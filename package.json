@@ -1,0 +1,58 @@
+{
+    "name": "@intentic-monorepo/root",
+    "version": "0.0.0",
+    "private": true,
+    "license": "UNLICENSED",
+    "repository": {
+        "type": "git",
+        "url": "git+https://gitlab.com/radarsu/intentic.git"
+    },
+    "scripts": {
+        "build": "turbo run build",
+        "test": "turbo run test",
+        "lint": "oxlint --deny-warnings",
+        "lint:fix": "oxlint --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "check": "pnpm build && pnpm lint && pnpm format:check",
+        "dev": "turbo run dev",
+        "e2e": "turbo run e2e --ui=stream",
+        "e2e:hermetic": "turbo run e2e:hermetic --ui=stream",
+        "db:up": "docker compose up -d --wait postgres && pnpm --filter @intentic-app/prisma migrate:deploy",
+        "db:down": "docker compose down",
+        "db:reset": "docker compose down -v && docker compose up -d --wait postgres && pnpm --filter @intentic-app/prisma migrate:deploy",
+        "generate": "pnpm --filter @intentic-app/prisma generate",
+        "migrate:dev": "pnpm --filter @intentic-app/prisma migrate:dev",
+        "migrate:deploy": "pnpm --filter @intentic-app/prisma migrate:deploy",
+        "studio": "pnpm --filter @intentic-app/prisma studio",
+        "intentic": "tsc -b tsconfig.libs.json && node _apps/cli/dist/cli.js",
+        "demo:up": "tsc -b tsconfig.libs.json && node _apps/cli/dist/demo.js up",
+        "demo:down": "tsc -b tsconfig.libs.json && node _apps/cli/dist/demo.js down",
+        "demo:clear": "tsc -b tsconfig.libs.json && node _apps/cli/dist/demo.js clear",
+        "publish:images": "bash scripts/publish-images.sh",
+        "libs:watch": "nice -n 15 tsc --build --watch --preserveWatchOutput tsconfig.libs.json",
+        "prepare": "git rev-parse --git-dir > /dev/null 2>&1 && git config core.hooksPath .githooks || true",
+        "clear": "find . \\( -name 'node_modules' -o -name '.cache' -o -name 'dist' -o -name '.turbo' -o -name 'pnpm-lock.yaml' \\) -prune -exec rm -rf '{}' +",
+        "cache:clear": "find . \\( -name '.cache' -o -name 'dist' -o -name '.turbo' \\) -prune -exec rm -rf '{}' +"
+    },
+    "devDependencies": {
+        "@commitlint/cli": "catalog:",
+        "@commitlint/config-conventional": "catalog:",
+        "@commitlint/types": "catalog:",
+        "@semantic-release/exec": "catalog:",
+        "@semantic-release/gitlab": "catalog:",
+        "@types/node": "catalog:",
+        "knip": "catalog:",
+        "oxlint": "catalog:",
+        "prettier": "catalog:",
+        "semantic-release": "catalog:",
+        "tslib": "catalog:",
+        "turbo": "catalog:",
+        "typescript": "catalog:"
+    },
+    "engines": {
+        "node": "24.18.0",
+        "pnpm": "11.9.0"
+    },
+    "packageManager": "pnpm@11.9.0"
+}

@@ -1,0 +1,188 @@
+{
+    "repo": "hono",
+    "cases": [
+        {
+            "id": "regexp-router",
+            "verb": "ask",
+            "query": "how does the regexp router match incoming routes?",
+            "expected": [{ "file": "src/router/reg-exp-router/router.ts" }]
+        },
+        {
+            "id": "middleware-compose",
+            "verb": "ask",
+            "query": "where is the middleware chain composed into a single handler?",
+            "expected": [{ "file": "src/compose.ts" }]
+        },
+        {
+            "id": "jwt-verify",
+            "verb": "ask",
+            "query": "how are JWT tokens verified?",
+            "expected": [{ "file": "src/utils/jwt/jwt.ts", "line": 96, "tolerance": 60 }]
+        },
+        {
+            "id": "streaming-sse",
+            "verb": "ask",
+            "query": "how are server-sent events streamed to the client?",
+            "expected": [{ "file": "src/helper/streaming/sse.ts" }]
+        },
+        {
+            "id": "smart-router-choice",
+            "verb": "ask",
+            "query": "how does the smart router pick which underlying router to use?",
+            "expected": [{ "file": "src/router/smart-router/router.ts" }]
+        },
+        {
+            "id": "def-hono-request",
+            "verb": "def",
+            "query": "HonoRequest",
+            "expected": [{ "file": "src/request.ts", "line": 36, "tolerance": 5 }]
+        },
+        {
+            "id": "def-set-cookie",
+            "verb": "def",
+            "query": "setCookie",
+            "expected": [{ "file": "src/helper/cookie/index.ts", "line": 99, "tolerance": 10 }]
+        },
+        {
+            "id": "sym-trie-router",
+            "verb": "sym",
+            "query": "TrieRouter",
+            "expected": [{ "file": "src/router/trie-router/router.ts", "line": 5, "tolerance": 5 }]
+        },
+        {
+            "id": "find-get-path",
+            "verb": "find",
+            "query": "export const getPath",
+            "expected": [{ "file": "src/utils/url.ts", "line": 106, "tolerance": 10 }]
+        },
+        {
+            "id": "files-cors",
+            "verb": "files",
+            "query": "middleware cors",
+            "expected": [{ "file": "src/middleware/cors/index.ts" }]
+        },
+        {
+            "id": "refs-compose",
+            "verb": "refs",
+            "query": "compose",
+            "expected": [{ "file": "src/hono-base.ts" }],
+            "notes": "compose is defined in src/compose.ts and consumed by hono-base's dispatch."
+        },
+        {
+            "id": "q-context-headers",
+            "verb": "q",
+            "query": "context set response header",
+            "expected": [{ "file": "src/context.ts" }]
+        },
+        {
+            "id": "basic-auth-check",
+            "verb": "ask",
+            "query": "where are basic auth credentials checked against the configured username and password?",
+            "expected": [{ "file": "src/middleware/basic-auth/index.ts" }]
+        },
+        {
+            "id": "csrf-protection",
+            "verb": "ask",
+            "query": "how is CSRF protection enforced for form submissions?",
+            "expected": [{ "file": "src/middleware/csrf/index.ts" }]
+        },
+        {
+            "id": "response-compression",
+            "verb": "ask",
+            "query": "where are responses compressed with gzip or deflate?",
+            "expected": [{ "file": "src/middleware/compress/index.ts" }]
+        },
+        {
+            "id": "static-files",
+            "verb": "ask",
+            "query": "how are static files served from disk?",
+            "expected": [{ "file": "src/middleware/serve-static/index.ts" }]
+        },
+        {
+            "id": "timeout-abort",
+            "verb": "ask",
+            "query": "how does the timeout middleware abort long-running handlers?",
+            "expected": [{ "file": "src/middleware/timeout/index.ts" }]
+        },
+        {
+            "id": "security-headers",
+            "verb": "ask",
+            "query": "where are security headers like content security policy added to responses?",
+            "expected": [{ "file": "src/middleware/secure-headers/secure-headers.ts" }]
+        },
+        {
+            "id": "trailing-slash",
+            "verb": "ask",
+            "query": "how are trailing slashes added to or removed from request paths?",
+            "expected": [{ "file": "src/middleware/trailing-slash/index.ts" }]
+        },
+        {
+            "id": "body-parsing",
+            "verb": "ask",
+            "query": "where is the request body parsed as form data or json?",
+            "expected": [{ "file": "src/utils/body.ts", "line": 97, "tolerance": 80 }, { "file": "src/request.ts" }],
+            "notes": "Cross-file concept: parseBody in utils/body.ts, exposed via HonoRequest."
+        },
+        {
+            "id": "websocket-upgrade",
+            "verb": "ask",
+            "query": "how are websocket connections handled and their events dispatched?",
+            "expected": [{ "file": "src/helper/websocket/index.ts" }]
+        },
+        {
+            "id": "response-cache",
+            "verb": "ask",
+            "query": "where does the cache middleware store and match cached responses?",
+            "expected": [{ "file": "src/middleware/cache/index.ts" }]
+        },
+        {
+            "id": "not-found-handler",
+            "verb": "ask",
+            "query": "what decides the 404 response when no route matches?",
+            "expected": [{ "file": "src/hono-base.ts", "line": 31, "tolerance": 20 }],
+            "notes": "Synonym gap: '404 when no route matches' vs notFoundHandler vocabulary."
+        },
+        {
+            "id": "q-path-params",
+            "verb": "q",
+            "query": "extract path parameters like :id from route patterns",
+            "expected": [{ "file": "src/utils/url.ts", "line": 51, "tolerance": 40 }]
+        },
+        {
+            "id": "def-smart-router",
+            "verb": "def",
+            "query": "SmartRouter",
+            "expected": [{ "file": "src/router/smart-router/router.ts", "line": 4, "tolerance": 5 }]
+        },
+        {
+            "id": "def-body-limit",
+            "verb": "def",
+            "query": "bodyLimit",
+            "expected": [{ "file": "src/middleware/body-limit/index.ts", "line": 50, "tolerance": 10 }]
+        },
+        {
+            "id": "sym-etag-matches",
+            "verb": "sym",
+            "query": "etagMatches",
+            "expected": [{ "file": "src/middleware/etag/index.ts", "line": 32, "tolerance": 5 }]
+        },
+        {
+            "id": "refs-get-path",
+            "verb": "refs",
+            "query": "getPath",
+            "expected": [{ "file": "src/hono-base.ts" }]
+        },
+        {
+            "id": "find-compose-def",
+            "verb": "find",
+            "query": "export const compose",
+            "expected": [{ "file": "src/compose.ts", "line": 15, "tolerance": 10 }]
+        },
+        {
+            "id": "files-trailing-slash",
+            "verb": "files",
+            "query": "trailing slash",
+            "expected": [{ "file": "src/middleware/trailing-slash/index.ts" }]
+        }
+    ]
+}

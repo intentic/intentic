@@ -1,0 +1,173 @@
+# GitLab CI/CD for the consolidated intentic monorepo (intentic/ = OSS core, platform/ = proprietary, site/).
+# One pipeline: turbo build/test covers every product; images + release cover the core's published artifacts.
+# Node + pnpm pinned to package.json engines; corepack reads packageManager to pick pnpm 11.9.0.
+
+stages:
+  - test
+  - images
+  - release
+
+variables:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+.pnpm-setup:
+  script:
+    - corepack enable
+    # Restore the exec bit corepack strips off its bundled node-gyp gyp_main.py: node-pty (no linux prebuild)
+    # compiles from source and make invokes gyp_main.py directly, otherwise dying with "Permission denied".
+    - pnpm --version
+    - find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
+    - pnpm install --frozen-lockfile
+
+default:
+  image: node:24.18.0
+  cache:
+    key: turbo-$CI_COMMIT_REF_SLUG
+    paths:
+      - .turbo
+      - "_*/*/.turbo"
+  before_script:
+    - !reference [.pnpm-setup, script]
+    # The iq engine's lexical tier shells into ripgrep (test + release:verify run the iq test suites).
+    - apt-get update && apt-get install -y --no-install-recommends ripgrep
+
+# Build + test every product on merge requests (turbo runs across intentic/, platform/, site/).
+test:
+  stage: test
+  interruptible: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - pnpm turbo run build
+    - pnpm turbo run test
+
+# Hermetic infra e2e on merge requests — NON-BLOCKING sidecar (allow_failure). Boots a Docker-in-Docker host
+# via testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no
+# external services or secrets. turbo scopes e2e:hermetic to @intentic/cli.
+e2e:hermetic:
+  stage: test
+  interruptible: true
+  allow_failure: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "/certs/client"
+    INTENTIC_HOST_IMAGE: "$CI_REGISTRY_IMAGE/dind-host:latest"
+    INTENTIC_LOG_DIR: "$CI_PROJECT_DIR/.e2e-hermetic-logs"
+  timeout: 45m
+  script:
+    - pnpm e2e:hermetic
+  artifacts:
+    when: on_failure
+    paths:
+      - .e2e-hermetic-logs/
+    expire_in: 1 week
+
+# Nightly gated e2e (scheduled): the sandbox-daemon tier always, plus whatever CI vars unlock (DISCORD_E2E_*,
+# CLOUDFLARE_API_TOKEN/CLOUDFLARE_ZONE). Each suite self-skips without its secrets. Runs the freshly published
+# :latest sandbox image (SANDBOX_E2E_IMAGE) rather than rebuilding from source.
+e2e:nightly:
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "/certs/client"
+    SANDBOX_E2E_IMAGE: "$CI_REGISTRY_IMAGE/sandbox:latest"
+  timeout: 3h
+  cache:
+    - key: turbo-$CI_COMMIT_REF_SLUG
+      paths:
+        - .turbo
+        - "_*/*/.turbo"
+    - key: intentic-e2e-whisper
+      paths:
+        - .cache/intentic-e2e
+  before_script:
+    - !reference [.pnpm-setup, script]
+    - install -m 0755 -d /etc/apt/keyrings
+    - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
+    - apt-get update && apt-get install -y --no-install-recommends docker-ce-cli
+    - mkdir -p "$HOME/.cache" "$CI_PROJECT_DIR/.cache/intentic-e2e" && ln -sfn "$CI_PROJECT_DIR/.cache/intentic-e2e" "$HOME/.cache/intentic-e2e"
+  script:
+    - pnpm e2e
+
+# Continuous image publishing: build + push sandbox + dind-host to the GitLab Container Registry on every push
+# to main that touches the core (moving `latest` + the commit SHA). The version-tagged image is the release job.
+images:
+  stage: images
+  image: docker:27
+  services:
+    - docker:27-dind
+  interruptible: true
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "/certs/client"
+  before_script:
+    - apk add --no-cache bash
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - _apps/sandbox/**/*
+        - _apps/cli/**/*
+        - _libs/**/*
+        - test/host/**/*
+        - scripts/publish-images.sh
+        - pnpm-lock.yaml
+  script:
+    - TAGS="latest sha-${CI_COMMIT_SHORT_SHA}" bash scripts/publish-images.sh
+
+# Release: build + test, then semantic-release (npm publish via OIDC, GitLab Release with the cross-compiled
+# intentic-sync binaries, and the sandbox/dind-host image at the release version + moving `stable` tag).
+release:verify:
+  stage: test
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - pnpm turbo run build
+    - pnpm turbo run test
+
+release:
+  stage: release
+  needs: ["release:verify"]
+  resource_group: release
+  services:
+    - docker:27-dind
+  variables:
+    GIT_DEPTH: 0
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "/certs/client"
+  # npm trusted publishing (OIDC): GitLab must be a registered trusted publisher for each @intentic/* package
+  # on npmjs.org. The aud must be exactly npm:<registry-host>.
+  id_tokens:
+    NPM_ID_TOKEN:
+      aud: npm:registry.npmjs.org
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - !reference [.pnpm-setup, script]
+    - install -m 0755 -d /etc/apt/keyrings
+    - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
+    - apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - curl -fsSL https://bun.sh/install | bash
+    - export PATH="$HOME/.bun/bin:$PATH"
+    - git remote set-url --push origin "https://oauth2:${GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+  script:
+    - pnpm exec semantic-release

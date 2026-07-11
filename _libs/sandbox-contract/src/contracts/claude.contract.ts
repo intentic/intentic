@@ -1,0 +1,12 @@
+import { oc } from "@orpc/contract";
+import { AccountIdSchema, AuthorizeChallengeSchema, OauthAccountListSchema, OauthAccountSchema, OauthExchangeSchema, OkSchema } from "../schemas.js";
+
+// Claude subscription OAuth — the sandbox owns the credential. `start` hands the browser the authorize URL +
+// PKCE material; `exchange` stores the resulting tokens as a new account and returns it; `accounts` lists the
+// connected accounts; `disconnect` clears the one named by id. A sandbox can hold several Claude accounts.
+export const claudeContract = {
+    start: oc.route({ method: "POST", path: "/claude/oauth/start" }).output(AuthorizeChallengeSchema),
+    exchange: oc.route({ method: "POST", path: "/claude/oauth/exchange" }).input(OauthExchangeSchema).output(OauthAccountSchema),
+    accounts: oc.route({ method: "GET", path: "/claude/accounts" }).output(OauthAccountListSchema),
+    disconnect: oc.route({ method: "POST", path: "/claude/account/disconnect" }).input(AccountIdSchema).output(OkSchema),
+};

@@ -1,0 +1,20 @@
+{
+    "name": "@intentic-dev/content",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        "./*": "./src/*.ts"
+    },
+    "scripts": {
+        "build": "tsc --noEmit",
+        "check": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@intentic/constants": "workspace:*"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "typescript": "catalog:"
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "id": "hono-body-limit",
+    "repo": "hono",
+    "type": "locate",
+    "prompt": "In this repository, where is the maximum request body size enforced while the body streams in (not just checked against Content-Length)? Answer with the exact file path(s) and line number(s).",
+    "grader": {
+        "kind": "anchors",
+        "anchors": [{ "file": "src/middleware/body-limit/index.ts" }],
+        "requireAll": false
+    },
+    "caps": { "maxTurns": 12 }
+}

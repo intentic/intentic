@@ -1,0 +1,120 @@
+/* PrimeVue component tuning. Lives in @layer primeng so plain Tailwind utilities (which sit
+ * in the later `utilities` layer — see the cssLayer order in vue/plugin.ts) always win.
+ * Everything is driven by the density/role tokens, so retuning happens in tokens.css. */
+@layer primeng {
+    .p-inputtext {
+        padding-block: var(--ui-control-padding-y);
+        padding-inline: var(--ui-control-padding-x);
+        border-radius: var(--radius-md);
+        background: var(--color-canvas);
+        border-color: var(--color-line);
+        color: var(--color-content);
+        font-size: var(--text-sm);
+        line-height: var(--text-sm--line-height);
+    }
+
+    .p-inputtext:enabled:hover {
+        border-color: var(--color-line-strong);
+    }
+
+    .p-inputtext::placeholder {
+        color: var(--color-subtle);
+    }
+
+    /* Button labels never wrap — a squeezed flex row shrinks the button instead of
+     * breaking its label onto two lines. */
+    .p-button {
+        white-space: nowrap;
+    }
+
+    /* Default size has no Aura font-size token (it inherits 16px), so it's pinned here.
+     * Padding/radius/icon widths live in theme.ts as per-size button tokens. */
+    .p-button:not(.p-button-sm):not(.p-button-lg) {
+        font-size: var(--text-sm);
+        line-height: var(--text-sm--line-height); /* same metrics as the text-sm inputs → 38px controls */
+    }
+
+    [data-mode="dark"] .p-button-secondary:enabled:hover,
+    [data-mode="dark"] .p-button-text:enabled:hover {
+        background: color-mix(in srgb, var(--color-content) 12%, transparent);
+    }
+
+    [data-mode="dark"] .p-button-danger.p-button-text:enabled:hover {
+        background: color-mix(in srgb, var(--color-danger-500) 18%, transparent);
+    }
+
+    .p-tooltip-text {
+        font-size: var(--text-xs); /* 0.75rem — smaller than the Aura default */
+    }
+}
+
+/* Reusable presentational classes. @layer components sits below utilities so per-element
+ * utility overrides still take precedence. */
+@layer components {
+    /* Label + control stack used by forms. */
+    .ui-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ui-field-gap);
+    }
+
+    .ui-field-label {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--color-muted);
+    }
+
+    /* Surface card — the single home of the old, copy-pasted
+     * `rounded-xl border border-surface-700 bg-surface-900 p-4` string. */
+    .ui-card {
+        border-radius: var(--ui-radius);
+        border: 1px solid var(--color-line);
+        background: var(--color-card);
+        padding: var(--ui-card-padding);
+    }
+
+    .ui-card-dashed {
+        border-style: dashed;
+        background: transparent;
+    }
+
+    /* Centered, width-constrained page shell. */
+    .ui-page {
+        display: block;
+        width: 100%;
+        max-width: var(--ui-page-max-width);
+        margin-inline: auto;
+        padding: var(--ui-page-padding);
+    }
+
+    /* Inline field-level error message — slides in below the input. */
+    .ui-field-error {
+        font-size: var(--text-xs);
+        color: var(--color-danger-500);
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        animation: ui-field-error-in 200ms ease-out;
+    }
+
+    /* Error border state for native inputs / textareas. */
+    .ui-field-input-error {
+        border-color: var(--color-danger-500) !important;
+    }
+}
+
+/* Validation animations — outside @layer so they're globally available. */
+@keyframes ui-field-error-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ui-shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-4px); }
+    40%, 80% { transform: translateX(4px); }
+}
+
+.ui-shake {
+    animation: ui-shake 400ms ease-in-out;
+}

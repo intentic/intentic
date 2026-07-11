@@ -1,0 +1,8 @@
+- No legacy support – make clean breaking changes; update all usages.
+- No re-exports or aliases – import from the true source; use original names.
+- No redundant assignments/coercions – avoid renaming, ?? null, or key renames without purpose.
+- Let errors propagate – do not wrap/rethrow unchanged errors.
+- No trivial wrappers – call signals, setters, and properties directly.
+- Prefer undefined – use it consistently; avoid mixing with null.
+- No migration logic – assume fresh state; remove compatibility layers.
+- Use early returns – handle edge cases first.

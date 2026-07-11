@@ -1,0 +1,660 @@
+<script setup lang="ts">
+import {
+    type AddCapabilityInput,
+    CAPABILITY_CATALOG,
+    CAPABILITY_CATEGORIES,
+    type CapabilityCatalogEntry,
+    type CapabilityField,
+} from "@intentic-app/catalog";
+import { type CapabilitySummary, type Marketplace, type MarketplacePlugin } from "@intentic-app/api-contract";
+import { cmp, type IconName, Page, Segmented } from "@intentic-app/ui";
+import Button from "primevue/button";
+import Dialog from "primevue/dialog";
+import { computed, nextTick, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import BrowserLoginDialog from "../components/BrowserLoginDialog.vue";
+import CredentialGuide from "../components/CredentialGuide.vue";
+import { devFillGet, devFillSet } from "../composables/devFill";
+import { browseMarketplace, useCapabilities } from "../composables/extensions/useCapabilities";
+import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
+
+/* The rail's "+" → the /capabilities page. Capabilities are connectors that give the agent tools (GitHub, MCP
+ * servers, SSH hosts, Stripe…), plus a few that scaffold managed repos (DevOps → intent + desired-state, each its
+ * own operator panel). Cards are grouped into sections by CAPABILITY_CATEGORIES. Pick a card → fill its config →
+ * apply STREAMS its progress live. The manifest is the source of truth; nothing is stored on the platform. */
+
+const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+const URL_RE = /^https?:\/\/.+/i;
+
+
+const { hasCapability, capabilities, error: listError, add, remove, refetch } = useCapabilities();
+
+const route = useRoute();
+const router = useRouter();
+
+// Cards that share a `kind` are told apart by a discriminator field the card fixes — `provider` for the cli cards,
+// `platform` for the browser cards (both map straight to the capability's config). The value is a single fixed
+// value, or the options for a multi-provider card (the SQL card owns postgres + mysql). Single-card kinds
+// (mcp/plugin/ssh/docker/…) have no such field → undefined → every instance of the kind matches. Used to find a
+// card's live instances.
+const cardDiscriminator = (entry: CapabilityCatalogEntry): { key: string; values: string[] } | undefined => {
+    const field = entry.fields.find((f) => f.key === `provider` || f.key === `platform`);
+    if (field === undefined) {
+        return undefined;
+    }
+    const values = field.value !== undefined ? [field.value] : (field.options ?? []).map((option) => option.value);
+    return { key: field.key, values };
+};
+const instancesOf = (entry: CapabilityCatalogEntry): CapabilitySummary[] => {
+    const disc = cardDiscriminator(entry);
+    return capabilities.value.filter(
+        (capability) => capability.kind === entry.kind && (disc === undefined || disc.values.includes(String(capability.config[disc.key]))),
+    );
+};
+const selectedInstances = computed<CapabilitySummary[]>(() => (selected.value ? instancesOf(selected.value) : []));
+
+// A free instance name: the provider id if unused, else the first `<id>-2`, `-3`, … so repeat adds create
+// distinct connections instead of upserting the same id (the silent-overwrite trap).
+const suggestName = (entry: CapabilityCatalogEntry): string => {
+    const taken = new Set(instancesOf(entry).map((instance) => instance.id));
+    if (!taken.has(entry.id)) {
+        return entry.id;
+    }
+    let n = 2;
+    while (taken.has(`${entry.id}-${n}`)) {
+        n += 1;
+    }
+    return `${entry.id}-${n}`;
+};
+// The typed name already exists → saving updates that connection rather than adding a new one.
+const nameCollision = computed(() => selectedInstances.value.some((instance) => instance.id === name.value.trim()));
+
+
+// The catalog grouped into its display sections, in category order; empty sections are dropped.
+const groupedCatalog = CAPABILITY_CATEGORIES.map((category) => ({
+    label: category.label,
+    hint: category.hint,
+    entries: CAPABILITY_CATALOG.filter((entry) => entry.category === category.id),
+})).filter((group) => group.entries.length > 0);
+
+// The picked card is URL-driven (/capabilities/<id>); an absent or unknown slug → undefined → the catalog grid.
+const selected = computed<CapabilityCatalogEntry | undefined>(() => CAPABILITY_CATALOG.find((entry) => entry.id === route.params[`card`]));
+const name = ref(``);
+// Whether the user (or a marketplace pick) chose the name. Until then the field holds a suggestion, and the
+// suggestion must track the LIVE list: pick() may run against a stale-hydrated or still-fetching list, and a
+// frozen snapshot then collides ("already exists") — or worse, mints a stale-bumped id — once fresh data lands.
+const nameEdited = ref(false);
+watch(capabilities, () => {
+    if (selected.value !== undefined && !nameEdited.value) {
+        name.value = suggestName(selected.value);
+    }
+});
+const values = reactive<Record<string, string>>({});
+const submitting = ref(false);
+const error = ref<string | null>(null);
+const log = ref<string[]>([]);
+// undefined = the confirm dialog is closed; a string = the capability id awaiting a confirmed removal.
+const confirmRemoveId = ref<string>();
+// Catalog logos that failed to load (bad/absent simple-icons slug) → fall back to a per-kind icon.
+const logoFailed = reactive(new Set<string>());
+
+// --- inline validation (touched-on-blur) ---
+// A field key appears here after the user has interacted with it (blur), so errors show only after they leave.
+const touched = reactive(new Set<string>());
+const shaking = ref(false);
+const markTouched = (key: string): void => { touched.add(key); };
+
+// Field-level error messages — undefined means the field is valid.
+const nameError = computed<string | undefined>(() => {
+    const trimmed = name.value.trim();
+    if (trimmed.length === 0) return `Name is required.`;
+    if (!NAME_RE.test(trimmed)) return `Use letters, digits, hyphens and underscores; must start with a letter or digit.`;
+    return undefined;
+});
+
+const fieldError = (field: CapabilityField): string | undefined => {
+    const val = (values[field.key] ?? ``).trim();
+    if (field.optional !== true && val.length === 0) return `This field is required.`;
+    if (val.length > 0 && !field.secret && field.key.toLowerCase().includes(`url`) && !URL_RE.test(val))
+        return `Enter a valid URL (e.g. https://…).`;
+    if (val.length > 0 && field.key === `port`) {
+        const n = Number(val);
+        if (!Number.isInteger(n) || n < 1 || n > 65535) return `Enter a valid port number (1–65535).`;
+    }
+    return undefined;
+};
+
+const touchAll = (): void => {
+    touched.add(`name`);
+    if (selected.value) {
+        for (const field of visibleFields(selected.value)) {
+            touched.add(field.key);
+        }
+    }
+};
+
+const logoUrl = (entry: CapabilityCatalogEntry): string | undefined =>
+    entry.logo !== undefined ? `https://cdn.simpleicons.org/${entry.logo}` : undefined;
+const kindIcon = (kind: string): IconName =>
+    kind === `devops`
+        ? `server`
+        : kind === `monorepo`
+          ? `sitemap`
+          : kind === `service`
+            ? `box`
+            : kind === `integration`
+              ? `link`
+              : kind === `plugin`
+                ? `th-large`
+                : kind === `browser`
+                  ? `globe`
+                  : `bolt`;
+
+// Guided browser-login dialog state (browser-kind capabilities: the session is a real logged-in browser, not a
+// pasted token, so it's connected out-of-band over the /system/browser-login WebSocket).
+const loginVisible = ref(false);
+const loginPlatform = ref(``);
+const loginLabel = ref(``);
+const openLogin = (platform: string, label: string): void => {
+    loginPlatform.value = platform;
+    loginLabel.value = label;
+    loginVisible.value = true;
+};
+// A completed login flips the capability's status pending → active; refresh the list so it shows.
+const onLoginDone = (): void => {
+    void refetch();
+};
+// A `when`-gated field applies only while its referenced field holds the given value (e.g. the SSH credential
+// matching the chosen auth mode). Read from reactive `values`, so it re-evaluates as the user toggles.
+const whenMet = (field: CapabilityField): boolean => field.when === undefined || values[field.when.key] === field.when.value;
+// The fields shown as inputs (const-valued ones are baked into config, not rendered; when-gated ones only
+// while their condition holds).
+const visibleFields = (entry: CapabilityCatalogEntry): CapabilityCatalogEntry["fields"] =>
+    entry.fields.filter((field) => field.value === undefined && whenMet(field));
+const requiresMet = computed(() => (selected.value ? (selected.value.requires ?? []).every((kind) => hasCapability(kind)) : false));
+
+const canSubmit = computed(() => {
+    const entry = selected.value;
+    if (entry === undefined || !requiresMet.value) {
+        return false;
+    }
+    if (!NAME_RE.test(name.value.trim())) {
+        return false;
+    }
+    return visibleFields(entry).every((field) => field.optional === true || (values[field.key] ?? ``).trim().length > 0);
+});
+
+// Marketplace browse (plugin card only): resolve a marketplace repo into entries; picking one pre-fills the
+// plugin form below (install stays the ordinary plugin apply).
+const marketUrl = ref(``);
+const marketToken = ref(``);
+const market = ref<Marketplace | null>(null);
+const browsing = ref(false);
+
+const browse = async (): Promise<void> => {
+    if (marketUrl.value.trim().length === 0 || browsing.value) {
+        return;
+    }
+    browsing.value = true;
+    error.value = null;
+    market.value = null;
+    try {
+        market.value = await browseMarketplace(marketUrl.value.trim(), marketToken.value.trim() || undefined);
+    } catch (err) {
+        error.value = err instanceof Error ? err.message : `Could not browse the marketplace.`;
+    } finally {
+        browsing.value = false;
+    }
+};
+
+const pickPlugin = (plugin: MarketplacePlugin): void => {
+    if (plugin.install === undefined) {
+        return;
+    }
+    name.value = plugin.name.replace(/[^a-zA-Z0-9_-]/g, `-`);
+    nameEdited.value = true;
+    values[`url`] = plugin.install.url;
+    values[`ref`] = plugin.install.ref ?? ``;
+    values[`path`] = plugin.install.path ?? ``;
+    // A plugin hosted inside a private marketplace repo needs the same token to clone.
+    values[`token`] = plugin.install.url === marketUrl.value.trim() ? marketToken.value.trim() : ``;
+};
+
+const clearForm = (): void => {
+    name.value = ``;
+    nameEdited.value = false;
+    for (const key of Object.keys(values)) {
+        delete values[key];
+    }
+    error.value = null;
+    log.value = [];
+    marketUrl.value = ``;
+    marketToken.value = ``;
+    market.value = null;
+    touched.clear();
+    shaking.value = false;
+};
+
+// One init path for both a click and a deep link: (re)seed the form whenever the URL selects a card.
+watch(
+    selected,
+    (entry) => {
+        if (entry === undefined) {
+            return;
+        }
+        clearForm();
+        // Pre-fill a free name: the provider id for the first connection, `<id>-2` etc. for the next — so re-adding
+        // creates another connection by default instead of overwriting the first.
+        name.value = suggestName(entry);
+        // Seed every editable field (ignoring `when`) so toggling a mode reveals an already-initialized field.
+        for (const field of entry.fields) {
+            if (field.value === undefined) {
+                values[field.key] = field.default ?? ``;
+            }
+        }
+        // Dev autofill (inert in prod): prefill secret fields with the values the last successful add used.
+        for (const field of entry.fields) {
+            if (field.secret === true && field.value === undefined) {
+                const remembered = devFillGet(`capability.${entry.id}.${field.key}`);
+                if (remembered !== undefined) {
+                    values[field.key] = remembered;
+                }
+            }
+        }
+    },
+    { immediate: true },
+);
+
+// An unknown slug (/capabilities/nonsense) resolves to no card → clean the URL back to the grid.
+watch(
+    () => route.params[`card`],
+    (card) => {
+        if (typeof card === `string` && card.length > 0 && selected.value === undefined) {
+            void router.replace({ name: `capabilities` });
+        }
+    },
+    { immediate: true },
+);
+
+// Picking a card / going back is a navigation now — the URL is the source of truth for what's shown.
+const pick = (entry: CapabilityCatalogEntry): void => {
+    void router.push({ name: `capabilities`, params: { card: entry.id } });
+};
+
+const back = (): void => {
+    void router.push({ name: `capabilities` });
+};
+
+const buildInput = (entry: CapabilityCatalogEntry): AddCapabilityInput => {
+    const config: Record<string, string> = {};
+    for (const field of entry.fields) {
+        if (field.value !== undefined) {
+            config[field.key] = field.value;
+            continue;
+        }
+        // Skip fields gated out by the current mode — e.g. the SSH credential of the unchosen auth branch.
+        if (!whenMet(field)) {
+            continue;
+        }
+        const value = (values[field.key] ?? ``).trim();
+        if (value.length > 0) {
+            config[field.key] = value;
+        }
+    }
+    return { id: name.value.trim(), kind: entry.kind, config };
+};
+
+const submit = async (): Promise<void> => {
+    const entry = selected.value;
+    if (entry === undefined || submitting.value) {
+        return;
+    }
+    // Mark every field touched so validation errors become visible on a premature submit.
+    touchAll();
+    if (!canSubmit.value) {
+        shaking.value = false;
+        void nextTick(() => { shaking.value = true; });
+        return;
+    }
+    submitting.value = true;
+    error.value = null;
+    log.value = [];
+    try {
+        await add(buildInput(entry), (line) => {
+            // The handler's shell runs in a real tmux session — open its terminal tab so the user watches the
+            // actual commands (user-clicked action → openFocused, the apply/vitest/add-apps precedent). The
+            // inline log below stays as the structured summary.
+            if (line[`kind`] === `terminal` && typeof line[`session`] === `string`) {
+                useTerminalPanel().openFocused(line[`session`]);
+                return;
+            }
+            const message = line[`message`];
+            if (typeof message === `string`) {
+                log.value = [...log.value, message];
+            }
+        });
+        // Dev autofill persist (inert in prod): remember the secret fields that just worked, per card.
+        for (const field of entry.fields) {
+            if (field.secret === true && field.value === undefined) {
+                devFillSet(`capability.${entry.id}.${field.key}`, (values[field.key] ?? ``).trim());
+            }
+        }
+        back();
+    } catch (err) {
+        error.value = err instanceof Error ? err.message : `Could not add the capability.`;
+    } finally {
+        submitting.value = false;
+    }
+};
+
+const removeCapability = async (id: string): Promise<void> => {
+    error.value = null;
+    try {
+        await remove.mutateAsync(id);
+    } catch (err) {
+        error.value = err instanceof Error ? err.message : `Could not remove the capability.`;
+    }
+};
+
+const askRemove = (id: string): void => {
+    confirmRemoveId.value = id;
+};
+const confirmRemove = async (): Promise<void> => {
+    const id = confirmRemoveId.value;
+    if (id === undefined) {
+        return;
+    }
+    await removeCapability(id);
+    confirmRemoveId.value = undefined;
+};
+
+const topError = computed(() => error.value ?? listError.value);
+const submitLabel = computed(() =>
+    selected.value?.kind === `devops` ? `Activate` : nameCollision.value ? `Update` : selected.value?.kind === `service` ? `Add & provision` : `Add`,
+);
+</script>
+
+<template>
+    <Page class="max-w-6xl">
+        <div v-if="topError" :class="cmp.alertDanger('mb-4')">{{ topError }}</div>
+
+        <!-- STEP 2: configure + apply the picked capability. Centered so a short form doesn't stretch the page. -->
+        <div v-if="selected" class="mx-auto max-w-xl">
+            <button type="button" class="mb-4 inline-flex items-center gap-1 text-xs text-muted hover:text-content" @click="back">
+                <Icon name="arrow-left" class="text-2xs" /> All capabilities
+            </button>
+
+            <div class="mb-4 flex items-center gap-3">
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-card">
+                    <img
+                        v-if="logoUrl(selected) && !logoFailed.has(selected.id)"
+                        :src="logoUrl(selected)"
+                        :alt="selected.name"
+                        class="h-5 w-5 object-contain"
+                        @error="logoFailed.add(selected.id)"
+                    />
+                    <Icon v-else :name="kindIcon(selected.kind)" class="text-sm text-link" />
+                </span>
+                <div class="min-w-0">
+                    <div class="font-medium text-content">{{ selected.name }}</div>
+                    <div class="text-xs text-muted">{{ selected.description }}</div>
+                </div>
+            </div>
+
+            <!-- Precondition gate: a service/integration needs DevOps first. -->
+            <div v-if="!requiresMet" class="rounded-lg border border-info/40 bg-info/10 px-3 py-2 text-xs text-info">
+                This needs <b>DevOps</b> active first. Go back and activate the DevOps capability, then add this.
+            </div>
+
+            <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
+                <!-- The connectors already added for this card — each instance removable here (the only place a
+                     custom-named instance can be torn down). -->
+                <div v-if="selectedInstances.length > 0" class="rounded-lg border border-line bg-card p-3">
+                    <div class="mb-2 text-2xs font-semibold uppercase tracking-wide text-subtle">Connected</div>
+                    <ul class="flex flex-col gap-1.5">
+                        <li v-for="instance in selectedInstances" :key="instance.id" class="flex flex-col gap-0.5">
+                            <div class="flex items-center gap-2 text-xs">
+                                <span class="font-medium text-content">{{ instance.id }}</span>
+                                <span class="text-2xs text-muted">{{ instance.status.state }}</span>
+                                <div class="ml-auto flex items-center gap-1">
+                                    <!-- A browser capability connects via a live login window, not a form — offer it here
+                                         (also the way to re-log-in once a session expires). -->
+                                    <Button
+                                        v-if="selected.kind === 'browser'"
+                                        :label="instance.status.state === 'active' ? 'Re-log in' : 'Log in'"
+                                        size="small"
+                                        :text="true"
+                                        @click="openLogin(String(instance.config[`platform`]), selected.name)"
+                                    >
+                                        <template #icon><Icon name="sign-in" /></template>
+                                    </Button>
+                                    <Button
+                                        v-if="selected.kind !== 'devops'"
+                                        size="small"
+                                        severity="danger"
+                                        :text="true"
+                                        :rounded="true"
+                                        aria-label="Remove instance"
+                                        @click="askRemove(instance.id)"
+                                    >
+                                        <template #icon><Icon name="trash" /></template>
+                                    </Button>
+                                </div>
+                            </div>
+                            <!-- A browser capability that's installed but not signed in is pending on the LOGIN, not a
+                                 rebuild — make the hint open the login window (same action as the button above), never
+                                 the /sandbox rebuild hub. Keyed off the daemon's "rebuild" detail (see handlers/browser.ts). -->
+                            <button
+                                v-if="
+                                    instance.status.state === 'pending' &&
+                                    selected.kind === 'browser' &&
+                                    !String(instance.status.detail ?? '').includes('rebuild')
+                                "
+                                type="button"
+                                class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
+                                @click="openLogin(String(instance.config[`platform`]), selected.name)"
+                            >
+                                <Icon name="exclamation-triangle" />
+                                {{ instance.status.detail ?? "Not connected" }} — Log in →
+                            </button>
+                            <!-- A capability that needs a sandbox rebuild (Discord voice / a DB client / a browser whose
+                                 Chromium isn't installed yet) is otherwise a dead-end "pending" — point at the /sandbox
+                                 hub where the rebuild command lives. -->
+                            <RouterLink
+                                v-else-if="instance.status.state === 'pending'"
+                                to="/sandbox"
+                                class="inline-flex items-center gap-1 text-2xs text-warning hover:underline"
+                            >
+                                <Icon name="exclamation-triangle" />
+                                {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
+                            </RouterLink>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Marketplace browse (plugin only): resolve a marketplace repo and pre-fill the form below. -->
+                <div v-if="selected.kind === 'plugin'" class="rounded-lg border border-line bg-card p-3">
+                    <div class="mb-2 text-2xs font-semibold uppercase tracking-wide text-subtle">From a marketplace (optional)</div>
+                    <div class="flex gap-2">
+                        <input v-model="marketUrl" placeholder="https://github.com/owner/marketplace" :class="cmp.input('min-w-0 flex-1')" />
+                        <input v-model="marketToken" type="password" autocomplete="off" placeholder="Token" :class="cmp.input('w-28')" />
+                        <Button
+                            label="Browse"
+                            size="small"
+                            :disabled="marketUrl.trim().length === 0 || browsing"
+                            :loading="browsing"
+                            @click="browse"
+                        />
+                    </div>
+                    <div v-if="market" class="scrollbar-thin mt-2 flex max-h-40 flex-col gap-1 overflow-auto">
+                        <button
+                            v-for="plugin in market.plugins"
+                            :key="plugin.name"
+                            type="button"
+                            class="flex items-baseline gap-2 rounded-md border border-line bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:border-line-strong disabled:opacity-50"
+                            :disabled="plugin.install === undefined"
+                            @click="pickPlugin(plugin)"
+                        >
+                            <span class="font-medium text-content">{{ plugin.name }}</span>
+                            <span v-if="plugin.version" class="text-2xs text-subtle">{{ plugin.version }}</span>
+                            <span class="min-w-0 truncate text-2xs text-muted">{{ plugin.description }}</span>
+                            <span v-if="plugin.install === undefined" class="ml-auto shrink-0 text-2xs text-subtle">not installable</span>
+                        </button>
+                    </div>
+                </div>
+
+                <label class="ui-field">
+                    <span class="ui-field-label">Name</span>
+                    <input
+                        v-model="name"
+                        placeholder="my-tool"
+                        :class="[cmp.input(), touched.has('name') && nameError ? 'ui-field-input-error' : '']"
+                        @input="nameEdited = true"
+                        @blur="markTouched('name')"
+                    />
+                    <span v-if="touched.has('name') && nameError" class="ui-field-error">
+                        <Icon name="exclamation-triangle" class="text-2xs" />
+                        {{ nameError }}
+                    </span>
+                    <span v-else-if="nameCollision" class="mt-1 inline-flex items-center gap-1 text-2xs text-warning">
+                        <Icon name="exclamation-triangle" />
+                        A connection named "{{ name.trim() }}" already exists — saving will update it.
+                    </span>
+                    <span v-else-if="selectedInstances.length > 0" class="mt-1 text-2xs text-subtle">
+                        Give this one a new name to add another connection, or reuse a name to update it.
+                    </span>
+                </label>
+                <CredentialGuide :entry="selected" :values="values" />
+                <label v-for="field in visibleFields(selected)" :key="field.key" class="ui-field">
+                    <span class="ui-field-label">{{ field.label }}{{ field.optional ? " (optional)" : "" }}</span>
+                    <Segmented
+                        v-if="field.options"
+                        :model-value="values[field.key] ?? ''"
+                        :options="[...field.options]"
+                        @update:model-value="values[field.key] = $event"
+                    />
+                    <textarea
+                        v-else-if="field.multiline"
+                        v-model="values[field.key]"
+                        :placeholder="field.placeholder"
+                        rows="6"
+                        spellcheck="false"
+                        :class="[cmp.input('font-mono resize-y'), touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '']"
+                        @blur="markTouched(field.key)"
+                    />
+                    <input
+                        v-else
+                        v-model="values[field.key]"
+                        :type="field.secret ? 'password' : 'text'"
+                        :autocomplete="field.secret ? 'off' : undefined"
+                        :placeholder="field.placeholder"
+                        :class="[cmp.input(), touched.has(field.key) && fieldError(field) ? 'ui-field-input-error' : '']"
+                        @blur="markTouched(field.key)"
+                    />
+                    <span v-if="touched.has(field.key) && fieldError(field)" class="ui-field-error">
+                        <Icon name="exclamation-triangle" class="text-2xs" />
+                        {{ fieldError(field) }}
+                    </span>
+                </label>
+                <p v-if="selected.hint" class="text-xs text-muted">{{ selected.hint }}</p>
+                <p class="inline-flex items-center gap-1.5 text-2xs text-subtle">
+                    <Icon name="lock" />
+                    Credentials are stored securely inside your sandbox and never shown in Files.
+                </p>
+
+                <!-- Streamed apply progress (devops scaffolding, service provisioning). -->
+                <pre
+                    v-if="log.length > 0"
+                    class="scrollbar-thin max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-canvas px-3 py-2 font-mono text-2xs text-subtle"
+                    >{{ log.slice(-12).join("\n") }}</pre>
+
+                <div :class="['flex justify-end', shaking ? 'ui-shake' : '']" @animationend="shaking = false">
+                    <Button type="submit" :label="submitLabel" :loading="submitting">
+                        <template #icon><Icon name="check" /></template>
+                    </Button>
+                </div>
+            </form>
+        </div>
+
+        <!-- STEP 1: the catalog, grouped into sections. -->
+        <template v-else>
+            <header class="mb-6">
+                <h1 class="text-2xl font-semibold">Add a capability</h1>
+                <p class="mt-1 text-sm text-muted">
+                    Grow your sandbox. DevOps unlocks self-hosting and deployment; the rest give your agent new tools or connect your accounts.
+                    Everything is stored only in your sandbox.
+                </p>
+            </header>
+
+            <div class="flex flex-col gap-8">
+                <div v-for="group in groupedCatalog" :key="group.label" class="flex flex-col gap-3">
+                    <div>
+                        <div :class="cmp.sectionLabel()">{{ group.label }}</div>
+                        <div class="mt-0.5 text-xs text-muted">{{ group.hint }}</div>
+                    </div>
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <div v-for="entry in group.entries" :key="entry.id" class="group relative">
+                            <button
+                                type="button"
+                                class="flex h-full w-full items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay"
+                                @click="pick(entry)"
+                            >
+                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-canvas">
+                                    <img
+                                        v-if="logoUrl(entry) && !logoFailed.has(entry.id)"
+                                        :src="logoUrl(entry)"
+                                        :alt="entry.name"
+                                        class="h-5 w-5 object-contain"
+                                        @error="logoFailed.add(entry.id)"
+                                    />
+                                    <Icon v-else :name="kindIcon(entry.kind)" class="text-sm text-link" />
+                                </span>
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="font-medium text-content">{{ entry.name }}</span>
+                                        <span
+                                            v-if="instancesOf(entry).length > 0"
+                                            class="inline-flex items-center gap-1 text-2xs text-success"
+                                            :aria-label="`${instancesOf(entry).length} connected`"
+                                        >
+                                            <Icon name="check-circle" />
+                                            {{ instancesOf(entry).length }} connected
+                                        </span>
+                                    </div>
+                                    <div class="mt-0.5 text-xs text-muted">{{ entry.description }}</div>
+                                    <div v-if="entry.requires?.includes('devops') && !hasCapability('devops')" class="mt-1 text-xs text-muted">
+                                        Requires DevOps
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- Removal runs a real teardown in the sandbox (MCP config, SSH host, service provisioning) — confirm first. -->
+        <Dialog
+            :visible="confirmRemoveId !== undefined"
+            :modal="true"
+            :draggable="false"
+            :dismissable-mask="true"
+            :style="{ width: '24rem' }"
+            header="Remove capability"
+            @update:visible="confirmRemoveId = undefined"
+        >
+            <p class="text-sm text-content">
+                Remove <b>{{ confirmRemoveId }}</b> from your sandbox? This tears down its configuration and can't be undone.
+            </p>
+            <template #footer>
+                <Button label="Cancel" severity="secondary" :text="true" @click="confirmRemoveId = undefined" />
+                <Button label="Remove" severity="danger" :loading="remove.isPending.value" @click="confirmRemove">
+                    <template #icon><Icon name="trash" /></template>
+                </Button>
+            </template>
+        </Dialog>
+
+        <!-- Guided browser login for browser-kind capabilities (screencast a live Chromium the user signs into). -->
+        <BrowserLoginDialog v-model:visible="loginVisible" :platform="loginPlatform" :label="loginLabel" @done="onLoginDone" />
+    </Page>
+</template>

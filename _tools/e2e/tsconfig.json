@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+        "baseUrl": "./",
+        "composite": false,
+        "noEmit": true,
+        "types": ["node"]
+    },
+    "include": ["./**/*.ts"],
+    "exclude": ["node_modules"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

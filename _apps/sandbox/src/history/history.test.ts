@@ -1,0 +1,256 @@
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { afterEach, expect, test, vi } from "vitest";
+import { createLogger } from "../logger.js";
+import { workspacePaths } from "../workspace/workspace.js";
+import { createWorkspaceHistory, type HistoryGitRunner, repoGitDir } from "./history.js";
+
+const exec = promisify(execFile);
+const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
+
+const tempDirs: string[] = [];
+const tempBase = async (): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), "intentic-history-"));
+    tempDirs.push(dir);
+    return dir;
+};
+afterEach(async () => {
+    for (const dir of tempDirs.splice(0)) {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+// The first arg that isn't a -c config pair — the git subcommand a recorded call ran.
+const subcommand = (args: readonly string[]): string => {
+    for (let index = 0; index < args.length; index++) {
+        if (args[index] === "-c") {
+            index++;
+            continue;
+        }
+        return args[index] ?? "";
+    }
+    return "";
+};
+
+// A root-scope-only history over a fake git that models refs/snapshots/head + commit trees in memory. The
+// scope git dir is pre-created so ensureScope skips `init --bare` (the fake creates no real dirs).
+const fakeHistory = async () => {
+    const base = await tempBase();
+    const work = join(base, "work");
+    const historyRoot = join(base, "history");
+    await mkdir(work, { recursive: true });
+    await mkdir(join(historyRoot, "scopes", "root.git", "info"), { recursive: true });
+
+    const calls: string[][] = [];
+    let head: string | undefined;
+    let tree = "tree-1";
+    let commits = 0;
+    const trees = new Map<string, string>();
+    const git: HistoryGitRunner = async (args) => {
+        calls.push([...args]);
+        const out = (stdout: string) => ({ stdout, stderr: "" });
+        switch (subcommand(args)) {
+            case "write-tree":
+                return out(`${tree}\n`);
+            case "rev-parse": {
+                const rev = args.at(-1) ?? "";
+                if (rev === "refs/snapshots/head") {
+                    if (head === undefined) {
+                        throw new Error("unknown ref");
+                    }
+                    return out(`${head}\n`);
+                }
+                const resolved = trees.get(rev.replace("^{tree}", "").replace("^", ""));
+                if (resolved === undefined) {
+                    throw new Error("unknown rev");
+                }
+                return out(`${resolved}\n`);
+            }
+            case "commit-tree": {
+                const sha = `c${++commits}`;
+                trees.set(sha, args[args.indexOf("commit-tree") + 1] ?? "");
+                return out(`${sha}\n`);
+            }
+            case "update-ref":
+                head = args.at(-1);
+                return out("");
+            case "log":
+                if (head === undefined) {
+                    throw new Error("unknown ref");
+                }
+                return out(`${head}\x1f1000\x1fsnapshot snap-1 turn\n`);
+            default:
+                return out("");
+        }
+    };
+    const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger }, git);
+    return { history, calls, setTree: (next: string) => (tree = next) };
+};
+
+test("snapshot commits parentless first, skips an unchanged tree, then parents on the previous snapshot", async () => {
+    const { history, calls, setTree } = await fakeHistory();
+
+    const first = await history.snapshot("turn");
+    expect(first).toBeDefined();
+    const commitCalls = () => calls.filter((call) => call.includes("commit-tree"));
+    expect(commitCalls()).toHaveLength(1);
+    expect(commitCalls()[0]).not.toContain("-p");
+    expect(commitCalls()[0]?.join(" ")).toContain(`snapshot ${first} turn`);
+    expect(calls.some((call) => call.includes("update-ref") && call.includes("refs/snapshots/head") && call.includes("c1"))).toBe(true);
+
+    // Same tree ⇒ no commit, no id.
+    expect(await history.snapshot("interval")).toBeUndefined();
+    expect(commitCalls()).toHaveLength(1);
+
+    setTree("tree-2");
+    expect(await history.snapshot("interval")).toBeDefined();
+    expect(commitCalls()).toHaveLength(2);
+    expect(commitCalls()[1]?.join(" ")).toContain("-p c1");
+});
+
+test("groups are cached between reads and recomputed only after a changed snapshot", async () => {
+    const { history, calls, setTree } = await fakeHistory();
+    await history.snapshot("turn");
+    const logCount = () => calls.filter((call) => subcommand(call) === "log").length;
+
+    // First read computes groups once (one `git log` per known scope — here just root).
+    await history.list();
+    const afterFirst = logCount();
+    expect(afterFirst).toBe(1);
+
+    // Repeated reads hit the cache: no extra `git log`, even across list/diff/fileDiff.
+    await history.list();
+    await history.diff("snap-1");
+    await history.fileDiff("snap-1", "root", "hello.txt");
+    expect(logCount()).toBe(afterFirst);
+
+    // A snapshot that changes the tree invalidates the cache; the next read re-runs `git log`.
+    setTree("tree-2");
+    expect(await history.snapshot("interval")).toBeDefined();
+    await history.list();
+    expect(logCount()).toBe(afterFirst + 1);
+});
+
+test("notifyUserWrite debounces a burst of pings into ONE user-triggered snapshot", async () => {
+    const { history, calls } = await fakeHistory();
+    // Fake timers only to fire the debounce deterministically; the snapshot chain itself awaits real fs IO, so
+    // restore real timers and use a follow-up snapshot as the serialization barrier (it skips — same tree).
+    vi.useFakeTimers();
+    try {
+        history.notifyUserWrite();
+        history.notifyUserWrite();
+        history.notifyUserWrite();
+        await vi.advanceTimersByTimeAsync(2_100);
+    } finally {
+        vi.useRealTimers();
+    }
+    await history.snapshot("manual");
+    const commits = calls.filter((call) => call.includes("commit-tree"));
+    expect(commits).toHaveLength(1);
+    expect(commits[0]?.join(" ")).toMatch(/snapshot \S+ user/);
+});
+
+test("restore runs read-tree → clean → checkout-index in order, with a safety snapshot first", async () => {
+    const { history, calls } = await fakeHistory();
+    await history.snapshot("turn");
+    calls.length = 0;
+
+    expect(await history.restore("snap-1")).toBe(true);
+    const order = calls.map(subcommand);
+    const readTree = order.indexOf("read-tree");
+    expect(order.indexOf("add")).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf("add")).toBeLessThan(readTree);
+    expect(readTree).toBeLessThan(order.indexOf("clean"));
+    expect(order.indexOf("clean")).toBeLessThan(order.indexOf("checkout-index"));
+
+    expect(await history.restore("nope")).toBe(false);
+});
+
+test("repoGitDir derives the protected git dir path", () => {
+    expect(repoGitDir("/history", "intent")).toBe("/history/gits/intent");
+});
+
+// End-to-end over a REAL git: snapshot → mutate (root file, new file, nested-repo edit, secret) → snapshot →
+// diff → fileDiff → restore, asserting secrets stay out of history and the nested repo's own git is untouched.
+test("integration: snapshot, diff, and restore a workspace with a nested repo and secrets", async () => {
+    const base = await tempBase();
+    const work = join(base, "work");
+    const historyRoot = join(base, "history");
+    const intent = join(work, "repositories", "intent");
+    await mkdir(intent, { recursive: true });
+    await writeFile(join(work, "hello.txt"), "one\n");
+    await writeFile(join(work, ".env"), "SECRET=x\n");
+    await writeFile(join(intent, "deploy.config.ts"), "v1\n");
+
+    // A real nested repo with its own commit; the agent's branch/HEAD must survive everything below.
+    const sh = async (cwd: string, ...args: string[]) => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
+    await sh(intent, "init", "-q");
+    await sh(intent, "add", "-A");
+    await sh(intent, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init");
+    const nestedHead = await sh(intent, "rev-parse", "HEAD");
+
+    const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger });
+    const first = await history.snapshot("manual");
+    expect(first).toBeDefined();
+
+    await writeFile(join(work, "hello.txt"), "two\n");
+    await writeFile(join(work, "later.txt"), "junk\n");
+    await writeFile(join(intent, "deploy.config.ts"), "v2\n");
+    const second = await history.snapshot("manual");
+    expect(second).toBeDefined();
+
+    const changes = await history.diff(second ?? "");
+    expect(changes).toContainEqual({ scope: "root", path: "hello.txt", status: "modified" });
+    expect(changes).toContainEqual({ scope: "root", path: "later.txt", status: "added" });
+    expect(changes).toContainEqual({ scope: "repositories/intent", path: "deploy.config.ts", status: "modified" });
+    expect(changes?.some((change) => change.path.includes(".env"))).toBe(false);
+
+    expect(await history.fileDiff(second ?? "", "root", "hello.txt")).toEqual({ before: "one\n", after: "two\n" });
+
+    expect(await history.restore(first ?? "")).toBe(true);
+    expect(await readFile(join(work, "hello.txt"), "utf8")).toBe("one\n");
+    expect(existsSync(join(work, "later.txt"))).toBe(false);
+    expect(await readFile(join(intent, "deploy.config.ts"), "utf8")).toBe("v1\n");
+    // The ignored secret survives the restore's clean, and the nested repo's own git never moved.
+    expect(await readFile(join(work, ".env"), "utf8")).toBe("SECRET=x\n");
+    expect(await sh(intent, "rev-parse", "HEAD")).toBe(nestedHead);
+
+    const snapshots = await history.list();
+    expect(snapshots.map((snapshot) => snapshot.id)).toContain(first);
+    expect(snapshots.map((snapshot) => snapshot.trigger)).toContain("restore");
+});
+
+// The review path: diff/fileDiff with a `base` aggregate the NET change across every turn since that base,
+// not just the last snapshot's own parent — a file created then removed between base and head nets to nothing.
+test("integration: diff/fileDiff with a base aggregate the net change across turns", async () => {
+    const base = await tempBase();
+    const work = join(base, "work");
+    await mkdir(work, { recursive: true });
+    await writeFile(join(work, "hello.txt"), "one\n");
+
+    const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot: join(base, "history"), logger });
+    const baseId = await history.snapshot("turn");
+
+    await writeFile(join(work, "hello.txt"), "two\n");
+    await writeFile(join(work, "scratch.txt"), "temp\n"); // added in turn 1…
+    await history.snapshot("turn");
+
+    await writeFile(join(work, "hello.txt"), "three\n");
+    await rm(join(work, "scratch.txt")); // …removed in turn 2, so it nets out of the aggregate.
+    await writeFile(join(work, "kept.txt"), "new\n");
+    const headId = await history.snapshot("turn");
+
+    const aggregate = await history.diff(headId ?? "", baseId);
+    expect(aggregate).toContainEqual({ scope: "root", path: "hello.txt", status: "modified" });
+    expect(aggregate).toContainEqual({ scope: "root", path: "kept.txt", status: "added" });
+    expect(aggregate?.some((change) => change.path === "scratch.txt")).toBe(false);
+
+    // Content spans the whole range (base → head), not just head's parent.
+    expect(await history.fileDiff(headId ?? "", "root", "hello.txt", baseId)).toEqual({ before: "one\n", after: "three\n" });
+    // An unknown base is NOT_FOUND-shaped (undefined), like an unknown id.
+    expect(await history.diff(headId ?? "", "nope")).toBeUndefined();
+});

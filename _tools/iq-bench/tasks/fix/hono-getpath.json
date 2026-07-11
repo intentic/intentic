@@ -1,0 +1,13 @@
+{
+    "id": "hono-getpath",
+    "repo": "hono",
+    "type": "fix",
+    "prompt": "Bug report: routes no longer match — the path extracted from incoming request URLs is wrong (it includes part of the scheme/host). Reproduce with `./node_modules/.bin/vitest run --config vitest.bench.config.mts src/utils/url.test.ts`, find the root cause, and fix it so the tests pass. Do not modify the tests.",
+    "setup": { "patch": "patches/hono-getpath-bug.patch" },
+    "grader": {
+        "kind": "test",
+        "command": "./node_modules/.bin/vitest run --config vitest.bench.config.mts src/utils/url.test.ts",
+        "timeoutMs": 120000
+    },
+    "caps": { "maxTurns": 20 }
+}

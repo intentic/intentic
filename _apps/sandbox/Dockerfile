@@ -1,0 +1,164 @@
+# The per-project AI-agent sandbox image (published as registry.gitlab.com/radarsu/intentic/sandbox). Build from the REPO
+# ROOT so the monorepo workspace resolves:
+#   docker build -f _apps/sandbox/Dockerfile -t registry.gitlab.com/radarsu/intentic/sandbox .
+# At run time connect.sh / the workspace provider inject agent credentials (ANTHROPIC_API_KEY or
+# CLAUDE_CODE_OAUTH_TOKEN) and mount the workspace volume at /work — neither is baked into the image.
+
+FROM node:24.18.0-bookworm@sha256:fdddfb3e688158251943d52eba361de991548f6814007acba4917ae6b512d6be AS build
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable
+# Fetch the cloudflared binary (copied into the runtime image below) so the in-sandbox `intentic apply` can
+# run `cloudflared access tcp` to reach a NAT'd self-host's SSH over its Cloudflare tunnel (via:"cloudflared").
+# Pinned to the same version connect.sh runs as the tunnel sidecar.
+ARG CLOUDFLARED_VERSION=2026.6.1
+RUN arch="$(dpkg --print-architecture)" \
+    && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
+    && chmod +x /usr/local/bin/cloudflared \
+    && /usr/local/bin/cloudflared --version
+WORKDIR /repo
+COPY . .
+# Restore the exec bit corepack strips off its bundled node-gyp gyp_main.py before installing — node-pty
+# (no linux prebuild) compiles from source and make invokes gyp_main.py directly, else Error 126.
+RUN pnpm --version \
+    && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} + \
+    && pnpm install --frozen-lockfile
+# turbo builds each package after its workspace deps (^build), so the CLI's libs are built before it.
+# Scope to the core deploy targets (+ their deps via ^build) so the image build never pulls the platform/site
+# toolchains — the monorepo now holds them too, but the sandbox image needs only @intentic/*.
+RUN pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli --filter=@intentic/iq
+# Prune each package to a standalone, production-only tree (workspace deps bundled into node_modules).
+RUN pnpm --filter @intentic/sandbox deploy --prod /out/sandbox
+RUN pnpm --filter @intentic/cli deploy --prod /out/cli
+RUN pnpm --filter @intentic/iq deploy --prod /out/iq
+# Bake the iq models so `iq ask` works fully offline from first boot: bge-small embedder (~34MB) + ms-marco
+# cross-encoder reranker (~23MB), both int8.
+RUN node _libs/iq-engine/scripts/fetch-model.mjs /opt/iq-models
+
+FROM node:24.18.0-bookworm-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc AS runtime
+# Links the GHCR package to the repo (inherits its visibility/permissions, shows under its Packages).
+LABEL org.opencontainers.image.source=https://gitlab.com/radarsu/intentic
+# procps gives the interactive terminal (system/terminal.ts) real process tools — `ps`, `top`, `kill` — so the
+# owner can see what's running in the sandbox and reap a stuck dev command. zsh is the terminal's shell (below).
+# tmux backs the terminal's sessions: each web tab attaches a tmux session, and the tmux server outlives the
+# WebSocket, so a page reload / drop detaches (session + its running processes survive) instead of killing them.
+# curl + jq back the CLI-tool integrations (e.g. the Discord `cli` capability's skill has the agent call
+# Discord's REST API with `curl … | jq`); neither is in the slim base and the build stage's curl doesn't carry over.
+# openssh-server is the transport for the local-sync feature: Mutagen on the laptop connects over SSH (through the
+# sandbox's Cloudflare tunnel) to block-delta sync /work. Key-only (config drop-in below); host keys baked here.
+# openssh-client + sshpass + rsync back the `ssh` capability: the agent runs `ssh <alias>` / `rsync` against
+# connected machines, with sshpass -f for the password-auth ones. iproute2 gives `ip`/`ss` diagnostics.
+# Heavy or privilege-coupled capability tools (WireGuard, whisper.cpp) are NOT baked here — each capability
+# carries a Dockerfile fragment the daemon composes into the sandbox's environment overlay on enable
+# (see capabilities/capability.ts `fragment`), applied by an owner-run rebuild.
+# python3 + make + g++ are the node-gyp toolchain: runtime `pnpm install` (ensure-intent.ts, scaffold
+# inject-template.ts, or a dev in /work) compiles native deps from source — node-pty ships no linux
+# prebuild, so it ALWAYS builds here. Uncommon toolchains (cmake, -dev headers) stay an overlay concern.
+# ripgrep backs the iq search CLI's lexical engine (iq-engine shells into `rg --json`).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 make g++ ripgrep \
+    && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
+    && ssh-keygen -A \
+    && printf '%s\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' 'PubkeyAuthentication yes' > /etc/ssh/sshd_config.d/intentic.conf
+# The terminal (system/terminal.ts) launches zsh with the oh-my-zsh "bira" theme + zsh-autosuggestions, so the
+# owner gets a real prompt and history autocomplete. Installed into root's home (the daemon/terminal run as
+# root); --depth=1 tracks the default branch (pin to a commit if reproducibility matters).
+RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /root/.oh-my-zsh \
+    && git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions \
+    && printf '%s\n' \
+        'export ZSH="$HOME/.oh-my-zsh"' \
+        'ZSH_THEME="bira"' \
+        'ZSH_DISABLE_COMPFIX=true' \
+        "zstyle ':omz:update' mode disabled" \
+        'plugins=(git zsh-autosuggestions)' \
+        "ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=245'" \
+        "PROMPT_EOL_MARK=''" \
+        'source $ZSH/oh-my-zsh.sh' \
+        > /root/.zshrc
+# tmux backs each terminal tab (system/terminal.ts attaches one session per tab). The web UI draws the tab bar,
+# so the tmux status bar is off; default-command launches the oh-my-zsh zsh above (not /bin/sh); destroy-unattached
+# off keeps a session alive when its web client detaches on reload/drop — the whole point of tmux-backed persistence.
+# The set-hook pipe-pane trio logs every pane (web tabs, panels, agent-run tmux, windows, splits) to
+# /history/logs/terminals — the crashed-session post-mortem the /logs routes serve (logs/log-files.ts keeps
+# the same hooks for re-arming a server that outlived a daemon restart). The stream is replayed through
+# pane-log-clean (a headless VT emulator) which owns each file and rewrites the rendered screen, so the
+# persisted log is what the terminal actually showed, not raw escape/redraw noise (the live pane still shows
+# raw color via the xterm WebSocket, unaffected). Pane width/height are passed so wrapping/cursor math match.
+# The session name is sanitized by the s||| format modifier because it lands in a shell command; the pane id
+# keeps names unique.
+RUN printf '%s\n' \
+        'set -g status off' \
+        'set -g history-limit 100000' \
+        'set -g mouse on' \
+        'setw -g aggressive-resize on' \
+        'set -g default-terminal "tmux-256color"' \
+        'set -g default-command zsh' \
+        'set -g destroy-unattached off' \
+        'set -g set-clipboard on' \
+        "set -as terminal-overrides ',xterm-256color:Ms=\\E]52;%p1%s;%p2%s\\007'" \
+        "set-hook -g session-created 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
+        "set-hook -g after-new-window 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
+        "set-hook -g after-split-window 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
+        > /root/.tmux.conf
+# The daemon runs the app's `pnpm dev` (dev-server.ts) — the build stage's corepack doesn't carry over, so
+# enable it here too and bake in the repo's pinned pnpm so the sandbox needs no first-run download or prompt.
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+# chmod as in the build stage: in-sandbox `pnpm install` (dev in /work, scaffold inject) compiles node-pty
+# from source, and corepack strips the exec bit off its bundled node-gyp gyp_main.py (else Error 126).
+RUN corepack enable && corepack prepare pnpm@11.9.0 --activate \
+    && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
+# The `opencode` CLI on PATH — the Grok provider (grok/opencode.ts) spawns `opencode serve` via
+# @opencode-ai/sdk's createOpencodeServer, which shells out to this binary. xAI OAuth tokens are persisted by
+# OpenCode under XDG_DATA_HOME, which the service pins to the workspace's .intentic so they survive restarts.
+# The agent's shell also drives it directly (`opencode run`) to delegate tasks to Grok (agent/delegation.ts).
+# Pin the CLI in lockstep with the SDK version in _apps/sandbox/package.json so the client/server wire API matches.
+# ponytail: bump this together with @opencode-ai/sdk; a version skew surfaces as server-start / event-shape errors.
+RUN npm install -g opencode-ai@1.17.15 && opencode --version
+# The `codex` CLI on PATH — the agent's shell delegates tasks to the user's connected Codex account
+# (`codex exec`, agent/delegation.ts), authenticated via the CODEX_HOME injected per turn. Pin in lockstep
+# with @openai/codex-sdk in _apps/sandbox/package.json (the Codex primary adapter), same rationale as opencode.
+RUN npm install -g @openai/codex@0.142.5 && codex --version
+# The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
+# connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
+# runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as
+# "executable file not found in $PATH".
+COPY --from=build /out/cli /opt/intentic-cli
+RUN chmod +x /opt/intentic-cli/dist/cli.js \
+    && ln -s /opt/intentic-cli/dist/cli.js /usr/local/bin/intentic
+# The iq search CLI on PATH — the agent's primary code-search tool (every backend's Bash tool inherits PATH)
+# and the daemon's /workspace/search backend (execFile `iq --json`). Same chmod rationale as intentic above.
+COPY --from=build /out/iq /opt/iq
+RUN chmod +x /opt/iq/dist/cli.js \
+    && ln -s /opt/iq/dist/cli.js /usr/local/bin/iq
+# The baked embedding model behind `iq ask` (IQ_MODEL_DIR below); absent → iq degrades to lexical, never fetches.
+COPY --from=build /opt/iq-models /opt/iq-models
+# cloudflared on PATH — `intentic apply` shells out to `cloudflared access tcp` to reach a self-host's SSH
+# through its Cloudflare tunnel when the host is registered with via:"cloudflared" (a NAT'd local machine).
+COPY --from=build /usr/local/bin/cloudflared /usr/local/bin/cloudflared
+# The sandbox daemon.
+COPY --from=build /out/sandbox /opt/sandbox
+# pane-log-clean on PATH — the tmux pipe-pane hooks (above / logs/log-files.ts) replay each pane's byte
+# stream through it (a headless VT emulator using @xterm/headless from the daemon's node_modules) to keep
+# the terminal logs readable. Symlinked like intentic/iq: node resolves @xterm/headless from the target's
+# realpath (/opt/sandbox/node_modules); tsc keeps the file's shebang, so chmod +x makes it directly runnable.
+RUN chmod +x /opt/sandbox/dist/logs/pane-log-clean.js \
+    && ln -s /opt/sandbox/dist/logs/pane-log-clean.js /usr/local/bin/pane-log-clean
+# Image-baked agent skills (the daemon runs as root; the agent's settingSources loads /root/.claude). The
+# environment skill teaches the agent to extend this very image via an approved overlay Dockerfile.
+COPY _apps/sandbox/skills /root/.claude/skills
+# The tmux command runner — the agent's PreToolUse hook (src/agent/agent-terminals.ts) wraps every Bash tool
+# command through it, and the daemon's terminal runner (src/system/terminal-run.ts) executes user-triggered
+# flows through it, so commands run live-visible in tmux sessions — and the agent's output filter, which
+# strips noise from what the model sees.
+COPY --chmod=755 _apps/sandbox/bin/tmux-run /usr/local/bin/tmux-run
+COPY --chmod=755 _apps/sandbox/bin/agent-output-filter.mjs /usr/local/bin/agent-output-filter
+# Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.
+COPY _apps/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+WORKDIR /work
+# LANG: without a UTF-8 locale zsh's line editor counts BYTES as columns, so bira's multibyte prompt glyphs
+# (╰─, ↵) desync the cursor and corrupt the prompt after any non-zero exit status. C.utf8 is glibc-built-in.
+ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 IQ_MODEL_DIR=/opt/iq-models
+EXPOSE 8787 22
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

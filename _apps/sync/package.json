@@ -1,0 +1,38 @@
+{
+    "name": "@intentic/sync",
+    "version": "0.0.0",
+    "description": "Local background agent that keeps a directory bidirectionally in sync with a remote intentic sandbox — one HTTP enrollment call, then Mutagen over tunnel SSH",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://gitlab.com/radarsu/intentic.git",
+        "directory": "_apps/sync"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "bin": {
+        "intentic-sync": "./dist/cli.js"
+    },
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@stricli/core": "catalog:",
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:"
+    }
+}

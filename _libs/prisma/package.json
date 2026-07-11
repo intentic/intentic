@@ -1,0 +1,45 @@
+{
+    "name": "@intentic-app/prisma",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "dist/client.js",
+    "types": "dist/client.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/client.d.ts",
+            "import": {
+                "types": "./dist/client.d.ts",
+                "default": "./dist/client.js"
+            },
+            "require": {
+                "types": "./dist/client.d.ts",
+                "default": "./dist/client.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "rm -rf ./generated ./dist ./.cache && DATABASE_URL=postgresql://placeholder prisma generate --no-hints && tsc",
+        "generate": "DATABASE_URL=postgresql://placeholder prisma generate --no-hints",
+        "migrate:dev": "prisma migrate dev",
+        "migrate:deploy": "prisma migrate deploy",
+        "studio": "prisma studio"
+    },
+    "files": [
+        "dist",
+        "generated",
+        "migrations",
+        "schema.prisma",
+        "prisma.config.ts"
+    ],
+    "dependencies": {
+        "@prisma/adapter-pg": "catalog:",
+        "@prisma/client": "catalog:",
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "prisma": "catalog:",
+        "typescript": "catalog:"
+    }
+}

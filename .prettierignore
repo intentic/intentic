@@ -1,0 +1,28 @@
+# Generated / build output — never format.
+**/node_modules
+**/.cache
+**/.turbo
+**/.astro
+**/dist
+**/dist-*
+**/deploy
+**/generated
+**/out-tsc
+**/tmp
+pnpm-lock.yaml
+**/assets/js/env.js
+_apps/sandbox/operator-templates
+
+# Local tooling config, not project source.
+.claude
+
+# Formatting is intentionally scoped to JS / TS / JSON.
+# Astro, YAML, CSS, HTML and Markdown are left untouched (no auto-formatting).
+**/*.astro
+**/*.mdx
+**/*.yaml
+**/*.yml
+**/*.css
+**/*.scss
+**/*.html
+**/*.md

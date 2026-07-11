@@ -1,0 +1,44 @@
+{
+    "name": "@intentic/resources",
+    "version": "0.0.0",
+    "description": "",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://gitlab.com/radarsu/intentic.git",
+        "directory": "_libs/resources"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --build --watch"
+    },
+    "dependencies": {
+        "@intentic/graph": "workspace:*",
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "typescript": "catalog:"
+    }
+}

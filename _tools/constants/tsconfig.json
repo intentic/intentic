@@ -1,0 +1,8 @@
+{
+    "compilerOptions": {
+        "composite": false,
+        "noEmit": true
+    },
+    "include": ["./src/**/*"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

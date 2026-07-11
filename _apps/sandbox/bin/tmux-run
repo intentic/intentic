@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# tmux-run [-e KEY=VALUE]... <session> <command-string> [window-name]
+#
+# Runs <command-string> inside a new window of tmux session <session> so the web terminal panel can watch
+# it live (and type into it — the command's stdin is the pane tty), while this wrapper streams the combined
+# output to its own stdout and exits with the command's real exit code. Two callers: the agent's PreToolUse
+# hook (src/agent/agent-terminals.ts) rewrites every Bash tool command through it, and the daemon's terminal
+# runner (src/system/terminal-run.ts) executes user-triggered flows (capabilities, infra check) through it.
+#
+# -e KEY=VALUE sets the var on the new window only (tmux new-window -e), so values — including secrets —
+# reach the command without appearing in pane text or the persisted pane logs. The daemon also puts the
+# pairs in this wrapper's own environment, which is what the no-tmux fallback path sees.
+#
+# Capture is a plain file fed by `tee` inside the pane, NOT pipe-pane: a pane supports only one pipe-pane
+# and the global per-pane log hooks (src/logs/log-files.ts) already own it — creating the window triggers
+# those hooks, so commands land in the terminal history logs for free.
+set -u
+
+envflags=()
+while getopts e: opt; do
+    case "$opt" in
+        e) envflags+=(-e "$OPTARG") ;;
+        *) exit 2 ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+session="$1"
+cmd="$2"
+name="${3:-run}"
+
+# Fail open: any tmux failure below must degrade to running the command plainly, never break the caller.
+fallback() { exec bash -c "$cmd"; }
+
+d="$(mktemp -d)" || fallback
+printf '%s\n' "$cmd" > "$d/cmd"
+: > "$d/out"
+# Runner executed inside the pane. tee mirrors output to the pane tty AND the capture file; PIPESTATUS[0]
+# preserves the command's exit code through the pipe.
+printf 'bash %q/cmd 2>&1 | tee -a %q/out\necho "${PIPESTATUS[0]}" > %q/status\n' "$d" "$d" "$d" > "$d/runner"
+
+tmux has-session -t "=$session" 2>/dev/null \
+    || tmux new-session -d -s "$session" -c "$PWD" || fallback
+
+# The persistent pane log (written by the global pipe-pane hooks, src/logs/log-files.ts, VT-rendered to clean
+# text by pane-log-clean) — the filter's footer points the agent here for the full output. Path known only
+# after the pane exists; the session
+# name already satisfies the hooks' sanitized charset, so session-pane composes the exact hook filename.
+logfile=""
+
+# Emit the captured output as the tool result, noise-filtered when the filter is present ($1 = exit code
+# for its success/failure asymmetry). The filter buffers and writes once, so a failure can't half-emit;
+# missing binary, opt-out, or a filter error all degrade to the raw capture — tail-capped when the caller
+# bounds what ships over stdout (the full output stays in the pane + pane log).
+emit() {
+    if [ "${INTENTIC_RUN_FILTER:-1}" != "0" ] && command -v agent-output-filter >/dev/null 2>&1; then
+        agent-output-filter "$cmd" "$1" "$SECONDS" "$logfile" < "$d/out" 2>/dev/null && return
+    fi
+    if [ -n "${INTENTIC_RUN_OUTPUT_BYTES:-}" ]; then
+        tail -c "$INTENTIC_RUN_OUTPUT_BYTES" "$d/out" 2>/dev/null
+    else
+        cat "$d/out" 2>/dev/null
+    fi
+}
+
+# Prune windows of finished commands, so the last output stays readable until the next command but dead
+# windows don't accumulate.
+tmux list-panes -s -t "=$session" -F '#{pane_dead} #{window_id}' 2>/dev/null \
+    | awk '$1==1{print $2}' | xargs -rn1 tmux kill-window -t
+
+# New ACTIVE window (an attached client follows the newest command) with remain-on-exit so finished output
+# stays visible until pruned.
+pane="$(tmux new-window -P -F '#{pane_id}' -t "=$session:" -n "$name" -c "$PWD" ${envflags[@]+"${envflags[@]}"} "bash $d/runner" \; \
+    set-option -w -t "=$session:" remain-on-exit on)" || fallback
+[ -n "${INTENTIC_TERMINAL_LOGS_DIR:-}" ] && logfile="$INTENTIC_TERMINAL_LOGS_DIR/$session-$pane.log"
+
+# A SIGTERM (the SDK's Bash timeout, or the daemon runner's abort/watchdog) takes the pane down with the
+# wrapper so timeout semantics match the plain Bash tool, and still returns whatever the command printed
+# before the kill. (A SIGKILLed wrapper leaves the pane running visibly; prune or the user cleans it up.)
+trap 'tmux kill-window -t "$pane" 2>/dev/null; emit 143; rm -rf "$d"; exit 143' TERM INT
+
+# Completion is the status file, not tail/pane timing: the runner writes it strictly AFTER `tee` closes
+# $d/out (line above), so once it exists the captured output is complete and flushed — no tail-follow,
+# inotify, or flush-window race. Pane liveness stays only as the kill escape hatch: a user ×-killing the
+# session (or the fast-exit case that destroys the window before remain-on-exit lands) would otherwise hang
+# this wrapper — and its caller — forever waiting for a status that never comes.
+# Soft timeout for long-running commands (dev servers, watch, tail -f): return early with the output so
+# far and a follow handle instead of hanging until the SDK's Bash timeout kills the pane. The pane (and
+# $d — the runner still tees into it) stays alive; the dead-window prune sweeps it once it exits. Default
+# sits under the SDK's 2-minute Bash timeout; 0 disables (the daemon runner blocks to real completion).
+soft="${INTENTIC_RUN_SOFT_TIMEOUT_S:-110}"
+while [ ! -f "$d/status" ]; do
+    if [ "$soft" -ge 1 ] 2>/dev/null && [ "$SECONDS" -ge "$soft" ]; then
+        emit running
+        printf '\n--- command still running in tmux window %s · follow: %s\n' "$name" "${logfile:-$d/out}"
+        exit 0
+    fi
+    [ "$(tmux display -p -t "$pane" '#{pane_dead}' 2>/dev/null)" = "0" ] && { sleep 0.05; continue; }
+    # Pane gone/dead: a normal fast exit writes status just before the pane dies, so give it a brief grace.
+    for _ in 1 2 3 4 5; do [ -f "$d/status" ] && break; sleep 0.05; done
+    break
+done
+# Missing status file means the pane was killed mid-command — report failure honestly.
+code="$(cat "$d/status" 2>/dev/null || echo 1)"
+# Emit the complete captured output once — the SDK captures this stdout as the whole Bash tool result.
+emit "$code"
+rm -rf "$d"
+exit "$code"

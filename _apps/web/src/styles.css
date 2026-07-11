@@ -1,0 +1,62 @@
+/* Establish the cascade-layer order BEFORE Tailwind/PrimeVue declare theirs. Tailwind's
+ * `@import "tailwindcss"` emits `@layer theme, base, components, utilities` and PrimeVue's
+ * runtime config (installUi cssLayer) wants `primeng` between base and components —
+ * but the linked stylesheet is parsed before PrimeVue's JS runs, so without this line
+ * `primeng` is introduced last (after `utilities`) and PrimeVue wins over Tailwind utilities.
+ * Declaring the full order here first fixes the position deterministically. */
+@layer theme, base, primeng, components, utilities;
+
+@import "tailwindcss";
+
+/* Design system: tokens + colors + PrimeVue tuning + utilities, then base resets. The
+ * order is load-bearing — see _libs/ui/src/styles/shared/index.css. */
+@import "../../../_libs/ui/src/styles/shared/index.css";
+@import "../../../_libs/ui/src/styles/core/index.css";
+
+/* Scan the @intentic-app/ui library's source for class names (it lives outside this app's tree,
+ * so Tailwind won't auto-detect it). The app's own files are auto-detected. */
+@source "../../../_libs/ui/src/**/*.{ts,html,vue}";
+
+/* Mobile base: kill the gray tap flash (active: classes provide press feedback instead) and the
+ * browser's own pull-to-refresh / scroll chaining on the app shell — inner scrollers opt back in
+ * with their own overscroll-behavior. */
+@layer base {
+    * {
+        -webkit-tap-highlight-color: transparent;
+    }
+    html,
+    body {
+        overscroll-behavior: none;
+    }
+}
+
+/* Tighten the page gutter on phones — the desktop `--ui-page-padding` (up to 2rem/side) eats a third of a
+ * 375px screen. max-width already collapses to 100% here, so only the padding needs trimming. */
+@media (max-width: 767.98px) {
+    :root {
+        --ui-page-padding: 1rem;
+    }
+}
+
+/* Mobile dialogs: every PrimeVue Dialog carries a desktop inline width (e.g. `26rem`/`40rem`) that overflows
+ * a phone. Cap width/height to the viewport (minus a margin) with `!important` — it beats the non-important
+ * inline width — and let the content region scroll. On a 375px screen this makes big dialogs near-full-screen
+ * while small confirmations stay appropriately sized. One rule covers ManageAccess/SandboxSettings/Upgrade/
+ * ImportMemory and the workspace confirms at once, so no per-Dialog pt is needed. */
+@media (max-width: 767.98px) {
+    .p-dialog {
+        max-width: calc(100vw - 1.5rem) !important;
+        max-height: calc(100dvh - 1.5rem) !important;
+    }
+    .p-dialog-content {
+        overflow-y: auto;
+    }
+}
+
+/* GSI injects its One Tap / verifying prompt iframe at body level. Match its light color-scheme
+ * so the browser paints no opaque (white) canvas behind it in dark mode — same trick as the
+ * rendered button in GoogleSigninGate.vue. */
+#credential_picker_container,
+#credential_picker_iframe {
+    color-scheme: light;
+}

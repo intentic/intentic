@@ -1,0 +1,7 @@
+# intentic starter Dockerfile — replace with your app's real build.
+FROM node:24.18.0-alpine3.24
+WORKDIR /app
+COPY . .
+ENV PORT=8080
+EXPOSE 8080
+CMD ["node", "server.js"]

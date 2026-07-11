@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "baseUrl": "./",
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo"
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "references": [{ "path": "../graph" }, { "path": "../need-resolver" }, { "path": "../resources" }, { "path": "../state-resolver" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

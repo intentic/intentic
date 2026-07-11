@@ -1,0 +1,18 @@
+import { env } from "@intentic/graph";
+import { defineIntent } from "@intentic/sdk";
+
+export const intent = defineIntent((i) => {
+    const cf = i.have.cloudflare("cf", {
+        apiToken: env("CLOUDFLARE_API_TOKEN"),
+    });
+
+    // `self` is your local deploy target (this machine / its Docker-in-Docker host). intentic registers it in
+    // the managed `// <intentic>` block at the top of this file — reference it with `on: self`, don't redeclare it.
+    i.want.app("my-app", {
+        on: self,
+        expose: cf,
+        environments: {
+            production: { domain: "app.<%= it.zone %>", branch: "main" },
+        },
+    });
+});

@@ -1,0 +1,7 @@
+{
+    "extends": "@intentic/tsconfig/tsconfig.astro.json",
+    "compilerOptions": {
+        "noEmit": true
+    },
+    "include": ["src/**/*.ts"]
+}

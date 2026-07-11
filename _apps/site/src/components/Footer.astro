@@ -1,0 +1,114 @@
+---
+import { APP_URL, githubIssuesUrl, githubUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/content/site";
+
+const year = 2026;
+
+const featureLinks = [
+    { href: "/#onboarding", label: "Workspace" },
+    { href: "/#ownership", label: "Ownership" },
+    { href: "/#capabilities", label: "Capabilities" },
+    { href: "/#automations", label: "Automations" },
+    { href: "/#devops", label: "DevOps Engine" },
+];
+
+const docsLinks = [
+    { href: "https://github.com/radarsu/intentic#getting-started", label: "Getting Started", external: true },
+    { href: "https://github.com/radarsu/intentic#capabilities", label: "CLI Reference", external: true },
+    {
+        href: "https://github.com/radarsu/intentic/blob/main/ARCHITECTURE.md",
+        label: "Architecture",
+        external: true,
+    },
+    { href: "https://github.com/radarsu/intentic/releases", label: "Release Notes", external: true },
+];
+
+const productLinks = [
+    { href: APP_URL, label: "Open the app", external: true },
+    { href: githubUrl, label: "GitHub", external: true },
+    { href: githubIssuesUrl, label: "Issues", external: true },
+    { href: "/#faq", label: "FAQ", external: false },
+];
+
+const legalLinks = [
+    { href: "/privacy/", label: "Privacy Policy" },
+    { href: "/terms/", label: "Terms of Service" },
+];
+---
+
+<footer class="mt-auto border-t border-line pt-12 pb-10">
+    <div class="mx-auto grid max-w-6xl grid-cols-2 gap-10 px-6 sm:grid-cols-4">
+        <div class="col-span-2 sm:col-span-1">
+            <img src="/assets/intentic-full.png" alt={ORG_NAME} class="h-6 w-auto" width="126" height="24" />
+            <p class="mt-3 max-w-xs text-sm leading-relaxed text-muted">{ORG_TAGLINE}.</p>
+        </div>
+
+        <div>
+            <h3 class="eyebrow mb-3">Features</h3>
+            <ul class="space-y-2">
+                {
+                    featureLinks.map((link) => (
+                        <li>
+                            <a href={link.href} class="text-sm text-muted transition-colors hover:text-link">
+                                {link.label}
+                            </a>
+                        </li>
+                    ))
+                }
+            </ul>
+        </div>
+
+        <div>
+            <h3 class="eyebrow mb-3">Docs</h3>
+            <ul class="space-y-2">
+                {
+                    docsLinks.map((link) => (
+                        <li>
+                            <a
+                                href={link.href}
+                                target={link.external ? "_blank" : undefined}
+                                rel={link.external ? "noopener" : undefined}
+                                class="text-sm text-muted transition-colors hover:text-link"
+                            >
+                                {link.label}
+                            </a>
+                        </li>
+                    ))
+                }
+            </ul>
+        </div>
+
+        <div>
+            <h3 class="eyebrow mb-3">Product</h3>
+            <ul class="space-y-2">
+                {
+                    productLinks.map((link) => (
+                        <li>
+                            <a
+                                href={link.href}
+                                target={link.external ? "_blank" : undefined}
+                                rel={link.external ? "noopener" : undefined}
+                                class="text-sm text-muted transition-colors hover:text-link"
+                            >
+                                {link.label}
+                            </a>
+                        </li>
+                    ))
+                }
+            </ul>
+        </div>
+    </div>
+
+    <div
+        class="mx-auto mt-10 flex max-w-6xl flex-col items-center justify-between gap-2 px-6 text-xs text-subtle sm:flex-row"
+    >
+        <span>© {year} {ORG_NAME}. Engine MIT licensed.</span>
+        <span class="flex gap-4">
+            {legalLinks.map((link) => <a href={link.href} class="transition-colors hover:text-link">{link.label}</a>)}
+        </span>
+        <span>
+            Open source on <a href={githubUrl} target="_blank" rel="noopener" class="transition-colors hover:text-link">
+                GitHub
+            </a>
+        </span>
+    </div>
+</footer>

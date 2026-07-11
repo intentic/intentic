@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "baseUrl": "./",
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts", "./src/e2e-harness.ts"],
+    "references": [{ "path": "../../_libs/sandbox-contract" }, { "path": "../../_libs/workspace-ignore" }],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

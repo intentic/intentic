@@ -1,0 +1,43 @@
+{
+    "name": "@intentic-app/ui",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "src/index.ts",
+    "types": "src/index.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "default": "./src/index.ts"
+        },
+        "./styles/*": "./src/styles/*"
+    },
+    "scripts": {
+        "build": "vue-tsc --noEmit",
+        "generate:icons": "bun run scripts/generateIconData.ts",
+        "typecheck": "vue-tsc --noEmit"
+    },
+    "dependencies": {
+        "@iconify/vue": "catalog:",
+        "@primeuix/themes": "catalog:",
+        "@shikijs/langs": "catalog:",
+        "@shikijs/themes": "catalog:",
+        "primevue": "catalog:",
+        "shiki": "catalog:",
+        "tailwind-merge": "catalog:",
+        "tslib": "catalog:",
+        "vue": "catalog:"
+    },
+    "devDependencies": {
+        "@iconify-json/hugeicons": "catalog:",
+        "@iconify-json/ph": "catalog:",
+        "@iconify-json/prime": "catalog:",
+        "@iconify-json/ri": "catalog:",
+        "@iconify-json/solar": "catalog:",
+        "@iconify/types": "catalog:",
+        "@iconify/utils": "catalog:",
+        "@intentic/tsconfig": "workspace:*",
+        "typescript": "catalog:",
+        "vue-tsc": "catalog:"
+    }
+}

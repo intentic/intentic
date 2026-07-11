@@ -1,0 +1,17 @@
+{
+    "files": [],
+    "references": [
+        { "path": "_libs/graph" },
+        { "path": "_libs/resources" },
+        { "path": "_libs/need-resolver" },
+        { "path": "_libs/state-resolver" },
+        { "path": "_libs/sdk" },
+        { "path": "_libs/engine" },
+        { "path": "_libs/providers" },
+        { "path": "_libs/sandbox-contract" },
+        { "path": "_libs/workspace-ignore" },
+        { "path": "_libs/iq-engine" },
+        { "path": "_apps/iq" },
+        { "path": "_apps/cli" }
+    ]
+}

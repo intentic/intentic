@@ -1,0 +1,473 @@
+import { type EnrollHostInput, EnrollHostInputSchema } from "@intentic/sandbox-contract";
+import { OpenAPIHandler } from "@orpc/openapi/fetch";
+import { ORPCError } from "@orpc/server";
+import { type Context, Hono } from "hono";
+import { cors } from "hono/cors";
+import { bearerFrom, ForbiddenError, tokenEquals } from "./auth/auth.js";
+import { fireAutomation, PAYLOAD_MAX } from "./automations/scheduler.js";
+import type { Services } from "./composition.js";
+import { type AppEnv, buildOrpcContext } from "./context.js";
+import { enrollHost } from "./inventory/enroll-host.js";
+import { createRouter } from "./router.js";
+import {
+    clearAuthorizedKeys,
+    consumePairing,
+    currentSyncKey,
+    enrollAuthorizedKey,
+    isKeyEnrolled,
+    isValidAuthorizedKey,
+    isValidPairing,
+    mintPairing,
+    syncingFrom,
+    syncSshHostname,
+} from "./system/sync.js";
+import { approveEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
+import { createBrowserLoginRoute } from "./system/browser-login.js";
+import { createTerminalRoute } from "./system/terminal.js";
+import { createWebchatRoute } from "./webchat/webchat.routes.js";
+import { extractTarToWorkspace, PathEscapeError } from "./workspace/workspace-archive.js";
+import { computeUploadSkip, type UploadManifestEntry } from "./workspace/workspace-diff.js";
+import { contentTypeForPath, MAX_RAW_BYTES, MAX_UPLOAD_BYTES, resolveWithin, UploadTooLargeError } from "./workspace/workspace-files.js";
+
+// Only genuine server faults (5xx) are logged; expected ORPCErrors (NOT_FOUND/BAD_REQUEST/…) are the routes'
+// normal control flow and would be noise.
+const logUnexpectedError = (services: Services, error: unknown): void => {
+    if (error instanceof ORPCError && error.code !== "INTERNAL_SERVER_ERROR") {
+        return;
+    }
+    services.logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, "unhandled error");
+};
+
+// The webhook fire route for event automations — its callers are external systems, so it's exempt from the
+// bearer middleware and authenticated by the automation's own token instead (see the route).
+const eventFirePath = /^\/automations\/[^/]+\/fire$/;
+
+// The web-chat widget ingest — its callers are anonymous website visitors (no Google token), so it's exempt
+// from the bearer middleware and gated by the automation's origin allowlist + rate limit instead (see the route).
+const webchatPath = /^\/webchat\/[^/]+\/message$/;
+
+// The lowercased email in a member-management request body, or undefined when absent/malformed.
+const memberEmail = async (c: Context): Promise<string | undefined> => {
+    const body = (await c.req.json().catch(() => undefined)) as { email?: unknown } | undefined;
+    return typeof body?.email === "string" ? body.email.toLowerCase() : undefined;
+};
+
+// The HTTP API the browser drives DIRECTLY over the sandbox's own Cloudflare tunnel. When services.auth is set
+// the daemon verifies the owner's Google ID token on every route but /health (it owns its own auth). No auth
+// only in tests or the host-internal server preview. All routes are oRPC except the plain /health and binary
+// /workspace/raw, registered before the catch-all.
+export const createApp = (services: Services): Hono<AppEnv> => {
+    const orpcHandler = new OpenAPIHandler(createRouter(services), {
+        interceptors: [
+            async (options) => {
+                try {
+                    return await options.next();
+                } catch (error) {
+                    logUnexpectedError(services, error);
+                    throw error;
+                }
+            },
+        ],
+    });
+
+    const app = new Hono<AppEnv>();
+
+    if (services.auth !== undefined) {
+        const authorize = services.auth.authorize;
+        const allowOrigin = services.auth.allowOrigin ?? "*";
+        app.use(
+            "*",
+            cors({
+                // The daemon is owner-driven from one origin — except the web-chat widget, which is embedded on
+                // arbitrary third-party sites. Reflect the caller's origin for /webchat so a legit widget isn't
+                // browser-blocked; the route's own allowedOrigins check is the real gate (CORS isn't a security
+                // boundary — a non-browser client ignores it).
+                origin: (origin, c) => (webchatPath.test(c.req.path) ? (origin ?? "*") : allowOrigin),
+                allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                allowHeaders: ["authorization", "content-type", "x-intentic-connect"],
+                maxAge: 600,
+            }),
+        );
+        app.use("*", async (c, next) => {
+            // /system/terminal is a WebSocket upgrade: the browser can't set an Authorization header on it, so
+            // the terminal route authorizes the token from the query string itself (see createTerminalRoute).
+            // /system/authorized-key is redeemed by the desktop-sync agent with a one-time pairing token instead
+            // of a bearer; the POST handler checks that token itself and the DELETE handler re-checks the owner.
+            if (
+                c.req.path === "/health" ||
+                c.req.path === "/system/terminal" ||
+                // /system/browser-login is a WebSocket upgrade too — it authorizes token+connect from the query
+                // string itself (see createBrowserLoginRoute), same as /system/terminal.
+                c.req.path === "/system/browser-login" ||
+                c.req.path === "/enroll" ||
+                c.req.path === "/system/authorized-key" ||
+                eventFirePath.test(c.req.path) ||
+                webchatPath.test(c.req.path)
+            ) {
+                return next();
+            }
+            // An operator panel's own backend (running inside this sandbox) calls the daemon with the per-boot
+            // panel token instead of a Google bearer — the token never leaves the container (it's injected into
+            // panel processes as INTENTIC_PANEL_TOKEN), so it's server-side only and not a browser-exposed path.
+            if (tokenEquals(c.req.header("x-intentic-panel") ?? "", services.panelToken)) {
+                return next();
+            }
+            try {
+                c.set("identity", await authorize(bearerFrom(c.req.header("authorization")), c.req.header("x-intentic-connect") ?? undefined));
+            } catch (error) {
+                // 403 = verified identity that isn't the owner/a member — the browser renders "no access" for it,
+                // distinct from 401 (missing/invalid token), which it treats like any other unreachable daemon.
+                if (error instanceof ForbiddenError) {
+                    return c.json({ error: error.message }, 403);
+                }
+                return c.json({ error: "unauthorized" }, 401);
+            }
+            return next();
+        });
+    }
+
+    app.get("/health", (c) => c.json({ ok: true }));
+
+    // Raw bytes for any file under /work, with a Content-Type by extension — the browser previews images/PDF
+    // here (the text route utf8-decodes and would corrupt them). Same guards/order as workspace.file: 400 on
+    // escape, 404 on missing, 413 on oversize.
+    app.get("/workspace/raw", async (c) => {
+        const path = c.req.query("path");
+        const target = path === undefined ? undefined : resolveWithin(services.workspace.root, path);
+        if (target === undefined) {
+            return c.json({ error: "invalid path" }, 400);
+        }
+        const size = await services.files.size(target);
+        if (size === undefined) {
+            return c.json({ error: "not found" }, 404);
+        }
+        if (size > MAX_RAW_BYTES) {
+            return c.json({ error: "file too large" }, 413);
+        }
+        const bytes = await services.files.readBytes(target);
+        if (bytes === undefined) {
+            return c.json({ error: "not found" }, 404);
+        }
+        // Wrap in a fresh Uint8Array so the body type is exactly Uint8Array<ArrayBuffer> (a Buffer's backing is
+        // ArrayBufferLike, which Hono's body type rejects); bounded by MAX_RAW_BYTES, so the copy is cheap.
+        return c.body(new Uint8Array(bytes), 200, { "Content-Type": contentTypeForPath(target), "Content-Length": String(bytes.byteLength) });
+    });
+
+    // Write one file under /work — the drag-drop upload AND the editor's text save both post here (bytes / utf8
+    // body are the same to persist), so writes stay off oRPC like the raw read above. The body streams straight to
+    // disk (no full-buffer), so multi-GB uploads stay flat in memory; parent dirs are auto-created, so a nested
+    // dropped-folder path materializes its tree. Guards: 400 on escape, 413 on oversize (Content-Length first,
+    // then the running byte count as it streams).
+    app.post("/workspace/upload", async (c) => {
+        const path = c.req.query("path");
+        const target = path === undefined ? undefined : resolveWithin(services.workspace.root, path);
+        if (target === undefined) {
+            return c.json({ error: "invalid path" }, 400);
+        }
+        // A big file arrives as sequential parts (the browser keeps each request under Cloudflare's ~100 MB edge
+        // body cap); ?offset says where this part lands, and the write goes in place instead of truncating.
+        const offset = Number(c.req.query("offset") ?? 0);
+        if (!Number.isInteger(offset) || offset < 0) {
+            return c.json({ error: "invalid offset" }, 400);
+        }
+        const declared = Number(c.req.header("content-length"));
+        if (Number.isFinite(declared) && offset + declared > MAX_UPLOAD_BYTES) {
+            return c.json({ error: "file too large" }, 413);
+        }
+        const body = c.req.raw.body;
+        // An empty body (a new empty file, or saving an emptied editor buffer) has no stream to pipe. Only at
+        // offset 0 — an empty later part must not wipe the parts already written.
+        if (body === null) {
+            if (offset === 0) {
+                await services.files.write(target, "");
+            }
+        } else {
+            try {
+                await services.files.writeStream(target, body, MAX_UPLOAD_BYTES, offset);
+            } catch (error) {
+                if (error instanceof UploadTooLargeError) {
+                    return c.json({ error: "file too large" }, 413);
+                }
+                throw error;
+            }
+        }
+        // A dropped file passes its source mtime as ?mtime so a re-upload can skip it (upload-diff); the editor's
+        // text save sends none and keeps the write-time mtime.
+        const mtime = Number(c.req.query("mtime"));
+        if (Number.isFinite(mtime)) {
+            await services.files.setMtime(target, mtime);
+        }
+        services.history.notifyUserWrite();
+        return c.json({ ok: true });
+    });
+
+    // Re-upload diff: the client posts a manifest of what it's about to upload (path + source size + mtime) and
+    // we answer which paths are already identical on disk (same size + whole-second mtime), so the browser drops
+    // those and re-sends only what changed. Live-stats /work (unlike the filtered tree, this sees `.git` and has
+    // no entry cap). Read-only — never writes; escaping/denied paths simply aren't reported as skippable.
+    app.post("/workspace/upload-diff", async (c) => {
+        const { files } = await c.req.json<{ files?: UploadManifestEntry[] }>();
+        return c.json({ skip: await computeUploadSkip(services.workspace.root, files ?? []) });
+    });
+
+    // Bulk directory upload: the browser streams ONE tar of a large dropped tree here (over per-file POSTs, which
+    // cost a round-trip each) and we extract it entry-by-entry into /work. Same guards as the single upload,
+    // applied per entry: 400 on any escaping path (aborts), silently skips secret/`.git` entries, 413 once the
+    // running total passes the cap. Streamed both ways, so a huge tree never lands in memory.
+    app.post("/workspace/upload-archive", async (c) => {
+        const body = c.req.raw.body;
+        if (body === null) {
+            return c.json({ error: "empty body" }, 400);
+        }
+        try {
+            await extractTarToWorkspace(services.workspace.root, body, MAX_UPLOAD_BYTES);
+        } catch (error) {
+            if (error instanceof PathEscapeError) {
+                return c.json({ error: "invalid path" }, 400);
+            }
+            if (error instanceof UploadTooLargeError) {
+                return c.json({ error: "file too large" }, 413);
+            }
+            throw error;
+        }
+        services.history.notifyUserWrite();
+        return c.json({ ok: true });
+    });
+
+    // Interactive PTY over a WebSocket. Paired with the `ws` server passed to serve() in main.ts (node-server's
+    // upgradeWebSocket drives it); registered before the oRPC catch-all so the upgrade matches here.
+    app.get("/system/terminal", createTerminalRoute(services));
+
+    // Guided browser login for `browser`-kind capabilities: a WebSocket that screencasts a live Chromium the
+    // owner signs into (see createBrowserLoginRoute). Same shared `ws` server + query-string auth as the terminal.
+    app.get("/system/browser-login", createBrowserLoginRoute(services));
+
+    // Deploy-target enrollment from the connect-host script (curl, not a browser): authenticated by the connect
+    // token alone (exempt from the bearer middleware above), so it self-registers a host without a Google login.
+    // Loopback mode (no services.auth) accepts any caller, like every other route.
+    app.post("/enroll", async (c) => {
+        if (services.auth !== undefined && !tokenEquals(c.req.header("x-intentic-connect") ?? "", services.config.connectToken)) {
+            return c.json({ error: "unauthorized" }, 401);
+        }
+        let input: EnrollHostInput;
+        try {
+            input = EnrollHostInputSchema.parse(await c.req.json());
+        } catch {
+            return c.json({ error: "invalid enrollment body" }, 400);
+        }
+        try {
+            await enrollHost(services, input);
+        } catch (error) {
+            if (error instanceof ORPCError && error.code === "PRECONDITION_FAILED") {
+                return c.json({ error: error.message }, 412);
+            }
+            throw error;
+        }
+        return c.json({ ok: true });
+    });
+
+    // Webhook fire for event automations: external systems (GitHub/Sentry/monitors) POST here to wake the
+    // agent, authenticated by the automation's own token as ?token=… — the only mechanism every webhook sender
+    // supports. Enforced ALWAYS (fail-closed even in loopback, unlike /enroll — the token always exists). The
+    // body (any format, capped) reaches the guard as AUTOMATION_PAYLOAD and is appended to the wake prompt.
+    // Responds immediately; the agent turn runs detached, exactly like a scheduler fire.
+    app.post("/automations/:id/fire", async (c) => {
+        const automation = await services.automations.get(c.req.param("id"));
+        if (automation === undefined || automation.trigger.kind !== "event") {
+            return c.json({ error: "no event automation with that id" }, 404);
+        }
+        const token = automation.trigger.token;
+        if (token === undefined || !tokenEquals(c.req.query("token") ?? "", token)) {
+            return c.json({ error: "unauthorized" }, 401);
+        }
+        if (!automation.enabled) {
+            return c.json({ error: "automation disabled" }, 409);
+        }
+        const declared = Number(c.req.header("content-length"));
+        if (Number.isFinite(declared) && declared > PAYLOAD_MAX) {
+            return c.json({ error: "payload too large" }, 413);
+        }
+        const payload = await c.req.text();
+        void fireAutomation(services, automation, payload === "" ? undefined : payload).catch((error: unknown) =>
+            services.logger.error({ err: error, automation: automation.id }, "automation run failed"),
+        );
+        return c.json({ ok: true });
+    });
+
+    // Web-chat widget ingest: an anonymous visitor POSTs a message and the agent's reply streams back as SSE.
+    // Exempt from the bearer middleware (visitors have no Google token), gated by the automation's origin
+    // allowlist + a per-conversation rate limit. Registered before the oRPC catch-all, like /automations/:id/fire.
+    app.post("/webchat/:id/message", createWebchatRoute(services));
+
+    // Owner-only management of the sandbox's shared-access list — the emails the auth check above admits besides
+    // the owner. The owner's browser calls these when inviting/removing collaborators; the platform mirrors the
+    // grants for discovery, but THIS list is the enforced one. Loopback mode (no auth) skips the owner gate, like
+    // every other route. The bearer middleware already ran (caller is at least a member); the owner gate narrows it.
+    // Returns the denial response, or undefined when the caller is the owner: 403 for a verified non-owner
+    // (ForbiddenError), 401 for authentication failures — the latter matters on the middleware-exempt
+    // /system/authorized-key routes, where this gate is the only auth at all.
+    const ownerDenied = async (c: Context): Promise<Response | undefined> => {
+        if (services.auth === undefined) {
+            return undefined;
+        }
+        try {
+            await services.auth.authorizeOwner(bearerFrom(c.req.header("authorization")));
+            return undefined;
+        } catch (error) {
+            return error instanceof ForbiddenError ? c.json({ error: error.message }, 403) : c.json({ error: "unauthorized" }, 401);
+        }
+    };
+    app.get("/members", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        return c.json({ emails: await services.members.list() });
+    });
+    app.post("/members", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const email = await memberEmail(c);
+        if (email === undefined) {
+            return c.json({ error: "email required" }, 400);
+        }
+        await services.members.add(email);
+        return c.json({ emails: await services.members.list() });
+    });
+    app.delete("/members", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const email = await memberEmail(c);
+        if (email === undefined) {
+            return c.json({ error: "email required" }, 400);
+        }
+        await services.members.remove(email);
+        return c.json({ emails: await services.members.list() });
+    });
+
+    // The agent-proposed overlay Dockerfile (.intentic/environment.Dockerfile). Members see the state; only the
+    // owner approves (copying it to the approved file) or rejects (deleting the proposal). The rebuild itself
+    // runs OUTSIDE the container — rebuild.sh locally, the workspace provider on a server — pinned to the
+    // approved hash, so approval here never mutates the running sandbox.
+    app.get("/environment", async (c) => c.json(await readEnvironment(services)));
+    app.post("/environment/approve", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const body = (await c.req.json().catch(() => undefined)) as { hash?: unknown } | undefined;
+        const hash = typeof body?.hash === "string" ? body.hash : undefined;
+        if (hash === undefined) {
+            return c.json({ error: "hash required" }, 400);
+        }
+        const failure = await approveEnvironment(services, hash);
+        if (failure === "missing") {
+            return c.json({ error: "no proposal to approve" }, 404);
+        }
+        if (failure === "mismatch") {
+            return c.json({ error: "the proposal changed since it was reviewed — refresh and re-approve" }, 409);
+        }
+        if (failure === "invalid") {
+            return c.json(
+                { error: "the proposal must contain only RUN/ENV content — no FROM (the daemon owns the base image) and no intentic:runtime lines" },
+                400,
+            );
+        }
+        return c.json(await readEnvironment(services));
+    });
+    app.post("/environment/reject", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        await rejectEnvironment(services);
+        return c.json(await readEnvironment(services));
+    });
+
+    // Local-sync (Mutagen) enrollment. The owner mints a short-lived pairing token in the browser (owner-gated,
+    // like /members); the desktop agent redeems it once here to enroll its SSH key — so the agent needs no OAuth,
+    // and trust still roots in the owner's Google identity that minted the token. These sit before the oRPC
+    // catch-all, like /members and /workspace/raw.
+    app.post("/system/sync/pair", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        return c.json(mintPairing());
+    });
+    app.post("/system/authorized-key", async (c) => {
+        // Authorized either by a valid pairing token (the agent's path) or the owner's Google token (fallback).
+        const pair = c.req.header("x-intentic-pair") ?? undefined;
+        const viaPair = pair !== undefined && isValidPairing(pair);
+        if (!viaPair) {
+            const denied = await ownerDenied(c);
+            if (denied !== undefined) {
+                return denied;
+            }
+        }
+        const body = (await c.req.json().catch(() => undefined)) as { key?: unknown } | undefined;
+        const key = typeof body?.key === "string" ? body.key : undefined;
+        if (key === undefined || !isValidAuthorizedKey(key)) {
+            return c.json({ error: "invalid key" }, 400);
+        }
+        // The agent needs the tunnel's SSH host to point Mutagen at; without one, sync can't reach this sandbox.
+        const sshHostname = syncSshHostname(services.config.connectToken, services.config.zone, services.config.sandbox.publicUrl);
+        if (sshHostname === undefined) {
+            return c.json({ error: "ssh tunnel not configured" }, 409);
+        }
+        // Exclusive sync: one machine at a time. If a *different* key already holds it, refuse (423 Locked)
+        // unless this is an explicit takeover — which overwrites the other key and stops its Mutagen transport.
+        // Refuse before consuming the token so the user can retry with --takeover using the same pairing.
+        const current = await currentSyncKey();
+        const takeover = c.req.header("x-intentic-sync-takeover") === "1";
+        if (current !== undefined && current !== key.trim() && !takeover) {
+            return c.json({ error: "sync already active", machine: current.split(" ")[2] }, 423);
+        }
+        await enrollAuthorizedKey(key);
+        // Burn the pairing token only on success, so a transient failure leaves it usable for a retry.
+        if (pair !== undefined) {
+            consumePairing(pair);
+        }
+        return c.json({ ok: true, sshHostname });
+    });
+    app.get("/system/sync", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const sshHostname = syncSshHostname(services.config.connectToken, services.config.zone, services.config.sandbox.publicUrl);
+        const machine = await syncingFrom();
+        // Always 200 so the UI can render its "enable" vs "enabled" state; sshHostname is omitted when this
+        // sandbox has no SSH tunnel (loopback/preview), which the card treats as "sync unavailable". syncingFrom
+        // names the machine currently holding sync so the card can show it and offer a takeover.
+        return c.json({
+            enrolled: await isKeyEnrolled(),
+            ...(machine !== undefined ? { syncingFrom: machine } : {}),
+            ...(sshHostname !== undefined ? { sshHostname } : {}),
+        });
+    });
+    app.delete("/system/authorized-key", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        await clearAuthorizedKeys();
+        return c.json({ ok: true });
+    });
+
+    // Everything else flows through the oRPC OpenAPI handler, mounted at the root (its contract paths ARE the
+    // daemon's routes). Registered last so /health + /workspace/raw match first.
+    app.all("/*", async (c) => {
+        const result = await orpcHandler.handle(c.req.raw, { context: buildOrpcContext(c) });
+        if (result.matched) {
+            return result.response;
+        }
+        return c.notFound();
+    });
+
+    return app;
+};

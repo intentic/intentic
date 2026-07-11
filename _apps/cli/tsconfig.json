@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+        "baseUrl": "./",
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts", "./src/__fixtures__/**"],
+    "references": [
+        { "path": "../../_libs/graph" },
+        { "path": "../../_libs/need-resolver" },
+        { "path": "../../_libs/state-resolver" },
+        { "path": "../../_libs/engine" },
+        { "path": "../../_libs/providers" }
+    ],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

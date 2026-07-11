@@ -1,0 +1,5 @@
+FROM busybox:1.37.0
+RUN mkdir -p /www && printf '%s' '<%= it.appBody %>' > /www/index.html
+ENV PORT=8080
+EXPOSE 8080
+CMD ["sh","-c","httpd -f -v -p ${PORT} -h /www"]

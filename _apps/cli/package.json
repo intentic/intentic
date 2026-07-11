@@ -1,0 +1,70 @@
+{
+    "name": "@intentic/cli",
+    "version": "0.0.0",
+    "description": "",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://gitlab.com/radarsu/intentic.git",
+        "directory": "_apps/cli"
+    },
+    "files": [
+        "dist",
+        "templates"
+    ],
+    "bin": {
+        "intentic": "./dist/cli.js"
+    },
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --build --watch",
+        "watch": "tsc --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "e2e": "INTENTIC_E2E=1 vitest run cli.e2e",
+        "e2e:hermetic": "INTENTIC_E2E_HERMETIC=1 vitest run hermetic.e2e"
+    },
+    "dependencies": {
+        "@intentic/engine": "workspace:*",
+        "@intentic/graph": "workspace:*",
+        "@intentic/need-resolver": "workspace:*",
+        "@intentic/providers": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/scaffold": "workspace:*",
+        "@intentic/state-resolver": "workspace:*",
+        "@puristic/env": "catalog:",
+        "@stricli/core": "catalog:",
+        "eta": "catalog:",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/sdk": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@types/ssh2": "catalog:",
+        "ssh2": "catalog:",
+        "testcontainers": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:",
+        "yaml": "catalog:"
+    }
+}

@@ -1,0 +1,408 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens ported from intentic-app (_libs/ui/src/styles/shared/) so the
+ * marketing site and the product read as one brand. OKLch values are copied
+ * verbatim from the app; the landing is dark-only, so the app's dark-mode role
+ * values are baked in directly.
+ */
+@theme {
+    --color-*: initial;
+    --font-*: initial;
+
+    /* Brand primitives (app: brand/primary ramp, hue 55) */
+    --color-primary-200: oklch(88% 0.1 55);
+    --color-primary-300: oklch(82% 0.13 55);
+    --color-primary-400: oklch(77% 0.155 55);
+    --color-primary-500: oklch(72% 0.17 55);
+    --color-primary-600: oklch(67% 0.175 55);
+    --color-primary-700: oklch(58% 0.16 50);
+
+    /* Semantic roles (app dark scheme, warm neutral hue 65) */
+    --color-canvas: oklch(16% 0.007 65);
+    --color-card: oklch(23% 0.008 65);
+    --color-overlay: oklch(30% 0.009 65);
+    --color-line: oklch(30% 0.009 65);
+    --color-line-strong: oklch(40% 0.01 65);
+    --color-content: oklch(98% 0.003 65);
+    --color-muted: oklch(71% 0.01 65);
+    --color-subtle: oklch(58% 0.011 65);
+    --color-link: var(--color-primary-400);
+
+    /* Status (app dark scheme) */
+    --color-success: oklch(64% 0.13 150);
+    --color-warning: oklch(74% 0.16 88);
+    --color-danger: oklch(64% 0.19 27);
+
+    --color-white: #fff;
+    --color-black: #000;
+
+    --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+
+    --text-2xs: 0.6875rem;
+    --text-2xs--line-height: 1rem;
+
+    /* Radius scale (app tokens.css) */
+    --radius-xs: 0.25rem;
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.25rem;
+}
+
+/* Self-hosted variable Inter */
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 300 900;
+    font-display: swap;
+    src: url("/fonts/inter-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 300 900;
+    font-display: swap;
+    src: url("/fonts/inter-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@layer base {
+    html {
+        font-family: var(--font-sans);
+        background: var(--color-canvas);
+        color: var(--color-content);
+        scroll-behavior: smooth;
+    }
+    body {
+        min-height: 100vh;
+        overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }
+    /* App base.css: borders degrade to the line token, never to white */
+    *,
+    ::before,
+    ::after {
+        border-color: var(--color-line);
+    }
+    ::selection {
+        background: color-mix(in srgb, var(--color-primary-500) 30%, transparent);
+    }
+}
+
+@layer components {
+    /* Uppercase eyebrow label (app motif) */
+    .eyebrow {
+        font-size: var(--text-2xs);
+        line-height: var(--text-2xs--line-height);
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--color-subtle);
+    }
+
+    /* ~38px control height, matching the app's button metrics */
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        border-radius: var(--radius-md);
+        padding: 0.5rem 0.9375rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        font-weight: 500;
+        text-decoration: none;
+        white-space: nowrap;
+        transition:
+            background-color 0.2s ease,
+            border-color 0.2s ease,
+            color 0.2s ease;
+    }
+    .btn-primary {
+        background: var(--color-primary-500);
+        color: var(--color-canvas);
+        font-weight: 600;
+    }
+    .btn-primary:hover {
+        background: var(--color-primary-400);
+    }
+    .btn-secondary {
+        border: 1px solid var(--color-line-strong);
+        color: var(--color-content);
+        background: transparent;
+    }
+    .btn-secondary:hover {
+        background: color-mix(in srgb, var(--color-content) 12%, transparent);
+    }
+
+    /* Hairline card (app .ui-card / rounded-2xl variant) */
+    .card {
+        border-radius: var(--radius-2xl);
+        border: 1px solid var(--color-line);
+        background: var(--color-card);
+    }
+
+    /* Translucent tint chip (app StatusBadge) */
+    .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        border-radius: 9999px;
+        padding: 0.25rem 0.625rem;
+        font-size: var(--text-2xs);
+        line-height: var(--text-2xs--line-height);
+        font-weight: 600;
+    }
+
+    /* Dotted blueprint grid overlay (app Login hero motif) */
+    .grid-overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.4;
+        background-image: radial-gradient(circle at 1px 1px, var(--color-line-strong) 1px, transparent 0);
+        background-size: 28px 28px;
+        mask-image: radial-gradient(ellipse 80% 60% at 30% 20%, black, transparent);
+    }
+
+    /* Terminal/code window */
+    .code-window {
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--color-line);
+        background: var(--color-canvas);
+        font-family: var(--font-mono);
+        font-size: 0.8125rem;
+        line-height: 1.6;
+        overflow-x: auto;
+    }
+
+    /* Astro <Code> (Shiki) output — fit the .code-window frame */
+    .code-window pre.astro-code {
+        margin: 0;
+        padding: 0.75rem 1rem;
+        overflow-x: auto;
+        background: transparent !important;
+    }
+}
+
+/* Entrance animations (app utilities.css) */
+.animate-fade-in {
+    animation: ui-fade-in 0.25s ease-out both;
+}
+.animate-fade-in-up {
+    animation: ui-fade-in-up 0.25s ease-out both;
+}
+@keyframes ui-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+@keyframes ui-fade-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Scroll reveal (recovered landing motif), gated on reduced motion */
+.fade-in {
+    opacity: 0;
+    transform: translateY(18px);
+    transition:
+        opacity 0.6s ease,
+        transform 0.6s ease;
+}
+.fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+    .fade-in {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+    .animate-fade-in,
+    .animate-fade-in-up {
+        animation: none;
+    }
+    .orb {
+        animation: none;
+    }
+}
+
+/* ── Hero floating orbs ──────────────────────────────── */
+.hero-orbs {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    will-change: transform;
+}
+
+.hero-orbs::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 70% 50% at 50% 0%, oklch(72% 0.17 55 / 0.06) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 60% at 80% 80%, oklch(70% 0.08 250 / 0.04) 0%, transparent 60%);
+}
+
+.orb {
+    position: absolute;
+    opacity: 0.07;
+    filter: drop-shadow(0 0 30px oklch(72% 0.17 55 / 0.35)) drop-shadow(0 0 60px oklch(72% 0.17 55 / 0.12));
+}
+
+.orb-1 {
+    width: 100px;
+    height: 100px;
+    top: 8%;
+    left: 8%;
+    opacity: 0.08;
+    animation: orb-drift-1 18s ease-in-out infinite;
+}
+
+.orb-2 {
+    width: 75px;
+    height: 75px;
+    top: 18%;
+    right: 14%;
+    opacity: 0.07;
+    animation: orb-drift-2 22s ease-in-out infinite;
+}
+
+.orb-3 {
+    width: 90px;
+    height: 90px;
+    top: 45%;
+    left: 4%;
+    opacity: 0.07;
+    animation: orb-drift-3 20s ease-in-out infinite;
+}
+
+.orb-4 {
+    width: 140px;
+    height: 140px;
+    top: 5%;
+    right: 5%;
+    opacity: 0.10;
+    animation: orb-drift-1 16s ease-in-out infinite;
+}
+
+.orb-5 {
+    width: 65px;
+    height: 65px;
+    bottom: 25%;
+    right: 8%;
+    opacity: 0.06;
+    animation: orb-drift-2 24s ease-in-out infinite;
+}
+
+.orb-6 {
+    width: 85px;
+    height: 85px;
+    bottom: 12%;
+    left: 15%;
+    opacity: 0.07;
+    animation: orb-drift-3 19s ease-in-out infinite;
+}
+
+.orb-7 {
+    width: 105px;
+    height: 105px;
+    bottom: 18%;
+    right: 22%;
+    opacity: 0.08;
+    animation: orb-drift-1 21s ease-in-out infinite;
+}
+
+@keyframes orb-drift-1 {
+    0%,
+    100% {
+        transform: translate(0, 0);
+    }
+    33% {
+        transform: translate(6px, -8px);
+    }
+    66% {
+        transform: translate(-4px, 5px);
+    }
+}
+
+@keyframes orb-drift-2 {
+    0%,
+    100% {
+        transform: translate(0, 0);
+    }
+    33% {
+        transform: translate(-5px, 7px);
+    }
+    66% {
+        transform: translate(8px, -4px);
+    }
+}
+
+@keyframes orb-drift-3 {
+    0%,
+    100% {
+        transform: translate(0, 0);
+    }
+    33% {
+        transform: translate(4px, 6px);
+    }
+    66% {
+        transform: translate(-7px, -5px);
+    }
+}
+
+/* ── Responsive orb overrides ────────────────────────── */
+@media (max-width: 860px) {
+    .orb {
+        opacity: 0.04;
+    }
+    .orb-4 {
+        width: 100px;
+        height: 100px;
+        opacity: 0.06;
+    }
+    .orb-2,
+    .orb-5 {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .orb-1,
+    .orb-2,
+    .orb-3,
+    .orb-5,
+    .orb-6,
+    .orb-7 {
+        display: none;
+    }
+    .orb-4 {
+        width: 80px;
+        height: 80px;
+        opacity: 0.05;
+    }
+}
+

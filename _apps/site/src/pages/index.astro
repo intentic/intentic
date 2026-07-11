@@ -1,0 +1,597 @@
+---
+import { Code } from "astro:components";
+import { faqItems } from "@intentic-dev/content/faq";
+import { APP_URL, githubUrl } from "@intentic-dev/content/site";
+import { buildSoftwareAppSchema } from "@intentic-dev/content/structured-data";
+import Footer from "../components/Footer.astro";
+import Nav from "../components/Nav.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { intenticWarm } from "../lib/shiki-theme";
+
+const faqQuestions = faqItems.map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
+
+const heroChips = ["Free plan", "Your machine, your accounts", "No open inbound ports", "Open-source MIT engine"];
+
+const onboardingSteps = [
+    {
+        title: "Sign in with Google",
+        body: "No forms, no card. Your account is an identity — the platform stores nothing else about your work.",
+    },
+    {
+        title: "Name your sandbox",
+        body: "intentic prepares a private tunnel under its own domain — no Cloudflare account required. Bring your own zone if you prefer; your token is used once and never stored.",
+    },
+    {
+        title: "Paste one command",
+        body: "The wizard hands you a personalized one-liner carrying a one-time setup code. Your workspace opens automatically the moment the sandbox reports in.",
+    },
+];
+
+const ownershipFacts = [
+    {
+        title: "Your code never leaves your machine",
+        body: "The sandbox runs where you start it — a laptop, a workstation, a VPS. Files, repos, and credentials stay there.",
+    },
+    {
+        title: "Credentials stay inside your sandbox",
+        body: "Capability tokens and API keys live in the sandbox. Secret files are denylisted from the file relay; listings return key names only.",
+    },
+    {
+        title: "The platform can't reach your daemon",
+        body: "The hub stores your identity and a URL, and never holds the token your browser signs in with — a platform breach cannot drive any sandbox.",
+    },
+];
+
+const permissionModes = [
+    { name: "Plan mode", body: "Propose a plan and wait for your approval before running.", isDefault: true },
+    { name: "Accept edits", body: "Apply file edits automatically.", isDefault: false },
+    { name: "Ask before edits", body: "Ask before each file edit.", isDefault: false },
+    { name: "Auto", body: "Run everything without asking.", isDefault: false },
+];
+
+const capabilityCategories = [
+    {
+        name: "Platform",
+        members: "DevOps · pnpm + turbo monorepo",
+        body: "Self-host and deploy: scaffolds your intent and desired-state repos, each with its own operator panel.",
+    },
+    {
+        name: "Code & issues",
+        members: "GitHub · GitLab · Redmine",
+        body: "Connect your repos and trackers; the agent reads, writes, and opens PRs.",
+    },
+    { name: "Observability", members: "Sentry · SigNoz", body: "Query errors, traces, logs, and metrics from chat." },
+    { name: "Data", members: "SQL databases", body: "PostgreSQL and MySQL — inspect schemas and run queries." },
+    { name: "Communication", members: "Discord · IMAP", body: "Read and post in your Discord server; watch a mailbox." },
+    { name: "Business & docs", members: "Stripe · Outline", body: "Payments and team docs, wired to the agent." },
+    { name: "Servers", members: "SSH · VPN · Docker", body: "Give the agent a remote machine to operate over SSH." },
+    { name: "Extend", members: "MCP servers · Claude plugins", body: "Add custom MCP servers and git-repo plugins." },
+];
+
+const automationRecipes = [
+    { name: "GitHub", trigger: "Push to repo" },
+    { name: "Sentry", trigger: "New alert" },
+    { name: "Stripe", trigger: "Payment events" },
+    { name: "Email", trigger: "New email" },
+    { name: "Discord", trigger: "Live events" },
+    { name: "Schedule", trigger: "Cron" },
+];
+
+const intentCode = `// intent/deploy.config.ts
+const host = i.have.host("host", {
+    address: "203.0.113.10",
+    sshKey: env("HOST_SSH_KEY"),
+});
+const cf = i.have.cloudflare("cf", {
+    apiToken: env("CLOUDFLARE_API_TOKEN"),
+});
+i.want.app("my-app", { on: host, expose: cf });`;
+
+const planRows = [
+    ["create", "host", "host"],
+    ["create", "cloudflare", "cf"],
+    ["create", "forgejo", "host-git"],
+    ["create", "forgejo-runner", "host-git-runner"],
+    ["create", "komodo", "host-deploy"],
+    ["create", "tunnel", "host-tunnel"],
+    ["create", "cf-route", "cf-git-example-com"],
+    ["create", "cf-route", "cf-deploy-example-com"],
+    ["create", "cf-route", "cf-app-example-com"],
+    ["create", "repo", "my-app-repo"],
+    ["create", "ci", "my-app.production-ci"],
+    ["create", "deployment", "my-app.production"],
+];
+
+const trustFacts = [
+    {
+        title: "Off the command path",
+        body: "Your browser drives your sandbox directly over its private tunnel. Chat, files, and infra never pass through the platform.",
+    },
+    {
+        title: "AES-256-GCM at rest",
+        body: "The little the platform stores — OAuth and connect tokens — is encrypted with no decrypt path in the product.",
+    },
+    {
+        title: "GDPR export & deletion",
+        body: "Download everything the platform stores about your account as JSON. Deletion cancels billing and cascades everything.",
+    },
+    {
+        title: "Unprivileged sandbox",
+        body: "The sandbox container holds no Docker socket; privileged powers are explicit opt-in capabilities.",
+    },
+    {
+        title: "Open-source MIT engine",
+        body: "The DevOps engine is MIT on GitHub — 100+ tests including a real end-to-end run through a live Cloudflare tunnel.",
+    },
+];
+---
+
+<BaseLayout faqQuestions={faqQuestions} extraJsonLd={[buildSoftwareAppSchema()]}>
+    <Nav />
+    <main class="flex-1">
+        <!-- 1 · Hero -->
+        <section class="relative overflow-hidden" id="hero">
+            <div class="absolute inset-0 bg-linear-to-br from-primary-600/15 via-canvas to-canvas" aria-hidden="true"></div>
+
+            <!-- Floating ambient orbs -->
+            <div class="hero-orbs" aria-hidden="true">
+                <svg width="0" height="0">
+                    <defs>
+                        <radialGradient id="orb-glow" cx="40%" cy="35%" r="50%">
+                            <stop offset="0%" stop-color="oklch(82% 0.14 55)" />
+                            <stop offset="60%" stop-color="oklch(72% 0.17 55)" />
+                            <stop offset="100%" stop-color="oklch(60% 0.16 55)" />
+                        </radialGradient>
+                    </defs>
+                </svg>
+
+                <svg class="orb orb-1" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="46" fill="url(#orb-glow)" stroke="oklch(77% 0.155 55 / 0.2)" stroke-width="0.8" />
+                    <ellipse cx="38" cy="36" rx="18" ry="14" fill="rgba(255,255,255,0.10)" />
+                </svg>
+                <svg class="orb orb-2" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="46" fill="url(#orb-glow)" stroke="oklch(77% 0.155 55 / 0.2)" stroke-width="0.8" />
+                    <ellipse cx="38" cy="36" rx="18" ry="14" fill="rgba(255,255,255,0.10)" />
+                </svg>
+                <svg class="orb orb-3" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="46" fill="url(#orb-glow)" stroke="oklch(77% 0.155 55 / 0.2)" stroke-width="0.8" />
+                    <ellipse cx="38" cy="36" rx="18" ry="14" fill="rgba(255,255,255,0.10)" />
+                </svg>
+                <svg class="orb orb-4" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="46" fill="url(#orb-glow)" stroke="oklch(77% 0.155 55 / 0.2)" stroke-width="0.8" />
+                    <ellipse cx="38" cy="36" rx="18" ry="14" fill="rgba(255,255,255,0.10)" />
+                </svg>
+                <svg class="orb orb-5" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="46" fill="url(#orb-glow)" stroke="oklch(77% 0.155 55 / 0.2)" stroke-width="0.8" />
+                    <ellipse cx="38" cy="36" rx="18" ry="14" fill="rgba(255,255,255,0.10)" />
+                </svg>
+                <svg class="orb orb-6" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="46" fill="url(#orb-glow)" stroke="oklch(77% 0.155 55 / 0.2)" stroke-width="0.8" />
+                    <ellipse cx="38" cy="36" rx="18" ry="14" fill="rgba(255,255,255,0.10)" />
+                </svg>
+                <svg class="orb orb-7" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="46" fill="url(#orb-glow)" stroke="oklch(77% 0.155 55 / 0.2)" stroke-width="0.8" />
+                    <ellipse cx="38" cy="36" rx="18" ry="14" fill="rgba(255,255,255,0.10)" />
+                </svg>
+            </div>
+
+            <div class="grid-overlay" aria-hidden="true"></div>
+
+            <div class="relative mx-auto grid max-w-6xl items-center gap-12 px-6 pt-32 pb-20 lg:grid-cols-2 lg:pt-40 lg:pb-28">
+                <div class="animate-fade-in-up">
+                    <h1 class="text-4xl leading-tight font-semibold tracking-tight xl:text-5xl">
+                        Build software <br /> with intent.
+                    </h1>
+                    <p class="mt-4 max-w-md text-base leading-relaxed text-muted">
+                        An AI-native workspace for infra, data, apps, and code — you own every line, we handle the wiring.
+                    </p>
+
+                    <div class="mt-8 flex flex-wrap gap-3">
+                        <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                        <a class="btn btn-secondary" href={githubUrl} target="_blank" rel="noopener">See the open-source engine</a>
+                    </div>
+
+                    <ul class="mt-8 flex flex-wrap gap-x-4 gap-y-2 text-xs text-subtle">
+                        {
+                            heroChips.map((chip) => (
+                                <li class="flex items-center gap-1.5">
+                                    <span class="h-1 w-1 rounded-full bg-primary-500" />
+                                    {chip}
+                                </li>
+                            ))
+                        }
+                    </ul>
+                </div>
+
+                <!-- Workspace mock (swap for a real product screenshot when the UI settles) -->
+                <div class="animate-fade-in-up max-lg:hidden" style="animation-delay: 60ms">
+                    <div class="card overflow-hidden shadow-2xl shadow-black/40">
+                        <div class="flex items-center gap-2 border-b border-line px-4 py-2.5">
+                            <span class="h-2.5 w-2.5 rounded-full bg-overlay"></span>
+                            <span class="h-2.5 w-2.5 rounded-full bg-overlay"></span>
+                            <span class="h-2.5 w-2.5 rounded-full bg-overlay"></span>
+                            <span class="ml-2 text-2xs text-subtle">workspace / intentic</span>
+                        </div>
+                        <div class="grid grid-cols-[9rem_1fr]">
+                            <div class="border-r border-line p-3 text-2xs leading-6 text-subtle">
+                                <div class="text-muted">intent/</div>
+                                <div class="pl-3">deploy.config.ts</div>
+                                <div class="mt-1 text-muted">desired-state/</div>
+                                <div class="pl-3">desired-state.json</div>
+                                <div class="mt-1 text-muted">app/</div>
+                                <div class="pl-3">src/</div>
+                                <div class="pl-3">Dockerfile</div>
+                            </div>
+                            <div class="flex flex-col gap-3 p-4">
+                                <div class="ml-auto max-w-[85%] rounded-lg bg-overlay px-3 py-2 text-xs text-content">
+                                    Deploy my app to my server and wire up staging.
+                                </div>
+                                <div class="rounded-lg border border-line bg-canvas p-3">
+                                    <div class="eyebrow">Plan · awaiting your approval</div>
+                                    <ul class="mt-2 space-y-1 text-xs text-muted">
+                                        <li>1. Declare host + Cloudflare in deploy.config.ts</li>
+                                        <li>2. Add staging + production environments</li>
+                                        <li>3. Resolve, then apply until state reads true</li>
+                                    </ul>
+                                    <div class="mt-3 flex gap-2">
+                                        <span class="btn btn-primary px-3 py-1 text-xs">Approve</span>
+                                        <span class="btn btn-secondary px-3 py-1 text-xs">Keep planning</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 text-2xs text-subtle">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+                                    converged in 2 iterations · my-app.production live
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2 · Onboarding -->
+        <section class="border-t border-line" id="onboarding">
+            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+                <div class="eyebrow">Get started</div>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">A few minutes to a live workspace.</h2>
+                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">
+                    Sign in, name your sandbox, paste one command. No Cloudflare account required; Docker installed if missing.
+                </p>
+
+                <div class="mt-10 grid gap-6 md:grid-cols-3">
+                    {
+                        onboardingSteps.map((step, i) => (
+                            <div class="card p-6">
+                                <span class="flex h-6 w-6 items-center justify-center rounded-full border border-line bg-canvas text-2xs font-semibold text-muted">
+                                    {i + 1}
+                                </span>
+                                <h3 class="mt-4 text-sm font-medium text-content">{step.title}</h3>
+                                <p class="mt-2 text-sm leading-relaxed text-muted">{step.body}</p>
+                            </div>
+                        ))
+                    }
+                </div>
+
+                <div class="code-window mt-6">
+                    <div class="flex items-center justify-between border-b border-line px-4 py-2">
+                        <span class="eyebrow">Step 3 · your machine</span>
+                    </div>
+                    <pre class="px-4 py-3 text-content"><code>curl -fsSL https://intentic.dev/connect | sh</code></pre>
+                </div>
+                <p class="mt-3 text-xs text-subtle">
+                    "No open ports, nothing deployed — just a reachable workspace." · "Needs Docker — installed automatically if missing
+                    (you'll be asked first)."
+                </p>
+            </div>
+        </section>
+
+        <!-- 3 · Ownership -->
+        <section class="border-t border-line" id="ownership">
+            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+                <div class="eyebrow">Ownership</div>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">You own every line.</h2>
+                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">
+                    Your sandbox runs on your machine. The platform stores your identity and a URL — nothing else. It can't read your
+                    code, hold your credentials, or reach your daemon.
+                </p>
+
+                <div class="mt-10 flex flex-col items-stretch gap-4 md:flex-row md:items-center">
+                    <div class="card flex-1 p-5 text-center">
+                        <div class="eyebrow">Your browser</div>
+                        <p class="mt-2 text-sm text-muted">Chat, files, editor, terminal</p>
+                    </div>
+                    <div class="text-center text-xs font-medium whitespace-nowrap text-link md:px-2">
+                        private tunnel, direct <span aria-hidden="true">→</span>
+                    </div>
+                    <div class="card flex-1 border-primary-600/30 p-5 text-center">
+                        <div class="eyebrow text-link">Your sandbox · your machine</div>
+                        <p class="mt-2 text-sm text-muted">Agent, repos, credentials, capabilities</p>
+                    </div>
+                    <div class="flex-1 rounded-2xl border border-dashed border-line p-5 text-center">
+                        <div class="eyebrow">intentic platform</div>
+                        <p class="mt-2 text-sm text-subtle">Identity + sandbox URL only. Off the command path.</p>
+                    </div>
+                </div>
+
+                <div class="mt-6 grid gap-6 md:grid-cols-3">
+                    {
+                        ownershipFacts.map((fact) => (
+                            <div class="card p-6">
+                                <h3 class="text-sm font-medium text-content">{fact.title}</h3>
+                                <p class="mt-2 text-sm leading-relaxed text-muted">{fact.body}</p>
+                            </div>
+                        ))
+                    }
+                </div>
+            </div>
+        </section>
+
+        <!-- 4 · Agent in control -->
+        <section class="border-t border-line" id="control">
+            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+                <div class="eyebrow">Control</div>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">Autonomy with a steering wheel.</h2>
+                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">
+                    Plan mode by default: the agent proposes, you approve. Review every change as a diff — discard or commit.
+                    Environment changes ship only with your sign-off.
+                </p>
+
+                <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {
+                        permissionModes.map((mode) => (
+                            <div class:list={["card p-5", mode.isDefault && "border-primary-600/40"]}>
+                                <div class="flex items-center gap-2">
+                                    <h3 class="text-sm font-medium text-content">{mode.name}</h3>
+                                    {mode.isDefault && <span class="chip bg-primary-600/15 text-link">default</span>}
+                                </div>
+                                <p class="mt-2 text-sm leading-relaxed text-muted">"{mode.body}"</p>
+                            </div>
+                        ))
+                    }
+                </div>
+
+                <div class="card mt-6 p-5">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <div class="eyebrow">Changes review</div>
+                            <p class="mt-1 text-sm text-muted">Everything the agent touched since you last verified, as diffs.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <span class="btn btn-secondary px-3 py-1 text-xs">Discard all</span>
+                            <span class="btn btn-primary px-3 py-1 text-xs">Commit</span>
+                        </div>
+                    </div>
+                    <div class="code-window mt-4 px-4 py-3">
+                        <div><span class="text-success">+ environments: staging: domain: "staging.example.com"</span></div>
+                        <div><span class="text-danger">- // TODO: add staging</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5 · Capabilities -->
+        <section class="border-t border-line" id="capabilities">
+            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+                <div class="eyebrow">Capabilities</div>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">Grow your sandbox.</h2>
+                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">
+                    GitHub, databases, Sentry, Discord, Stripe, SSH, MCP servers, plugins — added in a click, operated from chat.
+                </p>
+
+                <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {
+                        capabilityCategories.map((category) => (
+                            <div class="card p-5">
+                                <h3 class="text-sm font-medium text-content">{category.name}</h3>
+                                <div class="mt-1 text-2xs text-link">{category.members}</div>
+                                <p class="mt-2 text-sm leading-relaxed text-muted">{category.body}</p>
+                            </div>
+                        ))
+                    }
+                </div>
+
+                <p class="mt-6 text-xs text-subtle">"Credentials are stored securely inside your sandbox and never shown in Files."</p>
+            </div>
+        </section>
+
+        <!-- 6 · Automations -->
+        <section class="border-t border-line" id="automations">
+            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+                <div class="eyebrow">Automations</div>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">Your agent, on call.</h2>
+                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">
+                    Wake it on a schedule, a webhook, or live events — a Sentry alert, a Stripe payment, a push, an email. Each run is
+                    a fresh session with a transcript.
+                </p>
+
+                <div class="mt-10 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                    {
+                        automationRecipes.map((recipe) => (
+                            <div class="card p-5 text-center">
+                                <h3 class="text-sm font-medium text-content">{recipe.name}</h3>
+                                <p class="mt-1 text-xs text-muted">{recipe.trigger}</p>
+                            </div>
+                        ))
+                    }
+                </div>
+
+                <p class="mt-6 max-w-xl text-xs text-subtle">
+                    An optional guard command runs in your workspace first and decides whether each wake actually happens.
+                </p>
+            </div>
+        </section>
+
+        <!-- 7 · DevOps band -->
+        <section class="border-t border-line" id="devops">
+            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+                <div class="eyebrow">DevOps · the flagship capability</div>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">Infrastructure as intent.</h2>
+                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">
+                    Declare what you have and what you want; the open-source engine derives git, CI, registry, deploys, tunnel, and
+                    DNS — and reconciles until reality matches.
+                </p>
+
+                <div class="mt-10 grid items-start gap-6 lg:grid-cols-2">
+                    <div>
+                        <div class="mb-2 text-sm font-medium text-content">You declared 3 things…</div>
+                        <div class="code-window">
+                            <Code code={intentCode} lang="ts" theme={intenticWarm} />
+                        </div>
+                    </div>
+                    <div>
+                        <div class="mb-2 text-sm font-medium text-content">…the engine derived 12.</div>
+                        <div class="code-window">
+                            <div class="border-b border-line px-4 py-2 text-subtle">$ intentic plan</div>
+                            <div class="px-4 py-3">
+                                {
+                                    planRows.map(([verb, kind, name]) => (
+                                        <div>
+                                            <span class="text-success">{verb}</span>
+                                            <span class="whitespace-pre text-muted">{`   ${kind.padEnd(16)}`}</span>
+                                            <span class="text-content">{name}</span>
+                                        </div>
+                                    ))
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex flex-wrap items-center gap-2">
+                    <span class="chip bg-primary-600/15 text-link">zero inbound ports</span>
+                    <span class="chip bg-primary-600/15 text-link">reconciles until state reads true</span>
+                    <span class="chip bg-primary-600/15 text-link">Outline · SigNoz · Paperless-ngx · OpenProject · Invoice Ninja · Infisical</span>
+                    <a href={githubUrl} target="_blank" rel="noopener" class="ml-auto text-sm text-link hover:underline">
+                        Engine source on GitHub →
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 8 · Trust -->
+        <section class="border-t border-line" id="trust">
+            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+                <div class="eyebrow">Trust</div>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">Built to be unable to betray you.</h2>
+
+                <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                    {
+                        trustFacts.map((fact) => (
+                            <div class="card p-5">
+                                <h3 class="text-sm font-medium text-content">{fact.title}</h3>
+                                <p class="mt-2 text-xs leading-relaxed text-muted">{fact.body}</p>
+                            </div>
+                        ))
+                    }
+                </div>
+
+                <div class="mt-8 flex flex-wrap items-center gap-4">
+                    <p class="text-sm text-muted">If the architecture resonates, star the engine — it's how you can help right now.</p>
+                    <a class="btn btn-secondary" href={githubUrl} target="_blank" rel="noopener">Star on GitHub</a>
+                    <a
+                        href="https://github.com/radarsu/intentic#known-limitations"
+                        target="_blank"
+                        rel="noopener"
+                        class="text-sm text-link hover:underline"
+                    >
+                        Known limitations, documented →
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 9 · FAQ -->
+        <section class="border-t border-line" id="faq">
+            <div class="fade-in mx-auto max-w-3xl px-6 py-20 lg:py-24">
+                <div class="eyebrow">FAQ</div>
+                <h2 class="mt-3 text-3xl font-semibold tracking-tight">Frequently asked questions</h2>
+
+                <div class="mt-10 flex flex-col gap-3">
+                    {
+                        faqItems.map((item) => (
+                            <details class="card group px-6 py-4" id={item.id}>
+                                <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-medium text-content [&::-webkit-details-marker]:hidden">
+                                    {item.question}
+                                    <span class="text-subtle transition-transform group-open:rotate-45" aria-hidden="true">
+                                        +
+                                    </span>
+                                </summary>
+                                {item.answer.map((paragraph) => (
+                                    <p class="mt-3 text-sm leading-relaxed text-muted">{paragraph}</p>
+                                ))}
+                            </details>
+                        ))
+                    }
+                </div>
+            </div>
+        </section>
+
+        <!-- 10 · Final CTA -->
+        <section class="relative overflow-hidden border-t border-line">
+            <div class="absolute inset-0 bg-linear-to-br from-primary-600/15 via-canvas to-canvas" aria-hidden="true"></div>
+            <div class="fade-in relative mx-auto max-w-6xl px-6 py-20 text-center lg:py-28">
+                <div class="eyebrow">Ready</div>
+                <h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Build software with intent.</h2>
+                <p class="mx-auto mt-3 max-w-md text-base leading-relaxed text-muted">
+                    One command from a live workspace. Free to start.
+                </p>
+                <div class="mt-8 flex justify-center gap-3">
+                    <a class="btn btn-primary" href={APP_URL}>Get started free</a>
+                    <a class="btn btn-secondary" href={githubUrl} target="_blank" rel="noopener">See the engine</a>
+                </div>
+            </div>
+        </section>
+    </main>
+    <Footer />
+
+    <script>
+        // Fade-in observer
+        const targets = document.querySelectorAll(".fade-in");
+        if ("IntersectionObserver" in window) {
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    for (const entry of entries) {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add("visible");
+                            observer.unobserve(entry.target);
+                        }
+                    }
+                },
+                { threshold: 0.12 },
+            );
+            targets.forEach((el) => observer.observe(el));
+        } else {
+            targets.forEach((el) => el.classList.add("visible"));
+        }
+
+        // Scroll-based depth parallax for hero orbs
+        const hero = document.getElementById("hero");
+        const orbsLayer = document.querySelector(".hero-orbs");
+        const gridOverlay = document.querySelector(".grid-overlay");
+
+        if (hero && orbsLayer) {
+            let ticking = false;
+            window.addEventListener(
+                "scroll",
+                () => {
+                    if (!ticking) {
+                        requestAnimationFrame(() => {
+                            const y = window.scrollY;
+                            const limit = hero.offsetHeight;
+                            if (y < limit) {
+                                (orbsLayer as HTMLElement).style.transform = `translateY(${y * 0.3}px) scale(${1 + y * 0.0003})`;
+                                if (gridOverlay) {
+                                    (gridOverlay as HTMLElement).style.transform = `translateY(${y * 0.15}px)`;
+                                }
+                            }
+                            ticking = false;
+                        });
+                        ticking = true;
+                    }
+                },
+                { passive: true },
+            );
+        }
+    </script>
+</BaseLayout>
+

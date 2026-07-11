@@ -1,0 +1,10 @@
+{
+    "compilerOptions": {
+        "baseUrl": "./",
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo"
+    },
+    "include": ["./src/**/*"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

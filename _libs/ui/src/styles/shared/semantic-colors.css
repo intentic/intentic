@@ -1,0 +1,112 @@
+/* Tier 2 — semantic colors. Two complementary layers:
+ *
+ *  1. Numeric scales (`surface`/`primary`/`danger`/`success`/`warning`, 0–950).
+ *     Scheme-independent aliases of the primitives. These bridge to PrimeVue (the preset
+ *     in theme.ts maps `--p-*` onto the same vars) and give fine-grained control when a
+ *     specific shade is needed. Use sparingly in app code.
+ *
+ *  2. Role tokens (`canvas`/`card`/`overlay`/`line`/`content`/`muted`/`subtle`/`link`/
+ *     `danger`/`success`/`warning`). These FLIP between light and dark via the scheme
+ *     scopes below, so `bg-card text-content border-line` recolors automatically. App
+ *     code should reach for these first. */
+
+@theme {
+    --color-surface-0:   var(--color-neutral-0);
+    --color-surface-50:  var(--color-neutral-50);
+    --color-surface-100: var(--color-neutral-100);
+    --color-surface-200: var(--color-neutral-200);
+    --color-surface-300: var(--color-neutral-300);
+    --color-surface-400: var(--color-neutral-400);
+    --color-surface-500: var(--color-neutral-500);
+    --color-surface-600: var(--color-neutral-600);
+    --color-surface-700: var(--color-neutral-700);
+    --color-surface-800: var(--color-neutral-800);
+    --color-surface-900: var(--color-neutral-900);
+    --color-surface-950: var(--color-neutral-950);
+
+    --color-primary-0:   var(--color-brand-0);
+    --color-primary-50:  var(--color-brand-50);
+    --color-primary-100: var(--color-brand-100);
+    --color-primary-200: var(--color-brand-200);
+    --color-primary-300: var(--color-brand-300);
+    --color-primary-400: var(--color-brand-400);
+    --color-primary-500: var(--color-brand-500);
+    --color-primary-600: var(--color-brand-600);
+    --color-primary-700: var(--color-brand-700);
+    --color-primary-800: var(--color-brand-800);
+    --color-primary-900: var(--color-brand-900);
+    --color-primary-950: var(--color-brand-950);
+
+    --color-danger-0:   var(--color-red-0);
+    --color-danger-50:  var(--color-red-50);
+    --color-danger-100: var(--color-red-100);
+    --color-danger-200: var(--color-red-200);
+    --color-danger-300: var(--color-red-300);
+    --color-danger-400: var(--color-red-400);
+    --color-danger-500: var(--color-red-500);
+    --color-danger-600: var(--color-red-600);
+    --color-danger-700: var(--color-red-700);
+    --color-danger-800: var(--color-red-800);
+    --color-danger-900: var(--color-red-900);
+    --color-danger-950: var(--color-red-950);
+
+    --color-success-500: var(--color-green-500);
+    --color-success-600: var(--color-green-600);
+    --color-warning-500: var(--color-amber-500);
+    --color-warning-600: var(--color-amber-600);
+    --color-info-500:    var(--color-blue-500);
+    --color-info-600:    var(--color-blue-600);
+
+    /* Terminal surface — deliberately dark in BOTH modes. Must stay a hex literal: xterm.js reads it
+     * via getComputedStyle and its color parser rejects oklch(). */
+    --color-terminal: #0a0a0a;
+
+    /* Role tokens — values resolve through the scheme scopes below. */
+    --color-canvas:      var(--role-canvas);
+    --color-card:        var(--role-card);
+    --color-overlay:     var(--role-overlay);
+    --color-line:        var(--role-line);
+    --color-line-strong: var(--role-line-strong);
+    --color-content:     var(--role-content);
+    --color-muted:       var(--role-muted);
+    --color-subtle:      var(--role-subtle);
+    --color-link:        var(--role-link);
+    --color-danger:      var(--role-danger);
+    --color-success:     var(--role-success);
+    --color-warning:     var(--role-warning);
+    --color-info:        var(--role-info);
+}
+
+/* Light scheme (default). */
+:root {
+    --role-canvas:      var(--color-surface-50);
+    --role-card:        var(--color-surface-0);
+    --role-overlay:     var(--color-surface-0);
+    --role-line:        var(--color-surface-200);
+    --role-line-strong: var(--color-surface-300);
+    --role-content:     var(--color-surface-900);
+    --role-muted:       var(--color-surface-600);
+    --role-subtle:      var(--color-surface-500);
+    --role-link:        var(--color-primary-700);
+    --role-danger:      var(--color-danger-600);
+    --role-success:     var(--color-success-600);
+    --role-warning:     var(--color-warning-600);
+    --role-info:        var(--color-info-600);
+}
+
+/* Dark scheme. */
+[data-mode="dark"] {
+    --role-canvas:      var(--color-surface-950);
+    --role-card:        var(--color-surface-900);
+    --role-overlay:     var(--color-surface-800);
+    --role-line:        var(--color-surface-800);
+    --role-line-strong: var(--color-surface-700);
+    --role-content:     var(--color-surface-50);
+    --role-muted:       var(--color-surface-400);
+    --role-subtle:      var(--color-surface-500);
+    --role-link:        var(--color-primary-400);
+    --role-danger:      var(--color-danger-400);
+    --role-success:     var(--color-success-500);
+    --role-warning:     var(--color-warning-500);
+    --role-info:        var(--color-info-500);
+}

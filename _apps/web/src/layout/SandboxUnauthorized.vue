@@ -1,0 +1,58 @@
+<script setup lang="ts">
+import Button from "primevue/button";
+import { computed } from "vue";
+import { useAuth } from "../composables/useAuth";
+import { useGoogleIdentity } from "../composables/useGoogleIdentity";
+import { useSandbox } from "../composables/useSandbox";
+
+/* Shown in the workspace outlet when the daemon is UP but rejects the signed-in Google account with 403 —
+ * the account is neither the sandbox's owner nor a granted member (see useSandboxLiveness). Distinct from
+ * the connecting gate on purpose: waiting won't fix an account mismatch, so no spinner and no "Open setup".
+ * Two shapes: you're on the WRONG Google account (≠ your intentic account) → sign in with your account; or
+ * you're on your own account but this is someone else's sandbox → ask its owner. The liveness loop keeps
+ * retrying in the background, so a grant (or a switch) clears this screen by itself within seconds. */
+
+const { active } = useSandbox();
+const { user } = useAuth();
+const { signedInEmail, clearCredential, getIdToken } = useGoogleIdentity();
+
+// The Google identity the daemon saw isn't the account the user registered with — the common cause (they have
+// two Google accounts). Since platform login is Google-only, the intentic email is the account to sign in with.
+const wrongGoogleAccount = computed(
+    () =>
+        user.value?.email !== undefined && signedInEmail.value !== undefined && user.value.email.toLowerCase() !== signedInEmail.value.toLowerCase(),
+);
+
+// Drop the current credential and immediately re-mint: the sign-in gate overlays with Google's account
+// picker (clearCredential disables auto-select), and the liveness retries share the same in-flight mint.
+const switchAccount = (): void => {
+    clearCredential();
+    void getIdToken();
+};
+</script>
+
+<template>
+    <div class="flex h-full w-full items-center justify-center p-8">
+        <div class="animate-fade-in flex w-full max-w-md flex-col items-center gap-4 rounded-2xl border border-line bg-card p-8 text-center">
+            <span class="flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-canvas text-muted">
+                <Icon name="lock" class="text-xl" />
+            </span>
+            <div class="flex flex-col gap-1.5">
+                <h2 class="text-lg font-semibold text-content">No access to "{{ active?.name }}"</h2>
+                <p v-if="wrongGoogleAccount" class="text-sm text-muted">
+                    You're signed into Google as <span class="font-medium text-content">{{ signedInEmail }}</span
+                    >, but your intentic account is <span class="font-medium text-content">{{ user?.email }}</span
+                    >. Sign in with <span class="font-medium text-content">{{ user?.email }}</span> to open this sandbox.
+                </p>
+                <p v-else class="text-sm text-muted">
+                    This sandbox belongs to another account and hasn't shared access with
+                    <span class="font-medium text-content">{{ signedInEmail }}</span
+                    >. Ask its owner to grant you access — this clears automatically the moment it's granted.
+                </p>
+            </div>
+            <Button label="Switch Google account" severity="secondary" @click="switchAccount">
+                <template #icon><Icon name="user" /></template>
+            </Button>
+        </div>
+    </div>
+</template>

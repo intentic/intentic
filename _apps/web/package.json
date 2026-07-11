@@ -1,0 +1,61 @@
+{
+    "name": "@intentic-app/web",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "dev": "esbuild src/environments/environment.local.ts --bundle --target=es2024 --outfile=public/assets/js/env.js && vite",
+        "watch": "esbuild src/environments/environment.local.ts --bundle --target=es2024 --outfile=public/assets/js/env.js && vite",
+        "build": "vue-tsc --noEmit -p tsconfig.app.json && vite build && esbuild src/environments/environment.deployment.ts --bundle --minify --target=es2024 --outfile=dist/assets/js/env.js",
+        "test": "vitest run",
+        "typecheck": "vue-tsc --noEmit -p tsconfig.app.json"
+    },
+    "dependencies": {
+        "@better-auth/stripe": "catalog:",
+        "@intentic-app/api-contract": "workspace:*",
+        "@intentic-app/catalog": "workspace:*",
+        "@intentic-app/localhost-https": "workspace:*",
+        "@intentic-app/ui": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/workspace-ignore": "workspace:*",
+        "@orpc/client": "catalog:",
+        "@orpc/contract": "catalog:",
+        "@orpc/openapi-client": "catalog:",
+        "@primeuix/themes": "catalog:",
+        "@shikijs/monaco": "catalog:",
+        "@tanstack/query-persist-client-core": "catalog:",
+        "@tanstack/vue-query": "catalog:",
+        "@xterm/addon-fit": "catalog:",
+        "@xterm/xterm": "catalog:",
+        "better-auth": "catalog:",
+        "croner": "catalog:",
+        "docx-preview": "catalog:",
+        "dompurify": "catalog:",
+        "idb-keyval": "catalog:",
+        "marked": "catalog:",
+        "monaco-editor-core": "catalog:",
+        "posthog-js": "catalog:",
+        "primevue": "catalog:",
+        "tailwind-merge": "catalog:",
+        "tslib": "catalog:",
+        "vue": "catalog:",
+        "vue-router": "catalog:",
+        "xlsx": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@tailwindcss/vite": "catalog:",
+        "@types/node": "catalog:",
+        "@vitejs/plugin-vue": "catalog:",
+        "esbuild": "catalog:",
+        "tailwindcss": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+        "vitest": "catalog:",
+        "vue-tsc": "catalog:"
+    }
+}

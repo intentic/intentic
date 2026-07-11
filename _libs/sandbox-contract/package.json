@@ -1,0 +1,56 @@
+{
+    "name": "@intentic/sandbox-contract",
+    "version": "0.0.0",
+    "description": "oRPC wire contract for the intentic sandbox daemon — shared by the daemon and its browser client",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://gitlab.com/radarsu/intentic.git",
+        "directory": "_libs/sandbox-contract"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        },
+        "./tunnel-ids": {
+            "types": "./dist/tunnel-ids.d.ts",
+            "import": {
+                "@intentic/src": "./src/tunnel-ids.ts",
+                "default": "./dist/tunnel-ids.js"
+            },
+            "require": {
+                "@intentic/src": "./src/tunnel-ids.ts",
+                "default": "./dist/tunnel-ids.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --build --watch"
+    },
+    "dependencies": {
+        "@orpc/contract": "catalog:",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "typescript": "catalog:"
+    }
+}

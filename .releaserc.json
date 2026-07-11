@@ -1,0 +1,30 @@
+{
+    "branches": ["main"],
+    "tagFormat": "v${version}",
+    "plugins": [
+        "@semantic-release/commit-analyzer",
+        "@semantic-release/release-notes-generator",
+        [
+            "@semantic-release/exec",
+            {
+                "prepareCmd": "pnpm --dir _libs/graph version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/resources version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/need-resolver version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/state-resolver version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/sdk version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/engine version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/providers version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/sandbox-contract version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/workspace-ignore version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/scaffold version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/iq-engine version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/iq version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/sandbox version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/cli version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/sync version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm turbo run build && bash scripts/build-sync-binaries.sh",
+                "publishCmd": "pnpm --dir _libs/graph publish --access public --no-git-checks && pnpm --dir _libs/resources publish --access public --no-git-checks && pnpm --dir _libs/need-resolver publish --access public --no-git-checks && pnpm --dir _libs/state-resolver publish --access public --no-git-checks && pnpm --dir _libs/sdk publish --access public --no-git-checks && pnpm --dir _libs/engine publish --access public --no-git-checks && pnpm --dir _libs/providers publish --access public --no-git-checks && pnpm --dir _libs/sandbox-contract publish --access public --no-git-checks && pnpm --dir _libs/workspace-ignore publish --access public --no-git-checks && pnpm --dir _libs/scaffold publish --access public --no-git-checks && pnpm --dir _libs/iq-engine publish --access public --no-git-checks && pnpm --dir _apps/iq publish --access public --no-git-checks && pnpm --dir _apps/cli publish --access public --no-git-checks && pnpm --dir _apps/sync publish --access public --no-git-checks && TAGS=\"${nextRelease.version} stable\" bash scripts/publish-images.sh",
+                "successCmd": "git tag -f stable && git push -f origin stable"
+            }
+        ],
+        [
+            "@semantic-release/gitlab",
+            {
+                "successComment": false,
+                "failComment": false,
+                "assets": [
+                    { "path": "_apps/sync/dist-bin/intentic-sync-linux-amd64", "filepath": "/bin/intentic-sync-linux-amd64" },
+                    { "path": "_apps/sync/dist-bin/intentic-sync-linux-arm64", "filepath": "/bin/intentic-sync-linux-arm64" },
+                    { "path": "_apps/sync/dist-bin/intentic-sync-darwin-amd64", "filepath": "/bin/intentic-sync-darwin-amd64" },
+                    { "path": "_apps/sync/dist-bin/intentic-sync-darwin-arm64", "filepath": "/bin/intentic-sync-darwin-arm64" },
+                    { "path": "_apps/sync/dist-bin/intentic-sync-windows-amd64.exe", "filepath": "/bin/intentic-sync-windows-amd64.exe" }
+                ]
+            }
+        ]
+    ]
+}

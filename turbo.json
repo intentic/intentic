@@ -1,0 +1,92 @@
+{
+    "$schema": "https://turborepo.com/schema.json",
+    "ui": "tui",
+    "tasks": {
+        "build": {
+            "dependsOn": ["^build"],
+            "outputs": ["dist/**", ".cache/**", "generated/**", ".astro/**"]
+        },
+        "test": {
+            "dependsOn": ["^build"],
+            "outputs": []
+        },
+        "check": {
+            "dependsOn": ["^build"],
+            "outputs": []
+        },
+        "dev": {
+            "cache": false,
+            "persistent": true,
+            "passThroughEnv": ["WORKSPACE_ROOT", "PREVIEW_PORT"]
+        },
+        "watch": {
+            "cache": false,
+            "persistent": true
+        },
+        "start": {
+            "dependsOn": ["build"],
+            "cache": false,
+            "persistent": true,
+            "env": [
+                "DATABASE_URL",
+                "NODE_ENV",
+                "API_PORT",
+                "BETTER_AUTH_SECRET",
+                "BETTER_AUTH_URL",
+                "WEB_ORIGIN",
+                "GOOGLE_CLIENT_ID",
+                "GOOGLE_CLIENT_SECRET"
+            ]
+        },
+        "preview": {
+            "dependsOn": ["build"],
+            "cache": false,
+            "persistent": true
+        },
+        "e2e": {
+            "dependsOn": ["^build"],
+            "cache": false,
+            "passThroughEnv": [
+                "INTENTIC_E2E",
+                "CLOUDFLARE_API_TOKEN",
+                "CLOUDFLARE_ZONE",
+                "FORGEJO_ADMIN_PASSWORD",
+                "KOMODO_ADMIN_PASSWORD",
+                "KOMODO_WEBHOOK_SECRET",
+                "SANDBOX_E2E_IMAGE",
+                "DISCORD_E2E_BOT_TOKEN",
+                "DISCORD_E2E_SENDER_TOKEN",
+                "DISCORD_E2E_CHANNEL_ID",
+                "ANTHROPIC_API_KEY",
+                "CLAUDE_CODE_OAUTH_TOKEN"
+            ]
+        },
+        "e2e:hermetic": {
+            "dependsOn": ["^build"],
+            "cache": false,
+            "passThroughEnv": ["INTENTIC_E2E_HERMETIC", "INTENTIC_HOST_IMAGE", "INTENTIC_LOG_DIR"]
+        },
+        "bench:retrieval": {
+            "dependsOn": ["^build", "build"],
+            "cache": false,
+            "passThroughEnv": ["IQ_MODEL_DIR", "IQ_RG_PATH"]
+        },
+        "bench:agents": {
+            "dependsOn": ["^build", "build"],
+            "cache": false,
+            "passThroughEnv": [
+                "IQ_BENCH_AGENTS",
+                "IQ_BENCH_DANGEROUS",
+                "IQ_BENCH_TRANSCRIPTS",
+                "ANTHROPIC_API_KEY",
+                "CLAUDE_CODE_OAUTH_TOKEN",
+                "OPENAI_API_KEY",
+                "XAI_API_KEY"
+            ]
+        }
+    },
+    "remoteCache": {
+        "enabled": false
+    },
+    "concurrency": "200%"
+}

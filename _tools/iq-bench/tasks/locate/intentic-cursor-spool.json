@@ -1,0 +1,12 @@
+{
+    "id": "intentic-cursor-spool",
+    "repo": "intentic",
+    "type": "locate",
+    "prompt": "In this repository, when search output is truncated a continuation cursor is printed so the caller can resume. Where is that cursor encoded and the spooled result groups stored? Answer with the exact file path(s) and line number(s).",
+    "grader": {
+        "kind": "anchors",
+        "anchors": [{ "file": "_libs/iq-engine/src/render/cursor.ts" }],
+        "requireAll": false
+    },
+    "caps": { "maxTurns": 12 }
+}

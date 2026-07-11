@@ -1,0 +1,24 @@
+# Build context for the sandbox image is the MONOREPO ROOT (docker build -f _apps/sandbox/Dockerfile .).
+# Keep every workspace member's source — `pnpm install --frozen-lockfile` inside the image validates the whole
+# workspace against the root lockfile, and `pnpm --filter @intentic/{sandbox,cli,iq} deploy` prunes the final
+# image to the core packages. Exclude only artifacts, vcs, secrets, and things the core image never needs.
+**/node_modules
+**/.git
+**/.turbo
+**/.cache
+**/dist
+**/dist-bin
+**/dist-*
+**/deploy
+**/generated
+**/.astro
+**/out-tsc
+**/*.tsbuildinfo
+**/.env
+**/.env.local
+**/.env.*.local
+_tools/localhost-https
+.demo
+desired-state
+intent
+test

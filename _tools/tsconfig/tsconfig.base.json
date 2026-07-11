@@ -1,0 +1,28 @@
+{
+    "compilerOptions": {
+        "composite": true,
+        "customConditions": ["@intentic/src", "@intentic-app/src", "@intentic-dev/src"],
+        "declaration": true,
+        "declarationMap": true,
+        "exactOptionalPropertyTypes": true,
+        "forceConsistentCasingInFileNames": true,
+        "importHelpers": true,
+        "incremental": true,
+        "isolatedModules": true,
+        "module": "NodeNext",
+        "moduleResolution": "nodenext",
+        "newLine": "lf",
+        "noEmitOnError": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitOverride": true,
+        "noImplicitReturns": true,
+        "noPropertyAccessFromIndexSignature": true,
+        "noUncheckedIndexedAccess": true,
+        "removeComments": true,
+        "skipLibCheck": true,
+        "sourceMap": true,
+        "strict": true,
+        "target": "ES2024",
+        "useDefineForClassFields": true
+    }
+}

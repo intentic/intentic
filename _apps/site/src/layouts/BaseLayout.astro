@@ -1,0 +1,113 @@
+---
+import "../styles/global.css";
+import { getPageMeta } from "@intentic-dev/content/page-meta";
+import { ORG_DESCRIPTION, ORG_NAME, SITE_URL } from "@intentic-dev/content/site";
+import { buildFAQPageSchema, buildOrganizationSchema, buildWebPageSchema, buildWebSiteSchema } from "@intentic-dev/content/structured-data";
+import { lastModForUrl } from "@intentic-dev/astro-integrations";
+
+interface Props {
+    title?: string;
+    description?: string;
+    ogImage?: string;
+    faqQuestions?: { question: string; answer: string }[];
+    extraJsonLd?: Record<string, unknown>[];
+    noindex?: boolean;
+}
+
+const path = Astro.url.pathname.endsWith("/") ? Astro.url.pathname : `${Astro.url.pathname}/`;
+const meta = getPageMeta(path);
+
+const title = Astro.props.title ?? meta?.title ?? `${ORG_NAME} — Build software with intent`;
+const description = Astro.props.description ?? meta?.description ?? ORG_DESCRIPTION;
+const datePublished = meta?.datePublished;
+const dateModified = lastModForUrl(`${SITE_URL}${path}`) ?? undefined;
+
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+
+function ogSlug(pathname: string): string {
+    const trimmed = pathname.replace(/\/+$/, "");
+    if (trimmed === "") return "index";
+    return trimmed.replace(/^\//, "").replace(/\//g, "-");
+}
+
+const perPageOgAvailable = import.meta.env.PUBLIC_OG_PER_PAGE;
+const defaultOgPath = perPageOgAvailable && meta ? `/og/${ogSlug(path)}.png` : "/assets/intentic-logo-sized.png";
+const ogImage = new URL(Astro.props.ogImage ?? defaultOgPath, Astro.site);
+
+const faqQuestions = Astro.props.faqQuestions;
+const jsonLdItems: Record<string, unknown>[] = [
+    buildOrganizationSchema(),
+    buildWebSiteSchema(),
+    buildWebPageSchema({ name: title, description, path, datePublished, dateModified }),
+    ...(faqQuestions?.length ? [buildFAQPageSchema({ name: title, description, path, questions: faqQuestions })] : []),
+    ...(Astro.props.extraJsonLd ?? []),
+];
+
+const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
+---
+
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+        <title>{title}</title>
+        <meta name="description" content={description} />
+        <meta
+            name="keywords"
+            content="intentic, AI workspace, coding agent, Claude Code, agent sandbox, AI DevOps, self-hosting, infrastructure as intent, automations"
+        />
+        <meta
+            name="robots"
+            content={Astro.props.noindex ? "noindex,follow" : "max-snippet:-1, max-image-preview:large, max-video-preview:-1"}
+        />
+
+        <link rel="icon" type="image/png" href="/assets/intentic-logo-sized.png" />
+        <link rel="apple-touch-icon" href="/assets/intentic-logo-sized.png" />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="canonical" href={canonicalURL.href} />
+        <link rel="sitemap" href="/sitemap-index.xml" />
+
+        <meta property="og:type" content="website" />
+        <meta property="og:locale" content="en_US" />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={description} />
+        <meta property="og:url" content={canonicalURL.href} />
+        <meta property="og:site_name" content={ORG_NAME} />
+        <meta property="og:image" content={ogImage.href} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="628" />
+
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={title} />
+        <meta name="twitter:description" content={description} />
+        <meta name="twitter:image" content={ogImage.href} />
+
+        <meta name="theme-color" content="#181614" />
+        <link rel="preload" as="font" type="font/woff2" href="/fonts/inter-latin.woff2" crossorigin />
+        <noscript>
+            <style>
+                .fade-in {
+                    opacity: 1;
+                    transform: none;
+                }
+            </style>
+        </noscript>
+
+        {jsonLdItems.map((item) => <script is:inline type="application/ld+json" set:html={JSON.stringify(item)} />)}
+        {
+            cfBeaconToken && (
+                <script
+                    is:inline
+                    defer
+                    src="https://static.cloudflareinsights.com/beacon.min.js"
+                    data-cf-beacon={JSON.stringify({ token: cfBeaconToken })}
+                />
+            )
+        }
+    </head>
+    <body class="flex min-h-screen flex-col">
+        <slot />
+    </body>
+</html>

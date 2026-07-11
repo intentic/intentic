@@ -1,0 +1,192 @@
+{
+    "repo": "click",
+    "cases": [
+        {
+            "id": "option-parsing",
+            "verb": "ask",
+            "query": "how are command line options parsed into parameter values?",
+            "expected": [{ "file": "src/click/parser.py" }, { "file": "src/click/core.py" }]
+        },
+        {
+            "id": "user-prompt",
+            "verb": "ask",
+            "query": "how does click prompt the user for input with a default value?",
+            "expected": [{ "file": "src/click/termui.py", "line": 132, "tolerance": 80 }]
+        },
+        {
+            "id": "shell-completion",
+            "verb": "ask",
+            "query": "how are shell completions generated for bash and zsh?",
+            "expected": [{ "file": "src/click/shell_completion.py" }]
+        },
+        {
+            "id": "progress-bar",
+            "verb": "ask",
+            "query": "how does the progress bar render and update?",
+            "expected": [{ "file": "src/click/_termui_impl.py", "line": 57, "tolerance": 200 }]
+        },
+        {
+            "id": "cli-testing",
+            "verb": "ask",
+            "query": "how can I invoke a command in tests and capture its output?",
+            "expected": [{ "file": "src/click/testing.py" }]
+        },
+        {
+            "id": "def-command",
+            "verb": "def",
+            "query": "Command",
+            "expected": [{ "file": "src/click/core.py", "line": 960, "tolerance": 10 }]
+        },
+        {
+            "id": "def-param-type",
+            "verb": "def",
+            "query": "ParamType",
+            "expected": [{ "file": "src/click/types.py", "line": 42, "tolerance": 10 }]
+        },
+        {
+            "id": "sym-shell-complete",
+            "verb": "sym",
+            "query": "ShellComplete",
+            "expected": [{ "file": "src/click/shell_completion.py", "line": 216, "tolerance": 10 }]
+        },
+        {
+            "id": "find-echo-def",
+            "verb": "find",
+            "query": "def echo",
+            "expected": [{ "file": "src/click/utils.py", "line": 245, "tolerance": 10 }]
+        },
+        {
+            "id": "files-exceptions",
+            "verb": "files",
+            "query": "exceptions",
+            "expected": [{ "file": "src/click/exceptions.py" }]
+        },
+        {
+            "id": "q-context-object",
+            "verb": "q",
+            "query": "Context object passed between commands",
+            "expected": [{ "file": "src/click/core.py", "line": 208, "tolerance": 200 }]
+        },
+        {
+            "id": "q-ansi-colors",
+            "verb": "q",
+            "query": "strip ansi color codes",
+            "expected": [{ "file": "src/click/_compat.py" }]
+        },
+        {
+            "id": "subcommand-dispatch",
+            "verb": "ask",
+            "query": "how are nested subcommands resolved and dispatched to their handlers?",
+            "expected": [{ "file": "src/click/core.py", "line": 2060, "tolerance": 150 }],
+            "notes": "Group.resolve_command around line 2060."
+        },
+        {
+            "id": "type-conversion",
+            "verb": "ask",
+            "query": "where does click convert parameter strings into their declared types?",
+            "expected": [{ "file": "src/click/types.py" }]
+        },
+        {
+            "id": "lazy-file",
+            "verb": "ask",
+            "query": "how does click lazily open files passed as arguments?",
+            "expected": [
+                { "file": "src/click/utils.py", "line": 112, "tolerance": 80 },
+                { "file": "src/click/types.py", "line": 857, "tolerance": 100 }
+            ],
+            "notes": "Cross-file concept: LazyFile in utils.py, File param type in types.py."
+        },
+        {
+            "id": "usage-errors",
+            "verb": "ask",
+            "query": "where are usage errors formatted before being printed?",
+            "expected": [{ "file": "src/click/exceptions.py" }]
+        },
+        {
+            "id": "help-columns",
+            "verb": "ask",
+            "query": "how is help text laid out in two aligned columns?",
+            "expected": [{ "file": "src/click/formatting.py", "line": 229, "tolerance": 80 }],
+            "notes": "HelpFormatter.write_dl."
+        },
+        {
+            "id": "confirm-prompt",
+            "verb": "ask",
+            "query": "where does click ask the user to confirm before proceeding?",
+            "expected": [{ "file": "src/click/termui.py", "line": 245, "tolerance": 80 }]
+        },
+        {
+            "id": "hidden-input",
+            "verb": "ask",
+            "query": "how is input hidden when prompting for a password?",
+            "expected": [{ "file": "src/click/termui.py", "line": 78, "tolerance": 80 }]
+        },
+        {
+            "id": "terminal-width",
+            "verb": "ask",
+            "query": "where is the terminal width used to wrap help output?",
+            "expected": [{ "file": "src/click/formatting.py", "line": 141, "tolerance": 60 }]
+        },
+        {
+            "id": "external-editor",
+            "verb": "ask",
+            "query": "how does click open an external editor for the user to type text?",
+            "expected": [{ "file": "src/click/_termui_impl.py", "line": 656, "tolerance": 80 }]
+        },
+        {
+            "id": "pager-output",
+            "verb": "ask",
+            "query": "where is long output piped through a pager?",
+            "expected": [{ "file": "src/click/termui.py", "line": 323, "tolerance": 60 }]
+        },
+        {
+            "id": "q-clear-screen",
+            "verb": "q",
+            "query": "clear the terminal screen",
+            "expected": [{ "file": "src/click/termui.py", "line": 558, "tolerance": 40 }]
+        },
+        {
+            "id": "tty-detection",
+            "verb": "ask",
+            "query": "how does click detect whether a stream is attached to a terminal?",
+            "expected": [{ "file": "src/click/_compat.py", "line": 540, "tolerance": 80 }],
+            "notes": "Synonym gap: 'attached to a terminal' vs isatty vocabulary."
+        },
+        {
+            "id": "def-group",
+            "verb": "def",
+            "query": "Group",
+            "expected": [{ "file": "src/click/core.py", "line": 1643, "tolerance": 10 }]
+        },
+        {
+            "id": "def-lazy-file",
+            "verb": "def",
+            "query": "LazyFile",
+            "expected": [{ "file": "src/click/utils.py", "line": 112, "tolerance": 5 }]
+        },
+        {
+            "id": "sym-help-formatter",
+            "verb": "sym",
+            "query": "HelpFormatter",
+            "expected": [{ "file": "src/click/formatting.py", "line": 110, "tolerance": 5 }]
+        },
+        {
+            "id": "refs-param-type",
+            "verb": "refs",
+            "query": "ParamType",
+            "expected": [{ "file": "src/click/core.py" }]
+        },
+        {
+            "id": "find-envvar-def",
+            "verb": "find",
+            "query": "def resolve_envvar_value",
+            "expected": [{ "file": "src/click/core.py", "line": 2658, "tolerance": 10 }]
+        },
+        {
+            "id": "files-shell-completion",
+            "verb": "files",
+            "query": "shell completion",
+            "expected": [{ "file": "src/click/shell_completion.py" }]
+        }
+    ]
+}

@@ -1,0 +1,17 @@
+{
+    "name": "@intentic-app/e2e",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "e2e": "playwright test"
+    },
+    "devDependencies": {
+        "@intentic-app/prisma": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@playwright/test": "catalog:",
+        "@prisma/adapter-pg": "catalog:",
+        "@types/node": "catalog:",
+        "typescript": "catalog:"
+    }
+}

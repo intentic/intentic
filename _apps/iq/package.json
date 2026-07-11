@@ -1,0 +1,56 @@
+{
+    "name": "@intentic/iq",
+    "version": "0.0.0",
+    "description": "iq — agent-native workspace search CLI: one intent-first entry point over lexical, structural, semantic, and git engines",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://gitlab.com/radarsu/intentic.git",
+        "directory": "_apps/iq"
+    },
+    "files": [
+        "dist"
+    ],
+    "bin": {
+        "iq": "./dist/cli.js"
+    },
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --build --watch",
+        "watch": "tsc --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@intentic/iq-engine": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@puristic/env": "catalog:",
+        "@stricli/core": "catalog:",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:"
+    }
+}

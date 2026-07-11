@@ -1,0 +1,51 @@
+/* Tier 0 — foundational tokens + Tailwind reset.
+ *
+ * `--color-*: initial` / `--font-*: initial` drop Tailwind's built-in palettes and font
+ * stacks so the only colors/fonts that exist are the ones we define on purpose. This file
+ * is imported FIRST (before the primitive/semantic colors) so the reset runs before our
+ * tokens are added.
+ *
+ * Everything here is a single source of truth: change a value, and every utility, PrimeVue
+ * component, and design-system primitive that consumes it updates at once. */
+@theme {
+    --color-*: initial;
+    --font-*: initial;
+
+    /* Typography. */
+    --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji",
+        "Segoe UI Emoji";
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    --font-default: var(--font-sans);
+
+    --text-2xs: 0.6875rem;
+    --text-2xs--line-height: 1rem;
+
+    /* Spacing base — the unit Tailwind multiplies for p-*, gap-*, m-*, etc.
+     * Nudge this to make the whole UI more or less dense in one place. */
+    --spacing: 0.25rem;
+
+    /* Radius scale. */
+    --radius-xs: 0.25rem;
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.25rem;
+}
+
+/* Density tokens — consumed by the design-system primitives (ui-card, ui-page) and the
+ * PrimeVue overrides. Adjust these to retune padding/sizing app-wide without touching
+ * component templates. Defined on :root (not @theme) so they are plain custom properties. */
+:root {
+    --ui-radius: var(--radius-lg);
+
+    --ui-page-padding: calc(var(--spacing) * 6);
+    --ui-page-max-width: 48rem;
+
+    --ui-card-padding: calc(var(--spacing) * 5);
+    --ui-card-gap: calc(var(--spacing) * 4);
+
+    --ui-control-padding-x: calc(var(--spacing) * 3);
+    --ui-control-padding-y: calc(var(--spacing) * 2);
+    --ui-field-gap: calc(var(--spacing) * 2);
+}

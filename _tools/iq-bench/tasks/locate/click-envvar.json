@@ -1,0 +1,15 @@
+{
+    "id": "click-envvar",
+    "repo": "click",
+    "type": "locate",
+    "prompt": "In this repository, when an option has an `envvar` configured, where is the value actually read from the environment during parameter processing? Answer with the exact file path and line number(s).",
+    "grader": {
+        "kind": "anchors",
+        "anchors": [
+            { "file": "src/click/core.py", "line": 2658, "tolerance": 60 },
+            { "file": "src/click/core.py", "line": 3441, "tolerance": 60 }
+        ],
+        "requireAll": false
+    },
+    "caps": { "maxTurns": 12 }
+}

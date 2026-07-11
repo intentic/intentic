@@ -1,0 +1,95 @@
+/* Tier 1 — primitive palettes. Raw, role-agnostic color ramps in OKLch (perceptually
+ * uniform). Nothing in the app should reference these directly; map them to roles in
+ * semantic-colors.css or to the numeric `surface`/`primary`/... scales below. */
+@theme {
+    --color-white: #fff;
+    --color-black: #000;
+
+    /* Neutral (warm gray, hue 65) — backgrounds, text, borders. Subtly warmed to pair with
+     * the orange brand; chroma kept very low so it still reads as neutral. */
+    --color-neutral-0:   oklch(99% 0.002 65);
+    --color-neutral-50:  oklch(98% 0.003 65);
+    --color-neutral-100: oklch(96% 0.005 65);
+    --color-neutral-200: oklch(92% 0.007 65);
+    --color-neutral-300: oklch(87% 0.009 65);
+    --color-neutral-400: oklch(71% 0.010 65);
+    --color-neutral-500: oklch(58% 0.011 65);
+    --color-neutral-600: oklch(48% 0.011 65);
+    --color-neutral-700: oklch(40% 0.010 65);
+    --color-neutral-800: oklch(30% 0.009 65);
+    --color-neutral-900: oklch(23% 0.008 65);
+    --color-neutral-950: oklch(16% 0.007 65);
+
+    /* Brand (orange, hue 55) — primary actions, links, active state. Warm, dev-infrastructure
+     * orange. Hue eases toward red at the dark end so deep shades stay rich, not muddy. */
+    --color-brand-0:   oklch(97% 0.02  55);
+    --color-brand-50:  oklch(96% 0.035 55);
+    --color-brand-100: oklch(93% 0.06  55);
+    --color-brand-200: oklch(88% 0.10  55);
+    --color-brand-300: oklch(82% 0.13  55);
+    --color-brand-400: oklch(77% 0.155 55);
+    --color-brand-500: oklch(72% 0.17  55);
+    --color-brand-600: oklch(67% 0.175 55);
+    --color-brand-700: oklch(58% 0.16  50);
+    --color-brand-800: oklch(50% 0.135 48);
+    --color-brand-900: oklch(44% 0.115 46);
+    --color-brand-950: oklch(33% 0.085 45);
+
+    /* Red (hue 27) — danger / destructive. */
+    --color-red-0:   oklch(97% 0.02 27);
+    --color-red-50:  oklch(96% 0.03 27);
+    --color-red-100: oklch(93% 0.05 27);
+    --color-red-200: oklch(88% 0.09 27);
+    --color-red-300: oklch(81% 0.13 27);
+    --color-red-400: oklch(72% 0.18 27);
+    --color-red-500: oklch(64% 0.21 27);
+    --color-red-600: oklch(58% 0.22 27);
+    --color-red-700: oklch(50% 0.20 27);
+    --color-red-800: oklch(43% 0.16 27);
+    --color-red-900: oklch(38% 0.13 27);
+    --color-red-950: oklch(28% 0.09 27);
+
+    /* Green (hue 150) — success / positive. */
+    --color-green-0:   oklch(97% 0.02 150);
+    --color-green-50:  oklch(96% 0.04 150);
+    --color-green-100: oklch(93% 0.07 150);
+    --color-green-200: oklch(88% 0.11 150);
+    --color-green-300: oklch(80% 0.14 150);
+    --color-green-400: oklch(72% 0.16 150);
+    --color-green-500: oklch(64% 0.16 150);
+    --color-green-600: oklch(56% 0.14 150);
+    --color-green-700: oklch(48% 0.12 150);
+    --color-green-800: oklch(41% 0.10 150);
+    --color-green-900: oklch(36% 0.08 150);
+    --color-green-950: oklch(27% 0.06 150);
+
+    /* Blue (hue 255) — info / neutral-informational. Distinct from the orange brand so an
+     * informational state never reads as a primary action. */
+    --color-blue-0:   oklch(97% 0.02  255);
+    --color-blue-50:  oklch(96% 0.03  255);
+    --color-blue-100: oklch(93% 0.05  255);
+    --color-blue-200: oklch(88% 0.08  255);
+    --color-blue-300: oklch(80% 0.12  255);
+    --color-blue-400: oklch(72% 0.16  255);
+    --color-blue-500: oklch(64% 0.19  255);
+    --color-blue-600: oklch(56% 0.185 255);
+    --color-blue-700: oklch(48% 0.16  255);
+    --color-blue-800: oklch(41% 0.13  255);
+    --color-blue-900: oklch(36% 0.10  255);
+    --color-blue-950: oklch(27% 0.075 255);
+
+    /* Amber (hue 88) — warning / caution. Pushed toward golden-yellow so it stays clearly
+     * distinct from the brand orange (hue 55). */
+    --color-amber-0:   oklch(98% 0.02 88);
+    --color-amber-50:  oklch(97% 0.04 88);
+    --color-amber-100: oklch(94% 0.07 88);
+    --color-amber-200: oklch(90% 0.11 88);
+    --color-amber-300: oklch(85% 0.14 88);
+    --color-amber-400: oklch(80% 0.16 88);
+    --color-amber-500: oklch(74% 0.16 88);
+    --color-amber-600: oklch(65% 0.15 88);
+    --color-amber-700: oklch(55% 0.13 88);
+    --color-amber-800: oklch(46% 0.11 88);
+    --color-amber-900: oklch(40% 0.09 88);
+    --color-amber-950: oklch(30% 0.07 88);
+}

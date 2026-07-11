@@ -1,0 +1,28 @@
+{
+    "name": "@intentic-dev/site",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "astro dev",
+        "build": "mkdir -p public/scripts && cp ../../scripts/*.sh ../../scripts/*.ps1 public/scripts/ && astro build",
+        "preview": "astro preview",
+        "check": "astro check",
+        "astro": "astro"
+    },
+    "dependencies": {
+        "@astrojs/sitemap": "catalog:",
+        "@intentic-dev/astro-integrations": "workspace:*",
+        "@intentic-dev/content": "workspace:*",
+        "@resvg/resvg-js": "catalog:",
+        "@tailwindcss/vite": "catalog:",
+        "astro": "catalog:",
+        "satori": "catalog:",
+        "tailwindcss": "catalog:"
+    },
+    "devDependencies": {
+        "@astrojs/check": "^0.9.4",
+        "typescript": "catalog:",
+        "vite": "catalog:site"
+    }
+}

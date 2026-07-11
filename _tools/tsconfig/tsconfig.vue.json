@@ -1,0 +1,21 @@
+/* Shared base for the Vue app (web) and Vue lib (ui). Holds the deviations from tsconfig.base.json that
+ * Vite + vue-tsc need (bundler resolution, DOM libs, no composite/declaration emit). Path options
+ * (baseUrl/outDir/rootDir/tsBuildInfoFile) stay in each package's own tsconfig.json because `extends`
+ * resolves those relative to the file that defines them. */
+{
+    "compilerOptions": {
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "esModuleInterop": true,
+        "exactOptionalPropertyTypes": false,
+        "lib": ["ES2024", "DOM", "DOM.Iterable"],
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "target": "ES2023",
+        "useDefineForClassFields": true
+    },
+    "extends": "./tsconfig.base.json"
+}

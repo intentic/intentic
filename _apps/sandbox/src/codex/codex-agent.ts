@@ -1,0 +1,316 @@
+import { extname } from "node:path";
+import {
+    Codex,
+    type Input,
+    type ModelReasoningEffort,
+    type SandboxMode,
+    type ThreadEvent,
+    type ThreadItem,
+    type ThreadOptions,
+} from "@openai/codex-sdk";
+import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentRequest } from "../agent/agent.js";
+import { createPlanRequest } from "../agent/agent-requests.js";
+
+/* The Codex provider adapter: same seam as agent.ts's runAgent — AgentRequest in, AgentEvent frames out — but
+ * backed by the Codex CLI (`codex exec` via @openai/codex-sdk) instead of the Claude Agent SDK. Provider
+ * differences stay inside this file; the wire contract, routes, and UI are shared.
+ *
+ * The exec surface emits item-level events only (whole agent messages, no token deltas) and has no interactive
+ * approval channel — both fine here: the UI typewriter smooths chunky deltas, and the container is the
+ * isolation boundary (the Claude path already runs bypassPermissions for the same reason).
+ * ponytail: `codex app-server` is the upgrade path for token deltas + per-command approvals, swappable inside
+ * this file alone. */
+
+// One Codex turn: resume the thread when sessionId is present, else start a new one. Injected so tests drive a
+// fake ThreadEvent stream — no CLI spawn (the QueryFn pattern from agent.ts).
+export interface CodexTurn {
+    readonly prompt: string;
+    // Absolute image paths riding as native local_image inputs (Codex vision reads them by path).
+    readonly images?: readonly string[];
+    readonly sessionId?: string;
+    readonly env: Record<string, string>;
+    readonly options: ThreadOptions;
+    readonly signal: AbortSignal;
+}
+export type CodexRunner = (turn: CodexTurn) => AsyncIterable<ThreadEvent>;
+
+// The SDK does NOT inherit process.env when `env` is passed, so the runner receives the full environment.
+const defaultRunner: CodexRunner = async function* (turn) {
+    const codex = new Codex({ env: turn.env });
+    const thread = turn.sessionId !== undefined ? codex.resumeThread(turn.sessionId, turn.options) : codex.startThread(turn.options);
+    const input: Input =
+        turn.images !== undefined && turn.images.length > 0
+            ? [{ type: "text", text: turn.prompt }, ...turn.images.map((path) => ({ type: "local_image" as const, path }))]
+            : turn.prompt;
+    const { events } = await thread.runStreamed(input, { signal: turn.signal });
+    yield* events;
+};
+
+// Split attached files: raster images Codex vision accepts ride as native inputs; everything else (PDFs,
+// CSVs, SVGs, …) is referenced by path for the agent's shell to read.
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
+const splitAttachments = (attachments: readonly string[] = []): { images: string[]; others: string[] } => {
+    const images: string[] = [];
+    const others: string[] = [];
+    for (const path of attachments) {
+        (IMAGE_EXTS.has(extname(path).toLowerCase()) ? images : others).push(path);
+    }
+    return { images, others };
+};
+const withFileNote = (prompt: string, files: readonly string[]): string =>
+    files.length === 0 ? prompt : `${prompt}\n\nThe user attached these files — read them as needed:\n${files.map((path) => `- ${path}`).join("\n")}`;
+
+// Codex's reasoning-effort scale matches the SDK's EffortLevel except the top: Claude's "max" → Codex "xhigh".
+const EFFORT_LEVELS = new Set(["minimal", "low", "medium", "high", "xhigh"]);
+const reasoningEffort = (effort: string): ModelReasoningEffort | undefined => {
+    if (effort === "max") {
+        return "xhigh";
+    }
+    return EFFORT_LEVELS.has(effort) ? (effort as ModelReasoningEffort) : undefined;
+};
+
+// process.env with undefined entries dropped (CodexOptions.env is Record<string, string>), cli-kind capability
+// credentials merged, and CODEX_HOME pinned to the workspace-scoped auth/session store.
+const codexEnv = (codexHome: string, cliEnv: Record<string, string> | undefined): Record<string, string> => {
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+        if (value !== undefined) {
+            env[key] = value;
+        }
+    }
+    return { ...env, ...cliEnv, CODEX_HOME: codexHome };
+};
+
+const threadOptions = (request: AgentRequest, sandboxMode: SandboxMode): ThreadOptions => {
+    const effort = request.effort !== undefined ? reasoningEffort(request.effort) : undefined;
+    return {
+        workingDirectory: request.cwd,
+        // The workspace root holds the repos but is not itself a git repo.
+        skipGitRepoCheck: true,
+        sandboxMode,
+        // No approval channel on the exec surface; the container is the isolation boundary (same posture as
+        // the Claude path's bypassPermissions).
+        approvalPolicy: "never",
+        ...(request.model !== undefined ? { model: request.model } : {}),
+        ...(effort !== undefined ? { modelReasoningEffort: effort } : {}),
+    };
+};
+
+// Flatten an MCP result's content blocks to plain text, like agent.ts's resultText.
+const mcpResultText = (item: Extract<ThreadItem, { type: "mcp_tool_call" }>): string => {
+    if (item.error !== undefined) {
+        return item.error.message;
+    }
+    const content = item.result?.content;
+    if (!Array.isArray(content)) {
+        return "";
+    }
+    return content.map((block) => (block.type === "text" ? block.text : `[${block.type}]`)).join("");
+};
+
+// What phase-1 of a plan turn holds back: the thread id (to resume for execution) and the trailing
+// agent_message (the plan text the user approves).
+interface TurnCapture {
+    threadId?: string;
+    heldMessage?: string;
+}
+
+// Normalize one Codex turn's ThreadEvent stream onto AgentEvents. `capture` set ⇒ plan phase: agent messages
+// are held back one-deep — intermediate narration still streams (flushed when the next message arrives), and
+// whatever remains held at stream end is the plan text.
+async function* streamTurn(events: AsyncIterable<ThreadEvent>, capture?: TurnCapture): AsyncGenerator<AgentEvent> {
+    for await (const event of events) {
+        if (event.type === "thread.started") {
+            if (capture !== undefined) {
+                capture.threadId = event.thread_id;
+            }
+            yield { kind: "session", sessionId: event.thread_id };
+        } else if (event.type === "item.started" || event.type === "item.updated" || event.type === "item.completed") {
+            const item = event.item;
+            if (item.type === "agent_message") {
+                if (event.type !== "item.completed") {
+                    continue;
+                }
+                if (capture === undefined) {
+                    yield { kind: "delta", text: item.text };
+                } else {
+                    if (capture.heldMessage !== undefined) {
+                        yield { kind: "delta", text: capture.heldMessage };
+                    }
+                    capture.heldMessage = item.text;
+                }
+            } else if (item.type === "reasoning") {
+                if (event.type === "item.completed") {
+                    yield { kind: "thinking", text: item.text };
+                }
+            } else if (item.type === "command_execution") {
+                if (event.type === "item.started") {
+                    yield { kind: "tool", id: item.id, name: "Bash", target: item.command };
+                } else if (event.type === "item.completed") {
+                    yield {
+                        kind: "tool_result",
+                        id: item.id,
+                        output: item.aggregated_output,
+                        ...(item.status === "failed" || (item.exit_code !== undefined && item.exit_code !== 0) ? { isError: true } : {}),
+                    };
+                }
+            } else if (item.type === "file_change") {
+                // Emitted once, on success or failure; the item carries paths but no diff text.
+                if (event.type === "item.completed") {
+                    yield {
+                        kind: "tool",
+                        id: item.id,
+                        name: "Edit",
+                        target: item.changes.map((change) => `${change.kind} ${change.path}`).join(", "),
+                    };
+                    if (item.status === "failed") {
+                        yield { kind: "tool_result", id: item.id, output: "patch failed", isError: true };
+                    }
+                }
+            } else if (item.type === "mcp_tool_call") {
+                if (event.type === "item.started") {
+                    yield { kind: "tool", id: item.id, name: `${item.server}.${item.tool}` };
+                } else if (event.type === "item.completed") {
+                    yield {
+                        kind: "tool_result",
+                        id: item.id,
+                        output: mcpResultText(item),
+                        ...(item.status === "failed" ? { isError: true } : {}),
+                    };
+                }
+            } else if (item.type === "web_search") {
+                if (event.type === "item.completed") {
+                    yield { kind: "tool", id: item.id, name: "WebSearch", target: item.query };
+                }
+            } else if (item.type === "todo_list") {
+                yield {
+                    kind: "todos",
+                    items: item.items.map((todo) => ({ content: todo.text, status: todo.completed ? ("completed" as const) : ("pending" as const) })),
+                };
+            } else if (item.type === "error") {
+                if (event.type === "item.completed") {
+                    yield { kind: "error", message: item.message };
+                }
+            }
+        } else if (event.type === "turn.completed") {
+            // Codex reports only a cached-input bucket (no separate cache-write), so map it to cacheReadTokens.
+            yield {
+                kind: "usage",
+                inputTokens: event.usage.input_tokens,
+                outputTokens: event.usage.output_tokens,
+                cacheReadTokens: event.usage.cached_input_tokens,
+            };
+        } else if (event.type === "turn.failed") {
+            yield { kind: "error", message: event.error.message };
+        } else if (event.type === "error") {
+            yield { kind: "error", message: event.message };
+        }
+        // turn.started has no UI mapping — dropped, like the Claude path's unmapped SDK messages.
+    }
+}
+
+const PLAN_PREAMBLE =
+    "Before making any changes, propose a clear, concise plan for the request below and stop — do not execute it yet. " +
+    "You are in a read-only sandbox for this turn; end your reply with the plan itself.\n\n";
+
+// Always-plan flow, emulated in two phases (the exec surface has no ExitPlanMode hook): a read-only planning
+// turn whose trailing message becomes the `plan` frame, then — once approved on the existing decision bridge —
+// a full-access execution turn resumed on the same thread. Rejection feedback loops another planning turn.
+// ponytail: no `question` frames on Codex (no AskUserQuestion analog in exec mode); app-server adds one.
+async function* runCodexPlanTurn(request: AgentRequest, runner: CodexRunner, env: Record<string, string>): AsyncGenerator<AgentEvent> {
+    const { images: firstTurnImages, others } = splitAttachments(request.attachments);
+    let prompt = PLAN_PREAMBLE + withFileNote(request.prompt, others);
+    // Images ride the first planning turn only — revision and execute turns resume the same thread, whose
+    // context already holds them.
+    let images = firstTurnImages;
+    let sessionId = request.sessionId;
+    for (;;) {
+        const capture: TurnCapture = {};
+        yield* streamTurn(
+            runner({
+                prompt,
+                ...(images.length > 0 ? { images } : {}),
+                ...(sessionId !== undefined ? { sessionId } : {}),
+                env,
+                options: threadOptions(request, "read-only"),
+                signal: request.signal,
+            }),
+            capture,
+        );
+        images = [];
+        sessionId = capture.threadId ?? sessionId;
+        if (capture.heldMessage === undefined || request.signal.aborted) {
+            // The planning turn errored/aborted without a trailing message — the error frame already streamed.
+            return;
+        }
+        const { id, wait } = createPlanRequest();
+        yield { kind: "plan", decisionId: id, text: capture.heldMessage };
+        const decision = await wait(request.signal);
+        if (request.signal.aborted) {
+            return;
+        }
+        if (!decision.approve) {
+            const feedback = decision.feedback?.trim();
+            prompt =
+                feedback !== undefined && feedback !== ""
+                    ? `The user rejected the plan with this feedback:\n${feedback}\n\nRevise the plan. Still do not execute it.`
+                    : "The user rejected the plan. Revise it. Still do not execute it.";
+            continue;
+        }
+        yield* streamTurn(
+            runner({
+                prompt: "The plan is approved — execute it now.",
+                ...(sessionId !== undefined ? { sessionId } : {}),
+                env,
+                options: threadOptions(request, "danger-full-access"),
+                signal: request.signal,
+            }),
+        );
+        return;
+    }
+}
+
+// Build the Codex provider for the Services seam: AgentRequest in, AgentEvent frames out. Ignores the
+// Claude-only request fields (oauthToken, permissionMode, plugins, thinking — Codex reasoning is always on).
+// ponytail: request.tools (platform MCP servers) skipped on Codex turns; the ceiling is the SDK constructor's
+// `config: { mcp_servers }` overrides.
+export const createCodexAgent = (codexHome: string, runner: CodexRunner = defaultRunner) =>
+    async function* runCodexAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
+        // Per-account CODEX_HOME when the turn resolved one; the constructor's base dir is the OPENAI_API_KEY
+        // fallback path only.
+        const env = codexEnv(request.codexHome ?? codexHome, request.cliEnv);
+        // Codex reports a real failure (out of credits, usage limits, a bad model) as a turn.failed/error frame
+        // on its JSON stream and THEN exits non-zero — which makes the SDK throw a generic "Codex Exec exited
+        // with code N: <stderr>" whose stderr is only codex's benign "Reading prompt from stdin..." line.
+        // Surfacing that wrapper last would clobber the actionable message, so only emit it when nothing
+        // specific was already streamed.
+        const { images, others } = splitAttachments(request.attachments);
+        const turn =
+            request.plan === true
+                ? runCodexPlanTurn(request, runner, env)
+                : streamTurn(
+                      runner({
+                          prompt: withFileNote(request.prompt, others),
+                          ...(images.length > 0 ? { images } : {}),
+                          ...(request.sessionId !== undefined ? { sessionId: request.sessionId } : {}),
+                          env,
+                          options: threadOptions(request, "danger-full-access"),
+                          signal: request.signal,
+                      }),
+                  );
+        let surfacedError = false;
+        try {
+            for await (const event of turn) {
+                if (event.kind === "error") {
+                    surfacedError = true;
+                }
+                yield event;
+            }
+        } catch (error) {
+            if (!surfacedError) {
+                yield { kind: "error", message: error instanceof Error ? error.message : "codex agent failed" };
+            }
+        }
+        yield { kind: "done" };
+    };

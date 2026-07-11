@@ -1,0 +1,16 @@
+{
+    "name": "intentic",
+    "short_name": "intentic",
+    "description": "Build software with intent. An AI-native workspace for infra, data, apps, and code.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#181614",
+    "theme_color": "#181614",
+    "icons": [
+        {
+            "src": "/assets/intentic-logo-sized.png",
+            "sizes": "326x326",
+            "type": "image/png"
+        }
+    ]
+}

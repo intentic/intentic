@@ -1,0 +1,13 @@
+{
+    "id": "hono-compose-error",
+    "repo": "hono",
+    "type": "fix",
+    "prompt": "Bug report: when a middleware throws after a response was already finalized, the error handler's response is silently dropped. Reproduce with `./node_modules/.bin/vitest run --config vitest.bench.config.mts src/compose.test.ts`, find the root cause, and fix it so the tests pass. Do not modify the tests.",
+    "setup": { "patch": "patches/hono-compose-error-bug.patch" },
+    "grader": {
+        "kind": "test",
+        "command": "./node_modules/.bin/vitest run --config vitest.bench.config.mts src/compose.test.ts",
+        "timeoutMs": 120000
+    },
+    "caps": { "maxTurns": 20 }
+}

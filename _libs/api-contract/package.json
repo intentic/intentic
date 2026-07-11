@@ -1,0 +1,36 @@
+{
+    "name": "@intentic-app/api-contract",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic-app/src": "./src/index.ts",
+                "types": "./dist/index.d.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "types": "./dist/index.d.ts",
+                "default": "./dist/index.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --build --watch"
+    },
+    "dependencies": {
+        "@intentic/sandbox-contract": "workspace:*",
+        "@orpc/contract": "catalog:",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "typescript": "catalog:"
+    }
+}

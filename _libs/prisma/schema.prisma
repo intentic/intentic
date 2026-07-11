@@ -1,0 +1,204 @@
+datasource db {
+    provider = "postgresql"
+}
+
+generator client {
+    provider = "prisma-client"
+    output   = "./generated"
+}
+
+// ---------------------------------------------------------------------------
+// Better Auth tables (User/Session/Account/Verification) — the platform's
+// central account. Regenerate with `npx @better-auth/cli generate` after
+// changing auth plugins/options, then create a migration.
+// ---------------------------------------------------------------------------
+
+model User {
+    id               String             @id
+    name             String
+    email            String             @unique
+    emailVerified    Boolean            @default(false)
+    image            String?
+    // Stripe customer for the platform's own SaaS billing — created on sign-up by the Better Auth Stripe
+    // plugin. Central-account state (like the session/account rows), the one sanctioned platform-owned store.
+    stripeCustomerId String?
+    // Consent capture: which clickwrap version (auth.ts TERMS_VERSION = intentic.dev's LEGAL_VERSION) the
+    // login page showed when this account was created, and when. Stamped by the user-create hook.
+    termsAcceptedAt  DateTime?
+    termsVersion     String?
+    createdAt        DateTime           @default(now())
+    updatedAt        DateTime           @updatedAt
+    sessions         Session[]
+    accounts         Account[]
+    sandboxes        Sandbox[]
+
+    @@map("user")
+}
+
+// Platform SaaS subscription, written by the Better Auth Stripe plugin (auth.ts) from Stripe webhook events.
+// `referenceId` is the owning user id (the plugin's default) and is intentionally a plain String, not a
+// relation — the plugin queries it directly. Full field set the plugin writes; do not trim.
+model Subscription {
+    id                   String    @id @default(cuid())
+    plan                 String
+    referenceId          String
+    stripeCustomerId     String?
+    stripeSubscriptionId String?
+    status               String
+    periodStart          DateTime?
+    periodEnd            DateTime?
+    cancelAtPeriodEnd    Boolean?
+    cancelAt             DateTime?
+    canceledAt           DateTime?
+    endedAt              DateTime?
+    seats                Int?
+    trialStart           DateTime?
+    trialEnd             DateTime?
+    billingInterval      String?
+    stripeScheduleId     String?
+
+    // getPlan (entitlements.ts) runs findFirst({ referenceId, status }) on every gated route.
+    @@index([referenceId])
+    @@map("subscription")
+}
+
+model Session {
+    id        String   @id
+    expiresAt DateTime
+    token     String   @unique
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    ipAddress String?
+    userAgent String?
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    // Postgres does not index FK columns automatically; user-scoped lookups and cascades need it.
+    @@index([userId])
+    @@map("session")
+}
+
+model Account {
+    id                    String    @id
+    accountId             String
+    providerId            String
+    userId                String
+    user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+    accessToken           String?
+    refreshToken          String?
+    idToken               String?
+    accessTokenExpiresAt  DateTime?
+    refreshTokenExpiresAt DateTime?
+    scope                 String?
+    password              String?
+    createdAt             DateTime  @default(now())
+    updatedAt             DateTime  @updatedAt
+
+    // Better Auth looks accounts up by userId on every OAuth sign-in; the FK has no automatic index.
+    @@index([userId])
+    @@map("account")
+}
+
+model Verification {
+    id         String   @id
+    identifier String
+    value      String
+    expiresAt  DateTime
+    createdAt  DateTime @default(now())
+    updatedAt  DateTime @updatedAt
+
+    @@map("verification")
+}
+
+// ---------------------------------------------------------------------------
+// Platform domain. The strict, sandbox-centric model (CLAUDE.md): the ONLY
+// operational state the platform owns is the user's connection to the sandbox
+// they work from. Everything else — Claude/git credentials, the three repos
+// (intent/desired-state/app), inventory, and the provisioned infra — lives in
+// the sandbox; the platform proxies to it over the connection below.
+// ---------------------------------------------------------------------------
+
+// A sandbox a user works from. A user can own several. `token` is both the deterministic tunnel-hostname seed
+// and the `x-intentic-connect` first-bind secret the browser presents to the daemon. Encrypted at rest
+// (api crypto.ts) when SECRETS_KEY is set, like setupPayload and the Account token columns. The platform is
+// the registry: the DAEMON announces its own URL + liveness (POST /sandbox/announce); the browser only reads.
+model Sandbox {
+    id                 String          @id @default(cuid())
+    name               String
+    // Small square logo for the sandbox switcher, stored inline as a data URL (no upload infrastructure).
+    image              String?
+    ownerId            String
+    owner              User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+    token              String          @unique
+    // sha256(token) hex — the deterministic lookup key for the daemon's announce (token itself is encrypted
+    // with a random IV, so its ciphertext can't be queried by value).
+    tokenDigest        String          @unique
+    // The sandbox's public URL (https://sandbox-<id>.<zone>), reported by the DAEMON on every announce.
+    // Null until the daemon first phones home.
+    daemonUrl          String?
+    // When the daemon last announced — the setup wizard treats a recent value as "connected".
+    lastSeenAt         DateTime?
+    // Short-lived setup code the connect script redeems at POST /setup/claim for the values the one-liner used
+    // to carry inline (so no raw token lands in shell history). Re-claimable until expiry — a failed run stays
+    // re-runnable from the same copied command — and overwritten whenever setup mints a fresh one.
+    setupCode          String?         @unique
+    setupCodeExpiresAt DateTime?
+    // The KEY=value map /setup/claim returns alongside CONNECT_TOKEN (= token above): intentic mode
+    // {TUNNEL_TOKEN, SANDBOX_HOSTNAME}; own-Cloudflare mode {ZONE, SUBDOMAIN} — never the user's CF token.
+    setupPayload       Json?
+    // Intentic-path tunnel, provisioned once and reused across mints (its hostname is a stable digest of `token`,
+    // so re-provisioning only re-does the Cloudflare round-trips for the same result). tunnelToken is encrypted.
+    tunnelToken        String?
+    tunnelHostname     String?
+    members            SandboxMember[]
+    createdAt          DateTime        @default(now())
+    updatedAt          DateTime        @updatedAt
+
+    // sandbox.list's owned-sandboxes findMany is the hottest platform query.
+    @@index([ownerId])
+    @@map("sandbox")
+}
+
+// A sandbox subdomain provisioned ahead of demand (sandboxPool.ts) so /setup never pays the Cloudflare
+// round-trips inline. Holds exactly a Sandbox's provisioning artifacts — connect token + intentic tunnel —
+// minus the owner/name, all in the same encrypted-at-rest form (api crypto.ts) so sandbox.create claims one
+// by copying columns verbatim. `tunnelHostname` is sandbox-<id>.<zone>, whose leftmost label is the tunnel
+// name the reaper must skip (retention.ts) so it never deletes a still-unclaimed pool entry.
+model ReservedSandbox {
+    id             String   @id @default(cuid())
+    token          String   @unique
+    tokenDigest    String   @unique
+    tunnelToken    String
+    tunnelHostname String
+    createdAt      DateTime @default(now())
+
+    @@map("reserved_sandbox")
+}
+
+// A non-owner invited to a sandbox. Email-based (not a User relation) to mirror the daemon's email-based Google
+// auth and to allow granting access before the invitee's first sign-in. The owner is NOT listed here — ownership
+// lives on Sandbox.ownerId. The daemon is the actual enforcer (its .intentic/members.json); this table is the
+// platform's invite/grant record so the invitee's browser can discover the sandbox and its URL.
+//
+// Lifecycle: an invite is created PENDING (acceptedAt null) with a one-shot inviteToken carried in the emailed
+// link; the invitee opens the link, signs in as this email, and accepts (acceptedAt set) — flipping the row to
+// an active member. sandbox.list only surfaces a sandbox to the invitee once acceptedAt is set. The daemon's own
+// authorized list is pushed by the OWNER's browser at invite time (the server can't reach the daemon), so an
+// accepted invitee has daemon access immediately. inviteToken/inviteExpiresAt gate the accept link (resend mints
+// fresh ones); an unaccepted invite that expires is inert — the invitee never received a connect token.
+model SandboxMember {
+    id              String    @id @default(cuid())
+    sandboxId       String
+    sandbox         Sandbox   @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
+    email           String
+    inviteToken     String?   @unique
+    inviteExpiresAt DateTime?
+    acceptedAt      DateTime?
+    createdAt       DateTime  @default(now())
+
+    @@unique([sandboxId, email])
+    // sandbox.list's shared-sandboxes lookup and leave query by email alone; the composite unique
+    // above leads with sandboxId, so it can't serve them.
+    @@index([email])
+    @@map("sandbox_member")
+}

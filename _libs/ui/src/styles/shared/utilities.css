@@ -1,0 +1,49 @@
+/* Custom utilities — thin scrollbars and entrance animations, themed via role tokens. */
+@layer utilities {
+    .scrollbar-thin {
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-line-strong) transparent;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: var(--color-line-strong);
+        border-radius: 9999px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background: var(--color-muted);
+    }
+
+    .animate-fade-in {
+        animation: ui-fade-in 0.25s ease-out both;
+    }
+
+    .animate-fade-in-up {
+        animation: ui-fade-in-up 0.25s ease-out both;
+    }
+}
+
+@keyframes ui-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes ui-fade-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

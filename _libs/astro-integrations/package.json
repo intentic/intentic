@@ -1,0 +1,25 @@
+{
+    "name": "@intentic-dev/astro-integrations",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "types": "./src/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.d.ts",
+            "default": "./src/index.mjs"
+        },
+        "./og-images": "./src/og-images.mjs",
+        "./git-lastmod": "./src/git-lastmod.mjs",
+        "./indexnow": "./src/indexnow.mjs"
+    },
+    "scripts": {
+        "build": "node --check src/index.mjs",
+        "check": "node --check src/index.mjs"
+    },
+    "peerDependencies": {
+        "@resvg/resvg-js": "catalog:",
+        "astro": "catalog:",
+        "satori": "catalog:"
+    }
+}

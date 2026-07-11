@@ -1,0 +1,37 @@
+# Root + nested packages.
+**/node_modules
+**/.cache
+**/.local
+**/.turbo
+**/dist
+**/dist-*
+**/deploy
+**/generated
+**/out-tsc
+**/.astro
+**/*.tsbuildinfo
+**/npm-debug.log*
+**/pnpm-debug.log*
+/tmp
+**/tmp
+**/.astro-indexnow-cache.json
+
+# env / secrets
+**/.env
+**/.env.local
+**/.env.*.local
+**/.env.production
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+
+# site: connect scripts bundled from scripts at build (served by worker.ts)
+_apps/site/public/scripts
+
+# intentic dogfood / demo (local only)
+/intent
+/desired-state
+/app
+/.demo

@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+        "baseUrl": "./",
+        "rootDir": "../..",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        // Consume the source-first workspace libs directly from their .ts/.vue source — Vite + vue-tsc pull
+        // the live contract/UI code, so a change in _libs reflects here with no rebuild.
+        "paths": {
+            "@intentic-app/ui": ["../../_libs/ui/src/index.ts"],
+            "@intentic-app/api-contract": ["../../_libs/api-contract/src/index.ts"]
+        }
+    },
+    "extends": "@intentic/tsconfig/tsconfig.vue.json"
+}

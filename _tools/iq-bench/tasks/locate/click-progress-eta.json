@@ -1,0 +1,12 @@
+{
+    "id": "click-progress-eta",
+    "repo": "click",
+    "type": "locate",
+    "prompt": "In this repository, where is the progress bar's remaining-time estimate (ETA) computed and formatted for display? Answer with the exact file path and line number(s).",
+    "grader": {
+        "kind": "anchors",
+        "anchors": [{ "file": "src/click/_termui_impl.py", "line": 175, "tolerance": 30 }],
+        "requireAll": false
+    },
+    "caps": { "maxTurns": 12 }
+}

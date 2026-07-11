@@ -1,0 +1,44 @@
+import { createActivityRoutes } from "./activity/activity.routes.js";
+import { createAgentRoutes } from "./agent/agent.routes.js";
+import { createAutomationsRoutes } from "./automations/automations.routes.js";
+import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
+import { createClaudeRoutes } from "./claude/claude.routes.js";
+import { createCodexRoutes } from "./codex/codex.routes.js";
+import type { Services } from "./composition.js";
+import { createDraftsRoutes } from "./drafts/drafts.routes.js";
+import { createGitRoutes } from "./git/git.routes.js";
+import { createGrokRoutes } from "./grok/grok.routes.js";
+import { createHistoryRoutes } from "./history/history.routes.js";
+import { createIntenticRoutes } from "./intentic/intentic.routes.js";
+import { createInventoryRoutes } from "./inventory/inventory.routes.js";
+import { createLogsRoutes } from "./logs/logs.routes.js";
+import { createPanelsRoutes } from "./panels/panels.routes.js";
+import { createSecretsRoutes } from "./secrets/secrets.routes.js";
+import { createSessionsRoutes } from "./sessions/sessions.routes.js";
+import { createSettingsRoutes } from "./settings/settings.routes.js";
+import { createSystemRoutes } from "./system/system.routes.js";
+import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
+
+// The implemented oRPC router — the per-domain route factories assembled into the sandboxContract shape. The
+// OpenAPIHandler in app.ts serves it.
+export const createRouter = (services: Services) => ({
+    activity: createActivityRoutes(services),
+    agent: createAgentRoutes(services),
+    automations: createAutomationsRoutes(services),
+    capabilities: createCapabilitiesRoutes(services),
+    claude: createClaudeRoutes(services),
+    codex: createCodexRoutes(services),
+    drafts: createDraftsRoutes(services),
+    sessions: createSessionsRoutes(services),
+    settings: createSettingsRoutes(services),
+    intentic: createIntenticRoutes(services),
+    git: createGitRoutes(services),
+    grok: createGrokRoutes(services),
+    history: createHistoryRoutes(services),
+    workspace: createWorkspaceRoutes(services),
+    inventory: createInventoryRoutes(services),
+    logs: createLogsRoutes(services),
+    panels: createPanelsRoutes(services),
+    secrets: createSecretsRoutes(services),
+    system: createSystemRoutes(services),
+});

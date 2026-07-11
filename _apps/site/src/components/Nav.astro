@@ -1,0 +1,325 @@
+---
+import type { NavEntry } from "@intentic-dev/content/nav";
+import { navEntries } from "@intentic-dev/content/nav";
+import { APP_URL, githubUrl, ORG_NAME } from "@intentic-dev/content/site";
+import MobileNav from "./MobileNav.astro";
+
+const currentPath = Astro.url.pathname;
+
+function isActive(entry: NavEntry): boolean {
+    if (entry.type === "link") {
+        return currentPath === entry.href || currentPath.startsWith(entry.prefix);
+    }
+    return currentPath.startsWith(entry.prefix);
+}
+---
+
+<nav class="fixed top-0 right-0 left-0 z-100 border-b border-line bg-canvas/70 backdrop-blur-lg transition-colors duration-300">
+    <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+        <a href="/" class="flex items-center no-underline">
+            <img src="/assets/intentic-full.png" alt={ORG_NAME} class="h-6 w-auto" width="126" height="24" />
+        </a>
+
+        <button
+            class="hamburger flex-col gap-1.25 p-1 md:hidden"
+            id="mobile-nav-open"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+        >
+            <span></span><span></span><span></span>
+        </button>
+
+        <ul class="links flex list-none items-center gap-0.5 max-md:hidden" id="nav-links">
+            {
+                navEntries.map((entry) => {
+                    if (entry.type === "dropdown") {
+                        return (
+                            <li class="nav-item has-dropdown">
+                                <button
+                                    type="button"
+                                    class:list={["nav-link", { active: isActive(entry) }]}
+                                >
+                                    {entry.label}
+                                    <svg
+                                        class="chevron"
+                                        width="10"
+                                        height="6"
+                                        viewBox="0 0 10 6"
+                                        fill="none"
+                                        aria-hidden="true"
+                                    >
+                                        <path
+                                            d="M1 1L5 5L9 1"
+                                            stroke="currentColor"
+                                            stroke-width="1.5"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                        />
+                                    </svg>
+                                </button>
+                                <ul class="dropdown">
+                                    {entry.items.map((item) => (
+                                        <li>
+                                            <a
+                                                href={item.href}
+                                                target={item.external ? "_blank" : undefined}
+                                                rel={item.external ? "noopener" : undefined}
+                                            >
+                                                {item.label}
+                                                {item.external && (
+                                                    <svg
+                                                        class="external-icon"
+                                                        width="12"
+                                                        height="12"
+                                                        viewBox="0 0 12 12"
+                                                        fill="none"
+                                                        aria-hidden="true"
+                                                    >
+                                                        <path
+                                                            d="M3.5 1.5H10.5V8.5M10.5 1.5L1.5 10.5"
+                                                            stroke="currentColor"
+                                                            stroke-width="1.2"
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                        />
+                                                    </svg>
+                                                )}
+                                            </a>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </li>
+                        );
+                    }
+
+                    if (entry.type === "link") {
+                        return (
+                            <li class="nav-item">
+                                <a
+                                    href={entry.href}
+                                    class:list={["nav-link", { active: isActive(entry) }]}
+                                    target={entry.external ? "_blank" : undefined}
+                                    rel={entry.external ? "noopener" : undefined}
+                                >
+                                    {entry.label}
+                                    {entry.external && (
+                                        <svg
+                                            class="external-icon"
+                                            width="12"
+                                            height="12"
+                                            viewBox="0 0 12 12"
+                                            fill="none"
+                                            aria-hidden="true"
+                                        >
+                                            <path
+                                                d="M3.5 1.5H10.5V8.5M10.5 1.5L1.5 10.5"
+                                                stroke="currentColor"
+                                                stroke-width="1.2"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                            />
+                                        </svg>
+                                    )}
+                                </a>
+                            </li>
+                        );
+                    }
+                })
+            }
+
+            <li class="nav-item">
+                <a
+                    href={githubUrl}
+                    target="_blank"
+                    rel="noopener"
+                    class="nav-link"
+                    aria-label="GitHub repository"
+                >
+                    <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16" aria-hidden="true">
+                        <path
+                            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+                        />
+                    </svg>
+                </a>
+            </li>
+
+            <li class="max-md:mt-1">
+                <a class="btn btn-primary ml-2 max-md:ml-0 max-md:w-full" href={APP_URL}>Get started free</a>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+<MobileNav />
+
+<style>
+    /* ── Nav base ──────────────────────────────────────── */
+    .hamburger {
+        display: none;
+        background: none;
+        border: none;
+        cursor: pointer;
+    }
+    .hamburger span {
+        display: block;
+        width: 22px;
+        height: 2px;
+        background: var(--color-muted);
+        border-radius: 2px;
+        transition:
+            transform 0.3s,
+            opacity 0.3s;
+    }
+    .hamburger.active span:nth-child(1) {
+        transform: translateY(7px) rotate(45deg);
+    }
+    .hamburger.active span:nth-child(2) {
+        opacity: 0;
+    }
+    .hamburger.active span:nth-child(3) {
+        transform: translateY(-7px) rotate(-45deg);
+    }
+
+    /* ── Nav items ─────────────────────────────────────── */
+    .nav-item {
+        position: relative;
+    }
+
+    .nav-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--color-muted);
+        padding: 8px 14px;
+        border-radius: 8px;
+        transition:
+            color 0.2s,
+            background 0.2s;
+        cursor: pointer;
+        background: none;
+        border: none;
+        font-family: inherit;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .nav-link.active {
+        color: var(--color-content);
+    }
+
+    .nav-link:hover {
+        color: var(--color-content);
+        background: var(--color-overlay);
+    }
+
+    /* ── Chevron ────────────────────────────────────────── */
+    .chevron {
+        transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        margin-top: 1px;
+    }
+
+    .has-dropdown:hover .chevron {
+        transform: rotate(180deg);
+    }
+
+    /* ── Dropdown panel ────────────────────────────────── */
+    .dropdown {
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%) translateY(4px);
+        min-width: 220px;
+        list-style: none;
+        background: color-mix(in srgb, var(--color-canvas) 97%, transparent);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border: 1px solid var(--color-line);
+        border-top: 2px solid var(--color-link);
+        border-radius: 12px;
+        padding: 8px;
+        opacity: 0;
+        visibility: hidden;
+        transition:
+            opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+            visibility 0.22s,
+            transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        box-shadow:
+            0 20px 60px rgba(0, 0, 0, 0.4),
+            0 0 0 1px color-mix(in srgb, var(--color-link) 8%, transparent),
+            0 0 40px color-mix(in srgb, var(--color-link) 4%, transparent);
+    }
+
+    .has-dropdown:hover .dropdown {
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(-50%) translateY(0);
+    }
+
+    .dropdown a {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--color-muted);
+        border-radius: 8px;
+        transition:
+            background 0.15s,
+            color 0.15s,
+            padding-left 0.15s;
+        white-space: nowrap;
+        text-decoration: none;
+    }
+
+    .dropdown a:hover {
+        background: color-mix(in srgb, var(--color-link) 10%, transparent);
+        color: var(--color-content);
+        padding-left: 18px;
+    }
+
+    .dropdown a.active {
+        color: var(--color-content);
+    }
+
+    /* ── External link icon ────────────────────────────── */
+    .external-icon {
+        opacity: 0.4;
+        flex-shrink: 0;
+    }
+
+    /* ── Responsive ────────────────────────────────────── */
+    @media (max-width: 48rem) {
+        .hamburger {
+            display: flex;
+        }
+        .links {
+            display: none;
+        }
+    }
+</style>
+
+<script is:inline>
+    document.addEventListener("DOMContentLoaded", () => {
+        const toggle = document.getElementById("mobile-nav-open");
+        const overlay = document.getElementById("mobile-nav-overlay");
+
+        toggle?.addEventListener("click", () => {
+            const isOpen = overlay?.classList.toggle("open");
+            toggle.classList.toggle("active", isOpen);
+            toggle.setAttribute("aria-expanded", String(!!isOpen));
+            document.body.style.overflow = isOpen ? "hidden" : "";
+        });
+
+        // Highlight active dropdown items on desktop
+        const path = window.location.pathname + window.location.hash;
+        document.querySelectorAll(".dropdown a").forEach((a) => {
+            const href = a.getAttribute("href");
+            if (href === path || (href && path.startsWith(href))) {
+                a.classList.add("active");
+            }
+        });
+    });
+</script>

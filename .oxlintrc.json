@@ -1,0 +1,33 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["typescript", "unicorn", "oxc", "import", "vue"],
+    "categories": {
+        "correctness": "error",
+        "suspicious": "error",
+        "perf": "error"
+    },
+    "rules": {
+        "typescript/no-extraneous-class": ["error", { "allowWithDecorator": true }],
+        "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
+        "no-await-in-loop": "off"
+    },
+    "env": {
+        "node": true,
+        "browser": true,
+        "es2024": true
+    },
+    "ignorePatterns": [
+        "**/node_modules",
+        "**/.cache",
+        "**/.turbo",
+        "**/.astro",
+        "**/dist",
+        "**/dist-*",
+        "**/deploy",
+        "**/generated",
+        "**/out-tsc",
+        "**/tmp",
+        "**/assets/js/env.js",
+        "_apps/sandbox/operator-templates"
+    ]
+}

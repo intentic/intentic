@@ -1,0 +1,54 @@
+{
+    "name": "@intentic/providers",
+    "version": "0.0.0",
+    "description": "",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://gitlab.com/radarsu/intentic.git",
+        "directory": "_libs/providers"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@intentic/engine": "workspace:*",
+        "@intentic/graph": "workspace:*",
+        "bcryptjs": "^3.0.2",
+        "ssh2": "catalog:",
+        "tslib": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/sdk": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@types/ssh2": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:"
+    }
+}

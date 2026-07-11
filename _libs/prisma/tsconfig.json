@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "baseUrl": "./",
+        "outDir": "./dist",
+        "rootDir": "./",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+
+        "exactOptionalPropertyTypes": false,
+        "skipLibCheck": true
+    },
+    "include": ["./client.ts", "./generated/**/*"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

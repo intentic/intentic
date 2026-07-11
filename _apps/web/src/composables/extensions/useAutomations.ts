@@ -1,0 +1,75 @@
+import {
+    type Automation,
+    type AutomationApproval,
+    AutomationApprovalsListSchema,
+    type AutomationSummary,
+    AutomationsListSchema,
+} from "@intentic-app/api-contract";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { computed } from "vue";
+import { sandboxJson } from "../sandboxClient";
+import { sandboxKey, useSandbox } from "../useSandbox";
+
+/* The sandbox's automations manifest (.intentic/automations.json), read/written via the daemon's /automations
+ * routes. `save` upserts by id (the enabled toggle re-posts the automation with the flag flipped); the daemon's
+ * scheduler picks changes up on its next poll — nothing to provision, so no streamed apply.
+ * `pending` is the owner's approval queue: a `requireApproval` automation holds each fire there instead of
+ * waking; `approve` runs the held wake, `reject` drops it. */
+
+const QUERY_KEY = sandboxKey(`automations`);
+const PENDING_KEY = sandboxKey(`automation-approvals`);
+
+export function useAutomations() {
+    const { reachable } = useSandbox();
+    const queryClient = useQueryClient();
+
+    const query = useQuery({
+        queryKey: QUERY_KEY,
+        queryFn: async (): Promise<AutomationSummary[]> => AutomationsListSchema.parse(await sandboxJson(`/automations`)).automations,
+        enabled: reachable,
+    });
+    const pendingQuery = useQuery({
+        queryKey: PENDING_KEY,
+        queryFn: async (): Promise<AutomationApproval[]> => AutomationApprovalsListSchema.parse(await sandboxJson(`/automations/pending`)).approvals,
+        enabled: reachable,
+    });
+    const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    // Approving a held wake records a run, so refresh both the queue and the automation list.
+    const invalidatePending = (): Promise<void> => {
+        void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+        return queryClient.invalidateQueries({ queryKey: PENDING_KEY });
+    };
+
+    const save = useMutation({
+        mutationFn: (automation: Automation) =>
+            sandboxJson(`/automations`, {
+                method: `POST`,
+                headers: { "content-type": `application/json` },
+                body: JSON.stringify(automation),
+            }),
+        onSuccess: invalidate,
+    });
+    const remove = useMutation({
+        mutationFn: (id: string) => sandboxJson(`/automations/${encodeURIComponent(id)}`, { method: `DELETE` }),
+        onSuccess: invalidate,
+    });
+    const approve = useMutation({
+        mutationFn: (id: string) => sandboxJson(`/automations/pending/${encodeURIComponent(id)}/approve`, { method: `POST` }),
+        onSuccess: invalidatePending,
+    });
+    const reject = useMutation({
+        mutationFn: (id: string) => sandboxJson(`/automations/pending/${encodeURIComponent(id)}/reject`, { method: `POST` }),
+        onSuccess: invalidatePending,
+    });
+
+    return {
+        automations: computed<AutomationSummary[]>(() => query.data.value ?? []),
+        pending: computed<AutomationApproval[]>(() => pendingQuery.data.value ?? []),
+        error: computed(() => (query.error.value ? query.error.value.message : null)),
+        isLoading: query.isLoading,
+        save,
+        remove,
+        approve,
+        reject,
+    };
+}
