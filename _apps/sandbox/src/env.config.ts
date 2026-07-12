@@ -1,5 +1,6 @@
+import { resolve } from "node:path";
 import { DAEMON_PORT, PREVIEW_PORT } from "@intentic/constants";
-import { type ConfigDefinition, cliArgs, env, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
+import { type ConfigDefinition, cliArgs, env, envFile, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
 import { z } from "zod";
 
 // All sandbox configuration, from env set at `docker run` — by connect.sh (your PC) or the workspace provider
@@ -94,11 +95,16 @@ const configSchema = z.object({
         .prefault({}),
 });
 
-// Export the raw definition (not loadConfig's result) so the purenv CLI + codegen can resolve it. Sources:
-// real env first, CLI flags last (CLI wins), matching @puristic's precedence.
+// Local dev convenience: when the daemon runs bare (`tsx watch`) instead of inside its container, load the
+// monorepo-root .env — the same file the api reads — so daemon creds (AI keys, CLOUDFLARE_API_TOKEN, …) don't
+// have to be exported by hand. Absent in the container (nothing to read) ⇒ a no-op there.
+const rootEnv = resolve(import.meta.dirname, "../../../.env");
+
+// Export the raw definition (not loadConfig's result) so the purenv CLI + codegen can resolve it. Sources
+// (later wins): the local .env, then real env (what connect.{sh,ps1}/the provider set at `docker run`), then CLI.
 const definition = {
     schema: configSchema,
-    sources: [env(), cliArgs()],
+    sources: [envFile(rootEnv), env(), cliArgs()],
 } satisfies ConfigDefinition<typeof configSchema>;
 
 export default definition;

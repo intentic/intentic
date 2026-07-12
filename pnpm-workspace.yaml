@@ -12,12 +12,16 @@ useNodeVersion: 24.18.0
 
 overrides:
   zod: 4.4.3
+  # @posthog/core 1.40.1's tarball shipped dist .d.ts that import "../src/*.ts" (raw source), dragging posthog's
+  # src into vue-tsc under our strict flags (58 errors); 1.40.2 fixes the declaration emit (types-only bump).
+  "@posthog/core": 1.40.2
 
 minimumReleaseAgeExclude:
   - knip@6.23.0
   - "@vue/language-core@3.3.6"
   - vite@8.1.2
   - vue-tsc@3.3.6
+  - "@posthog/core@1.40.2"
 
 allowBuilds:
   "@ast-grep/lang-go": true

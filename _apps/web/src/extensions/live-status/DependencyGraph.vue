@@ -2,9 +2,9 @@
 import type { ResourceView } from "@intentic-app/api-contract";
 import { useDevice } from "@intentic-app/ui";
 import { computed, reactive, ref } from "vue";
-import { type GraphEdge, layoutGraph } from "./graphLayout";
 import { statusDot, statusLabel } from "../../composables/extensions/reconcileStatus";
 import { groupAccent, resourceIcon, resourceLogoUrl } from "../../composables/extensions/resourceVisual";
+import { type GraphEdge, layoutGraph } from "./graphLayout";
 
 /* The desired-state dependency graph: each resource as a node, laid out left→right by dependency depth (see
  * graphLayout.ts), edges flowing from a dependency to its dependents. Nodes are HTML (so they reuse the app's
@@ -148,7 +148,7 @@ const nodeSummary = (resource: ResourceView): string =>
                     @click="toggle(node.id)"
                 >
                     <!-- Category stripe (left) — the coarse group, on its own layer so it coexists with the border/ring. -->
-                    <span class="pointer-events-none absolute inset-y-0 left-0 w-1" :class="groupAccent(node.resource.group).bar"></span>
+                    <span class="pointer-events-none absolute inset-y-0 left-0 w-0.5" :class="groupAccent(node.resource.group).bar"></span>
                     <!-- Framed icon: the product's brand logo when we know it, else the semantic glyph; tinted by group. -->
                     <span
                         class="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"

@@ -232,7 +232,14 @@ const mode = computed<ChatMode>({
 // so switching tabs shows that chat's provider/model/effort/thinking. All of it is switchable mid-chat: a
 // provider/account switch takes effect at the next send (see Conversation.send's segment cut).
 const provider = computed<ChatProvider>(() => active.value.provider.value);
-const selectProvider = (p: ChatProvider): void => active.value.selectProvider(p);
+const selectProvider = (p: ChatProvider): void => {
+    active.value.selectProvider(p);
+    // Grok's catalog is daemon-owned and can be stale (loaded empty before the account connected, or an empty
+    // transient) — refetch on landing on Grok so the model picker is always populated on arrival.
+    if (p === `grok`) {
+        void loadGrokModels();
+    }
+};
 const model = computed<string>({
     get: () => active.value.model.value,
     set: (value) => {
@@ -453,6 +460,9 @@ const pollGrokOnce = async (deadline: number): Promise<void> => {
             cancelConnect();
             error.value = null;
             accountManageOpen.value = false;
+            // The account just connected — load its model catalog now so the picker is populated immediately,
+            // not only after the next reselect or reload.
+            void loadGrokModels();
             return;
         }
     } catch {
