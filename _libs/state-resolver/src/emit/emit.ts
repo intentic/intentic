@@ -335,8 +335,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
 
     if (intent.apps.length > 0) {
         const signozService = intent.services.find((service) => service.kind === "signoz");
-        const controlPlane =
-            intent.github !== undefined || intent.gitlab !== undefined ? [komodoId(cpId)] : [forgejoId(cpId), komodoId(cpId)];
+        const controlPlane = intent.github !== undefined || intent.gitlab !== undefined ? [komodoId(cpId)] : [forgejoId(cpId), komodoId(cpId)];
         nodes.push(resolveBackup(cpId, cpHost.input, backupInput, signozService?.id, controlPlane));
     }
 

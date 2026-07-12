@@ -228,7 +228,10 @@ test("a session error and a thrown runner become error events followed by done",
             type: "session.error",
             properties: {
                 sessionID: "s1",
-                error: { name: "ProviderModelNotFoundError", data: { message: "Model not found: xai/grok-code-fast-1. Did you mean: grok-4.20-0309-reasoning?" } },
+                error: {
+                    name: "ProviderModelNotFoundError",
+                    data: { message: "Model not found: xai/grok-code-fast-1. Did you mean: grok-4.20-0309-reasoning?" },
+                },
             },
         },
         { type: "session.idle", properties: { sessionID: "s1" } },

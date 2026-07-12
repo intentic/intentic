@@ -95,7 +95,11 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("question"), requestId: z.string(), questions: z.array(AskQuestionSchema) }),
     // `code` is a machine-readable discriminator for errors the UI reacts to programmatically (dropping a
     // dead session id so the next send self-heals). Absent on plain failures.
-    z.object({ kind: z.literal("error"), message: z.string(), code: z.enum(["session-not-found", "rate_limit", "codex-reauth", "grok-model-invalid"]).optional() }),
+    z.object({
+        kind: z.literal("error"),
+        message: z.string(),
+        code: z.enum(["session-not-found", "rate_limit", "codex-reauth", "grok-model-invalid"]).optional(),
+    }),
     z.object({ kind: z.literal("done") }),
 ]);
 export type AgentEvent = z.infer<typeof AgentEventSchema>;

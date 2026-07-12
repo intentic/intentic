@@ -168,7 +168,10 @@ async function* streamTurn(events: AsyncIterable<Event>, capture?: TurnCapture):
     const started = new Set<string>();
     // Token/cost accounting per assistant message: OpenCode carries it on the message info (not its parts) and an
     // agentic turn has several assistant messages, so key by id (latest snapshot wins) and sum once at idle.
-    const usage = new Map<string, { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUsd: number }>();
+    const usage = new Map<
+        string,
+        { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUsd: number }
+    >();
 
     for await (const event of events) {
         if (event.type === "session.created") {

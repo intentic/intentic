@@ -23,4 +23,3 @@ export const isPaymentRequired = (err: unknown): boolean => {
     }
     return false;
 };
-

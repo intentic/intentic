@@ -109,10 +109,7 @@ const save = async (): Promise<void> => {
                     type="text"
                     autocomplete="off"
                     maxlength="60"
-                    :class="[
-                        cmp.input('w-full'),
-                        nameTouched && nameError ? 'ui-field-input-error' : '',
-                    ]"
+                    :class="[cmp.input('w-full'), nameTouched && nameError ? 'ui-field-input-error' : '']"
                     @blur="nameTouched = true"
                 />
                 <span v-if="nameTouched && nameError" class="ui-field-error">

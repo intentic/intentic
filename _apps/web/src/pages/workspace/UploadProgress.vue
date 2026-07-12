@@ -112,7 +112,9 @@ onBeforeUnmount(() => {
         <!-- Re-drop where every file was already identical on the sandbox (nothing to send) -->
         <div v-if="files.length === 0 && skippedNotice === undefined && skippedUnchanged > 0" class="flex items-center gap-2">
             <Icon name="check-circle" class="text-sm text-success" />
-            <span class="flex-1 font-medium">Already up to date — skipped {{ skippedUnchanged }} unchanged {{ skippedUnchanged === 1 ? `file` : `files` }}</span>
+            <span class="flex-1 font-medium"
+                >Already up to date — skipped {{ skippedUnchanged }} unchanged {{ skippedUnchanged === 1 ? `file` : `files` }}</span
+            >
             <button
                 type="button"
                 class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content"

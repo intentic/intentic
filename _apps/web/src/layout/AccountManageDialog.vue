@@ -45,7 +45,9 @@ const usageLine = (id: string): string | undefined => {
     return `${usage.turns} turns · ${shortTokens(usage.inputTokens)} in / ${shortTokens(usage.outputTokens)} out${cache}${cost}`;
 };
 
-const accountTitle = computed(() => (managedProvider.value === `codex` ? `ChatGPT accounts` : managedProvider.value === `grok` ? `Grok accounts` : `Claude accounts`));
+const accountTitle = computed(() =>
+    managedProvider.value === `codex` ? `ChatGPT accounts` : managedProvider.value === `grok` ? `Grok accounts` : `Claude accounts`,
+);
 // The flows differ: Anthropic shows a code on its hosted page to paste back; ChatGPT uses a device code (the
 // user enters it on OpenAI's page and this panel connects on its own); Grok (xAI OAuth) opens x.ai on any
 // device and connects on approval (a paste-back code only for the non-device method).
@@ -56,7 +58,9 @@ const connectHint = computed(() =>
           ? `Open x.ai on any device with your SuperGrok / X Premium account and approve — this connects on its own.`
           : `Open Anthropic to authorize, then paste the code it shows you.`,
 );
-const openLabel = computed(() => (managedProvider.value === `codex` ? `Open ChatGPT` : managedProvider.value === `grok` ? `Open x.ai` : `Open Anthropic`));
+const openLabel = computed(() =>
+    managedProvider.value === `codex` ? `Open ChatGPT` : managedProvider.value === `grok` ? `Open x.ai` : `Open Anthropic`,
+);
 const pastePlaceholder = computed(() => (managedProvider.value === `codex` ? `Paste localhost URL…` : `Paste code…`));
 // Grok holds a single account (OpenCode owns the xAI credential), so hide "connect another" once it's linked.
 const canConnectMore = computed(() => managedProvider.value !== `grok` || managedAccounts.value.length === 0);
@@ -86,7 +90,11 @@ const finishConnect = async (): Promise<void> => {
         :show-header="false"
         :style="{ width: '28rem' }"
         :pt="{ content: '!p-0 !overflow-hidden !rounded-lg' }"
-        @update:visible="(v: boolean) => { if (!v) closeAccountManage(); }"
+        @update:visible="
+            (v: boolean) => {
+                if (!v) closeAccountManage();
+            }
+        "
     >
         <div class="flex flex-col gap-2 px-3 py-3 text-sm">
             <div class="flex items-center justify-between">
@@ -125,7 +133,9 @@ const finishConnect = async (): Promise<void> => {
                             <span class="truncate text-2xs text-content">{{ account.label }}</span>
                         </span>
                         <!-- A revoked/expired credential explains itself and offers reconnect; else the usage line. -->
-                        <span v-if="account.needsReauth" class="pl-3.5 text-[0.65rem] text-warning">{{ account.detail ?? `Reconnect to keep using this account.` }}</span>
+                        <span v-if="account.needsReauth" class="pl-3.5 text-[0.65rem] text-warning">{{
+                            account.detail ?? `Reconnect to keep using this account.`
+                        }}</span>
                         <span v-else-if="usageLine(account.id)" class="pl-3.5 text-[0.65rem] text-subtle">{{ usageLine(account.id) }}</span>
                     </span>
                     <div class="flex shrink-0 items-center gap-1">
@@ -161,10 +171,21 @@ const finishConnect = async (): Promise<void> => {
                             <CopyButton :text="userCode ?? ``" label="Copy" />
                         </div>
                         <div class="flex items-center gap-2">
-                            <Button v-if="authorizeUrl" as="a" :label="openLabel" size="small" severity="secondary" :href="authorizeUrl" target="_blank" rel="noopener">
+                            <Button
+                                v-if="authorizeUrl"
+                                as="a"
+                                :label="openLabel"
+                                size="small"
+                                severity="secondary"
+                                :href="authorizeUrl"
+                                target="_blank"
+                                rel="noopener"
+                            >
                                 <template #icon><Icon name="external-link" /></template>
                             </Button>
-                            <span v-if="userCode" class="text-2xs text-subtle"><Icon name="spinner" class="mr-1" spin />Waiting for you to finish signing in…</span>
+                            <span v-if="userCode" class="text-2xs text-subtle"
+                                ><Icon name="spinner" class="mr-1" spin />Waiting for you to finish signing in…</span
+                            >
                         </div>
                     </template>
                     <template v-else-if="managedProvider === `grok`">
@@ -174,15 +195,35 @@ const finishConnect = async (): Promise<void> => {
                             <CopyButton :text="userCode ?? ``" label="Copy" />
                         </div>
                         <div class="flex items-center gap-2">
-                            <Button v-if="authorizeUrl" as="a" :label="openLabel" size="small" severity="secondary" :href="authorizeUrl" target="_blank" rel="noopener">
+                            <Button
+                                v-if="authorizeUrl"
+                                as="a"
+                                :label="openLabel"
+                                size="small"
+                                severity="secondary"
+                                :href="authorizeUrl"
+                                target="_blank"
+                                rel="noopener"
+                            >
                                 <template #icon><Icon name="external-link" /></template>
                             </Button>
-                            <span v-if="userCode" class="text-2xs text-subtle"><Icon name="spinner" class="mr-1" spin />Waiting for you to approve…</span>
+                            <span v-if="userCode" class="text-2xs text-subtle"
+                                ><Icon name="spinner" class="mr-1" spin />Waiting for you to approve…</span
+                            >
                         </div>
                     </template>
                     <div v-else class="flex flex-col gap-2">
                         <div class="flex items-center gap-2">
-                            <Button v-if="authorizeUrl" as="a" :label="openLabel" size="small" severity="secondary" :href="authorizeUrl" target="_blank" rel="noopener">
+                            <Button
+                                v-if="authorizeUrl"
+                                as="a"
+                                :label="openLabel"
+                                size="small"
+                                severity="secondary"
+                                :href="authorizeUrl"
+                                target="_blank"
+                                rel="noopener"
+                            >
                                 <template #icon><Icon name="external-link" /></template>
                             </Button>
                         </div>

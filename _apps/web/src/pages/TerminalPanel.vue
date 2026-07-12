@@ -218,7 +218,9 @@ const endResize = (event: PointerEvent): void => {
                     :key="tab.name"
                     class="tterm group flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-md pl-2 pr-1.5 text-2xs"
                     :class="{ 'tterm-on': tab.name === activeName, 'opacity-60': tab.running === false }"
-                    v-tooltip.top="tab.kind === 'agent' ? 'AI terminal' : tab.kind === 'job' ? 'Job terminal' : tab.running === false ? 'finished' : undefined"
+                    v-tooltip.top="
+                        tab.kind === 'agent' ? 'AI terminal' : tab.kind === 'job' ? 'Job terminal' : tab.running === false ? 'finished' : undefined
+                    "
                     @click="switchTab(tab.name)"
                 >
                     <Icon
@@ -305,7 +307,10 @@ const endResize = (event: PointerEvent): void => {
         <div v-show="!collapsed" ref="container" class="min-h-0 flex-1 bg-terminal p-2"></div>
         <!-- Touch extra-keys row (coarse pointers only). pointerdown.prevent keeps the terminal focused so the
              soft keyboard stays up while the key is injected. -->
-        <div v-if="coarse && !collapsed" class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5">
+        <div
+            v-if="coarse && !collapsed"
+            class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5"
+        >
             <button type="button" class="termkey" :class="{ 'termkey-on': ctrlArmed }" @pointerdown.prevent="ctrlArmed = !ctrlArmed">Ctrl</button>
             <button v-for="key in EXTRA_KEYS" :key="key.label" type="button" class="termkey" @pointerdown.prevent="pressKey(key.data)">
                 {{ key.label }}

@@ -249,7 +249,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
         codexStore,
         codexHealth,
         locateCodexThread: async (threadId) =>
-            locateCodexThread(codexBase, (await codexStore.list()).map((account) => ({ home: codexStore.home(account.id), accountId: account.id })), threadId),
+            locateCodexThread(
+                codexBase,
+                (await codexStore.list()).map((account) => ({ home: codexStore.home(account.id), accountId: account.id })),
+                threadId,
+            ),
         openCode,
         authRoot,
         history: createWorkspaceHistory({ workspace, historyRoot: config.historyRoot, logger }),

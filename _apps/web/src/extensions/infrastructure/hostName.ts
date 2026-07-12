@@ -1,7 +1,10 @@
 // The user-facing host name can look like a machine name ("home-server"), but the
 // generated deploy.config.ts still needs a TypeScript/env-safe inventory id.
 export const normalizeHostName = (value: string): string => {
-    const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_]/g, `_`);
+    const normalized = value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, `_`);
     if (normalized === ``) {
         return ``;
     }

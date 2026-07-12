@@ -167,13 +167,7 @@ const confirmDelete = async (): Promise<void> => {
                     </div>
                     <label class="mt-3 flex flex-col gap-1">
                         <span class="text-xs font-medium text-muted">Display name</span>
-                        <input
-                            v-model="profileName"
-                            type="text"
-                            autocomplete="off"
-                            maxlength="60"
-                            :class="cmp.input('w-full')"
-                        />
+                        <input v-model="profileName" type="text" autocomplete="off" maxlength="60" :class="cmp.input('w-full')" />
                     </label>
                     <div class="mt-3 flex justify-end">
                         <Button type="submit" label="Save" size="small" :loading="saving" :disabled="saving || !canSaveProfile" />

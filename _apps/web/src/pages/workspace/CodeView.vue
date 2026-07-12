@@ -14,7 +14,13 @@ import { useMonaco } from "../../composables/workspace/useMonaco";
  * editor, so the two are the same rendering with a VSCode minimap. `lang === undefined` (unknown extension or a
  * file over the highlight cap) opens as plaintext (no tokenizer). Colored by Shiki via @shikijs/monaco. */
 
-const { code, lang, scrollToLine, editable, path } = defineProps<{ code: string; lang?: string; scrollToLine?: number; editable?: boolean; path?: string }>();
+const { code, lang, scrollToLine, editable, path } = defineProps<{
+    code: string;
+    lang?: string;
+    scrollToLine?: number;
+    editable?: boolean;
+    path?: string;
+}>();
 const emit = defineEmits<{ change: [value: string]; save: [value: string] }>();
 
 const { ensureMonaco, ensureLanguage } = useMonaco();
@@ -31,7 +37,9 @@ const flash = (line: number): void => {
     if (monaco === undefined || editor.value === undefined) {
         return;
     }
-    const marks = editor.value.createDecorationsCollection([{ range: new monaco.Range(line, 1, line, 1), options: { isWholeLine: true, className: `ws-line-flash` } }]);
+    const marks = editor.value.createDecorationsCollection([
+        { range: new monaco.Range(line, 1, line, 1), options: { isWholeLine: true, className: `ws-line-flash` } },
+    ]);
     clearTimeout(flashTimer);
     flashTimer = setTimeout(() => marks.clear(), 1500);
 };

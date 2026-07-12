@@ -28,7 +28,8 @@ export const delegationNote = (targets: DelegationTargets): string | undefined =
               "  It prints its thread id; continue that thread with `codex exec --sandbox danger-full-access resume <threadId> '<follow-up>'`."
             : "";
     const grokModelFlag = targets.grokModel !== undefined ? `--model xai/${targets.grokModel} ` : "";
-    const grokModelHint = targets.grokModel !== undefined ? "" : ` List xAI's current models with \`opencode models\` and pass one as \`--model xai/<id>\`.`;
+    const grokModelHint =
+        targets.grokModel !== undefined ? "" : ` List xAI's current models with \`opencode models\` and pass one as \`--model xai/<id>\`.`;
     const grok =
         targets.openCodeXdg !== undefined
             ? `\n- Grok (xAI) via OpenCode:\n` +

@@ -28,7 +28,10 @@ describe(`reduceApplyLine`, () => {
             { id: `shop.production`, type: `deployment`, state: `start`, action: `update`, reason: undefined },
         ]);
         expect([...state.readiness.values()]).toEqual([{ id: `shop.production`, state: `ready`, url: `https://shop.example.com` }]);
-        expect(state.iterations).toEqual([{ n: 1, converged: false }, { n: 2, converged: true }]);
+        expect(state.iterations).toEqual([
+            { n: 1, converged: false },
+            { n: 2, converged: true },
+        ]);
         expect(state.converged).toBe(true);
         expect(state.applyPhaseDone).toBe(true);
         expect(state.jobDone).toBe(true);
@@ -72,7 +75,10 @@ describe(`reduceApplyLine`, () => {
     it(`records which command failed on a non-zero exit and keeps a stream error verbatim`, () => {
         expect(reduceAll([{ kind: `exit`, command: `apply`, code: 1 }]).error).toContain(`Apply failed`);
         expect(reduceAll([{ kind: `exit`, command: `adopt`, code: 1 }]).error).toContain(`Adopt failed`);
-        const withError = reduceAll([{ kind: `error`, message: `missing secret env var "STRIPE_API_KEY"` }, { kind: `exit`, code: 1 }]);
+        const withError = reduceAll([
+            { kind: `error`, message: `missing secret env var "STRIPE_API_KEY"` },
+            { kind: `exit`, code: 1 },
+        ]);
         // The reducer humanizes the stream error and the later exit doesn't overwrite it.
         expect(withError.error).toContain(`STRIPE_API_KEY`);
     });

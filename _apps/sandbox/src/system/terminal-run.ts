@@ -102,7 +102,12 @@ export const createTerminalRunner = (): TerminalRunner => {
                       ],
                       {
                           ...execOptions,
-                          env: { ...env, INTENTIC_RUN_FILTER: "0", INTENTIC_RUN_SOFT_TIMEOUT_S: "0", INTENTIC_RUN_OUTPUT_BYTES: String(OUTPUT_TAIL_BYTES) },
+                          env: {
+                              ...env,
+                              INTENTIC_RUN_FILTER: "0",
+                              INTENTIC_RUN_SOFT_TIMEOUT_S: "0",
+                              INTENTIC_RUN_OUTPUT_BYTES: String(OUTPUT_TAIL_BYTES),
+                          },
                       },
                   )
                 : await execFileAsync("bash", ["-c", command], { ...execOptions, env });

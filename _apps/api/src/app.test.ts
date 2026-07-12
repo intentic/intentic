@@ -189,7 +189,9 @@ describe(`POST /sandbox/preview-route`, () => {
     it(`404s when intentic-provided tunnels are not configured, 502s a Cloudflare failure`, async () => {
         const row = { id: `s1`, token: `tok`, tunnelToken: `ct` };
         const disabled = { ...config, intenticCloudflare: { ...config.intenticCloudflare, apiToken: ``, zone: `` } } as Config;
-        expect((await previewRoute(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row) } }), `tok`, `app`, disabled)).status).toBe(404);
+        expect((await previewRoute(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row) } }), `tok`, `app`, disabled)).status).toBe(
+            404,
+        );
 
         vi.stubGlobal(`fetch`, () => Promise.reject(new Error(`cloudflare down`)));
         const res = await previewRoute(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row) } }), `tok`, `app`);

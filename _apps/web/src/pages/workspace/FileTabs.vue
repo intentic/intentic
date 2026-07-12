@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { IconName } from "@intentic-app/ui";
+import { type IconName, useExplorerStyle } from "@intentic-app/ui";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
-import { iconForEntry } from "./fileIcon";
+import { explorerColorClass, iconForEntry } from "./fileIcon";
 import { STATUS_CLASS, STATUS_LETTER, type WorkspaceTab } from "./workspaceTabs";
 
 /* The open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or plan preview.
@@ -16,12 +16,12 @@ const { tabs, active } = defineProps<{ tabs: readonly WorkspaceTab[]; active?: s
 const emit = defineEmits<{ select: [id: string]; close: [id: string]; contextmenu: [id: string, event: Event] }>();
 
 const { isDirty } = useEditBuffers();
+const { explorerStyle } = useExplorerStyle();
 
 const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 const fileIcon = (path: string): IconName => iconForEntry(basename(path), `file`);
 
-const tabLabel = (tab: WorkspaceTab): string =>
-    tab.kind === `plan` ? tab.title : tab.kind === `directory` ? basename(tab.dir) : basename(tab.path);
+const tabLabel = (tab: WorkspaceTab): string => (tab.kind === `plan` ? tab.title : tab.kind === `directory` ? basename(tab.dir) : basename(tab.path));
 const tabHint = (tab: WorkspaceTab): string => {
     if (tab.kind === `plan`) {
         return tab.title;
@@ -123,7 +123,12 @@ watch(
                 @click="emit('select', tab.id)"
                 @contextmenu.prevent.stop="emit('contextmenu', tab.id, $event)"
             >
-                <Icon v-if="tab.kind === 'file'" :name="fileIcon(tab.path)" class="text-2xs text-muted" />
+                <Icon
+                    v-if="tab.kind === 'file'"
+                    :name="fileIcon(tab.path)"
+                    class="text-2xs"
+                    :class="explorerColorClass(explorerStyle, basename(tab.path), 'file', false)"
+                />
                 <Icon name="list-check" v-else-if="tab.kind === 'plan'" class="text-2xs text-link" />
                 <Icon name="cog" v-else-if="tab.kind === 'directory'" class="text-2xs text-link" />
                 <span v-else class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[tab.status]">{{

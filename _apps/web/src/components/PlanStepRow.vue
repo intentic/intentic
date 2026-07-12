@@ -6,7 +6,13 @@ import { type ReconcileContext, statusGerund, statusLabel, statusVariant } from 
  * shared by the change preview, the live apply progress, and the live-status "live check", so the vocabulary
  * and layout stay in one place. `pending` (an apply node still in flight) swaps the badge for a spinner + a
  * present-tense label; `context` shifts the wording between the live board ("Drift") and a plan/apply ("Update"). */
-const { id, action, reason, context = `live`, pending = false } = defineProps<{
+const {
+    id,
+    action,
+    reason,
+    context = `live`,
+    pending = false,
+} = defineProps<{
     id: string;
     action: string;
     reason?: string;

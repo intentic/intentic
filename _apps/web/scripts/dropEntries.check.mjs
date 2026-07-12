@@ -35,12 +35,23 @@ const paths = (result) => result.files.map((e) => e.path).sort();
 
 // A nested folder flattens to slash-joined relative paths. Give every entry a distinct fullPath so the visited set
 // doesn't collapse same-named nodes.
-const tree = dirEntry("root", [fileEntry("a.txt", "/root/a.txt"), dirEntry("sub", [fileEntry("b.txt", "/root/sub/b.txt"), dirEntry("deep", [fileEntry("c.txt", "/root/sub/deep/c.txt")], "/root/sub/deep")], "/root/sub")]);
+const tree = dirEntry("root", [
+    fileEntry("a.txt", "/root/a.txt"),
+    dirEntry(
+        "sub",
+        [fileEntry("b.txt", "/root/sub/b.txt"), dirEntry("deep", [fileEntry("c.txt", "/root/sub/deep/c.txt")], "/root/sub/deep")],
+        "/root/sub",
+    ),
+]);
 assert.deepEqual(paths(await collectDroppedFiles(dt([tree]))), ["root/a.txt", "root/sub/b.txt", "root/sub/deep/c.txt"]);
 
 // Multiple directories + a loose file dropped together — the case that broke the sequential walk.
 const multi = await collectDroppedFiles(
-    dt([dirEntry("proj", [fileEntry("index.ts", "/proj/index.ts"), dirEntry("src", [fileEntry("app.ts", "/proj/src/app.ts")], "/proj/src")]), dirEntry("docs", [fileEntry("readme.md", "/docs/readme.md")]), fileEntry("top.txt")]),
+    dt([
+        dirEntry("proj", [fileEntry("index.ts", "/proj/index.ts"), dirEntry("src", [fileEntry("app.ts", "/proj/src/app.ts")], "/proj/src")]),
+        dirEntry("docs", [fileEntry("readme.md", "/docs/readme.md")]),
+        fileEntry("top.txt"),
+    ]),
 );
 assert.deepEqual(paths(multi), ["docs/readme.md", "proj/index.ts", "proj/src/app.ts", "top.txt"]);
 
@@ -61,7 +72,11 @@ assert.deepEqual(paths(junk), ["proj/.git/config", "proj/index.ts"]);
 assert.deepEqual(scanned.sort(), ["proj/.git/config", "proj/index.ts"]);
 
 // An already-aborted signal stops the walk immediately (cancel) — no files captured.
-const canceled = await collectDroppedFiles(dt([dirEntry("big", [fileEntry("a.txt", "/big/a.txt"), fileEntry("b.txt", "/big/b.txt")])]), undefined, AbortSignal.abort());
+const canceled = await collectDroppedFiles(
+    dt([dirEntry("big", [fileEntry("a.txt", "/big/a.txt"), fileEntry("b.txt", "/big/b.txt")])]),
+    undefined,
+    AbortSignal.abort(),
+);
 assert.deepEqual(paths(canceled), []);
 
 // No entry API (some sources expose files but not webkitGetAsEntry) → fall back to the flat file list.
@@ -107,6 +122,9 @@ const picked = filesToEntries([
     { name: "p.png", webkitRelativePath: "" },
     { name: "q.ts", webkitRelativePath: "folder/q.ts" },
 ]);
-assert.deepEqual(picked.map((e) => e.path), ["p.png", "folder/q.ts"]);
+assert.deepEqual(
+    picked.map((e) => e.path),
+    ["p.png", "folder/q.ts"],
+);
 
 console.log("dropEntries.check: OK");

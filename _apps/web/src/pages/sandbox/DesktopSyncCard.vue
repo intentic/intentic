@@ -67,7 +67,7 @@ onUnmounted(stop);
                 <dl class="flex flex-col gap-1.5 rounded-lg border border-line bg-overlay/40 px-3 py-2.5 text-2xs">
                     <div class="flex items-center justify-between gap-3">
                         <dt class="text-subtle">Syncing from</dt>
-                        <dd class="truncate font-mono text-content">{{ syncingFrom ?? 'another computer' }}</dd>
+                        <dd class="truncate font-mono text-content">{{ syncingFrom ?? "another computer" }}</dd>
                     </div>
                     <div class="flex items-center justify-between gap-3">
                         <dt class="text-subtle">Manage</dt>
@@ -93,7 +93,7 @@ onUnmounted(stop);
             <!-- Setup (fresh enable) or takeover (move an active sync here): pick a folder, reveal the one-liner. -->
             <template v-if="!enrolled || takeover">
                 <p v-if="takeover" class="text-2xs text-warning">
-                    This takes over from {{ syncingFrom ?? 'the other computer' }} — its sync stops when you run the command below.
+                    This takes over from {{ syncingFrom ?? "the other computer" }} — its sync stops when you run the command below.
                 </p>
                 <div class="flex flex-col gap-1.5">
                     <label class="text-2xs font-medium text-muted" for="desktop-sync-folder">Local folder</label>
@@ -126,8 +126,6 @@ onUnmounted(stop);
         </template>
 
         <!-- Sandbox has no SSH tunnel (loopback/preview) — sync can't reach it. -->
-        <div v-else :class="cmp.emptyState()">
-            Desktop sync becomes available once your sandbox is connected over its tunnel.
-        </div>
+        <div v-else :class="cmp.emptyState()">Desktop sync becomes available once your sandbox is connected over its tunnel.</div>
     </Card>
 </template>

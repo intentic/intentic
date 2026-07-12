@@ -60,8 +60,7 @@ watch(
                 v-else
                 class="scrollbar-thin overflow-x-auto rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content"
                 :class="{ 'whitespace-pre-wrap': wrap, 'break-words': wrap }"
-                >{{ code }}</pre
-            >
+                >{{ code }}</pre>
         </div>
     </div>
 </template>

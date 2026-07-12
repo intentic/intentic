@@ -13,7 +13,13 @@ export async function* readIntenticLines(body: ReadableStream<Uint8Array>): Asyn
         // An oRPC event-iterator failure arrives as an `event: error` frame (the stream's terminal error, not
         // a normal ndjson line). Normalize it to a kind:"error" line so callers surface it and stop — even
         // when the daemon couldn't emit its own error line (e.g. a failure before the CLI ran).
-        if (frame.split(`\n`).find((line) => line.startsWith(`event:`))?.slice(6).trim() === `error`) {
+        if (
+            frame
+                .split(`\n`)
+                .find((line) => line.startsWith(`event:`))
+                ?.slice(6)
+                .trim() === `error`
+        ) {
             yield { kind: `error`, message: typeof record[`message`] === `string` ? record[`message`] : `Provisioning failed.` };
             continue;
         }

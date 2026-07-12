@@ -209,10 +209,7 @@ const openClaudeInChat = (): void => {
                         <p class="text-xs text-muted">Live operator panels and active services — where they are and whether they're healthy.</p>
                     </div>
                 </div>
-                <div
-                    v-if="runningPanels.length === 0 && activeServices.length === 0"
-                    :class="cmp.emptyState('py-6')"
-                >
+                <div v-if="runningPanels.length === 0 && activeServices.length === 0" :class="cmp.emptyState('py-6')">
                     Nothing running — open a panel from the sidebar.
                 </div>
                 <template v-else>

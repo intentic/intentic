@@ -410,7 +410,6 @@ export const loadGrokModels = async (): Promise<void> => {
     }
 };
 
-
 // Device-code sign-in expires after 15 minutes; stop polling past it.
 const CODEX_POLL_DEADLINE_MS = 15 * 60 * 1000;
 let codexPollTimer: ReturnType<typeof setTimeout> | undefined;

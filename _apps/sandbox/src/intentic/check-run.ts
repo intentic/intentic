@@ -46,7 +46,12 @@ export async function* runCheckCommand(services: Services, args: readonly string
     try {
         // Replay + follow until the run's own {kind:"exit"} (single-command file); !settled covers a run killed
         // without writing one (SIGKILL) — the wrapper resolving flips it and the tail closes on its next poll.
-        yield* tailIntenticEvents(path, (line) => line.kind === "exit", () => !settled, controller.signal);
+        yield* tailIntenticEvents(
+            path,
+            (line) => line.kind === "exit",
+            () => !settled,
+            controller.signal,
+        );
         const { code, output } = await done;
         if (code !== 0) {
             const tail = output.trim().split("\n").slice(-15).join("\n");

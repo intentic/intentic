@@ -277,7 +277,9 @@ async function* streamSdk(queryFn: QueryFn, prompt: string, options: Options, tm
                     ...(message.usage?.input_tokens !== undefined ? { inputTokens: message.usage.input_tokens } : {}),
                     ...(message.usage?.output_tokens !== undefined ? { outputTokens: message.usage.output_tokens } : {}),
                     ...(message.usage?.cache_read_input_tokens !== undefined ? { cacheReadTokens: message.usage.cache_read_input_tokens } : {}),
-                    ...(message.usage?.cache_creation_input_tokens !== undefined ? { cacheCreationTokens: message.usage.cache_creation_input_tokens } : {}),
+                    ...(message.usage?.cache_creation_input_tokens !== undefined
+                        ? { cacheCreationTokens: message.usage.cache_creation_input_tokens }
+                        : {}),
                     ...(message.duration_ms !== undefined ? { durationMs: message.duration_ms } : {}),
                     ...(message.num_turns !== undefined ? { numTurns: message.num_turns } : {}),
                 };

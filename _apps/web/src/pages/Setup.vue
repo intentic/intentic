@@ -29,8 +29,6 @@ import { environment } from "../environments/environment";
  * its URL + liveness to the platform; this page just polls sandbox.list for a fresh lastSeenAt and then opens the
  * workspace — the browser never resolves the sandbox hostname here, so no DNS race can wedge setup. */
 
-
-
 const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
@@ -81,8 +79,6 @@ const subdomainValid = computed(() => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(su
 // derived from the sandbox name (not user-editable) — shown as info, not a field.
 const syncEnabled = ref(true);
 const syncDir = computed(() => (created.value ? syncFolder(created.value.name, created.value.id) : ``));
-
-
 
 // Step 1 collapses to a summary once the sandbox exists — its title carries the name.
 const step1Title = computed(() => (resuming.value ? `Reconnect "${name.value}"` : created.value ? `Sandbox: ${name.value}` : `Name your sandbox`));

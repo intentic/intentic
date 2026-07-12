@@ -109,7 +109,10 @@ export const reduceApplyLine = (state: ApplyProgressState, line: Record<string, 
         if (id === undefined) {
             return state;
         }
-        return { ...state, prunes: [...state.prunes, { id, type: str(line[`type`]), state: str(line[`state`]) ?? `deleted`, reason: str(line[`reason`]) }] };
+        return {
+            ...state,
+            prunes: [...state.prunes, { id, type: str(line[`type`]), state: str(line[`state`]) ?? `deleted`, reason: str(line[`reason`]) }],
+        };
     }
     if (kind === `orphan`) {
         const id = str(line[`id`]);

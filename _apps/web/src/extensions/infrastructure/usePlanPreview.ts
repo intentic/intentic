@@ -184,5 +184,20 @@ export function usePlanPreview() {
         });
     };
 
-    return { running, ran, stale, error, steps, orphans, activity, requiredEnv, missingSecrets, awaitingSecrets, markStale, run, cancel, continueAfterSecrets };
+    return {
+        running,
+        ran,
+        stale,
+        error,
+        steps,
+        orphans,
+        activity,
+        requiredEnv,
+        missingSecrets,
+        awaitingSecrets,
+        markStale,
+        run,
+        cancel,
+        continueAfterSecrets,
+    };
 }

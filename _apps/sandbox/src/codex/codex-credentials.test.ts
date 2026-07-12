@@ -99,7 +99,12 @@ test("the store writes each account's native auth.json under its own CODEX_HOME 
 test("probeCodexHealth stays healthy and makes NO network call while the access token is still valid", async () => {
     home = await mkdtemp(join(tmpdir(), "codex-home-"));
     const store = fileCodexStore(home);
-    await store.write("a", "work", { idToken: idTokenWithAccount("acct-1"), accessToken: accessTokenWithExp(nowSeconds() + 3600), refreshToken: "ref", accountId: "acct-1" });
+    await store.write("a", "work", {
+        idToken: idTokenWithAccount("acct-1"),
+        accessToken: accessTokenWithExp(nowSeconds() + 3600),
+        refreshToken: "ref",
+        accountId: "acct-1",
+    });
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -128,7 +133,11 @@ test("probeCodexHealth refreshes an expired token, persists the rotation, and pr
 test("probeCodexHealth flags needsReauth when the refresh token is revoked (4xx)", async () => {
     home = await mkdtemp(join(tmpdir(), "codex-home-"));
     const store = fileCodexStore(home);
-    await store.write("a", "work", { idToken: idTokenWithAccount("acct-1"), accessToken: accessTokenWithExp(nowSeconds() - 10), refreshToken: "ref" });
+    await store.write("a", "work", {
+        idToken: idTokenWithAccount("acct-1"),
+        accessToken: accessTokenWithExp(nowSeconds() - 10),
+        refreshToken: "ref",
+    });
     vi.stubGlobal(
         "fetch",
         vi.fn(async () => new Response("invalid_grant", { status: 400 })),
@@ -140,7 +149,11 @@ test("probeCodexHealth flags needsReauth when the refresh token is revoked (4xx)
 test("probeCodexHealth fails open (undefined) on a transient 5xx / network error", async () => {
     home = await mkdtemp(join(tmpdir(), "codex-home-"));
     const store = fileCodexStore(home);
-    await store.write("a", "work", { idToken: idTokenWithAccount("acct-1"), accessToken: accessTokenWithExp(nowSeconds() - 10), refreshToken: "ref" });
+    await store.write("a", "work", {
+        idToken: idTokenWithAccount("acct-1"),
+        accessToken: accessTokenWithExp(nowSeconds() - 10),
+        refreshToken: "ref",
+    });
     vi.stubGlobal(
         "fetch",
         vi.fn(async () => new Response("upstream down", { status: 503 })),
@@ -159,7 +172,12 @@ test("probeCodexHealth treats a rotation race (refresh token changed on disk) as
     vi.stubGlobal(
         "fetch",
         vi.fn(async () => {
-            await store.writeTokens("a", { idToken, accessToken: accessTokenWithExp(nowSeconds() + 3600), refreshToken: "ref-cli-rotated", accountId: "acct-1" });
+            await store.writeTokens("a", {
+                idToken,
+                accessToken: accessTokenWithExp(nowSeconds() + 3600),
+                refreshToken: "ref-cli-rotated",
+                accountId: "acct-1",
+            });
             return new Response("invalid_grant", { status: 400 });
         }),
     );

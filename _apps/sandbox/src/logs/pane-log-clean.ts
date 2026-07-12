@@ -48,7 +48,8 @@ class TitleStripper {
                 out += "\x1b"; // a real ESC we held across the boundary — keep it, then handle char
             }
             if (this.#inTitle) {
-                if (char === "\x07") this.#inTitle = false; // BEL also ends the title
+                if (char === "\x07")
+                    this.#inTitle = false; // BEL also ends the title
                 else if (char === "\x1b") this.#pendingEsc = true;
                 continue;
             }

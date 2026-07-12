@@ -26,7 +26,10 @@ const MAX_DEPTH = 64;
 const withTimeout = async <T>(promise: Promise<T>, label: string): Promise<T> => {
     let timer: ReturnType<typeof setTimeout>;
     try {
-        return await Promise.race([promise, new Promise<T>((_, reject) => (timer = setTimeout(() => reject(new Error(`Timed out reading ${label}`)), READ_TIMEOUT_MS)))]);
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => (timer = setTimeout(() => reject(new Error(`Timed out reading ${label}`)), READ_TIMEOUT_MS))),
+        ]);
     } finally {
         clearTimeout(timer!);
     }
@@ -44,7 +47,8 @@ const isSecretFile = (name: string): boolean =>
     name === ".secrets.json" || name === "claude.json" || name === "capabilities.json" || (name.startsWith(".env") && name !== ".env.example");
 
 // Promisify FileSystemFileEntry.file(cb, errCb).
-const fileOf = (entry: FileSystemFileEntry): Promise<File> => withTimeout(new Promise<File>((resolve, reject) => entry.file(resolve, reject)), entry.name);
+const fileOf = (entry: FileSystemFileEntry): Promise<File> =>
+    withTimeout(new Promise<File>((resolve, reject) => entry.file(resolve, reject)), entry.name);
 
 // readEntries returns a directory's children in BATCHES (≤100), so it must be called repeatedly until it comes
 // back empty — a single call silently truncates large folders.

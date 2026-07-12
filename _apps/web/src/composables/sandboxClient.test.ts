@@ -19,5 +19,7 @@ vi.stubGlobal(`fetch`, fetchMock);
 afterEach(() => vi.unstubAllGlobals());
 
 it("a caller-passed timeout signal reaches fetch and rejects the hung request", async () => {
-    await expect(sandboxJson(`/system/host-tunnel`, { method: `POST`, signal: AbortSignal.timeout(20) })).rejects.toMatchObject({ name: `TimeoutError` });
+    await expect(sandboxJson(`/system/host-tunnel`, { method: `POST`, signal: AbortSignal.timeout(20) })).rejects.toMatchObject({
+        name: `TimeoutError`,
+    });
 });

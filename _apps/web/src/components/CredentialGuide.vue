@@ -34,13 +34,7 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
 
 <template>
     <div v-if="entry.guide" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
-        <a
-            v-if="tokenUrl"
-            :href="tokenUrl"
-            target="_blank"
-            rel="noreferrer"
-            class="inline-flex items-center gap-1 text-link hover:underline"
-        >
+        <a v-if="tokenUrl" :href="tokenUrl" target="_blank" rel="noreferrer" class="inline-flex items-center gap-1 text-link hover:underline">
             {{ linkLabel }} <Icon name="external-link" />
         </a>
         <InfoHint v-if="steps.length > 0" label="How to get this credential" text="How to get it">

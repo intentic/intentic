@@ -22,7 +22,6 @@ import ConnectHostCard from "./ConnectHostCard.vue";
 const NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const SUBDOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
 
-
 const visible = defineModel<boolean>(`visible`, { default: false });
 const emit = defineEmits<{ added: [] }>();
 

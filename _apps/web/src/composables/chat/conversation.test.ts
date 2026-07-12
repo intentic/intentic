@@ -93,7 +93,12 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         // The selection and the turn settings move together (useChat builds settings from the selection).
         conversation.selectProvider(`codex`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `thr-1` }, { kind: `delta`, text: `sure` }]));
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `session`, sessionId: `thr-1` },
+                { kind: `delta`, text: `sure` },
+            ]),
+        );
         await conversation.send(`first`, { ...settings, agent: `codex`, model: `` });
         const firstBody = JSON.parse(sandboxRequestMock.mock.calls[0]![1]!.body as string) as Record<string, unknown>;
         expect(firstBody[`agent`]).toBe(`codex`);
@@ -307,9 +312,7 @@ describe(`Conversation`, () => {
         await conversation.send(`first`, settings);
 
         // The sandbox lost the transcript (rebuild before the store persisted, or the session was deleted).
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `session-not-found`, message: `gone` }, { kind: `done` }]),
-        );
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, code: `session-not-found`, message: `gone` }, { kind: `done` }]));
         await conversation.send(`second`, settings);
 
         expect(conversation.session.value).toBeUndefined();
@@ -390,7 +393,12 @@ describe(`Conversation`, () => {
         await conversation.send(`second`, settings);
         const target = conversation.messages.value[2]!; // the second user turn
 
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }, { kind: `delta`, text: `redone` }]));
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `session`, sessionId: `s-2` },
+                { kind: `delta`, text: `redone` },
+            ]),
+        );
         await conversation.editAndResend(target.id, `second, revised`, settings);
 
         // Everything from the edited message onward is gone; the edited text is the new turn.
@@ -411,7 +419,12 @@ describe(`Conversation`, () => {
 
     it(`editAndResend on the first user message clears the transcript and re-derives the title`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `delta`, text: `hi!` }]));
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `session`, sessionId: `s-1` },
+                { kind: `delta`, text: `hi!` },
+            ]),
+        );
         await conversation.send(`original topic`, settings);
         expect(conversation.title.value).toBe(`original topic`);
 
@@ -441,7 +454,12 @@ describe(`Conversation`, () => {
 
     it(`editAndResend removes a pending switch notice with the discarded tail`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `delta`, text: `sure` }]));
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `session`, sessionId: `s-1` },
+                { kind: `delta`, text: `sure` },
+            ]),
+        );
         await conversation.send(`first`, settings);
         conversation.selectProvider(`codex`);
         expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);

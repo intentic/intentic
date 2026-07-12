@@ -11,8 +11,6 @@ import { useDrafts } from "../composables/extensions/useDrafts";
  * which posts it through the platform skills once its scheduledAt is due. There is no create dialog here —
  * drafts originate with the agent, never the UI. */
 
-
-
 const { drafts, invalid, error: listError, save, remove } = useDrafts();
 const actionError = ref<string | null>(null);
 
@@ -80,8 +78,8 @@ const removeDraft = async (id: string): Promise<void> => {
             {{ actionError ?? listError }}
         </div>
         <div v-if="invalid.length > 0" :class="cmp.alertWarning('mb-3')">
-            <Icon name="exclamation-triangle" class="mr-1.5" />{{ invalid.length }} draft file{{ invalid.length === 1 ? "" : "s" }} couldn't be read and
-            won't post: <span class="font-mono">{{ invalid.join(", ") }}</span>
+            <Icon name="exclamation-triangle" class="mr-1.5" />{{ invalid.length }} draft file{{ invalid.length === 1 ? "" : "s" }} couldn't be read
+            and won't post: <span class="font-mono">{{ invalid.join(", ") }}</span>
         </div>
 
         <!-- The section only exists once the agent has proposed a draft; an empty queue shows nothing here (and
@@ -100,15 +98,23 @@ const removeDraft = async (id: string): Promise<void> => {
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-2">
-                                <span class="rounded bg-overlay px-1.5 py-0.5 text-2xs font-medium capitalize text-content">{{ draft.platform }}</span>
-                                <span v-if="draft.target" class="truncate rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{ draft.target }}</span>
+                                <span class="rounded bg-overlay px-1.5 py-0.5 text-2xs font-medium capitalize text-content">{{
+                                    draft.platform
+                                }}</span>
+                                <span v-if="draft.target" class="truncate rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{
+                                    draft.target
+                                }}</span>
                                 <StatusBadge
                                     :variant="STATUS_VARIANT[draft.status]"
                                     :label="draft.status"
                                     size="xs"
                                     v-tooltip.top="draft.status === 'failed' ? draft.error : undefined"
                                 />
-                                <span v-if="draft.media && draft.media.length > 0" class="text-2xs text-subtle" v-tooltip.top="draft.media.join(', ')">
+                                <span
+                                    v-if="draft.media && draft.media.length > 0"
+                                    class="text-2xs text-subtle"
+                                    v-tooltip.top="draft.media.join(', ')"
+                                >
                                     <Icon name="paperclip" class="text-2xs" />{{ draft.media.length }}
                                 </span>
                             </div>
@@ -127,7 +133,9 @@ const removeDraft = async (id: string): Promise<void> => {
                                 @change="reschedule(draft, ($event.target as HTMLInputElement).value)"
                             />
                             <div class="flex items-center gap-2">
-                                <span v-if="draft.status === 'posted' && draft.postedAt" class="text-2xs text-subtle">posted {{ formatAt(draft.postedAt) }}</span>
+                                <span v-if="draft.status === 'posted' && draft.postedAt" class="text-2xs text-subtle"
+                                    >posted {{ formatAt(draft.postedAt) }}</span
+                                >
                                 <Button
                                     v-if="draft.status === 'proposed'"
                                     label="Approve"

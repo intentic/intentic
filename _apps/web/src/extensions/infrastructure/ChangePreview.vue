@@ -118,7 +118,14 @@ const summarize = (list: readonly PlanStep[]): string => {
                         <span class="truncate text-sm font-medium text-content">{{ group.name }}</span>
                         <span class="shrink-0 text-2xs text-subtle">{{ summarize(group.steps) }}</span>
                     </div>
-                    <PlanStepRow v-for="step in group.steps" :key="step.id" :id="step.id" :action="step.action" :reason="step.reason" context="plan" />
+                    <PlanStepRow
+                        v-for="step in group.steps"
+                        :key="step.id"
+                        :id="step.id"
+                        :action="step.action"
+                        :reason="step.reason"
+                        context="plan"
+                    />
                 </div>
             </div>
             <p v-else class="flex items-center gap-2 text-sm text-success">

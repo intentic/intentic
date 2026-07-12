@@ -198,10 +198,7 @@ const revoke = async (target: string): Promise<void> => {
                     <template #icon><Icon name="send" /></template>
                 </Button>
             </div>
-            <span
-                v-if="emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())"
-                class="ui-field-error"
-            >
+            <span v-if="emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())" class="ui-field-error">
                 <Icon name="exclamation-triangle" class="text-2xs" />
                 Enter a valid email address.
             </span>

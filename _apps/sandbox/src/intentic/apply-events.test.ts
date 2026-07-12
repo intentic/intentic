@@ -106,7 +106,16 @@ test("a failed apply's or resolve's exit is terminal — the && chain stops ther
 test("a check run's tail ends on any exit — single-command files carry exactly one", async () => {
     const path = join(dir, "check.ndjson");
     await writeFile(path, line({ kind: "start" }) + line({ kind: "result", steps: [] }) + line({ kind: "exit", command: "plan", code: 0 }));
-    expect(await collect(tailIntenticEvents(path, (event) => event.kind === "exit", () => true, undefined))).toEqual(["start", "result", "exit"]);
+    expect(
+        await collect(
+            tailIntenticEvents(
+                path,
+                (event) => event.kind === "exit",
+                () => true,
+                undefined,
+            ),
+        ),
+    ).toEqual(["start", "result", "exit"]);
 });
 
 test("applyRunLive reports a started-but-not-exited run, and only that", async () => {

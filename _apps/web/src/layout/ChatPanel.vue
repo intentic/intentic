@@ -537,7 +537,10 @@ watch(keyboardInset, () => {
                     @click="openAccountManage"
                 >
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
-                    <span>{{ activeAccountReauth.detail ?? `This account needs to be reconnected.` }} <span class="font-semibold underline">Reconnect</span></span>
+                    <span
+                        >{{ activeAccountReauth.detail ?? `This account needs to be reconnected.` }}
+                        <span class="font-semibold underline">Reconnect</span></span
+                    >
                 </button>
                 <template v-if="connected">
                     <form

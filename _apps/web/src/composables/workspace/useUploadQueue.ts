@@ -109,7 +109,11 @@ const recomputeBytesDone = (): void => {
 const filterUnchanged = async (targetDir: string, entries: readonly DroppedFile[]): Promise<readonly DroppedFile[]> => {
     try {
         const files = entries.map((entry) => ({ path: joinPath(targetDir, entry.path), size: entry.file.size, mtime: entry.file.lastModified }));
-        const { skip } = await sandboxJson<{ skip: string[] }>(`/workspace/upload-diff`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify({ files }) });
+        const { skip } = await sandboxJson<{ skip: string[] }>(`/workspace/upload-diff`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ files }),
+        });
         if (skip.length === 0) {
             return entries;
         }
@@ -128,7 +132,14 @@ const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
             return;
         }
         const timer = setTimeout(resolve, ms);
-        signal.addEventListener(`abort`, () => { clearTimeout(timer); resolve(); }, { once: true });
+        signal.addEventListener(
+            `abort`,
+            () => {
+                clearTimeout(timer);
+                resolve();
+            },
+            { once: true },
+        );
     });
 
 // Upload one file via XHR with a plain File body — works on HTTP/1.1 and HTTP/2, streams from disk, real progress.
@@ -367,7 +378,9 @@ export function useUploadQueue() {
             return;
         }
         // markRaw the File so Vue doesn't proxy it — calling .stream() on a reactive proxy of a File throws.
-        const items = surviving.map((entry): QueueFile => reactive({ path: joinPath(targetDir, entry.path), size: entry.file.size, status: `queued`, file: markRaw(entry.file) }));
+        const items = surviving.map((entry): QueueFile =>
+            reactive({ path: joinPath(targetDir, entry.path), size: entry.file.size, status: `queued`, file: markRaw(entry.file) }),
+        );
         files.value.push(...items);
         bytesTotal.value += items.reduce((sum, item) => sum + item.size, 0);
         pending.push(items);
@@ -422,5 +435,22 @@ export function useUploadQueue() {
         return elapsed > 0 ? bytesDone.value / elapsed : 0;
     });
 
-    return { files, bytesTotal, bytesDone, currentName, finished, scanning, scannedCount, scanningName, skippedNotice, skippedUnchanged, failedCount, doneCount, throughput, enqueue, enqueueFromDataTransfer, dismiss: resetUploadQueue };
+    return {
+        files,
+        bytesTotal,
+        bytesDone,
+        currentName,
+        finished,
+        scanning,
+        scannedCount,
+        scanningName,
+        skippedNotice,
+        skippedUnchanged,
+        failedCount,
+        doneCount,
+        throughput,
+        enqueue,
+        enqueueFromDataTransfer,
+        dismiss: resetUploadQueue,
+    };
 }

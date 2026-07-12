@@ -142,7 +142,9 @@ const touched = reactive(new Set<string>());
 const shaking = ref(false);
 const nameInput = ref<HTMLInputElement>();
 const promptInput = ref<HTMLTextAreaElement>();
-const markTouched = (key: string): void => { touched.add(key); };
+const markTouched = (key: string): void => {
+    touched.add(key);
+};
 
 const nameError = computed<string | undefined>(() => {
     const trimmed = form.id.trim();
@@ -150,9 +152,7 @@ const nameError = computed<string | undefined>(() => {
     if (!NAME_RE.test(trimmed)) return `Use letters, digits, hyphens and underscores; must start with a letter or digit.`;
     return undefined;
 });
-const promptError = computed<string | undefined>(() =>
-    form.prompt.trim() === `` ? `Prompt is required.` : undefined,
-);
+const promptError = computed<string | undefined>(() => (form.prompt.trim() === `` ? `Prompt is required.` : undefined));
 
 const touchAll = (): void => {
     touched.add(`name`);
@@ -231,7 +231,9 @@ const submit = async (): Promise<void> => {
         const target = nameError.value !== undefined ? nameInput.value : promptError.value !== undefined ? promptInput.value : undefined;
         target?.focus();
         shaking.value = false;
-        void nextTick(() => { shaking.value = true; });
+        void nextTick(() => {
+            shaking.value = true;
+        });
         return;
     }
     if (save.isPending.value) {
@@ -412,9 +414,7 @@ const outcomeVariant = (outcome: string): StatusVariant => (outcome === `complet
                 </Button>
             </div>
 
-            <div v-if="automations.length === 0" :class="cmp.emptyState('py-6')">
-                No automations yet — schedule your agent's first wake-up.
-            </div>
+            <div v-if="automations.length === 0" :class="cmp.emptyState('py-6')">No automations yet — schedule your agent's first wake-up.</div>
 
             <div v-else class="flex flex-col gap-2">
                 <div v-for="automation in automations" :key="automation.id" class="rounded-lg border border-line bg-canvas">
@@ -674,12 +674,7 @@ const outcomeVariant = (outcome: string): StatusVariant => (outcome === `complet
                     >
                         At <input v-model="schedule.time" type="time" class="w-28" :class="cmp.input()" />
                     </label>
-                    <input
-                        v-if="schedule.freq === 'custom'"
-                        v-model="schedule.cron"
-                        placeholder="0 9 * * 1-5"
-                        :class="cmp.input('font-mono')"
-                    />
+                    <input v-if="schedule.freq === 'custom'" v-model="schedule.cron" placeholder="0 9 * * 1-5" :class="cmp.input('font-mono')" />
                     <p v-if="schedule.freq === 'custom'" class="text-2xs text-subtle">Standard 5-field cron: minute hour day month weekday.</p>
                     <p v-if="schedule.freq === 'weekly' && schedule.days.length === 0" class="text-xs text-danger">Pick at least one day.</p>
                     <p v-if="cronPreview" class="text-xs" :class="'error' in cronPreview ? 'text-danger' : 'text-muted'">
@@ -687,9 +682,12 @@ const outcomeVariant = (outcome: string): StatusVariant => (outcome === `complet
                         <template v-else>{{ cronPreview.error }}</template>
                     </p>
                 </div>
-                <p v-if="form.kind === 'event'" class="text-xs text-muted">Wakes when an external system POSTs its webhook URL — shown after you create it.</p>
+                <p v-if="form.kind === 'event'" class="text-xs text-muted">
+                    Wakes when an external system POSTs its webhook URL — shown after you create it.
+                </p>
                 <p v-else-if="form.kind === 'listener'" class="text-xs text-muted">
-                    Fires instantly over {{ LISTENER_SOURCES[form.provider].label }}'s live connection when the selected events happen — "Any" wakes on every kind.
+                    Fires instantly over {{ LISTENER_SOURCES[form.provider].label }}'s live connection when the selected events happen — "Any" wakes
+                    on every kind.
                 </p>
                 <label class="ui-field mt-3">
                     <span class="ui-field-label">
@@ -726,12 +724,16 @@ const outcomeVariant = (outcome: string): StatusVariant => (outcome === `complet
                             <input v-model="form.guard" placeholder="test -s .intentic/queue.json" class="font-mono" :class="cmp.input()" />
                             <p class="text-xs text-muted">
                                 <template v-if="form.kind === 'event'">
-                                    Runs before each wake with the payload in <span class="font-mono">$AUTOMATION_PAYLOAD</span>: exit 0 wakes the agent, anything else skips that run.
+                                    Runs before each wake with the payload in <span class="font-mono">$AUTOMATION_PAYLOAD</span>: exit 0 wakes the
+                                    agent, anything else skips that run.
                                 </template>
                                 <template v-else-if="form.kind === 'listener'">
-                                    Runs before each wake; batched events arrive as JSON lines in <span class="font-mono">$AUTOMATION_PAYLOAD</span>: exit 0 wakes the agent, anything else skips that run.
+                                    Runs before each wake; batched events arrive as JSON lines in <span class="font-mono">$AUTOMATION_PAYLOAD</span>:
+                                    exit 0 wakes the agent, anything else skips that run.
                                 </template>
-                                <template v-else>Runs in your workspace before each wake: exit 0 wakes the agent, anything else skips that run.</template>
+                                <template v-else
+                                    >Runs in your workspace before each wake: exit 0 wakes the agent, anything else skips that run.</template
+                                >
                             </p>
                         </label>
                         <div class="ui-field">

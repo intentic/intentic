@@ -23,9 +23,7 @@ const walkFiles = async (root: string): Promise<string[]> => {
     try {
         const entries = await readdir(root, { recursive: true, withFileTypes: true });
         // Skip pane-log-clean's atomic-rename scratch files (terminals/*.log.tmp) — not real log files.
-        return entries
-            .filter((entry) => entry.isFile() && !entry.name.endsWith(".tmp"))
-            .map((entry) => join(entry.parentPath, entry.name));
+        return entries.filter((entry) => entry.isFile() && !entry.name.endsWith(".tmp")).map((entry) => join(entry.parentPath, entry.name));
     } catch {
         return [];
     }

@@ -137,7 +137,9 @@ const canSubmit = computed(() => {
 // --- inline validation (touched-on-blur) ---
 const infraTouched = reactive(new Set<string>());
 const infraShaking = ref(false);
-const markInfraTouched = (key: string): void => { infraTouched.add(key); };
+const markInfraTouched = (key: string): void => {
+    infraTouched.add(key);
+};
 
 const infraNameError = computed<string | undefined>(() => {
     const trimmed = name.value.trim();
@@ -168,7 +170,9 @@ const submit = async (): Promise<void> => {
     }
     if (!canSubmit.value) {
         infraShaking.value = false;
-        void nextTick(() => { infraShaking.value = true; });
+        void nextTick(() => {
+            infraShaking.value = true;
+        });
         return;
     }
     const payload: Record<string, string | number> = {};
@@ -659,7 +663,12 @@ onUnmounted(progress.stopWatching);
             <!-- What applying will do, BEFORE anything changes (resolve → plan, read-only). -->
             <ChangePreview :preview="preview" />
 
-            <Button :label="isFirstProvision ? 'Set up & deploy' : 'Apply changes'" :disabled="!canApply" :loading="applying" @click="progress.launch()">
+            <Button
+                :label="isFirstProvision ? 'Set up & deploy' : 'Apply changes'"
+                :disabled="!canApply"
+                :loading="applying"
+                @click="progress.launch()"
+            >
                 <template #icon><Icon name="bolt" /></template>
             </Button>
             <p class="max-w-lg text-center text-xs text-subtle">

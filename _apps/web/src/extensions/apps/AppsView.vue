@@ -50,7 +50,11 @@ const label = (dir: string): string => (dir === `repositories/${props.repo}` ? `
 // The app's dev-server tmux session (started server-side by startApp).
 const sessionOf = (app: string): string => `panel-${props.repo}--${app}`;
 // A per-library-dir test session suffix, distinct from every app/package one (`<slug>__test`).
-const libSuffix = (dir: string): string => `${label(dir).replace(/[^a-z0-9]+/g, `-`).replace(/^-+|-+$/g, ``).toLowerCase()}__test`;
+const libSuffix = (dir: string): string =>
+    `${label(dir)
+        .replace(/[^a-z0-9]+/g, `-`)
+        .replace(/^-+|-+$/g, ``)
+        .toLowerCase()}__test`;
 
 const act = async (action: () => Promise<void>): Promise<void> => {
     actionError.value = undefined;

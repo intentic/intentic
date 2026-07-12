@@ -28,7 +28,8 @@ export const grokDefaultModel = ref<string>(``);
 
 // The model a fresh conversation seeds for a provider: Claude names Opus, Grok its live default (empty until
 // loaded ⇒ OpenCode's own default), Codex sends empty (the account default).
-export const defaultModelFor = (provider: ChatProvider): string => (provider === `claude` ? `opus` : provider === `grok` ? grokDefaultModel.value : ``);
+export const defaultModelFor = (provider: ChatProvider): string =>
+    provider === `claude` ? `opus` : provider === `grok` ? grokDefaultModel.value : ``;
 
 // The provider tabs shown wherever accounts are picked (the account dialog + the composer's connect gate).
 // Labels differ from the internal ids (codex → "ChatGPT").

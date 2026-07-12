@@ -22,10 +22,7 @@ const model = defineModel<T>({ required: true });
             :aria-selected="model === option.value"
             :title="option.title"
             class="cursor-pointer rounded-md py-0.5 text-2xs font-medium transition-colors"
-            :class="[
-                model === option.value ? `bg-overlay text-content` : `text-muted hover:text-content`,
-                size === `xs` ? `px-1.5` : `px-2.5`,
-            ]"
+            :class="[model === option.value ? `bg-overlay text-content` : `text-muted hover:text-content`, size === `xs` ? `px-1.5` : `px-2.5`]"
             @click="model = option.value"
         >
             {{ option.label

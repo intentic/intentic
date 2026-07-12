@@ -61,12 +61,21 @@ assert.ok(new TextEncoder().encode(longPath).length > 100, "long path must excee
 const started = [];
 let bytes = 0;
 const packed = await drain(
-    packTar([entry("a.txt", "hello"), entry("dir/b.txt", "world"), entry("empty.txt", ""), entry(longPath, "deep")], { onFileStart: (p) => started.push(p), onBytes: (n) => (bytes += n) }),
+    packTar([entry("a.txt", "hello"), entry("dir/b.txt", "world"), entry("empty.txt", ""), entry(longPath, "deep")], {
+        onFileStart: (p) => started.push(p),
+        onBytes: (n) => (bytes += n),
+    }),
 );
 
 const parsed = parseTar(packed);
-assert.deepEqual(parsed.map((e) => e.path), ["a.txt", "dir/b.txt", "empty.txt", longPath]);
-assert.deepEqual(parsed.map((e) => e.content), ["hello", "world", "", "deep"]);
+assert.deepEqual(
+    parsed.map((e) => e.path),
+    ["a.txt", "dir/b.txt", "empty.txt", longPath],
+);
+assert.deepEqual(
+    parsed.map((e) => e.content),
+    ["hello", "world", "", "deep"],
+);
 
 // The archive ends with two zero blocks, and its length is 512-aligned.
 assert.equal(packed.length % 512, 0);
@@ -108,7 +117,11 @@ const checkDrift = async (label, file, expectedSize, expectedPrefix, expectedByt
     const buf = await drain(packTar([{ path: "drift.bin", file }, sentinel], { onBytes: (n) => (counted += n) }));
     assert.equal(buf.length % 512, 0, `${label}: archive must stay 512-aligned`);
     const parsed = parseTar(buf);
-    assert.deepEqual(parsed.map((e) => e.path), ["drift.bin", "sentinel.txt"], `${label}: both entries must parse`);
+    assert.deepEqual(
+        parsed.map((e) => e.path),
+        ["drift.bin", "sentinel.txt"],
+        `${label}: both entries must parse`,
+    );
     assert.equal(parsed[0].size, expectedSize, `${label}: header must declare the scan-time size`);
     assert.equal(parsed[0].content.slice(0, expectedPrefix.length), expectedPrefix, `${label}: real bytes preserved`);
     assert.equal(parsed[0].content.length, expectedSize, `${label}: body length must equal declared size`);

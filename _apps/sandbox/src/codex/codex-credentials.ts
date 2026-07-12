@@ -322,7 +322,11 @@ export const fileCodexStore = (baseDir: string): CodexStore => {
 // turn) is never refreshed here; only an idle account with an expired access token is probed. On an expired
 // token we attempt the refresh the CLI would do anyway and persist it atomically, so success keeps the account
 // alive; a 4xx means the refresh token is revoked/expired ⇒ needsReauth. Transient/network errors fail open.
-export const probeCodexHealth = async (store: CodexStore, id: string, refresh: CodexRefreshFn = refreshCodexTokens): Promise<CodexReauthNeeded | undefined> => {
+export const probeCodexHealth = async (
+    store: CodexStore,
+    id: string,
+    refresh: CodexRefreshFn = refreshCodexTokens,
+): Promise<CodexReauthNeeded | undefined> => {
     const tokens = await store.read(id);
     if (tokens === undefined) {
         return undefined;

@@ -149,10 +149,7 @@ watch(
         </div>
 
         <!-- Errors overlay the top edge instead of pushing the preview around. -->
-        <div
-            v-if="listError || actionError"
-            :class="cmp.alertDanger('absolute inset-x-3 top-16 z-10')"
-        >
+        <div v-if="listError || actionError" :class="cmp.alertDanger('absolute inset-x-3 top-16 z-10')">
             {{ listError ?? actionError }}
         </div>
 

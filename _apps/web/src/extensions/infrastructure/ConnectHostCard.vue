@@ -22,7 +22,6 @@ import { normalizeHostName } from "./hostName";
 const { refetch } = useInventory();
 const { active, daemonUrl } = useSandbox();
 
-
 // Whether this sandbox's tunnel is intentic-provided (platform-computed: no user Cloudflare token). On that path
 // host tunnels are minted platform-side (relayed by the daemon) and the one-liner carries the narrow connector
 // token instead of CF_TOKEN.

@@ -18,7 +18,9 @@ export const DATABASE_URL = `postgresql://app:app@localhost:5440/app`;
 // backs the from-scratch boot (CI), where global-setup starts the API with exactly this value.
 const envSecret = (): string | undefined => {
     try {
-        return readFileSync(resolve(import.meta.dirname, `../../.env`), `utf8`).match(/^BETTER_AUTH_SECRET=(.+)$/m)?.[1]?.trim();
+        return readFileSync(resolve(import.meta.dirname, `../../.env`), `utf8`)
+            .match(/^BETTER_AUTH_SECRET=(.+)$/m)?.[1]
+            ?.trim();
     } catch {
         return undefined;
     }

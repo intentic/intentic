@@ -26,7 +26,6 @@ const emptyState = (...twClasses: string[]) =>
     twMerge(`rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-muted`, ...twClasses);
 
 /** Uppercase section heading label (e.g. "CONNECTIONS", "YOUR APPS"). */
-const sectionLabel = (...twClasses: string[]) =>
-    twMerge(`text-xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
+const sectionLabel = (...twClasses: string[]) => twMerge(`text-xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
 
 export const cmp = { input, alertDanger, alertWarning, emptyState, sectionLabel };

@@ -201,7 +201,12 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     grokAgent: async function* () {
         yield { kind: "done" };
     },
-    openCode: { client: async () => ({}) as never, connected: async () => false, xaiModels: async () => ({ models: [] }), disconnect: async () => {} },
+    openCode: {
+        client: async () => ({}) as never,
+        connected: async () => false,
+        xaiModels: async () => ({ models: [] }),
+        disconnect: async () => {},
+    },
     intentic: async function* () {},
     git: {
         init: async () => {},
@@ -819,7 +824,10 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
                     openCode: {
                         client: async () => ({}) as never,
                         connected: async () => true,
-                        xaiModels: async () => ({ models: [{ id: "grok-4.20-0309-reasoning", label: "grok-4.20-0309-reasoning" }], default: "grok-4.20-0309-reasoning" }),
+                        xaiModels: async () => ({
+                            models: [{ id: "grok-4.20-0309-reasoning", label: "grok-4.20-0309-reasoning" }],
+                            default: "grok-4.20-0309-reasoning",
+                        }),
                         disconnect: async () => {},
                     },
                     grokAgent: async function* (request) {

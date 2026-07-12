@@ -62,8 +62,7 @@ const setBaseline = (value: string): void => {
 // The daemon's /git/{repo}/commit only accepts the three workspace repos; a "root"-scope change is shown but not
 // committed (the agent works inside the repos, so root changes are rare).
 const COMMITTABLE_REPOS = new Set([`intent`, `desired-state`, `app`]);
-const repoOfScope = (scope: string): string | undefined =>
-    scope.startsWith(`repositories/`) ? scope.slice(`repositories/`.length) : undefined;
+const repoOfScope = (scope: string): string | undefined => (scope.startsWith(`repositories/`) ? scope.slice(`repositories/`.length) : undefined);
 
 const actionBusy = ref(false);
 const actionError = ref<string | undefined>(undefined);
@@ -111,7 +110,11 @@ export function useReview() {
 
     // The repos a Commit would touch (deduped, committable only).
     const committableRepos = computed(() => [
-        ...new Set(changes.value.map((change) => repoOfScope(change.scope)).filter((repo): repo is string => repo !== undefined && COMMITTABLE_REPOS.has(repo))),
+        ...new Set(
+            changes.value
+                .map((change) => repoOfScope(change.scope))
+                .filter((repo): repo is string => repo !== undefined && COMMITTABLE_REPOS.has(repo)),
+        ),
     ]);
 
     const advanceBaseline = (): void => {

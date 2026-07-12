@@ -74,7 +74,10 @@ export const gitlabApi: GitLabApi = {
     },
 
     findProject: async ({ url, token, owner, name }) => {
-        const response = await fetch(`${base(url)}/projects/${projectPath(owner, name)}`, { headers: headers(token), signal: AbortSignal.timeout(30_000) });
+        const response = await fetch(`${base(url)}/projects/${projectPath(owner, name)}`, {
+            headers: headers(token),
+            signal: AbortSignal.timeout(30_000),
+        });
         if (response.status === 404) {
             return undefined;
         }
@@ -105,7 +108,11 @@ export const gitlabApi: GitLabApi = {
     },
 
     deleteProject: async ({ url, token, owner, name }) => {
-        const response = await fetch(`${base(url)}/projects/${projectPath(owner, name)}`, { method: "DELETE", headers: headers(token), signal: AbortSignal.timeout(30_000) });
+        const response = await fetch(`${base(url)}/projects/${projectPath(owner, name)}`, {
+            method: "DELETE",
+            headers: headers(token),
+            signal: AbortSignal.timeout(30_000),
+        });
         if (response.status === 404) {
             return;
         }

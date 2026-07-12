@@ -22,7 +22,10 @@ assert.deepEqual(chunkItems([]), []);
 {
     const items = mk(2 * CHUNK_FILES + 1, 1);
     const chunks = chunkItems(items);
-    assert.deepEqual(chunks.map((c) => c.length), [CHUNK_FILES, CHUNK_FILES, 1]);
+    assert.deepEqual(
+        chunks.map((c) => c.length),
+        [CHUNK_FILES, CHUNK_FILES, 1],
+    );
     assert.deepEqual(flat(chunks), items);
 }
 
@@ -30,7 +33,10 @@ assert.deepEqual(chunkItems([]), []);
 {
     const half = Math.floor(CHUNK_BYTES / 2) + 1;
     const chunks = chunkItems(mk(3, half));
-    assert.deepEqual(chunks.map((c) => c.length), [1, 1, 1]);
+    assert.deepEqual(
+        chunks.map((c) => c.length),
+        [1, 1, 1],
+    );
     for (const c of chunks) assert.ok(bytesOf(c) <= CHUNK_BYTES);
 }
 
@@ -38,17 +44,30 @@ assert.deepEqual(chunkItems([]), []);
 {
     const size = Math.floor(CHUNK_BYTES * 0.4); // two fit (0.8), a third overflows (1.2)
     const chunks = chunkItems(mk(3, size));
-    assert.deepEqual(chunks.map((c) => c.length), [2, 1]);
+    assert.deepEqual(
+        chunks.map((c) => c.length),
+        [2, 1],
+    );
     for (const c of chunks) assert.ok(bytesOf(c) <= CHUNK_BYTES);
 }
 
 // A single file larger than the byte cap gets its OWN chunk and never absorbs its neighbors.
 {
-    const items = [{ size: 10, tag: "a" }, { size: CHUNK_BYTES * 3, tag: "big" }, { size: 10, tag: "b" }];
+    const items = [
+        { size: 10, tag: "a" },
+        { size: CHUNK_BYTES * 3, tag: "big" },
+        { size: 10, tag: "b" },
+    ];
     const chunks = chunkItems(items);
-    assert.deepEqual(chunks.map((c) => c.length), [1, 1, 1]);
+    assert.deepEqual(
+        chunks.map((c) => c.length),
+        [1, 1, 1],
+    );
     assert.equal(chunks[1][0].tag, "big");
-    assert.deepEqual(flat(chunks).map((i) => i.tag), ["a", "big", "b"]);
+    assert.deepEqual(
+        flat(chunks).map((i) => i.tag),
+        ["a", "big", "b"],
+    );
 }
 
 // Invariant sweep: every chunk respects both caps (a lone over-cap file is the only exception), nothing lost.

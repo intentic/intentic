@@ -26,7 +26,6 @@ import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const URL_RE = /^https?:\/\/.+/i;
 
-
 const { hasCapability, capabilities, error: listError, add, remove, refetch } = useCapabilities();
 
 const route = useRoute();
@@ -69,7 +68,6 @@ const suggestName = (entry: CapabilityCatalogEntry): string => {
 // The typed name already exists → saving updates that connection rather than adding a new one.
 const nameCollision = computed(() => selectedInstances.value.some((instance) => instance.id === name.value.trim()));
 
-
 // The catalog grouped into its display sections, in category order; empty sections are dropped.
 const groupedCatalog = CAPABILITY_CATEGORIES.map((category) => ({
     label: category.label,
@@ -102,7 +100,9 @@ const logoFailed = reactive(new Set<string>());
 // A field key appears here after the user has interacted with it (blur), so errors show only after they leave.
 const touched = reactive(new Set<string>());
 const shaking = ref(false);
-const markTouched = (key: string): void => { touched.add(key); };
+const markTouched = (key: string): void => {
+    touched.add(key);
+};
 
 // Field-level error messages — undefined means the field is valid.
 const nameError = computed<string | undefined>(() => {
@@ -115,8 +115,7 @@ const nameError = computed<string | undefined>(() => {
 const fieldError = (field: CapabilityField): string | undefined => {
     const val = (values[field.key] ?? ``).trim();
     if (field.optional !== true && val.length === 0) return `This field is required.`;
-    if (val.length > 0 && !field.secret && field.key.toLowerCase().includes(`url`) && !URL_RE.test(val))
-        return `Enter a valid URL (e.g. https://…).`;
+    if (val.length > 0 && !field.secret && field.key.toLowerCase().includes(`url`) && !URL_RE.test(val)) return `Enter a valid URL (e.g. https://…).`;
     if (val.length > 0 && field.key === `port`) {
         const n = Number(val);
         if (!Number.isInteger(n) || n < 1 || n > 65535) return `Enter a valid port number (1–65535).`;
@@ -313,7 +312,9 @@ const submit = async (): Promise<void> => {
     touchAll();
     if (!canSubmit.value) {
         shaking.value = false;
-        void nextTick(() => { shaking.value = true; });
+        void nextTick(() => {
+            shaking.value = true;
+        });
         return;
     }
     submitting.value = true;

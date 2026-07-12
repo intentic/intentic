@@ -17,8 +17,6 @@ const visible = defineModel<boolean>(`visible`, { default: false });
 const { active } = useSandbox();
 const { readFile, saveText } = useWorkspaceTree();
 
-
-
 const pasted = ref(``);
 const saving = ref(false);
 const error = ref<string | undefined>(undefined);
@@ -80,7 +78,12 @@ const add = async (): Promise<void> => {
                     <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">2</span>
                     Paste the result below to add it to memory
                 </span>
-                <textarea v-model="pasted" rows="8" placeholder="Paste your memory details here" :class="cmp.input('w-full font-mono resize-y')"></textarea>
+                <textarea
+                    v-model="pasted"
+                    rows="8"
+                    placeholder="Paste your memory details here"
+                    :class="cmp.input('w-full font-mono resize-y')"
+                ></textarea>
             </label>
         </div>
 

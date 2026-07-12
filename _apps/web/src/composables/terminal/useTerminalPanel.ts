@@ -49,5 +49,13 @@ export function useTerminalPanel() {
     const surface = (name: string): void => {
         surfaced.value = { name };
     };
-    return { open: layout.terminalOpen, setOpen: layout.setTerminalOpen, toggle: layout.toggleTerminalVisibility, requested, surfaced, openFocused, surface };
+    return {
+        open: layout.terminalOpen,
+        setOpen: layout.setTerminalOpen,
+        toggle: layout.toggleTerminalVisibility,
+        requested,
+        surfaced,
+        openFocused,
+        surface,
+    };
 }

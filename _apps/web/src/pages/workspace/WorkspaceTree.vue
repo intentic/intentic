@@ -51,8 +51,19 @@ const {
 }>();
 const emit = defineEmits<{ openFile: [path: string]; openDirectory: [path: string] }>();
 
-const { saveText, createDir, moveEntry, removeEntries, copyEntries, moveIntoMany, runAction, loadChildren, lazyChildren, lazyTruncated, lazyLoading } =
-    useWorkspaceTree();
+const {
+    saveText,
+    createDir,
+    moveEntry,
+    removeEntries,
+    copyEntries,
+    moveIntoMany,
+    runAction,
+    loadChildren,
+    lazyChildren,
+    lazyTruncated,
+    lazyLoading,
+} = useWorkspaceTree();
 const layout = useLayout();
 const { enqueueFromDataTransfer } = useUploadQueue();
 
@@ -684,7 +695,9 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         @blur="commitRename"
                         @vue:mounted="focusRename"
                     />
-                    <span v-else class="min-w-0 flex-1 truncate" :class="row.entry.ignored ? 'text-subtle' : 'text-content/90'">{{ row.entry.name }}</span>
+                    <span v-else class="min-w-0 flex-1 truncate" :class="row.entry.ignored ? 'text-subtle' : 'text-content/90'">{{
+                        row.entry.name
+                    }}</span>
                     <!-- An ignored dir fetching its children lazily on expand. -->
                     <Icon
                         v-if="row.entry.type === 'dir' && lazyLoading.has(row.entry.path)"

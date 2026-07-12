@@ -35,8 +35,25 @@ const route = useRoute();
 const router = useRouter();
 const layout = useLayout();
 const review = useReview();
-const { tree, truncated, entriesByPath, entry, error, isLoading, refetch, readBlob, moveEntry, removeEntries, runAction, busy, actionError, loadChildren, lazyChildren, lazyTruncated, lazyLoading } =
-    useWorkspaceTree();
+const {
+    tree,
+    truncated,
+    entriesByPath,
+    entry,
+    error,
+    isLoading,
+    refetch,
+    readBlob,
+    moveEntry,
+    removeEntries,
+    runAction,
+    busy,
+    actionError,
+    loadChildren,
+    lazyChildren,
+    lazyTruncated,
+    lazyLoading,
+} = useWorkspaceTree();
 const { files: uploadFiles, scanning: uploadScanning, skippedNotice: uploadSkipped, enqueue } = useUploadQueue();
 // The open file lives in the URL path (`/workspace/<path>`), synced to the tabs singleton by useWorkspaceRoute;
 // this component keeps only the mobile-specific query state (`?dir=` browse location, `?diff=` diff view).
@@ -305,7 +322,11 @@ const onPick = (event: Event): void => {
                                 v-longpress="() => (sheetEntry = node)"
                                 @click="node.type === 'dir' ? openDir(node.path) : openFile(node.path)"
                             >
-                                <Icon :name="iconForEntry(node.name, node.type)" class="shrink-0 text-base" :class="node.ignored ? 'text-subtle' : 'text-muted'" />
+                                <Icon
+                                    :name="iconForEntry(node.name, node.type)"
+                                    class="shrink-0 text-base"
+                                    :class="node.ignored ? 'text-subtle' : 'text-muted'"
+                                />
                                 <span class="min-w-0 flex-1 truncate text-sm" :class="{ 'text-subtle': node.ignored }">{{ node.name }}</span>
                                 <Icon v-if="node.type === 'dir'" name="chevron-right" class="shrink-0 text-xs text-subtle" />
                             </button>

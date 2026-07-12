@@ -3,7 +3,6 @@ import pino from "pino";
 import pretty from "pino-pretty";
 import type { Config } from "./config.js";
 
-
 // Correlate logs with traces (OTel standard): stamp every record with the active span's ids. No-op when there
 // is no active span (tracing disabled or outside a request), so it's always safe to run.
 const otelTraceContext = (): Record<string, string> => {

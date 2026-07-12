@@ -120,7 +120,9 @@ const update = async (input: { name?: string; image?: string }): Promise<void> =
     }
     const updated = await apiClient.sandbox.update({ sandboxId: activeSandboxId.value, ...input });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
-    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) => live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)));
+    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
+        live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
+    );
 };
 
 // Remove a sandbox from this account: owners drop the platform row + its intentic-provided tunnel (member

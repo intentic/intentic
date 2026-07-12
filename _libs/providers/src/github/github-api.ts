@@ -89,7 +89,11 @@ export const githubApi: GitHubApi = {
     },
 
     deleteRepo: async ({ token, owner, name }) => {
-        const response = await fetch(`${BASE}/repos/${owner}/${name}`, { method: "DELETE", headers: headers(token), signal: AbortSignal.timeout(30_000) });
+        const response = await fetch(`${BASE}/repos/${owner}/${name}`, {
+            method: "DELETE",
+            headers: headers(token),
+            signal: AbortSignal.timeout(30_000),
+        });
         if (response.status === 404) {
             return;
         }

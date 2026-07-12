@@ -99,7 +99,8 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
             yield {
                 kind: "error",
                 code: "session-not-found",
-                message: "This chat's Codex thread no longer exists on the sandbox — it was deleted or lost in a rebuild. The next message starts a fresh session.",
+                message:
+                    "This chat's Codex thread no longer exists on the sandbox — it was deleted or lost in a rebuild. The next message starts a fresh session.",
             };
             yield { kind: "done" };
             return;

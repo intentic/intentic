@@ -4,7 +4,8 @@ import { discoverXaiModels, parseModelSuggestions } from "./grok-models.js";
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
 
 test("parseModelSuggestions extracts the ids after 'Did you mean', not the rejected id", () => {
-    const message = "Model not found: xai/grok-code-fast-1. Did you mean: grok-4.20-0309-non-reasoning, grok-4.20-0309-reasoning, grok-4.20-multi-agent-0309?";
+    const message =
+        "Model not found: xai/grok-code-fast-1. Did you mean: grok-4.20-0309-non-reasoning, grok-4.20-0309-reasoning, grok-4.20-multi-agent-0309?";
     expect(parseModelSuggestions(message)).toEqual(["grok-4.20-0309-non-reasoning", "grok-4.20-0309-reasoning", "grok-4.20-multi-agent-0309"]);
 });
 
@@ -55,7 +56,10 @@ test("discoverXaiModels probes the chat endpoint and parses 'Did you mean' when 
             return jsonResponse({ data: [] });
         }
         // Chat completions: xAI rejects the throwaway probe model and names the account's valid ones.
-        return jsonResponse({ error: { message: "Model not found: intentic-model-probe. Did you mean: grok-4.20-0309-reasoning, grok-4.20-0309-non-reasoning?" } }, 404);
+        return jsonResponse(
+            { error: { message: "Model not found: intentic-model-probe. Did you mean: grok-4.20-0309-reasoning, grok-4.20-0309-non-reasoning?" } },
+            404,
+        );
     }) as unknown as typeof fetch;
     expect(await discoverXaiModels("tok", fake)).toEqual([
         { id: "grok-4.20-0309-reasoning", label: "grok-4.20-0309-reasoning" },

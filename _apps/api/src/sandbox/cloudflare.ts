@@ -82,7 +82,6 @@ export const listZoneNames = async (token: string): Promise<string[]> => {
     return names;
 };
 
-
 // Fetch + validate a Cloudflare success envelope, returning the parsed `result`. A 401/403 becomes a
 // CloudflareTokenError (a misconfigured intentic token surfaces the same way an under-scoped user token does);
 // any other transport/API failure propagates unchanged.

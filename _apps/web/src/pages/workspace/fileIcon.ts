@@ -5,18 +5,7 @@
 // applies in "colorful"/"vivid".
 import type { ExplorerStyle, IconName } from "@intentic-app/ui";
 
-export type FileCategory =
-    | "code"
-    | "style"
-    | "config"
-    | "data"
-    | "image"
-    | "doc"
-    | "shell"
-    | "archive"
-    | "lock"
-    | "binary"
-    | "generic";
+export type FileCategory = "code" | "style" | "config" | "data" | "image" | "doc" | "shell" | "archive" | "lock" | "binary" | "generic";
 
 const EXT_CATEGORY: Record<string, FileCategory> = {
     // images
@@ -195,24 +184,28 @@ const SLOT_CLASS: Record<ExplorerStyle, string> = {
     vivid: `w-5`,
 };
 
-// How to draw one tree row's icon under the active explorer setup. `ignored` entries always dim (the
-// tree's existing cue), regardless of setup.
+// The colour class for an entry under the active explorer setup. `ignored` entries always dim (the
+// tree's existing cue), regardless of setup. Shared by the tree and the open-file tabs.
+export const explorerColorClass = (style: ExplorerStyle, name: string, type: "file" | "dir", ignored: boolean | undefined): string => {
+    if (ignored) {
+        return `text-subtle`;
+    }
+    if (style === `minimal`) {
+        return type === `dir` ? `text-content/70` : `text-muted`;
+    }
+    return type === `dir` ? `text-file-folder` : CATEGORY_COLOR[categoryForEntry(name)];
+};
+
+// How to draw one tree row's icon under the active explorer setup.
 export const explorerTreatment = (
     style: ExplorerStyle,
     name: string,
     type: "file" | "dir",
     expanded: boolean,
     ignored: boolean | undefined,
-): ExplorerTreatment => {
-    const icon = iconForEntry(name, type, expanded);
-    const sizeClass = SIZE_CLASS[style];
-    const slotClass = SLOT_CLASS[style];
-    if (ignored) {
-        return { icon, sizeClass, slotClass, colorClass: `text-subtle` };
-    }
-    if (style === `minimal`) {
-        return { icon, sizeClass, slotClass, colorClass: type === `dir` ? `text-content/70` : `text-muted` };
-    }
-    const colorClass = type === `dir` ? `text-file-folder` : CATEGORY_COLOR[categoryForEntry(name)];
-    return { icon, sizeClass, slotClass, colorClass };
-};
+): ExplorerTreatment => ({
+    icon: iconForEntry(name, type, expanded),
+    sizeClass: SIZE_CLASS[style],
+    slotClass: SLOT_CLASS[style],
+    colorClass: explorerColorClass(style, name, type, ignored),
+});
