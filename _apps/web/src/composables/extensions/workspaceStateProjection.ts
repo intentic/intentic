@@ -1,4 +1,4 @@
-import { type AccessEntry, AccessEntrySchema, type ResourceGroup, type ResourceView, type WorkspaceState } from "@intentic-app/api-contract";
+import { type AccessEntry, AccessEntrySchema, groupOf, type ResourceView, type WorkspaceState } from "@intentic-app/api-contract";
 
 /* Shapes the infrastructure read-model from the sandbox's desired-state graph (desired-state.json, the
  * compiled deploy.config.ts) joined with the last reconcile result (status.json) — read directly from the
@@ -30,46 +30,6 @@ interface Status {
     readonly steps?: readonly StatusStep[];
     readonly access?: readonly unknown[];
 }
-
-// Bucket the closed resource-type vocabulary into the coarse lenses; unknown kinds fall to "other".
-const GROUPS: Readonly<Record<string, ResourceGroup>> = {
-    host: `infra`,
-    cloudflare: `infra`,
-    tunnel: `infra`,
-    "cf-route": `infra`,
-    forgejo: `git`,
-    "forgejo-runner": `git`,
-    "forgejo-user": `git`,
-    "forgejo-org": `git`,
-    "forgejo-team": `git`,
-    repo: `git`,
-    "control-repo": `git`,
-    ci: `git`,
-    github: `git`,
-    "gh-repo": `git`,
-    "gh-ci": `git`,
-    gitlab: `git`,
-    "gl-repo": `git`,
-    "gl-ci": `git`,
-    komodo: `deploy`,
-    "komodo-periphery": `deploy`,
-    "komodo-server": `deploy`,
-    "komodo-user": `deploy`,
-    deployment: `deploy`,
-    postgres: `data`,
-    valkey: `data`,
-    "postgres-database": `data`,
-    "valkey-namespace": `data`,
-    signoz: `data`,
-    authentik: `data`,
-    "authentik-client": `data`,
-    garage: `data`,
-    "garage-bucket": `data`,
-    discord: `notify`,
-    "forgejo-notify": `notify`,
-    "komodo-notify": `notify`,
-};
-const groupOf = (type: string): ResourceGroup => GROUPS[type] ?? `other`;
 
 // Keep only non-secret scalar inputs; $ref/$secret objects, arrays and nested objects are dropped.
 const scalarConfig = (inputs: Record<string, unknown>): Record<string, string | number | boolean> => {

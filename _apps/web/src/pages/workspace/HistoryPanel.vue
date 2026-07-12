@@ -2,6 +2,7 @@
 import type { SnapshotChange, SnapshotTrigger, WorkspaceSnapshot } from "@intentic-app/api-contract";
 import { ref } from "vue";
 import { useHistory } from "../../composables/workspace/useHistory";
+import { timeAgo } from "./format";
 import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
 
 /* The history timeline — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
@@ -26,20 +27,6 @@ const TRIGGER_LABEL: Record<SnapshotTrigger, string> = {
     "pre-restore": `pre-restore`,
     restore: `restored`,
     user: `you`,
-};
-
-const timeAgo = (at: number): string => {
-    const minutes = Math.round((Date.now() - at) / 60_000);
-    if (minutes < 1) {
-        return `just now`;
-    }
-    if (minutes < 60) {
-        return `${minutes}m ago`;
-    }
-    if (minutes < 60 * 24) {
-        return `${Math.round(minutes / 60)}h ago`;
-    }
-    return new Date(at).toLocaleString();
 };
 
 const changeLabel = (change: SnapshotChange): string => (change.scope === `root` ? change.path : `${change.scope}/${change.path}`);

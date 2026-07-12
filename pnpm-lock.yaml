@@ -890,6 +890,9 @@ importers:
 
   _libs/api-contract:
     dependencies:
+      '@intentic/resources':
+        specifier: workspace:*
+        version: link:../resources
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../sandbox-contract

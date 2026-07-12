@@ -90,7 +90,7 @@ const finishConnect = async (): Promise<void> => {
     >
         <div class="flex flex-col gap-2 px-3 py-3 text-sm">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-content">{{ accountTitle }}</span>
+                <span class="text-sm font-semibold text-content">{{ accountTitle }}</span>
                 <div class="flex items-center gap-1">
                     <button
                         v-for="tab in providerTabs"
@@ -103,7 +103,7 @@ const finishConnect = async (): Promise<void> => {
                     >
                         {{ tab.label }}
                     </button>
-                    <button type="button" class="composer-ghost h-6 w-6" @click="closeAccountManage" v-tooltip.left="'Close'" aria-label="Close">
+                    <button type="button" class="composer-ghost h-6 w-6" @click="closeAccountManage" aria-label="Close">
                         <Icon name="times" class="text-2xs" />
                     </button>
                 </div>

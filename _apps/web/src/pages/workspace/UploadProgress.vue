@@ -147,7 +147,6 @@ onBeforeUnmount(() => {
                     class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content"
                     @click="dismiss"
                     :aria-label="finished ? `Dismiss` : `Cancel`"
-                    v-tooltip.left="finished ? `Dismiss` : `Cancel upload`"
                 >
                     <Icon name="times" class="text-2xs" />
                 </button>

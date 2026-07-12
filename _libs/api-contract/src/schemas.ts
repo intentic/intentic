@@ -1,3 +1,4 @@
+import type { ResourceType } from "@intentic/resources";
 import {
     ActivityConnectionSchema,
     ActivityEventSchema,
@@ -357,6 +358,60 @@ export type SetupCode = z.infer<typeof SetupCodeSchema>;
 // Coarse lenses the closed resource-type vocabulary buckets into, for grouping in the Overview.
 export const ResourceGroupSchema = z.enum(["infra", "git", "deploy", "data", "notify", "other"]);
 export type ResourceGroup = z.infer<typeof ResourceGroupSchema>;
+
+// The coarse group each resolver resource-type buckets into — the single source the infra render models read
+// (the web's local projection today; any server-side projection tomorrow) so a new kind can't silently land in
+// the wrong bucket. Typed Record<ResourceType, …> via a type-only import (erased at runtime — no dep weight in
+// the browser bundle), so a kind added to the OSS vocabulary is a compile error here until it's grouped. Kinds
+// with no natural bucket sit in "other" (the prior projection default) on purpose.
+const RESOURCE_GROUP: Record<ResourceType, ResourceGroup> = {
+    host: "infra",
+    cloudflare: "infra",
+    tunnel: "infra",
+    "cf-route": "infra",
+    forgejo: "git",
+    "forgejo-user": "git",
+    "forgejo-org": "git",
+    "forgejo-team": "git",
+    "forgejo-runner": "git",
+    repo: "git",
+    "control-repo": "git",
+    ci: "git",
+    github: "git",
+    "gh-repo": "git",
+    "gh-ci": "git",
+    gitlab: "git",
+    "gl-repo": "git",
+    "gl-ci": "git",
+    komodo: "deploy",
+    "komodo-periphery": "deploy",
+    "komodo-server": "deploy",
+    "komodo-user": "deploy",
+    deployment: "deploy",
+    postgres: "data",
+    "postgres-database": "data",
+    valkey: "data",
+    "valkey-namespace": "data",
+    signoz: "data",
+    authentik: "data",
+    "authentik-client": "data",
+    garage: "data",
+    "garage-bucket": "data",
+    discord: "notify",
+    "forgejo-notify": "notify",
+    "komodo-notify": "notify",
+    stripe: "other",
+    outline: "other",
+    paperless: "other",
+    openproject: "other",
+    invoiceninja: "other",
+    infisical: "other",
+    workspace: "other",
+    backup: "other",
+};
+
+// The coarse group for a resource type; a string outside the closed vocabulary falls to "other".
+export const groupOf = (type: string): ResourceGroup => RESOURCE_GROUP[type as ResourceType] ?? "other";
 
 export const ResourceViewSchema = z.object({
     id: z.string(),

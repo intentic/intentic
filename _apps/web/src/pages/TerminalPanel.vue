@@ -295,7 +295,6 @@ const endResize = (event: PointerEvent): void => {
                 type="button"
                 class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                 @click="emit(`close`)"
-                v-tooltip.top="'Close terminal'"
                 aria-label="Close terminal"
             >
                 <Icon name="times" class="text-xs" />

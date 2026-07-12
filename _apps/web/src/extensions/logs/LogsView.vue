@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { cmp, InfoHint, Page, Segmented } from "@intentic-app/ui";
 import { computed, ref, watch } from "vue";
-import { formatBytes } from "../../pages/workspace/format";
+import { formatBytes, timeAgo } from "../../pages/workspace/format";
 import { useLogs, useLogTail } from "./useLogs";
 
 /* The logs extension: the debug surface for everything the sandbox records under /history/logs — terminal
@@ -31,20 +31,6 @@ const pane = ref<HTMLElement>();
 watch(tail, () => {
     requestAnimationFrame(() => pane.value?.scrollTo({ top: pane.value.scrollHeight }));
 });
-
-const timeAgo = (at: number): string => {
-    const minutes = Math.round((Date.now() - at) / 60_000);
-    if (minutes < 1) {
-        return `just now`;
-    }
-    if (minutes < 60) {
-        return `${minutes}m ago`;
-    }
-    if (minutes < 60 * 24) {
-        return `${Math.round(minutes / 60)}h ago`;
-    }
-    return new Date(at).toLocaleString();
-};
 </script>
 
 <template>

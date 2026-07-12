@@ -1,6 +1,7 @@
 import type { AgentEvent, AskQuestion, ContextUsage, OauthAccount, TodoItem } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandboxClient";
+import { sseData, sseFrames } from "../sse";
 import type { CatalogOption } from "./catalog";
 import { formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus";
 
@@ -633,41 +634,14 @@ export class Conversation {
     }
 
     private async consume(body: ReadableStream<Uint8Array>, turn: TurnContext): Promise<void> {
-        const reader = body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = ``;
-
-        for (;;) {
-            const { done, value } = await reader.read();
-            if (done) {
-                break;
-            }
-            buffer += decoder.decode(value, { stream: true });
-
-            // SSE frames are separated by a blank line.
-            let separator = buffer.indexOf(`\n\n`);
-            while (separator !== -1) {
-                this.handleFrame(buffer.slice(0, separator), turn);
-                buffer = buffer.slice(separator + 2);
-                separator = buffer.indexOf(`\n\n`);
-            }
+        for await (const frame of sseFrames(body)) {
+            this.handleFrame(frame, turn);
         }
     }
 
     private handleFrame(frame: string, turn: TurnContext): void {
-        const dataLine = frame.split(`\n`).find((line) => line.startsWith(`data:`));
-        if (!dataLine) {
-            return;
-        }
-        const payload = dataLine.slice(5).trim();
-        if (payload.length === 0) {
-            return;
-        }
-
-        let event: AgentEvent;
-        try {
-            event = JSON.parse(payload) as AgentEvent;
-        } catch {
+        const event = sseData(frame) as AgentEvent | undefined;
+        if (event === undefined) {
             return;
         }
 
