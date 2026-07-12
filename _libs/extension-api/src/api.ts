@@ -71,6 +71,12 @@ export interface IntenticApi {
     readonly sandbox: {
         request(path: string, init?: RequestInit): Promise<Response>;
         json<T>(path: string, init?: RequestInit): Promise<T>;
+        // Whether the active sandbox is currently reachable — reactive when read inside a computed, so it
+        // drives host-provided vue-query `enabled` options.
+        reachable(): boolean;
+        // A cache key scoped to the ACTIVE sandbox — the required prefix for every host-provided vue-query
+        // key, so caches never bleed across a sandbox switch.
+        key(...parts: readonly string[]): readonly unknown[];
     };
     readonly workspace: {
         repos(): readonly RepoFacts[];
@@ -83,6 +89,13 @@ export interface IntenticApi {
         start(name: string): Promise<void>;
         stop(name: string): Promise<void>;
     };
+    // The shell's ONE global terminal panel — extensions aim it at a tmux session (a capability job, a dev
+    // server, an agent terminal); the host owns the panel itself.
+    readonly terminal: {
+        open(session: string): void;
+    };
+    // Navigate the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").
+    readonly navigate: (path: string) => void;
     readonly theme: {
         mode(): "light" | "dark";
         onDidChange(listener: (mode: "light" | "dark") => void): Disposable;

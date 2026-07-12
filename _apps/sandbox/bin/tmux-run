@@ -53,8 +53,12 @@ logfile=""
 # missing binary, opt-out, or a filter error all degrade to the raw capture — tail-capped when the caller
 # bounds what ships over stdout (the full output stays in the pane + pane log).
 emit() {
-    if [ "${INTENTIC_RUN_FILTER:-1}" != "0" ] && command -v agent-output-filter >/dev/null 2>&1; then
-        agent-output-filter "$cmd" "$1" "$SECONDS" "$logfile" < "$d/out" 2>/dev/null && return
+    # The filter backend is swappable for A/B benchmarking: INTENTIC_FILTER_CMD names any stdin→stdout filter
+    # (raw output in, compacted out) and defaults to the native agent-output-filter. An external cleaner that
+    # RUNS the command instead (rtk/headroom) is wired at the PreToolUse hook via a thin adapter, not here.
+    filter="${INTENTIC_FILTER_CMD:-agent-output-filter}"
+    if [ "${INTENTIC_RUN_FILTER:-1}" != "0" ] && command -v "$filter" >/dev/null 2>&1; then
+        "$filter" "$cmd" "$1" "$SECONDS" "$logfile" < "$d/out" 2>/dev/null && return
     fi
     if [ -n "${INTENTIC_RUN_OUTPUT_BYTES:-}" ]; then
         tail -c "$INTENTIC_RUN_OUTPUT_BYTES" "$d/out" 2>/dev/null

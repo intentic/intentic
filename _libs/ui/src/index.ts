@@ -6,6 +6,7 @@ export { default as CopyButton } from "./components/CopyButton.vue";
 export { default as Icon } from "./components/Icon.vue";
 export { default as InfoHint } from "./components/InfoHint.vue";
 export { default as Page } from "./components/Page.vue";
+export { default as ProgressRing } from "./components/ProgressRing.vue";
 export { default as PullToRefresh } from "./components/PullToRefresh.vue";
 export { default as Segmented } from "./components/Segmented.vue";
 export { default as StatusBadge, type StatusVariant } from "./components/StatusBadge.vue";
@@ -14,8 +15,17 @@ export { Theme } from "./styles/theme.js";
 export { installUi } from "./vue/plugin.js";
 export { vTw } from "./vue/tw.js";
 export { useHighlighter } from "./vue/useHighlighter.js";
+export { formatBytes, timeAgo } from "./format.js";
 export { type IconName, type IconSet, iconSets } from "./icons/iconSets.js";
 export { type ExplorerStyle, explorerStyles } from "./icons/explorerStyle.js";
+export {
+    categoryForEntry,
+    explorerColorClass,
+    type ExplorerTreatment,
+    explorerTreatment,
+    type FileCategory,
+    iconForEntry,
+} from "./icons/fileIcon.js";
 export { useExplorerStyle } from "./vue/useExplorerStyle.js";
 export { type CommandOs, useOsPreference } from "./vue/useOsPreference.js";
 export { type Device, useDevice } from "./vue/useDevice.js";

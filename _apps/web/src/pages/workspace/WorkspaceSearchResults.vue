@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { IqGroup, IqHit } from "@intentic-app/api-contract";
 import { computed, nextTick, ref } from "vue";
-import { iconForEntry } from "./fileIcon";
+import { iconForEntry } from "@intentic-app/ui";
 
 /* iq search results for the explorer sidebar: relevance-ranked file header rows + indented hit rows (line
  * number + snippet with the hit <mark>ed via the daemon's start/end offsets when present — semantic hits carry

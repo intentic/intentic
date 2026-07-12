@@ -11,7 +11,7 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useLayout } from "../composables/useLayout";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useQuickOpen } from "../composables/useQuickOpen";
-import { useReview } from "../composables/workspace/useReview";
+import { useChanges } from "../composables/workspace/useChanges";
 import { useSandbox } from "../composables/useSandbox";
 import AccountPanel from "./AccountPanel.vue";
 import ChatPanel from "./ChatPanel.vue";
@@ -38,8 +38,8 @@ const { capabilities } = useCapabilities();
 // Drafts is agent-driven and usually empty — its rail tile appears only once there's something to act on.
 const { drafts, invalid: invalidDrafts } = useDrafts();
 const { reachable } = useSandbox();
-// Unreviewed agent changes surface as a count badge on the Workspace rail tile, visible from any area.
-const review = useReview();
+// Uncommitted workspace changes surface as a count badge on the Workspace rail tile, visible from any area.
+const changes = useChanges();
 const layout = useLayout();
 const { poppedOut, pipBody, dock } = useChatPopout();
 const route = useRoute();
@@ -154,10 +154,10 @@ onUnmounted(() => {
                 <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initials(tile.label) }}</span>
                 <Icon v-else :name="tile.icon!" class="text-lg" />
                 <span
-                    v-if="tile.to === '/workspace' && review.count.value > 0"
+                    v-if="tile.to === '/workspace' && changes.count.value > 0"
                     class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
-                    v-tooltip.right="`${review.count.value} unreviewed agent ${review.count.value === 1 ? 'change' : 'changes'}`"
-                    >{{ review.count.value > 99 ? "99+" : review.count.value }}</span
+                    v-tooltip.right="`${changes.count.value} uncommitted ${changes.count.value === 1 ? 'change' : 'changes'}`"
+                    >{{ changes.count.value > 99 ? "99+" : changes.count.value }}</span
                 >
             </RouterLink>
 

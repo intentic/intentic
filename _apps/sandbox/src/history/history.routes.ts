@@ -10,14 +10,14 @@ export const createHistoryRoutes = (services: Services) => {
     return {
         list: i.list.handler(async () => ({ snapshots: await services.history.list() })),
         diff: i.diff.handler(async ({ input }) => {
-            const changes = await services.history.diff(input.id, input.base);
+            const changes = await services.history.diff(input.id);
             if (changes === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown snapshot" });
             }
             return { changes };
         }),
         fileDiff: i.fileDiff.handler(async ({ input }) => {
-            const diff = await services.history.fileDiff(input.id, input.scope, input.path, input.base);
+            const diff = await services.history.fileDiff(input.id, input.scope, input.path);
             if (diff === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown snapshot or scope" });
             }

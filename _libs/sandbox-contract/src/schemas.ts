@@ -11,8 +11,10 @@ import { z } from "zod";
 // a plan/question that no longer exists, or a missing repo/path, is an ORPCError thrown by the handler instead.
 export const OkSchema = z.object({ ok: z.literal(true) });
 
-// The three workspace repos, by role. Kept as a bare string on the wire (not an enum) so an unknown repo is a
-// handler-thrown NOT_FOUND — matching the daemon's prior 404 — rather than an input-validation rejection.
+// Which repo a git route targets: "root" (the /work workspace repo) or a directory name under
+// /work/repositories (the three roles + extra clones). Kept as a bare string on the wire (not an enum) so an
+// unknown repo is a handler-thrown NOT_FOUND — matching the daemon's prior 404 — rather than an
+// input-validation rejection.
 export const RepoParamSchema = z.object({ repo: z.string() });
 
 // ---- agent ----
@@ -155,14 +157,42 @@ export const IntenticRunSchema = z.object({ args: z.array(z.string()) });
 
 // ---- git ----
 
-export const CommitSchema = RepoParamSchema.extend({ message: z.string().min(1) });
+export const CommitSchema = RepoParamSchema.extend({
+    message: z.string().min(1),
+    // Repo-relative paths to commit; absent ⇒ commit everything changed in the repo.
+    paths: z.array(z.string().min(1)).max(500).optional(),
+});
+export const DiscardSchema = RepoParamSchema.extend({
+    // Repo-relative paths to discard; absent ⇒ discard every uncommitted change in the repo.
+    paths: z.array(z.string().min(1)).max(500).optional(),
+});
 export const PushSchema = RepoParamSchema.extend({ branch: z.string().min(1) });
 export const GitFileQuerySchema = RepoParamSchema.extend({ path: z.string().min(1) });
 export const GitFileWriteSchema = RepoParamSchema.extend({ path: z.string().min(1), content: z.string() });
+export const GitFileDiffQuerySchema = RepoParamSchema.extend({ path: z.string().min(1) });
 export const GitStatusSchema = z.object({ branch: z.string(), dirty: z.boolean(), files: z.array(z.string()) });
 export const GitFilesSchema = z.object({ files: z.array(z.string()) });
 export const GitFileSchema = z.object({ path: z.string(), content: z.string() });
 export const CommitResultSchema = z.object({ committed: z.boolean() });
+// One uncommitted change in a repo's working tree (status vs HEAD, untracked included).
+export const GitChangeSchema = z.object({
+    // Repo-relative path with forward slashes; for "renamed" the NEW path (`from` carries the old one).
+    path: z.string(),
+    status: z.enum(["added", "modified", "deleted", "renamed", "type-changed"]),
+    from: z.string().optional(),
+});
+export type GitChange = z.infer<typeof GitChangeSchema>;
+export const RepoChangesSchema = z.object({
+    // The {repo} param the per-repo git routes accept: "root" or a directory name under repositories/.
+    repo: z.string(),
+    // Absent on an unborn HEAD (a repo initialized but never committed).
+    branch: z.string().optional(),
+    changes: z.array(GitChangeSchema),
+});
+export type RepoChanges = z.infer<typeof RepoChangesSchema>;
+// The aggregated review set across every repo (root + repositories/*); only repos with changes appear.
+export const GitChangesSchema = z.object({ repos: z.array(RepoChangesSchema) });
+export type GitChanges = z.infer<typeof GitChangesSchema>;
 
 // ---- history: daemon-owned workspace snapshots (diff + restore) ----
 // The daemon snapshots /work into bare git dirs on /history (outside the agent's reach) after every turn and on
@@ -181,8 +211,6 @@ export const SnapshotSchema = z.object({
 export type Snapshot = z.infer<typeof SnapshotSchema>;
 export const SnapshotsListSchema = z.object({ snapshots: z.array(SnapshotSchema) });
 export const SnapshotIdSchema = z.object({ id: z.string().min(1) });
-// `base` (optional) diffs the snapshot against an earlier one — the aggregate change since then, for review.
-export const SnapshotDiffQuerySchema = SnapshotIdSchema.extend({ base: z.string().min(1).optional() });
 export const SnapshotChangeSchema = z.object({
     scope: z.string(),
     // Scope-relative path with forward slashes.
@@ -195,17 +223,16 @@ export const SnapshotFileDiffQuerySchema = z.object({
     id: z.string().min(1),
     scope: z.string().min(1),
     path: z.string().min(1),
-    base: z.string().min(1).optional(),
 });
-// Both sides of a file at a snapshot vs its parent; an absent side means the file was added/deleted. Binary or
-// oversized content is flagged instead of shipped.
-export const SnapshotFileDiffSchema = z.object({
+// Both sides of a file diff — a snapshot vs its parent, or a working tree vs HEAD; an absent side means the
+// file was added/deleted. Binary or oversized content is flagged instead of shipped.
+export const FileDiffSchema = z.object({
     before: z.string().optional(),
     after: z.string().optional(),
     binary: z.boolean().optional(),
     truncated: z.boolean().optional(),
 });
-export type SnapshotFileDiff = z.infer<typeof SnapshotFileDiffSchema>;
+export type FileDiff = z.infer<typeof FileDiffSchema>;
 // Manual snapshot result: id is absent when nothing changed since the last snapshot.
 export const SnapshotResultSchema = z.object({ id: z.string().optional() });
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { cmp, InfoHint, Page, Segmented } from "@intentic-app/ui";
 import { computed, ref, watch } from "vue";
-import { formatBytes, timeAgo } from "../../pages/workspace/format";
+import { formatBytes, timeAgo } from "@intentic-app/ui";
 import { useLogs, useLogTail } from "./useLogs";
 
 /* The logs extension: the debug surface for everything the sandbox records under /history/logs — terminal

@@ -28,10 +28,10 @@ const openAtLine = (path: string, line: number): void => {
     openLine.value = line;
 };
 
-// A changed file from the history panel opens as a diff tab in the main area. Re-opening the same snapshot file
-// refreshes its content in place rather than stacking a duplicate tab.
+// A changed file from the Changes or History panel opens as a diff tab in the main area. Re-opening the same
+// source's file refreshes its content in place rather than stacking a duplicate tab.
 const openDiff = (payload: DiffTabPayload): void => {
-    const id = diffTabId(payload.snapshotId, payload.scope, payload.path);
+    const id = diffTabId(payload.key, payload.scope, payload.path);
     const tab: WorkspaceTab = {
         kind: `diff`,
         id,

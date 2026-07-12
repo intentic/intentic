@@ -19,7 +19,7 @@ import ChatModeMenu from "./ChatModeMenu.vue";
 import ChatProviderMenu from "./ChatProviderMenu.vue";
 import ChatTabs from "./ChatTabs.vue";
 import ChatTabsMobile from "./ChatTabsMobile.vue";
-import ProgressRing from "./ProgressRing.vue";
+import { ProgressRing } from "@intentic-app/ui";
 import ProviderLogo from "./ProviderLogo.vue";
 
 /* The shared assistant. Presentational only — all state lives in the useChat singleton, so the transcript

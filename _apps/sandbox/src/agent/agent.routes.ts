@@ -36,7 +36,7 @@ const HISTORY_CHAR_CAP = 24_000;
 const withHistory = (prompt: string, history: NonNullable<AgentTurn["history"]>): string => {
     const lines: string[] = [];
     let used = 0;
-    for (const message of [...history].reverse()) {
+    for (const message of history.toReversed()) {
         const text =
             message.text.length > HISTORY_MESSAGE_CHAR_CAP ? `${message.text.slice(0, HISTORY_MESSAGE_CHAR_CAP)}\n… (truncated)` : message.text;
         const line = `${message.role === "user" ? "User" : "Assistant"}: ${text}`;
@@ -280,6 +280,11 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         // cached system+tools prefix stays byte-stable and the provider prompt cache is reused across the session.
         const promptWithAttachments = attachmentPaths.length > 0 ? withAttachmentNote(base.prompt, attachmentPaths) : base.prompt;
         const prompt = stableSystemPrompt && note !== undefined ? `${note}\n\n---\n\n${promptWithAttachments}` : promptWithAttachments;
+        // System-prompt suffix: the delegation note (unless stableSystemPrompt moved it into the user message)
+        // followed by the terse-output steer. Both are stable across a session, so appending here keeps the cached
+        // system+tools prefix intact (the point of stableSystemPrompt).
+        const systemAppend =
+            [...(note !== undefined && !stableSystemPrompt ? [note] : []), ...(terseOutput ? [TERSE_NOTE] : [])].join("\n\n") || undefined;
         run = services.agent;
         request = {
             ...base,
@@ -298,9 +303,8 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
             // Forward the Bash output-cleaner spec (default "" ⇒ omit ⇒ filter's all-on default).
             ...(outputCleaners !== "" ? { outputCleaners } : {}),
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
-            // Off (default): append the note to the preset system prompt (prior behavior). On: it rode the user
-            // message above instead, so nothing is appended and the system prompt stays byte-stable/cacheable.
-            ...(note !== undefined && !stableSystemPrompt ? { systemAppend: note } : {}),
+            // Delegation note (when stableSystemPrompt left it here) + terseOutput steer, composed above.
+            ...(systemAppend !== undefined ? { systemAppend } : {}),
         };
     }
     // Bring every repo with a remote up to its latest commit before the agent reads the tree, so the turn works

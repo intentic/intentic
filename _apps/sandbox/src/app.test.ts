@@ -225,6 +225,10 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         commitAll: async () => false,
         push: async () => {},
         clone: async () => {},
+        changedFiles: async () => ({ changes: [] }),
+        commitPaths: async () => false,
+        discardPaths: async () => {},
+        fileDiff: async () => ({}),
     },
     files: fakeFiles(),
     workspaceTree: async () => ({ root: "/work", tree: [], truncated: false }),
@@ -1254,6 +1258,93 @@ test("git.writeFile writes a contained file and rejects a path escape", async ()
     expect(writes).toEqual([{ path: "/work/repositories/intent/deploy.config.ts", content: "next" }]);
     expect(await errorCode(client.git.writeFile({ repo: "intent", path: "../escape", content: "x" }))).toBe("BAD_REQUEST");
     expect(writes).toHaveLength(1);
+});
+
+test("git.changes aggregates dirty repos across root + roles + clones, skipping clean and broken ones", async () => {
+    const workspace = tempWorkspace([{ name: "intent" }, { name: "shop", extra: true }]);
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                git: {
+                    ...services().git,
+                    changedFiles: async (dir) => {
+                        if (dir === workspace.root) {
+                            return { branch: "main", changes: [{ path: "notes.md", status: "added" as const }] };
+                        }
+                        if (dir === join(workspace.repositories, "shop")) {
+                            throw new Error("broken repo");
+                        }
+                        return { changes: [] };
+                    },
+                },
+            }),
+        ),
+    );
+    expect(await client.git.changes()).toEqual({
+        repos: [{ repo: "root", branch: "main", changes: [{ path: "notes.md", status: "added" }] }],
+    });
+});
+
+test("git.commit routes paths to the per-path commit and no paths to commit-all", async () => {
+    const calls: string[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                git: {
+                    ...services().git,
+                    commitAll: async (dir, message) => {
+                        calls.push(`all ${dir} ${message}`);
+                        return true;
+                    },
+                    commitPaths: async (dir, message, paths) => {
+                        calls.push(`paths ${dir} ${message} ${paths.join(",")}`);
+                        return true;
+                    },
+                },
+            }),
+        ),
+    );
+    expect(await client.git.commit({ repo: "root", message: "m1", paths: ["notes.md"] })).toEqual({ committed: true });
+    expect(await client.git.commit({ repo: "intent", message: "m2" })).toEqual({ committed: true });
+    expect(calls).toEqual(["paths /work m1 notes.md", "all /work/repositories/intent m2"]);
+});
+
+test("git.discard forwards paths and records the worktree change as a user write", async () => {
+    const discards: (readonly string[] | undefined)[] = [];
+    let notified = 0;
+    const client = clientFor(
+        createApp(
+            services({
+                history: fakeHistory({ notifyUserWrite: () => void notified++ }),
+                git: {
+                    ...services().git,
+                    discardPaths: async (_dir, paths) => {
+                        discards.push(paths);
+                    },
+                },
+            }),
+        ),
+    );
+    expect(await client.git.discard({ repo: "root", paths: ["junk.txt"] })).toEqual({ ok: true });
+    expect(await client.git.discard({ repo: "root" })).toEqual({ ok: true });
+    expect(discards).toEqual([["junk.txt"], undefined]);
+    expect(notified).toBe(2);
+});
+
+test("git.fileDiff returns the working diff and BAD_REQUESTs a path escape", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                git: {
+                    ...services().git,
+                    fileDiff: async (_dir, path) => (path === "notes.md" ? { before: "one\n", after: "two\n" } : {}),
+                },
+            }),
+        ),
+    );
+    expect(await client.git.fileDiff({ repo: "root", path: "notes.md" })).toEqual({ before: "one\n", after: "two\n" });
+    expect(await errorCode(client.git.fileDiff({ repo: "root", path: "../escape" }))).toBe("BAD_REQUEST");
 });
 
 test("workspace.tree returns the full working tree from the walker", async () => {

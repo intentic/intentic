@@ -7,7 +7,7 @@ import { commands, executeCommand, type RegisteredCommand } from "../composables
 import { useQuickOpen } from "../composables/useQuickOpen";
 import { useWorkspaceSearch } from "../composables/workspace/useWorkspaceSearch";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
-import { iconForEntry } from "../pages/workspace/fileIcon";
+import { iconForEntry } from "@intentic-app/ui";
 
 /* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type — the sandbox
  * daemon's iq `files` search — and opens the pick as an editor tab. Mounted once in the desktop shell and opened

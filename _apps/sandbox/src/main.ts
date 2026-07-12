@@ -16,6 +16,7 @@ import { createDiscordSource } from "./discord/listener-source.js";
 import { stopVoice } from "./discord/voice.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
+import { ensureRootRepo } from "./git/root-repo.js";
 import { reconcileLspSkill } from "./settings/lsp-skill.js";
 import { composeEnvironment } from "./environment/environment.js";
 import { loadConfig } from "./env.config.js";
@@ -30,6 +31,7 @@ import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
 import { linkClaudeProjects } from "./sessions/session-store.js";
 import { createAnnouncer } from "./system/announce.js";
 import { seedPairing } from "./system/sync.js";
+import { reapIdleWebSessions } from "./system/terminal-session.js";
 import { startVersionCheck } from "./system/version-check.js";
 import { startWorkspaceWatch } from "./workspace/workspace-watch.js";
 
@@ -63,6 +65,12 @@ const main = async (): Promise<void> => {
     // Awaited, unlike the best-effort steps below, because a turn spawning the CLI mid-link would fork stores.
     await linkClaudeProjects(services.workspace.root).catch((error: unknown) =>
         logger.warn({ err: error }, "claude session store not persisted — transcripts will not survive a rebuild"),
+    );
+
+    // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge
+    // excludes. Awaited (cheap, and the git routes assume it), but a failure must not take the daemon down.
+    await ensureRootRepo(services.workspace, config.historyRoot).catch((error: unknown) =>
+        logger.warn({ err: error }, "root workspace repo not ensured — the Changes review will degrade"),
     );
 
     // Recompose the environment overlay from the manifest — converges fragment drift (a daemon update that
@@ -114,6 +122,11 @@ const main = async (): Promise<void> => {
     void applyTmuxLogHooks(config.historyRoot);
     void pruneLogFiles(logsRoot(config.historyRoot));
     const logsSweep = setInterval(() => void pruneLogFiles(logsRoot(config.historyRoot)), 3_600_000);
+
+    // Abandoned interactive shells: web-* sessions are exempt from the boot sweep (they're the user's own), so
+    // detached ones idle for days would pile up until the container restarts — reap them at boot + hourly.
+    void reapIdleWebSessions();
+    const webSessionSweep = setInterval(() => void reapIdleWebSessions(), 3_600_000);
 
     const app = createApp(services);
     // The interactive-terminal WebSocket (/system/terminal) rides node-server's native WS support: `ws` in
@@ -168,6 +181,7 @@ const main = async (): Promise<void> => {
     const shutdown = (): void => {
         logger.info("shutting down intentic sandbox daemon…");
         clearInterval(logsSweep);
+        clearInterval(webSessionSweep);
         scheduler.stop();
         versionCheck.stop();
         announcer.stop();

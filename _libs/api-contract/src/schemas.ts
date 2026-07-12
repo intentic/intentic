@@ -45,9 +45,12 @@ import {
     SandboxSettingsSchema,
     ServiceEntrySchema,
     ServiceKindSchema,
+    FileDiffSchema,
+    GitChangeSchema,
+    GitChangesSchema,
+    RepoChangesSchema,
     SnapshotChangeSchema,
     SnapshotDiffSchema,
-    SnapshotFileDiffSchema,
     SnapshotSchema,
     SnapshotsListSchema,
     SnapshotTriggerSchema,
@@ -196,14 +199,20 @@ export type IqFreshness = z.infer<typeof IqFreshnessSchema>;
 export type IqResult = z.infer<typeof IqResultSchema>;
 export type IqSearchMode = z.infer<typeof IqSearchQuerySchema>["mode"];
 
-// Workspace history (daemon-captured snapshots). Daemon names: Snapshot / SnapshotsList / SnapshotDiff /
-// SnapshotFileDiff — kept under the platform's historical *Response names as derived aliases.
+// Workspace history (daemon-captured snapshots). Daemon names: Snapshot / SnapshotsList / SnapshotDiff —
+// kept under the platform's historical *Response names as derived aliases.
 export type SnapshotTrigger = z.infer<typeof SnapshotTriggerSchema>;
 export type WorkspaceSnapshot = z.infer<typeof SnapshotSchema>;
 export type SnapshotsResponse = z.infer<typeof SnapshotsListSchema>;
 export type SnapshotChange = z.infer<typeof SnapshotChangeSchema>;
 export type SnapshotDiffResponse = z.infer<typeof SnapshotDiffSchema>;
-export type SnapshotFileDiffResponse = z.infer<typeof SnapshotFileDiffSchema>;
+// Shared by the snapshot file diff and the working-tree (Changes review) file diff.
+export type FileDiffResponse = z.infer<typeof FileDiffSchema>;
+
+// The Changes review (uncommitted work per repo, VSCode-SCM style).
+export type GitChange = z.infer<typeof GitChangeSchema>;
+export type RepoChanges = z.infer<typeof RepoChangesSchema>;
+export type GitChangesResponse = z.infer<typeof GitChangesSchema>;
 
 // ---- platform-native (owned by the platform; NOT daemon wire shapes) ----
 

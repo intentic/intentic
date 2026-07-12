@@ -7,8 +7,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { reportOpenPath } from "../../composables/usePresence";
+import { useChanges } from "../../composables/workspace/useChanges";
 import { useMonaco } from "../../composables/workspace/useMonaco";
-import { useReview } from "../../composables/workspace/useReview";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute";
 import { useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
@@ -17,7 +17,7 @@ import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import DiffView from "./DiffView.vue";
 import type { DiffTabPayload } from "./workspaceTabs";
 import { filesToEntries } from "./dropEntries";
-import { iconForEntry } from "./fileIcon";
+import { iconForEntry } from "@intentic-app/ui";
 import FileViewer from "./FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
@@ -34,7 +34,7 @@ import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 const route = useRoute();
 const router = useRouter();
 const layout = useLayout();
-const review = useReview();
+const changes = useChanges();
 const {
     tree,
     truncated,
@@ -104,7 +104,7 @@ const fileName = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1)
 const segment = computed<SidebarPanel>({ get: () => layout.sidebarPanel.value, set: (value) => layout.setSidebarPanel(value) });
 const segmentOptions = computed(() => [
     { label: `Files`, value: `files` as const, title: `Browse the workspace files` },
-    { label: `Changes`, value: `changes` as const, title: `Review what the agent changed`, badge: review.count.value },
+    { label: `Changes`, value: `changes` as const, title: `Review uncommitted changes`, badge: changes.count.value },
     { label: `History`, value: `history` as const, title: `Snapshot timeline` },
 ]);
 

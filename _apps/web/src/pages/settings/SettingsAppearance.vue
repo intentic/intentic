@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Card, useExplorerStyle, useIconSet, useTheme } from "@intentic-app/ui";
-import { explorerTreatment } from "../workspace/fileIcon";
+import { explorerTreatment } from "@intentic-app/ui";
 
 /* Appearance: how the workspace looks for this account — color scheme (data-mode), brand style (data-theme),
  * icon set, and file-tree treatment. Each recolors/re-renders the whole UI live, so most of the app is the

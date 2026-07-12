@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic-app/ui";
 import { computed } from "vue";
-import { formatBytes } from "./format";
+import { formatBytes } from "@intentic-app/ui";
 
 /* The non-renderable states of the viewer: a binary file (no inline preview), a file too large to preview, or
  * an empty file. Binary/too-large offer a Download (the dispatcher fetches the bytes and saves them). */

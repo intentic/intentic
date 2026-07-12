@@ -6,7 +6,10 @@ import { watch } from "vue";
 import { registerCommand, executeCommand } from "../composables/commands/useCommands";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
 import { sandboxJson, sandboxRequest } from "../composables/sandboxClient";
+import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
+import { sandboxKey, useSandbox } from "../composables/useSandbox";
 import { registerView } from "../extensions/registry";
+import { router } from "../router";
 
 /* The host's fulfillment of IntenticApi, one instance per activated extension. Every registration is gated on
  * the APPROVED manifest's declarations (views/commands/settings/processes) — the manifest the owner saw at
@@ -102,6 +105,8 @@ export const createExtensionApi = (
         sandbox: {
             request: (path, init) => sandboxRequest(path, init),
             json: (path, init) => sandboxJson(path, init),
+            reachable: () => useSandbox().reachable.value === true,
+            key: (...parts) => sandboxKey(...parts),
         },
         workspace: {
             repos: () => host.repos(),
@@ -119,6 +124,12 @@ export const createExtensionApi = (
             stop: async (name) => {
                 await sandboxJson(`${processPath(name)}/stop`, { method: `POST` });
             },
+        },
+        terminal: {
+            open: (session) => useTerminalPanel().openFocused(session),
+        },
+        navigate: (path) => {
+            void router.push(path);
         },
         theme: {
             mode: () => scheme.value,

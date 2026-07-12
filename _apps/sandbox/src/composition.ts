@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import type { AgentEvent, IntenticLine, WorkspaceChildren, WorkspaceTree } from "@intentic/sandbox-contract";
+import type { AgentEvent, FileDiff, GitChange, IntenticLine, WorkspaceChildren, WorkspaceTree } from "@intentic/sandbox-contract";
 import {
     type GitCloneOptions,
     type GitStatus,
@@ -28,6 +28,7 @@ import { type CodexReauthNeeded, type CodexStore, fileCodexStore, probeCodexHeal
 import { locateCodexThread } from "./sessions/codex-sessions.js";
 import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import type { Config } from "./env.config.js";
+import { changedFiles, commitPaths, discardPaths, workingFileDiff } from "./git/changes.js";
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
@@ -135,6 +136,11 @@ export interface Services {
         readonly checkout: (dir: string, ref: string) => Promise<void>;
         readonly head: (dir: string) => Promise<string>;
         readonly sync: (dir: string) => Promise<GitSyncResult>;
+        // The Changes review verbs (git/changes.ts): working-tree status, per-path commit/discard, HEAD↔worktree diff.
+        readonly changedFiles: (dir: string) => Promise<{ branch?: string; changes: GitChange[] }>;
+        readonly commitPaths: (dir: string, message: string, paths: readonly string[], author: { name: string; email: string }) => Promise<boolean>;
+        readonly discardPaths: (dir: string, paths?: readonly string[]) => Promise<void>;
+        readonly fileDiff: (dir: string, path: string) => Promise<FileDiff>;
     };
     readonly files: {
         readonly read: (absPath: string) => Promise<string | undefined>;
@@ -273,6 +279,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
             checkout: gitCheckout,
             head: gitHead,
             sync: gitSync,
+            changedFiles,
+            commitPaths,
+            discardPaths,
+            fileDiff: workingFileDiff,
         },
         files: {
             read: readWorkspaceFile,

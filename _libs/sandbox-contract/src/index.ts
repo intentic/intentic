@@ -42,6 +42,7 @@ export { workspaceContract } from "./contracts/workspace.contract.js";
 export * from "./events.js";
 export * from "./hostnames.js";
 export * from "./schemas.js";
+export * from "./terminal-protocol.js";
 
 // The aggregated contract — implemented on the server by the per-domain route factories and consumed by the
 // browser's typed oRPC client (ContractRouterClient<typeof sandboxContract>). The wire paths it declares are

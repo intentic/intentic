@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { access, mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { type Snapshot, type SnapshotChange, type SnapshotFileDiff, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
+import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { isValidRepoName } from "../workspace/repos.js";
@@ -14,17 +14,20 @@ import { REPO_ROLES, type WorkspacePaths } from "../workspace/workspace.js";
 // commit-tree → update-ref refs/snapshots/head). The agent's own repos are never touched — no commits land on
 // its branches, no HEAD/index moves — and the history lives outside /work, so workspace accidents (rm -rf,
 // git clean, a deleted .git) can't destroy it. One shared uuid in every scope's commit message groups the
-// per-scope commits into a single logical "workspace snapshot".
+// per-scope commits into a single logical "workspace snapshot". A restore rewrites worktree files only — the
+// real repos' HEADs stay put, so the restored-vs-HEAD delta surfaces in the Changes review afterwards
+// (intended: restore is the safety net, commit/discard is the review).
 
 const exec = promisify(execFile);
 
 const SNAPSHOT_INTERVAL_MS = 60_000;
 // Trailing debounce for user-write pings — long enough to coalesce a sequential multi-file drop into one snapshot.
 const USER_WRITE_DEBOUNCE_MS = 2_000;
-// git's well-known empty tree — the diff base for a scope's first snapshot.
-const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-// File contents above this are flagged `truncated` instead of shipped to the diff UI.
-const MAX_FILE_DIFF_BYTES = 512 * 1024;
+// git's well-known empty tree — the diff base for a scope's first snapshot (and an unborn HEAD in git/changes.ts).
+export const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+// File contents above this are flagged `truncated` instead of shipped to the diff UI (shared with the git
+// routes' working-tree file diff so both diff surfaces guard identically).
+export const MAX_FILE_DIFF_BYTES = 512 * 1024;
 
 // Runs git with the scope's detached-worktree env; injectable so the command sequences are unit-testable
 // without a real repo (mirrors git.ts's GitRunner seam, which can't carry env/cwd separately).
@@ -67,8 +70,9 @@ const COMMON_EXCLUDES = [
     ".gradle/",
 ];
 // The root scope additionally skips /repositories/ (each repo is its own scope — also avoids git's
-// embedded-repo gitlink handling) and /.intentic/ (daemon-internal manifests + credentials).
-const ROOT_EXCLUDES = ["/repositories/", "/.intentic/", ...COMMON_EXCLUDES];
+// embedded-repo gitlink handling) and /.intentic/ (daemon-internal manifests + credentials). The real /work
+// repo (git/root-repo.ts) shares this list so history and review agree on what's versionable.
+export const ROOT_EXCLUDES = ["/repositories/", "/.intentic/", ...COMMON_EXCLUDES];
 
 export interface WorkspaceHistory {
     readonly start: () => void;
@@ -79,10 +83,9 @@ export interface WorkspaceHistory {
     // into one snapshot("user") per user gesture, so a 100-file drop is one timeline entry, not a hundred.
     readonly notifyUserWrite: () => void;
     readonly list: () => Promise<Snapshot[]>;
-    // undefined ⇒ unknown snapshot id (routes map it to NOT_FOUND). `base` compares the snapshot against an
-    // arbitrary earlier snapshot (the aggregate change across every turn since then) instead of its own parent.
-    readonly diff: (id: string, base?: string) => Promise<SnapshotChange[] | undefined>;
-    readonly fileDiff: (id: string, scope: string, path: string, base?: string) => Promise<SnapshotFileDiff | undefined>;
+    // undefined ⇒ unknown snapshot id (routes map it to NOT_FOUND). What the snapshot changed vs its parent.
+    readonly diff: (id: string) => Promise<SnapshotChange[] | undefined>;
+    readonly fileDiff: (id: string, scope: string, path: string) => Promise<FileDiff | undefined>;
     readonly restore: (id: string) => Promise<boolean>;
 }
 
@@ -144,12 +147,12 @@ export const createWorkspaceHistory = (
         await writeFile(join(scope.gitDir, "info", "exclude"), `${excludes.join("\n")}\n`);
     };
 
-    // Rewrite the --separate-git-dir pointer file if the agent deleted it (nested scopes only).
+    // Rewrite the --separate-git-dir pointer file if the agent deleted it ("root" heals the /work repo's).
     const healGitPointer = async (scope: Scope): Promise<void> => {
-        if (scope.name === "root" || (await exists(join(scope.worktree, ".git")))) {
+        if (await exists(join(scope.worktree, ".git"))) {
             return;
         }
-        const realGitDir = repoGitDir(historyRoot, scope.name.slice("repositories/".length));
+        const realGitDir = repoGitDir(historyRoot, scope.name === "root" ? "root" : scope.name.slice("repositories/".length));
         if (await exists(realGitDir)) {
             await writeFile(join(scope.worktree, ".git"), `gitdir: ${realGitDir}\n`);
         }
@@ -423,61 +426,30 @@ export const createWorkspaceHistory = (
             userWriteTimer.unref();
         },
         list: async () => (await groups()).map(({ id, at, trigger, scopes }) => ({ id, at, trigger, scopes })),
-        diff: async (id, base) => {
+        diff: async (id) => {
             const group = await findGroup(id);
             if (group === undefined) {
                 return undefined;
             }
-            // Default: what this snapshot changed vs its own parent.
-            if (base === undefined) {
-                const changes: SnapshotChange[] = [];
-                for (const [name, sha] of group.commits) {
-                    const scope = scopeOf(name);
-                    changes.push(...(await scopeDiff(scope, await parentOf(scope, sha), sha)));
-                }
-                return changes;
-            }
-            // Aggregate: every scope's net change between the base snapshot's moment and this one's.
-            const baseGroup = await findGroup(base);
-            if (baseGroup === undefined) {
-                return undefined;
-            }
             const changes: SnapshotChange[] = [];
-            for (const scope of await knownScopes()) {
-                const from = (await stateAt(scope, baseGroup)) ?? EMPTY_TREE;
-                const to = (await stateAt(scope, group)) ?? EMPTY_TREE;
-                if (from !== to) {
-                    changes.push(...(await scopeDiff(scope, from, to)));
-                }
+            for (const [name, sha] of group.commits) {
+                const scope = scopeOf(name);
+                changes.push(...(await scopeDiff(scope, await parentOf(scope, sha), sha)));
             }
             return changes;
         },
-        fileDiff: async (id, scopeName, path, base) => {
+        fileDiff: async (id, scopeName, path) => {
             const group = await findGroup(id);
             if (group === undefined) {
                 return undefined;
             }
             const scope = scopeOf(scopeName);
-            // Default: this snapshot's commit vs its parent. Aggregate (`base` set): the scope's state at each moment.
-            let fromSha: string;
-            let toSha: string;
-            if (base === undefined) {
-                const sha = group.commits.get(scopeName);
-                if (sha === undefined) {
-                    return undefined;
-                }
-                fromSha = await parentOf(scope, sha);
-                toSha = sha;
-            } else {
-                const baseGroup = await findGroup(base);
-                if (baseGroup === undefined) {
-                    return undefined;
-                }
-                fromSha = (await stateAt(scope, baseGroup)) ?? EMPTY_TREE;
-                toSha = (await stateAt(scope, group)) ?? EMPTY_TREE;
+            const sha = group.commits.get(scopeName);
+            if (sha === undefined) {
+                return undefined;
             }
-            const before = await fileAt(scope, fromSha, path);
-            const after = await fileAt(scope, toSha, path);
+            const before = await fileAt(scope, await parentOf(scope, sha), path);
+            const after = await fileAt(scope, sha, path);
             return {
                 ...(before?.content !== undefined ? { before: before.content } : {}),
                 ...(after?.content !== undefined ? { after: after.content } : {}),

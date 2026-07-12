@@ -1,4 +1,4 @@
-import type { SnapshotDiffResponse, SnapshotFileDiffResponse, SnapshotsResponse } from "@intentic-app/api-contract";
+import type { FileDiffResponse, SnapshotDiffResponse, SnapshotsResponse } from "@intentic-app/api-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { sandboxJson } from "../sandboxClient";
@@ -13,9 +13,11 @@ import { sandboxKey, useSandbox } from "../useSandbox";
 const busy = ref(false);
 const actionError = ref<string | undefined>(undefined);
 
-// `base` (optional) diffs a snapshot against an earlier one — the aggregate change since then (the Changes review
-// panel); omitted, it diffs against the snapshot's own parent (the History timeline's per-snapshot view).
-const baseParam = (base?: string): string => (base !== undefined ? `&base=${encodeURIComponent(base)}` : ``);
+const diff = (id: string): Promise<SnapshotDiffResponse> => sandboxJson<SnapshotDiffResponse>(`/history/diff?id=${encodeURIComponent(id)}`);
+const fileDiff = (id: string, scope: string, path: string): Promise<FileDiffResponse> =>
+    sandboxJson<FileDiffResponse>(
+        `/history/file-diff?id=${encodeURIComponent(id)}&scope=${encodeURIComponent(scope)}&path=${encodeURIComponent(path)}`,
+    );
 
 export function useHistory() {
     const { reachable } = useSandbox();
@@ -30,13 +32,6 @@ export function useHistory() {
     const snapshots = computed(() => query.data.value?.snapshots ?? []);
     const error = computed(() => (query.error.value ? query.error.value.message : undefined));
 
-    const diff = (id: string, base?: string): Promise<SnapshotDiffResponse> =>
-        sandboxJson<SnapshotDiffResponse>(`/history/diff?id=${encodeURIComponent(id)}${baseParam(base)}`);
-    const fileDiff = (id: string, scope: string, path: string, base?: string): Promise<SnapshotFileDiffResponse> =>
-        sandboxJson<SnapshotFileDiffResponse>(
-            `/history/file-diff?id=${encodeURIComponent(id)}&scope=${encodeURIComponent(scope)}&path=${encodeURIComponent(path)}${baseParam(base)}`,
-        );
-
     const restore = async (id: string): Promise<void> => {
         actionError.value = undefined;
         busy.value = true;
@@ -49,8 +44,10 @@ export function useHistory() {
             // such discriminator, so the exact sandboxKey match is fine there.
             await queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
             await queryClient.invalidateQueries({ queryKey: sandboxKey(`history`, `snapshots`) });
-        } catch (error) {
-            actionError.value = error instanceof Error ? error.message : `Restore failed.`;
+            // A restore never moves the repos' HEADs, so the restored-vs-HEAD delta IS the new review set.
+            await queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) });
+        } catch (caught) {
+            actionError.value = caught instanceof Error ? caught.message : `Restore failed.`;
         } finally {
             busy.value = false;
         }

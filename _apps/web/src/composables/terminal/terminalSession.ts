@@ -1,42 +1,54 @@
 import { FitAddon } from "@xterm/addon-fit";
+import { SerializeAddon } from "@xterm/addon-serialize";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
+import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
 import { useGoogleIdentity } from "../useGoogleIdentity";
 import { useSandbox } from "../useSandbox";
 import "@xterm/xterm/css/xterm.css";
 
-/* One xterm ↔ one tmux session over the daemon's /system/terminal WebSocket — the shared core under BOTH
- * terminal surfaces: the workspace panel's tabs (useTerminal) and a panel page's embedded dev-server terminal
- * (TerminalView). Each session owns a persistent host div (xterm 6 must be open()ed exactly once, so the div
- * moves between containers instead of being rebuilt), auto-reconnects a dropped socket with backoff, and pings
- * every 30s against tunnel idle-reaping. The daemon's `exit` frame (the tmux client ended: shell exited, or an
- * attach-only `panel-*` session doesn't exist) is TERMINAL — it stops reconnection and hands off to `onExit`,
- * so a dead session can't spin an attach-fail loop. */
-
-// Server→client frames (JSON). `data` is raw pty output; `exit` fires when the tmux client ends.
-type ServerMessage = { readonly type: "data"; readonly data: string } | { readonly type: "exit"; readonly code: number };
+/* One xterm ↔ one tmux session over the daemon's /system/terminal WebSocket — the shared core under the
+ * terminal panel's tabs (useTerminal). Each session owns a persistent host div (xterm 6 must be open()ed
+ * exactly once, so the div moves between containers instead of being rebuilt), auto-reconnects a dropped
+ * socket with backoff, and pings every 30s against tunnel idle-reaping. The daemon's `exit` frame (the tmux
+ * client ended: shell exited, or an attach-only `panel-*` session doesn't exist) is TERMINAL — it stops
+ * reconnection and hands off to `onExit`, so a dead session can't spin an attach-fail loop. */
 
 const PING_MS = 30_000;
 const RETRY_MS = 1000;
-const MAX_RETRY_MS = 5000;
+const MAX_RETRY_MS = 30_000;
+// A connection that lived this long was healthy — its drop resets the backoff. Shorter lives (refused,
+// accept-then-crash) keep doubling, so a broken daemon is never hammered on a tight loop.
+const STABLE_MS = 5000;
+// The server answers every ping with a pong, so a healthy connection ALWAYS sees a frame within PING_MS —
+// silence this long means half-open; close() hands the socket to the normal reconnect path.
+const STALE_MS = 90_000;
+// Scrollback snapshots (page-reload survival) above this size aren't worth the sessionStorage quota.
+const SCROLLBACK_MAX_CHARS = 400_000;
+const SCROLLBACK_LINES = 1000;
 
 export type TerminalSession = {
     readonly name: string;
     readonly term: Terminal;
     readonly fit: FitAddon;
+    readonly serialize: SerializeAddon;
     // Persistent xterm mount — moves in/out of containers as the surface shows/hides it.
     readonly host: HTMLElement;
     readonly observer: ResizeObserver;
-    // The session-over handoff: the daemon's `exit` frame, or a dispose. Never called twice.
-    readonly onExit: (name: string) => void;
+    // The session-over handoff: the daemon's `exit` frame, or a dispose. Never called twice. Mutable because a
+    // cached session outlives the tabs instance that created it — each instance rebinds it on cache hit, so an
+    // exit always updates the LIVE surface's tab state, not a destroyed one's.
+    onExit: (name: string) => void;
     socket?: WebSocket;
-    ping?: number;
     reconnect?: number;
     retryDelay: number;
     // Set by dispose (and the exit frame) so the socket's close handler stops reconnecting.
     closing: boolean;
+    // True while the connection is known-down — gates the disconnect/not-reachable banner to once per outage.
+    down: boolean;
 };
 
-const send = (s: TerminalSession, message: object): void => {
+const send = (s: TerminalSession, message: TerminalClientMessage): void => {
     if (s.socket?.readyState === WebSocket.OPEN) {
         s.socket.send(JSON.stringify(message));
     }
@@ -63,6 +75,11 @@ const socketUrl = async (name: string, cols: number, rows: number): Promise<stri
     return `${ws}/system/terminal?${params.toString()}`;
 };
 
+const scheduleRetry = (s: TerminalSession): void => {
+    s.reconnect = window.setTimeout(() => void connectSocket(s), s.retryDelay);
+    s.retryDelay = Math.min(s.retryDelay * 2, MAX_RETRY_MS);
+};
+
 // Open (or re-open) one session's PTY socket. Reconnects reuse the xterm — tmux redraws the screen on attach, so
 // scrollback and the running processes both survive. Runs whether or not the host is mounted.
 const connectSocket = async (s: TerminalSession): Promise<void> => {
@@ -71,24 +88,58 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
         return;
     }
     const url = await socketUrl(s.name, s.term.cols, s.term.rows);
+    // Disposed during the token fetch — don't resurrect a socket for a dead session.
+    if (s.closing) {
+        return;
+    }
     if (url === undefined) {
-        s.term.writeln(`\x1b[31mSandbox isn't reachable, or you're not signed in — finish setup and sign in with Google.\x1b[0m`);
+        // Usually a transient startup state (panel opened before sign-in / daemon discovery resolved) — retry
+        // on the same backoff as a dropped socket instead of parking the session forever.
+        if (!s.down) {
+            s.down = true;
+            s.term.writeln(`\x1b[31mSandbox isn't reachable, or you're not signed in — finish setup and sign in with Google.\x1b[0m`);
+        }
+        scheduleRetry(s);
         return;
     }
     const ws = new WebSocket(url);
-    // Supersede any straggler socket (its close handler sees s.socket !== ws and stays silent).
+    // Supersede any straggler socket (its close handler sees s.socket !== ws, clears its own ping, and stays silent).
     s.socket?.close();
     s.socket = ws;
+    // Socket-scoped state lives in this closure so it cannot outlive the socket: every close event (including a
+    // superseded straggler's) clears its OWN ping interval before anything else.
+    let ping: number | undefined;
+    let openedAt = 0;
+    let lastFrameAt = 0;
     ws.addEventListener(`open`, () => {
+        if (s.closing || s.socket !== ws) {
+            ws.close();
+            return;
+        }
+        s.down = false;
+        openedAt = Date.now();
+        lastFrameAt = openedAt;
         // send() drops frames while CONNECTING, so push the live grid now — a refit during the handshake window
         // would otherwise leave the PTY at its spawn-time size until the next resize.
         send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
-        s.ping = window.setInterval(() => send(s, { type: `ping` }), PING_MS);
+        ping = window.setInterval(() => {
+            if (Date.now() - lastFrameAt > STALE_MS) {
+                ws.close();
+                return;
+            }
+            send(s, { type: `ping` });
+        }, PING_MS);
     });
     ws.addEventListener(`message`, (event) => {
-        const message = JSON.parse(String(event.data)) as ServerMessage;
+        // Any bytes from the server prove liveness, parseable or not.
+        lastFrameAt = Date.now();
+        let message: TerminalServerMessage;
+        try {
+            message = JSON.parse(String(event.data)) as TerminalServerMessage;
+        } catch {
+            return;
+        }
         if (message.type === `data`) {
-            s.retryDelay = RETRY_MS;
             s.term.write(message.data);
         } else if (message.type === `exit`) {
             // The tmux client ended (shell exited / attach-only session missing) — terminal, never a reconnect:
@@ -98,19 +149,41 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
         }
     });
     ws.addEventListener(`close`, (event) => {
-        if (s.socket !== ws) {
+        window.clearInterval(ping);
+        if (s.socket !== ws || s.closing) {
             return;
         }
-        window.clearInterval(s.ping);
-        // The session is over (exit frame) or being torn down — don't respawn it.
-        if (s.closing) {
-            return;
+        // Uptime-keyed backoff: a stable connection's drop retries at 1s; a connection that never opened or
+        // died young keeps the escalated delay.
+        if (openedAt !== 0 && Date.now() - openedAt > STABLE_MS) {
+            s.retryDelay = RETRY_MS;
         }
-        s.term.writeln(`\r\n\x1b[90m[disconnected (${event.code}${event.reason === `` ? `` : `: ${event.reason}`})]\x1b[0m`);
-        s.term.writeln(`\x1b[90m[reconnecting…]\x1b[0m`);
-        s.reconnect = window.setTimeout(() => void connectSocket(s), s.retryDelay);
-        s.retryDelay = Math.min(s.retryDelay * 2, MAX_RETRY_MS);
+        // Banner once per outage — the retries themselves are silent, and a successful reattach just redraws.
+        if (!s.down) {
+            s.down = true;
+            s.term.writeln(`\r\n\x1b[90m[disconnected (${event.code}${event.reason === `` ? `` : `: ${event.reason}`})]\x1b[0m`);
+            s.term.writeln(`\x1b[90m[reconnecting…]\x1b[0m`);
+        }
+        scheduleRetry(s);
     });
+};
+
+// One session's scrollback-snapshot key. Keyed by sandbox so a snapshot never restores into a same-named
+// session on a different daemon.
+const scrollbackKey = (name: string): string => `terminal-scrollback-${useSandbox().activeSandboxId.value}-${name}`;
+
+// Snapshot one session's scrollback into sessionStorage (page-reload survival; dies with the tab). Called from
+// the pagehide hook in useTerminal.ts; createTerminalSession restores and deletes the snapshot.
+export const persistScrollback = (s: TerminalSession): void => {
+    const snapshot = s.serialize.serialize({ scrollback: SCROLLBACK_LINES });
+    if (snapshot.length > SCROLLBACK_MAX_CHARS) {
+        return;
+    }
+    try {
+        window.sessionStorage.setItem(scrollbackKey(s.name), snapshot);
+    } catch {
+        // quota exceeded — losing the snapshot is fine
+    }
 };
 
 // Build one session's xterm + host + socket. The host stays out of the DOM until mountTerminalSession.
@@ -141,6 +214,8 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
+    const serialize = new SerializeAddon();
+    term.loadAddon(serialize);
     // tmux runs with `set-clipboard on`, so a copy (mouse drag in copy-mode, `y`, …) arrives here as OSC 52
     // with a base64 payload — land it in the browser clipboard, which xterm otherwise ignores. `?` asks to
     // READ the clipboard; that stays unanswered. Guarded: the payload is arbitrary program output.
@@ -168,19 +243,32 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
             void navigator.clipboard.writeText(selection).catch(() => {});
         }
     });
+    // Coalesce to one fit per frame — the panel's drag handle fires the observer per pointermove.
+    let raf = 0;
     const observer = new ResizeObserver(() => {
-        // Skip while detached (hidden host) or mid-drag at zero size — fit measures against a laid-out element.
-        if (host.clientWidth === 0 || host.clientHeight === 0) {
-            return;
-        }
-        fit.fit();
+        window.cancelAnimationFrame(raf);
+        raf = window.requestAnimationFrame(() => {
+            // Skip while detached (hidden host) or mid-drag at zero size — fit measures against a laid-out
+            // element. A disposed session's removed host also measures 0, so a stray queued frame is inert.
+            if (host.clientWidth === 0 || host.clientHeight === 0) {
+                return;
+            }
+            fit.fit();
+        });
     });
     observer.observe(host);
-    const s: TerminalSession = { name, term, fit, host, observer, onExit, retryDelay: RETRY_MS, closing: false };
+    const s: TerminalSession = { name, term, fit, serialize, host, observer, onExit, retryDelay: RETRY_MS, closing: false, down: false };
     // Keystrokes → pty; xterm's resize (from FitAddon) → pty resize. Wired once — send() targets the current
     // socket, so these survive reconnects.
     term.onData((data) => send(s, { type: `input`, data }));
     term.onResize(({ cols, rows }) => send(s, { type: `resize`, cols, rows }));
+    // Restore the pre-reload scrollback first (xterm buffers writes made before open()); tmux's attach redraw
+    // then paints the live screen below it.
+    const snapshot = window.sessionStorage.getItem(scrollbackKey(name));
+    if (snapshot !== null) {
+        window.sessionStorage.removeItem(scrollbackKey(name));
+        term.write(snapshot);
+    }
     // Connect immediately, even before the host is mounted: a hidden session keeps streaming. xterm buffers
     // writes made before open(), so output accrues (at the default 80x24) until the first mount open()s the
     // renderer and fit() sends the real size — tmux then redraws at that size.
@@ -194,6 +282,15 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement)
     container.append(s.host);
     if (!s.term.element) {
         s.term.open(s.host);
+        // The WebGL renderer where available — the DOM renderer janks under heavy output. Disposing the addon
+        // reverts xterm to the DOM renderer, so context loss or a blocked/absent GPU falls back automatically.
+        try {
+            const webgl = new WebglAddon();
+            webgl.onContextLoss(() => webgl.dispose());
+            s.term.loadAddon(webgl);
+        } catch {
+            // no WebGL — the DOM renderer stays
+        }
     }
     s.fit.fit();
     // Unconditional resync: onResize only fires on a dimension CHANGE, so a PTY that drifted while hidden (or
@@ -206,7 +303,6 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement)
 export const disposeTerminalSession = (s: TerminalSession): void => {
     s.closing = true;
     window.clearTimeout(s.reconnect);
-    window.clearInterval(s.ping);
     s.observer.disconnect();
     s.socket?.close();
     s.term.dispose();

@@ -223,34 +223,3 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     expect(snapshots.map((snapshot) => snapshot.id)).toContain(first);
     expect(snapshots.map((snapshot) => snapshot.trigger)).toContain("restore");
 });
-
-// The review path: diff/fileDiff with a `base` aggregate the NET change across every turn since that base,
-// not just the last snapshot's own parent — a file created then removed between base and head nets to nothing.
-test("integration: diff/fileDiff with a base aggregate the net change across turns", async () => {
-    const base = await tempBase();
-    const work = join(base, "work");
-    await mkdir(work, { recursive: true });
-    await writeFile(join(work, "hello.txt"), "one\n");
-
-    const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot: join(base, "history"), logger });
-    const baseId = await history.snapshot("turn");
-
-    await writeFile(join(work, "hello.txt"), "two\n");
-    await writeFile(join(work, "scratch.txt"), "temp\n"); // added in turn 1…
-    await history.snapshot("turn");
-
-    await writeFile(join(work, "hello.txt"), "three\n");
-    await rm(join(work, "scratch.txt")); // …removed in turn 2, so it nets out of the aggregate.
-    await writeFile(join(work, "kept.txt"), "new\n");
-    const headId = await history.snapshot("turn");
-
-    const aggregate = await history.diff(headId ?? "", baseId);
-    expect(aggregate).toContainEqual({ scope: "root", path: "hello.txt", status: "modified" });
-    expect(aggregate).toContainEqual({ scope: "root", path: "kept.txt", status: "added" });
-    expect(aggregate?.some((change) => change.path === "scratch.txt")).toBe(false);
-
-    // Content spans the whole range (base → head), not just head's parent.
-    expect(await history.fileDiff(headId ?? "", "root", "hello.txt", baseId)).toEqual({ before: "one\n", after: "three\n" });
-    // An unknown base is NOT_FOUND-shaped (undefined), like an unknown id.
-    expect(await history.diff(headId ?? "", "nope")).toBeUndefined();
-});

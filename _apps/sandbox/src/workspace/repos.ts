@@ -6,8 +6,10 @@ import { REPO_ROLES } from "./workspace.js";
 // one app's source in a sandbox. They live under <root>/repositories alongside the three roles and surface in
 // the workspace tree like everything else; the daemon owns the clone (the platform holds no git token).
 
-const RESERVED = new Set<string>(REPO_ROLES);
-// A safe sibling directory name: starts alphanumeric, no separators or `..`, and not one of the three roles.
+// "root" is the /work workspace repo's {repo} name (its git dir lives at /history/gits/root) — a clone must
+// never collide with it.
+const RESERVED = new Set<string>([...REPO_ROLES, "root"]);
+// A safe sibling directory name: starts alphanumeric, no separators or `..`, and not a reserved name.
 const REPO_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
 export const isValidRepoName = (name: string): boolean => REPO_NAME.test(name) && !name.includes("..") && !RESERVED.has(name);

@@ -3,7 +3,8 @@
 // glyph. A few extensions/names override the glyph where the category's default loses useful signal
 // (a PDF still reads as a PDF). The tree colours uniformly in the "minimal" setup; category colour only
 // applies in "colorful"/"vivid".
-import type { ExplorerStyle, IconName } from "@intentic-app/ui";
+import type { ExplorerStyle } from "./explorerStyle.js";
+import type { IconName } from "./iconSets.js";
 
 export type FileCategory = "code" | "style" | "config" | "data" | "image" | "doc" | "shell" | "archive" | "lock" | "binary" | "generic";
 

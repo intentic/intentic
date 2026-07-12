@@ -12,7 +12,7 @@ import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { isRecentlyChanged } from "../../composables/workspace/useWorkspaceLive";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import PresenceAvatars from "../../layout/PresenceAvatars.vue";
-import { explorerTreatment, iconForEntry } from "./fileIcon";
+import { explorerTreatment, iconForEntry } from "@intentic-app/ui";
 import { selectRange, stepLead } from "./treeSelect";
 
 interface Row {

@@ -2,7 +2,7 @@
 import { Card, cmp } from "@intentic-app/ui";
 import Button from "primevue/button";
 import PlanStepRow from "../../components/PlanStepRow.vue";
-import ProgressRing from "../../layout/ProgressRing.vue";
+import { ProgressRing } from "@intentic-app/ui";
 import type { useApplyProgress } from "./useApplyProgress";
 
 /* The live apply progress, replacing the old spinner + "follow progress in the terminal": per-resource rows

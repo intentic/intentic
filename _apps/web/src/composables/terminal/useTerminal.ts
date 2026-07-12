@@ -1,5 +1,5 @@
-import { ref, type Ref } from "vue";
-import { createTerminalSession, disposeTerminalSession, mountTerminalSession, type TerminalSession } from "./terminalSession";
+import { ref, type Ref, watch } from "vue";
+import { createTerminalSession, disposeTerminalSession, mountTerminalSession, persistScrollback, type TerminalSession } from "./terminalSession";
 
 /* Multi-tab terminal state for the terminal panel (pages/TerminalPanel.vue): an instance (createTerminalTabs)
  * over ONE module-level session cache, so a session's xterm/socket/scrollback survives unmount, collapse, and
@@ -25,21 +25,31 @@ export interface TerminalTabsSource {
     readonly kill?: (name: string) => void;
 }
 
-// Sandbox switch: every cached socket points at the OLD daemon — drop them all; the panel relists against the
-// new daemon on its next refresh.
+// Sandbox switch: every cached socket points at the OLD daemon — drop them all and bump the epoch so a
+// mounted surface resets its tab state and relists against the new daemon.
 export const disposeAllSessions = (): void => {
     for (const session of cache.values()) {
         disposeTerminalSession(session);
     }
     cache.clear();
+    epoch.value += 1;
 };
 
 // The shared session cache — one xterm + socket per tmux session name, owned by no surface. An entry is
 // disposed only when its session deliberately ends (tab ×, restart, or the daemon's exit frame); a mere
-// unmount detaches the DOM host and keeps streaming. A cached session's exit handler belongs to the instance
-// that created it — if that instance is gone the handler still evicts the cache entry, and a later instance's
-// tab list self-heals on its next refresh.
+// unmount detaches the DOM host and keeps streaming. sessionOf rebinds a cached session's exit handler to
+// the instance that touched it last, so an exit always updates a LIVE surface's tab state.
 const cache = new Map<string, TerminalSession>();
+
+// Bumped whenever the cache is wiped wholesale (sandbox switch) — mounted surfaces watch it.
+const epoch = ref(0);
+
+// Snapshot every live session's scrollback on reload/navigation — createTerminalSession restores it.
+window.addEventListener(`pagehide`, () => {
+    for (const session of cache.values()) {
+        persistScrollback(session);
+    }
+});
 
 export interface TerminalTabs {
     readonly order: Ref<TerminalTab[]>;
@@ -70,6 +80,9 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const sessionOf = (name: string): TerminalSession => {
         const cached = cache.get(name);
         if (cached !== undefined) {
+            // Sessions outlive the instance that created them (the panel remounts across v-if / mobile route) —
+            // rebind so this instance's tab list is the one an exit frame updates.
+            cached.onExit = endSession;
             return cached;
         }
         const session = createTerminalSession(name, endSession);
@@ -106,6 +119,14 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             mount(remembered !== undefined && tabs.some((tab) => tab.name === remembered) ? remembered : tabs[0]?.name);
         }
     };
+
+    // Sandbox switch while mounted: the sessions are already disposed — drop the stale tab state and relist
+    // against the new daemon. (createTerminalTabs runs in component setup, so the watcher dies with the surface.)
+    watch(epoch, () => {
+        order.value = [];
+        activeName.value = undefined;
+        void refresh();
+    });
 
     const attach = async (el: HTMLElement): Promise<void> => {
         container = el;

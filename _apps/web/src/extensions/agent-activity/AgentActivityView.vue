@@ -2,7 +2,7 @@
 import type { ActivityEvent } from "@intentic-app/api-contract";
 import { Card, cmp, InfoHint, Page, Segmented, StatusBadge, type IconName, type StatusVariant } from "@intentic-app/ui";
 import { computed, ref } from "vue";
-import { timeAgo } from "../../pages/workspace/format";
+import { timeAgo } from "@intentic-app/ui";
 import { useActivity } from "./useActivity";
 
 /* The agent-activity extension: the audit surface for what the agent does through its connected provider

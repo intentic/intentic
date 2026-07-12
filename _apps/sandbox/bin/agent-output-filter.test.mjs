@@ -19,7 +19,7 @@ describe("filterOutput", () => {
         const out = run(raw, { command: "npm ci", log: "/logs/terminals/agent-abc-%1.log" });
         expect(out).toContain("added 100 packages in 2s");
         expect(out).not.toContain("deprecated");
-        expect(out).toContain("--- [exit 0, 1s] 3 lines filtered to 1 · full log: /logs/terminals/agent-abc-%1.log");
+        expect(out).toContain("--- [exit 0, 1s] 3 lines filtered to 1 · full: retrieve-output /logs/terminals/agent-abc-%1.log [pattern]");
     });
 
     it("keeps npm warn lines on failure", () => {
@@ -59,6 +59,6 @@ describe("filterOutput", () => {
     it("omits the log pointer when no log path is known", () => {
         const out = run("npm warn old\nok\n", { command: "npm i" });
         expect(out).toContain("filtered to 1");
-        expect(out).not.toContain("full log");
+        expect(out).not.toContain("retrieve-output");
     });
 });

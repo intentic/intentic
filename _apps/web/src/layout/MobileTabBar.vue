@@ -3,11 +3,11 @@ import type { IconName } from "@intentic-app/ui";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useDrafts } from "../composables/extensions/useDrafts";
-import { useReview } from "../composables/workspace/useReview";
+import { useChanges } from "../composables/workspace/useChanges";
 import { useSandbox } from "../composables/useSandbox";
 
 /* The mobile shell's bottom navigation: four fixed thumb-size tabs. Chat is the primary on-the-go surface;
- * Review carries the things-to-act-on badge (agent drafts + unreviewed changes); everything the desktop rail
+ * Review carries the things-to-act-on badge (agent drafts + uncommitted changes); everything the desktop rail
  * holds beyond these lives on the Menu page. Tabs that talk to the daemon are inert while it's unreachable —
  * Menu stays live because sandbox switching lives there. */
 
@@ -28,8 +28,8 @@ const TABS: readonly Tab[] = [
 
 const { reachable } = useSandbox();
 const { drafts, invalid: invalidDrafts } = useDrafts();
-const review = useReview();
-const reviewBadge = computed(() => drafts.value.length + invalidDrafts.value.length + review.count.value);
+const changes = useChanges();
+const reviewBadge = computed(() => drafts.value.length + invalidDrafts.value.length + changes.count.value);
 
 const route = useRoute();
 // A tab is active for its route AND any sub-path (a file open on /workspace) — `active-class` compares params

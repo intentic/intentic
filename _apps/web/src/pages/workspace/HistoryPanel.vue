@@ -2,7 +2,7 @@
 import type { SnapshotChange, SnapshotTrigger, WorkspaceSnapshot } from "@intentic-app/api-contract";
 import { ref } from "vue";
 import { useHistory } from "../../composables/workspace/useHistory";
-import { timeAgo } from "./format";
+import { timeAgo } from "@intentic-app/ui";
 import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
 
 /* The history timeline — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
@@ -55,7 +55,7 @@ const openDiff = (change: SnapshotChange): void => {
         return;
     }
     void fileDiff(snapshotId, change.scope, change.path).then((body) => {
-        emit(`open-diff`, { snapshotId, scope: change.scope, label: changeLabel(change), status: change.status, path: change.path, ...body });
+        emit(`open-diff`, { key: snapshotId, scope: change.scope, label: changeLabel(change), status: change.status, path: change.path, ...body });
     });
 };
 

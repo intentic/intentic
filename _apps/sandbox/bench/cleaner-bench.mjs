@@ -12,6 +12,7 @@ import { parseCleaners } from "../bin/cleaners.mjs";
 
 // ~4 chars/token, the same heuristic iq-engine's estimateTokens uses — kept inline so the bench has no build dep.
 const estimateTokens = (text) => Math.ceil(text.length / 4);
+const pad = (value, width) => String(value).padEnd(width);
 
 // Captured representative raw outputs (combined stdout+stderr, as tmux-run tees them). Extend as real commands
 // surface via `discover`.
@@ -69,7 +70,6 @@ const cleanedFor = (fixture, spec) =>
 
 const bench = () => {
     const baseline = FIXTURES.reduce((sum, fixture) => sum + estimateTokens(fixture.raw), 0);
-    const pad = (value, width) => String(value).padEnd(width);
     process.stdout.write(`${pad("config", 14)}${pad("tokens", 10)}${pad("Δ vs raw", 12)}\n`);
     process.stdout.write(`${"-".repeat(36)}\n`);
     for (const config of CONFIGS) {
@@ -96,10 +96,12 @@ const discover = (file) => {
     const rawBytes = rows.reduce((sum, row) => sum + (row.rawBytes ?? 0), 0);
     const emittedBytes = rows.reduce((sum, row) => sum + (row.emittedBytes ?? 0), 0);
     const savedPct = rawBytes === 0 ? 0 : Math.round(((rawBytes - emittedBytes) / rawBytes) * 100);
-    process.stdout.write(`commands: ${rows.length} · raw ~${Math.round(rawBytes / 4)} tok → emitted ~${Math.round(emittedBytes / 4)} tok · saved ${savedPct}%\n\n`);
+    process.stdout.write(
+        `commands: ${rows.length} · raw ~${Math.round(rawBytes / 4)} tok → emitted ~${Math.round(emittedBytes / 4)} tok · saved ${savedPct}%\n\n`,
+    );
     const gaps = rows
         .filter((row) => (row.matched === undefined || row.matched.length === 0) && (row.rawBytes ?? 0) > 2000)
-        .sort((a, b) => (b.rawBytes ?? 0) - (a.rawBytes ?? 0))
+        .toSorted((a, b) => (b.rawBytes ?? 0) - (a.rawBytes ?? 0))
         .slice(0, 15);
     if (gaps.length === 0) {
         process.stdout.write("no high-volume un-cleaned commands — every noisy command matched a cleaner.\n");

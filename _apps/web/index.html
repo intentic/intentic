@@ -22,7 +22,14 @@
              — one shared vue, or reactivity breaks across the boundary. App code never hits this map: Vite
              rewrites its imports before the browser sees them. -->
         <script type="importmap">
-            { "imports": { "vue": "/ext-shims/vue.js", "@intentic/extension-api": "/ext-shims/extension-api.js" } }
+            {
+                "imports": {
+                    "vue": "/ext-shims/vue.js",
+                    "@intentic/extension-api": "/ext-shims/extension-api.js",
+                    "@intentic/extension-ui": "/ext-shims/extension-ui.js",
+                    "@tanstack/vue-query": "/ext-shims/vue-query.js"
+                }
+            }
         </script>
         <!-- Anti-flash: restore the saved brand theme before first paint (same idea as the static
              data-mode above, but a per-user choice can't be static). useTheme.ts stays the source of truth. -->

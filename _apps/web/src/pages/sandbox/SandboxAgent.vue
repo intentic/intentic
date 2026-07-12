@@ -110,6 +110,15 @@ const toggleOutputCleaning = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, outputCleaners: value ? "" : "off" });
 };
 
+// Verbosity steering: steer the assistant to answer concisely, cutting its own output tokens.
+const toggleTerseOutput = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, terseOutput: value });
+};
+
 // --- Import memory (was ImportMemoryDialog) ----------------------------------------------------------------
 const { readFile, saveText } = useWorkspaceTree();
 const importText = ref(``);
@@ -313,13 +322,32 @@ const importMemory = async (): Promise<void> => {
                 <Icon name="bolt" class="text-lg text-muted" />
                 <div class="min-w-0">
                     <h2 class="font-semibold leading-tight">Clean command output</h2>
-                    <p class="text-xs text-muted">Trim noisy shell output before it reaches the assistant — fewer tokens, same signal (errors always kept).</p>
+                    <p class="text-xs text-muted">
+                        Trim noisy shell output before it reaches the assistant — fewer tokens, same signal (errors always kept).
+                    </p>
                 </div>
             </div>
             <ToggleSwitch
                 :model-value="(sandboxSettings?.outputCleaners ?? '') !== 'off'"
                 :disabled="sandboxSettings === undefined"
                 @update:model-value="toggleOutputCleaning"
+            />
+        </Card>
+
+        <!-- Terse responses — steers the assistant to answer concisely (no restating context/tool output),
+             cutting its own output tokens. A stable system-prompt suffix, so it doesn't hurt prompt-cache hits. -->
+        <Card class="flex items-center justify-between">
+            <div class="flex min-w-0 items-center gap-2.5">
+                <Icon name="align-left" class="text-lg text-muted" />
+                <div class="min-w-0">
+                    <h2 class="font-semibold leading-tight">Terse responses</h2>
+                    <p class="text-xs text-muted">Ask the assistant to answer concisely without restating context — fewer output tokens per reply.</p>
+                </div>
+            </div>
+            <ToggleSwitch
+                :model-value="sandboxSettings?.terseOutput ?? false"
+                :disabled="sandboxSettings === undefined"
+                @update:model-value="toggleTerseOutput"
             />
         </Card>
 

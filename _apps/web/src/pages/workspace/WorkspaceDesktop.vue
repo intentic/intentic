@@ -11,9 +11,10 @@ import { usePanels } from "../../composables/extensions/usePanels";
 import { detectActivations } from "../../extensions/registry";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useMonaco } from "../../composables/workspace/useMonaco";
+import { useChat } from "../../composables/chat/useChat";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { reportOpenPath } from "../../composables/usePresence";
-import { useReview } from "../../composables/workspace/useReview";
+import { useChanges } from "../../composables/workspace/useChanges";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute";
 import { useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
@@ -44,22 +45,27 @@ const layout = useLayout();
 const { tree, truncated, error, isLoading, refetch, entry, moveIntoMany, runAction, busy, actionError } = useWorkspaceTree();
 const { files: uploadFiles, scanning: uploadScanning, skippedNotice: uploadSkipped, enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
-const review = useReview();
+const changes = useChanges();
 const router = useRouter();
 
-// The active nudge: once a turn leaves unreviewed changes, show a banner until the user opens Changes or dismisses
-// it. A new turn (headId moves) re-arms it, so each round of agent work gets surfaced once.
+// The active nudge: once a turn leaves uncommitted changes, show a banner until the user opens Changes or
+// dismisses it. Each finished agent turn (streaming falls) re-arms it, so every round of work surfaces once.
 const bannerDismissed = ref(false);
-watch(review.headId, () => (bannerDismissed.value = false));
-const showReviewBanner = computed(() => review.hasUnreviewed.value && layout.sidebarPanel.value !== `changes` && !bannerDismissed.value);
+const { streaming } = useChat();
+watch(streaming, (now, was) => {
+    if (was && !now) {
+        bannerDismissed.value = false;
+    }
+});
+const showReviewBanner = computed(() => changes.hasChanges.value && layout.sidebarPanel.value !== `changes` && !bannerDismissed.value);
 const openReview = (): void => layout.setSidebarPanel(`changes`);
 
 // The sidebar's mode switch lives ON the sidebar (proximity — the control sits with what it changes). The
-// Changes tab carries the unreviewed count so pending work is visible from any mode.
+// Changes tab carries the uncommitted count so pending work is visible from any mode.
 const sidebarMode = computed<SidebarPanel>({ get: () => layout.sidebarPanel.value, set: (value) => layout.setSidebarPanel(value) });
 const sidebarModeOptions = computed(() => [
     { label: `Files`, value: `files` as const, title: `Browse the workspace files` },
-    { label: `Changes`, value: `changes` as const, title: `Review what the agent changed since you last verified`, badge: review.count.value },
+    { label: `Changes`, value: `changes` as const, title: `Review uncommitted changes`, badge: changes.count.value },
     { label: `History`, value: `history` as const, title: `Snapshot timeline — restore a previous workspace state` },
 ]);
 
@@ -294,7 +300,7 @@ const endResize = (event: PointerEvent): void => {
         @dragover.prevent
         @drop.prevent
     >
-        <!-- Active nudge: the agent left changes to verify. Dismiss keeps it quiet until the next turn. -->
+        <!-- Active nudge: uncommitted work is waiting for review. Dismiss keeps it quiet until the next turn. -->
         <div
             v-if="showReviewBanner"
             class="flex shrink-0 items-center gap-3 border-b border-primary-600/30 bg-primary-600/10 px-4 py-2 text-xs text-link"
@@ -302,8 +308,8 @@ const endResize = (event: PointerEvent): void => {
             <Icon name="check-square" />
             <button type="button" class="flex min-w-0 flex-1 items-center gap-3 text-left hover:underline" @click="openReview">
                 <span class="min-w-0 flex-1">
-                    The agent changed <span class="font-medium">{{ review.count.value }}</span> {{ review.count.value === 1 ? "file" : "files" }} —
-                    review before you continue.
+                    <span class="font-medium">{{ changes.count.value }}</span> uncommitted
+                    {{ changes.count.value === 1 ? "change" : "changes" }} — review before you continue.
                 </span>
                 <span class="shrink-0 font-medium underline underline-offset-2">Review →</span>
             </button>

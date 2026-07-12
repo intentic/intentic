@@ -2,7 +2,7 @@
 import { type IconName, useExplorerStyle } from "@intentic-app/ui";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
-import { explorerColorClass, iconForEntry } from "./fileIcon";
+import { explorerColorClass, iconForEntry } from "@intentic-app/ui";
 import { STATUS_CLASS, STATUS_LETTER, type WorkspaceTab } from "./workspaceTabs";
 
 /* The open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or plan preview.

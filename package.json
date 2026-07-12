@@ -33,7 +33,8 @@
         "libs:watch": "nice -n 15 tsc --build --watch --preserveWatchOutput tsconfig.libs.json",
         "prepare": "git rev-parse --git-dir > /dev/null 2>&1 && git config core.hooksPath .githooks || true",
         "clear": "find . \\( -name 'node_modules' -o -name '.cache' -o -name 'dist' -o -name '.turbo' -o -name 'pnpm-lock.yaml' \\) -prune -exec rm -rf '{}' +",
-        "cache:clear": "find . \\( -name '.cache' -o -name 'dist' -o -name '.turbo' \\) -prune -exec rm -rf '{}' +"
+        "cache:clear": "find . \\( -name '.cache' -o -name 'dist' -o -name '.turbo' \\) -prune -exec rm -rf '{}' +",
+        "diff:stat": "git diff HEAD --shortstat"
     },
     "devDependencies": {
         "@commitlint/cli": "catalog:",

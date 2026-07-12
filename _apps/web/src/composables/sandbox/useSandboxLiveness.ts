@@ -1,5 +1,6 @@
 import { HelloSchema, PresenceSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
+import { useChat } from "../chat/useChat";
 import { readIntenticLines } from "../intenticStream";
 import { queryClient } from "../queryPersistence";
 import { sandboxRequest } from "../sandboxClient";
@@ -140,6 +141,11 @@ const stream = async (): Promise<void> => {
             // repo — constant during agent work — don't needlessly refetch panels.
             if (changed.some((path) => /^repositories\/[^/]+$/.test(path))) {
                 void queryClient.invalidateQueries({ queryKey: [`panels`] });
+            }
+            // Any worktree write surfaces in the Changes review — but not during a streaming turn, whose constant
+            // writes would hammer `git status`; the stream-end invalidation (useChanges) covers that batch.
+            if (!useChat().streaming.value) {
+                void queryClient.invalidateQueries({ queryKey: [`git`, `changes`] });
             }
         }
     }

@@ -29,13 +29,23 @@ const strip = (id, match, patterns) => ({
 // tests the command runs, in array order. Extend here as filter-stats.jsonl surfaces new noisy commands.
 export const COMMAND_CLEANERS = [
     strip("npm", /\b(npm|npx)\b/, [/^npm (?:warn|notice)\b/i]),
-    strip("pnpm", /\bpnpm\b/, [/^\s*Progress: /, /^Packages: [+-]/, /^Downloading /, /^\s*[.+]+\s*$/, /^Virtual store is at/, /^Lockfile is up to date/]),
+    strip("pnpm", /\bpnpm\b/, [
+        /^\s*Progress: /,
+        /^Packages: [+-]/,
+        /^Downloading /,
+        /^\s*[.+]+\s*$/,
+        /^Virtual store is at/,
+        /^Lockfile is up to date/,
+    ]),
     strip("yarn", /\byarn\b/, [/^warning /]),
     strip("docker", /\bdocker\b/, [
         /^#\d+ (?:sha256:|extracting|transferring|resolve|DONE|CACHED)/,
         /(?:Pulling fs layer|Waiting|Downloading|Download complete|Verifying Checksum|Extracting|Pull complete)\s*$/,
     ]),
-    strip("git", /\bgit\b/, [/^(?:remote: )?(?:Enumerating|Counting|Compressing|Receiving|Resolving|Unpacking|Writing) (?:objects|deltas)[: ]/, /^remote: Total /]),
+    strip("git", /\bgit\b/, [
+        /^(?:remote: )?(?:Enumerating|Counting|Compressing|Receiving|Resolving|Unpacking|Writing) (?:objects|deltas)[: ]/,
+        /^remote: Total /,
+    ]),
     strip("pip", /\bpip3?\b/, [/^\s*(?:Downloading|Using cached|Collecting|Requirement already satisfied)/]),
     strip("apt", /\bapt(?:-get)?\b/, [/^(?:Get:|Hit:|Ign:|Fetched |Selecting |Preparing to unpack|Unpacking |Setting up |Processing triggers)/]),
     // Test runners: on a green run (this only fires on exit 0) the per-test PASS lines are noise — drop them and
@@ -57,7 +67,7 @@ export const CLEANERS = [...COMMAND_CLEANERS.map((cleaner) => cleaner.id), "dedu
 // only repetition is dropped — so it's safe on both success output and repeated failure lines (looping traces).
 const dedupeRuns = (lines) => {
     const out = [];
-    for (let i = 0; i < lines.length; ) {
+    for (let i = 0; i < lines.length;) {
         let j = i + 1;
         while (j < lines.length && lines[j] === lines[i]) {
             j++;
@@ -81,7 +91,7 @@ const dedupeRuns = (lines) => {
 const SECRET_PATTERNS = [
     [/\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY)[A-Z0-9_]*\s*[:=]\s*)(\S+)/gi, "$1***"],
     [/\bAKIA[0-9A-Z]{16}\b/g, "***"],
-    [/\b(Bearer\s+)[\w.\-]+/gi, "$1***"],
+    [/\b(Bearer\s+)[\w.-]+/gi, "$1***"],
     [/\b(https?:\/\/[^:@\s/]+:)[^@\s]+@/gi, "$1***@"],
 ];
 const redactLine = (line) => SECRET_PATTERNS.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), line);
