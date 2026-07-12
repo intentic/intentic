@@ -1,4 +1,5 @@
 import type { Capability } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { Services } from "../composition.js";
 import type { AutomationRecord } from "./automations-store.js";
@@ -18,25 +19,31 @@ export const DEBOUNCE_MS = 750;
 // forever: a portal-side fix (e.g. enabling an intent) doesn't change the token, so it must heal unattended.
 export const FATAL_RETRY_MS = 300_000;
 
-// One normalized inbound event — serialized as a JSON line in the automation's payload.
-export interface ListenerMessage {
-    provider: "discord";
-    type: "message" | "voice_utterance" | "voice_transcript";
-    id: string;
-    channelId: string;
-    author: { id: string; name: string };
-    content: string;
+// One normalized inbound event — serialized as a JSON line in the automation's payload, and the JSON body a
+// realtime source POSTs to /listeners/<provider>/dispatch. A zod schema (not a bare interface) because it's
+// parsed from an extension gateway's request; `provider` and `type` are open strings — the source is now
+// extension-declared (contributes.listener), not a core enum.
+export const ListenerMessageSchema = z.object({
+    provider: z.string().min(1),
+    type: z.string().min(1),
+    id: z.string(),
+    channelId: z.string(),
+    author: z.object({ id: z.string(), name: z.string() }),
+    content: z.string(),
     // Discord message: it @mentions one of our bots or replies to a bot's message. Voice events never set it.
-    mentioned?: boolean;
+    mentioned: z.boolean().optional(),
     // Prior channel messages (chronological) fetched when a bot is tagged, so the agent can reason about why.
     // Kept a top-level field (not in `extra`) so it reaches the model's payload but stays out of the activity
     // feed, which logs only content/extra.
-    history?: Array<{ author: { id: string; name: string }; content: string; timestamp: string; self?: boolean }>;
-    timestamp: string;
+    history: z
+        .array(z.object({ author: z.object({ id: z.string(), name: z.string() }), content: z.string(), timestamp: z.string(), self: z.boolean().optional() }))
+        .optional(),
+    timestamp: z.string(),
     // Provider-specific fields (discord message: guildId, attachments; voice_utterance: path;
     // voice_transcript: path, participants, durationSeconds).
-    extra?: Record<string, unknown>;
-}
+    extra: z.record(z.string(), z.unknown()).optional(),
+});
+export type ListenerMessage = z.infer<typeof ListenerMessageSchema>;
 
 // What the reconciler hands a source each tick: the enabled listener automations for ITS provider plus the
 // full capability manifest (the source extracts its own credential).
@@ -95,6 +102,10 @@ export const createMessageBatcher = (
         push: (line, stream) => {
             pending.push(line);
             if (stream !== undefined) {
+                // End the sink this one supersedes so its consumer (the dispatch route's held-open ndjson
+                // response) isn't left hanging on a stream that will never fire — the batch keeps only the newest
+                // reply target, and a burst of two messages before a flush must not orphan the first's response.
+                pendingStream?.end();
                 pendingStream = stream;
             }
             clearTimeout(timer);
@@ -125,11 +136,12 @@ export const dispatchListenerMessage = async (
     message: ListenerMessage,
     wake: WakeFn = streamAgent,
     debounceMs = DEBOUNCE_MS,
-    // Builds a fresh live reply sink for this message when the source wants the turn streamed back (e.g. a Discord
-    // mention → a channel message edited as the model types). Called per matched automation so each streams its own
-    // reply. undefined / returns undefined ⇒ the agent sends its own reply as before.
-    makeStream?: () => TurnStream | undefined,
-): Promise<void> => {
+    // Builds a fresh live reply sink for a matched automation when the source wants the turn streamed back (e.g. a
+    // Discord mention → a channel message edited as the model types). Called per matched automation with its id so
+    // the dispatch route can tag each frame by automationId. undefined / returns undefined ⇒ the agent sends its own
+    // reply as before. Returns the ids that matched so a streaming caller knows which reply sinks to await.
+    makeStream?: (automationId: string) => TurnStream | undefined,
+): Promise<string[]> => {
     const line = JSON.stringify(message);
     const matched: string[] = [];
     for (const automation of await services.automations.list()) {
@@ -153,6 +165,9 @@ export const dispatchListenerMessage = async (
                 async (payload, stream) => {
                     const fresh = await services.automations.get(id);
                     if (fresh === undefined || !fresh.enabled || fresh.trigger.kind !== "listener") {
+                        // Disabled/deleted between dispatch and this debounced wake — end the reply sink so a
+                        // streamed dispatch doesn't hang awaiting a turn that will never run.
+                        stream?.end();
                         return;
                     }
                     await fireAutomation(services, fresh, payload, wake, false, stream);
@@ -174,7 +189,7 @@ export const dispatchListenerMessage = async (
             );
             batchers.set(automation.id, batcher);
         }
-        batcher.push(line, makeStream?.());
+        batcher.push(line, makeStream?.(automation.id));
         matched.push(automation.id);
     }
     // Only messages that actually woke an automation land in the activity log — the gateway sees every channel
@@ -193,6 +208,7 @@ export const dispatchListenerMessage = async (
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
     }
+    return matched;
 };
 
 // Surface a fatal source failure where the user already looks: an error run on each of the provider's

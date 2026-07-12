@@ -63,6 +63,18 @@ export const AgentContributionSchema = z.object({
 });
 export type AgentContribution = z.infer<typeof AgentContributionSchema>;
 
+// A realtime listener the extension's gateway process (contributes.processes) implements: `provider` is the
+// slug its automation triggers fire on (Trigger.provider) and `eventTypes` the kinds those triggers may narrow
+// to (Trigger.eventType). The daemon validates listener automations against these, and serves the gateway a
+// provider-scoped control surface — GET /listeners/<provider>/state to reconcile, POST …/dispatch to wake an
+// automation (optionally holding a turn-stream), …/failure + …/status to report. The daemon holds no provider
+// connection itself; the extension's process does.
+export const ListenerContributionSchema = z.object({
+    provider: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+    eventTypes: z.array(z.string().regex(/^[a-z0-9][a-z0-9_]*$/)).min(1),
+});
+export type ListenerContribution = z.infer<typeof ListenerContributionSchema>;
+
 // A Dockerfile fragment baked into the sandbox image overlay so the extension's tools are present at runtime
 // (a whisper binary, a psql client, …). `fragment` is a checkout-relative path to a file holding ONLY RUN/ENV
 // instructions — the daemon rejects FROM and privileged `# intentic:runtime` directives from extension
@@ -147,6 +159,15 @@ export const ExtensionManifestSchema = z.object({
             agent: AgentContributionSchema.optional(),
             environment: EnvironmentContributionSchema.optional(),
             connectors: z.array(ConnectorContributionSchema).optional(),
+            listener: ListenerContributionSchema.optional(),
+            // A checkout-relative directory of executables the daemon prepends to the AGENT's PATH each turn —
+            // how an extension ships a command-line tool for the agent (the CLI-tools path). The files ARE the
+            // approved code (they ride the sha-pinned checkout); the daemon only adds the dir to PATH.
+            bin: z
+                .string()
+                .min(1)
+                .refine((value) => !value.split("/").includes(".."), { message: "bin must stay inside the checkout" })
+                .optional(),
         })
         .optional(),
 });

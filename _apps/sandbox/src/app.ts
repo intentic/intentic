@@ -24,6 +24,7 @@ import {
     syncSshHostname,
 } from "./system/sync.js";
 import { approveEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
+import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserLoginRoute } from "./system/browser-login.js";
 import { createTerminalRoute } from "./system/terminal.js";
 import { createWebchatRoute } from "./webchat/webchat.routes.js";
@@ -415,6 +416,16 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         return c.body(source, 200, { "content-type": "text/javascript; charset=utf-8", etag: commit });
     });
+
+    // The realtime-listener control surface for an extension's gateway process (ext-discord): it reconciles via
+    // /state, POSTs inbound events to /dispatch (holding an ndjson turn-stream when it wants the reply painted),
+    // and reports failures/status. Reached with the per-boot panel token (the x-intentic-panel middleware branch
+    // above), like every other panel-process call — registered before the oRPC catch-all.
+    const listenerRoutes = createListenerRoutes(services);
+    app.get("/listeners/:provider/state", listenerRoutes.state);
+    app.post("/listeners/:provider/dispatch", listenerRoutes.dispatch);
+    app.post("/listeners/:provider/failure", listenerRoutes.failure);
+    app.post("/listeners/:provider/status", listenerRoutes.status);
 
     // Local-sync (Mutagen) enrollment. The owner mints a short-lived pairing token in the browser (owner-gated,
     // like /members); the desktop agent redeems it once here to enroll its SSH key — so the agent needs no OAuth,

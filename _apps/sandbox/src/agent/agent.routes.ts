@@ -6,12 +6,10 @@ import { cliEnvOf } from "../capabilities/cli-env.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
 import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
 import { extensionEnvOf } from "../extensions/extension-env.js";
-import { extensionAgentDirsOf } from "../extensions/installed-extensions.js";
+import { extensionAgentDirsOf, extensionBinDirsOf } from "../extensions/installed-extensions.js";
 import { ensureFreshToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { createDiscordVoiceServer } from "../discord/voice-tools.js";
-import type { DiscordCliConfig } from "../discord/voice.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
 import { createSessionSearchServer } from "../sessions/session-search-tool.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
@@ -61,6 +59,12 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
     // their CLI tools; extension `contributes.settings` with an `env` name inject theirs the same way.
     const capabilities = await services.capabilities.list();
     const cliEnv = { ...(await cliEnvOf(services)), ...(await extensionEnvOf(services)) };
+    // Extensions that ship an agent CLI (contributes.bin — e.g. ext-discord's `discord-voice`) get their bin dir
+    // prepended to the turn's PATH, so the tool resolves by name in the agent's shell across every runtime.
+    const binDirs = await extensionBinDirsOf(services);
+    if (binDirs.length > 0) {
+        cliEnv["PATH"] = [...binDirs, process.env["PATH"] ?? ""].filter((entry) => entry !== "").join(":");
+    }
     // Attachments arrive workspace-relative; resolve to absolute paths for the provider and reject escapes.
     const attachmentPaths: string[] = [];
     for (const rel of input.attachments ?? []) {
@@ -226,20 +230,6 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
             ...pluginDirsOf(capabilities, services.workspace.root),
             ...(await extensionAgentDirsOf(services)),
         ];
-        // Each discord capability also grants the in-process voice tools (join_voice/leave_voice/voice_status),
-        // one MCP server named for the instance — the session they drive lives in the daemon and outlives this turn.
-        const discordServers = Object.fromEntries(
-            capabilities.flatMap((capability) =>
-                capability.kind === "cli" && capability.config.provider === "discord"
-                    ? [
-                          [
-                              capability.id,
-                              createDiscordVoiceServer(services, streamAgent, capability.id, capability.config as unknown as DiscordCliConfig),
-                          ] as const,
-                      ]
-                    : [],
-            ),
-        );
         // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
         // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join).
         const browserServers = await browserServersOf(capabilities, services.workspace.root);
@@ -249,7 +239,6 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         // turn — the cross-provider delegation note then rides the user message instead of the system prompt.
         const { searchPastChats, stableSystemPrompt, hashlineEdits, outputCleaners, terseOutput } = await services.sandboxSettings.get();
         const sdkServers = {
-            ...discordServers,
             ...browserServers,
             ...(searchPastChats ? { pastChats: createSessionSearchServer(services.workspace.root, input.sessionId) } : {}),
             // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.

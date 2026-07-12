@@ -1,0 +1,58 @@
+#!/usr/bin/env node
+// The agent's voice control tool: `discord-voice join <channelId>` / `discord-voice leave` / `discord-voice
+// status`. It forwards to the long-lived gateway process (which holds the voice session across turns) over its
+// loopback HTTP control surface, whose address the gateway writes to a gateway.url file under the workspace.
+// ESM (the package is type:module) with no deps, so it runs as a bare executable on the agent's PATH.
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+
+const findGatewayUrl = async () => {
+    // Walk up from the agent's cwd to the workspace root, which holds .intentic/extensions-runtime/discord/gateway.url.
+    let dir = process.cwd();
+    for (;;) {
+        try {
+            const url = (await readFile(join(dir, ".intentic", "extensions-runtime", "discord", "gateway.url"), "utf8")).trim();
+            if (url !== "") {
+                return url;
+            }
+        } catch {
+            // keep walking up
+        }
+        const parent = dirname(dir);
+        if (parent === dir) {
+            return undefined;
+        }
+        dir = parent;
+    }
+};
+
+const [command, channelId] = process.argv.slice(2);
+if (command !== "join" && command !== "leave" && command !== "status") {
+    console.error("usage: discord-voice <join <channelId> | leave | status>");
+    process.exit(2);
+}
+if (command === "join" && !channelId) {
+    console.error("usage: discord-voice join <channelId>");
+    process.exit(2);
+}
+const base = await findGatewayUrl();
+if (base === undefined) {
+    console.error("The Discord gateway isn't running yet (no gateway.url). It starts with the sandbox — wait a moment and retry.");
+    process.exit(1);
+}
+const request =
+    command === "join"
+        ? fetch(`${base}/voice/join`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ channelId }) })
+        : command === "leave"
+          ? fetch(`${base}/voice/leave`, { method: "POST" })
+          : fetch(`${base}/voice/status`);
+let res;
+try {
+    res = await request;
+} catch (error) {
+    console.error(`Couldn't reach the Discord gateway: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+}
+const text = await res.text();
+process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
+process.exit(res.ok ? 0 : 1);

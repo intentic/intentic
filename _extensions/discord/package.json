@@ -1,8 +1,23 @@
 {
     "name": "@intentic/ext-discord",
     "version": "1.0.0",
-    "description": "Discord — the connected Discord server as an agent tool (connector data; gateway + voice runtime added later)",
+    "description": "Discord — the connected server as an agent tool, plus the gateway + voice runtime as a baked extension process",
     "license": "MIT",
     "private": true,
-    "type": "module"
+    "type": "module",
+    "scripts": {
+        "build": "tsc",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@discordjs/opus": "^0.10.0",
+        "@discordjs/voice": "^0.19.2",
+        "discord.js": "^14.26.4"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:"
+    }
 }

@@ -18,10 +18,15 @@ export const startExtensionProcess = async (services: Services, extension: Insta
     await services.panelProcesses.start(key, {
         command: process.command,
         cwd: process.cwd === undefined ? extension.dir : join(extension.dir, process.cwd),
-        // A declared process reaches the daemon's own routes (e.g. a listener source posting to /listeners)
+        // A declared process reaches the daemon's own routes (a listener gateway posting to /listeners/<provider>)
         // over loopback with the panel token — the token never leaves the container. (Flagged: the panel token
-        // is all-routes; a scoped per-extension token is a named follow-up.)
-        env: { INTENTIC_DAEMON: `http://127.0.0.1:${services.config.sandbox.port}`, INTENTIC_PANEL_TOKEN: services.panelToken },
+        // is all-routes; a scoped per-extension token is a named follow-up.) INTENTIC_WORKSPACE lets a process
+        // that produces agent-facing files (the discord gateway's voice transcripts) write under the workspace.
+        env: {
+            INTENTIC_DAEMON: `http://127.0.0.1:${services.config.sandbox.port}`,
+            INTENTIC_PANEL_TOKEN: services.panelToken,
+            INTENTIC_WORKSPACE: services.workspace.root,
+        },
     });
 };
 

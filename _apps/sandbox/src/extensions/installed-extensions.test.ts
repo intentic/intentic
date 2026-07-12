@@ -7,7 +7,7 @@ import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import { extensionDir } from "../capabilities/extension-dirs.js";
 import { readWorkspaceFile } from "../workspace/workspace-files.js";
-import { installedExtensions } from "./installed-extensions.js";
+import { extensionBinDirsOf, installedExtensions, listenerProvidersOf } from "./installed-extensions.js";
 
 const manifest = (publisher: string, name: string): object => ({
     publisher,
@@ -51,4 +51,21 @@ test("an empty extensions dir yields only git-installed extensions", async () =>
 
     const result = await installedExtensions(services(root, "", capabilities));
     expect(result.map((e) => e.id)).toEqual(["my-ext"]);
+});
+
+test("listenerProvidersOf maps each contributes.listener provider to its declared event types", async () => {
+    const baked = mkdtempSync(join(tmpdir(), "installed-baked-"));
+    await writeManifest(join(baked, "intentic.discord"), {
+        ...manifest("intentic", "discord"),
+        contributes: { listener: { provider: "discord", eventTypes: ["message", "voice_utterance"] } },
+    });
+    const providers = await listenerProvidersOf(services(mkdtempSync(join(tmpdir(), "installed-work-")), baked, []));
+    expect([...(providers.get("discord") ?? [])]).toEqual(["message", "voice_utterance"]);
+});
+
+test("extensionBinDirsOf resolves each contributes.bin to an absolute dir on the extension", async () => {
+    const baked = mkdtempSync(join(tmpdir(), "installed-baked-"));
+    await writeManifest(join(baked, "intentic.discord"), { ...manifest("intentic", "discord"), contributes: { bin: "bin" } });
+    const dirs = await extensionBinDirsOf(services(mkdtempSync(join(tmpdir(), "installed-work-")), baked, []));
+    expect(dirs).toEqual([join(baked, "intentic.discord", "bin")]);
 });

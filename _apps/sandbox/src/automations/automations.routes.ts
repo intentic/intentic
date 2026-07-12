@@ -5,6 +5,7 @@ import { Cron } from "croner";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { listenerProvidersOf } from "../extensions/installed-extensions.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { fireAutomation } from "./scheduler.js";
 
@@ -39,6 +40,20 @@ export const createAutomationsRoutes = (services: Services) => {
                     new Cron(input.trigger.cron).nextRun();
                 } catch {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid cron expression" });
+                }
+            }
+            // A listener trigger's provider/eventType are open strings in the schema — validate them here against
+            // what's actually installed: `webchat` (the core gateway-less source) plus every provider an
+            // extension declares via contributes.listener, and that provider's declared event types.
+            if (input.trigger.kind === "listener") {
+                const { provider, eventType } = input.trigger;
+                const declared = await listenerProvidersOf(services);
+                const eventTypes = declared.get(provider);
+                if (provider !== "webchat" && eventTypes === undefined) {
+                    throw new ORPCError("BAD_REQUEST", { message: `unknown listener provider "${provider}" — install the extension that declares it` });
+                }
+                if (eventType !== undefined && eventTypes !== undefined && !eventTypes.has(eventType)) {
+                    throw new ORPCError("BAD_REQUEST", { message: `provider "${provider}" has no event type "${eventType}"` });
                 }
             }
             // Event: keep the round-tripped token (the enabled toggle re-posts the trigger) or mint the

@@ -46,6 +46,9 @@
                 "skill": "skills/discord/SKILL.md",
                 "fragment": "env/whisper.Dockerfile"
             }
-        ]
+        ],
+        "listener": { "provider": "discord", "eventTypes": ["message", "voice_utterance", "voice_transcript"] },
+        "processes": [{ "name": "gateway", "command": "node dist/gateway.js", "autoStart": true }],
+        "bin": "bin"
     }
 }

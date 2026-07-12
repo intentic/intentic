@@ -15,7 +15,7 @@ import {
     type ListenerState,
     reportListenerFailure,
 } from "./listeners.js";
-import { PAYLOAD_MAX, type WakeFn } from "./scheduler.js";
+import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
 
 // The listener paths touch automations/capabilities/activity/workspace/logger; a cast keeps the fake that small.
 const fakeServices = (root: string): Services =>
@@ -91,6 +91,20 @@ test("lines arriving during an in-flight run queue into one follow-up fire — n
     gate.resolve();
     await vi.waitFor(() => expect(fired).toHaveLength(2));
     expect(fired[1]).toBe("b\nc");
+});
+
+test("a superseded reply stream is ended so a streamed dispatch never hangs on it", async () => {
+    const ended: string[] = [];
+    const s1: TurnStream = { delta: () => {}, end: () => void ended.push("s1") };
+    const s2: TurnStream = { delta: () => {}, end: () => void ended.push("s2") };
+    const fired: Array<TurnStream | undefined> = [];
+    const batcher = createMessageBatcher(async (_payload, stream) => void fired.push(stream), () => {}, 5);
+    batcher.push("a", s1);
+    batcher.push("b", s2);
+    // s1 is replaced before any flush — it's ended immediately so its consumer isn't stranded; s2 survives.
+    expect(ended).toEqual(["s1"]);
+    await vi.waitFor(() => expect(fired).toHaveLength(1));
+    expect(fired[0]).toBe(s2);
 });
 
 test("an over-cap batch keeps the newest whole lines within the payload cap", async () => {

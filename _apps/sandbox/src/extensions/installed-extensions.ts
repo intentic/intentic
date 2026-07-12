@@ -86,3 +86,30 @@ export const extensionAgentDirsOf = async (services: ExtensionHost): Promise<str
     }
     return dirs;
 };
+
+// The absolute `bin` dirs of installed extensions that ship agent CLIs (contributes.bin) — prepended to the
+// agent turn's PATH wherever the shell env is built, so a shipped tool (e.g. `discord-voice`) resolves by name.
+export const extensionBinDirsOf = async (services: ExtensionHost): Promise<string[]> => {
+    const dirs: string[] = [];
+    for (const extension of await installedExtensions(services)) {
+        const bin = extension.manifest.contributes?.bin;
+        if (bin !== undefined) {
+            dirs.push(join(extension.dir, bin));
+        }
+    }
+    return dirs;
+};
+
+// Every realtime-listener provider an installed extension declares → the event types it emits
+// (contributes.listener). The automations upsert validates a listener trigger against this (plus core
+// `webchat`), and the listener routes serve a gateway under its provider.
+export const listenerProvidersOf = async (services: ExtensionHost): Promise<Map<string, Set<string>>> => {
+    const providers = new Map<string, Set<string>>();
+    for (const extension of await installedExtensions(services)) {
+        const listener = extension.manifest.contributes?.listener;
+        if (listener !== undefined) {
+            providers.set(listener.provider, new Set(listener.eventTypes));
+        }
+    }
+    return providers;
+};

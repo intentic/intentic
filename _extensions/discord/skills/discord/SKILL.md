@@ -35,19 +35,20 @@ Then confirm it landed: `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" http
   `curl -s -X POST -H "Authorization: Bot $DISCORD_BOT_TOKEN" -H "Content-Type: application/json" -d '{"content":"hello"}' https://discord.com/api/v10/channels/<CHANNEL_ID>/messages`
 
 ## Voice (listen & transcribe)
-You have MCP tools for voice channels — use them, not curl:
-- `join_voice(channelId)` — join a voice channel and transcribe the conversation per speaker (local whisper).
-- `leave_voice()` — leave now and finalize the transcript.
-- `voice_status()` — current session: channel, duration, participants, utterances, live transcript path.
+Use the `discord-voice` command-line tool (on your PATH) — not curl. It drives the long-lived gateway that holds
+the call across turns:
+- `discord-voice join <channelId>` — join a voice channel and transcribe the conversation per speaker (local whisper).
+- `discord-voice leave` — leave now and finalize the transcript.
+- `discord-voice status` — current session: channel, duration, participants, utterances, live transcript path.
 The transcript under `.intentic/transcripts/` updates live after every utterance — read it mid-call to follow
 the conversation. Each transcribed utterance also fires a `voice_utterance` listener event (batched), and when
-the call ends (everyone leaves, or leave_voice) a `voice_transcript` event fires with the finalized transcript
-— those wakes are where you turn it into notes/action items. Voice channel ids come from the channel list
-command (`type: 2` = voice).
+the call ends (everyone leaves, or `discord-voice leave`) a `voice_transcript` event fires with the finalized
+transcript — those wakes are where you turn it into notes/action items. Voice channel ids come from the channel
+list command (`type: 2` = voice).
 
 Voice needs whisper.cpp, which was added to this sandbox's environment automatically when Discord was
-connected. If join_voice reports whisper-cli missing, the sandbox just hasn't been rebuilt yet — ask the
-owner to run the rebuild command on the Sandbox page's Environment card. Don't propose an overlay for this
+connected. If `discord-voice join` reports whisper-cli missing, the sandbox just hasn't been rebuilt yet — ask
+the owner to run the rebuild command on the Sandbox page's Environment card. Don't propose an overlay for this
 yourself.
 
 Notes: IDs come from the list commands above. If a read returns empty content, the Message Content intent isn't enabled (see Setup step 4).

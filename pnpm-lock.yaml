@@ -181,9 +181,6 @@ catalogs:
     '@xterm/addon-serialize':
       specifier: 0.14.0
       version: 0.14.0
-    '@xterm/addon-webgl':
-      specifier: 0.19.0
-      version: 0.19.0
     '@xterm/xterm':
       specifier: 6.0.0
       version: 6.0.0
@@ -864,9 +861,6 @@ importers:
       '@xterm/addon-serialize':
         specifier: 'catalog:'
         version: 0.14.0
-      '@xterm/addon-webgl':
-        specifier: 'catalog:'
-        version: 0.19.0
       '@xterm/xterm':
         specifier: 'catalog:'
         version: 6.0.0
@@ -1042,7 +1036,30 @@ importers:
 
   _extensions/connectors: {}
 
-  _extensions/discord: {}
+  _extensions/discord:
+    dependencies:
+      '@discordjs/opus':
+        specifier: ^0.10.0
+        version: 0.10.0
+      '@discordjs/voice':
+        specifier: ^0.19.2
+        version: 0.19.2(@discordjs/opus@0.10.0)(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.2)
+      discord.js:
+        specifier: ^14.26.4
+        version: 14.26.5
+    devDependencies:
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(vite@8.1.2(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
   _extensions/logs:
     dependencies:
@@ -4644,9 +4661,6 @@ packages:
 
   '@xterm/addon-serialize@0.14.0':
     resolution: {integrity: sha512-uteyTU1EkrQa2Ux6P/uFl2fzmXI46jy5uoQMKEOM0fKTyiW7cSn0WrFenHm5vO5uEXX/GpwW/FgILvv3r0WbkA==}
-
-  '@xterm/addon-webgl@0.19.0':
-    resolution: {integrity: sha512-b3fMOsyLVuCeNJWxolACEUED0vm7qC0cy4wRvf3oURSzDTYVQiGPhTnhWZwIHdvC48Y+oLhvYXnY4XDXPoJo6A==}
 
   '@xterm/headless@6.0.0':
     resolution: {integrity: sha512-5Yj1QINYCyzrZtf8OFIHi47iQtI+0qYFPHmouEfG8dHNxbZ9Tb9YGSuLcsEwj9Z+OL75GJqPyJbyoFer80a2Hw==}
@@ -11554,8 +11568,6 @@ snapshots:
   '@xterm/addon-fit@0.11.0': {}
 
   '@xterm/addon-serialize@0.14.0': {}
-
-  '@xterm/addon-webgl@0.19.0': {}
 
   '@xterm/headless@6.0.0': {}
 

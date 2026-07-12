@@ -1,6 +1,5 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
-import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
 import { useGoogleIdentity } from "../useGoogleIdentity";
@@ -282,15 +281,6 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement)
     container.append(s.host);
     if (!s.term.element) {
         s.term.open(s.host);
-        // The WebGL renderer where available — the DOM renderer janks under heavy output. Disposing the addon
-        // reverts xterm to the DOM renderer, so context loss or a blocked/absent GPU falls back automatically.
-        try {
-            const webgl = new WebglAddon();
-            webgl.onContextLoss(() => webgl.dispose());
-            s.term.loadAddon(webgl);
-        } catch {
-            // no WebGL — the DOM renderer stays
-        }
     }
     s.fit.fit();
     // Unconditional resync: onResize only fires on a dimension CHANGE, so a PTY that drifted while hidden (or

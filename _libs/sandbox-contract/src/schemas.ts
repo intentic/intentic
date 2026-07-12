@@ -710,24 +710,26 @@ export type ExtensionProcessStatus = z.infer<typeof ExtensionProcessStatusSchema
 // (a plain Hono route — webhook bodies are arbitrary). The token is the webhook's own auth (senders can't do
 // Google ID tokens): optional on input — the daemon generates one on upsert — and always present in stored and
 // listed automations, so the owner's UI can render the copyable URL.
-// `listener` fires from the daemon's own realtime connection to the provider (e.g. the Discord gateway) — no
-// cron, no token, never reachable via /fire. channelId narrows to one channel; absent ⇒ every channel the
-// bot can read. eventType narrows to one kind of event (a Discord message, a live voice utterance batch, or a
-// finished voice transcript); absent ⇒ all event kinds the source emits. mentioned narrows message events to
-// those that @mention one of the workspace's bots or reply to a bot's message; absent ⇒ all messages. Both
-// provider and eventType enums grow with each realtime source.
-// `webchat` is the exception: it has no daemon-held connection. An embeddable widget POSTs a visitor's message
-// to /webchat/<id>/message and the agent's reply streams back over SSE. Its address is the public automation
-// id, so allowedOrigins (the widget's embed sites) + a per-conversation rate limit are its abuse boundary —
-// no secret token can live in a browser.
+// `listener` fires from a realtime source's connection to the provider (an extension's gateway process holds
+// it, e.g. Discord) — no cron, no token, never reachable via /fire. channelId narrows to one channel; absent ⇒
+// every channel the bot can read. eventType narrows to one kind of event (a Discord message, a live voice
+// utterance batch, or a finished voice transcript); absent ⇒ all event kinds the source emits. mentioned
+// narrows message events to those that @mention one of the workspace's bots or reply to a bot's message;
+// absent ⇒ all messages. `provider` and `eventType` are open strings — a realtime source is now extension-
+// declared (contributes.listener), so the daemon validates a listener trigger at upsert against `webchat` ∪ the
+// installed extensions' declared providers/eventTypes rather than a hardcoded enum here.
+// `webchat` is the exception: it has no gateway. An embeddable widget POSTs a visitor's message to
+// /webchat/<id>/message and the agent's reply streams back over SSE. Its address is the public automation id, so
+// allowedOrigins (the widget's embed sites) + a per-conversation rate limit are its abuse boundary — no secret
+// token can live in a browser.
 export const TriggerSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("schedule"), cron: z.string().min(1) }),
     z.object({ kind: z.literal("event"), token: z.string().min(1).optional() }),
     z.object({
         kind: z.literal("listener"),
-        provider: z.enum(["discord", "webchat"]),
+        provider: z.string().min(1),
         channelId: z.string().min(1).optional(),
-        eventType: z.enum(["message", "voice_utterance", "voice_transcript"]).optional(),
+        eventType: z.string().min(1).optional(),
         mentioned: z.boolean().optional(),
         // webchat only: the website origins allowed to POST to the widget endpoint. Absent/empty ⇒ none admitted.
         allowedOrigins: z.array(z.string()).optional(),
