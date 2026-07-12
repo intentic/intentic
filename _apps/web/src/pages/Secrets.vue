@@ -3,12 +3,12 @@ import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { cmp, Page, Segmented, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
 import SecretEntryRow from "../components/SecretEntryRow.vue";
 import SecretField from "../components/SecretField.vue";
 import SecretGroup from "../components/SecretGroup.vue";
 import { readIntenticLines } from "../composables/intenticStream";
 import { sandboxRequest } from "../composables/sandboxClient";
-import { useChat } from "../composables/chat/useChat";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useSecretInventory } from "../composables/extensions/useSecrets";
 
@@ -21,7 +21,7 @@ const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const { inventory, inventoryPending, refreshInventory } = useSecretInventory();
 const { capabilities } = useCapabilities();
-const { openAccountManage } = useChat();
+const router = useRouter();
 
 // DevOps scaffolds the desired-state repo the env/generated secrets live in; until its capability reports
 // `active`, those groups are empty and every /secrets write 412s — so gate them on this signal (state, not
@@ -255,7 +255,7 @@ const pushToCi = async (): Promise<void> => {
 
                 <SecretGroup v-if="groupVisible(providersF)" icon="comments" label="AI providers" :count="countSummary(providersF)">
                     <template #actions>
-                        <Button label="Manage accounts" size="small" severity="secondary" @click="openAccountManage" />
+                        <Button label="Manage accounts" size="small" severity="secondary" @click="router.push('/sandbox/agent')" />
                     </template>
                     <p v-if="providersF.length === 0" class="px-4 py-2.5 text-xs text-subtle">No AI provider accounts connected.</p>
                     <div v-else class="flex flex-wrap gap-2 px-4 pb-3 pt-3">

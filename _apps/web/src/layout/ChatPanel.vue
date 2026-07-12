@@ -2,6 +2,7 @@
 import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, nextTick, reactive, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { effortsFor, modelsFor, MODES, providerLabel } from "../composables/chat/catalog";
 import type { ChatAttachment, ChatMessage, PendingAttachment } from "../composables/chat/conversation";
 import { formatReset, usageStatusFor, usageWindowLabel } from "../composables/chat/usageStatus";
@@ -51,10 +52,10 @@ const {
     stop,
     decidePlan,
     openConversation,
-    openAccountManage,
     newChat: newChatAction,
     closeTab: closeTabAction,
 } = useChat();
+const router = useRouter();
 const layout = useLayout();
 const { overlayTarget, poppedOut } = useChatPopout();
 const { reachable, denied } = useSandbox();
@@ -534,7 +535,7 @@ watch(keyboardInset, () => {
                     v-if="activeAccountReauth"
                     type="button"
                     class="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
-                    @click="openAccountManage"
+                    @click="router.push('/sandbox/agent')"
                 >
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
                     <span
@@ -673,7 +674,7 @@ watch(keyboardInset, () => {
                             <button
                                 type="button"
                                 class="inline-flex items-center gap-1 transition-colors hover:text-content"
-                                @click="openAccountManage"
+                                @click="router.push('/sandbox/agent')"
                             >
                                 <span class="inline-block h-1.5 w-1.5 rounded-full bg-success"></span> Ready · Manage
                             </button>

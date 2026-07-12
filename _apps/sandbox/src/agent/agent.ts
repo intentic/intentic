@@ -56,6 +56,9 @@ export interface AgentRequest {
     // In-process SDK MCP servers — daemon-side tools whose handlers run in the daemon itself (e.g. the
     // Discord voice session tools). Merged into mcpServers alongside the remote `tools` above.
     readonly sdkServers?: Record<string, McpServerConfig>;
+    // Built-in tool names to remove from the model's context this turn (SDK disallowedTools). Set by the
+    // hashlineEdits toggle to disable native Edit/Write so file mutations route through the hashline MCP tools.
+    readonly disallowedTools?: readonly string[];
     // Extra turn-scoped instructions appended to the claude_code preset system prompt (e.g. the CLI
     // delegation note when Codex/Grok accounts are connected — see agent/delegation.ts).
     readonly systemAppend?: string;
@@ -361,6 +364,7 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
     ...(request.plugins !== undefined ? { plugins: request.plugins.map((path) => ({ type: "local" as const, path })) } : {}),
     ...(request.effort !== undefined ? { effort: request.effort as EffortLevel } : {}),
     ...(request.thinking !== undefined ? { thinking: request.thinking ? { type: "adaptive" } : { type: "disabled" } } : {}),
+    ...(request.disallowedTools !== undefined ? { disallowedTools: [...request.disallowedTools] } : {}),
 });
 
 // Run one agent turn over `request.cwd`, streaming typed events. A throwing/aborted turn surfaces as an

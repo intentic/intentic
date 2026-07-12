@@ -15,6 +15,7 @@ import { createServices } from "./composition.js";
 import { createDiscordSource } from "./discord/listener-source.js";
 import { stopVoice } from "./discord/voice.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
+import { reconcileLspSkill } from "./settings/lsp-skill.js";
 import { composeEnvironment } from "./environment/environment.js";
 import { loadConfig } from "./env.config.js";
 import { createLogger } from "./logger.js";
@@ -69,6 +70,13 @@ const main = async (): Promise<void> => {
 
     // Converge the drafts skill (how the agent writes post drafts for approval) so its prose tracks the daemon.
     void ensureDraftsSkill(services);
+
+    // Converge the lsp skill with the lspTools toggle — present only when the owner enabled it (the `lsp` CLI is
+    // always on PATH; the skill is what surfaces it to the agent).
+    void services.sandboxSettings
+        .get()
+        .then((settings) => reconcileLspSkill(services, settings.lspTools))
+        .catch((error: unknown) => logger.warn({ err: error }, "lsp skill reconcile failed"));
 
     // Preview routes for every existing repo (best-effort; the ensurer never throws) — self-heals any repo
     // whose creation-time mint was missed, so hostnames exist well before a browser ever resolves them.

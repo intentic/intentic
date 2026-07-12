@@ -77,7 +77,7 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: `Add a capability` },
                 component: () => import(`../pages/Capabilities.vue`),
             },
-            { path: `sandbox`, name: `sandbox`, meta: { title: `Sandbox` }, component: () => import(`../pages/Sandbox.vue`) },
+            { path: `sandbox/:tab?`, name: `sandbox`, meta: { title: `Sandbox` }, component: () => import(`../pages/SandboxHub.vue`) },
             // Splat param: the open file's path lives in the URL (`/workspace/src/foo.ts`) so a reload or a
             // shared link reopens it. Optional/repeatable, so bare `/workspace` still matches (path === "").
             {
@@ -90,7 +90,7 @@ const routes: RouteRecordRaw[] = [
             { path: `drafts`, name: `drafts`, meta: { title: `Drafts` }, component: () => import(`../pages/Drafts.vue`) },
             { path: `secrets`, name: `secrets`, meta: { title: `Secrets` }, component: () => import(`../pages/Secrets.vue`) },
             { path: `ext/:ext/:key`, name: `extension`, component: () => import(`../pages/ExtensionHost.vue`) },
-            { path: `settings`, name: `settings`, meta: { title: `Settings` }, component: () => import(`../pages/Settings.vue`) },
+            { path: `settings/:tab?`, name: `settings`, meta: { title: `Settings` }, component: () => import(`../pages/SettingsHub.vue`) },
         ],
     },
     {

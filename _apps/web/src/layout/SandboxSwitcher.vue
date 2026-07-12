@@ -7,13 +7,12 @@ import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/useSandbox";
-import ManageAccessDialog from "../pages/ManageAccessDialog.vue";
-import SandboxSettingsDialog from "../pages/SandboxSettingsDialog.vue";
 
-/* Rail control to switch between the user's sandboxes (owned + shared), add another, or manage access to an
- * owned one. The active sandbox drives the whole workspace (useSandbox) — selecting here re-points every
- * sandbox-backed view + the liveness probe at the chosen daemon. Plan-gated actions preflight against the
- * loaded entitlements to upsell early (falling through when not yet loaded) — the API's 402 is the real gate. */
+/* Rail control to switch between the user's sandboxes (owned + shared) or add another. The active sandbox drives
+ * the whole workspace (useSandbox) — selecting here re-points every sandbox-backed view + the liveness probe at
+ * the chosen daemon. Settings, access and everything else about the active sandbox live on the tabbed /sandbox
+ * hub (opened from here). Plan-gated "Add sandbox" preflights the loaded entitlements to upsell early — the
+ * API's 402 is the real gate. */
 
 const sandbox = useSandbox();
 const router = useRouter();
@@ -21,8 +20,6 @@ const route = useRoute();
 const { entitlements, upgradeOpen } = useAuth();
 
 const panel = ref<InstanceType<typeof Popover> | null>(null);
-const manageOpen = ref(false);
-const settingsOpen = ref(false);
 
 onMounted(() => {
     if (sandbox.sandboxes.value.length === 0) {
@@ -35,8 +32,8 @@ const pick = (id: string): void => {
     panel.value?.hide();
 };
 
-// The sandbox status/management view has no rail tile — this chip is its home (identity → management surface).
-const openOverview = (): void => {
+// The sandbox management hub has no rail tile — this chip is its home (identity → tabbed settings surface).
+const openSandbox = (): void => {
     panel.value?.hide();
     void router.push(`/sandbox`);
 };
@@ -49,20 +46,6 @@ const addSandbox = (): void => {
         return;
     }
     void router.push(`/setup`);
-};
-
-const openSettings = (): void => {
-    panel.value?.hide();
-    settingsOpen.value = true;
-};
-
-const manageAccess = (): void => {
-    panel.value?.hide();
-    if (entitlements.value?.sandboxSharing === false) {
-        upgradeOpen.value = true;
-        return;
-    }
-    manageOpen.value = true;
 };
 
 // The sandbox awaiting removal confirmation (owner: drops the platform record for everyone; member: leaves).
@@ -94,7 +77,7 @@ const confirmRemove = async (): Promise<void> => {
     <button
         type="button"
         class="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-lg border border-line transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
-        :class="route.path === '/sandbox' ? 'bg-primary-600/15 text-link' : 'bg-card text-muted'"
+        :class="route.path.startsWith('/sandbox') ? 'bg-primary-600/15 text-link' : 'bg-card text-muted'"
         aria-label="Switch sandbox"
         v-tooltip.right="sandbox.active.value?.name ?? 'Sandboxes'"
         @click="panel?.toggle($event)"
@@ -162,40 +145,15 @@ const confirmRemove = async (): Promise<void> => {
             <button
                 type="button"
                 class="flex w-full items-center gap-2.5 rounded-md px-2 py-1 text-sm text-content transition-colors hover:bg-content/5"
-                @click="openOverview"
-            >
-                <span class="flex h-6 w-6 shrink-0 items-center justify-center">
-                    <Icon name="box" class="text-base text-muted" />
-                </span>
-                Sandbox overview
-            </button>
-            <button
-                v-if="sandbox.active.value?.role === 'owner'"
-                type="button"
-                class="flex w-full items-center gap-2.5 rounded-md px-2 py-1 text-sm text-content transition-colors hover:bg-content/5"
-                @click="openSettings"
+                @click="openSandbox"
             >
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center">
                     <Icon name="cog" class="text-base text-muted" />
                 </span>
                 Sandbox settings
             </button>
-            <button
-                v-if="sandbox.active.value?.role === 'owner'"
-                type="button"
-                class="flex w-full items-center gap-2.5 rounded-md px-2 py-1 text-sm text-content transition-colors hover:bg-content/5"
-                @click="manageAccess"
-            >
-                <span class="flex h-6 w-6 shrink-0 items-center justify-center">
-                    <Icon name="users" class="text-base text-muted" />
-                </span>
-                Manage access
-            </button>
         </div>
     </Popover>
-
-    <ManageAccessDialog v-model:visible="manageOpen" />
-    <SandboxSettingsDialog v-model:visible="settingsOpen" />
 
     <Dialog
         :visible="pending !== undefined"

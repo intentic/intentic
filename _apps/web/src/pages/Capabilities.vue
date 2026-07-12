@@ -459,11 +459,11 @@ const submitLabel = computed(() =>
                                 {{ instance.status.detail ?? "Not connected" }} — Log in →
                             </button>
                             <!-- A capability that needs a sandbox rebuild (Discord voice / a DB client / a browser whose
-                                 Chromium isn't installed yet) is otherwise a dead-end "pending" — point at the /sandbox
-                                 hub where the rebuild command lives. -->
+                                 Chromium isn't installed yet) is otherwise a dead-end "pending" — point at the Sandbox ▸
+                                 Environment tab where the rebuild command lives. -->
                             <RouterLink
                                 v-else-if="instance.status.state === 'pending'"
-                                to="/sandbox"
+                                to="/sandbox/environment"
                                 class="inline-flex items-center gap-1 text-2xs text-warning hover:underline"
                             >
                                 <Icon name="exclamation-triangle" />

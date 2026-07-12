@@ -9,6 +9,7 @@ import { ensureFreshToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { createDiscordVoiceServer } from "../discord/voice-tools.js";
+import { createHashlineServer } from "../hashline/hashline-tools.js";
 import { createSessionSearchServer } from "../sessions/session-search-tool.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
@@ -227,13 +228,17 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
         // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join).
         const browserServers = await browserServersOf(capabilities, services.workspace.root);
-        // When the sandbox setting is on, give the agent the search_past_chats tool over this workspace's prior
-        // sessions (Claude-only — Codex has no equivalent in-process tool seam).
-        const { searchPastChats } = await services.sandboxSettings.get();
+        // Per-sandbox agent toggles. searchPastChats gives the agent the search_past_chats tool over this
+        // workspace's prior sessions (Claude-only — Codex has no equivalent in-process tool seam).
+        // stableSystemPrompt keeps the preset system prompt byte-stable so the provider prompt cache survives the
+        // turn — the cross-provider delegation note then rides the user message instead of the system prompt.
+        const { searchPastChats, stableSystemPrompt, hashlineEdits } = await services.sandboxSettings.get();
         const sdkServers = {
             ...discordServers,
             ...browserServers,
             ...(searchPastChats ? { pastChats: createSessionSearchServer(services.workspace.root, input.sessionId) } : {}),
+            // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
+            ...(hashlineEdits ? { hashline: createHashlineServer(services.workspace.root) } : {}),
         };
         // Cross-provider delegation via the shell: when a Codex/Grok account is connected, the agent's Bash
         // gets the codex CLI's CODEX_HOME (first connected account, same resolution as a primary turn) and the
@@ -247,32 +252,45 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         // note never hardcodes a since-renamed id. Tolerate a transient xAI blip — a Claude turn must not fail on
         // this lookup; the note then omits the model and tells the agent to list xAI's models itself.
         const grokConnected = await services.openCode.connected("xai");
-        const grokModel = grokConnected
-            ? await services.openCode
-                  .xaiModels()
-                  .then((catalog) => catalog.default ?? catalog.models[0]?.id)
-                  .catch(() => undefined)
-            : undefined;
+        // Skip the live model lookup in stable mode — the note stays model-agnostic there (it points the agent at
+        // `opencode models`), so no volatile xAI id enters the turn at all.
+        const grokModel =
+            grokConnected && !stableSystemPrompt
+                ? await services.openCode
+                      .xaiModels()
+                      .then((catalog) => catalog.default ?? catalog.models[0]?.id)
+                      .catch(() => undefined)
+                : undefined;
         const note = delegationNote({
             ...(codexHome !== undefined ? { codexHome } : {}),
             ...(grokConnected ? { openCodeXdg: services.authRoot } : {}),
             ...(grokModel !== undefined ? { grokModel } : {}),
         });
         const shellEnv = { ...cliEnv, ...(codexHome !== undefined ? { CODEX_HOME: codexHome } : {}) };
+        // The turn's user message: attachment note folded in as before. With stableSystemPrompt on, the delegation
+        // note is prepended HERE (a user-message preamble) instead of appended to the preset system prompt, so the
+        // cached system+tools prefix stays byte-stable and the provider prompt cache is reused across the session.
+        const promptWithAttachments = attachmentPaths.length > 0 ? withAttachmentNote(base.prompt, attachmentPaths) : base.prompt;
+        const prompt = stableSystemPrompt && note !== undefined ? `${note}\n\n---\n\n${promptWithAttachments}` : promptWithAttachments;
         run = services.agent;
         request = {
             ...base,
+            prompt,
             // Fall back to the daemon-wide default model when the turn didn't pin one (a per-automation
             // `model` already rode into `base` above and wins). Empty config ⇒ the subscription default.
             ...(input.model === undefined && services.config.intenticAgentModel !== "" ? { model: services.config.intenticAgentModel } : {}),
-            ...(attachmentPaths.length > 0 ? { prompt: withAttachmentNote(base.prompt, attachmentPaths) } : {}),
             ...(plugins.length > 0 ? { plugins } : {}),
             ...(oauthToken !== undefined ? { oauthToken } : {}),
             ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
             ...(tools.length > 0 ? { tools } : {}),
             ...(Object.keys(sdkServers).length > 0 ? { sdkServers } : {}),
+            // hashlineEdits owns file mutation via the hashline MCP server above, so drop the native Edit/Write
+            // from the model's context (native Read stays for viewing images/PDFs).
+            ...(hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
-            ...(note !== undefined ? { systemAppend: note } : {}),
+            // Off (default): append the note to the preset system prompt (prior behavior). On: it rode the user
+            // message above instead, so nothing is appended and the system prompt stays byte-stable/cacheable.
+            ...(note !== undefined && !stableSystemPrompt ? { systemAppend: note } : {}),
         };
     }
     // Bring every repo with a remote up to its latest commit before the agent reads the tree, so the turn works

@@ -26,11 +26,12 @@ RUN pnpm --version \
 # turbo builds each package after its workspace deps (^build), so the CLI's libs are built before it.
 # Scope to the core deploy targets (+ their deps via ^build) so the image build never pulls the platform/site
 # toolchains — the monorepo now holds them too, but the sandbox image needs only @intentic/*.
-RUN pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli --filter=@intentic/iq
+RUN pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli --filter=@intentic/iq --filter=@intentic/lsp
 # Prune each package to a standalone, production-only tree (workspace deps bundled into node_modules).
 RUN pnpm --filter @intentic/sandbox deploy --prod /out/sandbox
 RUN pnpm --filter @intentic/cli deploy --prod /out/cli
 RUN pnpm --filter @intentic/iq deploy --prod /out/iq
+RUN pnpm --filter @intentic/lsp deploy --prod /out/lsp
 # Bake the iq models so `iq ask` works fully offline from first boot: bge-small embedder (~34MB) + ms-marco
 # cross-encoder reranker (~23MB), both int8.
 RUN node _libs/iq-engine/scripts/fetch-model.mjs /opt/iq-models
@@ -131,6 +132,13 @@ RUN chmod +x /opt/intentic-cli/dist/cli.js \
 COPY --from=build /out/iq /opt/iq
 RUN chmod +x /opt/iq/dist/cli.js \
     && ln -s /opt/iq/dist/cli.js /usr/local/bin/iq
+# The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
+# daemon writes/removes its skill at /work/.claude/skills/lsp). Standalone: it drives the TS language service
+# (its own bundled typescript) over whatever tsconfig project the agent points it at in /work. Same chmod +
+# symlink rationale as iq/intentic — tsc keeps the file's shebang, so the linked cli.js runs directly.
+COPY --from=build /out/lsp /opt/lsp
+RUN chmod +x /opt/lsp/dist/cli.js \
+    && ln -s /opt/lsp/dist/cli.js /usr/local/bin/lsp
 # The baked embedding model behind `iq ask` (IQ_MODEL_DIR below); absent → iq degrades to lexical, never fetches.
 COPY --from=build /opt/iq-models /opt/iq-models
 # The iq Claude Code plugin (skill + SessionStart nudge) — the single source that teaches every agent to prefer

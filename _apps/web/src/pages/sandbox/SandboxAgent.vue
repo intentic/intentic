@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import { CopyButton } from "@intentic-app/ui";
+import { Card, cmp, CopyButton } from "@intentic-app/ui";
 import Button from "primevue/button";
-import Dialog from "primevue/dialog";
-import { computed, ref } from "vue";
-import { providerTabs } from "../composables/chat/conversation";
-import { useChat } from "../composables/chat/useChat";
+import ToggleSwitch from "primevue/toggleswitch";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { providerTabs } from "../../composables/chat/conversation";
+import { useChat } from "../../composables/chat/useChat";
+import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
+import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
+import { useSandbox } from "../../composables/useSandbox";
+import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 
-/* Global, body-portaled account-management dialog. Mounted once in WorkspaceShell so openAccountManage() works
- * the same from the chat composer, the Secrets page, and the Sandbox page — desktop and mobile alike. Everything
- * runs off `managedProvider` (decoupled from the active chat's provider), so managing accounts never touches the
- * active conversation. The connect handshake's open-URL anchors stay real user-gesture clicks inside the dialog. */
+/* The Sandbox hub's "Agent" tab — the home for everything about the AI the sandbox runs. The AI provider
+ * accounts (Claude / ChatGPT / Grok) it authenticates as, its behavior settings (search past chats), and the
+ * import-memory tool. Accounts and memory live INSIDE the sandbox, never on the platform, which is why this is
+ * a sandbox tab. The account surface reuses useChat's handshake paths unchanged; opening the tab loads usage
+ * and preps the provider (openAccountManage), closing it tears the handshake down (closeAccountManage). */
 
+const sandbox = useSandbox();
+
+// --- AI provider accounts (was the global AccountManageDialog) ---------------------------------------------
 const {
     managedProvider,
     setManagedProvider,
@@ -18,14 +26,17 @@ const {
     authorizeUrl,
     userCode,
     connectLabel,
-    accountManageOpen,
     accountUsage,
     error: chatError,
+    openAccountManage,
     closeAccountManage,
     startConnect,
     completeConnect,
     disconnect,
 } = useChat();
+
+onMounted(() => openAccountManage());
+onUnmounted(() => closeAccountManage());
 
 // Compact "142k" token count and a short usage summary line per account (from /system/usage).
 const shortTokens = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
@@ -45,9 +56,6 @@ const usageLine = (id: string): string | undefined => {
     return `${usage.turns} turns · ${shortTokens(usage.inputTokens)} in / ${shortTokens(usage.outputTokens)} out${cache}${cost}`;
 };
 
-const accountTitle = computed(() =>
-    managedProvider.value === `codex` ? `ChatGPT accounts` : managedProvider.value === `grok` ? `Grok accounts` : `Claude accounts`,
-);
 // The flows differ: Anthropic shows a code on its hosted page to paste back; ChatGPT uses a device code (the
 // user enters it on OpenAI's page and this panel connects on its own); Grok (xAI OAuth) opens x.ai on any
 // device and connects on approval (a paste-back code only for the non-device method).
@@ -68,7 +76,6 @@ const canConnectMore = computed(() => managedProvider.value !== `grok` || manage
 const connecting = computed(() => authorizeUrl.value !== null);
 
 const connectCode = ref(``);
-
 const finishConnect = async (): Promise<void> => {
     const code = connectCode.value.trim();
     if (code.length === 0) {
@@ -79,27 +86,60 @@ const finishConnect = async (): Promise<void> => {
         connectCode.value = ``;
     }
 };
+
+// --- Agent behavior: search past chats (per-sandbox, daemon .intentic/settings.json) -----------------------
+const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
+
+// The daemon overwrites the whole settings object, so spread the current settings and flip just this flag. The
+// toggle is disabled until settings load, so a defined value is guaranteed by the time this fires.
+const toggleSearchPastChats = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, searchPastChats: value });
+};
+
+// --- Import memory (was ImportMemoryDialog) ----------------------------------------------------------------
+const { readFile, saveText } = useWorkspaceTree();
+const importText = ref(``);
+const importSaving = ref(false);
+const importError = ref<string | undefined>(undefined);
+const importMemory = async (): Promise<void> => {
+    const text = importText.value.trim();
+    if (text === `` || importSaving.value) {
+        return;
+    }
+    importSaving.value = true;
+    importError.value = undefined;
+    try {
+        for (const file of MEMORY_FILES) {
+            // readFile throws on a missing file (first import) — treat that as an empty starting point.
+            const current = await readFile(file).catch(() => ``);
+            await saveText(file, mergeMemory(current, text));
+        }
+        importText.value = ``;
+    } catch (caught) {
+        importError.value = caught instanceof Error ? caught.message : `Couldn't save memory.`;
+    } finally {
+        importSaving.value = false;
+    }
+};
 </script>
 
 <template>
-    <Dialog
-        :visible="accountManageOpen"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
-        :show-header="false"
-        :style="{ width: '28rem' }"
-        :pt="{ content: '!p-0 !overflow-hidden !rounded-lg' }"
-        @update:visible="
-            (v: boolean) => {
-                if (!v) closeAccountManage();
-            }
-        "
-    >
-        <div class="flex flex-col gap-2 px-3 py-3 text-sm">
-            <div class="flex items-center justify-between">
-                <span class="text-sm font-semibold text-content">{{ accountTitle }}</span>
-                <div class="flex items-center gap-1">
+    <div class="flex flex-col gap-2.5">
+        <!-- AI provider accounts the agent runs as. -->
+        <Card class="flex flex-col gap-3">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex items-center gap-2.5">
+                    <Icon name="sparkles" class="text-lg text-link" />
+                    <div>
+                        <h2 class="font-semibold leading-tight">AI account</h2>
+                        <p class="text-xs text-muted">The account Claude Code signs in as. Stored inside your sandbox, never on the platform.</p>
+                    </div>
+                </div>
+                <div class="flex shrink-0 items-center gap-1">
                     <button
                         v-for="tab in providerTabs"
                         :key="tab.value"
@@ -110,9 +150,6 @@ const finishConnect = async (): Promise<void> => {
                         :aria-pressed="managedProvider === tab.value"
                     >
                         {{ tab.label }}
-                    </button>
-                    <button type="button" class="composer-ghost h-6 w-6" @click="closeAccountManage" aria-label="Close">
-                        <Icon name="times" class="text-2xs" />
                     </button>
                 </div>
             </div>
@@ -240,6 +277,69 @@ const finishConnect = async (): Promise<void> => {
                     </div>
                 </template>
             </div>
-        </div>
-    </Dialog>
+        </Card>
+
+        <!-- Past-chat search — lets the agent look through the active sandbox's earlier conversations. Stored
+             per-sandbox in the daemon, so it's disabled until the active sandbox is reachable. -->
+        <Card class="flex items-center justify-between">
+            <div class="flex min-w-0 items-center gap-2.5">
+                <Icon name="history" class="text-lg text-muted" />
+                <div class="min-w-0">
+                    <h2 class="font-semibold leading-tight">Search past chats</h2>
+                    <p class="text-xs text-muted">Let the assistant search this sandbox's earlier conversations for relevant details.</p>
+                </div>
+            </div>
+            <ToggleSwitch
+                :model-value="sandboxSettings?.searchPastChats ?? false"
+                :disabled="sandboxSettings === undefined"
+                @update:model-value="toggleSearchPastChats"
+            />
+        </Card>
+
+        <!-- Import memory: bring context from another AI assistant into this sandbox's agent memory files. -->
+        <Card class="flex flex-col gap-3">
+            <div class="flex items-center gap-2.5">
+                <Icon name="sparkles" class="text-lg text-muted" />
+                <div>
+                    <h2 class="font-semibold leading-tight">Import memory</h2>
+                    <p class="text-xs text-muted">
+                        Bring context from another AI assistant into
+                        <span class="font-medium text-content">{{ sandbox.active.value?.name ?? `your sandbox` }}</span> so Claude and ChatGPT
+                        remember it.
+                    </p>
+                </div>
+            </div>
+
+            <div v-if="importError" :class="cmp.alertDanger()">{{ importError }}</div>
+
+            <label class="flex flex-col gap-1.5">
+                <span class="flex items-center gap-2 text-sm font-medium text-content">
+                    <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">1</span>
+                    Copy this prompt into a chat with your other AI provider
+                </span>
+                <textarea :value="IMPORT_PROMPT" readonly rows="6" :class="cmp.input('w-full font-mono resize-y text-subtle')"></textarea>
+                <div class="flex justify-end">
+                    <CopyButton :text="IMPORT_PROMPT" label="Copy prompt" />
+                </div>
+            </label>
+
+            <label class="flex flex-col gap-1.5">
+                <span class="flex items-center gap-2 text-sm font-medium text-content">
+                    <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-content/10 text-2xs font-semibold">2</span>
+                    Paste the result below to add it to memory
+                </span>
+                <textarea
+                    v-model="importText"
+                    rows="8"
+                    placeholder="Paste your memory details here"
+                    :class="cmp.input('w-full font-mono resize-y')"
+                ></textarea>
+                <div class="flex justify-end">
+                    <Button label="Add to memory" :loading="importSaving" :disabled="importText.trim().length === 0" @click="importMemory">
+                        <template #icon><Icon name="sparkles" /></template>
+                    </Button>
+                </div>
+            </label>
+        </Card>
+    </div>
 </template>

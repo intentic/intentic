@@ -6,7 +6,6 @@ import { useAuth } from "../composables/useAuth";
 import { useChat } from "../composables/chat/useChat";
 import { reportIdle, reportSessionId, reportView } from "../composables/usePresence";
 import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
-import AccountManageDialog from "./AccountManageDialog.vue";
 import GoogleSigninGate from "./GoogleSigninGate.vue";
 
 /* The persistent post-login shell, split by form factor: ShellDesktop (rail + chat column + terminal panel)
@@ -75,6 +74,4 @@ onUnmounted(() => {
     <ShellDesktop v-else />
     <!-- The browser→sandbox sign-in fallback (a fixed overlay): shows only when a Google ID token is needed. -->
     <GoogleSigninGate />
-    <!-- App-wide account-management modal, opened from Secrets / Sandbox / the chat composer on any route. -->
-    <AccountManageDialog />
 </template>

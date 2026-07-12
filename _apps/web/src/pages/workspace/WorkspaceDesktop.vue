@@ -467,7 +467,7 @@ const endResize = (event: PointerEvent): void => {
                         <button
                             type="button"
                             class="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                            @click="router.push({ name: 'sandbox', query: { enable: 'desktop-sync' } })"
+                            @click="router.push({ name: 'sandbox', params: { tab: 'sync' }, query: { enable: 'desktop-sync' } })"
                             v-tooltip.bottom="'Edit locally — sync these files to your computer'"
                             aria-label="Edit locally with desktop sync"
                         >

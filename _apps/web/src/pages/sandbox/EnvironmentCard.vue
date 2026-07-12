@@ -3,9 +3,10 @@ import { EnvironmentSchema } from "@intentic-app/api-contract";
 import { Card, Code, StatusBadge } from "@intentic-app/ui";
 import { useQueryClient } from "@tanstack/vue-query";
 import Button from "primevue/button";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { sandboxJson } from "../../composables/sandboxClient";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../composables/sandbox/useEnvironment";
+import { useSandbox } from "../../composables/useSandbox";
 import DiffView from "../workspace/DiffView.vue";
 
 /* The sandbox's environment (its composed overlay Dockerfile, on the /sandbox hub). The daemon composes it
@@ -18,6 +19,10 @@ import DiffView from "../workspace/DiffView.vue";
 const queryClient = useQueryClient();
 const actionError = ref<string | undefined>(undefined);
 const busy = ref(false);
+
+// Only the owner can decide on a proposal — the daemon is the real gate (it 403s a non-owner approve), but we
+// hide the buttons for members so a diff they can't act on isn't presented as actionable.
+const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
 
 // The derived environment state (shared with the shell's rebuild banner via one vue-query fetch).
 const { state, query, proposal, pending, applied, serverManaged, rebuildCommand } = useEnvironment();
@@ -76,7 +81,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                     path="environment.custom.Dockerfile"
                 />
             </div>
-            <div class="flex items-center justify-end gap-2">
+            <div v-if="isOwner" class="flex items-center justify-end gap-2">
                 <Button label="Reject" size="small" severity="danger" :text="true" :loading="busy" @click="reject">
                     <template #icon><Icon name="times" /></template>
                 </Button>
@@ -84,6 +89,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                     <template #icon><Icon name="check" /></template>
                 </Button>
             </div>
+            <p v-else class="text-2xs text-subtle">Only the sandbox owner can approve or reject this change.</p>
         </template>
 
         <!-- Approved, not yet built into the running container. The one-liner pins the approved content's

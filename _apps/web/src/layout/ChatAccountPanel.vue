@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import Button from "primevue/button";
+import { useRouter } from "vue-router";
 import { providerTabs } from "../composables/chat/conversation";
 import { useChat } from "../composables/chat/useChat";
 
 /* The connect gate above the composer: shown when the active conversation's provider has no account yet. It
- * offers a provider pick (while unlocked) and a "Connect account" button that opens the global account dialog
- * (AccountManageDialog, mounted in the shell) — where the connect handshake and per-account management live. */
+ * offers a provider pick and a "Connect account" button that deep-links to the Sandbox ▸ Agent tab — the
+ * account's home, where the connect handshake and per-account management live. */
 
-const { connected, provider, selectProvider, accountManageOpen, openAccountManage } = useChat();
+const { connected, provider, selectProvider } = useChat();
+const router = useRouter();
 </script>
 
 <template>
@@ -17,9 +19,8 @@ const { connected, provider, selectProvider, accountManageOpen, openAccountManag
             Connect your {{ provider === `codex` ? `ChatGPT` : provider === `grok` ? `Grok` : `Claude` }} account to start chatting.
         </p>
         <!-- Point this chat at whichever provider is connected, straight from the gate, so picking a
-             not-yet-connected provider is never a dead end. Hidden while the manage dialog is open (that
-             dialog owns provider selection). -->
-        <div v-if="!accountManageOpen" class="flex items-center gap-1">
+             not-yet-connected provider is never a dead end. -->
+        <div class="flex items-center gap-1">
             <button
                 v-for="tab in providerTabs"
                 :key="tab.value"
@@ -32,7 +33,7 @@ const { connected, provider, selectProvider, accountManageOpen, openAccountManag
                 {{ tab.label }}
             </button>
         </div>
-        <Button label="Connect account" size="small" @click="openAccountManage">
+        <Button label="Connect account" size="small" @click="router.push('/sandbox/agent')">
             <template #icon><Icon name="link" /></template>
         </Button>
     </div>

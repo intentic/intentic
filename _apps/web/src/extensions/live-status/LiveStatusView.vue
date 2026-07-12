@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ResourceGroupSchema, type Deployment } from "@intentic-app/api-contract";
-import { Card, cmp, InfoHint, Page, StatusBadge } from "@intentic-app/ui";
+import { Card, cmp, CopyButton, InfoHint, Page, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
-import { computed, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import PlanStepRow from "../../components/PlanStepRow.vue";
 import { convergedBadge, type PlanOrphan, type PlanStep, readPlanSteps, statusDot, statusLabel } from "../../composables/extensions/reconcileStatus";
 import { groupAccent } from "../../composables/extensions/resourceVisual";
+import { reveal } from "../../composables/extensions/useSecrets";
 import { sandboxRequest } from "../../composables/sandboxClient";
 import { useDeployments } from "../../composables/extensions/useDeployments";
 import { useWorkspaceState } from "../../composables/extensions/useWorkspaceState";
+import { useSandbox } from "../../composables/useSandbox";
 import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
 
@@ -74,6 +76,26 @@ const refresh = async (): Promise<void> => {
 // Env keys with their non-secret value; blanked values (secrets/refs) show the key alone.
 const envList = (deployment: Deployment): { key: string; label: string }[] =>
     Object.entries(deployment.env).map(([key, value]) => ({ key, label: value === `` ? key : `${key}=${value}` }));
+
+// Provisioned-services access — URLs + admin logins from the last apply (status.json, value-free), the "how do
+// I log into what's live" companion to the deployments board. A generated password's value is fetched on click
+// through the daemon's owner-gated reveal; members see the secret's name instead.
+const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
+const access = computed(() => state.value?.access ?? []);
+const revealedAccess = reactive(new Map<string, string>());
+const accessError = ref<string | undefined>(undefined);
+const toggleAccessReveal = async (key: string): Promise<void> => {
+    accessError.value = undefined;
+    if (revealedAccess.has(key)) {
+        revealedAccess.delete(key);
+        return;
+    }
+    try {
+        revealedAccess.set(key, await reveal(key));
+    } catch (err) {
+        accessError.value = err instanceof Error ? err.message : `Could not reveal the password.`;
+    }
+};
 </script>
 
 <template>
@@ -233,6 +255,56 @@ const envList = (deployment: Deployment): { key: string; label: string }[] =>
                             </p>
                         </div>
                         <p v-else-if="!checking" class="text-2xs text-subtle">Refresh to read the live state of your infrastructure.</p>
+                    </div>
+                </section>
+
+                <!-- Access — the URLs + admin logins for what's provisioned (from the last apply's status.json).
+                     A generated password reveals on click through the daemon (owner only); members see its name. -->
+                <section v-if="access.length > 0" class="rounded-lg border border-line bg-card p-4">
+                    <h3 :class="cmp.sectionLabel('mb-3')">Access</h3>
+                    <div v-if="accessError" :class="cmp.alertDanger('mb-2')">{{ accessError }}</div>
+                    <div class="flex flex-col gap-2">
+                        <div v-for="entry in access" :key="entry.id" class="flex flex-col gap-1.5 rounded-lg border border-line px-3 py-2.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-medium text-content">{{ entry.label }}</span>
+                                <a
+                                    :href="entry.url"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    class="inline-flex items-center gap-1 font-mono text-xs text-link hover:underline"
+                                >
+                                    {{ entry.url }} <Icon name="external-link" class="text-2xs" />
+                                </a>
+                            </div>
+                            <div
+                                v-if="entry.username !== undefined || entry.password !== undefined"
+                                class="flex flex-wrap items-center gap-3 text-xs text-muted"
+                            >
+                                <span v-if="entry.username !== undefined"
+                                    >user: <span class="font-mono text-content">{{ entry.username }}</span></span
+                                >
+                                <template v-if="entry.password !== undefined">
+                                    <template v-if="entry.password.source === `generated` && isOwner">
+                                        <span v-if="revealedAccess.has(entry.password.key)" class="inline-flex items-center gap-1">
+                                            password: <span class="font-mono text-content">{{ revealedAccess.get(entry.password.key) }}</span>
+                                            <CopyButton :text="revealedAccess.get(entry.password.key) ?? ``" />
+                                        </span>
+                                        <Button
+                                            :label="revealedAccess.has(entry.password.key) ? `Hide password` : `Reveal password`"
+                                            size="small"
+                                            severity="secondary"
+                                            :text="true"
+                                            @click="toggleAccessReveal(entry.password.key)"
+                                        >
+                                            <template #icon><Icon :name="revealedAccess.has(entry.password.key) ? `eye-slash` : `eye`" /></template>
+                                        </Button>
+                                    </template>
+                                    <span v-else
+                                        >password: your <span class="font-mono text-content">{{ entry.password.key }}</span> secret</span
+                                    >
+                                </template>
+                            </div>
+                        </div>
                     </div>
                 </section>
             </div>

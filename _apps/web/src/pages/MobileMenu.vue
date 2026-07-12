@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic-app/ui";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
@@ -8,8 +8,6 @@ import { detectActivations } from "../extensions";
 import { usePanels } from "../composables/extensions/usePanels";
 import { presenceActivity, presenceHue, presenceInitials, presenceOthers } from "../composables/usePresence";
 import { useSandbox } from "../composables/useSandbox";
-import ManageAccessDialog from "./ManageAccessDialog.vue";
-import SandboxSettingsDialog from "./SandboxSettingsDialog.vue";
 
 /* The mobile Menu tab: everything the desktop rail and its popovers hold, as one thumb-friendly page —
  * sandbox switching, the live presence roster, the area list (rail tiles), and the account actions. State
@@ -50,9 +48,6 @@ const areas = computed<readonly AreaRow[]>(() => [
     { to: `/settings`, label: `Settings`, icon: `cog` },
 ]);
 
-const manageOpen = ref(false);
-const settingsOpen = ref(false);
-
 const addSandbox = (): void => {
     const limit = entitlements.value?.sandboxLimit;
     if (limit !== undefined && sandbox.sandboxes.value.filter((option) => option.role === `owner`).length >= limit) {
@@ -60,14 +55,6 @@ const addSandbox = (): void => {
         return;
     }
     void router.push(`/setup`);
-};
-
-const manageAccess = (): void => {
-    if (entitlements.value?.sandboxSharing === false) {
-        upgradeOpen.value = true;
-        return;
-    }
-    manageOpen.value = true;
 };
 
 const logout = async (): Promise<void> => {
@@ -113,24 +100,6 @@ const logout = async (): Promise<void> => {
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="plus" class="text-base text-muted" /></span>
                 Add sandbox
             </button>
-            <template v-if="sandbox.active.value?.role === 'owner'">
-                <button
-                    type="button"
-                    class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm text-content transition-colors active:bg-overlay"
-                    @click="settingsOpen = true"
-                >
-                    <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="cog" class="text-base text-muted" /></span>
-                    Sandbox settings
-                </button>
-                <button
-                    type="button"
-                    class="flex h-12 items-center gap-3 rounded-lg px-2 text-left text-sm text-content transition-colors active:bg-overlay"
-                    @click="manageAccess"
-                >
-                    <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon name="users" class="text-base text-muted" /></span>
-                    Manage access
-                </button>
-            </template>
         </section>
 
         <!-- The other members connected right now — same roster the desktop rail stacks. -->
@@ -221,7 +190,5 @@ const logout = async (): Promise<void> => {
             </button>
         </section>
 
-        <ManageAccessDialog v-model:visible="manageOpen" />
-        <SandboxSettingsDialog v-model:visible="settingsOpen" />
     </div>
 </template>

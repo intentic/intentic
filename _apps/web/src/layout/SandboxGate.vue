@@ -64,11 +64,11 @@ const switchAccount = (): void => {
          workspace. -->
     <SandboxConnecting v-else-if="!reachable && (tree.length === 0 || probeError !== undefined)" />
     <template v-else>
-        <!-- The sandbox environment needs owner action that lives on /sandbox — surface it everywhere, since
-             that hub has no rail tile. Rebuild takes priority over an unreviewed proposal. -->
+        <!-- The sandbox environment needs owner action that lives on the Sandbox ▸ Environment tab — surface it
+             everywhere, since that hub has no rail tile. Rebuild takes priority over an unreviewed proposal. -->
         <RouterLink
             v-if="envPending || envProposal"
-            to="/sandbox"
+            to="/sandbox/environment"
             class="flex shrink-0 items-center gap-3 border-b border-warning/40 bg-warning/10 px-4 py-2 text-xs text-warning hover:bg-warning/15"
         >
             <Icon name="exclamation-triangle" />
