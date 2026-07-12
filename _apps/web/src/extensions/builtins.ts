@@ -1,8 +1,12 @@
-import type { CapabilitySummary, PanelSummary } from "@intentic-app/api-contract";
-import type { Activation, Extension } from "./extension";
+import type { Activation, ViewRegistration } from "@intentic/extension-api";
 
-// The static extension registry — array order is rail order for the contributed elements.
-export const extensions: readonly Extension[] = [
+/* The compiled-in first-party extensions — registered into the runtime registry (registry.ts) at module load,
+ * ahead of any dynamically loaded third-party bundle, so array order is rail order for the contributed
+ * elements. Builtins share the public registration/detection contract (dogfooding @intentic/extension-api) but
+ * their view internals keep privileged imports (@intentic-app/ui, PrimeVue, composables) — they compile into
+ * the app; third-party views get vue + the IntenticApi only. */
+
+export const builtins: readonly ViewRegistration[] = [
     {
         id: `infrastructure`,
         label: `Infrastructure`,
@@ -100,27 +104,3 @@ export const extensions: readonly Extension[] = [
         view: async () => (await import(`../pages/Panel.vue`)).default,
     },
 ];
-
-// One resolved sidebar element: the extension + the activation it contributed.
-export interface ActiveExtension {
-    readonly extension: Extension;
-    readonly activation: Activation;
-}
-
-// Run every extension's detect() and compose the sidebar: fallback activations are dropped for repos a
-// non-fallback extension already claims — the single cross-extension rule, applied once here. Repo-less
-// (capability-driven) activations sit outside the claim rule.
-export const detectActivations = (repos: readonly PanelSummary[], capabilities: readonly CapabilitySummary[]): ActiveExtension[] => {
-    const detected = extensions.map((extension) => ({ extension, activations: extension.detect(repos, capabilities) }));
-    const claimed = new Set(
-        detected
-            .filter(({ extension }) => extension.fallback !== true)
-            .flatMap(({ activations }) => activations.flatMap((a) => (a.repo === undefined ? [] : [a.repo]))),
-    );
-    return detected.flatMap(({ extension, activations }) =>
-        (extension.fallback === true ? activations.filter((a) => a.repo === undefined || !claimed.has(a.repo)) : activations).map((activation) => ({
-            extension,
-            activation,
-        })),
-    );
-};

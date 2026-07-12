@@ -19,6 +19,7 @@
         "@intentic-app/catalog": "workspace:*",
         "@intentic-app/localhost-https": "workspace:*",
         "@intentic-app/ui": "workspace:*",
+        "@intentic/extension-api": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
         "@orpc/client": "catalog:",

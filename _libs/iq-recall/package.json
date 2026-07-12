@@ -1,20 +1,17 @@
 {
-    "name": "@intentic/iq",
+    "name": "@intentic/iq-recall",
     "version": "0.0.0",
-    "description": "iq — agent-native workspace search CLI: one intent-first entry point over lexical, structural, semantic, and git engines",
+    "description": "Session recall behind the iq CLI — indexes Claude Code transcripts (node:sqlite) for topic→file amplification and session forking",
     "license": "MIT",
     "type": "module",
     "repository": {
         "type": "git",
         "url": "git+https://gitlab.com/radarsu/intentic.git",
-        "directory": "_apps/iq"
+        "directory": "_libs/iq-recall"
     },
     "files": [
         "dist"
     ],
-    "bin": {
-        "iq": "./dist/cli.js"
-    },
     "publishConfig": {
         "access": "public",
         "registry": "https://registry.npmjs.org/"
@@ -30,23 +27,27 @@
                 "@intentic/src": "./src/index.ts",
                 "default": "./dist/index.js"
             }
+        },
+        "./testing": {
+            "types": "./dist/testing.d.ts",
+            "import": {
+                "@intentic/src": "./src/testing.ts",
+                "default": "./dist/testing.js"
+            },
+            "require": {
+                "@intentic/src": "./src/testing.ts",
+                "default": "./dist/testing.js"
+            }
         }
     },
     "scripts": {
         "build": "tsc",
-        "dev": "tsc --build --watch",
         "watch": "tsc --build --watch",
         "test": "vitest run",
         "test:watch": "vitest"
     },
     "dependencies": {
-        "@intentic/iq-engine": "workspace:*",
-        "@intentic/iq-recall": "workspace:*",
-        "@intentic/sandbox-contract": "workspace:*",
-        "@puristic/env": "catalog:",
-        "@stricli/core": "catalog:",
-        "tslib": "catalog:",
-        "zod": "catalog:"
+        "tslib": "catalog:"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",

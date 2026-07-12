@@ -7,7 +7,6 @@
         "skipLibCheck": true
     },
     "include": ["./src/**/*"],
-    "exclude": ["./src/**/*.test.ts", "./src/__fixtures__/**"],
-    "references": [{ "path": "../../_libs/iq-engine" }, { "path": "../../_libs/iq-recall" }, { "path": "../../_libs/sandbox-contract" }],
+    "exclude": ["./src/**/*.test.ts"],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

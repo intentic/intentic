@@ -1,20 +1,17 @@
 {
-    "name": "@intentic/iq",
+    "name": "@intentic/extension-api",
     "version": "0.0.0",
-    "description": "iq — agent-native workspace search CLI: one intent-first entry point over lexical, structural, semantic, and git engines",
+    "description": "The versioned public API intentic extensions compile against — manifest schema, detection facts and the host API",
     "license": "MIT",
     "type": "module",
     "repository": {
         "type": "git",
         "url": "git+https://gitlab.com/radarsu/intentic.git",
-        "directory": "_apps/iq"
+        "directory": "_libs/extension-api"
     },
     "files": [
         "dist"
     ],
-    "bin": {
-        "iq": "./dist/cli.js"
-    },
     "publishConfig": {
         "access": "public",
         "registry": "https://registry.npmjs.org/"
@@ -34,24 +31,18 @@
     },
     "scripts": {
         "build": "tsc",
-        "dev": "tsc --build --watch",
-        "watch": "tsc --build --watch",
-        "test": "vitest run",
-        "test:watch": "vitest"
+        "watch": "tsc --build --watch"
     },
     "dependencies": {
-        "@intentic/iq-engine": "workspace:*",
-        "@intentic/iq-recall": "workspace:*",
-        "@intentic/sandbox-contract": "workspace:*",
-        "@puristic/env": "catalog:",
-        "@stricli/core": "catalog:",
         "tslib": "catalog:",
         "zod": "catalog:"
     },
+    "peerDependencies": {
+        "vue": "^3.5.0"
+    },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
-        "@types/node": "catalog:",
         "typescript": "catalog:",
-        "vitest": "catalog:"
+        "vue": "catalog:"
     }
 }

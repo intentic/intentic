@@ -12,7 +12,7 @@ import { usePanels } from "../../composables/extensions/usePanels";
 import { convergedBadge } from "../../composables/extensions/reconcileStatus";
 import { useSecrets } from "../../composables/extensions/useSecrets";
 import { useWorkspaceState } from "../../composables/extensions/useWorkspaceState";
-import { detectActivations } from "../../extensions";
+import { detectActivations } from "../registry";
 import AddWantDialog from "./AddWantDialog.vue";
 import ApplyProgress from "./ApplyProgress.vue";
 import ChangePreview from "./ChangePreview.vue";

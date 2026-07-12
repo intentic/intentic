@@ -14,6 +14,7 @@ import { outline } from "./outline/outline.command.js";
 import { q } from "./q/q.command.js";
 import { recent } from "./recent/recent.command.js";
 import { refs } from "./refs/refs.command.js";
+import { sessionsCommand } from "./sessions/sessions.routes.js";
 import { sym } from "./sym/sym.command.js";
 import { who } from "./who/who.command.js";
 
@@ -42,6 +43,7 @@ const HELP = `One search tool, intent-first. Bare query auto-detects intent and 
   iq log "MAX_MATCHES" --path src         git history of a string
   iq who src/app.ts:15                    blame an anchor
   iq multi                                queries from stdin, one spawn
+  iq sessions files "auth refresh"        files past sessions touched for a topic
 
 Every hit is a path:line anchor. Output fits --budget (default 1500 tokens); truncation footers
 give the exact --after command to continue. Scope: --in <dir> --repo <name> --lang ts,py
@@ -66,6 +68,7 @@ export const app = buildApplication(
             who,
             multi,
             index: indexCommand,
+            sessions: sessionsCommand,
         },
         defaultCommand: "q",
         docs: { brief: "iq — agent-native workspace search", fullDescription: HELP },

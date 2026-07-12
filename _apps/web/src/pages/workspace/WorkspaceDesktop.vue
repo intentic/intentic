@@ -8,7 +8,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
-import { detectActivations } from "../../extensions";
+import { detectActivations } from "../../extensions/registry";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useMonaco } from "../../composables/workspace/useMonaco";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";

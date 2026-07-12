@@ -4,7 +4,7 @@ import { computed, onMounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { detectActivations } from "../extensions";
+import { detectActivations } from "../extensions/registry";
 import { usePanels } from "../composables/extensions/usePanels";
 import { presenceActivity, presenceHue, presenceInitials, presenceOthers } from "../composables/usePresence";
 import { useSandbox } from "../composables/useSandbox";
@@ -40,7 +40,8 @@ const areas = computed<readonly AreaRow[]>(() => [
         .filter(({ extension }) => extension.surface === `rail`)
         .map(({ extension, activation }): AreaRow => {
             const to = `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
-            return activation.icon === undefined ? { to, label: activation.title } : { to, label: activation.title, icon: activation.icon };
+            // Activation.icon is an open string in the public extension API; trusted to name one of the app's icons.
+            return activation.icon === undefined ? { to, label: activation.title } : { to, label: activation.title, icon: activation.icon as IconName };
         }),
     { to: `/capabilities`, label: `Add a capability`, icon: `plus` },
     { to: `/terminal`, label: `Terminal`, icon: `code` },

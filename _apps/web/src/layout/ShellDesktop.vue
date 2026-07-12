@@ -5,7 +5,7 @@ import { RouterView, useRoute } from "vue-router";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
-import { detectActivations } from "../extensions";
+import { detectActivations } from "../extensions/registry";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useLayout } from "../composables/useLayout";
@@ -72,7 +72,9 @@ const tiles = computed<readonly AreaTile[]>(() => {
             .filter(({ extension }) => extension.surface === `rail`)
             .map(({ extension, activation }): AreaTile => {
                 const to = `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
-                return activation.icon === undefined ? { to, label: activation.title } : { to, label: activation.title, icon: activation.icon };
+                // Activation.icon is an open string in the public extension API; the rail trusts it names one
+                // of the app's icons (an unknown name renders the icon set's fallback).
+                return activation.icon === undefined ? { to, label: activation.title } : { to, label: activation.title, icon: activation.icon as IconName };
             }),
     ];
 });

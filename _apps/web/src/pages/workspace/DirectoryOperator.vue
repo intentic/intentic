@@ -3,7 +3,7 @@ import { Segmented } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
-import { detectActivations } from "../../extensions";
+import { detectActivations } from "../../extensions/registry";
 import ExtensionView from "../../extensions/ExtensionView.vue";
 
 /* The in-tree management surface for one repository directory: renders the directory-surface extension views the

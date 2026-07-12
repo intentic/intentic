@@ -1,6 +1,6 @@
 import type { PanelSummary } from "@intentic-app/api-contract";
 import { describe, expect, it } from "vitest";
-import { detectActivations } from "./index";
+import { detectActivations } from "./registry";
 
 // A PanelSummary with everything false — override only the facts a case exercises.
 const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => ({

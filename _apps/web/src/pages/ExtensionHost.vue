@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { usePanels } from "../composables/extensions/usePanels";
-import { detectActivations } from "../extensions";
+import { detectActivations } from "../extensions/registry";
 import ExtensionView from "../extensions/ExtensionView.vue";
 
 /* Hosts one extension activation (/ext/:ext/:key): re-runs the registry's detection over the live repo facts
