@@ -3,13 +3,26 @@
     "version": "0.0.0",
     "private": true,
     "type": "module",
-    "main": "src/index.ts",
-    "types": "src/index.ts",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
     "exports": {
         ".": {
-            "types": "./src/index.ts",
-            "default": "./src/index.ts"
+            "types": "./dist/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/index.ts",
+                "default": "./dist/index.js"
+            }
         }
+    },
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --build --watch"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
