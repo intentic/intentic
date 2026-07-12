@@ -56,14 +56,14 @@ const isNavActive = (to: string): boolean => route.path === to || route.path.sta
 // no extension serves lives only in the Workspace file tree.
 const fixedTiles: readonly AreaTile[] = [
     { to: `/workspace`, label: `Workspace`, icon: `folder` },
-    { to: `/automations`, label: `Automations`, icon: `clock` },
     { to: `/secrets`, label: `Secrets`, icon: `key` },
 ];
-// Slotted in after Automations only when the agent has proposed a draft (or left an unreadable draft file) — an
-// empty queue keeps the rail uncluttered, mirroring the extension tiles that appear on content.
+// Slotted in before Secrets only when the agent has proposed a draft (or left an unreadable draft file) — an
+// empty queue keeps the rail uncluttered, mirroring the extension tiles that appear on content. Drafts stays a
+// core shell surface (the mobile bottom-bar "Review" tab depends on it too), so its tile is not an extension.
 const draftsTile: AreaTile = { to: `/drafts`, label: `Drafts`, icon: `send` };
 const tiles = computed<readonly AreaTile[]>(() => {
-    const base = drafts.value.length > 0 || invalidDrafts.value.length > 0 ? fixedTiles.toSpliced(2, 0, draftsTile) : fixedTiles;
+    const base = drafts.value.length > 0 || invalidDrafts.value.length > 0 ? fixedTiles.toSpliced(1, 0, draftsTile) : fixedTiles;
     return [
         ...base,
         ...detectActivations(panels.value, capabilities.value)

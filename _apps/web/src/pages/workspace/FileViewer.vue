@@ -58,18 +58,66 @@ const readFile = async (target: string): Promise<string> => {
 const readBlob = (target: string): Promise<Blob> => sandboxBlob(`/workspace/raw?path=${encodeURIComponent(target)}`);
 
 let seq = 0;
+// A same-path re-fire in an editable text view is a POSSIBLE external change — but it's also how the user's own
+// save echoes back (upload → daemon file-watch → /events SSE → changeEpochOf bump). Reconcile by content instead
+// of blindly resetting: re-read quietly (never null `text`, so no flicker), then act only on a real difference
+// from the baseline we last knew on disk. After a save, baseline === disk, so the self-echo is a no-op.
+const reconcileOpenFile = (currentPath: string): void => {
+    const id = ++seq;
+    readFile(currentPath).then(
+        (content) => {
+            if (id !== seq) {
+                return;
+            }
+            // Equal to what we last knew on disk ⇒ our own save echo (or a no-op touch): leave the view alone.
+            if (content === edit.baselineOf(currentPath)) {
+                return;
+            }
+            // A genuine external edit landed while the user has unsaved work — keep the buffer, offer Reload.
+            if (edit.isDirty(currentPath)) {
+                staleOnDisk.value = true;
+                return;
+            }
+            // External edit, no local changes: adopt it. Reseed the uncontrolled editor from the new disk text.
+            if (content.includes("\u0000")) {
+                mode.value = `binary`;
+                return;
+            }
+            text.value = content;
+            edit.markSaved(currentPath, content);
+            reloadNonce.value++;
+        },
+        (err) => {
+            if (id !== seq) {
+                return;
+            }
+            if (err instanceof SandboxHttpError && err.status === 404) {
+                // Deleted on disk: close the tab when clean; keep a dirty buffer behind the stale-on-disk banner.
+                if (edit.isDirty(currentPath)) {
+                    staleOnDisk.value = true;
+                } else {
+                    emit(`gone`, currentPath);
+                }
+                return;
+            }
+            error.value = err instanceof Error ? err.message : `Could not load the file.`;
+        },
+    );
+};
+
 watch(
-    // changeEpochOf(path) makes an external edit re-read the open file even when its byte length (and so the tree
-    // entry's size) is unchanged — the gap the old [path, size] trigger left.
-    () => [path, meta?.size, changeEpochOf(path)] as const,
-    ([currentPath, size], previous, onCleanup) => {
-        // A re-trigger on the SAME path is an external change (the agent/terminal touched this file). If the user
-        // has unsaved edits, don't overwrite the buffer or the preview — surface a Reload affordance instead.
-        if (previous !== undefined && currentPath === previous[0] && edit.isDirty(currentPath)) {
-            staleOnDisk.value = true;
+    // changeEpochOf(path) is the complete external-change signal — every write to /work echoes over the SSE and
+    // bumps it, so the open file re-reads even when its byte length (the tree entry's size) is unchanged. Size is
+    // deliberately NOT a trigger: it would also fire mid-save from the post-save tree refetch, racing markSaved.
+    () => [path, changeEpochOf(path)] as const,
+    ([currentPath], previous, onCleanup) => {
+        // A same-path re-fire in an editable text view reconciles by content (no flicker, no false warning);
+        // everything else (a new file, or a non-text mode) takes the destructive reset + fetch below.
+        if (previous !== undefined && currentPath === previous[0] && (mode.value === `code` || mode.value === `markdown`)) {
+            reconcileOpenFile(currentPath);
             return;
         }
-        const resolution = resolveFile(currentPath, size);
+        const resolution = resolveFile(currentPath, meta?.size);
         const id = ++seq;
 
         staleOnDisk.value = false;

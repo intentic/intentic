@@ -2,6 +2,7 @@ import { watch } from "vue";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useSandbox } from "../composables/useSandbox";
+import { loadBuiltins } from "./builtins";
 import { loadExtensions } from "./loader";
 
 let started = false;
@@ -20,6 +21,9 @@ export function useExtensionHost(): void {
     const { panels } = usePanels();
     const { capabilities } = useCapabilities();
     const host = { repos: () => panels.value, capabilities: () => capabilities.value };
+    // Compiled-in first-party extensions register immediately (no daemon round-trip); the daemon-installed ones
+    // load once the sandbox is reachable.
+    loadBuiltins(host);
     let loading = false;
     watch(
         reachable,

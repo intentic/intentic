@@ -1,16 +1,12 @@
 <script setup lang="ts">
-import { AUTOMATION_RECIPES, type AutomationRecipe } from "@intentic-app/catalog";
-import { type AutomationRun, type AutomationSummary } from "@intentic-app/api-contract";
-import { Card, cmp, CopyButton, Page, StatusBadge, type StatusVariant } from "@intentic-app/ui";
+import { type AutomationRun, type AutomationSummary } from "@intentic/sandbox-contract";
+import { Button, Card, cmp, CopyButton, Dialog, Icon, Page, StatusBadge, type StatusVariant, ToggleSwitch } from "@intentic/extension-ui";
 import { Cron } from "croner";
-import Button from "primevue/button";
-import Dialog from "primevue/dialog";
-import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, reactive, ref } from "vue";
-import { cronOf, defaultSchedule, parseCron, scheduleLabel } from "../composables/extensions/cronSchedule";
-import { useAutomations } from "../composables/extensions/useAutomations";
-import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { useSandbox } from "../composables/useSandbox";
+import { cronOf, defaultSchedule, parseCron, scheduleLabel } from "./cronSchedule";
+import { host } from "./host";
+import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
+import { useAutomations } from "./useAutomations";
 
 /* Automations: agent wake-ups, native to every sandbox (no capability to enable). One automation = trigger
  * (cron, webhook, or a live listener on the daemon's provider connection) → optional guard (a shell command
@@ -69,8 +65,8 @@ const LISTENER_SOURCES = {
 >;
 
 const { automations, pending, error: listError, save, remove, approve, reject } = useAutomations();
-const { capabilities } = useCapabilities();
-const { daemonUrl } = useSandbox();
+// Capability facts from the host — reactive because reading them inside a computed tracks the underlying store.
+const capabilities = computed(() => host().workspace.capabilities());
 
 const createOpen = ref(false);
 // Guard/model/approval fold away by default — revealed on demand or when a recipe prefills a guard.
@@ -332,8 +328,8 @@ const toggleHistory = (id: string): void => {
 
 // The event automation's webhook URL (with its token) for pasting into GitHub/Sentry/monitor settings.
 const webhookUrl = (automation: AutomationSummary): string | undefined => {
-    const base = daemonUrl.value;
-    if (automation.trigger.kind !== `event` || !base) {
+    const base = host().sandbox.origin();
+    if (automation.trigger.kind !== `event` || base === undefined) {
         return undefined;
     }
     return `${base}/automations/${encodeURIComponent(automation.id)}/fire?token=${automation.trigger.token ?? ``}`;

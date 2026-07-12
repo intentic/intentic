@@ -107,6 +107,10 @@ export const createExtensionApi = (
             json: (path, init) => sandboxJson(path, init),
             reachable: () => useSandbox().reachable.value === true,
             key: (...parts) => sandboxKey(...parts),
+            origin: () => {
+                const base = useSandbox().daemonUrl.value;
+                return base === undefined || base === `` ? undefined : base;
+            },
         },
         workspace: {
             repos: () => host.repos(),

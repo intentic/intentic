@@ -1,0 +1,9 @@
+{
+    "publisher": "intentic",
+    "name": "logs",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.2.0" },
+    "contributes": {
+        "views": [{ "id": "logs", "label": "Logs", "surface": "rail" }]
+    }
+}

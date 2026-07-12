@@ -2,6 +2,7 @@ packages:
   - "_apps/*"
   - "_libs/*"
   - "_tools/*"
+  - "_extensions/*"
 
 injectWorkspacePackages: true
 

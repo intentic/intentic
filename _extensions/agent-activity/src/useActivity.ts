@@ -1,29 +1,29 @@
-import { type ActivityEvent, ActivityListSchema, type ActivityStatus, ActivityStatusSchema } from "@intentic-app/api-contract";
+import { type ActivityEvent, ActivityListSchema, type ActivityStatus, ActivityStatusSchema } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxJson } from "../../composables/sandboxClient";
-import { sandboxKey, useSandbox } from "../../composables/useSandbox";
+import { host } from "./host";
 
 /* The agent-activity audit feed, via the daemon's /activity routes: the durable event log (inbound wakes,
  * sniffed outbound provider calls, voice sessions, failures) plus the live connection/voice status probe.
- * Plain polling — an audit feed doesn't need sub-second freshness. */
+ * Plain polling — an audit feed doesn't need sub-second freshness. All daemon access goes through the host api. */
 
 const POLL_MS = 5000;
 const FEED_LIMIT = 200;
 
 export function useActivity() {
-    const { reachable } = useSandbox();
+    const api = host();
+    const enabled = computed(() => api.sandbox.reachable());
 
     const feed = useQuery({
-        queryKey: sandboxKey(`activity`),
-        queryFn: async () => ActivityListSchema.parse(await sandboxJson(`/activity?limit=${FEED_LIMIT}`)).events,
-        enabled: reachable,
+        queryKey: api.sandbox.key(`activity`),
+        queryFn: async () => ActivityListSchema.parse(await api.sandbox.json(`/activity?limit=${FEED_LIMIT}`)).events,
+        enabled,
         refetchInterval: POLL_MS,
     });
     const status = useQuery({
-        queryKey: sandboxKey(`activity-status`),
-        queryFn: async () => ActivityStatusSchema.parse(await sandboxJson(`/activity/status`)),
-        enabled: reachable,
+        queryKey: api.sandbox.key(`activity-status`),
+        queryFn: async () => ActivityStatusSchema.parse(await api.sandbox.json(`/activity/status`)),
+        enabled,
         refetchInterval: POLL_MS,
     });
 

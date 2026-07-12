@@ -1,10 +1,11 @@
 import type { Activation, ViewRegistration } from "@intentic/extension-api";
 
-/* The compiled-in first-party extensions — registered into the runtime registry (registry.ts) at module load,
- * ahead of any dynamically loaded third-party bundle, so array order is rail order for the contributed
- * elements. Builtins share the public registration/detection contract (dogfooding @intentic/extension-api) but
- * their view internals keep privileged imports (@intentic-app/ui, PrimeVue, composables) — they compile into
- * the app; third-party views get vue + the IntenticApi only. */
+/* Legacy compiled-in view contributions — the ones NOT YET moved into their own `_extensions/*` package. These
+ * seed the runtime registry at module load; each still reaches privileged app internals (composables,
+ * @intentic-app/ui, PrimeVue). As each migrates (extension-host/builtins.ts activates the packaged ones through
+ * the public IntenticApi), its entry leaves this array. directory-ui is the exception that stays here
+ * permanently: its DirectoryUiHost is shared with the workspace file-open path, so it's a core-registered view,
+ * not a package. When only directory-ui remains, this file becomes the core view-contribution list. */
 
 export const builtins: readonly ViewRegistration[] = [
     {
@@ -30,26 +31,6 @@ export const builtins: readonly ViewRegistration[] = [
             return target === undefined ? [] : [{ key: target.repo, title: `Live status`, icon: `sitemap`, repo: target.repo }];
         },
         view: async () => (await import(`./live-status/LiveStatusView.vue`)).default,
-    },
-    {
-        id: `agent-activity`,
-        label: `Agent activity`,
-        surface: `rail`,
-        // Capability-driven, not repo-driven: the agent's provider audit feed surfaces when any monitored
-        // provider (discord so far) is connected.
-        detect: (_repos, capabilities) =>
-            capabilities.some((capability) => capability.kind === `cli` && capability.config[`provider`] === `discord`)
-                ? [{ key: `activity`, title: `Agent activity`, icon: `wave-pulse` }]
-                : [],
-        view: async () => (await import(`./agent-activity/AgentActivityView.vue`)).default,
-    },
-    {
-        id: `logs`,
-        label: `Logs`,
-        surface: `rail`,
-        // Always present: the daemon records terminal captures, intentic runs, and its own log unconditionally.
-        detect: () => [{ key: `logs`, title: `Logs`, icon: `file` }],
-        view: async () => (await import(`./logs/LogsView.vue`)).default,
     },
     {
         id: `apps`,

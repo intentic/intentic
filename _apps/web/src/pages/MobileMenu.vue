@@ -34,8 +34,8 @@ onMounted(() => {
 // The rail's extension tiles, same detection as ShellDesktop — Workspace/Drafts/Chat live on the tab bar, so
 // the menu lists only the remaining areas.
 const areas = computed<readonly AreaRow[]>(() => [
-    { to: `/automations`, label: `Automations`, icon: `clock` },
     { to: `/secrets`, label: `Secrets`, icon: `key` },
+    // Automations is now a rail extension — it flows through detectActivations below like every other rail tile.
     ...detectActivations(panels.value, capabilities.value)
         .filter(({ extension }) => extension.surface === `rail`)
         .map(({ extension, activation }): AreaRow => {

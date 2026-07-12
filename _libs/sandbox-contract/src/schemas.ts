@@ -807,6 +807,7 @@ export const AutomationSummarySchema = AutomationSchema.extend({
     runs: z.array(AutomationRunSchema),
     nextRun: z.number().optional(),
 });
+export type AutomationSummary = z.infer<typeof AutomationSummarySchema>;
 export const AutomationsListSchema = z.object({ automations: z.array(AutomationSummarySchema) });
 export const AutomationIdParamSchema = z.object({ id: z.string() });
 
@@ -1092,6 +1093,7 @@ export const LogReadSchema = z.object({
     text: z.string(),
     truncated: z.boolean(),
 });
+export type LogRead = z.infer<typeof LogReadSchema>;
 
 // A tab's self-report of what it is looking at, keyed by its /events connection's clientId. Full replace,
 // not a merge — an absent field means "cleared", so a tab leaving a file drops the path with the same report.

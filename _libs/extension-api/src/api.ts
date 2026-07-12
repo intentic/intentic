@@ -77,6 +77,10 @@ export interface IntenticApi {
         // A cache key scoped to the ACTIVE sandbox — the required prefix for every host-provided vue-query
         // key, so caches never bleed across a sandbox switch.
         key(...parts: readonly string[]): readonly unknown[];
+        // The daemon's base URL (its public tunnel origin), for building externally-shareable URLs like webhook
+        // endpoints. Undefined until the sandbox has registered its address. Not needed for `request`/`json`
+        // (those take a path and inject auth) — only when the raw origin must be shown to the user.
+        origin(): string | undefined;
     };
     readonly workspace: {
         repos(): readonly RepoFacts[];

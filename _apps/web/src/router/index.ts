@@ -86,7 +86,6 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: `Workspace` },
                 component: () => import(`../pages/workspace/Workspace.vue`),
             },
-            { path: `automations`, name: `automations`, meta: { title: `Automations` }, component: () => import(`../pages/Automations.vue`) },
             { path: `drafts`, name: `drafts`, meta: { title: `Drafts` }, component: () => import(`../pages/Drafts.vue`) },
             { path: `secrets`, name: `secrets`, meta: { title: `Secrets` }, component: () => import(`../pages/Secrets.vue`) },
             { path: `ext/:ext/:key`, name: `extension`, component: () => import(`../pages/ExtensionHost.vue`) },

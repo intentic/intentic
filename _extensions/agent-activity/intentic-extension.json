@@ -1,0 +1,9 @@
+{
+    "publisher": "intentic",
+    "name": "agent-activity",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.2.0" },
+    "contributes": {
+        "views": [{ "id": "agent-activity", "label": "Agent activity", "surface": "rail" }]
+    }
+}

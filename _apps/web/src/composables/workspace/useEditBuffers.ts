@@ -29,6 +29,9 @@ export function useEditBuffers() {
     };
     const setBuffer = (path: string, text: string): void => void buffers.set(path, text);
     const bufferOf = (path: string): string | undefined => buffers.get(path);
+    // The last text known to be on disk — the file viewer reconciles an external-change re-read against this to
+    // tell a real edit from its own save echo (equal ⇒ nothing new, leave the view untouched).
+    const baselineOf = (path: string): string | undefined => baseline.get(path);
     // After a successful save, the buffer IS the new on-disk text.
     const markSaved = (path: string, text: string): void => {
         baseline.set(path, text);
@@ -42,5 +45,5 @@ export function useEditBuffers() {
 
     const dirtyPaths = computed(() => new Set([...buffers.keys()].filter(isDirty)));
 
-    return { isDirty, setBaseline, setBuffer, bufferOf, markSaved, forget, dirtyPaths };
+    return { isDirty, setBaseline, setBuffer, bufferOf, baselineOf, markSaved, forget, dirtyPaths };
 }
