@@ -16,7 +16,8 @@
         "dev": "tsx watch ./src/main.ts",
         "test": "vitest run",
         "test:watch": "vitest",
-        "e2e": "INTENTIC_E2E=1 vitest run e2e"
+        "e2e": "INTENTIC_E2E=1 vitest run e2e",
+        "bench:cleaners": "node bench/cleaner-bench.mjs"
     },
     "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "catalog:",

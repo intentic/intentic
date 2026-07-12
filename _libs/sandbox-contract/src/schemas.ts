@@ -131,13 +131,21 @@ export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTrans
 //                        TS language server); off ⇒ the skill isn't present so the agent doesn't reach for it.
 //   hashlineEdits     — swaps the native Read/Edit/Write for hash-anchored edits on the Claude path (stale-file
 //                        guard + fewer output tokens); off ⇒ the native file tools.
-// All default off (see the store's DEFAULTS), so a sandbox behaves identically until the owner opts in.
+//   terseOutput       — appends a concise-response steer to the end of the system prompt (a stable suffix, so it
+//                        composes with stableSystemPrompt) to cut the model's OWN output tokens.
+//   outputCleaners    — the Bash output-cleaner spec (agent-output-filter): "" = all cleaners on (default),
+//                        "off" = disable the filter (raw baseline), else an iq-style allow-list / default-minus
+//                        spec ("git,pnpm" = only those; "-cap" = all except). Threaded to the filter via env.
+// The booleans default off and outputCleaners defaults "" (all cleaners on), so a sandbox behaves as before
+// until the owner changes them.
 
 export const SandboxSettingsSchema = z.object({
     searchPastChats: z.boolean(),
     stableSystemPrompt: z.boolean(),
     lspTools: z.boolean(),
     hashlineEdits: z.boolean(),
+    terseOutput: z.boolean(),
+    outputCleaners: z.string(),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 

@@ -172,7 +172,14 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     automations: memoryAutomationsStore(),
     activity: { append: async () => {}, list: async () => [] },
     sandboxSettings: {
-        get: async () => ({ searchPastChats: false, stableSystemPrompt: false, lspTools: false, hashlineEdits: false }),
+        get: async () => ({
+            searchPastChats: false,
+            stableSystemPrompt: false,
+            lspTools: false,
+            hashlineEdits: false,
+            terseOutput: false,
+            outputCleaners: "",
+        }),
         set: async () => {},
     },
     // A connected account by default, so the /agent guard (no token + no env creds) doesn't short-circuit

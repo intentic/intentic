@@ -100,6 +100,16 @@ const toggleSearchPastChats = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, searchPastChats: value });
 };
 
+// Output cleaning is a spec string ("" = all cleaners on, "off" = disabled), not a bool; this toggle covers the
+// common on/off. A finer spec (e.g. "-cap", "git,pnpm") for benchmarking specific cleaners is set via /settings.
+const toggleOutputCleaning = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, outputCleaners: value ? "" : "off" });
+};
+
 // --- Import memory (was ImportMemoryDialog) ----------------------------------------------------------------
 const { readFile, saveText } = useWorkspaceTree();
 const importText = ref(``);
@@ -293,6 +303,23 @@ const importMemory = async (): Promise<void> => {
                 :model-value="sandboxSettings?.searchPastChats ?? false"
                 :disabled="sandboxSettings === undefined"
                 @update:model-value="toggleSearchPastChats"
+            />
+        </Card>
+
+        <!-- Output cleaning — compresses noisy shell output (installs/builds/tests) before the model sees it,
+             invisible to the agent. Off = raw output. Finer per-cleaner selection is a spec set via settings. -->
+        <Card class="flex items-center justify-between">
+            <div class="flex min-w-0 items-center gap-2.5">
+                <Icon name="bolt" class="text-lg text-muted" />
+                <div class="min-w-0">
+                    <h2 class="font-semibold leading-tight">Clean command output</h2>
+                    <p class="text-xs text-muted">Trim noisy shell output before it reaches the assistant — fewer tokens, same signal (errors always kept).</p>
+                </div>
+            </div>
+            <ToggleSwitch
+                :model-value="(sandboxSettings?.outputCleaners ?? '') !== 'off'"
+                :disabled="sandboxSettings === undefined"
+                @update:model-value="toggleOutputCleaning"
             />
         </Card>
 

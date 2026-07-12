@@ -7,7 +7,14 @@ import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-c
 
 // Applied when the file is absent or invalid. Every flag is opt-in, so all default off — a fresh sandbox (or an
 // older manifest that predates a newly-added flag, which then fails safeParse) reads as everything disabled.
-const DEFAULTS: SandboxSettings = { searchPastChats: false, stableSystemPrompt: false, lspTools: false, hashlineEdits: false };
+const DEFAULTS: SandboxSettings = {
+    searchPastChats: false,
+    stableSystemPrompt: false,
+    lspTools: false,
+    hashlineEdits: false,
+    terseOutput: false,
+    outputCleaners: "",
+};
 
 export interface SandboxSettingsStore {
     readonly get: () => Promise<SandboxSettings>;

@@ -23,6 +23,11 @@ import { delegationNote } from "./delegation.js";
 const withAttachmentNote = (prompt: string, paths: readonly string[]): string =>
     `${prompt}\n\nThe user attached these files — read them with the Read tool as needed:\n${paths.map((path) => `- ${path}`).join("\n")}`;
 
+// Appended to the system prompt when terseOutput is on (verbosity steering): a stable suffix that trims the
+// model's OWN output tokens without dropping substance. Kept short so it barely costs tokens itself each turn.
+const TERSE_NOTE =
+    "Response style: be concise — don't restate the request, re-quote files you just read, or echo tool output the user can already see. Lead with the answer or the action; expand only where detail changes a decision.";
+
 // Fold a switched conversation's prior transcript into the turn as a role-attributed preamble — ONE format
 // for all three runtimes (native per-adapter injection can come later). Newest messages win the budget so
 // long conversations keep their tail; an oversized single message is head-truncated.
@@ -235,7 +240,7 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         // workspace's prior sessions (Claude-only — Codex has no equivalent in-process tool seam).
         // stableSystemPrompt keeps the preset system prompt byte-stable so the provider prompt cache survives the
         // turn — the cross-provider delegation note then rides the user message instead of the system prompt.
-        const { searchPastChats, stableSystemPrompt, hashlineEdits } = await services.sandboxSettings.get();
+        const { searchPastChats, stableSystemPrompt, hashlineEdits, outputCleaners, terseOutput } = await services.sandboxSettings.get();
         const sdkServers = {
             ...discordServers,
             ...browserServers,
@@ -290,6 +295,8 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
             // hashlineEdits owns file mutation via the hashline MCP server above, so drop the native Edit/Write
             // from the model's context (native Read stays for viewing images/PDFs).
             ...(hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),
+            // Forward the Bash output-cleaner spec (default "" ⇒ omit ⇒ filter's all-on default).
+            ...(outputCleaners !== "" ? { outputCleaners } : {}),
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
             // Off (default): append the note to the preset system prompt (prior behavior). On: it rode the user
             // message above instead, so nothing is appended and the system prompt stays byte-stable/cacheable.

@@ -166,6 +166,10 @@ COPY _apps/sandbox/skills /root/.claude/skills
 # strips noise from what the model sees.
 COPY --chmod=755 _apps/sandbox/bin/tmux-run /usr/local/bin/tmux-run
 COPY --chmod=755 _apps/sandbox/bin/agent-output-filter.mjs /usr/local/bin/agent-output-filter
+# The cleaner registry the filter imports (./cleaners.mjs resolves next to the renamed binary at /usr/local/bin).
+COPY --chmod=755 _apps/sandbox/bin/cleaners.mjs /usr/local/bin/cleaners.mjs
+# retrieve-output on PATH — the reversible half of the filter (fetch back elided output; the footer names it).
+COPY --chmod=755 _apps/sandbox/bin/retrieve-output.mjs /usr/local/bin/retrieve-output
 # Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.
 COPY _apps/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

@@ -13,7 +13,14 @@ const tempStore = () => {
 };
 
 // Every flag off — the store's DEFAULTS, and the full shape get() must always return.
-const ALL_OFF: SandboxSettings = { searchPastChats: false, stableSystemPrompt: false, lspTools: false, hashlineEdits: false };
+const ALL_OFF: SandboxSettings = {
+    searchPastChats: false,
+    stableSystemPrompt: false,
+    lspTools: false,
+    hashlineEdits: false,
+    terseOutput: false,
+    outputCleaners: "",
+};
 
 test("get defaults to every flag off when the file is absent", async () => {
     const { store } = tempStore();

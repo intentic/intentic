@@ -59,6 +59,10 @@ export interface AgentRequest {
     // Built-in tool names to remove from the model's context this turn (SDK disallowedTools). Set by the
     // hashlineEdits toggle to disable native Edit/Write so file mutations route through the hashline MCP tools.
     readonly disallowedTools?: readonly string[];
+    // The Bash output-cleaner spec, forwarded to agent-output-filter via env (INTENTIC_OUTPUT_CLEANERS), or the
+    // literal "off" to disable the filter (INTENTIC_RUN_FILTER=0, raw baseline). Empty/undefined ⇒ the filter's
+    // all-on default. See settings/outputCleaners + bin/cleaners.mjs.
+    readonly outputCleaners?: string;
     // Extra turn-scoped instructions appended to the claude_code preset system prompt (e.g. the CLI
     // delegation note when Codex/Grok accounts are connected — see agent/delegation.ts).
     readonly systemAppend?: string;
@@ -332,6 +336,18 @@ const errorMessage = (error: unknown, stderr: string): string => {
     return detail ? `${base}: ${detail}` : base;
 };
 
+// Map the outputCleaners setting to the env the Bash output filter reads: "off" disables it wholesale (the raw
+// baseline), a spec selects cleaners, and empty/undefined leaves the filter at its all-on default (no env needed).
+const cleanerEnv = (spec: string | undefined): Record<string, string> => {
+    if (spec === "off") {
+        return { INTENTIC_RUN_FILTER: "0" };
+    }
+    if (spec !== undefined && spec !== "") {
+        return { INTENTIC_OUTPUT_CLEANERS: spec };
+    }
+    return {};
+};
+
 // Base SDK options shared by both paths.
 const baseOptions = (request: AgentRequest, abortController: AbortController, permissionMode: PermissionMode, tmuxEnabled: boolean): Options => ({
     cwd: request.cwd,
@@ -355,6 +371,8 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
         // IS_SANDBOX marks the environment as already-sandboxed — which this container is.
         IS_SANDBOX: "1",
         ...(request.oauthToken !== undefined ? { CLAUDE_CODE_OAUTH_TOKEN: request.oauthToken } : {}),
+        // The output-cleaner spec (or the filter-off flag) that the agent's Bash → tmux-run → agent-output-filter reads.
+        ...cleanerEnv(request.outputCleaners),
     },
     // Run every Bash command inside an `agent-*` tmux session (bin/tmux-run) so the terminal panel can
     // watch the agent work live. Hooks fire even under bypassPermissions, and for subagents too.
