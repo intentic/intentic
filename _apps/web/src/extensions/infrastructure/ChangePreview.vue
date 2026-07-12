@@ -2,59 +2,47 @@
 import { Card, cmp } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed } from "vue";
-import PlanStepRow from "../../components/PlanStepRow.vue";
-import type { PlanStep } from "../../composables/extensions/reconcileStatus";
+import { type PlanStep, statusDot } from "../../composables/extensions/reconcileStatus";
 import SecretField from "../../components/SecretField.vue";
 import type { usePlanPreview } from "./usePlanPreview";
-import { appName } from "./wanted";
 
-/* The pre-apply review: what applying the current wants WOULD do to the infra, grouped by want, so the user
- * sees the changes before committing them (a want stages here, it doesn't deploy). Reads the usePlanPreview
- * instance InfraDeclare owns; folds in the missing-secrets checklist that gates resolve → plan. */
+/* The pre-apply review: what applying the current wants WOULD do to the infra, grouped by verb (create /
+ * update / remove) so a long plan scans as three counted sections instead of a per-resource chain (a want
+ * stages here, it doesn't deploy). Reads the usePlanPreview instance InfraDeclare owns; folds in the
+ * missing-secrets checklist that gates resolve → plan. */
 const { preview } = defineProps<{ preview: ReturnType<typeof usePlanPreview> }>();
 const { running, ran, stale, error, steps, orphans, activity, missingSecrets, awaitingSecrets } = preview;
 
-interface WantChanges {
-    readonly name: string;
+// The three things a plan can do, in the order a reviewer cares: additions, changes, removals. Each section
+// keys on a canonical action so statusDot stays the one color vocabulary.
+const SECTIONS = [
+    { action: `create`, matches: [`create`], label: `to create` },
+    { action: `update`, matches: [`update`, `diff`], label: `to update` },
+    { action: `delete`, matches: [`delete`, `prune`], label: `to remove` },
+] as const;
+
+interface ChangeSection {
+    readonly action: string;
+    readonly label: string;
     readonly steps: readonly PlanStep[];
 }
 
-// Group the plan's non-noop steps + orphans (as deletes) by want name ("shop.production" → "shop"); a want
-// whose resources are all in sync drops out. Orphans are the only authoritative "to remove" — the declared/
-// live rollup can't see a want that was removed but is still running.
-const changes = computed<WantChanges[]>(() => {
-    const byWant = new Map<string, PlanStep[]>();
-    const push = (id: string, step: PlanStep): void => {
-        const name = appName(id);
-        const list = byWant.get(name) ?? [];
-        list.push(step);
-        byWant.set(name, list);
-    };
-    for (const step of steps.value) {
-        if (step.action !== `noop`) {
-            push(step.id, step);
-        }
-    }
-    for (const orphan of orphans.value) {
-        push(orphan.id, { id: orphan.id, action: `delete` });
-    }
-    return [...byWant].map(([name, list]) => ({ name, steps: list }));
+// Bucket the plan's non-noop steps + orphans (as deletes) by action; empty buckets drop out. Dedupe by id
+// within a bucket — a resource can arrive both as a prune step and in the result frame's orphan list. Orphans
+// are the only authoritative "to remove" — the declared/live rollup can't see a want that was removed but is
+// still running.
+const sections = computed<ChangeSection[]>(() => {
+    const all: PlanStep[] = [
+        ...steps.value.filter((step) => step.action !== `noop`),
+        ...orphans.value.map((orphan): PlanStep => ({ id: orphan.id, action: `delete` })),
+    ];
+    return SECTIONS.map(({ action, matches, label }) => {
+        const bucket = new Map(all.filter((step) => (matches as readonly string[]).includes(step.action)).map((step) => [step.id, step]));
+        return { action, label, steps: [...bucket.values()] };
+    }).filter((section) => section.steps.length > 0);
 });
 
-const hasChanges = computed(() => changes.value.length > 0);
-
-// A per-want one-liner: "1 to create · 2 to update · 1 to remove".
-const summarize = (list: readonly PlanStep[]): string => {
-    const count = (...actions: string[]): number => list.filter((step) => actions.includes(step.action)).length;
-    return [
-        [count(`create`), `to create`],
-        [count(`update`, `diff`), `to update`],
-        [count(`delete`, `prune`), `to remove`],
-    ]
-        .filter(([n]) => (n as number) > 0)
-        .map(([n, label]) => `${n} ${label}`)
-        .join(` · `);
-};
+const hasChanges = computed(() => sections.value.length > 0);
 </script>
 
 <template>
@@ -112,21 +100,22 @@ const summarize = (list: readonly PlanStep[]): string => {
         </div>
 
         <template v-else-if="ran">
-            <div v-if="hasChanges" class="flex flex-col gap-3">
-                <div v-for="group in changes" :key="group.name" class="flex flex-col gap-1.5">
-                    <div class="flex items-baseline justify-between gap-2">
-                        <span class="truncate text-sm font-medium text-content">{{ group.name }}</span>
-                        <span class="shrink-0 text-2xs text-subtle">{{ summarize(group.steps) }}</span>
+            <div v-if="hasChanges" class="flex flex-col gap-2">
+                <!-- One section per verb: the header IS the summary (dot + count + verb), rows are just ids —
+                     no per-row badge repetition. Big sections (e.g. a mass remove) start collapsed. -->
+                <details v-for="section in sections" :key="section.action" class="group" :open="section.steps.length <= 8">
+                    <summary class="flex cursor-pointer list-none items-center gap-2 py-0.5 [&::-webkit-details-marker]:hidden">
+                        <Icon name="chevron-right" class="text-xs text-subtle transition-transform group-open:rotate-90" />
+                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="statusDot(section.action)"></span>
+                        <span class="text-sm font-medium text-content">{{ section.steps.length }} {{ section.label }}</span>
+                    </summary>
+                    <div class="ml-1.5 mt-1.5 divide-y divide-line rounded-md border border-line bg-canvas">
+                        <div v-for="step in section.steps" :key="step.id" class="px-3 py-1.5">
+                            <span class="block truncate font-mono text-2xs text-content">{{ step.id }}</span>
+                            <span v-if="step.reason" class="block truncate text-2xs text-muted">{{ step.reason }}</span>
+                        </div>
                     </div>
-                    <PlanStepRow
-                        v-for="step in group.steps"
-                        :key="step.id"
-                        :id="step.id"
-                        :action="step.action"
-                        :reason="step.reason"
-                        context="plan"
-                    />
-                </div>
+                </details>
             </div>
             <p v-else class="flex items-center gap-2 text-sm text-success">
                 <Icon name="check-circle" /> Everything is up to date — nothing to apply.

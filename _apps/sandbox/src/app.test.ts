@@ -171,7 +171,10 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     capabilities: memoryCapabilitiesStore(),
     automations: memoryAutomationsStore(),
     activity: { append: async () => {}, list: async () => [] },
-    sandboxSettings: { get: async () => ({ searchPastChats: false }), set: async () => {} },
+    sandboxSettings: {
+        get: async () => ({ searchPastChats: false, stableSystemPrompt: false, lspTools: false, hashlineEdits: false }),
+        set: async () => {},
+    },
     // A connected account by default, so the /agent guard (no token + no env creds) doesn't short-circuit
     // turns under test. Tests that exercise the disconnected path override this.
     claudeStore: {

@@ -133,6 +133,11 @@ RUN chmod +x /opt/iq/dist/cli.js \
     && ln -s /opt/iq/dist/cli.js /usr/local/bin/iq
 # The baked embedding model behind `iq ask` (IQ_MODEL_DIR below); absent → iq degrades to lexical, never fetches.
 COPY --from=build /opt/iq-models /opt/iq-models
+# The iq Claude Code plugin (skill + SessionStart nudge) — the single source that teaches every agent to prefer
+# iq over grep/find/Glob. Baked here and always loaded via IQ_PLUGIN_DIR (agent.routes.ts prepends it to the SDK
+# `plugins` option), so iq is the default in the sandbox exactly as external users get it from the marketplace.
+# Copied from the build context (not /out/iq — the npm package ships only dist/, the plugin lives beside it).
+COPY _apps/iq/plugin /opt/iq-plugin
 # cloudflared on PATH — `intentic apply` shells out to `cloudflared access tcp` to reach a self-host's SSH
 # through its Cloudflare tunnel when the host is registered with via:"cloudflared" (a NAT'd local machine).
 COPY --from=build /usr/local/bin/cloudflared /usr/local/bin/cloudflared
@@ -159,6 +164,6 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 WORKDIR /work
 # LANG: without a UTF-8 locale zsh's line editor counts BYTES as columns, so bira's multibyte prompt glyphs
 # (╰─, ↵) desync the cursor and corrupt the prompt after any non-zero exit status. C.utf8 is glibc-built-in.
-ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 IQ_MODEL_DIR=/opt/iq-models
+ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 IQ_MODEL_DIR=/opt/iq-models IQ_PLUGIN_DIR=/opt/iq-plugin
 EXPOSE 8787 22
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

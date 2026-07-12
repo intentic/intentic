@@ -209,7 +209,12 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities — a same-named
         // external tool overrides, matching mcpServersOf's last-wins merge.
         const tools = [...services.tools, ...mcpToolsOf(capabilities)];
-        const plugins = pluginDirsOf(capabilities, services.workspace.root);
+        // The image-baked iq plugin (skill + SessionStart nudge) loads on every turn, ahead of any user-added
+        // plugin-kind capabilities, so iq is the default code-search tool. Empty outside the container ⇒ skipped.
+        const plugins = [
+            ...(services.config.iqPluginDir !== "" ? [services.config.iqPluginDir] : []),
+            ...pluginDirsOf(capabilities, services.workspace.root),
+        ];
         // Each discord capability also grants the in-process voice tools (join_voice/leave_voice/voice_status),
         // one MCP server named for the instance — the session they drive lives in the daemon and outlives this turn.
         const discordServers = Object.fromEntries(

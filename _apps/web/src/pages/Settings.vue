@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SandboxSettings } from "@intentic-app/api-contract";
 import { Card, cmp, Page, useExplorerStyle, useIconSet, useTheme } from "@intentic-app/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -33,9 +34,18 @@ const router = useRouter();
 
 const importOpen = ref(false);
 
-// Per-sandbox agent setting: whether the assistant may search the active sandbox's past chats. Stored in the
-// sandbox daemon (undefined until the active sandbox is reachable), so the toggle is disabled while it loads.
+// Per-sandbox agent settings (search-past-chats + the experimental toggles below). Stored in the sandbox daemon
+// (undefined until the active sandbox is reachable), so the toggles are disabled while it loads.
 const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
+// Persisting one flag sends the WHOLE object (the daemon validates the full schema and `save` overwrites it), so
+// merge the change onto the current values. Only ever fired by a toggle that's disabled until settings load.
+const setSandboxFlag = (change: Partial<SandboxSettings>): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, ...change });
+};
 
 // Profile: display name + avatar, saved via Better Auth's update-user (useAuth.updateProfile). The picked
 // file becomes a small square data URL in the browser — no upload. Re-seeded from the shared user ref, so a
@@ -300,7 +310,62 @@ const confirmDelete = async (): Promise<void> => {
                 <ToggleSwitch
                     :model-value="sandboxSettings?.searchPastChats ?? false"
                     :disabled="sandboxSettings === undefined"
-                    @update:model-value="saveSandboxSettings.mutate({ searchPastChats: $event })"
+                    @update:model-value="setSandboxFlag({ searchPastChats: $event })"
+                />
+            </Card>
+
+            <!-- Experimental agent-harness toggles: each is opt-in and independently benchmarkable (watch the
+                 per-turn usage/cost the agent reports). Stored per-sandbox in the daemon like Search past chats. -->
+            <h2 class="mt-4 px-1 text-xs font-semibold uppercase tracking-wide text-subtle">Experimental</h2>
+
+            <!-- Prompt-cache optimization — keeps the system prompt byte-stable so the provider prompt cache
+                 survives across turns (cross-agent delegation hints ride the message, not the system prompt). -->
+            <Card class="flex items-center justify-between">
+                <div class="flex min-w-0 items-center gap-2.5">
+                    <Icon name="bolt" class="text-lg text-muted" />
+                    <div class="min-w-0">
+                        <h2 class="font-semibold leading-tight">Prompt-cache optimization</h2>
+                        <p class="text-xs text-muted">Keep the system prompt stable across turns so the model's prompt cache is reused — cuts cost on longer chats.</p>
+                    </div>
+                </div>
+                <ToggleSwitch
+                    :model-value="sandboxSettings?.stableSystemPrompt ?? false"
+                    :disabled="sandboxSettings === undefined"
+                    @update:model-value="setSandboxFlag({ stableSystemPrompt: $event })"
+                />
+            </Card>
+
+            <!-- LSP code tools — surfaces the `lsp` CLI (rename + diagnostics over the TypeScript language server)
+                 to the agent via its skill, so refactors update every import and edits are compiler-checked. -->
+            <Card class="flex items-center justify-between">
+                <div class="flex min-w-0 items-center gap-2.5">
+                    <Icon name="code" class="text-lg text-muted" />
+                    <div class="min-w-0">
+                        <h2 class="font-semibold leading-tight">LSP code tools</h2>
+                        <p class="text-xs text-muted">Give the agent language-server rename and diagnostics so refactors update every usage and edits are compiler-checked.</p>
+                    </div>
+                </div>
+                <ToggleSwitch
+                    :model-value="sandboxSettings?.lspTools ?? false"
+                    :disabled="sandboxSettings === undefined"
+                    @update:model-value="setSandboxFlag({ lspTools: $event })"
+                />
+            </Card>
+
+            <!-- Hash-anchored edits — swaps the agent's file-edit tools for hash-anchored patches: rejects edits to
+                 a file that changed since it was read, and uses fewer output tokens. Claude agent only for now. -->
+            <Card class="flex items-center justify-between">
+                <div class="flex min-w-0 items-center gap-2.5">
+                    <Icon name="file-edit" class="text-lg text-muted" />
+                    <div class="min-w-0">
+                        <h2 class="font-semibold leading-tight">Hash-anchored edits</h2>
+                        <p class="text-xs text-muted">Anchor the agent's edits to content hashes — safer on changed files and fewer output tokens. Claude agent only.</p>
+                    </div>
+                </div>
+                <ToggleSwitch
+                    :model-value="sandboxSettings?.hashlineEdits ?? false"
+                    :disabled="sandboxSettings === undefined"
+                    @update:model-value="setSandboxFlag({ hashlineEdits: $event })"
                 />
             </Card>
 

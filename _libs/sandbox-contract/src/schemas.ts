@@ -121,10 +121,23 @@ export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySch
 export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTranscriptMessageSchema) });
 
 // ---- settings: per-sandbox agent settings (.intentic/settings.json) ----
-// Small user-owned config the /settings routes edit and streamAgent reads. `searchPastChats` gates the
-// search_past_chats agent tool (off ⇒ the tool isn't registered, so the agent can't read prior conversations).
+// Small user-owned config the /settings routes edit and streamAgent reads — all opt-in booleans the owner
+// toggles in the UI (so each can be A/B benchmarked):
+//   searchPastChats   — gates the search_past_chats agent tool (off ⇒ not registered, agent can't read prior chats).
+//   stableSystemPrompt — keeps the system prompt byte-stable across turns (the delegation note rides the user
+//                        message instead of the preset `append`) so the provider prompt cache survives.
+//   lspTools          — loads the `lsp` skill so the agent uses the baked LSP CLI (rename + diagnostics over the
+//                        TS language server); off ⇒ the skill isn't present so the agent doesn't reach for it.
+//   hashlineEdits     — swaps the native Read/Edit/Write for hash-anchored edits on the Claude path (stale-file
+//                        guard + fewer output tokens); off ⇒ the native file tools.
+// All default off (see the store's DEFAULTS), so a sandbox behaves identically until the owner opts in.
 
-export const SandboxSettingsSchema = z.object({ searchPastChats: z.boolean() });
+export const SandboxSettingsSchema = z.object({
+    searchPastChats: z.boolean(),
+    stableSystemPrompt: z.boolean(),
+    lspTools: z.boolean(),
+    hashlineEdits: z.boolean(),
+});
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 
 // ---- intentic CLI ----

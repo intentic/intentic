@@ -68,7 +68,7 @@
             "id": "files-skill",
             "verb": "files",
             "query": "SKILL",
-            "expected": [{ "file": "_apps/sandbox/skills/iq/SKILL.md" }]
+            "expected": [{ "file": "_apps/iq/plugin/skills/iq/SKILL.md" }]
         },
         {
             "id": "query-classification",

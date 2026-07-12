@@ -54,6 +54,11 @@ const configSchema = z.object({
     // Daemon-wide default Claude model for turns that don't pin one (headless wakes like Discord). Empty ⇒
     // the account/subscription default. A per-automation `model` still overrides this.
     intenticAgentModel: z.string().default(""),
+    // The image-baked iq Claude Code plugin dir (skill + SessionStart nudge) — always prepended to the agent's
+    // `plugins` so iq is the default code-search tool, exactly as external users get it from the marketplace.
+    // Set by the Dockerfile (IQ_PLUGIN_DIR=/opt/iq-plugin); empty on a bare `tsx watch` dev run (the plugin
+    // isn't baked outside the image) ⇒ not loaded.
+    iqPluginDir: z.string().default(""),
     // Container-env Claude fallback creds: used only to decide whether a turn can run when no account is stored.
     claudeCodeOauthToken: z.string().default("").meta({ secret: true }),
     anthropicApiKey: z.string().default("").meta({ secret: true }),

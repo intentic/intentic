@@ -12,10 +12,14 @@ const BASELINE_NOTES = "# Workspace notes\n\nAnswer using standard tools like gr
 export type Arm =
     { readonly name: string; readonly kind: "baseline" } | { readonly name: string; readonly kind: "iq"; readonly config?: BenchConfig };
 
+// Source the iq teaching from the shipped plugin (_apps/iq/plugin) so the bench measures exactly what the
+// sandbox bakes and external users install — the skill body plus the plugin's SessionStart nudge, no bespoke
+// copy. Frontmatter is stripped (the notes file needs the body, not the skill's YAML header).
 const skillNotes = (): string => {
-    const raw = readFileSync(join(monorepoRoot, "_apps/sandbox/skills/iq/SKILL.md"), "utf8");
-    const body = raw.replace(/^---[\s\S]*?---\n/, "");
-    return `# Workspace notes\n\nThis workspace has \`iq\` on PATH — ALWAYS prefer it over grep/find/Glob chains.\n${body}`;
+    const pluginRoot = join(monorepoRoot, "_apps/iq/plugin");
+    const skill = readFileSync(join(pluginRoot, "skills/iq/SKILL.md"), "utf8").replace(/^---[\s\S]*?---\n/, "");
+    const nudge = readFileSync(join(pluginRoot, "hooks/nudge.txt"), "utf8").trim();
+    return `# Workspace notes\n\n${nudge}\n\n${skill}`;
 };
 
 const shimDir = (): string => {

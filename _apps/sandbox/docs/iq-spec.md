@@ -279,7 +279,7 @@ Every stage toggles for benchmarking via `--features` / `IQ_FEATURES`:
 
 1. **Package:** `@intentic/iq` (new `_apps/` or `_tools/` package), CLI on `@stricli/core`; `--json/--ndjson` honor `INTENTIC_OUTPUT` with secret masking.
 2. **Reuse:** `createIgnoreScope`/`isDeniedWorkspacePath` from `workspace-ignore.ts`; extend `WorkspaceSearch*` zod schemas in `@intentic/sandbox-contract` for JSON output; retire `workspace-search.ts` — the daemon shells into `iq --json`.
-3. **Agent exposure:** on the sandbox image `PATH`, called via Bash (all agent backends inherit it), taught by the baked `skills/iq/SKILL.md`. No in-process MCP tool in v1 — it would duplicate the Bash path and cost tool-list tokens every turn; revisit if agents keep reaching for grep.
+3. **Agent exposure:** the binary is on the sandbox image `PATH`, called via Bash (all agent backends inherit it); the agent is taught to prefer it by the baked iq Claude Code plugin (`_apps/iq/plugin` → `IQ_PLUGIN_DIR`, prepended to the SDK `plugins` option), whose skill + SessionStart nudge are the single source shared with the benchmark and external users. No in-process MCP tool in v1 — it would duplicate the Bash path and cost tool-list tokens every turn; revisit if agents keep reaching for grep.
 4. **Engine candidates (later):** ripgrep (lexical), tree-sitter/ast-grep (structural), tantivy/zoekt-style trigram index, local or API embeddings, `git log -S/-G` (history).
 
 ## Ergonomics dry-run (validation)

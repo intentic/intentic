@@ -108,7 +108,15 @@ On trivial single-file lookups `iq` is roughly break-even (when the answer is on
 
 ## Using it with a coding agent
 
-Put `iq` on the agent's `PATH` and tell it to prefer `iq` over grep/find chains. The skill file at [`_apps/sandbox/skills/iq/SKILL.md`](../sandbox/skills/iq/SKILL.md) is a ready-made Claude Code / Agent SDK skill; the same content works as a `CLAUDE.md` / `AGENTS.md` note.
+`iq` ships as a **Claude Code plugin** ([`plugin/`](plugin)) that teaches an agent to prefer `iq` over grep/find/Glob by default — a bundled skill plus a SessionStart nudge. The plugin installs the *teaching*, not the binary, so install both:
+
+```sh
+npm i -g @intentic/iq                              # the CLI (also needs Node ≥ 24 + ripgrep, see Install)
+/plugin marketplace add radarsu/intentic           # the marketplace (or the repo's https URL)
+/plugin install iq                                  # the skill + nudge
+```
+
+The plugin's skill lives at [`plugin/skills/iq/SKILL.md`](plugin/skills/iq/SKILL.md) and doubles as a `CLAUDE.md` / `AGENTS.md` note if you'd rather paste it in directly. The Agent SDK loads the same plugin via `plugins: [{ type: "local", path: "…/_apps/iq/plugin" }]`. The intentic sandbox bakes this exact plugin into its image, so the sandbox agent and an external user get identical behavior.
 
 ## License
 

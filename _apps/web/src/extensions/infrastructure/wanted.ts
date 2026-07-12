@@ -14,9 +14,8 @@ export interface WantedApp {
     readonly domain?: string;
 }
 
-// "shop.production" → "shop"; a bare name stays itself. Exported so the change preview can roll per-environment
-// plan/apply node ids up to their want name the same way this rollup does.
-export const appName = (nodeId: string): string => nodeId.split(`.`)[0] ?? nodeId;
+// "shop.production" → "shop"; a bare name stays itself.
+const appName = (nodeId: string): string => nodeId.split(`.`)[0] ?? nodeId;
 
 const RANK: Record<WantedAppStatus, number> = { declared: 0, planned: 1, live: 2 };
 

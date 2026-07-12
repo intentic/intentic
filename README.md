@@ -177,6 +177,25 @@ pnpm intentic init       # scaffold the intent + desired-state repos
 
 > Requires **Node 24** and **pnpm 11**. From this repo the CLI runs as `pnpm intentic <command>` (the first call builds `dist`, then runs incrementally). The full authoring reference is [examples/deploy.config.ts](examples/deploy.config.ts).
 
+## Develop locally
+
+A single `.env` at the repo root drives the platform (only the api reads it; web/site bake their dev config into `src`). Copy the template and fill in Google credentials — everything else degrades with a startup warning:
+
+```sh
+cp .env.example .env      # set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (each var is documented in .env.example)
+pnpm db:up                # Postgres on :5440 (docker-compose.yml) + prisma migrate
+pnpm dev                  # turbo: api on https://localhost:6480, web on https://localhost:47145, the site, …
+```
+
+Dev serves over HTTPS via the committed `@intentic-app/localhost-https` cert (Google FedCM One Tap refuses `http://localhost`).
+
+- **Sandbox daemon (optional).** To run the daemon outside its container, add its creds to the same root `.env` — see the `# Sandbox daemon` section of `.env.example` (`ANTHROPIC_API_KEY`, `CLOUDFLARE_API_TOKEN`, … — all optional) — then `pnpm --filter @intentic/sandbox dev`.
+- **CLI deploys against your own infra.** A filled artifact lives (gitignored) at `intent/` + `desired-state/`; `desired-state/.env` holds your `HOST_SSH_KEY` / `CLOUDFLARE_API_TOKEN` / `DISCORD_BOT_TOKEN` (regenerated as `.env.example` by `intentic resolve`). Install the intent's deps once, then drive it:
+  ```sh
+  (cd intent && pnpm install --ignore-workspace)
+  pnpm intentic plan        # reads intent/deploy.config.ts + desired-state/ + its .env
+  ```
+
 ## Run on your own PC (no server)
 
 No VPS? Because each host's Cloudflare Tunnel connects *outbound* (the host opens no inbound ports), the "host" can be your own laptop or desktop behind NAT. One command bootstraps a Docker-in-Docker host on your machine, points intentic at it over SSH like any server, and stands up the whole stack — apps reachable through your Cloudflare account, zero inbound ports on your PC:
