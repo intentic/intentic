@@ -615,6 +615,9 @@ importers:
       '@intentic/constants':
         specifier: workspace:*
         version: link:../../_tools/constants
+      '@intentic/extension-api':
+        specifier: workspace:*
+        version: link:../../_libs/extension-api
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_libs/sandbox-contract
@@ -794,7 +797,7 @@ importers:
         version: link:../../_libs/api-contract
       '@intentic-app/catalog':
         specifier: workspace:*
-        version: file:_libs/catalog(@opentelemetry/api@1.9.1)
+        version: file:_libs/catalog(@opentelemetry/api@1.9.1)(vue@3.5.39(typescript@5.9.3))
       '@intentic-app/localhost-https':
         specifier: workspace:*
         version: link:../../_tools/localhost-https
@@ -955,7 +958,7 @@ importers:
     dependencies:
       '@intentic/sandbox-contract':
         specifier: workspace:*
-        version: file:_libs/sandbox-contract(@opentelemetry/api@1.9.1)
+        version: file:_libs/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.39(typescript@5.9.3))
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
@@ -1207,6 +1210,9 @@ importers:
 
   _libs/sandbox-contract:
     dependencies:
+      '@intentic/extension-api':
+        specifier: workspace:*
+        version: link:../extension-api
       '@orpc/contract':
         specifier: 'catalog:'
         version: 1.14.3(@opentelemetry/api@1.9.1)
@@ -2515,6 +2521,11 @@ packages:
 
   '@intentic-app/catalog@file:_libs/catalog':
     resolution: {directory: _libs/catalog, type: directory}
+
+  '@intentic/extension-api@file:_libs/extension-api':
+    resolution: {directory: _libs/extension-api, type: directory}
+    peerDependencies:
+      vue: ^3.5.0
 
   '@intentic/sandbox-contract@file:_libs/sandbox-contract':
     resolution: {directory: _libs/sandbox-contract, type: directory}
@@ -9470,20 +9481,29 @@ snapshots:
   '@img/sharp-win32-x64@0.34.5':
     optional: true
 
-  '@intentic-app/catalog@file:_libs/catalog(@opentelemetry/api@1.9.1)':
+  '@intentic-app/catalog@file:_libs/catalog(@opentelemetry/api@1.9.1)(vue@3.5.39(typescript@5.9.3))':
     dependencies:
-      '@intentic/sandbox-contract': file:_libs/sandbox-contract(@opentelemetry/api@1.9.1)
+      '@intentic/sandbox-contract': file:_libs/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.39(typescript@5.9.3))
       tslib: 2.8.1
     transitivePeerDependencies:
       - '@opentelemetry/api'
+      - vue
 
-  '@intentic/sandbox-contract@file:_libs/sandbox-contract(@opentelemetry/api@1.9.1)':
+  '@intentic/extension-api@file:_libs/extension-api(vue@3.5.39(typescript@5.9.3))':
     dependencies:
+      tslib: 2.8.1
+      vue: 3.5.39(typescript@5.9.3)
+      zod: 4.4.3
+
+  '@intentic/sandbox-contract@file:_libs/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.39(typescript@5.9.3))':
+    dependencies:
+      '@intentic/extension-api': file:_libs/extension-api(vue@3.5.39(typescript@5.9.3))
       '@orpc/contract': 1.14.3(@opentelemetry/api@1.9.1)
       tslib: 2.8.1
       zod: 4.4.3
     transitivePeerDependencies:
       - '@opentelemetry/api'
+      - vue
 
   '@isaacs/cliui@8.0.2':
     dependencies:

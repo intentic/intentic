@@ -6,6 +6,7 @@ import { useAuth } from "../composables/useAuth";
 import { useChat } from "../composables/chat/useChat";
 import { reportIdle, reportSessionId, reportView } from "../composables/usePresence";
 import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
+import { useExtensionHost } from "../extension-host/useExtensionHost";
 import GoogleSigninGate from "./GoogleSigninGate.vue";
 
 /* The persistent post-login shell, split by form factor: ShellDesktop (rail + chat column + terminal panel)
@@ -20,6 +21,8 @@ const ShellMobile = defineAsyncComponent(() => import("./ShellMobile.vue"));
 const { mobile } = useDevice();
 const { refreshPlan } = useAuth();
 const liveness = useSandboxLiveness();
+// Boot installed third-party extensions once the sandbox is reachable (idempotent across shell remounts).
+useExtensionHost();
 const router = useRouter();
 const route = useRoute();
 

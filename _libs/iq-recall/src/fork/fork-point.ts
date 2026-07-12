@@ -77,7 +77,7 @@ export const selectForkPoint = (db: RecallDb, root: string, sessionId: string, p
         const estTokens = Math.round(bytes / 4);
         const score = (sum(fresh) - 1.5 * sum(stale)) / Math.sqrt(estTokens + 1000);
         if (score > 0 && (best === undefined || score > best.score)) {
-            best = { point: { turnUuid: turn.uuid, ordinal: turn.ordinal, estTokens, coverageFiles: [...fresh].sort(), staleFiles: [...stale].sort() }, score };
+            best = { point: { turnUuid: turn.uuid, ordinal: turn.ordinal, estTokens, coverageFiles: fresh.toSorted(), staleFiles: stale.toSorted() }, score };
         }
     }
     return best?.point;

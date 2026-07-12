@@ -605,6 +605,31 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             ],
         },
     },
+    {
+        id: "extension",
+        name: "Extension",
+        kind: "extension",
+        category: "extend",
+        description: "Install an intentic extension from a git repo — app views, commands, settings, agent skills and background processes.",
+        fields: [
+            { key: "url", label: "Git URL", placeholder: "https://github.com/owner/extension" },
+            // A full sha, not a branch: extension code runs trusted in your browser, so installs pin exactly
+            // the reviewed commit — updating is re-adding at a new sha.
+            { key: "ref", label: "Commit sha (full 40 characters)" },
+            { key: "path", label: "Subdirectory", optional: true },
+            { key: "token", label: "Access token", secret: true, optional: true },
+        ],
+        hint: "Owner-only. Extension code runs inside the app with your session — install only publishers you trust.",
+        guide: {
+            scopes: "private repos: read access (e.g. GitHub repo)",
+            steps: [
+                "Point at a git repo with an intentic-extension.json at its root (or the subdirectory).",
+                "Pin the exact commit sha you reviewed — branches and tags are not accepted.",
+                "Private repo: add a token with read access.",
+                "Reload the app after installing to load its UI; agent contributions load next turn.",
+            ],
+        },
+    },
 ];
 
 // Capability providers the daemon can listen to live (a `listener` trigger) — gates the trigger option in the UI.

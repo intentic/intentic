@@ -41,3 +41,19 @@ truncation footers print the exact `--after <cursor>` command to continue. Scope
 `--repo <name>`, `--lang ts,py`, `--glob`/`--not-glob`, `--only tests|src|docs|config`; `--ignored` includes
 gitignored files (secrets stay unreachable). Exit codes: 0 hits, 1 none, 2 usage error. The index
 self-manages — run `iq index rebuild` only if results look stale.
+
+## Session recall
+
+Past Claude Code sessions of this workspace are indexed (which files each topic touched, per user turn):
+
+| I want… | Run |
+|---|---|
+| files past sessions touched for a topic | `iq sessions files "auth refresh"` — complements content search: association, not text match |
+| recent sessions | `iq sessions list [query]` |
+| sessions related to a prompt | `iq sessions match "<prompt>"` |
+| continue from a past session's context | `iq sessions fork <sessionId> [--at <turn>]`, then `claude --resume <printed id>` |
+
+When a hook reports "a related past session exists" on the user's first prompt, relay the suggested
+`iq sessions fork …` command to the user and let THEM decide — never fork on their behalf. A fork copies the
+session up to that turn under a fresh id; its staleness report lists files changed since — re-read those
+before trusting remembered contents.

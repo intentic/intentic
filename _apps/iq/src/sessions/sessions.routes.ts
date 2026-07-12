@@ -138,7 +138,7 @@ export const runHookMatch = async (input: string, write: (chunk: string) => void
     const recall = recallFor(root);
     try {
         await recall.ingest();
-        const matches = recall.match(prompt, { ...(payload.session_id !== undefined ? { excludeSessionId: payload.session_id } : {}) });
+        const matches = recall.match(prompt, payload.session_id === undefined ? {} : { excludeSessionId: payload.session_id });
         const top = matches[0];
         if (top === undefined || !top.strong) {
             return;

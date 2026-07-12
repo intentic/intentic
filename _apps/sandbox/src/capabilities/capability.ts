@@ -102,6 +102,7 @@ export const secretField = (capability: Capability): string | undefined => {
     switch (capability.kind) {
         case "mcp":
         case "plugin":
+        case "extension":
             return capability.config.token !== undefined ? "token" : undefined;
         case "cli":
             return cliSecretKeys[capability.config.provider];
@@ -147,6 +148,13 @@ export const echoConfig = (capability: Capability): Record<string, string | numb
             return {
                 url: capability.config.url,
                 ...(capability.config.ref !== undefined ? { ref: capability.config.ref } : {}),
+                ...(capability.config.path !== undefined ? { path: capability.config.path } : {}),
+                hasToken: capability.config.token !== undefined,
+            };
+        case "extension":
+            return {
+                url: capability.config.url,
+                ref: capability.config.ref,
                 ...(capability.config.path !== undefined ? { path: capability.config.path } : {}),
                 hasToken: capability.config.token !== undefined,
             };

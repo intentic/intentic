@@ -1,5 +1,6 @@
 import { capabilitiesContract, CapabilitySchema } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
+import { bearerFrom } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { composeEnvironment } from "../environment/environment.js";
@@ -29,10 +30,20 @@ export const createCapabilitiesRoutes = (services: Services) => {
             );
             return { capabilities: rows };
         }),
-        add: i.add.handler(async function* ({ input }) {
+        add: i.add.handler(async function* ({ input, context }) {
             const handler = registry[input.kind];
             if (adding.has(input.id)) {
                 throw new ORPCError("CONFLICT", { message: `"${input.id}" is already being added — wait for it to finish` });
+            }
+            // Extensions ship code that runs trusted in the browser shell and the agent's turns — installing
+            // one IS the trust decision, so only the owner may make it (mirrors /environment/approve; loopback
+            // mode has no auth and skips the gate like every other route).
+            if (input.kind === "extension" && services.auth !== undefined) {
+                try {
+                    await services.auth.authorizeOwner(bearerFrom(context.headers.get("authorization") ?? undefined));
+                } catch {
+                    throw new ORPCError("FORBIDDEN", { message: "only the sandbox owner can install extensions" });
+                }
             }
             const active = await services.capabilities.list();
             for (const required of handler.requires ?? []) {

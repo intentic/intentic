@@ -3,6 +3,14 @@ import type { StricliProcess } from "@stricli/core";
 import { run } from "@stricli/core";
 import { app } from "./app.js";
 
+// Piping into `head` closes stdout mid-write — treat EPIPE as a clean stop, not a crash (grep convention).
+process.stdout.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EPIPE") {
+        process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
+    }
+    throw error;
+});
+
 // Agents arrive with grep muscle memory — map stricli's terse alias errors to actionable redirects.
 const FLAG_REDIRECTS: Record<string, string> = {
     i: "case-insensitive is the default; exact case: --case",

@@ -1,7 +1,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative } from "node:path";
 import { readLines } from "../transcript/line-reader.js";
-import { aiTitleOf, fileTouchesOf, type Line, parseLine, timestampOf, typedPromptOf, typeOf, uuidOf } from "../transcript/lines.js";
+import { aiTitleOf, fileTouchesOf, parseLine, timestampOf, typedPromptOf, uuidOf } from "../transcript/lines.js";
 import type { RecallDb } from "../store/db.js";
 
 export interface IngestStats {

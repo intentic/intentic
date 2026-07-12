@@ -7,6 +7,7 @@ import { useSandbox } from "../composables/useSandbox";
 import SandboxAccess from "./sandbox/SandboxAccess.vue";
 import SandboxAgent from "./sandbox/SandboxAgent.vue";
 import SandboxEnvironment from "./sandbox/SandboxEnvironment.vue";
+import SandboxExtensions from "./sandbox/SandboxExtensions.vue";
 import SandboxOverview from "./sandbox/SandboxOverview.vue";
 import SandboxStatus from "./sandbox/SandboxStatus.vue";
 import SandboxSync from "./sandbox/SandboxSync.vue";
@@ -17,7 +18,7 @@ import SandboxSync from "./sandbox/SandboxSync.vue";
  * correctly drives each tab's side-effecting lifecycles (desktop-sync start/stop, the agent's account surface);
  * the underlying composables are module singletons / vue-query caches, so remounting a tab is cheap. */
 
-const TABS = [`overview`, `status`, `environment`, `access`, `agent`, `sync`] as const;
+const TABS = [`overview`, `status`, `environment`, `access`, `agent`, `extensions`, `sync`] as const;
 type Tab = (typeof TABS)[number];
 const DEFAULT: Tab = `overview`;
 
@@ -37,6 +38,7 @@ const options = computed(() => [
     { label: `Environment`, value: `environment` as Tab },
     { label: `Access`, value: `access` as Tab },
     { label: `Agent`, value: `agent` as Tab },
+    { label: `Extensions`, value: `extensions` as Tab },
     { label: `Sync`, value: `sync` as Tab },
 ]);
 
@@ -74,6 +76,7 @@ watch(
         <SandboxEnvironment v-else-if="activeTab === `environment`" />
         <SandboxAccess v-else-if="activeTab === `access`" />
         <SandboxAgent v-else-if="activeTab === `agent`" />
+        <SandboxExtensions v-else-if="activeTab === `extensions`" />
         <SandboxSync v-else-if="activeTab === `sync`" />
     </Page>
 </template>

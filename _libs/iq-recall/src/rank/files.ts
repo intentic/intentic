@@ -82,7 +82,7 @@ export interface TopicFile {
     readonly score: number;
     readonly sessions: number;
     readonly lastTouched: number;
-    readonly sampleTitle?: string;
+    readonly sampleTitle: string | undefined;
 }
 
 export interface TopicOptions {
@@ -139,18 +139,17 @@ export const rankFilesForTopic = (db: RecallDb, query: string, options: TopicOpt
         return typeof title === "string" ? title : undefined;
     };
     return [...byPath.entries()]
-        .map(([path, accumulated]): TopicFile => {
-            const sampleTitle = titleOf(accumulated.bestSession);
-            return {
+        .map(
+            ([path, accumulated]): TopicFile => ({
                 path,
                 score: accumulated.score * (idf.get(path) ?? 0),
                 sessions: accumulated.sessions.size,
                 lastTouched: accumulated.lastTouched,
-                ...(sampleTitle !== undefined ? { sampleTitle } : {}),
-            };
-        })
+                sampleTitle: titleOf(accumulated.bestSession),
+            }),
+        )
         .filter((file) => file.score > 0)
-        .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
+        .toSorted((a, b) => b.score - a.score || a.path.localeCompare(b.path))
         .slice(0, options.limit ?? 20);
 };
 

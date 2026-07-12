@@ -64,7 +64,11 @@ export const ExtensionManifestSchema = z.object({
     engines: z.object({ intentic: z.string().min(1) }),
     // Repo-relative path of the prebuilt single-file ESM bundle (built with `vue` and `@intentic/extension-api`
     // as externals); absent ⇒ an agent-only extension with no UI entry.
-    entry: z.string().optional(),
+    entry: z
+        .string()
+        .min(1)
+        .refine((value) => !value.split("/").includes(".."), { message: "entry must stay inside the checkout" })
+        .optional(),
     contributes: z
         .object({
             views: z.array(ViewContributionSchema).optional(),

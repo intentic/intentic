@@ -3,6 +3,7 @@ import type { IqSearchMode } from "@intentic-app/api-contract";
 import Dialog from "primevue/dialog";
 import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { commands, executeCommand, type RegisteredCommand } from "../composables/commands/useCommands";
 import { useQuickOpen } from "../composables/useQuickOpen";
 import { useWorkspaceSearch } from "../composables/workspace/useWorkspaceSearch";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
@@ -11,7 +12,9 @@ import { iconForEntry } from "../pages/workspace/fileIcon";
 /* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type — the sandbox
  * daemon's iq `files` search — and opens the pick as an editor tab. Mounted once in the desktop shell and opened
  * from its global keydown. Server-ranked: no local tree load, no client-side fuzzy matcher. Below the 2-char
- * search floor it offers the open tabs as jump targets so Enter always has somewhere to go. */
+ * search floor it offers the open tabs as jump targets so Enter always has somewhere to go. A `>` prefix flips
+ * the palette to COMMAND mode (VSCode's Ctrl+Shift+P folded into the same field), filtering the command
+ * registry (useCommands) instead of files. */
 
 const { isOpen } = useQuickOpen();
 const router = useRouter();
@@ -19,8 +22,18 @@ const { tabs } = useWorkspaceTabs();
 
 const query = ref(``);
 const mode = ref<IqSearchMode>(`files`);
-// active is isOpen, so the daemon query stays idle until the palette is open AND the query clears the 2-char floor.
-const { groups, searching, pending, truncated, error } = useWorkspaceSearch(query, isOpen, mode);
+// `>` prefix = command mode; the rest of the text filters registered commands by title or id.
+const commandMode = computed(() => query.value.trimStart().startsWith(`>`));
+const commandQuery = computed(() => query.value.trimStart().slice(1).trim().toLowerCase());
+const commandRows = computed<readonly RegisteredCommand[]>(() =>
+    commands.value.filter(
+        (entry) => entry.title.toLowerCase().includes(commandQuery.value) || entry.command.toLowerCase().includes(commandQuery.value),
+    ),
+);
+// The daemon query stays idle until the palette is open, the query clears the 2-char floor, AND we're not in
+// command mode (a ">foo" query would otherwise search files for the literal text).
+const searchActive = computed(() => isOpen.value && !commandMode.value);
+const { groups, searching, pending, truncated, error } = useWorkspaceSearch(query, searchActive, mode);
 
 const input = ref<HTMLInputElement | null>(null);
 const activeIndex = ref(0);
@@ -29,9 +42,10 @@ const rowEls = new Map<string, HTMLElement>();
 const openTabPaths = computed<readonly string[]>(() => tabs.value.flatMap((tab) => (tab.kind === `file` ? [tab.path] : [])));
 const showingRecents = computed(() => query.value.trim().length < 2);
 const rows = computed<readonly string[]>(() => (showingRecents.value ? openTabPaths.value : groups.value.map((group) => group.path)));
+const rowCount = computed(() => (commandMode.value ? commandRows.value.length : rows.value.length));
 
 // Snap the highlight back to the top whenever the result set changes under it.
-watch(rows, () => (activeIndex.value = 0));
+watch([rows, commandRows], () => (activeIndex.value = 0));
 
 const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
@@ -51,16 +65,30 @@ const open = (path: string): void => {
     isOpen.value = false;
 };
 
+const run = (entry: RegisteredCommand): void => {
+    isOpen.value = false;
+    // A throwing command is its owner's bug — contain it to the console, never the palette.
+    void Promise.resolve(executeCommand(entry.command)).catch((caught: unknown) => console.error(`command ${entry.command} failed`, caught));
+};
+
 const move = (delta: number): void => {
-    const count = rows.value.length;
+    const count = rowCount.value;
     if (count === 0) {
         return;
     }
     activeIndex.value = (activeIndex.value + delta + count) % count;
-    rowEls.get(rows.value[activeIndex.value] ?? ``)?.scrollIntoView({ block: `nearest` });
+    const key = commandMode.value ? commandRows.value[activeIndex.value]?.command : rows.value[activeIndex.value];
+    rowEls.get(key ?? ``)?.scrollIntoView({ block: `nearest` });
 };
 
 const openActive = (): void => {
+    if (commandMode.value) {
+        const entry = commandRows.value[activeIndex.value];
+        if (entry !== undefined) {
+            run(entry);
+        }
+        return;
+    }
     const path = rows.value[activeIndex.value];
     if (path !== undefined) {
         open(path);
@@ -100,18 +128,41 @@ const onShow = async (): Promise<void> => {
                     ref="input"
                     v-model="query"
                     type="text"
-                    placeholder="Go to file by name or path…"
+                    placeholder="Go to file by name or path… (> for commands)"
                     class="w-full min-w-0 bg-transparent py-2.5 pl-9 pr-3 text-sm text-content placeholder:text-subtle focus:outline-none"
                     role="searchbox"
                     aria-controls="quick-open-list"
-                    :aria-activedescendant="rows[activeIndex] !== undefined ? `quick-open-opt-${activeIndex}` : undefined"
+                    :aria-activedescendant="activeIndex < rowCount ? `quick-open-opt-${activeIndex}` : undefined"
                     @keydown.down.prevent="move(1)"
                     @keydown.up.prevent="move(-1)"
                     @keydown.enter.prevent="openActive"
                     @keydown.esc="isOpen = false"
                 />
             </div>
-            <div id="quick-open-list" class="scrollbar-thin max-h-80 overflow-auto py-1" role="listbox" aria-label="Files">
+            <div v-if="commandMode" id="quick-open-list" class="scrollbar-thin max-h-80 overflow-auto py-1" role="listbox" aria-label="Commands">
+                <button
+                    v-for="(entry, index) in commandRows"
+                    :id="`quick-open-opt-${index}`"
+                    :key="entry.command"
+                    :ref="(el) => setRowEl(entry.command, el)"
+                    type="button"
+                    role="option"
+                    :aria-selected="index === activeIndex"
+                    class="qo-row flex w-full items-center gap-2 px-3 py-1.5 text-left"
+                    :class="{ 'qo-row-on': index === activeIndex }"
+                    @click="run(entry)"
+                    @mouseenter="activeIndex = index"
+                >
+                    <Icon name="chevron-right" class="shrink-0 text-2xs text-muted" />
+                    <span class="min-w-0 truncate text-sm text-content">{{ entry.title }}</span>
+                    <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ entry.command }}</span>
+                </button>
+                <p v-if="commandRows.length === 0 && commands.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
+                    No commands registered — extensions contribute them.
+                </p>
+                <p v-else-if="commandRows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">No commands match.</p>
+            </div>
+            <div v-else id="quick-open-list" class="scrollbar-thin max-h-80 overflow-auto py-1" role="listbox" aria-label="Files">
                 <p v-if="showingRecents && rows.length > 0" class="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">
                     Recently opened
                 </p>

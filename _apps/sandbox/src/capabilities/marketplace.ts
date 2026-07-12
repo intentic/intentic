@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { Marketplace, MarketplacePlugin } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { CapabilityCtx } from "./capability.js";
-import { gitAuthHeader } from "./handlers/plugin.js";
+import { gitAuthHeader } from "./git-checkout.js";
 import { pluginsRoot } from "./plugin-dirs.js";
 
 // The slice of .claude-plugin/marketplace.json the daemon reads — unknown fields are stripped, `source` stays
@@ -15,6 +15,9 @@ const MarketplaceFileSchema = z.object({
             name: z.string(),
             description: z.string().optional(),
             version: z.string().optional(),
+            // intentic's own marker on a marketplace entry: "extension" installs as the sha-pinned extension
+            // capability. Claude Code ignores the field, so one marketplace repo serves both consumers.
+            kind: z.enum(["plugin", "extension"]).optional(),
             source: z.unknown(),
         }),
     ),
@@ -72,6 +75,9 @@ export const browseMarketplace = async (ctx: CapabilityCtx, url: string, token?:
                 }
                 if (plugin.version !== undefined) {
                     entry.version = plugin.version;
+                }
+                if (plugin.kind !== undefined) {
+                    entry.kind = plugin.kind;
                 }
                 const install = resolveSource(plugin.source, url, file.metadata?.pluginRoot);
                 if (install !== undefined) {

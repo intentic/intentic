@@ -10,7 +10,7 @@ const STRONG_SCORE = 0.6;
 
 export interface SessionMatch {
     readonly sessionId: string;
-    readonly title?: string;
+    readonly title: string | undefined;
     readonly lastTs: number;
     readonly promptCount: number;
     readonly score: number;
@@ -46,7 +46,7 @@ export const matchSessions = (db: RecallDb, prompt: string, options: MatchOption
     interface Candidate {
         sessionRowId: number;
         sessionId: string;
-        title?: string;
+        title: string | undefined;
         lastTs: number;
         promptCount: number;
         bm25: number;
@@ -69,7 +69,7 @@ export const matchSessions = (db: RecallDb, prompt: string, options: MatchOption
         candidates.push({
             sessionRowId,
             sessionId,
-            ...(typeof row["title"] === "string" ? { title: row["title"] } : {}),
+            title: typeof row["title"] === "string" ? row["title"] : undefined,
             lastTs: Number(row["last_ts"]),
             promptCount: Number(row["prompts"]),
             bm25: (bestTurn.get(sessionRowId) ?? 0) + 0.5 * (titles.get(sessionRowId) ?? 0),
@@ -99,7 +99,7 @@ export const matchSessions = (db: RecallDb, prompt: string, options: MatchOption
             }
             return {
                 sessionId: candidate.sessionId,
-                ...(candidate.title !== undefined ? { title: candidate.title } : {}),
+                title: candidate.title,
                 lastTs: candidate.lastTs,
                 promptCount: candidate.promptCount,
                 score,
@@ -107,5 +107,5 @@ export const matchSessions = (db: RecallDb, prompt: string, options: MatchOption
                 strong: candidate.bm25 >= STRONG_BM25 && score >= STRONG_SCORE,
             };
         })
-        .sort((a, b) => b.score - a.score || a.sessionId.localeCompare(b.sessionId));
+        .toSorted((a, b) => b.score - a.score || a.sessionId.localeCompare(b.sessionId));
 };

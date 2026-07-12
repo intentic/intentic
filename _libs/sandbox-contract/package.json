@@ -45,6 +45,7 @@
         "watch": "tsc --build --watch"
     },
     "dependencies": {
+        "@intentic/extension-api": "workspace:*",
         "@orpc/contract": "catalog:",
         "tslib": "catalog:",
         "zod": "catalog:"

@@ -31,7 +31,7 @@ export interface RecallOptions {
 
 export interface SessionSummary {
     readonly sessionId: string;
-    readonly title?: string;
+    readonly title: string | undefined;
     readonly lastTs: number;
     readonly promptCount: number;
 }
@@ -106,7 +106,7 @@ export const createRecall = (options: RecallOptions): Recall => {
                 .map(
                     (row): SessionSummary => ({
                         sessionId: row["sid"] as string,
-                        ...(typeof row["title"] === "string" ? { title: row["title"] } : {}),
+                        title: typeof row["title"] === "string" ? row["title"] : undefined,
                         lastTs: Number(row["last_ts"]),
                         promptCount: Number(row["prompts"]),
                     }),

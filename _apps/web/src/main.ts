@@ -6,6 +6,8 @@ import { initAnalytics } from "./composables/analytics";
 import { queryClient } from "./composables/queryPersistence";
 // Registers the module-level watch that re-scopes chat / editor / file-action state on sandbox switch.
 import "./composables/sandboxScope";
+// Publishes the app's vue + extension-api instances for extension bundles (see the import map in index.html).
+import "./extension-host/hostModules";
 import { router } from "./router";
 import "./styles.css";
 

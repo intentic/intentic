@@ -1,3 +1,4 @@
+import { ExtensionManifestSchema } from "@intentic/extension-api";
 import { z } from "zod";
 
 // All request/response wire schemas for the sandbox daemon. Inputs that carry a `{param}` in their route path
@@ -460,6 +461,7 @@ export const CapabilityKindSchema = z.enum([
     "integration",
     "cli",
     "plugin",
+    "extension",
     "ssh",
     "vpn",
     "docker",
@@ -549,6 +551,20 @@ export const PluginConfigSchema = z.object({
         .optional(),
     token: z.string().min(1).optional(),
 });
+// An intentic extension from a git repo (an intentic-extension.json checkout — UI bundle + agent contributions
+// + processes). Unlike `plugin`, `ref` is a REQUIRED full commit sha: extension code runs trusted in the
+// owner's browser, so the owner approves exactly the code that runs — pin by construction, updates are explicit
+// re-adds at a new sha. `path`/`token` as in PluginConfigSchema.
+export const ExtensionConfigSchema = z.object({
+    url: z.string().url(),
+    ref: z.string().regex(/^[0-9a-f]{40}$/, "ref must be a full 40-character commit sha"),
+    path: z
+        .string()
+        .min(1)
+        .refine((value) => !value.split("/").includes(".."), { message: "path must stay inside the checkout" })
+        .optional(),
+    token: z.string().min(1).optional(),
+});
 // A remote machine the AGENT can reach over SSH. One capability = one machine; the id is its ssh-config Host
 // alias, so the agent runs `ssh <id> "…"`. The handler writes a per-machine config block + a 0600 key/password
 // file under ~/.ssh (see the ssh handler), so — unlike `cli` — nothing is injected into the agent's env, and
@@ -592,6 +608,7 @@ export type ServiceConfig = z.infer<typeof ServiceConfigSchema>;
 export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
 export type CliConfig = z.infer<typeof CliConfigSchema>;
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;
+export type ExtensionConfig = z.infer<typeof ExtensionConfigSchema>;
 export type SshConfig = z.infer<typeof SshConfigSchema>;
 export type VpnConfig = z.infer<typeof VpnConfigSchema>;
 export type DockerConfig = z.infer<typeof DockerConfigSchema>;
@@ -608,6 +625,7 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("integration"), config: IntegrationConfigSchema }),
     z.object({ id: entryId, kind: z.literal("cli"), config: CliConfigSchema }),
     z.object({ id: entryId, kind: z.literal("plugin"), config: PluginConfigSchema }),
+    z.object({ id: entryId, kind: z.literal("extension"), config: ExtensionConfigSchema }),
     z.object({ id: entryId, kind: z.literal("ssh"), config: SshConfigSchema }),
     z.object({ id: entryId.max(15), kind: z.literal("vpn"), config: VpnConfigSchema }),
     z.object({ id: entryId, kind: z.literal("docker"), config: DockerConfigSchema }),
@@ -639,11 +657,35 @@ export const MarketplacePluginSchema = z.object({
     name: z.string(),
     description: z.string().optional(),
     version: z.string().optional(),
+    // "extension" marks an intentic-extension entry (installs as the `extension` capability, sha-pinned);
+    // absent/"plugin" = a Claude Code plugin. Claude Code ignores unknown marketplace fields, so one
+    // marketplace repo serves both consumers.
+    kind: z.enum(["plugin", "extension"]).optional(),
     install: z.object({ url: z.string(), ref: z.string().optional(), path: z.string().optional() }).optional(),
 });
 export type MarketplacePlugin = z.infer<typeof MarketplacePluginSchema>;
 export const MarketplaceSchema = z.object({ name: z.string(), plugins: z.array(MarketplacePluginSchema) });
 export type Marketplace = z.infer<typeof MarketplaceSchema>;
+
+// ---- extensions: installed extension-kind capabilities resolved to their manifests ----
+// What the web extension host boots from: each row is an extension capability whose checkout still parses —
+// the approved manifest (contribution declarations), and the checked-out commit (the code identity; the bundle
+// route's ETag). A rotted checkout is skipped here; its capability row still shows status.
+export const ExtensionSummarySchema = z.object({
+    id: entryId,
+    manifest: ExtensionManifestSchema,
+    commit: z.string(),
+});
+export type ExtensionSummary = z.infer<typeof ExtensionSummarySchema>;
+export const ExtensionsListSchema = z.object({ extensions: z.array(ExtensionSummarySchema) });
+// The extension's contributes.settings values, persisted daemon-side (.intentic/extension-settings.json) keyed
+// by the manifest-derived extension id — the checkout stays pristine, so a re-clone update never loses them.
+export const ExtensionSettingsSchema = z.object({ settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])) });
+export type ExtensionSettings = z.infer<typeof ExtensionSettingsSchema>;
+export const ExtensionSettingsInputSchema = z.object({
+    id: z.string(),
+    settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+});
 
 // ---- automations: scheduled agent wake-ups (.intentic/automations.json) ----
 // An automation wakes the agent autonomously: the daemon's scheduler fires each enabled automation on its

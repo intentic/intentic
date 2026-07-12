@@ -128,6 +128,9 @@ export const materializeFork = async (options: ForkOptions): Promise<ForkResult>
         keptLines: kept.length,
         droppedLines: entries.length - (kept.length - (title !== undefined ? 2 : 1)),
         leafUuid: leaf,
-        staleFiles: [...staleByPath.entries()].filter(([, changed]) => changed).map(([touched]) => touched).sort(),
+        staleFiles: [...staleByPath.entries()]
+            .filter(([, changed]) => changed)
+            .map(([touched]) => touched)
+            .toSorted(),
     };
 };

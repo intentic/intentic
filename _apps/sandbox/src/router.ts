@@ -6,6 +6,7 @@ import { createClaudeRoutes } from "./claude/claude.routes.js";
 import { createCodexRoutes } from "./codex/codex.routes.js";
 import type { Services } from "./composition.js";
 import { createDraftsRoutes } from "./drafts/drafts.routes.js";
+import { createExtensionsRoutes } from "./extensions/extensions.routes.js";
 import { createGitRoutes } from "./git/git.routes.js";
 import { createGrokRoutes } from "./grok/grok.routes.js";
 import { createHistoryRoutes } from "./history/history.routes.js";
@@ -29,6 +30,7 @@ export const createRouter = (services: Services) => ({
     claude: createClaudeRoutes(services),
     codex: createCodexRoutes(services),
     drafts: createDraftsRoutes(services),
+    extensions: createExtensionsRoutes(services),
     sessions: createSessionsRoutes(services),
     settings: createSettingsRoutes(services),
     intentic: createIntenticRoutes(services),

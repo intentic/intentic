@@ -4,6 +4,7 @@ import { createOutboundSniffer } from "../activity/outbound.js";
 import { browserServersOf } from "../browser/browser-tools.js";
 import { cliEnvOf } from "../capabilities/cli-env.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
+import { extensionAgentDirsOf } from "../capabilities/extension-dirs.js";
 import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
 import { ensureFreshToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
@@ -212,9 +213,11 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         const tools = [...services.tools, ...mcpToolsOf(capabilities)];
         // The image-baked iq plugin (skill + SessionStart nudge) loads on every turn, ahead of any user-added
         // plugin-kind capabilities, so iq is the default code-search tool. Empty outside the container ⇒ skipped.
+        // Extension checkouts with a contributes.agent manifest entry ride the same SDK plugin loader.
         const plugins = [
             ...(services.config.iqPluginDir !== "" ? [services.config.iqPluginDir] : []),
             ...pluginDirsOf(capabilities, services.workspace.root),
+            ...(await extensionAgentDirsOf(capabilities, services.workspace.root, services.files.read)),
         ];
         // Each discord capability also grants the in-process voice tools (join_voice/leave_voice/voice_status),
         // one MCP server named for the instance — the session they drive lives in the daemon and outlives this turn.
