@@ -1,59 +1,46 @@
 import { type ExtensionManifest, extensionIdOf, type ProcessContribution } from "@intentic/extension-api";
-import { type Capability, type ExtensionSummary, extensionsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { type ExtensionSummary, extensionsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
-import { extensionDir, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
+import { extensionDir } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { declaredProcesses, extensionProcessKey, startExtensionProcess } from "./extension-processes.js";
+import { extensionProcessKey, startExtensionProcess } from "./extension-processes.js";
 import { readAllExtensionSettings, writeExtensionSettings } from "./extension-settings.js";
+import { type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 
-// Installed extensions resolved to their approved manifests + per-extension settings values. The web extension
-// host boots from `list`; the bundle bytes ride the plain /extensions/:id/bundle route in app.ts. A checkout
-// whose manifest no longer parses is skipped from the list — its capability row still shows status, and
-// re-adding repairs it.
+// Installed extensions (git-installed capabilities ∪ image-baked) resolved to their approved manifests +
+// per-extension settings values. The web extension host boots from `list`; the bundle bytes ride the plain
+// /extensions/:id/bundle route in app.ts. A checkout whose manifest no longer parses is skipped from the list —
+// its capability row still shows status, and re-adding repairs it.
 export const createExtensionsRoutes = (services: Services) => {
     const i = implement(extensionsContract).$context<OrpcContext>();
     const root = services.workspace.root;
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
     const sandboxId = sandboxIdFromToken(services.config.connectToken);
-    const manifestOf = async (id: string): Promise<ExtensionManifest | undefined> => {
-        const capability = await services.capabilities.get(id);
-        if (capability === undefined || capability.kind !== "extension") {
-            return undefined;
-        }
-        return readExtensionManifest(services.files.read, extensionRootOf(extensionDir(root, id), capability.config.path));
-    };
-    // The capability + declared process a process route addresses; an undeclared name is NOT_FOUND (the
+    const find = async (id: string): Promise<InstalledExtension | undefined> => (await installedExtensions(services)).find((e) => e.id === id);
+    const manifestOf = async (id: string): Promise<ExtensionManifest | undefined> => (await find(id))?.manifest;
+    // The extension + declared process a process route addresses; an undeclared name is NOT_FOUND (the
     // manifest-honesty rule).
-    const processOf = async (
-        id: string,
-        name: string,
-    ): Promise<{ capability: Extract<Capability, { kind: "extension" }>; process: ProcessContribution }> => {
-        const capability = await services.capabilities.get(id);
-        if (capability === undefined || capability.kind !== "extension") {
+    const processOf = async (id: string, name: string): Promise<{ extension: InstalledExtension; process: ProcessContribution }> => {
+        const extension = await find(id);
+        if (extension === undefined) {
             throw new ORPCError("NOT_FOUND", { message: "no extension with that id" });
         }
-        const process = (await declaredProcesses(services, capability)).find((declared) => declared.name === name);
+        const process = (extension.manifest.contributes?.processes ?? []).find((declared) => declared.name === name);
         if (process === undefined) {
             throw new ORPCError("NOT_FOUND", { message: `the extension declares no process "${name}"` });
         }
-        return { capability, process };
+        return { extension, process };
     };
     return {
         list: i.list.handler(async () => {
-            const capabilities = await services.capabilities.list();
             const extensions: ExtensionSummary[] = [];
-            for (const capability of capabilities) {
-                if (capability.kind !== "extension") {
-                    continue;
-                }
-                const dir = extensionDir(root, capability.id);
-                const manifest = await readExtensionManifest(services.files.read, extensionRootOf(dir, capability.config.path));
-                if (manifest === undefined) {
-                    continue;
-                }
-                extensions.push({ id: capability.id, manifest, commit: await services.git.head(dir) });
+            for (const extension of await installedExtensions(services)) {
+                // A baked extension has no git checkout — its identity is the shipped image, so commit is a
+                // sentinel; a git-installed one reports its pinned HEAD (the bundle route's ETag).
+                const commit = extension.builtin ? `builtin` : await services.git.head(extensionDir(root, extension.id));
+                extensions.push({ id: extension.id, manifest: extension.manifest, commit, builtin: extension.builtin });
             }
             return { extensions };
         }),
@@ -62,7 +49,22 @@ export const createExtensionsRoutes = (services: Services) => {
             if (manifest === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no extension with that id" });
             }
-            return { settings: (await readAllExtensionSettings(root))[extensionIdOf(manifest)] ?? {} };
+            const declared = manifest.contributes?.settings ?? [];
+            const secretKeys = new Set(declared.filter((setting) => setting.secret === true).map((setting) => setting.key));
+            const stored = (await readAllExtensionSettings(root))[extensionIdOf(manifest)] ?? {};
+            // Strip secret values from the wire; report which secret keys hold a value so the UI can show "set".
+            const settings: Record<string, string | number | boolean> = {};
+            const secretsSet: string[] = [];
+            for (const [key, value] of Object.entries(stored)) {
+                if (secretKeys.has(key)) {
+                    if (value !== "") {
+                        secretsSet.push(key);
+                    }
+                } else {
+                    settings[key] = value;
+                }
+            }
+            return { settings, secretsSet };
         }),
         setSettings: i.setSettings.handler(async ({ input }) => {
             const manifest = await manifestOf(input.id);
@@ -71,12 +73,25 @@ export const createExtensionsRoutes = (services: Services) => {
             }
             // Only declared keys persist — the manifest is the settings schema, the same honesty rule the host
             // applies to runtime view/command registrations.
-            const declared = new Set((manifest.contributes?.settings ?? []).map((setting) => setting.key));
-            const undeclared = Object.keys(input.settings).filter((key) => !declared.has(key));
+            const declared = manifest.contributes?.settings ?? [];
+            const secretKeys = new Set(declared.filter((setting) => setting.secret === true).map((setting) => setting.key));
+            const declaredKeys = new Set(declared.map((setting) => setting.key));
+            const undeclared = Object.keys(input.settings).filter((key) => !declaredKeys.has(key));
             if (undeclared.length > 0) {
                 throw new ORPCError("BAD_REQUEST", { message: `undeclared setting keys: ${undeclared.join(", ")}` });
             }
-            await writeExtensionSettings(root, extensionIdOf(manifest), input.settings);
+            // Merge, so a secret key absent from the payload keeps its stored value (the masked UI round-trips
+            // non-secret edits without resending secrets); an empty-string secret clears it.
+            const stored = (await readAllExtensionSettings(root))[extensionIdOf(manifest)] ?? {};
+            const next = { ...stored };
+            for (const key of declaredKeys) {
+                if (key in input.settings) {
+                    next[key] = input.settings[key]!;
+                } else if (!secretKeys.has(key)) {
+                    delete next[key];
+                }
+            }
+            await writeExtensionSettings(root, extensionIdOf(manifest), next);
             return { ok: true } as const;
         }),
         processStatus: i.processStatus.handler(async ({ input }) => {
@@ -92,8 +107,8 @@ export const createExtensionsRoutes = (services: Services) => {
             };
         }),
         processStart: i.processStart.handler(async ({ input }) => {
-            const { capability, process } = await processOf(input.id, input.name);
-            await startExtensionProcess(services, capability, process);
+            const { extension, process } = await processOf(input.id, input.name);
+            await startExtensionProcess(services, extension, process);
             return { ok: true } as const;
         }),
         processStop: i.processStop.handler(async ({ input }) => {

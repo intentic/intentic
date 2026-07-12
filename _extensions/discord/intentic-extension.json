@@ -1,0 +1,51 @@
+{
+    "publisher": "intentic",
+    "name": "discord",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.2.0" },
+    "contributes": {
+        "connectors": [
+            {
+                "provider": "discord",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Discord",
+                    "logo": "discord",
+                    "description": "Let the agent read and post in your Discord server.",
+                    "category": "communication",
+                    "hint": "Voice transcription runs a local whisper model: bigger = more accurate but slower on CPU (Medium ≈ 1.5GB download on first use). Set the voice language to an ISO code like pl or en to pin transcription (auto-detect can misfire on short utterances). It needs a one-time sandbox rebuild (Environment card) after adding.",
+                    "guide": {
+                        "url": "https://discord.com/developers/applications",
+                        "linkLabel": "Open the Discord developer portal",
+                        "scopes": "Privileged intents: Message Content + Server Members",
+                        "steps": [
+                            "New Application → Bot.",
+                            "Reset Token, then copy the bot token.",
+                            "Enable the Message Content and Server Members privileged intents.",
+                            "Paste the token here, then ask the agent to “invite yourself to my server” — it makes a one-click invite link."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "botToken", "label": "Bot token", "secret": true },
+                    {
+                        "key": "voiceModel",
+                        "label": "Voice model",
+                        "default": "medium",
+                        "options": [
+                            { "value": "tiny", "label": "Tiny" },
+                            { "value": "base", "label": "Base" },
+                            { "value": "small", "label": "Small" },
+                            { "value": "medium", "label": "Medium" },
+                            { "value": "large-v3-turbo", "label": "Large" }
+                        ]
+                    },
+                    { "key": "voiceLanguage", "label": "Voice language", "placeholder": "auto", "optional": true }
+                ],
+                "env": { "DISCORD_BOT_TOKEN": "${botToken}" },
+                "skill": "skills/discord/SKILL.md",
+                "fragment": "env/whisper.Dockerfile"
+            }
+        ]
+    }
+}

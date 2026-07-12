@@ -1,52 +1,44 @@
 import { join } from "node:path";
 import type { ProcessContribution } from "@intentic/extension-api";
-import type { Capability } from "@intentic/sandbox-contract";
-import { extensionDir, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
+import { type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 
-type ExtensionCapability = Extract<Capability, { kind: "extension" }>;
+// The panel key (→ tmux session `panel-ext-<id>-<name>`) for one declared extension process. tmux session
+// names reject dots and a baked extension's id is publisher.name, so dots are sanitized. Extension processes
+// ride the panel manager unchanged — port assignment (PORT env), the liveness sweep, boot's stale-session
+// kill, and the preview proxy all apply with no new machinery.
+export const extensionProcessKey = (id: string, name: string): string => `ext-${id.replaceAll(".", "-")}-${name}`;
 
-// The panel key (→ tmux session `panel-ext-<id>-<name>`) for one declared extension process. Extension
-// processes ride the panel manager unchanged — port assignment (PORT env), the liveness sweep, boot's
-// stale-session kill, and the preview proxy all apply with no new machinery.
-export const extensionProcessKey = (id: string, name: string): string => `ext-${id}-${name}`;
-
-// The extension root of a checkout (config.path for marketplace/monorepo-hosted extensions).
-const rootOf = (services: Services, capability: ExtensionCapability): string =>
-    extensionRootOf(extensionDir(services.workspace.root, capability.id), capability.config.path);
-
-// The manifest's declared processes; empty when the checkout rotted (install-time validation already passed).
-export const declaredProcesses = async (services: Services, capability: ExtensionCapability): Promise<readonly ProcessContribution[]> => {
-    const manifest = await readExtensionManifest(services.files.read, rootOf(services, capability));
-    return manifest?.contributes?.processes ?? [];
-};
-
-export const startExtensionProcess = async (services: Services, capability: ExtensionCapability, process: ProcessContribution): Promise<void> => {
-    const dir = rootOf(services, capability);
-    const key = extensionProcessKey(capability.id, process.name);
+export const startExtensionProcess = async (services: Services, extension: InstalledExtension, process: ProcessContribution): Promise<void> => {
+    const key = extensionProcessKey(extension.id, process.name);
     if (process.preview === true) {
         // Mint the tunneled preview hostname BEFORE the process binds (the panels-start pattern); never rejects.
         await services.ensurePreviewRoute(key);
     }
-    await services.panelProcesses.start(key, { command: process.command, cwd: process.cwd === undefined ? dir : join(dir, process.cwd) });
+    await services.panelProcesses.start(key, {
+        command: process.command,
+        cwd: process.cwd === undefined ? extension.dir : join(extension.dir, process.cwd),
+        // A declared process reaches the daemon's own routes (e.g. a listener source posting to /listeners)
+        // over loopback with the panel token — the token never leaves the container. (Flagged: the panel token
+        // is all-routes; a scoped per-extension token is a named follow-up.)
+        env: { INTENTIC_DAEMON: `http://127.0.0.1:${services.config.sandbox.port}`, INTENTIC_PANEL_TOKEN: services.panelToken },
+    });
 };
 
 // autoStart processes for one extension — after a successful install (the capabilities add route's post-apply
-// seam, beside composeEnvironment).
-export const startAutoStartProcesses = async (services: Services, capability: ExtensionCapability): Promise<void> => {
-    for (const process of await declaredProcesses(services, capability)) {
+// seam) and at boot convergence.
+export const startAutoStartProcesses = async (services: Services, extension: InstalledExtension): Promise<void> => {
+    for (const process of extension.manifest.contributes?.processes ?? []) {
         if (process.autoStart === true) {
-            await startExtensionProcess(services, capability, process);
+            await startExtensionProcess(services, extension, process);
         }
     }
 };
 
 // Boot convergence (beside startEnabledDocker): sessions died with the container / the boot sweep while the
-// manifests survived on /work — bring every installed extension's autoStart processes back up. Best-effort.
+// manifests survived — bring every installed extension's autoStart processes back up. Best-effort.
 export const startAllExtensionProcesses = async (services: Services): Promise<void> => {
-    for (const capability of await services.capabilities.list()) {
-        if (capability.kind === "extension") {
-            await startAutoStartProcesses(services, capability);
-        }
+    for (const extension of await installedExtensions(services)) {
+        await startAutoStartProcesses(services, extension);
     }
 };

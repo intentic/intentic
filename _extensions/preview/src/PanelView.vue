@@ -1,20 +1,19 @@
 <script setup lang="ts">
-import { cmp, StatusBadge, type StatusVariant } from "@intentic-app/ui";
-import Button from "primevue/button";
+import { Button, cmp, Icon, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
-import { usePanels } from "../composables/extensions/usePanels";
-import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
+import { host } from "./host";
+import { usePanels } from "./usePanels";
 
 /* The preview extension's view: a repo's `operator/` (or root) dev server, started in the sandbox and shown
  * live in a full-bleed iframe (https://preview-<repo>-<sandboxId>.<zone>) with hot reload — the iframe is the
  * surface; controls float over it and reveal on hover, like the workspace's file-viewer chrome. The fallback
- * sidebar element for a plain runnable repo no first-party extension serves (extensions/index.ts). */
+ * sidebar element for a plain runnable repo no first-party extension serves. */
 
 const props = defineProps<{ repo: string }>();
 const repo = computed(() => props.repo);
 
 const { panels, error: listError, isLoading, start, stop } = usePanels();
-const { openFocused } = useTerminalPanel();
+const openTerminal = (session: string): void => host().terminal.open(session);
 const panel = computed(() => panels.value.find((entry) => entry.repo === repo.value));
 
 const busy = ref(false);
@@ -136,7 +135,7 @@ watch(
                 >
                     <Icon name="external-link" />
                 </a>
-                <Button label="Terminal" size="small" severity="secondary" @click="openFocused(`panel-${repo}`)">
+                <Button label="Terminal" size="small" severity="secondary" @click="openTerminal(`panel-${repo}`)">
                     <template #icon><Icon name="align-left" /></template>
                 </Button>
                 <Button v-if="!panel.running" label="Start" size="small" :disabled="busy" @click="act(start)">

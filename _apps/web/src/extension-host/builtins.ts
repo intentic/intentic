@@ -1,8 +1,10 @@
 import type { ExtensionManifest, ExtensionModule } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-api";
 import * as agentActivity from "@intentic/ext-agent-activity";
+import * as apps from "@intentic/ext-apps";
 import * as automations from "@intentic/ext-automations";
 import * as logs from "@intentic/ext-logs";
+import * as preview from "@intentic/ext-preview";
 import { createExtensionApi, type HostBindings } from "./apiImpl";
 
 /* The compiled-in first-party extensions. Each is a real in-repo extension package (its own
@@ -20,6 +22,8 @@ const builtins: readonly Builtin[] = [
     { manifest: automations.manifest, module: automations },
     { manifest: logs.manifest, module: logs },
     { manifest: agentActivity.manifest, module: agentActivity },
+    { manifest: apps.manifest, module: apps },
+    { manifest: preview.manifest, module: preview },
 ];
 
 // Activate every builtin at shell boot, ahead of the daemon-installed extensions. A builtin's activate() only
@@ -29,7 +33,7 @@ export const loadBuiltins = (host: HostBindings): void => {
     for (const { manifest, module } of builtins) {
         const id = extensionIdOf(manifest);
         try {
-            const { api, context } = createExtensionApi({ id, manifest, commit: `builtin` }, host);
+            const { api, context } = createExtensionApi({ id, manifest, commit: `builtin`, builtin: true }, host);
             void module.activate(api, context);
         } catch (error) {
             console.error(`builtin extension ${id} failed to activate`, error);

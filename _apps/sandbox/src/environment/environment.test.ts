@@ -1,6 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
@@ -20,11 +21,15 @@ import {
 // A proposal is custom-section content only — the daemon owns the FROM.
 const CUSTOM = "RUN apt-get update && apt-get install -y cowsay\n";
 
+// The real first-party connectors/discord extensions, so a cli capability's image fragment resolves.
+const EXTENSIONS_DIR = fileURLToPath(new URL("../../../../_extensions", import.meta.url));
+
 const stubServices = (environmentHashApplied = "", capabilities: Capability[] = []): Services =>
     ({
-        config: { sandbox: { environmentHash: environmentHashApplied, name: "intentic-sandbox-demo" } },
+        config: { sandbox: { environmentHash: environmentHashApplied, name: "intentic-sandbox-demo" }, extensionsDir: EXTENSIONS_DIR },
         workspace: { root: mkdtempSync(join(tmpdir(), "environment-")) },
         files: { read: readWorkspaceFile, write: writeWorkspaceFile, remove: removeWorkspacePath },
+        logger: { warn: () => undefined },
         capabilities: { list: async () => capabilities },
     }) as unknown as Services;
 

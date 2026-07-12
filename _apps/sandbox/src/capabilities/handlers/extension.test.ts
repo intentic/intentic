@@ -7,7 +7,9 @@ import { promisify } from "node:util";
 import { type Capability, CapabilitySchema } from "@intentic/sandbox-contract";
 import { gitHead } from "@intentic/scaffold";
 import { expect, test } from "vitest";
-import { extensionAgentDirsOf, extensionDir, extensionsRoot } from "../extension-dirs.js";
+import type { Services } from "../../composition.js";
+import { extensionAgentDirsOf } from "../../extensions/installed-extensions.js";
+import { extensionDir, extensionsRoot } from "../extension-dirs.js";
 import { createTerminalRunner } from "../../system/terminal-run.js";
 import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
@@ -111,7 +113,13 @@ test("extensionAgentDirsOf maps contributes.agent checkouts (honoring config.pat
         { id: "no-agent", kind: "extension", config: { url: noAgent.url, ref: noAgent.sha } },
         { id: "x", kind: "mcp", config: { url: "https://a/mcp" } },
     ];
-    expect(await extensionAgentDirsOf(capabilities, root, ctx.files.read)).toEqual([join(extensionDir(root, "with-agent"), "plugin")]);
+    const services = {
+        workspace: { root },
+        files: { read: ctx.files.read },
+        capabilities: { list: async () => capabilities },
+        config: { extensionsDir: "" },
+    } as unknown as Services;
+    expect(await extensionAgentDirsOf(services)).toEqual([join(extensionDir(root, "with-agent"), "plugin")]);
 });
 
 test("the config schema requires a full 40-character sha ref", () => {

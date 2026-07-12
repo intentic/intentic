@@ -1,0 +1,8 @@
+{
+    "name": "@intentic/ext-connectors",
+    "version": "1.0.0",
+    "description": "The first-party CLI connectors (github/gitlab/sentry/redmine/outline/imap/signoz/postgres/mysql) as pure-data intentic extension",
+    "license": "MIT",
+    "private": true,
+    "type": "module"
+}

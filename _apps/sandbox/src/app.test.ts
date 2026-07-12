@@ -137,9 +137,13 @@ const fakeFiles = (overrides: Partial<Services["files"]> = {}): Services["files"
 
 // All config fields at their schema defaults; the routes only read claudeCodeOauthToken / anthropicApiKey
 // (the agent guard) and the workspace paths (via services.workspace), so the rest are inert here.
+// The real first-party connectors/discord extensions, so cli-capability tests resolve their provider data.
+const EXTENSIONS_DIR = fileURLToPath(new URL("../../../_extensions", import.meta.url));
+
 const baseConfig: Config = {
     workspaceRoot: "/work",
     historyRoot: "/history",
+    extensionsDir: EXTENSIONS_DIR,
     agentAuthDir: "",
     logLevel: "silent",
     logPretty: false,

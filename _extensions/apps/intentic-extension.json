@@ -1,0 +1,9 @@
+{
+    "publisher": "intentic",
+    "name": "apps",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.2.0" },
+    "contributes": {
+        "views": [{ "id": "apps", "label": "Apps", "surface": "directory" }]
+    }
+}

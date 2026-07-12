@@ -52,6 +52,7 @@ const COMMON_EXCLUDES = [
     ".secrets.json",
     "claude.json",
     "capabilities.json",
+    "extension-settings.json",
     "node_modules/",
     ".tmp/",
     "dist/",

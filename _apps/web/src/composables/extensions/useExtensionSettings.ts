@@ -9,10 +9,15 @@ import { sandboxJson } from "../sandboxClient";
  * record, mirroring the sandbox-settings pattern. */
 
 export interface ExtensionSettingsStore {
-    // undefined until the first load resolves.
+    // The non-secret values — undefined until the first load resolves. Secret values are NEVER held client-side
+    // (the daemon strips them from reads); `secretsSet` names the secret keys that currently hold a value.
     readonly values: ShallowRef<Record<string, SettingValue> | undefined>;
+    readonly secretsSet: ShallowRef<readonly string[]>;
     readonly load: () => Promise<void>;
-    readonly save: (next: Record<string, SettingValue>) => Promise<void>;
+    // Persist a partial update. The daemon merges: keys omitted here keep their stored value (so a secret the
+    // user didn't touch is preserved), non-secret declared keys absent are cleared, an empty-string secret
+    // clears it. Reloads afterwards so `values` re-strips any secret that rode in.
+    readonly save: (patch: Record<string, SettingValue>) => Promise<void>;
 }
 
 const stores = new Map<string, ExtensionSettingsStore>();
@@ -23,18 +28,23 @@ export const extensionSettingsStore = (id: string): ExtensionSettingsStore => {
         return existing;
     }
     const values = shallowRef<Record<string, SettingValue> | undefined>(undefined);
+    const secretsSet = shallowRef<readonly string[]>([]);
+    const load = async (): Promise<void> => {
+        const parsed = ExtensionSettingsSchema.parse(await sandboxJson(`/extensions/${encodeURIComponent(id)}/settings`));
+        values.value = parsed.settings;
+        secretsSet.value = parsed.secretsSet;
+    };
     const store: ExtensionSettingsStore = {
         values,
-        load: async () => {
-            values.value = ExtensionSettingsSchema.parse(await sandboxJson(`/extensions/${encodeURIComponent(id)}/settings`)).settings;
-        },
-        save: async (next) => {
+        secretsSet,
+        load,
+        save: async (patch) => {
             await sandboxJson(`/extensions/${encodeURIComponent(id)}/settings`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
-                body: JSON.stringify({ settings: next }),
+                body: JSON.stringify({ settings: patch }),
             });
-            values.value = next;
+            await load();
         },
     };
     stores.set(id, store);

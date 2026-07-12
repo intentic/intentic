@@ -1,0 +1,36 @@
+{
+    "name": "@intentic/ext-apps",
+    "version": "1.0.0",
+    "description": "Apps — a monorepo's apps and their tests, as a first-party intentic extension",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "main": "src/index.ts",
+    "types": "src/index.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "default": "./src/index.ts"
+        }
+    },
+    "scripts": {
+        "build": "vue-tsc --noEmit",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@intentic/extension-api": "workspace:*",
+        "@intentic/extension-ui": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@tanstack/vue-query": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "typescript": "catalog:",
+        "vitest": "catalog:",
+        "vue": "catalog:",
+        "vue-tsc": "catalog:"
+    },
+    "peerDependencies": {
+        "vue": "^3.5.0"
+    }
+}

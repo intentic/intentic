@@ -131,6 +131,7 @@ export const createExtensionApi = (
         },
         terminal: {
             open: (session) => useTerminalPanel().openFocused(session),
+            setOpen: (open) => useTerminalPanel().setOpen(open),
         },
         navigate: (path) => {
             void router.push(path);

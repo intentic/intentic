@@ -1,10 +1,6 @@
 <script setup lang="ts">
-import type { RepoApp, TemplateSummary } from "@intentic-app/api-contract";
-import { Card } from "@intentic-app/ui";
-import Button from "primevue/button";
-import Checkbox from "primevue/checkbox";
-import Dialog from "primevue/dialog";
-import InputText from "primevue/inputtext";
+import { Button, Card, Checkbox, Dialog, Icon, InputText } from "@intentic/extension-ui";
+import type { RepoApp, TemplateSummary } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 
 /* The Add-an-app dialog — the single entry point for scaffolding apps, kept behind a modal so the view stays a

@@ -59,6 +59,10 @@ const setValue = (extension: ExtensionSummary, setting: SettingContribution, val
     void store.save({ ...store.values.value, [setting.key]: value });
 };
 
+// A secret setting's value is never sent to the browser — the tab only knows whether one is stored.
+const secretIsSet = (extension: ExtensionSummary, setting: SettingContribution): boolean =>
+    extensionSettingsStore(extension.id).secretsSet.value.includes(setting.key);
+
 // Contribution counts for the summary line — the same declarations the install approval showed.
 const contributionSummary = (extension: ExtensionSummary): string => {
     const contributes = extension.manifest.contributes;
@@ -99,8 +103,18 @@ const contributionSummary = (extension: ExtensionSummary): string => {
                         <p class="text-sm text-content">{{ setting.title }}</p>
                         <p v-if="setting.description" class="text-2xs text-muted">{{ setting.description }}</p>
                     </div>
+                    <!-- Secret settings: write-only. The stored value never reaches the browser; typing a new
+                         one replaces it, clearing the box and saving clears it. -->
+                    <input
+                        v-if="setting.secret === true"
+                        type="password"
+                        autocomplete="off"
+                        :class="cmp.input(`w-44 shrink-0`)"
+                        :placeholder="secretIsSet(extension, setting) ? `•••••• (set)` : `Enter value`"
+                        @change="(event) => setValue(extension, setting, (event.target as HTMLInputElement).value)"
+                    />
                     <ToggleSwitch
-                        v-if="setting.type === `boolean`"
+                        v-else-if="setting.type === `boolean`"
                         :model-value="valueOf(extension, setting) === true"
                         @update:model-value="(value: boolean) => setValue(extension, setting, value)"
                     />

@@ -1,13 +1,8 @@
-import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { type TreeEntry, vitestProjects } from "./useVitest";
 
-// The composable half pulls the sandbox client (browser-only window.env); only the pure walk is under test.
-vi.mock(`../../composables/workspace/useWorkspaceTree`, () => ({ useWorkspaceTree: () => ({}) }));
-vi.mock(`../../composables/sandboxClient`, () => ({ sandboxJson: () => Promise.resolve({}) }));
-const { vitestProjects } = await import(`./useVitest`);
-
-const file = (path: string): WorkspaceTreeEntry => ({ name: path.split(`/`).at(-1) ?? path, path, type: `file` });
-const dir = (path: string, children: WorkspaceTreeEntry[]): WorkspaceTreeEntry => ({
+const file = (path: string): TreeEntry => ({ name: path.split(`/`).at(-1) ?? path, path, type: `file` });
+const dir = (path: string, children: TreeEntry[]): TreeEntry => ({
     name: path.split(`/`).at(-1) ?? path,
     path,
     type: `dir`,
@@ -16,7 +11,7 @@ const dir = (path: string, children: WorkspaceTreeEntry[]): WorkspaceTreeEntry =
 
 // One repo mirroring the real shapes: a config package, a config-less package whose tests sit in src/, a
 // package with neither, and root-level evidence above any nested package.json.
-const tree: WorkspaceTreeEntry[] = [
+const tree: TreeEntry[] = [
     dir(`repositories`, [
         dir(`repositories/mono`, [
             file(`repositories/mono/package.json`),

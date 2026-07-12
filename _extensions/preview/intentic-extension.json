@@ -1,0 +1,9 @@
+{
+    "publisher": "intentic",
+    "name": "preview",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.2.0" },
+    "contributes": {
+        "views": [{ "id": "preview", "label": "Preview", "surface": "directory" }]
+    }
+}

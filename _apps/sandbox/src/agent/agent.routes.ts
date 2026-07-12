@@ -4,12 +4,14 @@ import { createOutboundSniffer } from "../activity/outbound.js";
 import { browserServersOf } from "../browser/browser-tools.js";
 import { cliEnvOf } from "../capabilities/cli-env.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
-import { extensionAgentDirsOf } from "../capabilities/extension-dirs.js";
 import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
+import { extensionEnvOf } from "../extensions/extension-env.js";
+import { extensionAgentDirsOf } from "../extensions/installed-extensions.js";
 import { ensureFreshToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { createDiscordVoiceServer } from "../discord/voice-tools.js";
+import type { DiscordCliConfig } from "../discord/voice.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
 import { createSessionSearchServer } from "../sessions/session-search-tool.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
@@ -56,9 +58,9 @@ const withHistory = (prompt: string, history: NonNullable<AgentTurn["history"]>)
 // Exported because it IS "wake the agent" — the automations scheduler drives the same composition headlessly.
 export async function* streamAgent(services: Services, input: AgentTurn, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
     // cli-kind capabilities contribute env vars (their stored credentials) so either agent's shell can run
-    // their CLI tools.
+    // their CLI tools; extension `contributes.settings` with an `env` name inject theirs the same way.
     const capabilities = await services.capabilities.list();
-    const cliEnv = cliEnvOf(capabilities);
+    const cliEnv = { ...(await cliEnvOf(services)), ...(await extensionEnvOf(services)) };
     // Attachments arrive workspace-relative; resolve to absolute paths for the provider and reject escapes.
     const attachmentPaths: string[] = [];
     for (const rel of input.attachments ?? []) {
@@ -222,14 +224,19 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         const plugins = [
             ...(services.config.iqPluginDir !== "" ? [services.config.iqPluginDir] : []),
             ...pluginDirsOf(capabilities, services.workspace.root),
-            ...(await extensionAgentDirsOf(capabilities, services.workspace.root, services.files.read)),
+            ...(await extensionAgentDirsOf(services)),
         ];
         // Each discord capability also grants the in-process voice tools (join_voice/leave_voice/voice_status),
         // one MCP server named for the instance — the session they drive lives in the daemon and outlives this turn.
         const discordServers = Object.fromEntries(
             capabilities.flatMap((capability) =>
                 capability.kind === "cli" && capability.config.provider === "discord"
-                    ? [[capability.id, createDiscordVoiceServer(services, streamAgent, capability.id, capability.config)] as const]
+                    ? [
+                          [
+                              capability.id,
+                              createDiscordVoiceServer(services, streamAgent, capability.id, capability.config as unknown as DiscordCliConfig),
+                          ] as const,
+                      ]
                     : [],
             ),
         );

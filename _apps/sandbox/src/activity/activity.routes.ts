@@ -23,7 +23,7 @@ export const createActivityRoutes = (services: Services) => {
                           {
                               capabilityId: capability.id,
                               provider: "discord",
-                              gateway: discordGatewayState(capability.config.botToken),
+                              gateway: discordGatewayState(capability.config["botToken"] ?? ""),
                               ...(lastError !== undefined ? { lastError } : {}),
                           },
                       ]

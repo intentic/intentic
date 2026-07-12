@@ -23,7 +23,7 @@ export const discordBotTokens = (capabilities: readonly Capability[]): Set<strin
     const tokens = new Set<string>();
     for (const capability of capabilities) {
         if (capability.kind === "cli" && capability.config.provider === "discord") {
-            tokens.add(capability.config.botToken);
+            tokens.add(capability.config["botToken"] ?? "");
         }
     }
     return tokens;

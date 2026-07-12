@@ -1,4 +1,4 @@
-import type { Capability, CapabilityKind, CapabilityStatus, CliConfig, IntenticLine } from "@intentic/sandbox-contract";
+import type { Capability, CapabilityKind, CapabilityStatus, IntenticLine } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { applyEventsPath, isTerminalExit, tailIntenticEvents } from "../intentic/apply-events.js";
 import { INFRA_APPLY_KEY, startInfraApplyJob } from "../intentic/infra-apply.js";
@@ -6,6 +6,7 @@ import { type ConfigStore, createConfigStore } from "../inventory/config-store.j
 import type { PanelProcesses } from "../panels/panel-processes.js";
 import { ensureIntentInstallable } from "../workspace/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../workspace/scaffold-ledger.js";
+import { connectorSecretField, type ResolvedConnector } from "./cli/connector-registry.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 
 // The narrow slice of the daemon a capability handler may touch — deliberately no agent/auth/sessions surface.
@@ -32,6 +33,9 @@ export interface CapabilityCtx {
     };
     readonly config: ConfigStore;
     readonly capabilities: CapabilitiesStore;
+    // The image-baked extensions dir (services.config.extensionsDir) — lets the cli handler build the connector
+    // registry (installedExtensions) from the narrow ctx without holding Services.
+    readonly extensionsDir: string;
     readonly scaffoldNeutralLedger: (session: string) => Promise<void>;
     readonly ensureIntentInstallable: (session: string) => Promise<void>;
     readonly scaffoldMonorepo: (name: string, session: string) => Promise<void>;
@@ -75,37 +79,27 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         },
         config,
         capabilities: services.capabilities,
+        extensionsDir: services.config.extensionsDir,
         scaffoldNeutralLedger: (session) => scaffoldNeutralLedger(services, session),
         ensureIntentInstallable: (session) => ensureIntentInstallable(services, session),
         scaffoldMonorepo: (name, session) => scaffoldAppMonorepo(services, name, session),
     };
 };
 
-// Which config key holds each cli provider's credential (exhaustive by type — a new provider is a compile error).
-const cliSecretKeys: Record<CliConfig["provider"], string> = {
-    discord: "botToken",
-    github: "token",
-    gitlab: "token",
-    sentry: "token",
-    redmine: "apiKey",
-    outline: "apiKey",
-    signoz: "apiKey",
-    imap: "password",
-    postgres: "password",
-    mysql: "password",
-};
-
 // The config key holding a capability's secret, undefined when it carries none (an unset optional token, or a
 // kind with no credential — stripe's key lives in .env as a regular env secret). Drives the /secrets inventory
-// (which capabilities appear, all revealable), reveal's value lookup, and setSecret's merge.
-export const secretField = (capability: Capability): string | undefined => {
+// (which capabilities appear, all revealable), reveal's value lookup, and setSecret's merge. `connectors` is the
+// resolved connector registry (see connectorRegistry) — a cli capability's secret key is DATA in its connector.
+export const secretField = (capability: Capability, connectors: Map<string, ResolvedConnector>): string | undefined => {
     switch (capability.kind) {
         case "mcp":
         case "plugin":
         case "extension":
             return capability.config.token !== undefined ? "token" : undefined;
-        case "cli":
-            return cliSecretKeys[capability.config.provider];
+        case "cli": {
+            const spec = connectors.get(capability.config.provider)?.spec;
+            return spec === undefined ? undefined : connectorSecretField(spec);
+        }
         case "ssh":
             return capability.config.auth === "key" ? "privateKey" : "password";
         case "vpn":
@@ -122,8 +116,9 @@ export const secretField = (capability: Capability): string | undefined => {
     }
 };
 
-// Non-secret echo of a capability's config for the list summary (an mcp token becomes hasToken).
-export const echoConfig = (capability: Capability): Record<string, string | number | boolean> => {
+// Non-secret echo of a capability's config for the list summary (an mcp token becomes hasToken). `connectors`
+// resolves a cli capability's secret field (which value to withhold).
+export const echoConfig = (capability: Capability, connectors: Map<string, ResolvedConnector>): Record<string, string | number | boolean> => {
     switch (capability.kind) {
         case "mcp":
             return { url: capability.config.url, hasToken: capability.config.token !== undefined };
@@ -136,8 +131,19 @@ export const echoConfig = (capability: Capability): Record<string, string | numb
             };
         case "integration":
             return { provider: capability.config.provider };
-        case "cli":
-            return { provider: capability.config.provider, hasToken: true };
+        case "cli": {
+            // Echo the non-secret fields (url etc.) for display; the secret one becomes hasSecret. The web
+            // renders the card's label/logo from the connector manifest, not from this echo.
+            const spec = connectors.get(capability.config.provider)?.spec;
+            const secretKey = spec === undefined ? undefined : connectorSecretField(spec);
+            const echo: Record<string, string | number | boolean> = {};
+            for (const [key, value] of Object.entries(capability.config)) {
+                if (key !== secretKey) {
+                    echo[key] = value;
+                }
+            }
+            return { ...echo, hasSecret: secretKey !== undefined && capability.config[secretKey] !== undefined && capability.config[secretKey] !== "" };
+        }
         case "ssh":
             return { host: capability.config.host, port: capability.config.port, user: capability.config.user, auth: capability.config.auth };
         case "vpn":

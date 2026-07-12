@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { ExtensionManifestSchema } from "@intentic/extension-api";
 import type { ExtensionConfig } from "@intentic/sandbox-contract";
+import { invalidExtensionFragment } from "../../environment/fragment-sources.js";
 import { extensionProcessKey } from "../../extensions/extension-processes.js";
 import { capabilityJobSession } from "../../system/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
@@ -35,6 +36,19 @@ export const extensionHandler: CapabilityHandler = {
                 if (manifest.entry !== undefined && (await ctx.files.read(join(dir, manifest.entry))) === undefined) {
                     throw new Error(`the manifest names entry "${manifest.entry}" but the checkout has no such file — commit the prebuilt bundle`);
                 }
+                // An image fragment must exist and be RUN/ENV-only: extensions can install tools but not claim
+                // container privileges (those stay daemon-owned) or swap the base image.
+                const fragmentPath = manifest.contributes?.environment?.fragment;
+                if (fragmentPath !== undefined) {
+                    const fragment = await ctx.files.read(join(dir, fragmentPath));
+                    if (fragment === undefined) {
+                        throw new Error(`the manifest names an environment fragment "${fragmentPath}" but the checkout has no such file`);
+                    }
+                    const offending = invalidExtensionFragment(fragment);
+                    if (offending !== undefined) {
+                        throw new Error(`the environment fragment may contain only RUN/ENV instructions — offending line: ${offending.trim()}`);
+                    }
+                }
             },
         });
         yield { kind: "log", message: "Extension installed — reload the app to load its UI; agent contributions load next turn." };
@@ -42,7 +56,7 @@ export const extensionHandler: CapabilityHandler = {
     status: async (ctx, id, config) => {
         const { path } = config as ExtensionConfig;
         const dir = extensionDir(ctx.workspace.root, id);
-        if ((await readExtensionManifest(ctx.files.read, extensionRootOf(dir, path))) === undefined) {
+        if ((await readExtensionManifest(extensionRootOf(dir, path))) === undefined) {
             return { state: "inactive" };
         }
         try {
@@ -55,7 +69,7 @@ export const extensionHandler: CapabilityHandler = {
         const { path } = config as ExtensionConfig;
         const dir = extensionDir(ctx.workspace.root, id);
         // Stop declared background processes before the checkout (and with it the manifest) disappears.
-        const manifest = await readExtensionManifest(ctx.files.read, extensionRootOf(dir, path));
+        const manifest = await readExtensionManifest(extensionRootOf(dir, path));
         for (const process of manifest?.contributes?.processes ?? []) {
             ctx.panels.stop(extensionProcessKey(id, process.name));
         }

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { parseEnv } from "node:util";
 import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { secretField } from "../capabilities/capability.js";
+import { connectorRegistry } from "../capabilities/cli/connector-registry.js";
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { bearerFrom, ForbiddenError } from "../auth/auth.js";
@@ -107,15 +108,16 @@ export const createSecretsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         inventory: i.inventory.handler(async () => {
-            const [repoEntries, capabilities, claudeAccounts, codexAccounts, grokConnected] = await Promise.all([
+            const [repoEntries, capabilities, connectors, claudeAccounts, codexAccounts, grokConnected] = await Promise.all([
                 existsSync(desiredState()) ? collectSecretInventory(desiredState()) : [],
                 services.capabilities.list(),
+                connectorRegistry(services),
                 services.claudeStore.list(),
                 services.codexStore.list(),
                 services.openCode.connected("xai"),
             ]);
             const capabilityEntries: SecretInventoryEntry[] = capabilities
-                .filter((capability) => secretField(capability) !== undefined)
+                .filter((capability) => secretField(capability, connectors) !== undefined)
                 .map((capability) => ({
                     key: capability.id,
                     kind: "capability",
@@ -137,7 +139,7 @@ export const createSecretsRoutes = (services: Services) => {
             // Capability credentials first (key = capability id) — they exist pre-scaffold, before ensureActive.
             const capability = await services.capabilities.get(input.key);
             if (capability !== undefined) {
-                const field = secretField(capability);
+                const field = secretField(capability, await connectorRegistry(services));
                 const value = field === undefined ? undefined : (capability.config as Record<string, string>)[field];
                 if (value !== undefined) {
                     return { value };

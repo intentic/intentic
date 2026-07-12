@@ -59,6 +59,11 @@ const configSchema = z.object({
     // Set by the Dockerfile (IQ_PLUGIN_DIR=/opt/iq-plugin); empty on a bare `tsx watch` dev run (the plugin
     // isn't baked outside the image) ⇒ not loaded.
     iqPluginDir: z.string().default(""),
+    // The image-baked first-party extensions dir (Dockerfile: SANDBOX_EXTENSIONS_DIR=/opt/extensions). Each
+    // subdir is an intentic-extension.json checkout (ext-discord, ext-connectors) enumerated alongside
+    // git-installed extension capabilities by installedExtensions(). Empty on a bare `tsx watch` dev run ⇒ none
+    // baked (point it at the repo's _extensions/ for local dev).
+    extensionsDir: z.string().default(""),
     // Container-env Claude fallback creds: used only to decide whether a turn can run when no account is stored.
     claudeCodeOauthToken: z.string().default("").meta({ secret: true }),
     anthropicApiKey: z.string().default("").meta({ secret: true }),

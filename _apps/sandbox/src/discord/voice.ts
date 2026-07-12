@@ -33,8 +33,15 @@ import { ensureDiscordClient, releaseDiscordClient } from "./client.js";
  * both the MCP tools and shutdown reach it directly.
  * ponytail: one session per sandbox — a map per channel if concurrent calls ever matter. */
 
-// The discord arm of the cli capability config — botToken plus the voice knobs (voiceModel, voiceLanguage).
-export type DiscordCliConfig = Extract<CliConfig, { provider: "discord" }>;
+// The discord cli capability config — botToken plus the voice knobs. The cli config schema is now open
+// (`provider` + string fields, validated against the discord connector's declared fields), so this is a plain
+// shape rather than a schema-union arm.
+export interface DiscordCliConfig {
+    readonly provider: string;
+    readonly botToken: string;
+    readonly voiceModel?: string;
+    readonly voiceLanguage?: string;
+}
 
 // The whisper model, downloaded on first use into the workspace volume (kept out of the image). Size and
 // language come from the capability config: default `medium` (~1.5GB, best accuracy/CPU trade-off for

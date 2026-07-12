@@ -4,8 +4,11 @@ import { bearerFrom } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { composeEnvironment } from "../environment/environment.js";
+import { capabilityFragments } from "../environment/fragment-sources.js";
 import { startAutoStartProcesses } from "../extensions/extension-processes.js";
+import { installedExtensions } from "../extensions/installed-extensions.js";
 import { capabilityCtx, echoConfig, secretField } from "./capability.js";
+import { connectorRegistry } from "./cli/connector-registry.js";
 import { browseMarketplace } from "./marketplace.js";
 import { registry } from "./registry.js";
 
@@ -20,13 +23,13 @@ export const createCapabilitiesRoutes = (services: Services) => {
     const adding = new Set<string>();
     return {
         list: i.list.handler(async () => {
-            const capabilities = await services.capabilities.list();
+            const [capabilities, connectors] = await Promise.all([services.capabilities.list(), connectorRegistry(services)]);
             const rows = await Promise.all(
                 capabilities.map(async (capability) => ({
                     id: capability.id,
                     kind: capability.kind,
                     status: await registry[capability.kind].status(ctx, capability.id, capability.config),
-                    config: echoConfig(capability),
+                    config: echoConfig(capability, connectors),
                 })),
             );
             return { capabilities: rows };
@@ -59,12 +62,15 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 // A fresh extension checkout brings its declared autoStart processes up (the same post-apply
                 // seam composeEnvironment uses — full Services, so the narrow handler ctx stays narrow).
                 if (input.kind === "extension") {
-                    await startAutoStartProcesses(services, input);
+                    const installed = (await installedExtensions(services)).find((extension) => extension.id === input.id);
+                    if (installed !== undefined) {
+                        await startAutoStartProcesses(services, installed);
+                    }
                 }
-                // Fold this entry's image fragment into the composed overlay (upsert first, so compose sees it).
+                // Fold this entry's image fragment(s) into the composed overlay (upsert first, so compose sees it).
                 const composedHash = await composeEnvironment(services);
                 if (
-                    handler.fragment?.(input.config) !== undefined &&
+                    (await capabilityFragments(services, input)).length > 0 &&
                     composedHash !== undefined &&
                     composedHash !== services.config.sandbox.environmentHash
                 ) {
@@ -91,7 +97,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             if (capability === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no capability with that id" });
             }
-            const field = secretField(capability);
+            const field = secretField(capability, await connectorRegistry(services));
             if (field === undefined) {
                 throw new ORPCError("CONFLICT", { message: `the ${capability.kind} capability holds no secret` });
             }

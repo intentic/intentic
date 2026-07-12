@@ -1,0 +1,8 @@
+{
+    "name": "@intentic/ext-discord",
+    "version": "1.0.0",
+    "description": "Discord — the connected Discord server as an agent tool (connector data; gateway + voice runtime added later)",
+    "license": "MIT",
+    "private": true,
+    "type": "module"
+}

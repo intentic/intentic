@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Card, cmp, Page, StatusBadge } from "@intentic-app/ui";
-import Button from "primevue/button";
+import { Button, Card, cmp, Icon, Page, StatusBadge } from "@intentic/extension-ui";
 import { computed, onMounted, onUnmounted, ref, toRef } from "vue";
-import { globalTerminalSource, useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
 import AddAppDialog from "./AddAppDialog.vue";
 import { groupTests } from "./appTests";
+import { host } from "./host";
+import { listTerminals } from "./terminals";
 import { useApps } from "./useApps";
 import { useVitest } from "./useVitest";
 
@@ -19,7 +19,7 @@ import { useVitest } from "./useVitest";
 const props = defineProps<{ repo: string; monorepo: boolean }>();
 const { apps, templates, error, isLoading, addApps, refresh, startApp, stopApp } = useApps(toRef(props, `repo`));
 const { projects, error: testsError, isLoading: testsLoading, runTests: postRunTests } = useVitest(toRef(props, `repo`));
-const { openFocused, setOpen } = useTerminalPanel();
+const openFocused = (session: string): void => host().terminal.open(session);
 
 const busy = ref(false);
 const actionError = ref<string | undefined>(undefined);
@@ -87,7 +87,7 @@ const runTests = (suffix: string, dirs: readonly string[]): Promise<void> =>
 // keeps polling — the job's fate is unknown.
 const watchAdd = (): void => {
     addPoll ??= setInterval(async () => {
-        const sessions = await globalTerminalSource.list().catch(() => undefined);
+        const sessions = await listTerminals().catch(() => undefined);
         if (sessions === undefined || sessions.some((session) => session.name === ADD_SESSION && session.running)) {
             return;
         }
@@ -123,14 +123,14 @@ const startOne = (app: string): Promise<void> =>
 const startAll = (): Promise<void> =>
     act(async () => {
         await Promise.all(stopped.value.map((app) => startApp(app.app)));
-        setOpen(true);
+        host().terminal.setOpen(true);
     });
 const stopAll = (): Promise<void> => act(async () => Promise.all(running.value.map((app) => stopApp(app.app))).then(() => undefined));
 
 // A refresh/navigation during a run: the tmux job survived it, so recover the "Adding…" state from the
 // terminals list and resume watching. Unmount only stops the watcher — the job and its tab live on globally.
 onMounted(async () => {
-    const sessions = await globalTerminalSource.list().catch(() => undefined);
+    const sessions = await listTerminals().catch(() => undefined);
     if (sessions !== undefined && sessions.some((session) => session.name === ADD_SESSION && session.running)) {
         adding.value = true;
         watchAdd();

@@ -403,6 +403,7 @@ export const RepoAppSchema = z.object({
     running: z.boolean(),
     healthy: z.boolean(),
 });
+export type RepoApp = z.infer<typeof RepoAppSchema>;
 export const AppsListSchema = z.object({ apps: z.array(RepoAppSchema) });
 export type AppsList = z.infer<typeof AppsListSchema>;
 // Path params for the per-repo apps routes: the monorepo name (validated in the handler like PanelRepoParam)
@@ -525,53 +526,13 @@ export const ServiceConfigSchema = z.object({
 // External-app credential injected into DEPLOYED apps (i.have.stripe → STRIPE_API_KEY from env). Agent-facing
 // connectors are `cli` capabilities instead (see below), not integrations.
 export const IntegrationConfigSchema = z.object({ provider: z.literal("stripe") });
-// Per-provider CLI-tool config. A `cli` capability gives the AGENT an authenticated command-line tool (not a
-// deployed-app credential like `integration`): the secret + any non-secret URL are stored here and injected
-// into the agent's env each turn (see cliEnvOf), and a .claude/skills/<id> cheatsheet teaches the agent to use
-// it via curl. Discriminated by provider so each provider's fields are typed and future providers slot in.
-export const CliConfigSchema = z.discriminatedUnion("provider", [
-    z.object({
-        provider: z.literal("discord"),
-        botToken: z.string().min(1),
-        // Voice transcription knobs (whisper.cpp). Defaults applied at use site: model `medium`, language
-        // `auto`. An explicit ISO 639-1 voiceLanguage pins whisper's detection (short utterances flicker on
-        // auto); `en` additionally selects the English-specialized ggml-*.en model.
-        voiceModel: z.enum(["tiny", "base", "small", "medium", "large-v3-turbo"]).optional(),
-        voiceLanguage: z.string().optional(),
-    }),
-    // `git` toggles real git access (clone/pull/push in the terminal + for the agent): on apply the daemon writes
-    // an https credential line and, if `token` can register an ssh key, wires native ssh too — otherwise ssh-form
-    // remotes are rerouted over https so git still works. "off" (or absent) keeps the connection curl-API-only.
-    z.object({ provider: z.literal("github"), token: z.string().min(1), git: z.enum(["on", "off"]).optional() }),
-    z.object({ provider: z.literal("gitlab"), token: z.string().min(1), url: z.string().url(), git: z.enum(["on", "off"]).optional() }),
-    z.object({ provider: z.literal("sentry"), token: z.string().min(1), url: z.string().url(), org: z.string().optional() }),
-    z.object({ provider: z.literal("redmine"), url: z.string().url(), apiKey: z.string().min(1) }),
-    z.object({ provider: z.literal("outline"), url: z.string().url(), apiKey: z.string().min(1) }),
-    z.object({
-        provider: z.literal("imap"),
-        host: z.string().min(1),
-        port: z.coerce.number(),
-        username: z.string().min(1),
-        password: z.string().min(1),
-    }),
-    z.object({ provider: z.literal("signoz"), url: z.string().url(), apiKey: z.string().min(1) }),
-    z.object({
-        provider: z.literal("postgres"),
-        host: z.string().min(1),
-        port: z.coerce.number(),
-        user: z.string().min(1),
-        password: z.string().min(1),
-        database: z.string().min(1),
-    }),
-    z.object({
-        provider: z.literal("mysql"),
-        host: z.string().min(1),
-        port: z.coerce.number(),
-        user: z.string().min(1),
-        password: z.string().min(1),
-        database: z.string().min(1),
-    }),
-]);
+// A `cli` capability gives the AGENT an authenticated command-line tool (not a deployed-app credential like
+// `integration`): the credential + any non-secret URL are stored here and injected into the agent's env each
+// turn (see cliEnvOf), and a .claude/skills/<id> cheatsheet teaches the agent to use it via curl. The provider
+// data (fields, env, skill, image fragment) is DATA in an installed extension's `contributes.connectors`, not a
+// per-provider schema arm — so the config is `provider` + arbitrary string fields, validated against the
+// connector's declared fields at add-time (see the sandbox's connector-registry) rather than by this schema.
+export const CliConfigSchema = z.object({ provider: z.string().min(1) }).catchall(z.string());
 // A Claude Code plugin from a git repo. The daemon only owns the checkout; the Agent SDK's plugin loader reads
 // its internals (skills/agents/hooks/commands/.mcp.json). `path` = subdirectory for plugins that live inside a
 // marketplace/monorepo checkout. `token` = https auth for private repos (never echoed; becomes hasToken).
@@ -710,12 +671,20 @@ export const ExtensionSummarySchema = z.object({
     id: entryId,
     manifest: ExtensionManifestSchema,
     commit: z.string(),
+    // Image-baked first-party extension (no git checkout, not removable) vs a git-installed capability — the
+    // web hides the uninstall affordance for baked ones.
+    builtin: z.boolean(),
 });
 export type ExtensionSummary = z.infer<typeof ExtensionSummarySchema>;
 export const ExtensionsListSchema = z.object({ extensions: z.array(ExtensionSummarySchema) });
 // The extension's contributes.settings values, persisted daemon-side (.intentic/extension-settings.json) keyed
 // by the manifest-derived extension id — the checkout stays pristine, so a re-clone update never loses them.
-export const ExtensionSettingsSchema = z.object({ settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])) });
+// Secret-marked values are stripped from `settings`; `secretsSet` lists the secret keys that DO hold a value,
+// so the UI renders "•••• (set)" without ever receiving the secret back.
+export const ExtensionSettingsSchema = z.object({
+    settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+    secretsSet: z.array(z.string()),
+});
 export type ExtensionSettings = z.infer<typeof ExtensionSettingsSchema>;
 export const ExtensionSettingsInputSchema = z.object({
     id: z.string(),

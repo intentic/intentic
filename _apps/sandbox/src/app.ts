@@ -401,7 +401,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         const dir = extensionDir(services.workspace.root, id);
         const extensionRoot = extensionRootOf(dir, capability.config.path);
-        const manifest = await readExtensionManifest(services.files.read, extensionRoot);
+        const manifest = await readExtensionManifest(extensionRoot);
         if (manifest?.entry === undefined) {
             return c.json({ error: "the extension has no UI entry" }, 404);
         }

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Environment } from "@intentic/sandbox-contract";
-import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
+import { capabilityFragments } from "./fragment-sources.js";
 
 // The overlay Dockerfile extending the sandbox image. The approved file is DAEMON-COMPOSED from three parts:
 // the pinned FROM, the enabled capabilities' code-versioned fragments (see CapabilityHandler.fragment), and the
@@ -49,11 +49,7 @@ const CUSTOM_MARKER = "# ---- custom (owner-approved) ----";
 export const composeEnvironment = async (services: Services): Promise<string | undefined> => {
     const capabilities = await services.capabilities.list();
     const fragments = [
-        ...new Set(
-            capabilities
-                .map((capability) => registry[capability.kind].fragment?.(capability.config)?.trim())
-                .filter((fragment): fragment is string => fragment !== undefined),
-        ),
+        ...new Set((await Promise.all(capabilities.map((capability) => capabilityFragments(services, capability)))).flat()),
     ].toSorted();
     const custom = ((await services.files.read(customPath(services))) ?? "").trim();
     if (fragments.length === 0 && custom === "") {

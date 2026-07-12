@@ -23,7 +23,10 @@ export const CommandContributionSchema = z.object({
 export type CommandContribution = z.infer<typeof CommandContributionSchema>;
 
 // A typed setting descriptor the host renders schema-driven into the Settings page and persists daemon-side —
-// `enum` lists the choices for type "enum" and is meaningless otherwise.
+// `enum` lists the choices for type "enum" and is meaningless otherwise. `secret: true` masks the value in the
+// UI and strips it from reads (a set secret round-trips as "still set", never its value). `env` injects the
+// stored value into the agent's shell environment under that name every turn — the way a connector's
+// credential reaches the agent's CLI tools, but declared by the extension.
 export const SettingContributionSchema = z.object({
     key: z.string().regex(/^[a-z0-9][a-zA-Z0-9-]*$/),
     type: z.enum(["boolean", "string", "number", "enum"]),
@@ -31,6 +34,11 @@ export const SettingContributionSchema = z.object({
     description: z.string().optional(),
     default: z.union([z.string(), z.number(), z.boolean()]).optional(),
     enum: z.array(z.string()).optional(),
+    secret: z.boolean().optional(),
+    env: z
+        .string()
+        .regex(/^[A-Z][A-Z0-9_]*$/)
+        .optional(),
 });
 export type SettingContribution = z.infer<typeof SettingContributionSchema>;
 
@@ -55,6 +63,67 @@ export const AgentContributionSchema = z.object({
 });
 export type AgentContribution = z.infer<typeof AgentContributionSchema>;
 
+// A Dockerfile fragment baked into the sandbox image overlay so the extension's tools are present at runtime
+// (a whisper binary, a psql client, …). `fragment` is a checkout-relative path to a file holding ONLY RUN/ENV
+// instructions — the daemon rejects FROM and privileged `# intentic:runtime` directives from extension
+// fragments (those stay daemon-owned), and the owner approves the composed overlay + rebuilds out-of-band.
+export const EnvironmentContributionSchema = z.object({
+    fragment: z
+        .string()
+        .min(1)
+        .refine((value) => !value.split("/").includes(".."), { message: "fragment must stay inside the checkout" }),
+});
+export type EnvironmentContribution = z.infer<typeof EnvironmentContributionSchema>;
+
+// A field the "+" install dialog renders for a connector's config form (a slug key, a label, secret/optional
+// flags, an optional select, a `when` gate). Mirrors the platform catalog's field shape so the web can render
+// connector cards from installed extensions exactly like core capability cards.
+export const ConnectorFieldSchema = z.object({
+    key: z.string().regex(/^[a-zA-Z][a-zA-Z0-9]*$/),
+    label: z.string().min(1),
+    placeholder: z.string().optional(),
+    secret: z.boolean().optional(),
+    optional: z.boolean().optional(),
+    multiline: z.boolean().optional(),
+    default: z.string().optional(),
+    options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
+    when: z.object({ key: z.string(), value: z.string() }).optional(),
+});
+export type ConnectorField = z.infer<typeof ConnectorFieldSchema>;
+
+// A CLI-tool connector as DATA: the "+" card, the config fields, the env vars the agent's shell gets (value
+// templates over the fields — `${field}` substitutes, `${field:uri}` percent-encodes), the SKILL.md cheatsheet
+// path, and an optional image fragment path (a psql/whisper client). The daemon's cli handler resolves a
+// provider to its spec through the connector registry instead of a hardcoded table, so a connector is one
+// manifest entry + two files, no daemon change.
+export const ConnectorContributionSchema = z.object({
+    provider: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+    kind: z.literal("cli"),
+    catalog: z.object({
+        name: z.string().min(1),
+        logo: z.string().optional(),
+        description: z.string().min(1),
+        category: z.string().min(1),
+        hint: z.string().optional(),
+        // The credential-creation walkthrough the install dialog renders (the platform catalog's guide shape).
+        guide: z
+            .object({
+                url: z.string().optional(),
+                urlFromField: z.string().optional(),
+                path: z.string().optional(),
+                linkLabel: z.string().optional(),
+                scopes: z.string().optional(),
+                steps: z.array(z.string()).optional(),
+            })
+            .optional(),
+    }),
+    fields: z.array(ConnectorFieldSchema).min(1),
+    env: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string()),
+    skill: z.string().min(1),
+    fragment: z.string().min(1).optional(),
+});
+export type ConnectorContribution = z.infer<typeof ConnectorContributionSchema>;
+
 export const ExtensionManifestSchema = z.object({
     publisher: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
     name: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
@@ -76,6 +145,8 @@ export const ExtensionManifestSchema = z.object({
             settings: z.array(SettingContributionSchema).optional(),
             processes: z.array(ProcessContributionSchema).optional(),
             agent: AgentContributionSchema.optional(),
+            environment: EnvironmentContributionSchema.optional(),
+            connectors: z.array(ConnectorContributionSchema).optional(),
         })
         .optional(),
 });

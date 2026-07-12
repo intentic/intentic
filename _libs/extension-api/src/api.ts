@@ -96,7 +96,10 @@ export interface IntenticApi {
     // The shell's ONE global terminal panel — extensions aim it at a tmux session (a capability job, a dev
     // server, an agent terminal); the host owns the panel itself.
     readonly terminal: {
+        // Open the panel focused on a tmux session (starting/attaching it).
         open(session: string): void;
+        // Show or hide the panel without focusing a session.
+        setOpen(open: boolean): void;
     };
     // Navigate the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").
     readonly navigate: (path: string) => void;

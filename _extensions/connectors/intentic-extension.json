@@ -1,0 +1,270 @@
+{
+    "publisher": "intentic",
+    "name": "connectors",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.2.0" },
+    "contributes": {
+        "connectors": [
+            {
+                "provider": "github",
+                "kind": "cli",
+                "catalog": {
+                    "name": "GitHub",
+                    "logo": "github/f5f5f5",
+                    "description": "Issues, PRs and code search as agent tools — plus git clone/pull/push in the terminal.",
+                    "category": "code",
+                    "hint": "The agent uses the token with curl against the GitHub API. With Git access on you can git pull/push in the terminal — ssh-form URLs work too (rerouted over HTTPS when native SSH isn't available), so any repo-scoped token works. For native ssh://git we register an SSH key to your account, which needs write:public_key on a classic PAT (or the \"Git SSH keys: write\" permission on a fine-grained token); without it git still works over HTTPS and we show the key to add manually.",
+                    "guide": {
+                        "url": "https://github.com/settings/tokens",
+                        "scopes": "repo (+ write:public_key / Git SSH keys: write for native ssh)",
+                        "steps": [
+                            "Open Settings → Developer settings → Personal access tokens.",
+                            "Classic: generate a token with the repo scope (add write:public_key for native ssh://git).",
+                            "Fine-grained: grant repo Contents access (add the \"Git SSH keys: write\" account permission for native ssh://git).",
+                            "Copy the token and paste it here. Git works over HTTPS regardless; the extra permission only enables native ssh."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "token", "label": "Personal access token", "secret": true },
+                    { "key": "git", "label": "Git access", "default": "on", "options": [{ "value": "on", "label": "On" }, { "value": "off", "label": "Off" }] }
+                ],
+                "env": { "GITHUB_TOKEN": "${token}" },
+                "skill": "skills/github/SKILL.md"
+            },
+            {
+                "provider": "gitlab",
+                "kind": "cli",
+                "catalog": {
+                    "name": "GitLab",
+                    "logo": "gitlab",
+                    "description": "Issues, merge requests, and pipelines as agent tools — plus git clone/pull/push in the terminal.",
+                    "category": "code",
+                    "hint": "The agent uses the token with curl against the GitLab API. With Git access on, we register an SSH key to your account (the api scope covers key upload) so you can git clone/pull/push over ssh://git in the terminal; if key upload is refused, ssh-form URLs are rerouted over HTTPS so git still works.",
+                    "guide": {
+                        "urlFromField": "url",
+                        "path": "/-/user_settings/personal_access_tokens",
+                        "linkLabel": "Create an access token",
+                        "scopes": "api",
+                        "steps": [
+                            "Self-hosted: set the Instance URL above first.",
+                            "Open User settings → Access tokens.",
+                            "Add a token with the api scope.",
+                            "Copy the token and paste it here."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "url", "label": "Instance URL", "placeholder": "https://gitlab.com", "default": "https://gitlab.com" },
+                    { "key": "token", "label": "Access token", "secret": true },
+                    { "key": "git", "label": "Git access", "default": "on", "options": [{ "value": "on", "label": "On" }, { "value": "off", "label": "Off" }] }
+                ],
+                "env": { "GITLAB_TOKEN": "${token}", "GITLAB_URL": "${url}" },
+                "skill": "skills/gitlab/SKILL.md"
+            },
+            {
+                "provider": "sentry",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Sentry",
+                    "logo": "sentry",
+                    "description": "Query issues and traces from your Sentry org.",
+                    "category": "observability",
+                    "hint": "Self-hosted: set your instance URL above first. Leave the org blank to let the agent list your orgs.",
+                    "guide": {
+                        "urlFromField": "url",
+                        "path": "/settings/account/api/auth-tokens/",
+                        "scopes": "project:read event:read org:read",
+                        "steps": [
+                            "Open Settings → Account → Auth Tokens (or Developer Settings → Internal Integration).",
+                            "Create a token with the project:read, event:read and org:read scopes.",
+                            "Copy the token and paste it here."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "url", "label": "Sentry URL", "placeholder": "https://sentry.io", "default": "https://sentry.io" },
+                    { "key": "org", "label": "Org slug", "optional": true },
+                    { "key": "token", "label": "Auth token", "secret": true }
+                ],
+                "env": { "SENTRY_TOKEN": "${token}", "SENTRY_URL": "${url}", "SENTRY_ORG": "${org}" },
+                "skill": "skills/sentry/SKILL.md"
+            },
+            {
+                "provider": "redmine",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Redmine",
+                    "logo": "redmine",
+                    "description": "Connect your Redmine instance for issues and projects.",
+                    "category": "code",
+                    "hint": "The agent uses the API key with curl.",
+                    "guide": {
+                        "urlFromField": "url",
+                        "path": "/my/account",
+                        "linkLabel": "Open your Redmine account",
+                        "scopes": "REST API must be enabled by an admin",
+                        "steps": [
+                            "Set the Instance URL above first.",
+                            "Open My account (top-right).",
+                            "Under \"API access key\", click Show (an admin enables it in Administration → Settings → API if hidden).",
+                            "Copy the key and paste it here."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "url", "label": "Instance URL", "placeholder": "https://redmine.example.com" },
+                    { "key": "apiKey", "label": "API key", "secret": true }
+                ],
+                "env": { "REDMINE_URL": "${url}", "REDMINE_API_KEY": "${apiKey}" },
+                "skill": "skills/redmine/SKILL.md"
+            },
+            {
+                "provider": "outline",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Outline",
+                    "logo": "outline/f5f5f5",
+                    "description": "Connect your Outline wiki for docs and knowledge base.",
+                    "category": "business",
+                    "hint": "The agent uses the token with curl against the Outline API.",
+                    "guide": {
+                        "urlFromField": "url",
+                        "path": "/settings/tokens",
+                        "scopes": "the token inherits your permissions",
+                        "steps": [
+                            "Set the Instance URL above first.",
+                            "Open Settings → API Tokens.",
+                            "Create a token and give it a name.",
+                            "Copy the token and paste it here."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "url", "label": "Instance URL", "placeholder": "https://outline.example.com" },
+                    { "key": "apiKey", "label": "API token", "secret": true }
+                ],
+                "env": { "OUTLINE_URL": "${url}", "OUTLINE_API_KEY": "${apiKey}" },
+                "skill": "skills/outline/SKILL.md"
+            },
+            {
+                "provider": "imap",
+                "kind": "cli",
+                "catalog": {
+                    "name": "IMAP",
+                    "description": "Connect an email inbox over IMAP for the agent to read.",
+                    "category": "communication",
+                    "guide": {
+                        "url": "https://myaccount.google.com/apppasswords",
+                        "linkLabel": "Create a Gmail app password",
+                        "steps": [
+                            "Gmail: turn on 2-Step Verification, then create an App Password (link above) and use it as the password.",
+                            "Outlook/Microsoft: account.microsoft.com → Security → Advanced security options → App passwords.",
+                            "Other hosts: your normal IMAP password works.",
+                            "Host/port — Gmail imap.gmail.com:993, Outlook outlook.office365.com:993."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "host", "label": "IMAP host", "placeholder": "imap.gmail.com" },
+                    { "key": "port", "label": "Port", "default": "993" },
+                    { "key": "username", "label": "Username", "placeholder": "you@example.com" },
+                    { "key": "password", "label": "Password", "secret": true }
+                ],
+                "env": { "IMAP_HOST": "${host}", "IMAP_PORT": "${port}", "IMAP_USERNAME": "${username}", "IMAP_PASSWORD": "${password}" },
+                "skill": "skills/imap/SKILL.md"
+            },
+            {
+                "provider": "signoz",
+                "kind": "cli",
+                "catalog": {
+                    "name": "SigNoz",
+                    "logo": "signoz",
+                    "description": "Query traces, logs and metrics from a SigNoz instance.",
+                    "category": "observability",
+                    "hint": "The agent queries observability with curl.",
+                    "guide": {
+                        "urlFromField": "url",
+                        "path": "/settings/api-keys",
+                        "scopes": "Viewer role is enough",
+                        "steps": [
+                            "Set the SigNoz URL above (Cloud or self-hosted).",
+                            "Open Settings → API Keys and create a key (Viewer role).",
+                            "Copy the key and paste it here."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "url", "label": "SigNoz URL", "placeholder": "https://signoz.example.com" },
+                    { "key": "apiKey", "label": "API key", "secret": true }
+                ],
+                "env": { "SIGNOZ_URL": "${url}", "SIGNOZ_API_KEY": "${apiKey}" },
+                "skill": "skills/signoz/SKILL.md"
+            },
+            {
+                "provider": "postgres",
+                "kind": "cli",
+                "catalog": {
+                    "name": "PostgreSQL",
+                    "logo": "postgresql",
+                    "description": "Query your PostgreSQL database from the agent with psql.",
+                    "category": "data",
+                    "hint": "The agent queries your database with psql. Installing the client extends the sandbox image — run the one-time rebuild the Environment card shows after adding.",
+                    "guide": {
+                        "steps": [
+                            "No external token — use an existing DB user, ideally a read-only one.",
+                            "Make sure the database is reachable from the sandbox (host/port open, grants/pg_hba allow it).",
+                            "PostgreSQL uses port 5432.",
+                            "Add this card again with a different name to connect another database."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "host", "label": "Host", "placeholder": "db.example.com" },
+                    { "key": "port", "label": "Port", "default": "5432" },
+                    { "key": "user", "label": "User", "placeholder": "postgres" },
+                    { "key": "password", "label": "Password", "secret": true },
+                    { "key": "database", "label": "Database", "placeholder": "app" }
+                ],
+                "env": { "POSTGRES_URL": "postgresql://${user:uri}:${password:uri}@${host}:${port}/${database:uri}" },
+                "skill": "skills/postgres/SKILL.md",
+                "fragment": "env/postgres.Dockerfile"
+            },
+            {
+                "provider": "mysql",
+                "kind": "cli",
+                "catalog": {
+                    "name": "MySQL",
+                    "logo": "mysql",
+                    "description": "Query your MySQL / MariaDB database from the agent.",
+                    "category": "data",
+                    "hint": "The agent queries your database with the mysql client. Installing the client extends the sandbox image — run the one-time rebuild the Environment card shows after adding.",
+                    "guide": {
+                        "steps": [
+                            "No external token — use an existing DB user, ideally a read-only one.",
+                            "Make sure the database is reachable from the sandbox (host/port open, grants allow it).",
+                            "MySQL uses port 3306.",
+                            "Add this card again with a different name to connect another database."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "host", "label": "Host", "placeholder": "db.example.com" },
+                    { "key": "port", "label": "Port", "default": "3306" },
+                    { "key": "user", "label": "User", "placeholder": "root" },
+                    { "key": "password", "label": "Password", "secret": true },
+                    { "key": "database", "label": "Database", "placeholder": "app" }
+                ],
+                "env": {
+                    "MYSQL_HOST": "${host}",
+                    "MYSQL_PORT": "${port}",
+                    "MYSQL_USER": "${user}",
+                    "MYSQL_PASSWORD": "${password}",
+                    "MYSQL_DATABASE": "${database}"
+                },
+                "skill": "skills/mysql/SKILL.md",
+                "fragment": "env/mysql.Dockerfile"
+            }
+        ]
+    }
+}

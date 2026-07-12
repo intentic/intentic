@@ -34,16 +34,16 @@ export interface GitHost {
 }
 
 // Map a github/gitlab capability config to its git host. github is fixed; gitlab derives from the instance url.
-export const gitHostOf = (config: Extract<CliConfig, { provider: "github" | "gitlab" }>): GitHost =>
-    config.provider === "github"
-        ? { provider: "github", host: "github.com", apiBase: "https://api.github.com", token: config.token, httpsUser: "x-access-token" }
-        : {
-              provider: "gitlab",
-              host: new URL(config.url).host,
-              apiBase: `${config.url.replace(/\/+$/, "")}/api/v4`,
-              token: config.token,
-              httpsUser: "oauth2",
-          };
+// The config is the open cli shape (`provider` + string fields), so token/url are read positionally.
+export const gitHostOf = (config: CliConfig): GitHost => {
+    // Fields are validated present at add-time (the connector's field spec), so read them positionally.
+    const token = config["token"] ?? "";
+    if (config.provider === "github") {
+        return { provider: "github", host: "github.com", apiBase: "https://api.github.com", token, httpsUser: "x-access-token" };
+    }
+    const url = config["url"] ?? "";
+    return { provider: "gitlab", host: new URL(url).host, apiBase: `${url.replace(/\/+$/, "")}/api/v4`, token, httpsUser: "oauth2" };
+};
 
 // The account-key REST calls are the only un-testable seam (network + a live token), so they're injectable; keygen
 // and git-config run for real (both are local and available in test envs).
@@ -211,3 +211,28 @@ export const teardownGitAccess = async (host: GitHost, exec: ExecInTerminal, dep
     await disableHttpsRewrite(host, exec);
     await removeHttpsCredential(host);
 };
+
+// A connector's privileged side effect beyond env + skill, run by cliHandler around the skill write/remove.
+// This CANNOT be data (it shells out with the host's credentials + registers account keys), so it stays core,
+// keyed by PROVIDER NAME — a connector extension declares the name, the daemon owns what that name is allowed
+// to do. Only the git providers have one; every other connector is pure data.
+export interface ConnectorHook {
+    readonly apply: (config: CliConfig, exec: ExecInTerminal) => Promise<string | undefined>;
+    readonly remove: (config: CliConfig, exec: ExecInTerminal) => Promise<void>;
+}
+
+const gitAccessHook: ConnectorHook = {
+    // `git: "on"` sets up git-over-ssh + the https credential; an explicit "off" (or a previously-on connection
+    // switched off) tears down so re-applies are idempotent both directions.
+    apply: async (config, exec) => {
+        const host = gitHostOf(config);
+        if (config["git"] === "on") {
+            return setupGitAccess(host, exec);
+        }
+        await teardownGitAccess(host, exec);
+        return undefined;
+    },
+    remove: (config, exec) => teardownGitAccess(gitHostOf(config), exec),
+};
+
+export const CORE_CONNECTOR_HOOKS: Record<string, ConnectorHook> = { github: gitAccessHook, gitlab: gitAccessHook };
