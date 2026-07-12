@@ -11,12 +11,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { daemonUrl, dockerBuild, dockerRmi, dockerRun, startSandboxContainer, until } from "./e2e-harness.js";
 import { environmentHash, hasValidBase } from "./environment/environment.js";
 
-// The Tier-3 real Discord + Whisper e2e: the daemon's gateway client on a REAL bot token receives a REAL
-// message (sent by a second, harness-owned bot — the listener deliberately dispatches third-party bot posts,
-// see discord/listener-source.ts) and the matched automation's wake lands in the approvals queue — the whole
-// trigger path proven without spending an agent turn. Whisper is proven by building the discord capability's
-// composed overlay (whisper.cpp from source) and running the real whisper-cli + tiny.en model on the canonical
-// whisper.cpp speech sample, pinned to the same tag the fragment builds.
+// The Tier-3 real Discord + Whisper e2e: the ext-discord gateway process on a REAL bot token receives a REAL
+// message (sent by a second, harness-owned bot — the listener deliberately dispatches third-party bot posts, see
+// _extensions/discord/src/listener.ts) and the matched automation's wake lands in the approvals queue — the whole
+// trigger path proven without spending an agent turn. Requires the baked ext-discord dist in the image (the
+// gateway is an autoStart extension process). Whisper is proven by building the discord capability's composed
+// overlay (whisper.cpp from source) and running the real whisper-cli + tiny.en model on the canonical whisper.cpp
+// speech sample, pinned to the same tag the fragment builds.
 //
 // Required env (skipped without them, on top of INTENTIC_E2E):
 //   DISCORD_E2E_BOT_TOKEN    — the daemon's capability bot. Must be in the test server with the MESSAGE
@@ -24,8 +25,8 @@ import { environmentHash, hasValidBase } from "./environment/environment.js";
 //   DISCORD_E2E_SENDER_TOKEN — the harness bot that posts the trigger message. Same server + channel.
 //   DISCORD_E2E_CHANNEL_ID   — a text channel both bots can read/write.
 // Optional: ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN unlock the one real agent-turn spec.
-// Manual checklist (not automated): a live voice-channel session (join_voice with real speakers) — the capture
-// path is covered by discord/voice.test.ts with an injected exec; the binary + model are covered here.
+// Manual checklist (not automated): a live voice-channel session (`discord-voice join` with real speakers) — the
+// capture path is covered by _extensions/discord/src/audio.test.ts with an injected exec; binary + model here.
 const BOT_TOKEN = process.env["DISCORD_E2E_BOT_TOKEN"] ?? "";
 const SENDER_TOKEN = process.env["DISCORD_E2E_SENDER_TOKEN"] ?? "";
 const CHANNEL_ID = process.env["DISCORD_E2E_CHANNEL_ID"] ?? "";

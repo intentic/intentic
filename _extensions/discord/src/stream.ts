@@ -48,7 +48,7 @@ export const createDiscordStream = (channel: StreamChannel, onError: (error: unk
         }
         flushing = true;
         try {
-            do {
+            for (;;) {
                 // Finalize every message that is now completely full (2000 chars) before painting the tail.
                 while (buffer.length - base > DISCORD_MAX) {
                     await emit(buffer.slice(base, base + DISCORD_MAX));
@@ -58,8 +58,11 @@ export const createDiscordStream = (channel: StreamChannel, onError: (error: unk
                 await emit(buffer.slice(base) || "…");
                 renderedLen = buffer.length;
                 // One pass per timer tick while streaming (rate limit); once ended, loop until Discord has it all
-                // even if deltas landed during the awaits above.
-            } while (ended && renderedLen < buffer.length);
+                // even if deltas landed during the awaits above (end() flips `ended` during those awaits).
+                if (!ended || renderedLen >= buffer.length) {
+                    break;
+                }
+            }
         } catch (error) {
             dead = true;
             onError(error);

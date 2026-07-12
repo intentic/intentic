@@ -1,8 +1,6 @@
-import type { Capability } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { Services } from "../composition.js";
-import type { AutomationRecord } from "./automations-store.js";
 import { fireAutomation, PAYLOAD_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
 
 // Realtime agent wake-ups: provider sources hold a live connection (e.g. the Discord gateway) and dispatch
@@ -44,22 +42,6 @@ export const ListenerMessageSchema = z.object({
     extra: z.record(z.string(), z.unknown()).optional(),
 });
 export type ListenerMessage = z.infer<typeof ListenerMessageSchema>;
-
-// What the reconciler hands a source each tick: the enabled listener automations for ITS provider plus the
-// full capability manifest (the source extracts its own credential).
-export interface ListenerState {
-    readonly automations: AutomationRecord[];
-    readonly capabilities: Capability[];
-}
-
-// A provider's realtime connection. `ensure` reconciles desired-vs-actual (connect, disconnect, resubscribe)
-// and must be idempotent; the source dispatches events via dispatchListenerMessage and reports fatal
-// credential failures via reportListenerFailure.
-export interface ListenerSource {
-    readonly provider: ListenerMessage["provider"];
-    readonly ensure: (state: ListenerState) => Promise<void>;
-    readonly stop: () => void;
-}
 
 export interface MessageBatcher {
     readonly push: (line: string, stream?: TurnStream) => void;
@@ -224,44 +206,4 @@ export const reportListenerFailure = async (services: Services, provider: Listen
         }
         await services.automations.recordRun(automation.id, { at: Date.now(), outcome: "error", detail });
     }
-};
-
-export interface Listeners {
-    readonly start: () => void;
-    readonly stop: () => void;
-    // One reconcile pass over every source; `start` runs it on an interval. Exposed for tests.
-    readonly ensure: () => Promise<void>;
-}
-
-// Reconciles each source's connection against the manifest on a poll tick (the scheduler's shape) — creating
-// an automation or saving a capability takes effect within a tick, with zero notification wiring. The tick
-// cadence also serves as reconnect backoff after a non-fatal connection drop.
-export const createListeners = (services: Services, sources: readonly ListenerSource[], intervalMs = 30_000): Listeners => {
-    let timer: NodeJS.Timeout | undefined;
-
-    const ensure = async (): Promise<void> => {
-        const [automations, capabilities] = await Promise.all([services.automations.list(), services.capabilities.list()]);
-        for (const source of sources) {
-            const routed = automations.filter(
-                (automation) => automation.enabled && automation.trigger.kind === "listener" && automation.trigger.provider === source.provider,
-            );
-            await source
-                .ensure({ automations: routed, capabilities })
-                .catch((error: unknown) => services.logger.error({ err: error, provider: source.provider }, "listener reconcile failed"));
-        }
-    };
-
-    return {
-        ensure,
-        start: () => {
-            void ensure();
-            timer = setInterval(() => void ensure(), intervalMs);
-        },
-        stop: () => {
-            clearInterval(timer);
-            for (const source of sources) {
-                source.stop();
-            }
-        },
-    };
 };

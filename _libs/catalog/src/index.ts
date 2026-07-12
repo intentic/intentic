@@ -632,8 +632,5 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
     },
 ];
 
-// Capability providers the daemon can listen to live (a `listener` trigger) — gates the trigger option in the UI.
-export const LISTENER_PROVIDERS: readonly string[] = ["discord"];
-
 // Automation "start from" recipes moved to the automations extension (@intentic/ext-automations): they are
 // automation-UI prefill data, so they live with that extension rather than the platform product catalog.

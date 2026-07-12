@@ -6,15 +6,7 @@ import { expect, test, vi } from "vitest";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Services } from "../composition.js";
 import { fileAutomationsStore } from "./automations-store.js";
-import {
-    createListeners,
-    createMessageBatcher,
-    dispatchListenerMessage,
-    type ListenerMessage,
-    type ListenerSource,
-    type ListenerState,
-    reportListenerFailure,
-} from "./listeners.js";
+import { createMessageBatcher, dispatchListenerMessage, type ListenerMessage, reportListenerFailure } from "./listeners.js";
 import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
 
 // The listener paths touch automations/capabilities/activity/workspace/logger; a cast keeps the fake that small.
@@ -172,21 +164,4 @@ test("a fatal source failure lands as an error run on the provider's listener au
     await reportListenerFailure(services, "discord", "Discord rejected the bot token");
     expect((await services.automations.get("live"))?.runs[0]).toMatchObject({ outcome: "error", detail: "Discord rejected the bot token" });
     expect((await services.automations.get("cron"))?.runs).toEqual([]);
-});
-
-test("the reconciler hands each source its enabled listener automations plus the capabilities, and stop stops sources", async () => {
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
-    await services.automations.upsert(listenerAutomation("live"));
-    await services.automations.upsert(listenerAutomation("off", { enabled: false }));
-    await services.automations.upsert({ id: "cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "p", enabled: true });
-    await services.capabilities.upsert({ id: "discord", kind: "cli", config: { provider: "discord", botToken: "T" } });
-    const seen: ListenerState[] = [];
-    const stop = vi.fn();
-    const source: ListenerSource = { provider: "discord", ensure: async (state) => void seen.push(state), stop };
-    const listeners = createListeners(services, [source]);
-    await listeners.ensure();
-    expect(seen[0]?.automations.map((automation) => automation.id)).toEqual(["live"]);
-    expect(seen[0]?.capabilities.map((capability) => capability.id)).toEqual(["discord"]);
-    listeners.stop();
-    expect(stop).toHaveBeenCalledOnce();
 });

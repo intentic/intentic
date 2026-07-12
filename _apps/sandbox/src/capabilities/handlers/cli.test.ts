@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { exec } from "@intentic/scaffold";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
+import { setListenerStatus } from "../../extensions/listener-status.js";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
 import { createTerminalRunner, terminalExec } from "../../system/terminal-run.js";
 import { makeWorkspaceDir, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
@@ -51,7 +52,7 @@ const drain = async (gen: AsyncGenerator<unknown>): Promise<void> => {
     }
 };
 
-test("apply writes the connector's SKILL.md; discord stays pending until whisper is rebuilt in", async () => {
+test("apply writes the connector's SKILL.md; discord voice pends only when the gateway reports whisper missing", async () => {
     const { ctx, root } = tempCtx();
     expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "inactive" });
 
@@ -61,9 +62,12 @@ test("apply writes the connector's SKILL.md; discord stays pending until whisper
     expect(skill).toContain("name: discord");
     expect(skill).toContain("$DISCORD_BOT_TOKEN");
     expect(skill).toContain("https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot&permissions=1117248");
-    expect(skill).toContain("join_voice");
+    expect(skill).toContain("discord-voice");
     expect(skill).not.toContain("FROM registry.gitlab.com");
-    // whisper-cli isn't installed in test envs — voice pends on the owner's rebuild.
+    // No gateway status yet ⇒ text tools active; whisper state is unknown, so it doesn't pend.
+    expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "active" });
+    // Once the gateway reports whisper missing (its /listeners/discord/status post), voice pends on a rebuild.
+    setListenerStatus("discord", { connections: [], whisperReady: false }, Date.now());
     expect(await cliHandler.status(ctx, "discord", discord.config)).toEqual({ state: "pending", detail: "voice needs a rebuild (whisper)" });
 });
 

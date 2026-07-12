@@ -26,12 +26,13 @@ interface HistoryEntry {
 // Newest-first discord messages (as fetch returns them) → chronological history entries, flagging posts by our
 // own bots so the model recognizes its prior replies. Exported for tests.
 export const toHistory = (newestFirst: readonly Message[], selfIds: ReadonlySet<string>): HistoryEntry[] =>
-    [...newestFirst].reverse().map((m) => ({
-        author: { id: m.author.id, name: m.author.username },
-        content: m.content,
-        timestamp: m.createdAt.toISOString(),
-        ...(selfIds.has(m.author.id) ? { self: true } : {}),
-    }));
+    newestFirst.toReversed().map((m) => {
+        const entry: HistoryEntry = { author: { id: m.author.id, name: m.author.username }, content: m.content, timestamp: m.createdAt.toISOString() };
+        if (selfIds.has(m.author.id)) {
+            entry.self = true;
+        }
+        return entry;
+    });
 
 export interface DiscordListener {
     readonly onMessage: (message: Message) => void;
@@ -165,9 +166,10 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
     return {
         onMessage,
         stopAll: () => {
-            for (const channelId of [...typing.keys()]) {
-                stopTyping(channelId);
+            for (const timer of typing.values()) {
+                clearInterval(timer);
             }
+            typing.clear();
         },
     };
 };

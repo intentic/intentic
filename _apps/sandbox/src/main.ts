@@ -6,14 +6,11 @@ import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
-import { createListeners } from "./automations/listeners.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { DOCKER_PANEL_KEY, startEnabledDocker } from "./capabilities/handlers/docker.js";
 import { reconnectVpns } from "./capabilities/handlers/vpn.js";
 import { createServices } from "./composition.js";
-import { createDiscordSource } from "./discord/listener-source.js";
-import { stopVoice } from "./discord/voice.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
 import { ensureRootRepo } from "./git/root-repo.js";
@@ -159,10 +156,9 @@ const main = async (): Promise<void> => {
         announcer.start();
     }
 
-    // Realtime agent wake-ups: reconcile each provider's live connection (Discord gateway) against enabled
-    // listener automations + capabilities, so events fire instantly instead of on a poll cron.
-    const listeners = createListeners(services, [createDiscordSource(services)]);
-    listeners.start();
+    // Realtime agent wake-ups are provider gateways now: a listener extension (ext-discord) runs an autoStart
+    // process that holds the connection and drives the daemon's /listeners/<provider> routes (started via
+    // startAllExtensionProcesses below) — the daemon holds no gateway of its own.
 
     // Workspace history: an immediate snapshot plus the interval sweep (turn snapshots ride on streamAgent).
     services.history.start();
@@ -185,15 +181,13 @@ const main = async (): Promise<void> => {
         scheduler.stop();
         versionCheck.stop();
         announcer.stop();
-        // Flush an in-flight voice transcript before the sockets go down, then drop the gateway connection.
-        void stopVoice().finally(() => {
-            listeners.stop();
-            services.history.stop();
-            services.panelProcesses.stopAll();
-            previewProxy.close();
-            server.close();
-            process.exit(0);
-        });
+        services.history.stop();
+        // Stops the extension gateway processes too (tmux SIGTERM) — each flushes its own in-flight voice
+        // transcript on the way down.
+        services.panelProcesses.stopAll();
+        previewProxy.close();
+        server.close();
+        process.exit(0);
     };
     process.on("SIGTERM", shutdown);
     process.on("SIGINT", shutdown);

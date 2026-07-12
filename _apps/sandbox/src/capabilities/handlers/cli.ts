@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { CliConfig } from "@intentic/sandbox-contract";
-import { whisperCliMissing } from "../../discord/voice.js";
+import { listenerStatus } from "../../extensions/listener-status.js";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
 import { terminalExec } from "../../system/terminal-run.js";
 import { capabilityJobSession } from "../../system/terminal-session.js";
@@ -65,9 +65,10 @@ export const cliHandler: CapabilityHandler = {
         if ((await ctx.files.read(skillPath(ctx.workspace.root, id))) === undefined) {
             return { state: "inactive" };
         }
-        // Discord's voice transcription rides whisper.cpp from the connector's overlay fragment — until the
-        // owner rebuilds, the text tools work but voice doesn't, so surface that as pending.
-        if ((config as CliConfig).provider === "discord" && (await whisperCliMissing())) {
+        // Discord's voice transcription rides whisper.cpp from the connector's overlay fragment — until the owner
+        // rebuilds, the text tools work but voice doesn't. The gateway process reports whisper's presence via
+        // /listeners/discord/status (whisper runs there now, not in the daemon), so surface pending off that.
+        if ((config as CliConfig).provider === "discord" && listenerStatus("discord", Date.now())?.whisperReady === false) {
             return { state: "pending", detail: "voice needs a rebuild (whisper)" };
         }
         return { state: "active" };
