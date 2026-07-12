@@ -254,14 +254,24 @@ const mint = async (chosen: SetupCodeTarget, key: string): Promise<void> => {
     }
 };
 
+// The locally-built sandbox image a dev sandbox runs (built by `pnpm build:sandbox`). Without it, connect.sh
+// pulls the published sandbox:stable, whose daemon predates any unreleased routes the dev web app calls — every
+// new daemon endpoint would answer 404 until the next release. connect.sh's pull_image falls back to the local
+// tag when the pull fails, and fails loudly when the image was never built.
+const DEV_SANDBOX_IMAGE = `intentic-sandbox:dev`;
+
 // The shared env suffix each command carries: the local-dev PLATFORM_URL override (plus the shared dev
-// agent-auth volume, so sandboxes created against a localhost platform keep their AI logins across resets),
-// and SYNC_DIR when desktop sync is opted in (a folder path, not a secret — the connect script runs the sync
-// agent only when it's set).
+// agent-auth volume, so sandboxes created against a localhost platform keep their AI logins across resets,
+// and the locally-built sandbox image so the daemon matches the working tree), and SYNC_DIR when desktop
+// sync is opted in (a folder path, not a secret — the connect script runs the sync agent only when it's set).
 const platformEnv = (): string =>
-    platformUrlOverride.value ? ` PLATFORM_URL='${platformUrlOverride.value}' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'` : ``;
+    platformUrlOverride.value
+        ? ` PLATFORM_URL='${platformUrlOverride.value}' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth' SANDBOX_IMAGE='${DEV_SANDBOX_IMAGE}'`
+        : ``;
 const platformEnvPs = (): string =>
-    platformUrlOverride.value ? `$env:PLATFORM_URL='${platformUrlOverride.value}'; $env:INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'; ` : ``;
+    platformUrlOverride.value
+        ? `$env:PLATFORM_URL='${platformUrlOverride.value}'; $env:INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'; $env:SANDBOX_IMAGE='${DEV_SANDBOX_IMAGE}'; `
+        : ``;
 const syncEnv = (): string => (syncEnabled.value ? ` SYNC_DIR='${syncDir.value}'` : ``);
 const syncEnvPs = (): string => (syncEnabled.value ? `$env:SYNC_DIR='${syncDir.value}'; ` : ``);
 

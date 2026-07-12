@@ -23,7 +23,7 @@ test("gitInit creates the worktree dir and the separate git dir's parent, then i
     await gitInit(dir, separateGitDir, git);
     await expect(access(dir)).resolves.toBeUndefined();
     await expect(access(join(historyRoot, "gits"))).resolves.toBeUndefined();
-    expect(calls).toEqual([[dir, "init", "-q", `--separate-git-dir=${separateGitDir}`]]);
+    expect(calls).toEqual([[dir, "init", "-q", "--initial-branch=main", `--separate-git-dir=${separateGitDir}`]]);
     await rm(historyRoot, { recursive: true });
 });
 
@@ -34,7 +34,7 @@ test("gitInit with no separate git dir is a plain init", async () => {
     const { git, calls } = recordingGit({});
     await gitInit(dir, undefined, git);
     await expect(access(dir)).resolves.toBeUndefined();
-    expect(calls).toEqual([[dir, "init", "-q"]]);
+    expect(calls).toEqual([[dir, "init", "-q", "--initial-branch=main"]]);
     await rm(historyRoot, { recursive: true });
 });
 

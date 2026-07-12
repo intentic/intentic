@@ -36,8 +36,6 @@ export const adoptRepos = async (options: AdoptOptions): Promise<{ readonly name
             log(`created ${user}/${name} in Forgejo`);
         }
         await gitCommitAll(dir, "intentic adopt", { name: user, email }, git);
-        // Normalize the branch: `git init`'s default may be `master`, but Forgejo (and the app repos) use `main`.
-        await git(dir, ["branch", "-M", "main"]);
         const cloneUrl = `${baseUrl}/${user}/${name}.git`;
         const remotes = (await git(dir, ["remote"])).stdout.split("\n").map((line) => line.trim());
         await git(dir, remotes.includes("origin") ? ["remote", "set-url", "origin", cloneUrl] : ["remote", "add", "origin", cloneUrl]);

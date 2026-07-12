@@ -14,7 +14,7 @@ export const gitInit = async (dir: string, separateGitDir?: string, git: GitRunn
         // Git creates the git dir itself but not its parents (fresh /history volume has no gits/).
         await mkdir(dirname(separateGitDir), { recursive: true });
     }
-    await git(dir, ["init", "-q", ...(separateGitDir !== undefined ? [`--separate-git-dir=${separateGitDir}`] : [])]);
+    await git(dir, ["init", "-q", "--initial-branch=main", ...(separateGitDir !== undefined ? [`--separate-git-dir=${separateGitDir}`] : [])]);
 };
 
 export interface GitCloneOptions {

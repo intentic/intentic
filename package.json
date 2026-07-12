@@ -30,6 +30,7 @@
         "demo:down": "tsc -b tsconfig.libs.json && node _apps/cli/dist/demo.js down",
         "demo:clear": "tsc -b tsconfig.libs.json && node _apps/cli/dist/demo.js clear",
         "publish:images": "bash scripts/publish-images.sh",
+        "build:sandbox": "docker build -f _apps/sandbox/Dockerfile -t intentic-sandbox:dev .",
         "libs:watch": "nice -n 15 tsc --build --watch --preserveWatchOutput tsconfig.libs.json",
         "prepare": "git rev-parse --git-dir > /dev/null 2>&1 && git config core.hooksPath .githooks || true",
         "clear": "find . \\( -name 'node_modules' -o -name '.cache' -o -name 'dist' -o -name '.turbo' -o -name 'pnpm-lock.yaml' \\) -prune -exec rm -rf '{}' +",

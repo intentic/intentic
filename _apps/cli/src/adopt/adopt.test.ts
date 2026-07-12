@@ -38,7 +38,6 @@ test("creates the repo when missing, commits a dirty tree, adds origin, and push
     expect(created).toMatchObject({ owner: "intentic", name: "intent", private: true, autoInit: false });
     expect(calls).toContainEqual(["/w/intent", "add", "-A"]);
     expect(calls.some((c) => c.includes("commit"))).toBe(true);
-    expect(calls).toContainEqual(["/w/intent", "branch", "-M", "main"]);
     expect(calls).toContainEqual(["/w/intent", "remote", "add", "origin", "https://git.example.com/intentic/intent.git"]);
     const push = calls.find((c) => c.includes("push"));
     expect(push).toBeDefined();

@@ -143,7 +143,7 @@ export const createWorkspaceHistory = (
         if (await exists(scope.gitDir)) {
             return;
         }
-        await git(["init", "--bare", "-q", scope.gitDir], { cwd: historyRoot, env: {} });
+        await git(["init", "--bare", "-q", "--initial-branch=main", scope.gitDir], { cwd: historyRoot, env: {} });
         const excludes = scope.name === "root" ? ROOT_EXCLUDES : COMMON_EXCLUDES;
         await writeFile(join(scope.gitDir, "info", "exclude"), `${excludes.join("\n")}\n`);
     };

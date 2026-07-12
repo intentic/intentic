@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic-app/api-contract";
+import { Code } from "@intentic-app/ui";
+import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import Popover from "primevue/popover";
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/useSandbox";
+import { bashCommand } from "../environments/scriptCommand";
 
 /* Rail control to switch between the user's sandboxes (owned + shared) or add another. The active sandbox drives
  * the whole workspace (useSandbox) — selecting here re-points every sandbox-backed view + the liveness probe at
@@ -49,8 +52,31 @@ const addSandbox = (): void => {
 };
 
 // The sandbox awaiting removal confirmation (owner: drops the platform record for everyone; member: leaves).
-// Non-destructive either way — the daemon keeps running on its host; teardown is the cleanup script's job.
+// Non-destructive either way — the daemon keeps running on its host; teardown is the cleanup script's job,
+// so the owner dialog surfaces that command (cleanupCommand) for the machine hosting it.
 const pending = ref<SandboxSummary | undefined>(undefined);
+const cleanupCommand = ref<string | undefined>(undefined);
+
+// The container slug on the hosting machine: the hostname's first label (sandbox-<id> or a custom subdomain,
+// both equal connect.sh's SLUG), or — for a sandbox that never announced a daemonUrl — the same
+// sandbox-<sha256(token)[:12]> derivation Setup.vue pre-fills the subdomain with (must mirror the CLI).
+watch(pending, async (target) => {
+    if (target === undefined || target.role !== `owner`) {
+        cleanupCommand.value = undefined;
+        return;
+    }
+    let slug: string;
+    if (target.daemonUrl !== null) {
+        slug = new URL(target.daemonUrl).hostname.split(`.`)[0] ?? ``;
+    } else {
+        const digest = await crypto.subtle.digest(`SHA-256`, new TextEncoder().encode(target.token));
+        const hex = Array.from(new Uint8Array(digest))
+            .map((b) => b.toString(16).padStart(2, `0`))
+            .join(``);
+        slug = sandboxSubdomain(hex.slice(0, 12));
+    }
+    cleanupCommand.value = bashCommand(`cleanup`, ``, `${slug} -y`);
+});
 
 const askRemove = (option: SandboxSummary): void => {
     panel.value?.hide();
@@ -171,6 +197,10 @@ const confirmRemove = async (): Promise<void> => {
                     : `Leave "${pending.name}"? You lose access; the sandbox keeps running.`
             }}
         </p>
+        <template v-if="pending?.role === 'owner' && cleanupCommand !== undefined">
+            <p class="mt-3 text-sm text-muted">To also remove it from the machine hosting it — including its files — run there:</p>
+            <Code class="mt-2" :code="cleanupCommand" lang="bash" label="Cleanup command" :wrap="true" />
+        </template>
         <template #footer>
             <Button label="Cancel" severity="secondary" :text="true" @click="pending = undefined" />
             <Button :label="pending?.role === 'owner' ? 'Remove' : 'Leave'" severity="danger" autofocus @click="confirmRemove">

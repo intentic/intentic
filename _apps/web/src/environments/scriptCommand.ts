@@ -15,6 +15,7 @@ const SCRIPT_URLS = {
     desktopPs1: `https://intentic.dev/sync.ps1`,
     rebuild: `https://intentic.dev/rebuild`,
     update: `https://intentic.dev/update`,
+    cleanup: `https://intentic.dev/cleanup`,
 } as const;
 
 const SCRIPT_PATHS = {
@@ -26,6 +27,7 @@ const SCRIPT_PATHS = {
     desktopPs1: `scripts/sync.ps1`,
     rebuild: `scripts/rebuild.sh`,
     update: `scripts/update.sh`,
+    cleanup: `scripts/cleanup.sh`,
 } as const;
 
 type ScriptKey = keyof typeof SCRIPT_URLS;

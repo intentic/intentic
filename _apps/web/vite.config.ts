@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
+import { shikiLangDeps } from "../../_libs/ui/src/vue/shikiLangs.js";
 
 // Resolve a path relative to this config file (which lives at the app root, _apps/web/).
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
@@ -16,6 +17,13 @@ export default defineConfig({
             "@intentic-app/ui": here("../../_libs/ui/src/index.ts"),
             "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
         },
+    },
+    optimizeDeps: {
+        // Shiki's core/engine/themes are statically imported by useHighlighter, so the dep optimizer finds
+        // and pre-bundles them. The grammars, though, load via dynamic import from the source-linked ui lib,
+        // which the optimizer leaves un-prebundled — it then serves 504 for every grammar chunk, so the
+        // <Code> highlighter (and Monaco) silently fall back to unhighlighted text. Pre-bundle them all.
+        include: [`shiki/core`, `shiki/engine/javascript`, `@shikijs/themes/light-plus`, `@shikijs/themes/dark-plus`, ...shikiLangDeps],
     },
     server: {
         host: "localhost",

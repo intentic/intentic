@@ -59,6 +59,8 @@ LABEL org.opencontainers.image.source=https://gitlab.com/radarsu/intentic
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 make g++ ripgrep \
     && rm -rf /var/lib/apt/lists/*
+# Repos the agent creates by hand default to main, matching gitInit's --initial-branch and Forgejo.
+RUN git config --global init.defaultBranch main
 RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
     && ssh-keygen -A \
     && printf '%s\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' 'PubkeyAuthentication yes' > /etc/ssh/sshd_config.d/intentic.conf
