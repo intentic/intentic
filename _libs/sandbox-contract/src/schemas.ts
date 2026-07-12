@@ -686,6 +686,16 @@ export const ExtensionSettingsInputSchema = z.object({
     id: z.string(),
     settings: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
+// One declared background process (contributes.processes) — status/start/stop, addressed by the capability
+// entry id + the manifest's process name. Undeclared names are NOT_FOUND, the manifest-honesty rule again.
+export const ExtensionProcessParamSchema = z.object({ id: z.string(), name: z.string() });
+export const ExtensionProcessStatusSchema = z.object({
+    name: z.string(),
+    running: z.boolean(),
+    port: z.number().optional(),
+    previewUrl: z.string().optional(),
+});
+export type ExtensionProcessStatus = z.infer<typeof ExtensionProcessStatusSchema>;
 
 // ---- automations: scheduled agent wake-ups (.intentic/automations.json) ----
 // An automation wakes the agent autonomously: the daemon's scheduler fires each enabled automation on its

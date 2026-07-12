@@ -28,6 +28,7 @@
         "**/out-tsc",
         "**/tmp",
         "**/assets/js/env.js",
+        "_apps/web/public/ext-shims",
         "_apps/sandbox/operator-templates"
     ]
 }

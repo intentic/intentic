@@ -1,5 +1,5 @@
 import { computed, ref, watch } from "vue";
-import { environment } from "../../environments/environment";
+import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import { sandboxRequest } from "../sandboxClient";
 import { syncFolder } from "./syncFolder";
 import { useSandbox } from "../useSandbox";
@@ -45,12 +45,12 @@ export function useDesktopSync() {
     const linuxCommand = computed(() =>
         url.value === `` || pairToken.value === undefined
             ? ``
-            : `curl -fsSL ${environment.scriptUrls.desktopSh} | env SANDBOX_URL='${url.value}' PAIR_TOKEN='${pairToken.value}' SYNC_DIR="${toShellPath(folder.value)}"${takeover.value ? ` TAKEOVER='1'` : ``} sh`,
+            : bashCommand(`desktopSh`, `env SANDBOX_URL='${url.value}' PAIR_TOKEN='${pairToken.value}' SYNC_DIR="${toShellPath(folder.value)}"${takeover.value ? ` TAKEOVER='1'` : ``} `, ``),
     );
     const windowsCommand = computed(() =>
         url.value === `` || pairToken.value === undefined
             ? ``
-            : `$env:SANDBOX_URL='${url.value}'; $env:PAIR_TOKEN='${pairToken.value}'; $env:SYNC_DIR="${toWindowsPath(folder.value)}";${takeover.value ? ` $env:TAKEOVER='1';` : ``} irm ${environment.scriptUrls.desktopPs1} | iex`,
+            : psCommand(`desktopPs1`, `$env:SANDBOX_URL='${url.value}'; $env:PAIR_TOKEN='${pairToken.value}'; $env:SYNC_DIR="${toWindowsPath(folder.value)}";${takeover.value ? ` $env:TAKEOVER='1';` : ``} `),
     );
 
     // Mint (or re-mint) a pairing token so the card can reveal the one-liner. Authorized by the browser's Google

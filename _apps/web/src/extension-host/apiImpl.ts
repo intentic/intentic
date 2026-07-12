@@ -1,12 +1,4 @@
-import type {
-    CapabilityFacts,
-    Disposable,
-    ExtensionContext,
-    IntenticApi,
-    ProcessStatus,
-    RepoFacts,
-    SettingValue,
-} from "@intentic/extension-api";
+import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, ProcessStatus, RepoFacts } from "@intentic/extension-api";
 import { extensionApiVersion, extensionIdOf } from "@intentic/extension-api";
 import { useTheme } from "@intentic-app/ui";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";

@@ -31,9 +31,6 @@ const view = computed(() => viewOf(extension));
 
 <template>
     <ExtensionErrorBoundary :key="`${extension.id}-${activation.key}`" :extension-id="extension.id">
-        <component
-            :is="view"
-            v-bind="{ ...(activation.repo !== undefined ? { repo: activation.repo } : {}), ...activation.props }"
-        />
+        <component :is="view" v-bind="{ ...(activation.repo !== undefined ? { repo: activation.repo } : {}), ...activation.props }" />
     </ExtensionErrorBoundary>
 </template>

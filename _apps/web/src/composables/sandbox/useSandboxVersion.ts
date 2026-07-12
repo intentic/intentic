@@ -1,7 +1,7 @@
 import { InfoSchema } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
-import { environment } from "../../environments/environment";
+import { bashCommand } from "../../environments/scriptCommand";
 import { sandboxJson } from "../sandboxClient";
 import { sandboxKey, useSandbox } from "../useSandbox";
 import { useEnvironment } from "./useEnvironment";
@@ -55,7 +55,7 @@ export function useSandboxVersion() {
     // (the daemon returns it even without an overlay). Empty until both the container and an update are known.
     const slug = computed(() => envState.value?.container?.replace(/^intentic-sandbox-/, ``));
     const updateCommand = computed(() =>
-        slug.value !== undefined && updateAvailable.value ? `curl -fsSL ${environment.scriptUrls.update} | sh -s -- ${slug.value}` : ``,
+        slug.value !== undefined && updateAvailable.value ? bashCommand(`update`, ``, slug.value) : ``,
     );
 
     // The banner is shown only when an update is available AND the user hasn't dismissed THIS version.

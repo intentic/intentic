@@ -10,9 +10,6 @@ export type WebEnvironment = {
     // PostHog product analytics (public project key). Empty key = analytics disabled (dev default); the deploy
     // container's envsubst fills $POSTHOG_KEY. See composables/analytics.ts.
     analytics: { posthogKey: string; posthogHost: string };
-    // The connect/sync/host install scripts the copy-paste one-liners fetch — per environment (dev: repo main;
-    // deployed: intentic.dev vanity URLs redirecting to the `stable` release tag). See environment.default.ts.
-    scriptUrls: { sh: string; ps1: string; hostSh: string; hostPs1: string; desktopSh: string; desktopPs1: string; rebuild: string; update: string };
 };
 
 declare global {

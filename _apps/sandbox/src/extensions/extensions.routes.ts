@@ -1,9 +1,11 @@
-import { type ExtensionManifest, extensionIdOf } from "@intentic/extension-api";
-import { type ExtensionSummary, extensionsContract } from "@intentic/sandbox-contract";
+import { type ExtensionManifest, extensionIdOf, type ProcessContribution } from "@intentic/extension-api";
+import { type Capability, type ExtensionSummary, extensionsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import { extensionDir, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { declaredProcesses, extensionProcessKey, startExtensionProcess } from "./extension-processes.js";
 import { readAllExtensionSettings, writeExtensionSettings } from "./extension-settings.js";
 
 // Installed extensions resolved to their approved manifests + per-extension settings values. The web extension
@@ -13,12 +15,30 @@ import { readAllExtensionSettings, writeExtensionSettings } from "./extension-se
 export const createExtensionsRoutes = (services: Services) => {
     const i = implement(extensionsContract).$context<OrpcContext>();
     const root = services.workspace.root;
+    const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
+    const sandboxId = sandboxIdFromToken(services.config.connectToken);
     const manifestOf = async (id: string): Promise<ExtensionManifest | undefined> => {
         const capability = await services.capabilities.get(id);
         if (capability === undefined || capability.kind !== "extension") {
             return undefined;
         }
         return readExtensionManifest(services.files.read, extensionRootOf(extensionDir(root, id), capability.config.path));
+    };
+    // The capability + declared process a process route addresses; an undeclared name is NOT_FOUND (the
+    // manifest-honesty rule).
+    const processOf = async (
+        id: string,
+        name: string,
+    ): Promise<{ capability: Extract<Capability, { kind: "extension" }>; process: ProcessContribution }> => {
+        const capability = await services.capabilities.get(id);
+        if (capability === undefined || capability.kind !== "extension") {
+            throw new ORPCError("NOT_FOUND", { message: "no extension with that id" });
+        }
+        const process = (await declaredProcesses(services, capability)).find((declared) => declared.name === name);
+        if (process === undefined) {
+            throw new ORPCError("NOT_FOUND", { message: `the extension declares no process "${name}"` });
+        }
+        return { capability, process };
     };
     return {
         list: i.list.handler(async () => {
@@ -57,6 +77,28 @@ export const createExtensionsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: `undeclared setting keys: ${undeclared.join(", ")}` });
             }
             await writeExtensionSettings(root, extensionIdOf(manifest), input.settings);
+            return { ok: true } as const;
+        }),
+        processStatus: i.processStatus.handler(async ({ input }) => {
+            const { process } = await processOf(input.id, input.name);
+            const key = extensionProcessKey(input.id, input.name);
+            const port = services.panelProcesses.portOf(key);
+            const url = process.preview === true ? previewUrl(key, zone, sandboxId) : undefined;
+            return {
+                name: input.name,
+                running: services.panelProcesses.running(key),
+                ...(port !== undefined ? { port } : {}),
+                ...(url !== undefined ? { previewUrl: url } : {}),
+            };
+        }),
+        processStart: i.processStart.handler(async ({ input }) => {
+            const { capability, process } = await processOf(input.id, input.name);
+            await startExtensionProcess(services, capability, process);
+            return { ok: true } as const;
+        }),
+        processStop: i.processStop.handler(async ({ input }) => {
+            await processOf(input.id, input.name);
+            services.panelProcesses.stop(extensionProcessKey(input.id, input.name));
             return { ok: true } as const;
         }),
     };

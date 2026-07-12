@@ -15,6 +15,7 @@ import { createServices } from "./composition.js";
 import { createDiscordSource } from "./discord/listener-source.js";
 import { stopVoice } from "./discord/voice.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
+import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
 import { reconcileLspSkill } from "./settings/lsp-skill.js";
 import { composeEnvironment } from "./environment/environment.js";
 import { loadConfig } from "./env.config.js";
@@ -105,6 +106,8 @@ const main = async (): Promise<void> => {
     // the boot path).
     void reconnectVpns(capabilityCtx(services));
     void startEnabledDocker(capabilityCtx(services));
+    // Installed extensions' declared autoStart processes come back the same way (manifests on /work).
+    void startAllExtensionProcesses(services);
 
     // Debug-log upkeep: re-arm the tmux pipe-pane hooks on a tmux server that outlived a daemon restart
     // (best-effort; the image's tmux.conf covers server start) and sweep historyRoot/logs at boot + hourly.

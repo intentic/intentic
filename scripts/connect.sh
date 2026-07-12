@@ -38,7 +38,7 @@
 #   SYNC_DIR + SYNC_PAIR_TOKEN  desktop sync chosen at setup: SYNC_DIR (the local folder) rides the command as
 #                   an env var, SYNC_PAIR_TOKEN arrives via the setup-code claim; when SYNC_DIR is set, after the
 #                   sandbox is up this script also runs the standard sync bootstrap (SYNC_SCRIPT_URL, default
-#                   the raw scripts/sync.sh from GitHub — same source this script ships from) as the invoking
+#                   the published https://intentic.dev/sync — same source this script ships from) as the invoking
 #                   user, so the one pasted command covers folder sync too. Never fatal to sandbox setup.
 # POSIX sh (this is piped into `sh`, which is dash on Debian/Ubuntu/WSL — no `pipefail`).
 set -eu
@@ -145,7 +145,7 @@ SUBDOMAIN="${SUBDOMAIN:-}"
 # the sandbox at boot as a single-use pairing, then handed to the sync bootstrap fetched from SYNC_SCRIPT_URL.
 SYNC_DIR="${SYNC_DIR:-}"
 SYNC_PAIR_TOKEN="${SYNC_PAIR_TOKEN:-}"
-SYNC_SCRIPT_URL="${SYNC_SCRIPT_URL:-https://gitlab.com/radarsu/intentic/-/raw/main/scripts/sync.sh}"
+SYNC_SCRIPT_URL="${SYNC_SCRIPT_URL:-https://intentic.dev/sync}"
 SANDBOX_PUBLIC_URL=""
 # The stable name the tunnel ingress dials. The workspace answers to it via a --network-alias on its own per-sandbox
 # network, so the real container name stays unique (coexistence) while BOTH the platform-provisioned tunnel (whose

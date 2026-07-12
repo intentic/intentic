@@ -1,7 +1,7 @@
 import { EnvironmentSchema } from "@intentic-app/api-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { environment } from "../../environments/environment";
+import { bashCommand } from "../../environments/scriptCommand";
 import { sandboxJson } from "../sandboxClient";
 import { sandboxKey, useSandbox } from "../useSandbox";
 
@@ -41,7 +41,7 @@ export function useEnvironment() {
     const rebuildCommand = computed(() => {
         const slug = state.value?.container?.replace(/^intentic-sandbox-/, ``);
         return slug !== undefined && pending.value !== undefined
-            ? `curl -fsSL ${environment.scriptUrls.rebuild} | sh -s -- ${slug} ${pending.value.hash}`
+            ? bashCommand(`rebuild`, ``, `${slug} ${pending.value.hash}`)
             : ``;
     });
 

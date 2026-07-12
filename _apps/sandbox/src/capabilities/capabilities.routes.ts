@@ -4,6 +4,7 @@ import { bearerFrom } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { composeEnvironment } from "../environment/environment.js";
+import { startAutoStartProcesses } from "../extensions/extension-processes.js";
 import { capabilityCtx, echoConfig, secretField } from "./capability.js";
 import { browseMarketplace } from "./marketplace.js";
 import { registry } from "./registry.js";
@@ -55,6 +56,11 @@ export const createCapabilitiesRoutes = (services: Services) => {
             try {
                 yield* handler.apply(ctx, input.id, input.config);
                 await services.capabilities.upsert(input);
+                // A fresh extension checkout brings its declared autoStart processes up (the same post-apply
+                // seam composeEnvironment uses — full Services, so the narrow handler ctx stays narrow).
+                if (input.kind === "extension") {
+                    await startAutoStartProcesses(services, input);
+                }
                 // Fold this entry's image fragment into the composed overlay (upsert first, so compose sees it).
                 const composedHash = await composeEnvironment(services);
                 if (

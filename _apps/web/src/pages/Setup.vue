@@ -14,6 +14,7 @@ import { useCloudflareZones } from "../composables/extensions/useCloudflareZones
 import { syncFolder } from "../composables/sandbox/syncFolder";
 import { useSandbox } from "../composables/useSandbox";
 import { environment } from "../environments/environment";
+import { bashCommand, psCommand } from "../environments/scriptCommand";
 
 /* The setup gate's destination (outside the workspace shell). Step 2 offers two ways to make the sandbox reachable:
  *   • intentic-provided (default): the platform provisions a Cloudflare tunnel under its OWN zone; the user needs no
@@ -272,7 +273,7 @@ const linuxCommand = (): string => {
         return ``;
     }
     const envs = `${mode.value === `own` ? ` CF_TOKEN='${cfToken.value.trim()}'` : ``}${platformEnv()}${syncEnv()}`;
-    return `curl -fsSL ${environment.scriptUrls.sh} | sudo${envs === `` ? `` : ` env${envs}`} sh -s -- ${code}`;
+    return bashCommand(`sh`, `sudo${envs === `` ? `` : ` env${envs}`} `, code);
 };
 
 const windowsCommand = (): string => {
@@ -281,7 +282,7 @@ const windowsCommand = (): string => {
         return ``;
     }
     const cfEnv = mode.value === `own` ? `$env:CF_TOKEN='${cfToken.value.trim()}'; ` : ``;
-    return `${platformEnvPs()}${cfEnv}${syncEnvPs()}$env:SETUP_CODE='${code}'; irm ${environment.scriptUrls.ps1} | iex`;
+    return psCommand(`ps1`, `${platformEnvPs()}${cfEnv}${syncEnvPs()}$env:SETUP_CODE='${code}'; `);
 };
 
 const selectedCommand = computed(() => (cmdOs.value === `windows` ? windowsCommand() : linuxCommand()));

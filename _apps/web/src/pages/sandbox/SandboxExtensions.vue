@@ -94,11 +94,7 @@ const contributionSummary = (extension: ExtensionSummary): string => {
             </div>
 
             <div v-if="(extension.manifest.contributes?.settings ?? []).length > 0" class="flex flex-col gap-2 border-t border-line pt-2.5">
-                <div
-                    v-for="setting in extension.manifest.contributes?.settings"
-                    :key="setting.key"
-                    class="flex items-center justify-between gap-3"
-                >
+                <div v-for="setting in extension.manifest.contributes?.settings" :key="setting.key" class="flex items-center justify-between gap-3">
                     <div class="min-w-0">
                         <p class="text-sm text-content">{{ setting.title }}</p>
                         <p v-if="setting.description" class="text-2xs text-muted">{{ setting.description }}</p>

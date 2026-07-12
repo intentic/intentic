@@ -6,7 +6,7 @@ import { computed, onUnmounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandboxClient";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useSandbox } from "../../composables/useSandbox";
-import { environment } from "../../environments/environment";
+import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import { zoneFromUrl } from "@intentic/sandbox-contract";
 import { normalizeHostName } from "./hostName";
 
@@ -18,7 +18,8 @@ import { normalizeHostName } from "./hostName";
  * on an intentic-provided one the daemon relays a host-tunnel mint to the platform and the command carries its
  * connector token instead — no Cloudflare account needed. This runs in the browser workspace, so the sandbox
  * self-context (daemon URL, connect token, tunnel provenance) comes from the platform's sandbox registry
- * (useSandbox); the script URLs from the web environment; the zone is derived client-side from the daemon URL. */
+ * (useSandbox); the install command from scriptCommand (deploy curls intentic.dev, dev runs the repo script by
+ * path); the zone is derived client-side from the daemon URL. */
 const { refetch } = useInventory();
 const { active, daemonUrl } = useSandbox();
 
@@ -29,8 +30,8 @@ const provided = computed(() => active.value?.providedTunnel === true);
 
 // The connect-host one-liner: SANDBOX_URL (the daemon) + CONNECT_TOKEN (which also authorizes /enroll) + either
 // CF_TOKEN (entered here; the daemon writes it via /enroll) with ZONE, or — on the intentic-provided path — the
-// minted HOST_SSH_TUNNEL_TOKEN/HOST_SSH_HOSTNAME with the required HOST_NAME that salted the mint. Script URLs
-// come from the web environment; the sandbox URL + token from the active sandbox.
+// minted HOST_SSH_TUNNEL_TOKEN/HOST_SSH_HOSTNAME with the required HOST_NAME that salted the mint. The command
+// shape comes from scriptCommand (deploy vs local-dev-by-path); the sandbox URL + token from the active sandbox.
 const cfToken = ref(``);
 const hostName = ref(``);
 // Lenient format check (Cloudflare tokens are 40 chars of [A-Za-z0-9_-]); the connect-host script does the real verify.
@@ -125,13 +126,13 @@ const connectHostCommand = computed(() => {
         if (minted.value === undefined || !mintCurrent.value) {
             return ``;
         }
-        return `curl -fsSL ${environment.scriptUrls.hostSh} | sudo env SANDBOX_URL='${url}' CONNECT_TOKEN='${sandbox.token}' HOST_SSH_TUNNEL_TOKEN='${minted.value.tunnelToken}' HOST_SSH_HOSTNAME='${minted.value.hostname}' HOST_NAME='${mintedName.value}' sh`;
+        return bashCommand(`hostSh`, `sudo env SANDBOX_URL='${url}' CONNECT_TOKEN='${sandbox.token}' HOST_SSH_TUNNEL_TOKEN='${minted.value.tunnelToken}' HOST_SSH_HOSTNAME='${minted.value.hostname}' HOST_NAME='${mintedName.value}' `, ``);
     }
     if (zone.value === undefined) {
         return ``;
     }
     const nameEnv = canonicalHostName.value !== `` ? ` HOST_NAME='${canonicalHostName.value}'` : ``;
-    return `curl -fsSL ${environment.scriptUrls.hostSh} | sudo env SANDBOX_URL='${url}' CONNECT_TOKEN='${sandbox.token}' CF_TOKEN='${cfToken.value.trim()}' ZONE='${zone.value}'${nameEnv} sh`;
+    return bashCommand(`hostSh`, `sudo env SANDBOX_URL='${url}' CONNECT_TOKEN='${sandbox.token}' CF_TOKEN='${cfToken.value.trim()}' ZONE='${zone.value}'${nameEnv} `, ``);
 });
 
 // The PowerShell equivalent (Windows deploy target). Same reactive inputs as the bash one-liner above, but the
@@ -148,13 +149,13 @@ const connectHostCommandPs = computed(() => {
         if (minted.value === undefined || !mintCurrent.value) {
             return ``;
         }
-        return `${base}$env:HOST_SSH_TUNNEL_TOKEN='${minted.value.tunnelToken}'; $env:HOST_SSH_HOSTNAME='${minted.value.hostname}'; $env:HOST_NAME='${mintedName.value}'; irm ${environment.scriptUrls.hostPs1} | iex`;
+        return psCommand(`hostPs1`, `${base}$env:HOST_SSH_TUNNEL_TOKEN='${minted.value.tunnelToken}'; $env:HOST_SSH_HOSTNAME='${minted.value.hostname}'; $env:HOST_NAME='${mintedName.value}'; `);
     }
     if (zone.value === undefined) {
         return ``;
     }
     const nameEnv = canonicalHostName.value !== `` ? `$env:HOST_NAME='${canonicalHostName.value}'; ` : ``;
-    return `${base}$env:CF_TOKEN='${cfToken.value.trim()}'; $env:ZONE='${zone.value}'; ${nameEnv}irm ${environment.scriptUrls.hostPs1} | iex`;
+    return psCommand(`hostPs1`, `${base}$env:CF_TOKEN='${cfToken.value.trim()}'; $env:ZONE='${zone.value}'; ${nameEnv}`);
 });
 
 // While the section is open, poll the inventory so a machine that just ran connect-host appears in the list.

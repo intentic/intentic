@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { ExtensionManifestSchema } from "@intentic/extension-api";
 import type { ExtensionConfig } from "@intentic/sandbox-contract";
+import { extensionProcessKey } from "../../extensions/extension-processes.js";
 import { capabilityJobSession } from "../../system/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
 import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../extension-dirs.js";
@@ -50,7 +51,14 @@ export const extensionHandler: CapabilityHandler = {
             return { state: "inactive" };
         }
     },
-    remove: async (ctx, id) => {
-        await ctx.files.remove(extensionDir(ctx.workspace.root, id));
+    remove: async (ctx, id, config) => {
+        const { path } = config as ExtensionConfig;
+        const dir = extensionDir(ctx.workspace.root, id);
+        // Stop declared background processes before the checkout (and with it the manifest) disappears.
+        const manifest = await readExtensionManifest(ctx.files.read, extensionRootOf(dir, path));
+        for (const process of manifest?.contributes?.processes ?? []) {
+            ctx.panels.stop(extensionProcessKey(id, process.name));
+        }
+        await ctx.files.remove(dir);
     },
 };

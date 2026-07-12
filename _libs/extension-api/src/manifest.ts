@@ -83,5 +83,4 @@ export type ExtensionManifest = z.infer<typeof ExtensionManifestSchema>;
 
 // The extension's identity everywhere (capability entries, /ext routes, settings namespaces) — derived, never
 // declared, so it can't contradict the publisher/name the install dialog showed.
-export const extensionIdOf = (manifest: Pick<ExtensionManifest, "publisher" | "name">): string =>
-    `${manifest.publisher}.${manifest.name}`;
+export const extensionIdOf = (manifest: Pick<ExtensionManifest, "publisher" | "name">): string => `${manifest.publisher}.${manifest.name}`;

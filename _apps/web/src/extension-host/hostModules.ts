@@ -9,8 +9,9 @@ import * as vue from "vue";
  * their own. Imported for its side effect from main.ts, ahead of any extension load. */
 
 declare global {
-    // eslint-disable-next-line no-var
+    // oxlint-disable-next-line no-var, no-underscore-dangle -- ambient global declarations require `var`; the generated ext-shims read exactly this dunder name
     var __intenticHost: { readonly modules: Readonly<Record<string, unknown>> } | undefined;
 }
 
+// oxlint-disable-next-line no-underscore-dangle -- the host-bridge global the ext-shims re-export from
 globalThis.__intenticHost = { modules: { vue, "@intentic/extension-api": extensionApi } };
