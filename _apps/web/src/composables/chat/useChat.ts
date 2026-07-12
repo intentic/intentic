@@ -718,15 +718,26 @@ const startConnect = async (): Promise<void> => {
 const openAccountManage = (): void => {
     accountManageOpen.value = true;
     void loadUsage();
+    // A connect handshake already in flight (a device poll that outlived a card close / the reachable-flash
+    // remount) owns the managed provider — leave it be. Re-running setManagedProvider here would either mint a
+    // fresh device code that diverges from the sign-in tab the user already opened, or hit its cancelConnect
+    // path and kill the live poll.
+    if (pendingAuth !== null) {
+        return;
+    }
     // Manage the accounts of the provider the active conversation would send to; setManagedProvider preps a
     // connect handshake up front only when that provider has no account yet (so the open-URL anchor is a real
     // gesture, never a browser-blocked programmatic popup).
     setManagedProvider(provider.value);
 };
 
+// Closing the card is a pure UI action — it must NOT abort an in-flight connect. The device flows (Grok/Codex)
+// complete out-of-band (the user approves at x.ai / ChatGPT and the daemon exchanges tokens server-side later),
+// so their poll has to outlive both this close and the reachable-flash that unmounts SandboxAgent. cancelConnect
+// stays the sole handshake teardown, driven only by genuine invalidation: completion (pollGrokOnce/pollCodexOnce),
+// the 15-min deadline, a fresh startConnect, a deliberate provider switch, or resetChat (sandbox switch).
 const closeAccountManage = (): void => {
     accountManageOpen.value = false;
-    cancelConnect();
 };
 
 // Reflects the server's view of both providers' connections so the UI shows the right control on load and

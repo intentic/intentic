@@ -174,6 +174,13 @@ const main = async (): Promise<void> => {
         env: { ...process.env, WORKSPACE_ROOT: services.workspace.root },
     }).catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed — first query builds incrementally"));
 
+    // Warm the Grok provider's OpenCode server at boot instead of lazily on the first /grok/oauth/start. The cold
+    // `opencode serve` spawn is CPU-heavy; in a constrained container it can deschedule the daemon long enough to
+    // stall the /events heartbeat past the browser's watchdog, flashing the UI to "connecting" mid-session — which
+    // unmounts the account page and aborts the in-flight Grok connect. At boot that spike hides behind the initial
+    // connect screen. Best-effort: ensure() is idempotent, so the first interactive call reuses this warm client.
+    void services.openCode.client().catch((error: unknown) => logger.warn({ err: error }, "opencode warmup failed — first grok connect boots it lazily"));
+
     const shutdown = (): void => {
         logger.info("shutting down intentic sandbox daemon…");
         clearInterval(logsSweep);

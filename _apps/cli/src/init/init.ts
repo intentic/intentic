@@ -2,7 +2,15 @@ import { execFile } from "node:child_process";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { gitInit, INTENT_GITIGNORE, INTENT_TSCONFIG, intentPackageJson, scaffoldDeployConfig, TARGET_GITIGNORE } from "@intentic/scaffold";
+import {
+    gitInit,
+    INTENT_GITIGNORE,
+    INTENT_TSCONFIG,
+    intentPackageJson,
+    libsLinkSpec,
+    scaffoldDeployConfig,
+    TARGET_GITIGNORE,
+} from "@intentic/scaffold";
 import { APP_DIR, CONFIG_FILE, INTENT_DIR, TARGET_DIR } from "../lib/artifact.js";
 import { renderTemplate } from "../lib/templates.js";
 import { scaffoldApp } from "./scaffold-app.js";
@@ -43,7 +51,10 @@ export const scaffold = async (
         await gitInit(intentDir);
         await gitInit(targetDir);
         await writeFile(join(intentDir, CONFIG_FILE), minimal ? scaffoldDeployConfig([]) : selfHost ? selfHostConfig(zone) : starterConfig());
-        await writeFile(join(intentDir, "package.json"), intentPackageJson(version, link));
+        await writeFile(
+            join(intentDir, "package.json"),
+            intentPackageJson(link ? libsLinkSpec("graph") : `~${version}`, link ? libsLinkSpec("sdk") : `~${version}`),
+        );
         await writeFile(join(intentDir, "tsconfig.json"), INTENT_TSCONFIG);
         await writeFile(join(intentDir, ".gitignore"), INTENT_GITIGNORE);
         await writeFile(join(targetDir, ".gitignore"), TARGET_GITIGNORE);

@@ -14,7 +14,8 @@ import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
  * accounts (Claude / ChatGPT / Grok) it authenticates as, its behavior settings (search past chats), and the
  * import-memory tool. Accounts and memory live INSIDE the sandbox, never on the platform, which is why this is
  * a sandbox tab. The account surface reuses useChat's handshake paths unchanged; opening the tab loads usage
- * and preps the provider (openAccountManage), closing it tears the handshake down (closeAccountManage). */
+ * and preps the provider (openAccountManage); closing it just hides the card (closeAccountManage) — an in-flight
+ * connect keeps running so a device sign-in the user is completing at x.ai / ChatGPT still lands. */
 
 const sandbox = useSandbox();
 

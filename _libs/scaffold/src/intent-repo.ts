@@ -27,19 +27,22 @@ export const INTENT_TSCONFIG = `${JSON.stringify(
 // dogfooded against unpublished packages. Computed from this compiled module's location: {src,dist} → scaffold → _libs.
 const LIBS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-// The intent repo's package.json: the two @intentic deps `resolve` imports, pinned to the caller's version (the
-// CLI's own version, or the daemon's), or linked to local monorepo source with `link`.
-export const intentPackageJson = (version: string, link: boolean): string => {
-    const dependency = (pkg: string): string => (link ? `link:${join(LIBS_DIR, pkg)}` : `~${version}`);
-    return `${JSON.stringify(
+// A `link:` spec into this monorepo's `_libs`, scaffold-relative. The CLI's `--link` dogfooding path uses it:
+// the CLI bundle deps both graph + sdk, so both land beside scaffold under LIBS_DIR. NOT usable from the sandbox
+// daemon — its bundle reaches graph (via scaffold) but not sdk, so the daemon resolves specs from its own tree.
+export const libsLinkSpec = (pkg: "graph" | "sdk"): string => `link:${join(LIBS_DIR, pkg)}`;
+
+// The intent repo's package.json. The two @intentic deps `resolve` imports are pinned by the caller-supplied
+// specs — a published `~<version>` range (registry) or a `link:` to local/bundled source.
+export const intentPackageJson = (graphSpec: string, sdkSpec: string): string =>
+    `${JSON.stringify(
         {
             name: "intent",
             version: "0.0.0",
             private: true,
             type: "module",
-            dependencies: { "@intentic/graph": dependency("graph"), "@intentic/sdk": dependency("sdk") },
+            dependencies: { "@intentic/graph": graphSpec, "@intentic/sdk": sdkSpec },
         },
         undefined,
         4,
     )}\n`;
-};

@@ -621,12 +621,18 @@ importers:
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_libs/extension-api
+      '@intentic/graph':
+        specifier: workspace:*
+        version: link:../../_libs/graph
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_libs/sandbox-contract
       '@intentic/scaffold':
         specifier: workspace:*
         version: link:../../_libs/scaffold
+      '@intentic/sdk':
+        specifier: workspace:*
+        version: link:../../_libs/sdk
       '@intentic/workspace-ignore':
         specifier: workspace:*
         version: link:../../_libs/workspace-ignore
