@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { emailOf, fileCodexStore, pollDeviceAuth, probeCodexHealth, startDeviceAuth } from "./codex-credentials.js";
+import { emailOf, fileCodexStore, pollDeviceAuth, probeCodexHealth, startDeviceAuth, writeCodexConfig } from "./codex-credentials.js";
 
 let home: string | undefined;
 afterEach(async () => {
@@ -94,6 +94,30 @@ test("the store writes each account's native auth.json under its own CODEX_HOME 
     await store.clear("a");
     expect(await store.connected("a")).toBe(false);
     expect((await store.list()).map((account) => account.label)).toEqual(["personal"]);
+});
+
+test("every CODEX_HOME gets the hardened config.toml, never overwritten once present", async () => {
+    home = await mkdtemp(join(tmpdir(), "codex-home-"));
+    const store = fileCodexStore(home);
+    await store.write("a", "work", { idToken: "id.jwt", accessToken: "acc", refreshToken: "ref" });
+
+    // Codex has no telemetry env vars — the opt-outs must land as $CODEX_HOME/config.toml keys.
+    const configPath = join(home, "a", "config.toml");
+    const config = await readFile(configPath, "utf8");
+    expect(config).toContain("check_for_update_on_startup = false");
+    expect(config).toContain("[analytics]");
+    expect(config).toContain("[feedback]");
+    expect(config).toContain('metrics_exporter = "none"');
+
+    // The agent may extend the file — a later token refresh (writeTokens) must not clobber it.
+    await writeFile(configPath, `${config}\n[mcp_servers.custom]\ncommand = "x"\n`);
+    await store.writeTokens("a", { idToken: "id.jwt", accessToken: "acc2", refreshToken: "ref2" });
+    expect(await readFile(configPath, "utf8")).toContain("[mcp_servers.custom]");
+
+    // The fallback CODEX_HOME is the store's base dir itself — its config.toml must not list as a phantom account.
+    await writeCodexConfig(home);
+    await readFile(join(home, "config.toml"), "utf8");
+    expect((await store.list()).map((account) => account.label)).toEqual(["work"]);
 });
 
 test("probeCodexHealth stays healthy and makes NO network call while the access token is still valid", async () => {

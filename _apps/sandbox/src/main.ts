@@ -10,6 +10,7 @@ import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { DOCKER_PANEL_KEY, startEnabledDocker } from "./capabilities/handlers/docker.js";
 import { reconnectVpns } from "./capabilities/handlers/vpn.js";
+import { writeCodexConfig } from "./codex/codex-credentials.js";
 import { createServices } from "./composition.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
@@ -51,6 +52,12 @@ const main = async (): Promise<void> => {
     process.on("unhandledRejection", (reason) => logger.error({ err: reason }, "unhandled rejection"));
     process.on("uncaughtException", (err) => logger.error({ err }, "uncaught exception"));
     const services = createServices(config, logger);
+
+    // Privacy defaults for the OPENAI_API_KEY-fallback CODEX_HOME (per-account homes get theirs at connect time,
+    // codex-credentials.ts writeTokens). Best-effort: a Codex turn works without it, just unhardened.
+    void writeCodexConfig(join(services.authRoot, "codex")).catch((error: unknown) =>
+        logger.warn({ err: error }, "codex privacy config not written"),
+    );
 
     // Setup-time desktop sync: arm the platform-minted pairing token so the connect script can enroll its agent.
     if (config.syncPairToken !== "") {

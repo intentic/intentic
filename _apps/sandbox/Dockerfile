@@ -123,6 +123,11 @@ RUN corepack enable && corepack prepare pnpm@11.9.0 --activate \
 # Pin the CLI in lockstep with the SDK version in _apps/sandbox/package.json so the client/server wire API matches.
 # ponytail: bump this together with @opencode-ai/sdk; a version skew surfaces as server-start / event-shape errors.
 RUN npm install -g opencode-ai@1.17.15 && opencode --version
+# OpenCode privacy defaults, in the GLOBAL config (the only level where autoupdate:false is honored): no
+# auto-update (the CLI is version-pinned above) and no session sync to opncd.ai, even manual /share. The
+# daemon's server-spawn config (grok/opencode.ts) merges over this file, so runtime overrides are unaffected.
+RUN mkdir -p /root/.config/opencode \
+    && printf '{ "autoupdate": false, "share": "disabled" }\n' > /root/.config/opencode/opencode.json
 # The `codex` CLI on PATH — the agent's shell delegates tasks to the user's connected Codex account
 # (`codex exec`, agent/delegation.ts), authenticated via the CODEX_HOME injected per turn. Pin in lockstep
 # with @openai/codex-sdk in _apps/sandbox/package.json (the Codex primary adapter), same rationale as opencode.
@@ -193,5 +198,16 @@ WORKDIR /work
 # LANG: without a UTF-8 locale zsh's line editor counts BYTES as columns, so bira's multibyte prompt glyphs
 # (╰─, ↵) desync the cursor and corrupt the prompt after any non-zero exit status. C.utf8 is glibc-built-in.
 ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 IQ_MODEL_DIR=/opt/iq-models IQ_PLUGIN_DIR=/opt/iq-plugin EXTENSIONS_DIR=/opt/extensions
+# Privacy hardening for every agent CLI the daemon spawns (they all inherit process.env): telemetry, error
+# reporting, feedback uploads, and update checks off — the CLIs are version-pinned in this image, so an update
+# probe is pure phone-home. DO_NOT_TRACK covers Claude Code and anything else honoring the convention; Codex
+# reads no env switches at all (its equivalents live in CODEX_HOME/config.toml — codex/codex-credentials.ts).
+ENV DO_NOT_TRACK=1 \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    DISABLE_TELEMETRY=1 \
+    DISABLE_ERROR_REPORTING=1 \
+    DISABLE_FEEDBACK_COMMAND=1 \
+    DISABLE_AUTOUPDATER=1 \
+    OPENCODE_DISABLE_AUTOUPDATE=1
 EXPOSE 8787 22
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

@@ -52,6 +52,11 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
         if (client !== undefined) {
             return client;
         }
+        // xAI's Responses API stores request/response server-side for 30 days by default (store: true in
+        // @ai-sdk/xai) — opt every known model out via per-model options, the only seam OpenCode forwards to the
+        // call. Config is fixed at server spawn, so a model first discovered later (the self-heal path) lacks the
+        // flag until the next daemon restart; the persisted catalog covers it from then on.
+        const storeOptOut = [...new Set([...SEED_XAI_MODELS, ...(await readPersistedModels())])];
         // createOpencodeServer spawns `opencode serve` inheriting process.env (it exposes no env option), so pin
         // XDG_DATA_HOME across the synchronous spawn only — the child captures it at launch; restoring right
         // after keeps the daemon's other subprocess spawns (Claude/Codex) unaffected.
@@ -62,7 +67,10 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
             server = await createOpencodeServer({
                 // No provider key — xAI auth is OAuth (stored by OpenCode). Run autonomously: the container IS the
                 // isolation boundary (same posture as Claude's bypassPermissions / Codex's danger-full-access).
-                config: { permission: { edit: "allow", bash: "allow", webfetch: "allow" } },
+                config: {
+                    permission: { edit: "allow", bash: "allow", webfetch: "allow" },
+                    provider: { xai: { models: Object.fromEntries(storeOptOut.map((id) => [id, { options: { store: false } }])) } },
+                },
             });
         } finally {
             if (previous === undefined) {

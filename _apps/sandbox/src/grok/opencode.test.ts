@@ -1,9 +1,19 @@
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { humanizeModelId, SEED_XAI_MODELS } from "./grok-models.js";
 import { createOpenCodeService } from "./opencode.js";
+
+// Capture the server-spawn options instead of booting a real `opencode serve` (client() is otherwise untested).
+const { serverSpawns } = vi.hoisted(() => ({ serverSpawns: [] as { config?: unknown }[] }));
+vi.mock("@opencode-ai/sdk", () => ({
+    createOpencodeServer: async (options: { config?: unknown }) => {
+        serverSpawns.push(options);
+        return { url: "http://127.0.0.1:0", close: (): void => {} };
+    },
+    createOpencodeClient: () => ({}),
+}));
 
 const roots: string[] = [];
 const scratch = async (): Promise<string> => {
@@ -103,6 +113,22 @@ test("recordModels persists xAI's named models (chat-only) and xaiModels() serve
         models: [{ id: "grok-4", label: "Grok 4" }, { id: "grok-3", label: "Grok 3" }],
         default: "grok-4",
     });
+});
+
+test("client() spawns the server with store:false for every known xai model (seed + persisted)", async () => {
+    const xdg = await scratch();
+    const service = createOpenCodeService(xdg, forbiddenFetch);
+    await service.recordModels(["grok-4-latest"]);
+    await service.client();
+
+    // xAI stores conversations server-side for 30 days unless each model call opts out — the per-model config
+    // options are the only seam OpenCode forwards to the call, so every known id must carry store:false.
+    const spawn = serverSpawns.at(-1) as { config: { provider: { xai: { models: Record<string, { options: unknown }> } } } };
+    const models = spawn.config.provider.xai.models;
+    expect(Object.keys(models).toSorted()).toEqual([...new Set([...SEED_XAI_MODELS, "grok-4-latest"])].toSorted());
+    for (const model of Object.values(models)) {
+        expect(model.options).toEqual({ store: false });
+    }
 });
 
 test("recordModels is a no-op for an empty or media-only list (keeps the seed floor)", async () => {

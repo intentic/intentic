@@ -234,6 +234,34 @@ export interface CodexStore {
     readonly list: () => Promise<OauthAccount[]>;
 }
 
+// Privacy-hardened Codex config for a CODEX_HOME: Codex has no telemetry env vars — analytics (chatgpt.com
+// events, whose flag also gates the default statsig metrics exporter), the Sentry-backed /feedback flow, and
+// the startup update probe (the CLI is image-pinned) are all config.toml keys, at the user level $CODEX_HOME.
+const CODEX_CONFIG = `check_for_update_on_startup = false
+
+[analytics]
+enabled = false
+
+[feedback]
+enabled = false
+
+[otel]
+metrics_exporter = "none"
+`;
+
+// Ensure a CODEX_HOME exists with the hardened config.toml. Never overwrites ("wx") — the file is Codex's
+// user-level config, which the agent may legitimately extend later (e.g. mcp_servers).
+export const writeCodexConfig = async (home: string): Promise<void> => {
+    await mkdir(home, { recursive: true });
+    try {
+        await writeFile(join(home, "config.toml"), CODEX_CONFIG, { flag: "wx" });
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+            throw error;
+        }
+    }
+};
+
 // Writes Codex's native auth.json under `<baseDir>/<id>` — the exact shape `codex login` produces, so the CLI
 // treats it as its own and refreshes it in place. OPENAI_API_KEY is explicitly null in that wire format.
 export const fileCodexStore = (baseDir: string): CodexStore => {
@@ -270,7 +298,7 @@ export const fileCodexStore = (baseDir: string): CodexStore => {
     // Write auth.json in the exact `codex login` wire shape (the one place the format is defined). Atomic —
     // the Codex CLI may read it concurrently — via temp file + rename.
     const writeTokens = async (id: string, tokens: CodexTokens): Promise<void> => {
-        await mkdir(home(id), { recursive: true });
+        await writeCodexConfig(home(id));
         const auth = {
             OPENAI_API_KEY: null,
             tokens: {
