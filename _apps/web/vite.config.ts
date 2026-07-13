@@ -1,39 +1,19 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 import { shikiLangDeps } from "../../_libs/ui/src/vue/shikiLangs.js";
+import { sourceAliases } from "./source-aliases";
 
 // Resolve a path relative to this config file (which lives at the app root, _apps/web/).
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
-// Resolve every first-party extension to its true source, so the app and the extension's lazily-imported .vue
-// view share ONE host.ts instance. Otherwise pnpm materializes injected node_modules copies of some ext packages,
-// Vite's dep optimizer pre-bundles them, and the extension's host.ts singleton forks: activate() binds one copy
-// while the view reads another -> "host() called before activate()". Skips daemon-only packages (no web src entry).
-const extensionAliases = Object.fromEntries(
-    readdirSync(here(`../../_extensions`), { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry): [string, string] => [
-            JSON.parse(readFileSync(here(`../../_extensions/${entry.name}/package.json`), `utf8`)).name,
-            here(`../../_extensions/${entry.name}/src/index.ts`),
-        ])
-        .filter(([, source]) => existsSync(source)),
-);
-
 export default defineConfig({
     plugins: [vue(), tailwindcss()],
     resolve: {
-        // Source-first workspace: resolve the libs to their .ts/.vue source, mirroring the tsconfig paths so
-        // an edit in _libs reflects here with no rebuild (and Vue-SFC HMR works across the package boundary).
-        alias: {
-            "@intentic-app/ui": here("../../_libs/ui/src/index.ts"),
-            "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
-            "@intentic/sandbox-contract": here("../../_libs/sandbox-contract/src/index.ts"),
-            "@intentic/extension-api": here("../../_libs/extension-api/src/index.ts"),
-            ...extensionAliases,
-        },
+        // Source-first workspace aliases, shared with vitest.config.ts — see source-aliases.ts for why.
+        alias: sourceAliases(),
     },
     optimizeDeps: {
         // Shiki's core/engine/themes are statically imported by useHighlighter, so the dep optimizer finds
