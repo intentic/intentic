@@ -221,18 +221,20 @@ export const GitChangesSchema = z.object({ repos: z.array(RepoChangesSchema) });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
 
 // ---- history: daemon-owned workspace snapshots (diff + restore) ----
-// The daemon snapshots /work into bare git dirs on /history (outside the agent's reach) after every turn and on
-// an interval. A "snapshot" groups one commit per scope (root + each nested repo) under a shared id.
+// The daemon snapshots /work into bare git dirs on /history (outside the agent's reach). A "snapshot" groups
+// one commit per scope (root + each nested repo) under a shared id. Only checkpoint triggers (turn / user /
+// pre-restore / restore) are listed; "interval" captures are a hidden safety net that dissolves into the next
+// visible checkpoint's diff.
 
-export const SnapshotTriggerSchema = z.enum(["turn", "interval", "manual", "pre-restore", "restore", "user"]);
+export const SnapshotTriggerSchema = z.enum(["turn", "interval", "pre-restore", "restore", "user"]);
 export type SnapshotTrigger = z.infer<typeof SnapshotTriggerSchema>;
 export const SnapshotSchema = z.object({
     id: z.string(),
     // Committer time, ms since epoch.
     at: z.number(),
     trigger: SnapshotTriggerSchema,
-    // The scopes that changed in this snapshot: "root" or "repositories/<name>".
-    scopes: z.array(z.string()),
+    // Human-readable checkpoint label — the turn's prompt for "turn" snapshots; absent otherwise.
+    label: z.string().optional(),
 });
 export type Snapshot = z.infer<typeof SnapshotSchema>;
 export const SnapshotsListSchema = z.object({ snapshots: z.array(SnapshotSchema) });
@@ -259,8 +261,6 @@ export const FileDiffSchema = z.object({
     truncated: z.boolean().optional(),
 });
 export type FileDiff = z.infer<typeof FileDiffSchema>;
-// Manual snapshot result: id is absent when nothing changed since the last snapshot.
-export const SnapshotResultSchema = z.object({ id: z.string().optional() });
 
 // ---- workspace tree + files ----
 

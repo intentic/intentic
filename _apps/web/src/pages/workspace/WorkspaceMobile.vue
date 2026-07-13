@@ -105,7 +105,7 @@ const segment = computed<SidebarPanel>({ get: () => layout.sidebarPanel.value, s
 const segmentOptions = computed(() => [
     { label: `Files`, value: `files` as const, title: `Browse the workspace files` },
     { label: `Changes`, value: `changes` as const, title: `Review uncommitted changes`, badge: changes.count.value },
-    { label: `History`, value: `history` as const, title: `Snapshot timeline` },
+    { label: `Checkpoints`, value: `history` as const, title: `Workspace checkpoints` },
 ]);
 
 const filter = ref(``);

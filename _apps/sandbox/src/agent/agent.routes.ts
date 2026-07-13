@@ -359,8 +359,10 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         record({ type: "turn.completed", ...(usageExtra !== undefined ? { extra: usageExtra } : {}) });
         sniffer.flush();
         // Fire-and-forget workspace snapshot at turn end (aborted turns included) — history must never delay
-        // or fail a turn.
-        services.history.snapshot("turn").catch((error: unknown) => services.logger.warn({ err: error }, "history: turn snapshot failed"));
+        // or fail a turn. The raw prompt (not the enriched request) labels the checkpoint in the user's words.
+        services.history
+            .snapshot("turn", input.prompt)
+            .catch((error: unknown) => services.logger.warn({ err: error }, "history: turn snapshot failed"));
     }
 }
 

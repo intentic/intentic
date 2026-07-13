@@ -66,7 +66,7 @@ const sidebarMode = computed<SidebarPanel>({ get: () => layout.sidebarPanel.valu
 const sidebarModeOptions = computed(() => [
     { label: `Files`, value: `files` as const, title: `Browse the workspace files` },
     { label: `Changes`, value: `changes` as const, title: `Review uncommitted changes`, badge: changes.count.value },
-    { label: `History`, value: `history` as const, title: `Snapshot timeline — restore a previous workspace state` },
+    { label: `Checkpoints`, value: `history` as const, title: `Workspace checkpoints — restore files to any earlier point` },
 ]);
 
 const filter = ref(``);

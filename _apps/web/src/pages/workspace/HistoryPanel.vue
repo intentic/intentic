@@ -2,15 +2,17 @@
 import type { SnapshotChange, SnapshotTrigger, WorkspaceSnapshot } from "@intentic-app/api-contract";
 import { ref } from "vue";
 import { useHistory } from "../../composables/workspace/useHistory";
-import { timeAgo } from "@intentic-app/ui";
+import { type IconName, timeAgo } from "@intentic-app/ui";
 import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
 
-/* The history timeline — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
- * handle, and the Files|Changes|History mode switch): the daemon's auto-captured snapshot timeline of /work.
- * Selecting a snapshot lazy-loads what it changed; a changed file opens a side-by-side diff as a tab in the main
- * editor area (emitted up to Workspace.vue); Restore (two-step confirm) rewrites /work to that point — files
- * created since are removed, secrets and git branches untouched, and a safety snapshot is taken first, so a
- * restore is itself restorable. */
+/* The checkpoint timeline — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the
+ * resize handle, and the Files|Changes|Checkpoints mode switch): the daemon's checkpoints of /work, NOT git
+ * history — agent turns (titled with the turn's prompt), user changes, and restore markers; hidden interval
+ * captures dissolve into the next checkpoint's diff. Selecting a checkpoint lazy-loads everything it changed
+ * since the previous one; a changed file opens a side-by-side diff as a tab in the main editor area (emitted up
+ * to Workspace.vue); Restore (two-step confirm) rewrites /work to that point — files created since are removed,
+ * secrets and git branches untouched, and a safety checkpoint is saved first, so a restore is itself
+ * restorable. */
 
 const { snapshots, error, isLoading, refetch, diff, fileDiff, restore, busy, actionError } = useHistory();
 const emit = defineEmits<{ "open-diff": [payload: DiffTabPayload] }>();
@@ -20,13 +22,14 @@ const changes = ref<readonly SnapshotChange[]>([]);
 const diffLoading = ref(false);
 const confirmRestoreId = ref<string | undefined>(undefined);
 
-const TRIGGER_LABEL: Record<SnapshotTrigger, string> = {
-    turn: `agent turn`,
-    interval: `auto`,
-    manual: `manual`,
-    "pre-restore": `pre-restore`,
-    restore: `restored`,
-    user: `you`,
+// Fallback title + icon per trigger; a snapshot's own label (the turn's prompt) wins as the row title.
+// "interval" never surfaces in the list — the daemon keeps those captures off the timeline.
+const TRIGGER_META: Record<SnapshotTrigger, { title: string; icon: IconName }> = {
+    turn: { title: `Agent turn`, icon: `sparkles` },
+    user: { title: `Your changes`, icon: `user` },
+    "pre-restore": { title: `Before restore`, icon: `shield` },
+    restore: { title: `Restore point`, icon: `undo` },
+    interval: { title: `Auto capture`, icon: `clock` },
 };
 
 const changeLabel = (change: SnapshotChange): string => (change.scope === `root` ? change.path : `${change.scope}/${change.path}`);
@@ -68,7 +71,7 @@ const confirmRestore = (id: string): void => {
 <template>
     <div class="flex min-h-0 flex-1 flex-col">
         <div class="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
-            <span class="text-2xs font-medium uppercase tracking-wide text-subtle">History</span>
+            <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Checkpoints</span>
             <span class="flex-1"></span>
             <Icon name="spinner" v-if="busy" v-tooltip.top="'Working…'" class="text-xs text-muted" spin />
             <button
@@ -76,7 +79,7 @@ const confirmRestore = (id: string): void => {
                 class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                 @click="refetch()"
                 v-tooltip.top="'Refresh'"
-                aria-label="Refresh history"
+                aria-label="Refresh checkpoints"
             >
                 <Icon name="refresh" class="text-xs" :spin="isLoading" />
             </button>
@@ -87,7 +90,7 @@ const confirmRestore = (id: string): void => {
 
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
             <p v-if="snapshots.length === 0" class="px-3 py-2 text-2xs text-subtle">
-                No snapshots yet — the workspace is captured automatically after each agent turn and every minute it changes.
+                No checkpoints yet — one is saved after each agent turn and whenever you change files.
             </p>
             <div v-for="snapshot in snapshots" :key="snapshot.id" class="cv-row border-b border-line/50">
                 <button
@@ -96,9 +99,11 @@ const confirmRestore = (id: string): void => {
                     @click="select(snapshot)"
                 >
                     <Icon class="text-2xs text-subtle" :name="selectedId === snapshot.id ? 'chevron-down' : 'chevron-right'" />
-                    <span class="text-xs text-content">{{ timeAgo(snapshot.at) }}</span>
-                    <span class="rounded border border-line px-1 py-px text-2xs text-muted">{{ TRIGGER_LABEL[snapshot.trigger] }}</span>
-                    <span class="flex-1"></span>
+                    <Icon class="shrink-0 text-2xs text-muted" :name="TRIGGER_META[snapshot.trigger].icon" />
+                    <span class="min-w-0 flex-1 truncate text-xs text-content" :title="snapshot.label">{{
+                        snapshot.label ?? TRIGGER_META[snapshot.trigger].title
+                    }}</span>
+                    <span class="shrink-0 text-2xs text-muted">{{ timeAgo(snapshot.at) }}</span>
                 </button>
 
                 <div v-if="selectedId === snapshot.id" class="pb-1.5 pl-4 pr-2">
@@ -120,7 +125,10 @@ const confirmRestore = (id: string): void => {
 
                     <div class="mt-1.5 flex items-center gap-2">
                         <template v-if="confirmRestoreId === snapshot.id">
-                            <span class="flex-1 text-2xs text-warning">Rewrite the workspace to this point? Files created since are removed.</span>
+                            <span class="flex-1 text-2xs text-warning"
+                                >Rewrite all files to this checkpoint? Files created after it are removed; git branches and secrets are
+                                untouched.</span
+                            >
                             <button
                                 type="button"
                                 class="rounded border border-danger/50 px-2 py-0.5 text-2xs text-danger transition-colors hover:bg-danger/10"
@@ -137,7 +145,7 @@ const confirmRestore = (id: string): void => {
                             :disabled="busy"
                             @click="confirmRestoreId = snapshot.id"
                             v-tooltip.bottom="
-                                'Bring the workspace back to this snapshot. Secrets and git branches are untouched; a safety snapshot is taken first.'
+                                'Bring the workspace back to this checkpoint. Secrets and git branches are untouched; a safety checkpoint is saved first.'
                             "
                         >
                             <Icon name="history" class="mr-1 text-2xs" />Restore

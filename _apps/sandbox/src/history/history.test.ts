@@ -82,7 +82,8 @@ const fakeHistory = async () => {
                 if (head === undefined) {
                     throw new Error("unknown ref");
                 }
-                return out(`${head}\x1f1000\x1fsnapshot snap-1 turn\n`);
+                // -z record: sha␟seconds␟subject␟body, NUL-terminated.
+                return out(`${head}\x1f1000\x1fsnapshot snap-1 turn\x1f\0`);
             default:
                 return out("");
         }
@@ -148,7 +149,7 @@ test("notifyUserWrite debounces a burst of pings into ONE user-triggered snapsho
     } finally {
         vi.useRealTimers();
     }
-    await history.snapshot("manual");
+    await history.snapshot("interval");
     const commits = calls.filter((call) => call.includes("commit-tree"));
     expect(commits).toHaveLength(1);
     expect(commits[0]?.join(" ")).toMatch(/snapshot \S+ user/);
@@ -194,14 +195,24 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     const nestedHead = await sh(intent, "rev-parse", "HEAD");
 
     const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger });
-    const first = await history.snapshot("manual");
+    const first = await history.snapshot("user");
     expect(first).toBeDefined();
 
+    // A hidden interval capture lands between the two visible checkpoints — the turn's diff must span it.
     await writeFile(join(work, "hello.txt"), "two\n");
+    const hidden = await history.snapshot("interval");
+    expect(hidden).toBeDefined();
+
     await writeFile(join(work, "later.txt"), "junk\n");
     await writeFile(join(intent, "deploy.config.ts"), "v2\n");
-    const second = await history.snapshot("manual");
+    const second = await history.snapshot("turn", "  Fix the\n\tgreeting  ");
     expect(second).toBeDefined();
+
+    // Interval captures stay off the timeline and aren't addressable; the turn carries its sanitized label.
+    const listed = await history.list();
+    expect(listed.map((snapshot) => snapshot.id)).not.toContain(hidden);
+    expect(await history.diff(hidden ?? "")).toBeUndefined();
+    expect(listed.find((snapshot) => snapshot.id === second)?.label).toBe("Fix the greeting");
 
     const changes = await history.diff(second ?? "");
     expect(changes).toContainEqual({ scope: "root", path: "hello.txt", status: "modified" });

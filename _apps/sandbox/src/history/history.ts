@@ -17,12 +17,21 @@ import { REPO_ROLES, type WorkspacePaths } from "../workspace/workspace.js";
 // per-scope commits into a single logical "workspace snapshot". A restore rewrites worktree files only — the
 // real repos' HEADs stay put, so the restored-vs-HEAD delta surfaces in the Changes review afterwards
 // (intended: restore is the safety net, commit/discard is the review).
+//
+// The timeline users see is CHECKPOINTS, not raw captures: only turn / user / pre-restore / restore snapshots
+// are listed (turns labeled with the turn's prompt, carried in the commit body), while "interval" captures stay
+// a hidden safety net — the only cover for terminal-made edits, which never ping notifyUserWrite. A visible
+// checkpoint's diff therefore compares against the PREVIOUS VISIBLE checkpoint, not the raw git parent, so
+// hidden captures dissolve into the next checkpoint instead of fragmenting it.
 
 const exec = promisify(execFile);
 
 const SNAPSHOT_INTERVAL_MS = 60_000;
 // Trailing debounce for user-write pings — long enough to coalesce a sequential multi-file drop into one snapshot.
 const USER_WRITE_DEBOUNCE_MS = 2_000;
+// The triggers that surface as timeline checkpoints; "interval" captures are hidden safety sweeps.
+const VISIBLE_TRIGGERS: ReadonlySet<SnapshotTrigger> = new Set(["turn", "user", "pre-restore", "restore"]);
+const MAX_LABEL_LENGTH = 160;
 // git's well-known empty tree — the diff base for a scope's first snapshot (and an unborn HEAD in git/changes.ts).
 export const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 // File contents above this are flagged `truncated` instead of shipped to the diff UI (shared with the git
@@ -78,8 +87,9 @@ export const ROOT_EXCLUDES = ["/repositories/", "/.intentic/", ...COMMON_EXCLUDE
 export interface WorkspaceHistory {
     readonly start: () => void;
     readonly stop: () => void;
-    // Returns the snapshot id, or undefined when nothing changed anywhere since the last snapshot.
-    readonly snapshot: (trigger: SnapshotTrigger) => Promise<string | undefined>;
+    // Returns the snapshot id, or undefined when nothing changed anywhere since the last snapshot. The label
+    // (e.g. a turn's prompt) becomes the checkpoint's timeline title.
+    readonly snapshot: (trigger: SnapshotTrigger, label?: string) => Promise<string | undefined>;
     // Ping from a user-initiated write route (upload / mkdir / delete / move / copy / clone). Trailing-debounced
     // into one snapshot("user") per user gesture, so a 100-file drop is one timeline entry, not a hundred.
     readonly notifyUserWrite: () => void;
@@ -103,6 +113,7 @@ interface ScopeCommit {
     readonly at: number;
     readonly id: string;
     readonly trigger: SnapshotTrigger;
+    readonly label?: string;
 }
 
 const exists = async (path: string): Promise<boolean> => {
@@ -112,6 +123,17 @@ const exists = async (path: string): Promise<boolean> => {
     } catch {
         return false;
     }
+};
+
+// Labels live in commit bodies and come from free-form prompts — collapse to one bounded line so `git log`
+// parsing and the timeline row stay tame.
+const sanitizeLabel = (label: string): string | undefined => {
+    const clean = label
+        .replaceAll(/[\p{Cc}\p{Cf}]+/gu, " ")
+        .replaceAll(/\s+/gu, " ")
+        .trim()
+        .slice(0, MAX_LABEL_LENGTH);
+    return clean === "" ? undefined : clean;
 };
 
 export const createWorkspaceHistory = (
@@ -168,7 +190,7 @@ export const createWorkspaceHistory = (
     };
 
     // One snapshot commit for a scope; undefined when its tree is unchanged.
-    const snapshotScope = async (scope: Scope, id: string, trigger: SnapshotTrigger): Promise<string | undefined> => {
+    const snapshotScope = async (scope: Scope, id: string, trigger: SnapshotTrigger, label: string | undefined): Promise<string | undefined> => {
         await ensureScope(scope);
         await healGitPointer(scope);
         const run = { cwd: scope.worktree, env: scopeEnv(scope) };
@@ -195,6 +217,8 @@ export const createWorkspaceHistory = (
                     ...(prev !== undefined ? ["-p", prev] : []),
                     "-m",
                     `snapshot ${id} ${trigger}`,
+                    // The label rides in the commit body — the subject keeps its fixed 3-word grammar.
+                    ...(label !== undefined ? ["-m", label] : []),
                 ],
                 run,
             )
@@ -232,19 +256,27 @@ export const createWorkspaceHistory = (
     const scopeLog = async (scope: Scope): Promise<ScopeCommit[]> => {
         let stdout: string;
         try {
-            stdout = (await git(["log", "-n", "500", "--format=%H%x1f%ct%x1f%s", "refs/snapshots/head"], bare(scope))).stdout;
+            // -z separates records with NUL — the body (%b) carries the label, which a newline split would shred.
+            stdout = (await git(["log", "-z", "-n", "500", "--format=%H%x1f%ct%x1f%s%x1f%b", "refs/snapshots/head"], bare(scope))).stdout;
         } catch {
             return [];
         }
         const commits: ScopeCommit[] = [];
-        for (const line of stdout.split("\n")) {
-            const [sha, seconds, subject] = line.split("\x1f");
+        for (const record of stdout.split("\0")) {
+            const [sha, seconds, subject, body] = record.split("\x1f");
             const [word, id, trigger] = (subject ?? "").split(" ");
             const parsed = SnapshotTriggerSchema.safeParse(trigger);
             if (sha === undefined || sha === "" || seconds === undefined || word !== "snapshot" || id === undefined || !parsed.success) {
                 continue;
             }
-            commits.push({ sha, at: Number(seconds) * 1000, id, trigger: parsed.data });
+            const label = body?.trim();
+            commits.push({
+                sha,
+                at: Number(seconds) * 1000,
+                id,
+                trigger: parsed.data,
+                ...(label !== undefined && label !== "" ? { label } : {}),
+            });
         }
         return commits;
     };
@@ -254,45 +286,61 @@ export const createWorkspaceHistory = (
         readonly commits: Map<string, string>;
     }
 
-    // groups() runs one `git log` per known scope; list/diff/fileDiff all funnel through it, so a file-diff
-    // click would otherwise re-scan every scope. Cache the result and invalidate only when history changes
-    // (a snapshot that recorded something, or a restore). Both mutators run under the serialize chain.
-    let groupsCache: SnapshotGroup[] | undefined;
+    interface HistoryIndex {
+        // Every snapshot group, newest first — hidden interval captures included (restore/stateAt need them).
+        readonly groups: SnapshotGroup[];
+        // scope name → its full snapshot log, newest first — backs stateAt without re-running `git log`.
+        readonly logs: Map<string, ScopeCommit[]>;
+    }
 
-    const groups = async (): Promise<SnapshotGroup[]> => {
-        if (groupsCache !== undefined) {
-            return groupsCache;
+    // historyIndex() runs one `git log` per known scope; list/diff/fileDiff/restore all funnel through it, so a
+    // file-diff click would otherwise re-scan every scope. Cache the result and invalidate only when history
+    // changes (a snapshot that recorded something, or a restore). Both mutators run under the serialize chain.
+    let indexCache: HistoryIndex | undefined;
+
+    const historyIndex = async (): Promise<HistoryIndex> => {
+        if (indexCache !== undefined) {
+            return indexCache;
         }
-        const byId = new Map<string, { at: number; trigger: SnapshotTrigger; commits: Map<string, string> }>();
+        const logs = new Map<string, ScopeCommit[]>();
+        const byId = new Map<string, { id: string; at: number; trigger: SnapshotTrigger; label?: string; commits: Map<string, string> }>();
         for (const scope of await knownScopes()) {
-            for (const commit of await scopeLog(scope)) {
-                const group = byId.get(commit.id) ?? { at: commit.at, trigger: commit.trigger, commits: new Map<string, string>() };
+            const log = await scopeLog(scope);
+            logs.set(scope.name, log);
+            for (const commit of log) {
+                const group = byId.get(commit.id) ?? {
+                    id: commit.id,
+                    at: commit.at,
+                    trigger: commit.trigger,
+                    ...(commit.label !== undefined ? { label: commit.label } : {}),
+                    commits: new Map<string, string>(),
+                };
                 group.at = Math.max(group.at, commit.at);
                 group.commits.set(scope.name, commit.sha);
                 byId.set(commit.id, group);
             }
         }
-        groupsCache = [...byId.entries()]
-            .map(([id, group]) => ({
-                id,
-                at: group.at,
-                trigger: group.trigger,
-                scopes: [...group.commits.keys()].toSorted(),
-                commits: group.commits,
-            }))
-            .toSorted((a, b) => b.at - a.at);
-        return groupsCache;
+        indexCache = { groups: [...byId.values()].toSorted((a, b) => b.at - a.at), logs };
+        return indexCache;
     };
 
-    const findGroup = async (id: string): Promise<SnapshotGroup | undefined> => (await groups()).find((group) => group.id === id);
+    // The checkpoint timeline — what list/diff/restore expose; interval captures never surface here.
+    const visibleGroups = async (): Promise<SnapshotGroup[]> =>
+        (await historyIndex()).groups.filter((group) => VISIBLE_TRIGGERS.has(group.trigger));
 
-    // Parent of a scope's snapshot commit — the empty tree for the first one.
-    const parentOf = async (scope: Scope, sha: string): Promise<string> => (await revParse(scope, `${sha}^`)) ?? EMPTY_TREE;
+    const findGroup = async (id: string): Promise<SnapshotGroup | undefined> => (await visibleGroups()).find((group) => group.id === id);
+
+    // The checkpoint a visible group is diffed against — undefined for the oldest (⇒ the empty tree).
+    const previousVisible = async (group: SnapshotGroup): Promise<SnapshotGroup | undefined> => {
+        const visible = await visibleGroups();
+        const position = visible.findIndex((candidate) => candidate.id === group.id);
+        return visible[position + 1];
+    };
 
     // A scope's commit at-or-before a snapshot group's moment: its own commit in that group, else the most recent
     // earlier one (a scope only appears in the groups where it changed). undefined ⇒ the scope didn't exist yet.
     const stateAt = async (scope: Scope, group: SnapshotGroup): Promise<string | undefined> =>
-        group.commits.get(scope.name) ?? (await scopeLog(scope)).find((commit) => commit.at <= group.at)?.sha;
+        group.commits.get(scope.name) ?? ((await historyIndex()).logs.get(scope.name) ?? []).find((commit) => commit.at <= group.at)?.sha;
 
     const STATUS_BY_LETTER: Record<string, SnapshotChange["status"]> = { A: "added", M: "modified", D: "deleted", T: "type-changed" };
 
@@ -338,13 +386,14 @@ export const createWorkspaceHistory = (
         return next;
     };
 
-    const snapshotAll = async (trigger: SnapshotTrigger): Promise<string | undefined> => {
+    const snapshotAll = async (trigger: SnapshotTrigger, label?: string): Promise<string | undefined> => {
         await mkdir(scopesRoot, { recursive: true });
         const id = randomUUID();
+        const cleanLabel = label !== undefined ? sanitizeLabel(label) : undefined;
         let changed = false;
         for (const scope of await liveScopes()) {
             try {
-                if ((await snapshotScope(scope, id, trigger)) !== undefined) {
+                if ((await snapshotScope(scope, id, trigger, cleanLabel)) !== undefined) {
                     changed = true;
                 }
             } catch (error) {
@@ -352,7 +401,7 @@ export const createWorkspaceHistory = (
             }
         }
         if (changed) {
-            groupsCache = undefined;
+            indexCache = undefined;
         }
         return changed ? id : undefined;
     };
@@ -387,12 +436,12 @@ export const createWorkspaceHistory = (
         }
         // Record the restore point; history is append-only, never rewound.
         await snapshotAll("restore");
-        groupsCache = undefined;
+        indexCache = undefined;
     };
 
     let timer: NodeJS.Timeout | undefined;
     let userWriteTimer: NodeJS.Timeout | undefined;
-    const snapshot = (trigger: SnapshotTrigger): Promise<string | undefined> => serialize(() => snapshotAll(trigger));
+    const snapshot = (trigger: SnapshotTrigger, label?: string): Promise<string | undefined> => serialize(() => snapshotAll(trigger, label));
 
     return {
         start: () => {
@@ -426,16 +475,29 @@ export const createWorkspaceHistory = (
             }, USER_WRITE_DEBOUNCE_MS);
             userWriteTimer.unref();
         },
-        list: async () => (await groups()).map(({ id, at, trigger, scopes }) => ({ id, at, trigger, scopes })),
+        list: async () =>
+            (await visibleGroups()).map(({ id, at, trigger, label }) =>
+                label !== undefined ? { id, at, trigger, label } : { id, at, trigger },
+            ),
+        // A checkpoint's diff spans everything since the previous visible checkpoint — hidden interval captures
+        // in between are the point of the base choice, not an accident.
         diff: async (id) => {
             const group = await findGroup(id);
             if (group === undefined) {
                 return undefined;
             }
+            const base = await previousVisible(group);
             const changes: SnapshotChange[] = [];
-            for (const [name, sha] of group.commits) {
-                const scope = scopeOf(name);
-                changes.push(...(await scopeDiff(scope, await parentOf(scope, sha), sha)));
+            for (const scope of await knownScopes()) {
+                const to = await stateAt(scope, group);
+                if (to === undefined) {
+                    continue;
+                }
+                const from = base !== undefined ? await stateAt(scope, base) : undefined;
+                if (from === to) {
+                    continue;
+                }
+                changes.push(...(await scopeDiff(scope, from ?? EMPTY_TREE, to)));
             }
             return changes;
         },
@@ -445,12 +507,14 @@ export const createWorkspaceHistory = (
                 return undefined;
             }
             const scope = scopeOf(scopeName);
-            const sha = group.commits.get(scopeName);
-            if (sha === undefined) {
+            const to = await stateAt(scope, group);
+            if (to === undefined) {
                 return undefined;
             }
-            const before = await fileAt(scope, await parentOf(scope, sha), path);
-            const after = await fileAt(scope, sha, path);
+            const base = await previousVisible(group);
+            const from = base !== undefined ? await stateAt(scope, base) : undefined;
+            const before = from !== undefined ? await fileAt(scope, from, path) : undefined;
+            const after = await fileAt(scope, to, path);
             return {
                 ...(before?.content !== undefined ? { before: before.content } : {}),
                 ...(after?.content !== undefined ? { after: after.content } : {}),

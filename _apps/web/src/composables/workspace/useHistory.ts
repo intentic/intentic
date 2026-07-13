@@ -5,10 +5,10 @@ import { sandboxJson } from "../sandboxClient";
 import { resetEditBuffers } from "./useEditBuffers";
 import { sandboxKey, useSandbox } from "../useSandbox";
 
-/* Workspace history: the daemon's auto-captured snapshots of /work (per agent turn + a periodic sweep), read
- * DIRECTLY from the sandbox like the workspace tree. The list is vue-query cached; diff/fileDiff stay
- * imperative (the panel loads them on demand). Restore rewrites /work on the daemon, so it refreshes the
- * snapshots, the tree, and drops stale edit buffers. */
+/* Workspace history: the daemon's checkpoints of /work (agent turns labeled with the prompt, user changes,
+ * restore markers — hidden interval captures never listed), read DIRECTLY from the sandbox like the workspace
+ * tree. The list is vue-query cached; diff/fileDiff stay imperative (the panel loads them on demand). Restore
+ * rewrites /work on the daemon, so it refreshes the snapshots, the tree, and drops stale edit buffers. */
 
 const busy = ref(false);
 const actionError = ref<string | undefined>(undefined);
