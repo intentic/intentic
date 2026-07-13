@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, formatBytes, Icon, InfoHint, Page, Segmented, timeAgo } from "@intentic/extension-ui";
+import { cmp, Code, formatBytes, Icon, InfoHint, Page, Segmented, timeAgo } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { useLogs, useLogTail } from "./useLogs";
 
@@ -15,10 +15,35 @@ const bytesChoice = ref(`65536`);
 const bytes = computed(() => Number(bytesChoice.value));
 const { tail, error: tailError, isLoading: tailLoading } = useLogTail(selected, bytes);
 
-// Group the flat file list by its top-level dir so terminals / intentic-runs / daemon.log read as sections.
+// Datetime filter over the FILE LIST (by mtime). Presets cover the common recent windows; an optional custom
+// range (native datetime-local, browser-local -> epoch ms) overrides the preset when a `from` is set. Only the
+// file-level modifiedAt is filterable — the log text carries no per-line timestamps.
+const PRESET_MS = new Map<string, number>([
+    [`1h`, 3_600_000],
+    [`24h`, 86_400_000],
+    [`7d`, 604_800_000],
+]);
+const windowChoice = ref(`all`);
+const customFrom = ref(``);
+const customTo = ref(``);
+const parseLocal = (value: string): number | undefined => {
+    const ms = new Date(value).getTime();
+    return Number.isNaN(ms) ? undefined : ms;
+};
+const range = computed(() => {
+    const from = parseLocal(customFrom.value);
+    if (from !== undefined) {
+        return { since: from, until: parseLocal(customTo.value) ?? Infinity };
+    }
+    const span = PRESET_MS.get(windowChoice.value);
+    return { since: span === undefined ? -Infinity : Date.now() - span, until: Infinity };
+});
+const filteredFiles = computed(() => files.value.filter((file) => file.modifiedAt >= range.value.since && file.modifiedAt <= range.value.until));
+
+// Group the filtered file list by its top-level dir so terminals / intentic-runs / daemon.log read as sections.
 const groups = computed(() => {
     const byGroup = new Map<string, typeof files.value>();
-    for (const file of files.value) {
+    for (const file of filteredFiles.value) {
         const group = file.name.includes(`/`) ? file.name.split(`/`)[0]! : `daemon`;
         byGroup.set(group, [...(byGroup.get(group) ?? []), file]);
     }
@@ -54,7 +79,23 @@ watch(tail, () => {
 
             <div class="flex min-h-0 flex-col gap-4">
                 <section class="rounded-lg border border-line bg-card p-4">
-                    <h3 :class="cmp.sectionLabel('mb-3')">Files</h3>
+                    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                        <h3 :class="cmp.sectionLabel()">Files</h3>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <Segmented
+                                v-model="windowChoice"
+                                size="xs"
+                                :options="[
+                                    { label: `1h`, value: `1h` },
+                                    { label: `24h`, value: `24h` },
+                                    { label: `7d`, value: `7d` },
+                                    { label: `All`, value: `all` },
+                                ]"
+                            />
+                            <input v-model="customFrom" type="datetime-local" title="Modified after" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
+                            <input v-model="customTo" type="datetime-local" title="Modified before" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
+                        </div>
+                    </div>
                     <div v-for="group in groups" :key="group.title" class="mb-2">
                         <p class="mb-1 font-mono text-2xs uppercase text-subtle/70">{{ group.title }}</p>
                         <div class="flex flex-col divide-y divide-line">
@@ -78,6 +119,9 @@ watch(tail, () => {
                     <p v-if="files.length === 0 && !isLoading" class="py-6 text-center text-sm text-muted">
                         Nothing yet. Logs appear as terminals run, infra commands execute, and the daemon works.
                     </p>
+                    <p v-else-if="files.length > 0 && filteredFiles.length === 0" class="py-6 text-center text-sm text-muted">
+                        No files match this time range.
+                    </p>
                 </section>
 
                 <section v-if="selected" class="rounded-lg border border-line bg-card p-4">
@@ -98,10 +142,8 @@ watch(tail, () => {
                     <div v-if="tailError" :class="cmp.alertDanger('mb-2')">
                         {{ tailError }}
                     </div>
-                    <div ref="pane" class="max-h-128 overflow-auto rounded bg-surface p-3">
-                        <pre class="whitespace-pre-wrap wrap-break-word font-mono text-xs text-muted">{{
-                            tail?.text ?? (tailLoading ? `Loading…` : ``)
-                        }}</pre>
+                    <div ref="pane" class="max-h-128 overflow-auto">
+                        <Code :code="tail?.text ?? (tailLoading ? `Loading…` : ``)" :wrap="true" :copyable="false" />
                     </div>
                 </section>
             </div>

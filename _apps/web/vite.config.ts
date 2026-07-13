@@ -30,6 +30,8 @@ export default defineConfig({
         alias: {
             "@intentic-app/ui": here("../../_libs/ui/src/index.ts"),
             "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
+            "@intentic/sandbox-contract": here("../../_libs/sandbox-contract/src/index.ts"),
+            "@intentic/extension-api": here("../../_libs/extension-api/src/index.ts"),
             ...extensionAliases,
         },
     },

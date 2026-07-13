@@ -24,6 +24,37 @@ type ShikiCore = Awaited<ReturnType<ReturnType<typeof useHighlighter>[`ensureCor
 
 const shikiTheme = (): string => (useTheme().scheme.value === `dark` ? `dark-plus` : `light-plus`);
 
+// Monaco theme colors must be concrete #rrggbb strings — they can't reference the app's oklch() vars, and
+// browsers now serialize a computed color back as oklch()/color() rather than rgb(). Resolve --color-canvas
+// through a color-property probe (a custom property would serialize back unresolved), then rasterize that
+// value on a 1×1 canvas and read the sRGB bytes — format-agnostic, so it survives whatever string the
+// browser hands back. Read live, so it reflects the active data-mode + data-theme.
+const resolveEditorBg = (): string => {
+    const probe = document.createElement(`span`);
+    probe.style.color = `var(--color-canvas)`;
+    document.body.appendChild(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    const ctx = document.createElement(`canvas`).getContext(`2d`)!;
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r = 0, g = 0, b = 0] = ctx.getImageData(0, 0, 1, 1).data;
+    const channel = (n: number): string => n.toString(16).padStart(2, `0`);
+    return `#${channel(r)}${channel(g)}${channel(b)}`;
+};
+
+// Pull the editor surface off Shiki dark-plus's stock #1E1E1E and onto the app's canvas token, so the
+// code area is the deepest surface (a step below the bg-card chrome) in the active brand's tone. Mutating
+// the theme's colors map before the bridge runs bakes the bg into the Monaco theme it defines. Only the two
+// Monaco-scoped surface keys are touched — theme.bg/fg and token colors are untouched, so the shared <Code>
+// HTML highlighter is unaffected.
+const patchEditorSurface = (core: NonNullable<ShikiCore>): void => {
+    const bg = resolveEditorBg();
+    const colors = (core.getTheme(shikiTheme()).colors ??= {});
+    colors[`editor.background`] = bg;
+    colors[`editorGutter.background`] = bg;
+};
+
 let ready: Promise<typeof Monaco> | undefined;
 let bridge: ShikiToMonaco | undefined;
 // Grammars already registered with Monaco + bridged, so re-opening the same language is a no-op.
@@ -33,6 +64,7 @@ const bridged = new Set<string>();
 // the first loaded theme (light-plus) on every call, so re-apply ours right after — otherwise opening a new
 // language would flip a dark editor back to light.
 const applyBridge = (monaco: typeof Monaco, core: NonNullable<ShikiCore>): void => {
+    patchEditorSurface(core);
     bridge?.(core, monaco);
     monaco.editor.setTheme(shikiTheme());
 };
@@ -47,9 +79,13 @@ const init = async (): Promise<typeof Monaco> => {
     bridge = (await import(`@shikijs/monaco`)).shikiToMonaco;
     // Bridge with no grammars yet — it still defines light-plus/dark-plus and patches setTheme, so even a
     // plaintext (unsupported / oversized) file renders with the right theme background. Grammars register lazily.
-    applyBridge(monaco, await useHighlighter().ensureCore());
-    // One active theme at a time — flip it whenever the app scheme changes (module-lifetime watcher).
-    watch(useTheme().scheme, () => monaco.editor.setTheme(shikiTheme()));
+    const core = await useHighlighter().ensureCore();
+    applyBridge(monaco, core);
+    // One active theme at a time. Re-run the bridge (not a bare setTheme) on a scheme OR brand-theme change,
+    // so the editor background is re-resolved from --color-canvas and re-baked into the now-active theme —
+    // keeping the editor on the canvas token across light/dark and brand switches (module-lifetime watcher).
+    const { scheme, theme } = useTheme();
+    watch([scheme, theme], () => applyBridge(monaco, core));
     return monaco;
 };
 
