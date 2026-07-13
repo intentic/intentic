@@ -12,12 +12,27 @@ const XAI_CHAT_URL = `${XAI_BASE}/chat/completions`;
 // return nothing. It never runs inference — xAI rejects the unknown id before generating.
 const PROBE_MODEL = "intentic-model-probe";
 
+// The never-empty floor for xaiModels(): served only when live discovery yields nothing AND no last-known-good
+// catalog was persisted (a fresh, offline, or expired-token daemon). These are stable Grok family names; if the
+// account actually wants a dated variant (e.g. grok-4.20-0309-reasoning), the first turn's "Did you mean"
+// rejection self-heals the pinned model AND records the real catalog (see grok-agent's runner). So a stale seed
+// costs at most one silent server-side retry — never a user-visible bounce.
+export const SEED_XAI_MODELS: readonly string[] = ["grok-4", "grok-3"];
+
 const authHeader = (accessToken: string): Record<string, string> => ({ authorization: `Bearer ${accessToken}` });
+
+// A raw xAI model id → a display label matching the other providers' polish (grok-4-fast → "Grok 4 Fast"),
+// instead of surfacing the bare id. Title-cases the hyphen-split tokens; dotted/dated segments pass through.
+export const humanizeModelId = (id: string): string =>
+    id
+        .split("-")
+        .map((token) => (token === "" ? token : token[0]!.toUpperCase() + token.slice(1)))
+        .join(" ");
 
 // xAI's generic /v1/models lists media-generation models (image/video — e.g. grok-imagine-video, grok-2-image)
 // alongside chat models, but those 400 on the chat endpoint ("… is a video model …"). Keep only chat/coding ids.
 // "vision" chat models (image INPUT, text output — e.g. grok-2-vision) don't match, so they're correctly kept.
-const isChatModel = (id: string): boolean => !/imagine|image|video/i.test(id);
+export const isChatModel = (id: string): boolean => !/imagine|image|video/i.test(id);
 
 // GET an OpenAI/xAI model-list endpoint ({ data: [{id}] }, or xAI's { models: [{id}] }); [] on non-ok/parse error.
 const getModelList = async (url: string, accessToken: string, fetchImpl: typeof fetch): Promise<{ id: string; label: string }[]> => {

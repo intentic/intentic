@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import type { OpencodeClient } from "@opencode-ai/sdk";
 import { grokContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -16,13 +17,17 @@ const grokAccount = { id: XAI, label: "Grok", connectedAt: 0 };
 const isDeviceMethod = (label: string): boolean => /headless|device|remote|vps/i.test(label);
 
 // OpenCode's provider.oauth.callback is a SINGLE poll of the device token endpoint (true once approved, false
-// while pending) — it doesn't loop. So drive the RFC 8628 poll ourselves until the user approves or the code
-// expires (~15 min). Detached from the `start` response; the UI polls /grok/accounts for the connected flip.
-// ponytail: a superseding `start` leaves this loop polling an expired code until its deadline — harmless.
-const pollDeviceApproval = async (client: OpencodeClient, method: number): Promise<void> => {
+// while pending) — it doesn't loop. So drive the RFC 8628 poll ourselves until the user approves, the code
+// expires (~15 min), or a superseding `start` aborts us. Detached from the `start` response; the UI polls
+// /grok/accounts for the connected flip.
+const pollDeviceApproval = async (client: OpencodeClient, method: number, signal: AbortSignal): Promise<void> => {
     const deadline = Date.now() + 15 * 60_000;
-    while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 5_000));
+    while (Date.now() < deadline && !signal.aborted) {
+        try {
+            await sleep(5_000, undefined, { signal });
+        } catch {
+            return; // superseded by a newer sign-in — stop polling the now-expired code
+        }
         try {
             if ((await client.provider.oauth.callback({ path: { id: XAI }, body: { method } })).data === true) {
                 return;
@@ -39,6 +44,8 @@ const pollDeviceApproval = async (client: OpencodeClient, method: number): Promi
 // connection view; `disconnect` clears the stored tokens.
 export const createGrokRoutes = (services: Services) => {
     const i = implement(grokContract).$context<OrpcContext>();
+    // A superseding sign-in aborts the previous device poll so it stops hammering the now-expired code.
+    let pollController: AbortController | undefined;
     return {
         start: i.start.handler(async () => {
             const client = await services.openCode.client();
@@ -56,7 +63,9 @@ export const createGrokRoutes = (services: Services) => {
             // The device grant has no paste-back: the URL is xAI's verification_uri_complete with the code
             // pre-filled (`?user_code=…`). Drive the poll-to-completion loop in the background (awaited nowhere);
             // the UI polls /grok/accounts until connected.
-            void pollDeviceApproval(client, method);
+            pollController?.abort();
+            pollController = new AbortController();
+            void pollDeviceApproval(client, method, pollController.signal);
             // Surface the code the URL pre-fills (the single source of truth) so the card matches x.ai exactly —
             // `instructions` has been observed to carry a different/stale code. Fall back to it only if absent.
             const code = new URL(authorization.url).searchParams.get("user_code") ?? authorization.instructions;

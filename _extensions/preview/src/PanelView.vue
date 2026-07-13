@@ -22,11 +22,17 @@ const actionError = ref<string | undefined>(undefined);
 const previewSrc = ref<string | undefined>(undefined);
 // True after ~30s of failed probes — surfaces the "DNS may still be propagating" hint.
 const probeSlow = ref(false);
+// True once the probe gives up (past PROBE_GIVE_UP_MS) — surfaces a terminal, retryable message instead of
+// polling a never-resolving preview host forever.
+const probeFailed = ref(false);
 // Bumped to cancel an in-flight probe loop (repo switch, panel stop, unmount).
 let probeGeneration = 0;
 
 const PROBE_INTERVAL_MS = 3000;
 const PROBE_SLOW_AFTER_MS = 30_000;
+// Absolute cap so a never-resolving preview host isn't polled forever — generous, since a first start can
+// legitimately take a minute for the address to propagate.
+const PROBE_GIVE_UP_MS = 180_000;
 
 // Hand the browser the hostname only once a fetch proves it resolves: `no-cors` resolves on ANY HTTP response
 // and rejects only on DNS/socket failure — exactly the needed signal, since a freshly-minted DNS record can
@@ -34,13 +40,23 @@ const PROBE_SLOW_AFTER_MS = 30_000;
 const probeUntilReachable = async (url: string, src: string): Promise<void> => {
     const generation = ++probeGeneration;
     probeSlow.value = false;
+    probeFailed.value = false;
     const startedAt = Date.now();
     for (;;) {
         try {
             await fetch(url, { mode: `no-cors`, cache: `no-store` });
             break;
         } catch {
-            probeSlow.value = Date.now() - startedAt > PROBE_SLOW_AFTER_MS;
+            const elapsed = Date.now() - startedAt;
+            probeSlow.value = elapsed > PROBE_SLOW_AFTER_MS;
+            // Give up rather than poll a never-resolving preview host forever — surface a terminal, retryable
+            // state. (The generation guard already stops us on repo switch / stop / unmount.)
+            if (elapsed > PROBE_GIVE_UP_MS) {
+                if (generation === probeGeneration) {
+                    probeFailed.value = true;
+                }
+                return;
+            }
             await new Promise((resolve) => setTimeout(resolve, PROBE_INTERVAL_MS));
         }
         if (generation !== probeGeneration) {
@@ -84,6 +100,7 @@ watch(repo, () => {
     probeGeneration += 1;
     previewSrc.value = undefined;
     probeSlow.value = false;
+    probeFailed.value = false;
 });
 onUnmounted(() => {
     probeGeneration += 1;
@@ -179,6 +196,12 @@ watch(
                 :title="`${repo} preview`"
                 class="h-full w-full flex-1 bg-white"
             ></iframe>
+            <div v-else-if="panel.running && probeFailed" class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+                <Icon name="exclamation-triangle" class="text-muted" />
+                <p class="text-sm text-muted">The preview address didn't come up.</p>
+                <p class="text-2xs text-subtle">The dev server may still be starting — Terminals shows it live.</p>
+                <Button label="Retry" size="small" @click="resolvePreview()" />
+            </div>
             <div v-else-if="panel.running" class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
                 <Icon name="spinner" class="text-muted" spin />
                 <p class="text-sm text-muted">Preparing the preview…</p>

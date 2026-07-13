@@ -9,4 +9,5 @@
 - Use early returns – handle edge cases first.
 
 ---
-For more context, check the platform product at ../platform (same monorepo)
+For the full architecture — the deployment engine, the app plane (web/api/sandbox), the extension
+system, and the iq/lsp dependency islands — see [ARCHITECTURE.md](./ARCHITECTURE.md).

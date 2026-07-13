@@ -30,5 +30,27 @@
         "**/assets/js/env.js",
         "_apps/web/public/ext-shims",
         "_apps/sandbox/operator-templates"
+    ],
+    "overrides": [
+        {
+            "files": ["_extensions/**"],
+            "rules": {
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "patterns": [
+                            {
+                                "group": ["@intentic/*", "!@intentic/extension-api", "!@intentic/extension-ui", "!@intentic/sandbox-contract"],
+                                "message": "Extensions may depend only on @intentic/extension-api, @intentic/extension-ui, and @intentic/sandbox-contract — the extension SDK + the shared wire contract. Reaching any other @intentic/* package couples the extension to app/engine internals. See _extensions/README.md."
+                            },
+                            {
+                                "group": ["@intentic-app/*", "**/_apps/**", "**/_libs/**"],
+                                "message": "Extensions must not reach the app plane (@intentic-app/*) or app/lib internals. Use @intentic/extension-ui for UI and @intentic/sandbox-contract for wire types. See _extensions/README.md."
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
     ]
 }

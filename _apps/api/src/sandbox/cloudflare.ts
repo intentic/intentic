@@ -338,6 +338,10 @@ const tunnelSchema = z.object({
 // total_pages (unlike /zones), so paginate by page-size: keep going while a page comes back full, stop on the
 // first short page — the reaper exists precisely for accounts with more tunnels than one page holds.
 const PER_PAGE = 50;
+// Defensive cap: cfd_tunnel pagination has no total_pages, so we stop on the first short page — but a `page`-
+// ignoring API bug that kept returning full pages would otherwise sweep forever. 200 pages (10k tunnels) is far
+// above any real account; the reaper keeps the true count small.
+const MAX_TUNNEL_PAGES = 200;
 const listTunnels = async (apiToken: string, accountId: string): Promise<z.infer<typeof tunnelSchema>[]> => {
     const tunnels: z.infer<typeof tunnelSchema>[] = [];
     let page = 1;
@@ -364,7 +368,10 @@ const listTunnels = async (apiToken: string, accountId: string): Promise<z.infer
         tunnels.push(...parsed);
         pageCount = parsed.length;
         page += 1;
-    } while (pageCount === PER_PAGE);
+    } while (pageCount === PER_PAGE && page <= MAX_TUNNEL_PAGES);
+    if (pageCount === PER_PAGE) {
+        throw new Error(`Cloudflare GET /cfd_tunnel still returned full pages at page ${MAX_TUNNEL_PAGES} — refusing to sweep further (the API may be ignoring the page param).`);
+    }
     return tunnels;
 };
 

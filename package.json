@@ -12,6 +12,7 @@
         "test": "turbo run test",
         "lint": "oxlint --deny-warnings",
         "lint:fix": "oxlint --fix",
+        "knip": "knip",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "check": "pnpm build && pnpm lint && pnpm format:check",

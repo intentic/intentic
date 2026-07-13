@@ -183,6 +183,8 @@ const services = (overrides: Partial<Services> = {}): Services => ({
             hashlineEdits: false,
             terseOutput: false,
             outputCleaners: "",
+            outputHoldout: 0,
+            filterBackend: "native" as const,
         }),
         set: async () => {},
     },

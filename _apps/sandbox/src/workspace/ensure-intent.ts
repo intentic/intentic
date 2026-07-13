@@ -16,9 +16,21 @@ const require = createRequire(import.meta.url);
 // direct deps of @intentic/sandbox exactly so this resolves — in the image from /opt/sandbox/node_modules, in
 // local `pnpm dev` from the _libs symlinks.
 const packageRoot = (pkg: string): string => {
-    let dir = dirname(require.resolve(pkg));
-    while (!existsSync(join(dir, "package.json"))) dir = dirname(dir);
-    return dir;
+    const entry = require.resolve(pkg);
+    // Walk up from the resolved entry to its package root, stopping at the filesystem root. The resolve→root
+    // invariant holds for a normally-installed package, but a broken/partial dev symlink could otherwise send
+    // this synchronous loop past the root forever (dirname("/") === "/") and peg the daemon event loop — so
+    // fail loudly at the root instead of spinning.
+    for (let dir = dirname(entry); ; ) {
+        if (existsSync(join(dir, "package.json"))) {
+            return dir;
+        }
+        const parent = dirname(dir);
+        if (parent === dir) {
+            throw new Error(`no package.json above ${entry} for "${pkg}"`);
+        }
+        dir = parent;
+    }
 };
 
 // The dependency spec for an @intentic/* package the intent repo needs. A released image carries a published

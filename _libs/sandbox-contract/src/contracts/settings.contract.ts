@@ -1,9 +1,11 @@
 import { oc } from "@orpc/contract";
-import { OkSchema, SandboxSettingsSchema } from "../schemas.js";
+import { CleanerSavingsSchema, OkSchema, SandboxSettingsSchema } from "../schemas.js";
 
 // Per-sandbox agent settings (.intentic/settings.json). `get` returns the current flags with defaults applied
-// when the file is absent; `set` overwrites them. Today: whether the agent may search this sandbox's past chats.
+// when the file is absent; `set` overwrites them. `savings` reports the output-cleaner token savings aggregated
+// from the live filter-stats ledger (the rtk-`gain` surface — read-only, so a UI card can show what's working).
 export const settingsContract = {
     get: oc.route({ method: "GET", path: "/settings" }).output(SandboxSettingsSchema),
     set: oc.route({ method: "POST", path: "/settings" }).input(SandboxSettingsSchema).output(OkSchema),
+    savings: oc.route({ method: "GET", path: "/settings/savings" }).output(CleanerSavingsSchema),
 };

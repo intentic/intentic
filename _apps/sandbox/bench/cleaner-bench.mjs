@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import { filterOutput } from "../bin/agent-output-filter.mjs";
 import { parseCleaners } from "../bin/cleaners.mjs";
+import { parseStatsFile, summarizeStats } from "../bin/filter-stats.mjs";
 
 // ~4 chars/token, the same heuristic iq-engine's estimateTokens uses — kept inline so the bench has no build dep.
 const estimateTokens = (text) => Math.ceil(text.length / 4);
@@ -53,6 +54,26 @@ const FIXTURES = [
         exitCode: "1",
         raw: `${[...Array.from({ length: 20 }, (_, i) => `src/ok-${i}.ts building`), "src/broken.ts(12,3): error TS2322: Type 'string' is not assignable to type 'number'.", "src/broken.ts(19,7): error TS2551: Property 'x' does not exist.", "Found 2 errors."].join("\n")}\n`,
     },
+    {
+        name: "tsc --diagnostics (green)",
+        command: "tsc --noEmit --diagnostics",
+        exitCode: "0",
+        raw: `${["(node:4210) ExperimentalWarning: Type Stripping is an experimental feature", "Files:              412", "Lines:            84213", "Check time:         3.10s", "Total time:         4.82s"].join("\n")}\n`,
+    },
+    {
+        name: "ls -lR",
+        command: "ls -lR src",
+        exitCode: "0",
+        // A realistic recursive listing: several dirs, each with a `total N` header and many entries — the size
+        // where stripping the headers + the global head/tail cap actually pays (tiny listings are net-neutral).
+        raw: `${["node_modules:", "total 0", ...Array.from({ length: 40 }, (_, i) => `drwxr-xr-x 3 u u 4096 dep-${i}`), "", "node_modules/.pnpm:", "total 0", ...Array.from({ length: 80 }, (_, i) => `drwxr-xr-x 3 u u 4096 pkg-${i}@1.0.${i}`)].join("\n")}\n`,
+    },
+    {
+        name: "cargo build",
+        command: "cargo build",
+        exitCode: "0",
+        raw: `${[...Array.from({ length: 25 }, (_, i) => `   Compiling crate-${i} v0.1.${i}`), "   Updating crates.io index", "    Finished dev [unoptimized] target(s) in 12.4s"].join("\n")}\n`,
+    },
 ];
 
 // Named configs, mirroring iq-bench: the "off" baseline (filter disabled ⇒ raw) plus cleaner subsets.
@@ -87,29 +108,25 @@ const bench = () => {
 };
 
 // Read a live sandbox's filter-stats.jsonl: report realized savings + high-volume commands no cleaner matched
-// (candidates for a new registry handler — the rtk `discover` idea).
+// (candidates for a new registry handler — the rtk `discover` idea). Uses the shared summarizeStats so the CLI
+// and the daemon's /settings/savings route report the same numbers.
 const discover = (file) => {
-    const rows = readFileSync(file, "utf8")
-        .split("\n")
-        .filter((line) => line.trim() !== "")
-        .map((line) => JSON.parse(line));
-    const rawBytes = rows.reduce((sum, row) => sum + (row.rawBytes ?? 0), 0);
-    const emittedBytes = rows.reduce((sum, row) => sum + (row.emittedBytes ?? 0), 0);
-    const savedPct = rawBytes === 0 ? 0 : Math.round(((rawBytes - emittedBytes) / rawBytes) * 100);
+    const report = summarizeStats(parseStatsFile(readFileSync(file, "utf8")));
+    const measured = report.holdout.measuredSavedPct !== undefined ? ` · holdout-measured ${report.holdout.measuredSavedPct}%` : "";
     process.stdout.write(
-        `commands: ${rows.length} · raw ~${Math.round(rawBytes / 4)} tok → emitted ~${Math.round(emittedBytes / 4)} tok · saved ${savedPct}%\n\n`,
+        `commands: ${report.commands} · raw ~${report.rawTokens} tok → emitted ~${report.emittedTokens} tok · saved ${report.savedPct}%${measured}\n`,
     );
-    const gaps = rows
-        .filter((row) => (row.matched === undefined || row.matched.length === 0) && (row.rawBytes ?? 0) > 2000)
-        .toSorted((a, b) => (b.rawBytes ?? 0) - (a.rawBytes ?? 0))
-        .slice(0, 15);
-    if (gaps.length === 0) {
+    if (report.perCleaner.length > 0) {
+        process.stdout.write(`by cleaner: ${report.perCleaner.map((entry) => `${entry.id} ×${entry.commands}`).join(", ")}\n`);
+    }
+    process.stdout.write("\n");
+    if (report.gaps.length === 0) {
         process.stdout.write("no high-volume un-cleaned commands — every noisy command matched a cleaner.\n");
         return;
     }
     process.stdout.write("high-volume commands with NO matching cleaner (add a handler for these):\n");
-    for (const row of gaps) {
-        process.stdout.write(`  ~${Math.round((row.rawBytes ?? 0) / 4)} tok  ${String(row.command).slice(0, 80)}\n`);
+    for (const gap of report.gaps) {
+        process.stdout.write(`  ~${gap.tokens} tok  ${gap.command}\n`);
     }
 };
 

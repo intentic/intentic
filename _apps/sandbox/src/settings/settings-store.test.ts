@@ -20,6 +20,8 @@ const ALL_OFF: SandboxSettings = {
     hashlineEdits: false,
     terseOutput: false,
     outputCleaners: "",
+    outputHoldout: 0,
+    filterBackend: "native",
 };
 
 test("get defaults to every flag off when the file is absent", async () => {

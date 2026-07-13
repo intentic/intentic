@@ -32,6 +32,25 @@ The **Vue 3 SPA** (Vite + PrimeVue) — the platform's workspace UI. A user sign
 
 ## How to extend
 
-- **New area/page:** add a lazy route in `router/index.ts` under the shell and a `.vue` page in `pages/`; add a rail tile in `WorkspaceShell.vue`.
-- **New sandbox call:** add a daemon route in the intentic/_apps/sandbox daemon, then call it from the browser via `sandboxRequest` (validate the response against an `@intentic-app/api-contract` schema); wrap discrete reads in a `useQuery` composable. Only sign-in + setup go through the platform oRPC client.
-- **New client state:** prefer a composable exposing a module-level `ref`; import it where needed.
+**Default: write an extension, not a shell edit.** A new user-facing feature (a sidebar panel, a file
+viewer, a command) is a contribution to the extension system, not a new page baked into the shell. This is
+the whole point of the lean-core split — see the extension system in [ARCHITECTURE.md](../../ARCHITECTURE.md).
+
+- **New panel / area:** add a first-party extension under [`_extensions/`](../../_extensions) (a
+  `intentic-extension.json` manifest + an `activate` that calls `api.views.register`), and wire it into
+  [src/extension-host/builtins.ts](src/extension-host/builtins.ts). It reaches the daemon only through the
+  routes its manifest declares, and consumes the shared UI slice via `@intentic/extension-ui`. Start from an
+  existing extension (e.g. [`_extensions/logs`](../../_extensions/logs)) as the template.
+- **New file viewer:** contribute a `viewers` entry from an extension (see
+  [`_extensions/viewers`](../../_extensions/viewers)) — the host owns the fetch and hands your component the
+  bytes. Don't add a branch to `FileViewer.vue`.
+- **New sandbox call from an extension:** add the daemon route, declare it in the extension's manifest
+  route allowlist, then call it via `api.sandbox.json` (validate the response against the
+  `@intentic/sandbox-contract` schema). An undeclared route is refused by the host.
+
+**Reserved for core** (edit the shell directly only for these): the editor surfaces themselves
+(`WorkspaceTree`, `CodeView`, `FileViewer`, chat), the router/shell scaffolding in `router/index.ts` /
+`WorkspaceShell.vue`, and the three privileged core view contributions in
+[src/extensions/builtins.ts](src/extensions/builtins.ts) (`infrastructure`, `live-status`, `directory-ui`)
+that are coupled to platform/onboarding internals a clean extension must not reach. New client state for a
+core surface: a composable exposing a module-level `ref`.

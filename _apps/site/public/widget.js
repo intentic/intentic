@@ -6,12 +6,13 @@
 // in a shadow root so it never collides with the host page's CSS. No dependencies, no build step.
 
 // Parse an SSE byte stream into (event, data) frames, tolerating chunk boundaries mid-frame.
-const readSSE = async (body, onFrame) => {
+const readSSE = async (body, onFrame, onActivity) => {
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
     for (;;) {
         const { value, done } = await reader.read();
+        onActivity?.();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         let sep;
@@ -106,6 +107,10 @@ const readSSE = async (body, onFrame) => {
     };
 
     let busy = false;
+    // A half-open daemon stream would park reader.read() forever, wedging the widget (busy/sendBtn stuck, the
+    // finally never reached). Abort the request after IDLE_MS with no bytes; the initial connect is covered too,
+    // and each received chunk re-arms it (via bump below).
+    const IDLE_MS = 30_000;
     const send = async () => {
         const content = input.value.trim();
         if (!content || busy) return;
@@ -115,6 +120,12 @@ const readSSE = async (body, onFrame) => {
         addMsg("user", content);
         history.push({ author: "visitor", content });
 
+        const controller = new AbortController();
+        let idle = setTimeout(() => controller.abort(), IDLE_MS);
+        const bump = () => {
+            clearTimeout(idle);
+            idle = setTimeout(() => controller.abort(), IDLE_MS);
+        };
         let agentEl;
         let agentText = "";
         try {
@@ -122,6 +133,7 @@ const readSSE = async (body, onFrame) => {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({ conversationId, content, history: history.slice(-HISTORY_MAX) }),
+                signal: controller.signal,
             });
             if (!res.ok || !res.body) {
                 const msg = res.status === 429 ? "You're sending messages too fast — please slow down." : "Sorry, something went wrong.";
@@ -139,11 +151,12 @@ const readSSE = async (body, onFrame) => {
                 } else if (event === "error") {
                     addMsg("note", data || "Sorry, something went wrong.");
                 }
-            });
+            }, bump);
             if (agentText) history.push({ author: "agent", content: agentText });
         } catch {
             addMsg("note", "Couldn't reach support. Please try again.");
         } finally {
+            clearTimeout(idle);
             busy = false;
             sendBtn.disabled = false;
             input.focus();

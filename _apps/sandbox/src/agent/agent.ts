@@ -63,6 +63,12 @@ export interface AgentRequest {
     // literal "off" to disable the filter (INTENTIC_RUN_FILTER=0, raw baseline). Empty/undefined ⇒ the filter's
     // all-on default. See settings/outputCleaners + bin/cleaners.mjs.
     readonly outputCleaners?: string;
+    // Measurement control: a fraction [0,1] of commands whose output bypasses cleaning (INTENTIC_OUTPUT_HOLDOUT),
+    // recorded raw so the savings report has a real cleaned-vs-raw baseline. 0/undefined ⇒ no holdout.
+    readonly outputHoldout?: number;
+    // Which cleaner backend compresses the output: "native" (agent-output-filter, default) or "rtk" (the rtk
+    // binary — the PreToolUse hook prefixes `rtk ` and the native filter is turned off). An A/B backend switch.
+    readonly filterBackend?: "native" | "rtk";
     // Extra turn-scoped instructions appended to the claude_code preset system prompt (e.g. the CLI
     // delegation note when Codex/Grok accounts are connected — see agent/delegation.ts).
     readonly systemAppend?: string;
@@ -336,16 +342,22 @@ const errorMessage = (error: unknown, stderr: string): string => {
     return detail ? `${base}: ${detail}` : base;
 };
 
-// Map the outputCleaners setting to the env the Bash output filter reads: "off" disables it wholesale (the raw
-// baseline), a spec selects cleaners, and empty/undefined leaves the filter at its all-on default (no env needed).
-const cleanerEnv = (spec: string | undefined): Record<string, string> => {
-    if (spec === "off") {
+// Map the output-cleaner settings to the env the Bash output filter reads. The rtk backend runs the compression
+// itself (the hook prefixes `rtk `), so the native filter is turned off and the native-only knobs (spec, holdout)
+// don't apply. On the native backend: "off" disables the filter wholesale (raw baseline), a spec selects
+// cleaners, a non-zero holdout bypasses that fraction of commands as a measured control, and empty leaves the
+// filter at its all-on default.
+const cleanerEnv = (request: AgentRequest): Record<string, string> => {
+    if (request.filterBackend === "rtk") {
         return { INTENTIC_RUN_FILTER: "0" };
     }
-    if (spec !== undefined && spec !== "") {
-        return { INTENTIC_OUTPUT_CLEANERS: spec };
+    if (request.outputCleaners === "off") {
+        return { INTENTIC_RUN_FILTER: "0" };
     }
-    return {};
+    return {
+        ...(request.outputCleaners !== undefined && request.outputCleaners !== "" ? { INTENTIC_OUTPUT_CLEANERS: request.outputCleaners } : {}),
+        ...(request.outputHoldout !== undefined && request.outputHoldout > 0 ? { INTENTIC_OUTPUT_HOLDOUT: String(request.outputHoldout) } : {}),
+    };
 };
 
 // Base SDK options shared by both paths.
@@ -371,12 +383,13 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
         // IS_SANDBOX marks the environment as already-sandboxed — which this container is.
         IS_SANDBOX: "1",
         ...(request.oauthToken !== undefined ? { CLAUDE_CODE_OAUTH_TOKEN: request.oauthToken } : {}),
-        // The output-cleaner spec (or the filter-off flag) that the agent's Bash → tmux-run → agent-output-filter reads.
-        ...cleanerEnv(request.outputCleaners),
+        // The output-cleaner spec/holdout (or the filter-off flag) that the agent's Bash → tmux-run → agent-output-filter reads.
+        ...cleanerEnv(request),
     },
     // Run every Bash command inside an `agent-*` tmux session (bin/tmux-run) so the terminal panel can
-    // watch the agent work live. Hooks fire even under bypassPermissions, and for subagents too.
-    ...(tmuxEnabled ? { hooks: bashTmuxHooks() } : {}),
+    // watch the agent work live. Hooks fire even under bypassPermissions, and for subagents too. The rtk
+    // backend rewrites the command to `rtk <cmd>` inside the same wrapper.
+    ...(tmuxEnabled ? { hooks: bashTmuxHooks(request.filterBackend) } : {}),
     ...(request.model !== undefined ? { model: request.model } : {}),
     ...(request.sessionId !== undefined ? { resume: request.sessionId } : {}),
     ...(request.plugins !== undefined ? { plugins: request.plugins.map((path) => ({ type: "local" as const, path })) } : {}),

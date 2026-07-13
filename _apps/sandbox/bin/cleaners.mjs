@@ -1,7 +1,12 @@
 // The output-cleaner registry behind agent-output-filter. Each cleaner has a stable `id`; the active set is a
 // spec (INTENTIC_OUTPUT_CLEANERS) parsed the same way as iq's --features (allow-list / default-minus), so
 // cleaners can be flipped on/off and A/B benchmarked exactly like iq's retrieval stages. Plain .mjs (no build
-// step) — imported by agent-output-filter and unit tests. Kept dependency-free so the filter never breaks.
+// step) — imported by agent-output-filter and unit tests. Kept dependency-free (node builtins only) so the
+// filter never breaks.
+
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 // CSI sequences, OSC sequences (title sets, hyperlinks), and lone two-byte escapes. Always stripped (pure noise).
 // eslint-disable-next-line no-control-regex
@@ -57,11 +62,30 @@ export const COMMAND_CLEANERS = [
         /^PASS\s+\S/, // jest per-file PASS header
         /^\s*[.·]+\s*$/, // pytest/mocha dot progress
     ]),
+    // Typecheck/lint: on green (exit 0), the file:line diagnostics are absent, so what's left is perf/summary
+    // chatter — tsc's --diagnostics timing table and Node's experimental/deprecation warning preambles.
+    // Failures keep everything (command cleaners skip on non-zero exit), so real errors survive.
+    strip("lint", /\b(?:tsc|eslint|biome|ruff|golangci-lint)\b/, [
+        /^(?:Files|Lines|Nodes|Identifiers|Symbols|Types|Instantiations|Memory used|Parse time|Bind time|Check time|Emit time|Total time)\s*:/,
+        /^\(node:\d+\)\s/, // (node:NN) ExperimentalWarning / DeprecationWarning
+    ]),
+    // Directory listings: `ls -l` prints a `total N` block header per directory — pure noise once the entries
+    // follow. (Long listings are still capped by the global `cap` stage.)
+    strip("ls", /\bls\b/, [/^total \d+$/]),
+    // GitHub CLI: `gh pr/issue/run list` prepend a "Showing 30 of 152 …" header that just restates the list.
+    strip("gh", /\bgh\b/, [/^\s*Showing \d+ of \d+ /]),
+    // Build tools: cargo/go emit a line per compiled crate + dependency download — high-volume progress noise on
+    // a successful build. Strip the per-unit chatter; the final `Finished`/binary line survives.
+    strip("build", /\b(?:cargo|go|kubectl)\b/, [
+        /^\s*(?:Compiling|Downloading|Downloaded|Updating|Installing|Blocking) /,
+        /^\s*go: downloading /,
+    ]),
 ];
 
 // The full toggle vocabulary: every command cleaner id, plus the global stages. `dedup` and `redact` have no
-// command match (they run on all output); `cap` is the head/tail truncation.
-export const CLEANERS = [...COMMAND_CLEANERS.map((cleaner) => cleaner.id), "dedup", "cap", "redact"];
+// command match (they run on all output); `cap` is the head/tail truncation; `cache` collapses a command whose
+// output is byte-identical to an earlier run this session (applied in agent-output-filter, which owns the store).
+export const CLEANERS = [...COMMAND_CLEANERS.map((cleaner) => cleaner.id), "dedup", "cap", "redact", "cache"];
 
 // Collapse a run of ≥3 identical consecutive lines to one line + a count marker. Lossless on distinct content —
 // only repetition is dropped — so it's safe on both success output and repeated failure lines (looping traces).
@@ -161,3 +185,63 @@ export const cleanLines = (lines, { command, exitCode, enabled }) => {
 // Which command cleaners actually fired for this command — recorded in filter-stats.jsonl to attribute savings.
 export const matchedCleaners = (command, enabled) =>
     COMMAND_CLEANERS.filter((cleaner) => enabled.has(cleaner.id) && cleaner.match.test(command)).map((cleaner) => cleaner.id);
+
+// ---- `cache` cleaner: collapse a byte-identical repeat of a command's output within one agent session ----
+// Agents re-run the same command (git status, pnpm test, tsc) across a turn; when the cleaned output is identical
+// to a previous run this session, the second one carries no new information. Replace it with a one-liner that
+// points at the reversible retrieval handle — the boost "result cache" idea applied to output tokens. Stateful,
+// so it lives here (agent-output-filter owns the store) rather than in the pure cleanLines pipeline.
+
+// Sentinel the collapse emits; agent-output-filter recognises it to record `cache` in the stat line's `matched`.
+export const CACHE_MARKER = "(output identical to a previous run this session";
+
+const hashText = (text) => createHash("sha1").update(text).digest("hex");
+
+// The per-session key: every command in one SDK session runs in a new tmux window (new pane id), so the pane-log
+// path differs per command — strip the trailing `-<pane>.log` to recover the shared `agent-<id>` session name.
+// undefined ⇒ no stable key (the cache then never hits, which is the safe/fail-open outcome).
+export const sessionKeyFromLog = (logPath) => {
+    if (logPath === undefined || logPath === "") {
+        return undefined;
+    }
+    const base = logPath.split("/").pop() ?? "";
+    const match = base.match(/^(.*)-[^-]+\.log$/);
+    return match !== null && match[1] !== "" ? match[1] : undefined;
+};
+
+// A file-backed store of commandHash → bodyHash under <terminalsDir>/../output-cache/<sessionKey>.json. Read once,
+// rewritten on each miss. Fail-open on any I/O error (a missed collapse never breaks the tool result).
+export const openCacheStore = (terminalsDir, sessionKey) => {
+    const file = join(terminalsDir, "..", "output-cache", `${sessionKey}.json`);
+    let map;
+    try {
+        map = new Map(Object.entries(JSON.parse(readFileSync(file, "utf8"))));
+    } catch {
+        map = new Map();
+    }
+    return {
+        lookup: (key) => map.get(key),
+        record: (key, value) => {
+            map.set(key, value);
+            try {
+                mkdirSync(dirname(file), { recursive: true });
+                writeFileSync(file, JSON.stringify(Object.fromEntries(map)));
+            } catch {
+                // best-effort: a failed write just means the next identical run won't collapse.
+            }
+        },
+    };
+};
+
+// Pure given `store` (an object with lookup/record): on a hit return the collapse marker, else record and pass the
+// body through. Tests inject an in-memory Map-backed store to stay deterministic.
+export const collapseCached = (body, command, store, logPath) => {
+    const commandHash = hashText(command);
+    const bodyHash = hashText(body);
+    if (store.lookup(commandHash) === bodyHash) {
+        const handle = logPath !== undefined && logPath !== "" ? ` · retrieve-output ${logPath}` : "";
+        return { body: `${CACHE_MARKER}${handle})`, cached: true };
+    }
+    store.record(commandHash, bodyHash);
+    return { body, cached: false };
+};

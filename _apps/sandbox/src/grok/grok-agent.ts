@@ -48,10 +48,13 @@ const eventSessionId = (event: Event): string | undefined => {
     }
 };
 
-// A turn with no OpenCode event for this long is treated as stuck and aborted — OpenCode can stall silently
-// (e.g. while building a multimodal request) and emit neither session.idle nor session.error, which would
-// otherwise hang the turn (no `done`) and spin the UI forever.
+// A turn with no OpenCode event for OUR session for this long is treated as stuck and aborted — OpenCode can
+// stall silently (e.g. while building a multimodal request) and emit neither session.idle nor session.error,
+// which would otherwise hang the turn (no `done`) and spin the UI forever.
 const GROK_INACTIVITY_MS = 120_000;
+
+// Hard overall backstop: even if our session keeps dribbling events, one turn must not run forever.
+const GROK_MAX_TURN_MS = 30 * 60_000;
 
 // The production runner: use the shared OpenCode client to create/resume the session, fire the prompt on the
 // xAI provider, and yield the session's events off the global SSE stream. `inactivityMs` is injectable for tests.
@@ -82,12 +85,17 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
         // and close it on exit (it's a per-turn subscription). Both session.idle and session.error are terminal —
         // OpenCode may not send idle after an error.
         const iterator: AsyncIterator<Event> = sse.stream[Symbol.asyncIterator]();
+        // Two independent bounds, measured against wall-clock deadlines rather than a fresh per-read timer: the
+        // inactivity deadline advances only on OUR session's events (a busy sibling session on the shared stream
+        // must not keep a wedged target turn's watchdog from firing), and the turn deadline is a hard backstop.
+        const turnDeadline = Date.now() + GROK_MAX_TURN_MS;
+        let inactivityDeadline = Date.now() + inactivityMs;
         try {
             for (;;) {
                 const next = iterator.next();
                 let timer: ReturnType<typeof setTimeout>;
                 const idle = new Promise<"timeout">((resolve) => {
-                    timer = setTimeout(() => resolve("timeout"), inactivityMs);
+                    timer = setTimeout(() => resolve("timeout"), Math.max(0, Math.min(inactivityDeadline, turnDeadline) - Date.now()));
                 });
                 const result = await Promise.race([next, idle]);
                 clearTimeout(timer!);
@@ -103,6 +111,7 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                 if (eventSessionId(event) !== sessionId) {
                     continue;
                 }
+                inactivityDeadline = Date.now() + inactivityMs;
                 yield event;
                 if (event.type === "session.idle" || event.type === "session.error") {
                     return;

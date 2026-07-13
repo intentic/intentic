@@ -1,5 +1,6 @@
 import { type FileHandle, mkdir, open, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { IntenticLine } from "@intentic/sandbox-contract";
 import { parseIntenticLine } from "./intentic-runner.js";
 
@@ -109,17 +110,14 @@ export async function* tailIntenticEvents(
                 return;
             }
             yield { kind: "heartbeat" };
-            await new Promise<void>((resolve) => {
-                const timer = setTimeout(resolve, 1000);
-                abort.addEventListener(
-                    "abort",
-                    () => {
-                        clearTimeout(timer);
-                        resolve();
-                    },
-                    { once: true },
-                );
-            });
+            // Poll interval, woken immediately on abort. node's timers/promises setTimeout adds then removes its
+            // own abort listener per call, so a long-lived tail can't accumulate listeners on the signal the way
+            // a hand-rolled addEventListener (fired once, never removed) would.
+            try {
+                await sleep(1000, undefined, { signal: abort });
+            } catch {
+                return; // aborted mid-wait — stop tailing (same outcome as the while (!abort.aborted) guard)
+            }
         }
     } finally {
         await handle.close();

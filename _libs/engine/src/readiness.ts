@@ -14,8 +14,11 @@ export const parseDuration = (text: string): number => {
 export const httpProbe: ReadinessProbe = async (url, expectedStatus) => {
     // A connection refused/reset/timeout during warm-up means "not ready yet", not a fatal error — return
     // false so waitReady keeps polling until the deadline rather than throwing on the first failed connect.
+    // Bound each probe (a host that accepts the socket but never sends headers would otherwise stall on
+    // undici's ~5-min default, silently overshooting waitReady's own deadline); an aborted probe is a caught
+    // "not ready yet". Matches the wget -T 10 / AbortSignal.timeout convention used across the providers.
     try {
-        const response = await fetch(url, { method: "GET" });
+        const response = await fetch(url, { method: "GET", signal: AbortSignal.timeout(10_000) });
         return response.status === expectedStatus || response.status < 400;
     } catch {
         return false;

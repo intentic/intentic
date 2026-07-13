@@ -168,6 +168,12 @@ const loop = async (): Promise<void> => {
         try {
             switched = false;
             await stream();
+            // A healthy stream never returns cleanly — it blocks on heartbeats until aborted (→ throw), and a
+            // deliberate switch aborts too (→ catch). So a clean return means the daemon answered then closed
+            // the body without erroring; throttle before reconnecting so a 200-then-immediately-close daemon
+            // can't drive a zero-delay hot-reconnect loop.
+            await wait(backoff);
+            backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
         } catch (error) {
             if (!running) {
                 return;

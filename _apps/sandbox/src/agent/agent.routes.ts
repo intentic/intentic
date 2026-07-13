@@ -237,7 +237,8 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         // workspace's prior sessions (Claude-only — Codex has no equivalent in-process tool seam).
         // stableSystemPrompt keeps the preset system prompt byte-stable so the provider prompt cache survives the
         // turn — the cross-provider delegation note then rides the user message instead of the system prompt.
-        const { searchPastChats, stableSystemPrompt, hashlineEdits, outputCleaners, terseOutput } = await services.sandboxSettings.get();
+        const { searchPastChats, stableSystemPrompt, hashlineEdits, outputCleaners, outputHoldout, filterBackend, terseOutput } =
+            await services.sandboxSettings.get();
         const sdkServers = {
             ...browserServers,
             ...(searchPastChats ? { pastChats: createSessionSearchServer(services.workspace.root, input.sessionId) } : {}),
@@ -296,8 +297,11 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
             // hashlineEdits owns file mutation via the hashline MCP server above, so drop the native Edit/Write
             // from the model's context (native Read stays for viewing images/PDFs).
             ...(hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),
-            // Forward the Bash output-cleaner spec (default "" ⇒ omit ⇒ filter's all-on default).
+            // Forward the Bash output-cleaner spec (default "" ⇒ omit ⇒ filter's all-on default), the holdout
+            // control fraction, and the cleaner backend (default "native" ⇒ omit).
             ...(outputCleaners !== "" ? { outputCleaners } : {}),
+            ...(outputHoldout > 0 ? { outputHoldout } : {}),
+            ...(filterBackend !== "native" ? { filterBackend } : {}),
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
             // Delegation note (when stableSystemPrompt left it here) + terseOutput steer, composed above.
             ...(systemAppend !== undefined ? { systemAppend } : {}),

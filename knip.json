@@ -1,0 +1,51 @@
+{
+    "$schema": "./node_modules/knip/schema.json",
+    "ignore": ["**/dist/**", "**/generated/**", "**/.astro/**", "**/*.d.ts"],
+    "ignoreDependencies": ["tslib"],
+    "ignoreBinaries": ["docker", "docker compose", "ssh", "mutagen", "cloudflared", "rg", "tmux", "psql", "bun"],
+    "workspaces": {
+        ".": {
+            "entry": ["scripts/*.{sh,mjs,ts}", "test/**/*.ts"],
+            "ignore": ["desired-state/**", "intent/**", "examples/**"]
+        },
+        "_apps/web": {
+            "entry": ["src/main.ts", "index.html", "vite.config.ts", "src/**/*.test.ts"]
+        },
+        "_apps/api": {
+            "entry": ["src/main.ts", "src/**/*.test.ts"]
+        },
+        "_apps/sandbox": {
+            "entry": ["src/main.ts", "src/**/*.test.ts"]
+        },
+        "_apps/iq": {
+            "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.ts"]
+        },
+        "_apps/cli": {
+            "entry": ["src/cli.ts", "src/demo.ts", "src/**/*.test.ts"]
+        },
+        "_apps/sync": {
+            "entry": ["src/cli.ts", "src/**/*.test.ts"]
+        },
+        "_apps/lsp": {
+            "entry": ["src/cli.ts", "src/**/*.test.ts"]
+        },
+        "_apps/site": {
+            "entry": ["astro.config.mjs", "src/pages/**/*.{astro,ts}"]
+        },
+        "_extensions/*": {
+            "entry": ["src/index.ts", "src/**/*.test.ts"]
+        },
+        "_libs/iq-engine": {
+            "entry": ["src/index.ts", "scripts/*.mjs", "src/**/*.test.ts"]
+        },
+        "_libs/*": {
+            "entry": ["src/index.ts", "src/**/*.test.ts"]
+        },
+        "_tools/iq-bench": {
+            "entry": ["src/**/*.ts"]
+        },
+        "_tools/e2e": {
+            "entry": ["src/**/*.ts"]
+        }
+    }
+}

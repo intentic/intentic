@@ -138,8 +138,14 @@ export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTrans
 //   outputCleaners    — the Bash output-cleaner spec (agent-output-filter): "" = all cleaners on (default),
 //                        "off" = disable the filter (raw baseline), else an iq-style allow-list / default-minus
 //                        spec ("git,pnpm" = only those; "-cap" = all except). Threaded to the filter via env.
-// The booleans default off and outputCleaners defaults "" (all cleaners on), so a sandbox behaves as before
-// until the owner changes them.
+//   outputHoldout     — measurement control: a fraction [0,1] of Bash commands whose output bypasses cleaning
+//                        (recorded raw as `heldOut`), so the savings report compares a real cleaned-vs-raw
+//                        population instead of an estimate. 0 = no holdout (default).
+//   filterBackend     — which cleaner runs the compression: "native" (agent-output-filter, default) or "rtk"
+//                        (the rtk binary from its installed extension, rewritten at the PreToolUse hook) — an
+//                        A/B backend switch, so native and rtk can be benchmarked head-to-head.
+// The booleans default off, outputCleaners defaults "" (all cleaners on), outputHoldout 0, filterBackend
+// "native" — so a sandbox behaves as before until the owner changes them.
 
 export const SandboxSettingsSchema = z.object({
     searchPastChats: z.boolean(),
@@ -148,8 +154,26 @@ export const SandboxSettingsSchema = z.object({
     hashlineEdits: z.boolean(),
     terseOutput: z.boolean(),
     outputCleaners: z.string(),
+    outputHoldout: z.number().min(0).max(1),
+    filterBackend: z.enum(["native", "rtk"]),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
+
+// ---- output-cleaner savings report (rtk-`gain`-style) ----
+// Aggregated from historyRoot/logs/filter-stats.jsonl (one row per agent Bash command). `perCleaner` attributes
+// which cleaner ids fired across commands; `holdout` is the measured control (commands the holdout bypassed) vs
+// the cleaned population — a real saved-% rather than an estimate; `gaps` are high-volume commands that matched
+// no cleaner (the next handler to write). Empty/zeroed when no commands have run yet.
+export const CleanerSavingsSchema = z.object({
+    commands: z.number(),
+    rawTokens: z.number(),
+    emittedTokens: z.number(),
+    savedPct: z.number(),
+    perCleaner: z.array(z.object({ id: z.string(), commands: z.number() })),
+    holdout: z.object({ cleaned: z.number(), heldOut: z.number(), measuredSavedPct: z.number().optional() }),
+    gaps: z.array(z.object({ command: z.string(), tokens: z.number() })),
+});
+export type CleanerSavings = z.infer<typeof CleanerSavingsSchema>;
 
 // ---- intentic CLI ----
 

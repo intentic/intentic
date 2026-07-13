@@ -2,9 +2,11 @@ import { settingsContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { readCleanerSavings } from "../logs/filter-stats.js";
 import { reconcileLspSkill } from "./lsp-skill.js";
 
-// The per-sandbox agent-settings routes. `get` applies defaults when the manifest is absent; `set` overwrites it.
+// The per-sandbox agent-settings routes. `get` applies defaults when the manifest is absent; `set` overwrites it;
+// `savings` reports the output-cleaner token savings from the live filter-stats ledger (the rtk-`gain` surface).
 export const createSettingsRoutes = (services: Services) => {
     const i = implement(settingsContract).$context<OrpcContext>();
     return {
@@ -18,5 +20,6 @@ export const createSettingsRoutes = (services: Services) => {
             );
             return { ok: true } as const;
         }),
+        savings: i.savings.handler(() => readCleanerSavings(services.config.historyRoot)),
     };
 };

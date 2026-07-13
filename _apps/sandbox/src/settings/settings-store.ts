@@ -14,6 +14,8 @@ const DEFAULTS: SandboxSettings = {
     hashlineEdits: false,
     terseOutput: false,
     outputCleaners: "",
+    outputHoldout: 0,
+    filterBackend: "native",
 };
 
 export interface SandboxSettingsStore {

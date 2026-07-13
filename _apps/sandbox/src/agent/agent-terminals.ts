@@ -34,7 +34,11 @@ const windowSlug = (description: unknown): string => {
     return slug === "" ? "run" : slug;
 };
 
-export const bashTmuxHooks = (): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
+// When filterBackend is "rtk", the command is prefixed with `rtk ` before it's wrapped (rtk's own Claude Code
+// hook convention: it recognizes and compresses the leading command, and passes through what it doesn't). The
+// native output filter is turned off for this backend (cleanerEnv sets INTENTIC_RUN_FILTER=0), so rtk owns the
+// compression and tmux-run just tees rtk's already-compact output. "native"/undefined keeps today's path.
+export const bashTmuxHooks = (filterBackend?: "native" | "rtk"): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PreToolUse: [
         {
             matcher: "Bash",
@@ -51,12 +55,13 @@ export const bashTmuxHooks = (): Partial<Record<HookEvent, HookCallbackMatcher[]
                     if (session === undefined) {
                         return {};
                     }
+                    const inner = filterBackend === "rtk" ? `rtk ${tool.command}` : tool.command;
                     return {
                         hookSpecificOutput: {
                             hookEventName: "PreToolUse",
                             updatedInput: {
                                 ...(tool as Record<string, unknown>),
-                                command: `${TMUX_RUN_BIN} ${session} ${shellQuote(tool.command)} ${windowSlug(tool.description)}`,
+                                command: `${TMUX_RUN_BIN} ${session} ${shellQuote(inner)} ${windowSlug(tool.description)}`,
                             },
                         },
                     };

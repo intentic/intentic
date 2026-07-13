@@ -275,6 +275,87 @@ track releases without a graph change. The registry package is public so tenant 
 unauthenticated; both `connect.sh` (your PC) and the `workspace` provider (a server) run this image
 directly.
 
+## The app plane
+
+Everything above is the **deployment engine** — the intent→reconcile machinery the CLI runs. Sitting
+alongside it (and consuming it only through shared contracts) is the **app plane**: the product a user
+actually looks at, a VSCode-shaped file editor. Its dependency edges into `@intentic/*` all go through
+`sandbox-contract` (and one type-only reach into `@intentic/resources` from `api-contract`); the engine
+core never depends back on the app.
+
+| Package | Role |
+| --- | --- |
+| [`@intentic-app/web`](_apps/web) | The Vue 3 SPA shell — the editor UI (rail · workspace tree + file viewers + Monaco · chat). Signs in against the platform, then drives the sandbox daemon **directly** over its tunnel. The **extension host** lives here. |
+| [`@intentic-app/api`](_apps/api) | The thin platform: Better Auth sign-in + the `setup.*` handshake + Stripe. Off the command path (see topology above). |
+| [`@intentic/sandbox`](_apps/sandbox) | The per-user daemon (documented under [The sandbox daemon](#the-sandbox-daemon)) — also the app plane's whole backend: workspace files, chat, terminals, panels, search, settings, and the daemon-side half of the extension system. |
+| [`@intentic/sandbox-contract`](_libs/sandbox-contract) | **The keystone wire contract** — the oRPC route + schema surface shared by the daemon, the web client, and every UI extension (~15 dependents). It is deliberately *the* first-party data contract: because everything that consumes it is in-repo and compiled together, a wire change is caught by the compiler and fixed atomically, so there is no separate "stable API" shim to maintain. |
+| [`@intentic-app/api-contract`](_libs/api-contract) | The platform (web↔api) oRPC contract. |
+| [`@intentic-app/ui`](_libs/ui) | The app design system (PrimeVue + Tailwind primitives). |
+| [`@intentic-app/catalog`](_libs/catalog) | Capability/connector catalog data rendered by the web. |
+
+### Extension system
+
+The app is a **lean core + an extension system**, the same bet VSCode makes. An extension is a package
+with an `intentic-extension.json` manifest at its root ([manifest.ts](_libs/extension-api/src/manifest.ts));
+identity is derived, never declared (`extensionIdOf = ${publisher}.${name}`). The manifest is the
+**approval + gating surface**: the install dialog shows exactly the declared contribution points, and the
+host refuses any runtime registration the approved manifest never declared. Contribution points cover both
+UI (`views`, `viewers`, `commands`, `settings`) and daemon/agent surface (`processes`, `agent`,
+`environment`, `connectors`, `listener`, `bin`). A UI extension ships a prebuilt ESM `entry` bundle and an
+`activate(api, context)` function; there is no ambient global — the host `IntenticApi` arrives as the
+`activate` argument, and everything registered is a `Disposable` pushed onto `context.subscriptions` so
+deactivation unwinds cleanly ([api.ts](_libs/extension-api/src/api.ts)).
+
+Two boundaries are load-bearing and easy to confuse — the distinction is the most important architectural
+line in the app:
+
+- **`_apps/web/src/extension-host/`** — the real host. It loads git-installed third-party bundles
+  (`GET /extensions` → engines check → authenticated bundle fetch → `import()` → `activate`) and the
+  compiled-in first-party extensions ([extension-host/builtins.ts](_apps/web/src/extension-host/builtins.ts)),
+  **both through the same manifest-gated `createExtensionApi`** ([apiImpl.ts](_apps/web/src/extension-host/apiImpl.ts)).
+  A builtin extension can touch only the public `IntenticApi`, never app internals — that is the dogfooding
+  boundary that keeps the first-party extensions honest.
+- **`_apps/web/src/extensions/builtins.ts`** — three *core* view contributions (`infrastructure`,
+  `live-status`, `directory-ui`) that are extension-*shaped* but stay in the app because each is genuinely
+  coupled to platform/onboarding or the file-open iframe bridge. They register through the same runtime
+  registry but consume privileged internals **by design**, and the file documents exactly why each one
+  can't be a clean extension.
+
+The **data plane** an extension talks to is `sandbox-contract` over an authenticated transport
+(`api.sandbox.request/json` — auth injected host-side, tokens never seen by the bundle). An extension's
+reach into daemon routes is **declared in its manifest and gated by the host**, so coupling is explicit and
+reviewable rather than ambient. The narrow `facts.ts` surface
+([facts.ts](_libs/extension-api/src/facts.ts)) is only the stable **detection** vocabulary a view's
+`detect()` reads to decide when to activate — not the data plane. The SDK is published as two npm packages:
+[`@intentic/extension-api`](_libs/extension-api) (types + manifest schema) and
+[`@intentic/extension-ui`](_libs/extension-ui) (a host-provided slice of the app design system, resolved at
+runtime via an import map so every extension shares the shell's one Vue/PrimeVue instance).
+
+First-party extensions live in `_extensions/`: `agent-activity`, `apps`, `automations`, `logs`, `preview`,
+`viewers` (UI); `connectors` (data-only — a connector is one manifest entry, no code); `discord` (a
+daemon-side gateway `process` + `listener`). The daemon-side enumerator/loader is
+`_apps/sandbox/src/extensions/`. Note the current split is a **UI veneer**: an extension is mostly where its
+Vue lives, while its backend (activity, automations, logs, panels…) still sits in the daemon core — moving
+those behind a daemon-side extension runtime is a deliberately deferred, marketplace-phase step, not a
+gap to close now.
+
+### Dependency islands: iq & lsp
+
+Two recent subsystems are **subprocess CLIs baked into the sandbox image, not linked into any code path** —
+no workspace package imports them; the daemon and agent invoke them by spawning a process. Keeping them at
+arm's length is intentional, and nothing may `import` these packages:
+
+- **iq** ([`@intentic/iq`](_apps/iq) + [`@intentic/iq-engine`](_libs/iq-engine) +
+  [`@intentic/iq-recall`](_libs/iq-recall) + [`@intentic/iq-bench`](_tools/iq-bench)) — an agent-native
+  workspace-search engine: a local index (SQLite) fused across lexical (ripgrep), structural (ast-grep),
+  semantic (local embed + rerank), and git signals, rendered to a token-budgeted ranked answer. It replaces
+  an agent's grep/find chains with one call, and it also backs the **editor's Search panel** — the daemon's
+  `/workspace/search` route shells `iq --json` and returns the parsed result. Search is a **core editor
+  feature**; iq is merely the interchangeable engine behind that route.
+- **lsp** ([`@intentic/lsp`](_apps/lsp)) — despite the name, **not** a language-server host: a small
+  agent-facing TypeScript CLI (`lsp rename`, `lsp diag`) over the TS language service, advertised to the
+  agent through a gated skill file. TypeScript/JavaScript only.
+
 ## Scaling model & limits
 
 Who pays for scale is a design decision, not an accident:
