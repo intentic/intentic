@@ -5,6 +5,7 @@ import {
     CAPABILITY_CATEGORIES,
     type CapabilityCatalogEntry,
     type CapabilityField,
+    connectorCard,
 } from "@intentic-app/catalog";
 import { type CapabilitySummary, type Marketplace, type MarketplacePlugin } from "@intentic-app/api-contract";
 import { cmp, type IconName, Page, Segmented } from "@intentic-app/ui";
@@ -21,16 +22,34 @@ import { browseMarketplace, useCapabilities } from "../composables/extensions/us
 import { useExtensions } from "../composables/extensions/useExtensions";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 
-/* The rail's "+" → the /capabilities page. Capabilities are connectors that give the agent tools (GitHub, MCP
- * servers, SSH hosts, Stripe…), plus a few that scaffold managed repos (DevOps → intent + desired-state, each its
- * own operator panel). Cards are grouped into sections by CAPABILITY_CATEGORIES. Pick a card → fill its config →
- * apply STREAMS its progress live. The manifest is the source of truth; nothing is stored on the platform. */
+/* The rail's "+" → the /capabilities page. Capabilities give the agent tools (GitHub, MCP servers, SSH hosts,
+ * Stripe…), plus a few that scaffold managed repos (DevOps → intent + desired-state, each its own operator
+ * panel). Cards are grouped into sections by CAPABILITY_CATEGORIES. Core cards are static catalog data; cli
+ * cards DERIVE from the installed extensions' contributes.connectors (connectorCard), so a cli card exists iff
+ * its capability is actually addable. Pick a card → fill its config → apply STREAMS its progress live. The
+ * manifest is the source of truth; nothing is stored on the platform. */
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const URL_RE = /^https?:\/\/.+/i;
 
 const { hasCapability, capabilities, error: listError, add, remove, refetch } = useCapabilities();
-const { connectorOf, extensions } = useExtensions();
+const { connectorOf, extensions, settled: extensionsSettled } = useExtensions();
+
+// The full card list: connector cards derived from the installed extensions' contributions (one card per
+// provider, first declaration wins — the daemon connectorRegistry's precedent) + the static core cards.
+const allCards = computed<CapabilityCatalogEntry[]>(() => {
+    const seen = new Set<string>();
+    const derived: CapabilityCatalogEntry[] = [];
+    for (const extension of extensions.value) {
+        for (const connector of extension.manifest.contributes?.connectors ?? []) {
+            if (!seen.has(connector.provider)) {
+                seen.add(connector.provider);
+                derived.push(connectorCard(connector));
+            }
+        }
+    }
+    return [...derived, ...CAPABILITY_CATALOG];
+});
 
 const route = useRoute();
 const router = useRouter();
@@ -72,15 +91,18 @@ const suggestName = (entry: CapabilityCatalogEntry): string => {
 // The typed name already exists → saving updates that connection rather than adding a new one.
 const nameCollision = computed(() => selectedInstances.value.some((instance) => instance.id === name.value.trim()));
 
-// The catalog grouped into its display sections, in category order; empty sections are dropped.
-const groupedCatalog = CAPABILITY_CATEGORIES.map((category) => ({
-    label: category.label,
-    hint: category.hint,
-    entries: CAPABILITY_CATALOG.filter((entry) => entry.category === category.id),
-})).filter((group) => group.entries.length > 0);
+// The catalog grouped into its display sections, in category order; empty sections are dropped. Derived
+// connector cards render before the static ones within a section (allCards order).
+const groupedCatalog = computed(() =>
+    CAPABILITY_CATEGORIES.map((category) => ({
+        label: category.label,
+        hint: category.hint,
+        entries: allCards.value.filter((entry) => entry.category === category.id),
+    })).filter((group) => group.entries.length > 0),
+);
 
 // The picked card is URL-driven (/capabilities/<id>); an absent or unknown slug → undefined → the catalog grid.
-const selected = computed<CapabilityCatalogEntry | undefined>(() => CAPABILITY_CATALOG.find((entry) => entry.id === route.params[`card`]));
+const selected = computed<CapabilityCatalogEntry | undefined>(() => allCards.value.find((entry) => entry.id === route.params[`card`]));
 const name = ref(``);
 // Whether the user (or a marketplace pick) chose the name. Until then the field holds a suggestion, and the
 // suggestion must track the LIVE list: pick() may run against a stale-hydrated or still-fetching list, and a
@@ -189,21 +211,16 @@ const effectConfig = (entry: CapabilityCatalogEntry, source: (field: CapabilityF
     }
     return config;
 };
-// Live over the form state, so the plugin clone URL and the SQL engine's client image track as the user types.
-// hasSecret is synthesized from the card's own secret-marked fields, so a cli card's secret row shows even
-// before /extensions resolves its connector spec (the deriver's echo fallback consumes it).
+// Live over the form state, so the plugin clone URL tracks as the user types. A selected cli card exists only
+// because its connector is installed (allCards derives it), so connectorOf always resolves here — the effects
+// panel is complete by construction.
 const liveEffects = computed<readonly CapabilityEffect[]>(() => {
     const entry = selected.value;
     if (entry === undefined) {
         return [];
     }
     const config = effectConfig(entry, (field) => (values[field.key] ?? ``).trim());
-    return capabilityEffects({
-        kind: entry.kind,
-        id: name.value.trim() || undefined,
-        config: { ...config, hasSecret: entry.fields.some((field) => field.secret === true) },
-        connector: connectorOf(config[`provider`] ?? ``),
-    });
+    return capabilityEffects({ kind: entry.kind, id: name.value.trim() || undefined, config, connector: connectorOf(config[`provider`] ?? ``) });
 });
 // The consequential effects a card statically implies, badged on its grid tile — image/runtime/trusted-code
 // only (the full list is one click away). Defaults decide config-dependent ones (the SQL card's default engine).
@@ -316,11 +333,13 @@ watch(
     { immediate: true },
 );
 
-// An unknown slug (/capabilities/nonsense) resolves to no card → clean the URL back to the grid.
+// An unknown slug (/capabilities/nonsense) resolves to no card → clean the URL back to the grid. Gated on the
+// extensions query having settled: a deep-linked connector card (/capabilities/github) is unknown until
+// /extensions delivers its contribution, and bouncing early would eat the link.
 watch(
-    () => route.params[`card`],
-    (card) => {
-        if (typeof card === `string` && card.length > 0 && selected.value === undefined) {
+    [() => route.params[`card`], extensionsSettled],
+    ([card]) => {
+        if (typeof card === `string` && card.length > 0 && extensionsSettled.value && selected.value === undefined) {
             void router.replace({ name: `capabilities` });
         }
     },

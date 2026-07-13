@@ -28,15 +28,25 @@ Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/*
 | `preview` | UI view | Per-repo dev-server preview panels. |
 | `viewers` | UI viewers | File renderers (docx / xlsx / svg) via `contributes.viewers`. |
 | `connectors` | data-only | CLI-tool connectors as manifest data — no code. |
-| `discord` | daemon gateway | A `process` + `listener` bridging Discord to the daemon. |
+| `discord` | daemon gateway | A `process` + `listener` bridging Discord to the daemon, plus the discord connector. |
+| `rtk` | environment fragment | Ships the rtk binary into the sandbox image overlay (output-filter benchmarking); git-install opt-in. |
 
-## How they load
+## How they load — three paths
 
-The compiled-in first-party extensions are statically imported and activated at shell boot through the
-manifest-gated host in [_apps/web/src/extension-host/builtins.ts](../_apps/web/src/extension-host/builtins.ts).
-Adding a new first-party extension = a new package here + one line there. (Note the three *core* view
-contributions in `_apps/web/src/extensions/builtins.ts` are **not** extensions — they're privileged in-app
-views coupled to platform internals; see that file and ARCHITECTURE.md.)
+- **Compiled into the web bundle** (the UI extensions): statically imported and activated at shell boot
+  through the manifest-gated host in
+  [_apps/web/src/extension-host/builtins.ts](../_apps/web/src/extension-host/builtins.ts). Adding a new
+  first-party UI extension = a new package here + one line there. (Note the three *core* view contributions
+  in `_apps/web/src/extensions/builtins.ts` are **not** extensions — they're privileged in-app views coupled
+  to platform internals; see that file and ARCHITECTURE.md.)
+- **Baked into the sandbox image** (`connectors`, `discord`): copied to `/opt/extensions` by the sandbox
+  [Dockerfile](../_apps/sandbox/Dockerfile) and enumerated via `EXTENSIONS_DIR` by
+  [installedExtensions()](../_apps/sandbox/src/extensions/installed-extensions.ts) — present in every
+  sandbox, `builtin: true` on `GET /extensions`, not removable, no capability entry. This is how connector
+  capability cards exist out of the box.
+- **Git-installed** (the `extension` capability): an owner-only, full-sha-pinned clone into
+  `.intentic/extensions/<id>` — the path for third-party extensions and for opt-in first-party ones like
+  `rtk` (its environment fragment composes per capability entry, so baking it would be inert).
 
 The current split is a **UI veneer**: an extension is mostly where its Vue lives, while feature backends
 still sit in the daemon core. Moving those behind a daemon-side extension runtime is a deliberately deferred,

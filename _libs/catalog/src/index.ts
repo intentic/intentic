@@ -1,5 +1,6 @@
 // Platform UI/product catalogs: the add-form descriptors + card data the web renders. NOT wire contract —
 // moved out of @intentic-app/api-contract so the contract holds only schemas. Daemon enums are imported.
+import type { ConnectorContribution } from "@intentic/extension-api";
 import type { CapabilityKind, InventoryProvider, ServiceKind } from "@intentic/sandbox-contract";
 
 // Catalog the web uses to render the add forms. Only the user-provided, non-secret fields appear here.
@@ -89,25 +90,26 @@ export interface AddCapabilityInput {
     readonly config: Record<string, string>;
 }
 
-// One field the "+" dialog renders for a capability's config form.
+// One field the "+" dialog renders for a capability's config form. Optional members carry `| undefined` so a
+// zod-inferred ConnectorField (exactOptionalPropertyTypes) is assignable — connectorCard passes them through.
 export interface CapabilityField {
     readonly key: string;
     readonly label: string;
-    readonly placeholder?: string;
-    readonly secret?: boolean;
-    readonly optional?: boolean;
+    readonly placeholder?: string | undefined;
+    readonly secret?: boolean | undefined;
+    readonly optional?: boolean | undefined;
     // Render a multi-line <textarea> instead of a single-line <input> — a single-line input strips the newlines
     // when a multi-line value (e.g. a PEM private key) is pasted, corrupting it.
-    readonly multiline?: boolean;
-    // A fixed value baked into config, not shown as an input — e.g. service="signoz", provider="stripe".
-    readonly value?: string;
+    readonly multiline?: boolean | undefined;
+    // A fixed value baked into config, not shown as an input — e.g. platform="reddit", provider="stripe".
+    readonly value?: string | undefined;
     // A pre-filled default the user can edit (e.g. the "self"/"cf" bindings DevOps registers).
-    readonly default?: string;
+    readonly default?: string | undefined;
     // A user-chosen value from a fixed set — rendered as a Segmented selector instead of a text input.
-    readonly options?: readonly { readonly value: string; readonly label: string }[];
+    readonly options?: readonly { readonly value: string; readonly label: string }[] | undefined;
     // Show/require/send this field only when another field currently equals a value (e.g. the SSH credential
     // that matches the chosen auth mode). Omitted → always shown.
-    readonly when?: { readonly key: string; readonly value: string };
+    readonly when?: { readonly key: string; readonly value: string } | undefined;
 }
 
 // The logical section a card sits under in the "+" grid — a display grouping (by what it's for), not the
@@ -131,15 +133,15 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
 // `url`; a self-hostable one builds the link from a config field's live value (`urlFromField` + `path`), so it
 // points at github.com or the user's own instance, and simply hides until that field holds an http(s) URL.
 export interface CapabilityGuide {
-    readonly url?: string;
-    readonly urlFromField?: string;
-    readonly path?: string;
+    readonly url?: string | undefined;
+    readonly urlFromField?: string | undefined;
+    readonly path?: string | undefined;
     // Overrides the default "Create a token" link label.
-    readonly linkLabel?: string;
+    readonly linkLabel?: string | undefined;
     // The subtle "Scopes: …" line under the link — the permissions the token needs.
-    readonly scopes?: string;
+    readonly scopes?: string | undefined;
     // Ordered how-to-get-it steps, revealed in an InfoHint disclosure.
-    readonly steps?: readonly string[];
+    readonly steps?: readonly string[] | undefined;
 }
 
 // The grid the rail's "+" renders. Every card is a capability *type*; the user names each instance (→ its id,
@@ -152,12 +154,12 @@ export interface CapabilityCatalogEntry {
     readonly category: CapabilityCategory;
     // A simple-icons slug (https://cdn.simpleicons.org/<logo>); undefined → a generic per-kind icon. A "/<hex>"
     // suffix forces a color for icons invisible on the dark canvas (e.g. github's near-black).
-    readonly logo?: string;
+    readonly logo?: string | undefined;
     readonly description: string;
-    readonly requires?: readonly CapabilityKind[];
+    readonly requires?: readonly CapabilityKind[] | undefined;
     readonly fields: readonly CapabilityField[];
-    readonly hint?: string;
-    readonly guide?: CapabilityGuide;
+    readonly hint?: string | undefined;
+    readonly guide?: CapabilityGuide | undefined;
 }
 
 export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
@@ -180,192 +182,6 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         hint: "Names the repo. Once it's created, open its panel to add a Hono API, a Vue web app, or an Astro landing page.",
     },
     {
-        id: "github",
-        name: "GitHub",
-        kind: "cli",
-        category: "code",
-        logo: "github/f5f5f5",
-        description: "Issues, PRs and code search as agent tools — plus git clone/pull/push in the terminal.",
-        fields: [
-            { key: "provider", label: "", value: "github" },
-            { key: "token", label: "Personal access token", secret: true },
-            {
-                key: "git",
-                label: "Git access",
-                default: "on",
-                options: [
-                    { value: "on", label: "On" },
-                    { value: "off", label: "Off" },
-                ],
-            },
-        ],
-        hint: 'The agent uses the token with curl against the GitHub API. With Git access on you can git pull/push in the terminal — ssh-form URLs work too (rerouted over HTTPS when native SSH isn\'t available), so any repo-scoped token works. For native ssh://git we register an SSH key to your account, which needs write:public_key on a classic PAT (or the "Git SSH keys: write" permission on a fine-grained token); without it git still works over HTTPS and we show the key to add manually.',
-        guide: {
-            url: "https://github.com/settings/tokens",
-            scopes: "repo (+ write:public_key / Git SSH keys: write for native ssh)",
-            steps: [
-                "Open Settings → Developer settings → Personal access tokens.",
-                "Classic: generate a token with the repo scope (add write:public_key for native ssh://git).",
-                'Fine-grained: grant repo Contents access (add the "Git SSH keys: write" account permission for native ssh://git).',
-                "Copy the token and paste it here. Git works over HTTPS regardless; the extra permission only enables native ssh.",
-            ],
-        },
-    },
-    {
-        id: "sentry",
-        name: "Sentry",
-        kind: "cli",
-        category: "observability",
-        logo: "sentry",
-        description: "Query issues and traces from your Sentry org.",
-        fields: [
-            { key: "provider", label: "", value: "sentry" },
-            { key: "url", label: "Sentry URL", placeholder: "https://sentry.io", default: "https://sentry.io" },
-            { key: "org", label: "Org slug", optional: true },
-            { key: "token", label: "Auth token", secret: true },
-        ],
-        hint: "Self-hosted: set your instance URL above first. Leave the org blank to let the agent list your orgs.",
-        guide: {
-            urlFromField: "url",
-            path: "/settings/account/api/auth-tokens/",
-            scopes: "project:read event:read org:read",
-            steps: [
-                "Open Settings → Account → Auth Tokens (or Developer Settings → Internal Integration).",
-                "Create a token with the project:read, event:read and org:read scopes.",
-                "Copy the token and paste it here.",
-            ],
-        },
-    },
-    {
-        id: "discord",
-        name: "Discord",
-        kind: "cli",
-        category: "communication",
-        logo: "discord",
-        description: "Let the agent read and post in your Discord server.",
-        fields: [
-            { key: "provider", label: "", value: "discord" },
-            { key: "botToken", label: "Bot token", secret: true },
-            {
-                key: "voiceModel",
-                label: "Voice model",
-                default: "medium",
-                options: [
-                    { value: "tiny", label: "Tiny" },
-                    { value: "base", label: "Base" },
-                    { value: "small", label: "Small" },
-                    { value: "medium", label: "Medium" },
-                    { value: "large-v3-turbo", label: "Large" },
-                ],
-            },
-            { key: "voiceLanguage", label: "Voice language", placeholder: "auto", optional: true },
-        ],
-        hint: "Voice transcription runs a local whisper model: bigger = more accurate but slower on CPU (Medium ≈ 1.5GB download on first use). Set the voice language to an ISO code like pl or en to pin transcription (auto-detect can misfire on short utterances).",
-        guide: {
-            url: "https://discord.com/developers/applications",
-            linkLabel: "Open the Discord developer portal",
-            scopes: "Privileged intents: Message Content + Server Members",
-            steps: [
-                "New Application → Bot.",
-                "Reset Token, then copy the bot token.",
-                "Enable the Message Content and Server Members privileged intents.",
-                "Paste the token here, then ask the agent to “invite yourself to my server” — it makes a one-click invite link.",
-            ],
-        },
-    },
-    {
-        id: "gitlab",
-        name: "GitLab",
-        kind: "cli",
-        category: "code",
-        logo: "gitlab",
-        description: "Issues, merge requests, and pipelines as agent tools — plus git clone/pull/push in the terminal.",
-        fields: [
-            { key: "provider", label: "", value: "gitlab" },
-            { key: "url", label: "Instance URL", placeholder: "https://gitlab.com", default: "https://gitlab.com" },
-            { key: "token", label: "Access token", secret: true },
-            {
-                key: "git",
-                label: "Git access",
-                default: "on",
-                options: [
-                    { value: "on", label: "On" },
-                    { value: "off", label: "Off" },
-                ],
-            },
-        ],
-        hint: "The agent uses the token with curl against the GitLab API. With Git access on, we register an SSH key to your account (the api scope covers key upload) so you can git clone/pull/push over ssh://git in the terminal; if key upload is refused, ssh-form URLs are rerouted over HTTPS so git still works.",
-        guide: {
-            urlFromField: "url",
-            path: "/-/user_settings/personal_access_tokens",
-            linkLabel: "Create an access token",
-            scopes: "api",
-            steps: [
-                "Self-hosted: set the Instance URL above first.",
-                "Open User settings → Access tokens.",
-                "Add a token with the api scope.",
-                "Copy the token and paste it here.",
-            ],
-        },
-    },
-    {
-        id: "signoz-query",
-        name: "SigNoz",
-        kind: "cli",
-        category: "observability",
-        logo: "signoz",
-        description: "Query traces, logs and metrics from a SigNoz instance.",
-        fields: [
-            { key: "provider", label: "", value: "signoz" },
-            { key: "url", label: "SigNoz URL", placeholder: "https://signoz.example.com" },
-            { key: "apiKey", label: "API key", secret: true },
-        ],
-        hint: "The agent queries observability with curl.",
-        guide: {
-            urlFromField: "url",
-            path: "/settings/api-keys",
-            scopes: "Viewer role is enough",
-            steps: [
-                "Set the SigNoz URL above (Cloud or self-hosted).",
-                "Open Settings → API Keys and create a key (Viewer role).",
-                "Copy the key and paste it here.",
-            ],
-        },
-    },
-    {
-        id: "sql",
-        name: "SQL database",
-        kind: "cli",
-        category: "data",
-        logo: "postgresql",
-        description: "Query your PostgreSQL or MySQL database from the agent.",
-        fields: [
-            {
-                key: "provider",
-                label: "Engine",
-                default: "postgres",
-                options: [
-                    { value: "postgres", label: "PostgreSQL" },
-                    { value: "mysql", label: "MySQL" },
-                ],
-            },
-            { key: "host", label: "Host", placeholder: "db.example.com" },
-            { key: "port", label: "Port", default: "5432" },
-            { key: "user", label: "User", placeholder: "postgres" },
-            { key: "password", label: "Password", secret: true },
-            { key: "database", label: "Database", placeholder: "app" },
-        ],
-        hint: "The agent queries your database with psql/mysql.",
-        guide: {
-            steps: [
-                "No external token — use an existing DB user, ideally a read-only one.",
-                "Make sure the database is reachable from the sandbox (host/port open, grants/pg_hba allow it).",
-                "PostgreSQL uses port 5432, MySQL 3306.",
-                "Add this card again with a different name to connect another database.",
-            ],
-        },
-    },
-    {
         id: "stripe",
         name: "Stripe",
         kind: "integration",
@@ -375,81 +191,6 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         requires: ["devops"],
         fields: [{ key: "provider", label: "", value: "stripe" }],
         hint: "The API key is read from your sandbox env (STRIPE_API_KEY) on the next provision.",
-    },
-    {
-        id: "redmine",
-        name: "Redmine",
-        kind: "cli",
-        category: "code",
-        logo: "redmine",
-        description: "Connect your Redmine instance for issues and projects.",
-        fields: [
-            { key: "provider", label: "", value: "redmine" },
-            { key: "url", label: "Instance URL", placeholder: "https://redmine.example.com" },
-            { key: "apiKey", label: "API key", secret: true },
-        ],
-        hint: "The agent uses the API key with curl.",
-        guide: {
-            urlFromField: "url",
-            path: "/my/account",
-            linkLabel: "Open your Redmine account",
-            scopes: "REST API must be enabled by an admin",
-            steps: [
-                "Set the Instance URL above first.",
-                "Open My account (top-right).",
-                "Under “API access key”, click Show (an admin enables it in Administration → Settings → API if hidden).",
-                "Copy the key and paste it here.",
-            ],
-        },
-    },
-    {
-        id: "outline",
-        name: "Outline",
-        kind: "cli",
-        category: "business",
-        logo: "outline/f5f5f5",
-        description: "Connect your Outline wiki for docs and knowledge base.",
-        fields: [
-            { key: "provider", label: "", value: "outline" },
-            { key: "url", label: "Instance URL", placeholder: "https://outline.example.com" },
-            { key: "apiKey", label: "API token", secret: true },
-        ],
-        hint: "The agent uses the token with curl against the Outline API.",
-        guide: {
-            urlFromField: "url",
-            path: "/settings/tokens",
-            scopes: "the token inherits your permissions",
-            steps: [
-                "Set the Instance URL above first.",
-                "Open Settings → API Tokens.",
-                "Create a token and give it a name.",
-                "Copy the token and paste it here.",
-            ],
-        },
-    },
-    {
-        id: "imap",
-        name: "IMAP",
-        kind: "cli",
-        category: "communication",
-        description: "Connect an email inbox over IMAP for the agent to read.",
-        fields: [
-            { key: "provider", label: "", value: "imap" },
-            { key: "host", label: "IMAP host", placeholder: "imap.gmail.com" },
-            { key: "port", label: "Port", default: "993" },
-            { key: "username", label: "Username", placeholder: "you@example.com" },
-            { key: "password", label: "Password", secret: true },
-        ],
-        guide: {
-            url: "https://myaccount.google.com/apppasswords",
-            linkLabel: "Create a Gmail app password",
-            steps: [
-                "Gmail: turn on 2-Step Verification, then create an App Password (link above) and use it as the password.",
-                "Outlook/Microsoft: account.microsoft.com → Security → Advanced security options → App passwords.",
-                "Other hosts: your normal IMAP password works.",
-                "Host/port — Gmail imap.gmail.com:993, Outlook outlook.office365.com:993.",
-            ],
-        },
     },
     {
         id: "ssh",
@@ -629,6 +370,26 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         },
     },
 ];
+
+const isCapabilityCategory = (category: string): category is CapabilityCategory => CAPABILITY_CATEGORIES.some((entry) => entry.id === category);
+
+// A cli connector contribution rendered as a catalog card — the "+" grid derives one card per connector from
+// the INSTALLED extensions (GET /extensions), so a card exists iff its capability is actually addable, and the
+// connector manifest is the single source of the card's name/logo/fields/guide (no static duplicate to drift).
+// The provider becomes both the card id (the /capabilities/<id> slug) and the fixed `provider` config field the
+// daemon's cli handler resolves. A third-party connector declaring a category outside CAPABILITY_CATEGORIES
+// lands under "extend" (the catch-all section).
+export const connectorCard = (connector: ConnectorContribution): CapabilityCatalogEntry => ({
+    id: connector.provider,
+    name: connector.catalog.name,
+    kind: "cli",
+    category: isCapabilityCategory(connector.catalog.category) ? connector.catalog.category : "extend",
+    logo: connector.catalog.logo,
+    description: connector.catalog.description,
+    fields: [{ key: "provider", label: "", value: connector.provider }, ...connector.fields],
+    hint: connector.catalog.hint,
+    guide: connector.catalog.guide,
+});
 
 // Automation "start from" recipes moved to the automations extension (@intentic/ext-automations): they are
 // automation-UI prefill data, so they live with that extension rather than the platform product catalog.

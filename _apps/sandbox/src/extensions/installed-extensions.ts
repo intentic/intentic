@@ -16,7 +16,7 @@ export interface ExtensionHost {
 /* The union of git-installed extension capabilities and image-baked extensions — the single enumerator every
  * extension consumer (agent plugin dirs, processes, settings, env, the list route) iterates, so a baked
  * first-party extension (ext-discord, ext-connectors) behaves identically to one a user cloned. Baked ones live
- * under services.config.extensionsDir (SANDBOX_EXTENSIONS_DIR), one subdir per checkout, the iq-plugin precedent
+ * under services.config.extensionsDir (EXTENSIONS_DIR), one subdir per checkout, the iq-plugin precedent
  * — no capability entry, not removable, present because they shipped in the image. */
 
 export interface InstalledExtension {

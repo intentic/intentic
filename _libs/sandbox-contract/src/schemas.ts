@@ -694,8 +694,15 @@ export type Marketplace = z.infer<typeof MarketplaceSchema>;
 // What the web extension host boots from: each row is an extension capability whose checkout still parses —
 // the approved manifest (contribution declarations), and the checked-out commit (the code identity; the bundle
 // route's ETag). A rotted checkout is skipped here; its capability row still shows status.
+// The routing handle: a git-installed extension uses its capability entry id; an image-baked one has no
+// capability entry and is addressed by the manifest-derived publisher.name — hence the dot in the pattern.
+const extensionId = z
+    .string()
+    .min(1)
+    .max(121)
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/);
 export const ExtensionSummarySchema = z.object({
-    id: entryId,
+    id: extensionId,
     manifest: ExtensionManifestSchema,
     commit: z.string(),
     // Image-baked first-party extension (no git checkout, not removable) vs a git-installed capability — the

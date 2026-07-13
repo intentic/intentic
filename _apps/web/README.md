@@ -19,9 +19,16 @@ The **Vue 3 SPA** (Vite + PrimeVue) — the platform's workspace UI. A user sign
   - `useChat.ts` + `conversation.ts` — the Claude agent, daemon-direct (`/agent`, `/agent/decision`, `/agent/answer`, `/sessions`, `/claude/*`).
   - `useDeployments.ts` / `useWorkspaceState.ts` (+ `workspaceStateProjection.ts`) / `useInventory.ts` / `useWorkspaceTree.ts` — the read-model + inventory as **vue-query** queries/mutations against the daemon; `intenticStream.ts` is the shared `/intentic` ndjson reader; `renderMarkdown.ts` sanitizes marked output (DOMPurify) for `v-html`.
   - `useLayout.ts` — chat panel + explorer sidebar width/side.
+  - `extensions/` — the extension/capability data layer: `useExtensions.ts` (installed manifests from `GET /extensions`, `connectorOf(provider)` for connector specs, `settled` for load-gated decisions) and `useCapabilities.ts` (capability list + the streamed add + remove/secret mutations).
+- **[src/extension-host/](src/extension-host)** — the real extension host: fetches `GET /extensions`, engine-checks and `import()`s git-installed bundles, activates the compiled-in first-party UI extensions (`builtins.ts`) — everything through the manifest-gated `createExtensionApi` (`apiImpl.ts`).
+- **[src/extensions/](src/extensions)** — the reactive runtime view registry the shell renders from, plus the three privileged *core* view contributions (`infrastructure`, `live-status`, `directory-ui`) that are extension-shaped but deliberately in-app.
 - **[src/layout/](src/layout)** — the persistent shell: `WorkspaceShell.vue` (rail | workspace | chat grid), `ChatPanel.vue`, `AccountPanel.vue`, `GoogleSigninGate.vue`.
-- **[src/pages/](src/pages)** — lazy-loaded areas: `Login`, `Setup`, `Sandbox`, `Infra` (topology + config/provision), `workspace/` (VSCode-like explorer + file viewer), and the `*Dialog.vue` overlays.
+- **[src/pages/](src/pages)** — lazy-loaded areas: `Login`, `Setup`, `Sandbox`, `Infra` (topology + config/provision), `workspace/` (VSCode-like explorer + file viewer), `Capabilities.vue` (the rail's "+": static core cards merged with cli cards derived from installed extensions' connectors, a config form with a live "This will add to your sandbox" effects panel), `Secrets.vue` (the capability-secret inventory), and the `*Dialog.vue` overlays.
 - **[src/router/index.ts](src/router/index.ts)** — `/login` + `/setup` → guarded shell (`/`) with child areas; `beforeEnter` guards (`requireAuth`, `requireSetup`) replace the old route guards.
+
+The capability model itself — the twelve kinds, the effects taxonomy (skills, secrets, image fragments,
+scaffolds, profiles, …), and the environment-overlay rebuild flow — is documented under **Capabilities** in
+[ARCHITECTURE.md](../../ARCHITECTURE.md).
 
 ## Conventions
 

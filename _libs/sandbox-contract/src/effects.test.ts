@@ -96,10 +96,7 @@ describe("capabilityEffects", () => {
 
     it("derives extension process and image effects from the installed manifest", () => {
         const bare = capabilityEffects({ kind: "extension", config: { url: "https://github.com/o/e" } });
-        expect(bare).toEqual([
-            { kind: "trusted-code" },
-            { kind: "clone", url: "https://github.com/o/e" },
-        ]);
+        expect(bare).toEqual([{ kind: "trusted-code" }, { kind: "clone", url: "https://github.com/o/e" }]);
         const full = capabilityEffects({
             kind: "extension",
             config: { url: "https://github.com/o/e", hasToken: true },

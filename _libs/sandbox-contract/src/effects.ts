@@ -112,12 +112,7 @@ export const capabilityEffects = (input: CapabilityEffectInput): readonly Capabi
                 { kind: "skill", name: "ssh" },
             ];
         case "vpn":
-            return [
-                { kind: "secret", exposure: "disk" },
-                { kind: "skill", name: "vpn" },
-                { kind: "image" },
-                { kind: "runtime", level: "net-admin" },
-            ];
+            return [{ kind: "secret", exposure: "disk" }, { kind: "skill", name: "vpn" }, { kind: "image" }, { kind: "runtime", level: "net-admin" }];
         case "docker":
             return [{ kind: "image" }, { kind: "runtime", level: "privileged" }, { kind: "process", names: ["dockerd"] }];
         case "browser": {

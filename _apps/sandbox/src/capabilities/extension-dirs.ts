@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-api";
 
 // Where GIT-INSTALLED extension checkouts live: .intentic/extensions/<id> — daemon-owned state beside
-// capabilities.json (outside the three repos, outside .claude/). Baked extensions live at SANDBOX_EXTENSIONS_DIR
+// capabilities.json (outside the three repos, outside .claude/). Baked extensions live at EXTENSIONS_DIR
 // instead. Both are daemon-owned dirs read with a RAW fs read (extensionRead) — never the agent-facing
 // workspace-scoped read, which refuses paths outside /work (where the baked dir lives).
 export const extensionsRoot = (root: string): string => join(root, ".intentic", "extensions");

@@ -99,8 +99,9 @@ survive reconnects. Its subsystems:
   ([panels/](_apps/sandbox/src/panels/)).
 - **Automations** — cron schedules, webhooks (`/automations/:id/fire`), and event listeners
   ([automations/](_apps/sandbox/src/automations/)).
-- **Capabilities** — owner-approved add-ons (browser, docker, vpn, mcp, …) from a marketplace registry
-  ([capabilities/](_apps/sandbox/src/capabilities/)).
+- **Capabilities** — everything a user adds to the sandbox (connectors, docker, vpn, mcp, plugins, …),
+  one unified model with a per-kind handler ([capabilities/](_apps/sandbox/src/capabilities/)) — see
+  [Capabilities](#capabilities).
 - **Members** — shared access for invited collaborators, enforced by the daemon
   ([auth.ts](_apps/sandbox/src/auth/auth.ts)).
 - **Workspace file service** — search, tree, watch, diff, and chunked multi-GB uploads
@@ -110,7 +111,8 @@ survive reconnects. Its subsystems:
   `/work` so an agent `rm -rf` can't reach it ([history/](_apps/sandbox/src/history/)).
 - **Environment overlays** — agent-proposed Dockerfile layers, applied only after owner approval
   ([environment/](_apps/sandbox/src/environment/)).
-- **Discord** — chat/stream/voice integration ([discord/](_apps/sandbox/src/discord/)).
+- **Discord** — chat/stream/voice integration, now an image-baked extension: a gateway `process` +
+  `listener` in [\_extensions/discord](_extensions/discord).
 
 **One image, two ways to start.** The sandbox `connect.sh` runs on your PC and the one the
 `i.want.workspace` provider deploys onto a remote host (over SSH) are the *same image*. Either way the
@@ -331,13 +333,118 @@ reviewable rather than ambient. The narrow `facts.ts` surface
 [`@intentic/extension-ui`](_libs/extension-ui) (a host-provided slice of the app design system, resolved at
 runtime via an import map so every extension shares the shell's one Vue/PrimeVue instance).
 
-First-party extensions live in `_extensions/`: `agent-activity`, `apps`, `automations`, `logs`, `preview`,
-`viewers` (UI); `connectors` (data-only — a connector is one manifest entry, no code); `discord` (a
-daemon-side gateway `process` + `listener`). The daemon-side enumerator/loader is
-`_apps/sandbox/src/extensions/`. Note the current split is a **UI veneer**: an extension is mostly where its
+What an extension **bundles** is exactly its declared contributions: a prebuilt ESM `entry` (UI) with
+`views` / `viewers` / `commands` / `settings`; `connectors` — a cli capability as pure data (catalog card +
+config fields + env templates + a SKILL.md cheatsheet + an optional client-image fragment), rendered by the
+web as a *derived* capability card (see [Capabilities](#capabilities)); `processes` (daemon-run,
+tmux-managed background processes); `agent` (a directory that is a Claude Code plugin —
+skills/agents/hooks/.mcp.json, handed to the Agent SDK's plugin loader each turn); `environment` (a
+RUN/ENV-only Dockerfile fragment baked into the sandbox image overlay); `bin` (executables prepended to the
+agent's PATH); `listener` (a realtime event provider its gateway process implements); and
+`permissions.sandbox`, the daemon-route allowlist gating its data plane.
+
+First-party extensions live in `_extensions/` and reach the product by one of **three load paths**:
+
+- **Compiled into the web bundle** — the UI extensions (`agent-activity`, `apps`, `automations`, `logs`,
+  `preview`, `viewers`), statically imported and activated at shell boot
+  ([extension-host/builtins.ts](_apps/web/src/extension-host/builtins.ts)). They ship no `entry` over the
+  wire; the bundle IS the SPA.
+- **Baked into the sandbox image** — the daemon-side ones (`connectors`, `discord`) ship at
+  `/opt/extensions` (Dockerfile bake, `EXTENSIONS_DIR`), enumerated by `installedExtensions()`
+  ([installed-extensions.ts](_apps/sandbox/src/extensions/installed-extensions.ts)) alongside git-installed
+  ones and served by `GET /extensions` as `builtin: true` — present in every sandbox, not removable, no
+  capability entry.
+- **Git-installed** — the `extension` capability: an owner-only, full-sha-pinned clone into
+  `.intentic/extensions/<id>`, validated before swap. `rtk` is the in-repo example (an
+  environment-fragment-only extension that stays opt-in — a baked dir has no capability entry, and
+  fragments compose per entry, so baking it would be inert).
+
+Note the current split is a **UI veneer**: an extension is mostly where its
 Vue lives, while its backend (activity, automations, logs, panels…) still sits in the daemon core — moving
 those behind a daemon-side extension runtime is a deliberately deferred, marketplace-phase step, not a
 gap to close now.
+
+### Capabilities
+
+Everything a user adds to a sandbox is a **capability**: one `{ id, kind, config }` entry in a single
+discriminated union (`CapabilitySchema` in [schemas.ts](_libs/sandbox-contract/src/schemas.ts)) over twelve
+kinds — `devops`, `monorepo`, `mcp`, `service`, `integration`, `cli`, `plugin`, `extension`, `ssh`, `vpn`,
+`docker`, `browser`. There is deliberately **no top-level taxonomy** of "skills vs connectors vs
+environments vs secrets": those are overlapping *ingredients*, not disjoint categories (a connector is a
+skill + a secret + env injection + maybe an image fragment; an extension is a repo + skills + processes +
+views + a fragment), so the model unifies the noun and differentiates behaviour per kind — the same bet
+VSCode makes with "everything is an extension", disclosed per item instead of classified up front. The
+machinery is uniform:
+
+- **One manifest** — `/work/.intentic/capabilities.json` is the source of truth for what's active
+  ([capabilities-store.ts](_apps/sandbox/src/capabilities/capabilities-store.ts)); secrets live in it and
+  are denylisted from agent reads, and list responses echo them only as `hasToken`/`hasSecret` booleans.
+- **One lifecycle** — `add` (streams its apply progress live), `remove`, `status`, `setSecret`
+  ([capabilities.contract.ts](_libs/sandbox-contract/src/contracts/capabilities.contract.ts), orchestrated
+  by [capabilities.routes.ts](_apps/sandbox/src/capabilities/capabilities.routes.ts): precondition check →
+  streamed `apply` → manifest upsert → environment recompose).
+- **One total registry** — `Record<CapabilityKind, CapabilityHandler>` where a handler is
+  `{ requires?, fragment?, apply, status, remove? }`
+  ([registry.ts](_apps/sandbox/src/capabilities/registry.ts),
+  [capability.ts](_apps/sandbox/src/capabilities/capability.ts)) — a thirteenth kind is a compile error
+  until it is handled everywhere, including the effects deriver and the secret/echo switches.
+
+**Cards are derived, not duplicated.** The web's `/capabilities` grid
+([Capabilities.vue](_apps/web/src/pages/Capabilities.vue)) merges the static core cards
+(`CAPABILITY_CATALOG`) with cli cards **derived** from the installed extensions' `contributes.connectors`
+(`connectorCard()`, both in [catalog](_libs/catalog/src/index.ts)): a cli card exists **iff** its capability
+is actually addable, third-party connectors surface automatically, and the connector manifest is the single
+source of a card's name/logo/fields/credential guide — nothing to drift.
+
+**Effects — what adding actually does, as data.** Kinds differ wildly in consequence (an extension runs
+code with your session; docker needs a privileged runtime; a cli connector just writes a skill and stores a
+secret), so the consequences are a first-class taxonomy: the `CapabilityEffect` union, derived by
+`capabilityEffects()` ([effects.ts](_libs/sandbox-contract/src/effects.ts)) from kind + live config +
+connector/extension contributions — the same data the handlers consume, so there is no per-card effects
+list to maintain — and rendered as the "This will add to your sandbox" panel
+([CapabilityEffects.vue](_apps/web/src/components/CapabilityEffects.vue)) before the add, as compact strips
+on connected instances, and as grid badges for the consequential ones (image / runtime / trusted-code).
+
+| Effect | Mechanics |
+| --- | --- |
+| `skill` | Writes `.claude/skills/<name>/SKILL.md`, auto-loaded by the agent next turn — per-instance for `cli`/`browser` (the instance id is the skill name), shared for `ssh`/`vpn`. |
+| `secret` | `agent-env`: injected into the agent's environment each turn, never written to disk (`cli`). `disk`: a `0600` file or a denylisted manifest field (ssh key/password, WireGuard conf, git token). |
+| `clone` | Git checkout into `.intentic/plugins/<id>` or `.intentic/extensions/<id>` (staged → pinned detached checkout → swap; tokens ride `GIT_CONFIG_*`, never the URL). |
+| `image` | A Dockerfile fragment composed into the environment overlay — needs a one-time owner-run rebuild. |
+| `runtime` | Privileged directives riding a core fragment: `docker` → `--privileged`; `vpn` → `NET_ADMIN` + `/dev/net/tun`. |
+| `process` | Long-lived tmux-managed background processes (`dockerd`, an extension's declared `processes`), restored on boot. |
+| `mcp` | The manifest entry itself becomes an `mcp__<id>__` server the agent connects to next turn. |
+| `scaffold` | Repos created in the workspace: `devops` → the intent + desired-state repos; `monorepo` → an empty pnpm+turbo repo named after the instance. |
+| `deploy` | A managed `deploy.config.ts` entry; `service` also runs the shared infra-apply job now, `integration` applies on the next provision. |
+| `trusted-code` | Extension code runs inside the app with the owner's session — owner-only, full-sha-pinned install; the trust decision of the system. |
+| `profile` | A persisted logged-in Chromium profile under `.intentic/browser/<platform>`, established through the guided-login WebSocket (`/system/browser-login`) — the credential is a browser session, not a token. |
+
+**Environment fragments have two trust tiers.** Core handler fragments (`docker`/`vpn`/`browser`) are
+code-authored and may carry privileged `# intentic:runtime` directives; extension/connector checkout
+fragments are restricted to RUN/ENV instructions — the whole "what can an extension bake into the image"
+security surface is `invalidExtensionFragment`
+([fragment-sources.ts](_apps/sandbox/src/environment/fragment-sources.ts)). `composeEnvironment` folds
+every active entry's fragments (a cli entry resolves its connector's fragment through the registry; an
+extension entry its `contributes.environment`) into the overlay Dockerfile (`FROM` the base image), and an
+owner-run rebuild applies it — until then the capability reads `pending` and the UI routes to the
+Environment card.
+
+Per-kind mechanics ([handlers/](_apps/sandbox/src/capabilities/handlers/)):
+
+| Kind | On add |
+| --- | --- |
+| `devops` | Scaffolds the intent + desired-state repos (each its own operator panel) — the foundation `service`/`integration` require. Not removable. |
+| `monorepo` | Scaffolds an empty pnpm+turbo repo named after the instance; apps are added from its operator panel. |
+| `mcp` | Pure registration — no side effect beyond the manifest entry; `status` probes the URL. |
+| `service` | Upserts an `i.want.service` entry into `deploy.config.ts`'s managed region and runs the infra-apply job, relaying its events. |
+| `integration` | Upserts an `i.have.<provider>` backend entry; the secret (e.g. `STRIPE_API_KEY`) is read from sandbox env at provision time. |
+| `cli` | Connector-driven (data from `contributes.connectors`): templates the connector's SKILL.md into `.claude/skills/<id>`, injects the credential into the agent's env each turn, optionally bakes a client-image fragment (psql, mysql, whisper). |
+| `plugin` | Clones a Claude Code plugin repo into `.intentic/plugins/<id>`; the Agent SDK's loader reads its skills/agents/hooks/`.mcp.json` each turn. A marketplace repo (`.claude-plugin/marketplace.json`) can pre-fill the form. |
+| `extension` | Owner-only, sha-pinned clone into `.intentic/extensions/<id>`, validated before swap (manifest parses, prebuilt entry exists, fragment RUN/ENV-only); starts declared `autoStart` processes. |
+| `ssh` | Writes a per-machine Host block + `0600` key/password under `~/.ssh/intentic-hosts` + the shared ssh skill; the instance id is the alias the agent uses (`ssh <id>`). |
+| `vpn` | Stores the WireGuard conf `0600`, brings the tunnel up (`wg-quick`), shared vpn skill; its fragment bakes wireguard-tools + `NET_ADMIN`. The id doubles as the interface name (15-char cap). |
+| `docker` | Fragment bakes Docker Engine + Compose with `--privileged`; runs `dockerd` in a persistent tmux session, restarted on boot — so `pnpm db:up` works like a local dev machine. |
+| `browser` | Per-instance platform skill + the Chromium fragment; connecting is a guided live login (screencast over WebSocket) that persists the profile the agent's `@playwright/mcp` drives. |
 
 ### Dependency islands: iq & lsp
 

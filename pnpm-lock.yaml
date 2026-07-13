@@ -806,7 +806,7 @@ importers:
         version: link:../../_libs/api-contract
       '@intentic-app/catalog':
         specifier: workspace:*
-        version: file:_libs/catalog(@opentelemetry/api@1.9.1)(vue@3.5.39(typescript@5.9.3))
+        version: link:../../_libs/catalog
       '@intentic-app/localhost-https':
         specifier: workspace:*
         version: link:../../_tools/localhost-https
@@ -1192,9 +1192,12 @@ importers:
 
   _libs/catalog:
     dependencies:
+      '@intentic/extension-api':
+        specifier: workspace:*
+        version: link:../extension-api
       '@intentic/sandbox-contract':
         specifier: workspace:*
-        version: file:_libs/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.39(typescript@5.9.3))
+        version: link:../sandbox-contract
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
@@ -1205,6 +1208,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
   _libs/content:
     dependencies:
@@ -2779,9 +2785,6 @@ packages:
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [win32]
-
-  '@intentic-app/catalog@file:_libs/catalog':
-    resolution: {directory: _libs/catalog, type: directory}
 
   '@intentic-app/ui@file:_libs/ui':
     resolution: {directory: _libs/ui, type: directory}
@@ -9767,14 +9770,6 @@ snapshots:
 
   '@img/sharp-win32-x64@0.34.5':
     optional: true
-
-  '@intentic-app/catalog@file:_libs/catalog(@opentelemetry/api@1.9.1)(vue@3.5.39(typescript@5.9.3))':
-    dependencies:
-      '@intentic/sandbox-contract': file:_libs/sandbox-contract(@opentelemetry/api@1.9.1)(vue@3.5.39(typescript@5.9.3))
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - '@opentelemetry/api'
-      - vue
 
   '@intentic-app/ui@file:_libs/ui(typescript@5.9.3)':
     dependencies:

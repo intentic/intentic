@@ -22,10 +22,15 @@ export function useExtensions() {
     // A cli provider's connector spec from the installed extensions' contributes.connectors — the data
     // capabilityEffects derives a cli card's secret/image effects from. Undefined until /extensions loads.
     const connectorOf = (provider: string): ConnectorContribution | undefined =>
-        extensions.value.flatMap((extension) => extension.manifest.contributes?.connectors ?? []).find((connector) => connector.provider === provider);
+        extensions.value
+            .flatMap((extension) => extension.manifest.contributes?.connectors ?? [])
+            .find((connector) => connector.provider === provider);
     return {
         extensions,
         connectorOf,
+        // The list has actually arrived (or definitively failed) — gates decisions that must not fire against
+        // the empty pre-fetch state, like bouncing an unknown /capabilities/<card> slug back to the grid.
+        settled: computed(() => query.isFetched.value || query.isError.value),
         error: computed(() => (query.error.value ? query.error.value.message : null)),
         isLoading: query.isLoading,
         refetch: query.refetch,

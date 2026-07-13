@@ -17,17 +17,26 @@ interface EffectRow {
 const describe = (effect: CapabilityEffect): EffectRow => {
     switch (effect.kind) {
         case "skill":
-            return { icon: `sparkles`, label: effect.name === undefined ? `Adds a skill the agent loads next turn` : `Adds skill "${effect.name}" the agent loads next turn` };
+            return {
+                icon: `sparkles`,
+                label: effect.name === undefined ? `Adds a skill the agent loads next turn` : `Adds skill "${effect.name}" the agent loads next turn`,
+            };
         case "secret":
             return effect.exposure === `agent-env`
                 ? { icon: `key`, label: `Stores a secret — injected into the agent's env each turn, never written to disk or shown in Files` }
                 : { icon: `lock`, label: `Stores a secret in your sandbox — never shown in Files` };
         case "clone":
-            return { icon: `download`, label: effect.url === undefined ? `Clones a git repository into your sandbox` : `Clones ${effect.url} into your sandbox` };
+            return {
+                icon: `download`,
+                label: effect.url === undefined ? `Clones a git repository into your sandbox` : `Clones ${effect.url} into your sandbox`,
+            };
         case "image":
             return { icon: `box`, label: `Extends the sandbox image — one-time rebuild required` };
         case "runtime":
-            return { icon: `shield`, label: effect.level === `privileged` ? `Requires a privileged container runtime` : `Requires network-admin container access` };
+            return {
+                icon: `shield`,
+                label: effect.level === `privileged` ? `Requires a privileged container runtime` : `Requires network-admin container access`,
+            };
         case "process":
             return { icon: `play`, label: `Runs background process${effect.names.length === 1 ? `` : `es`}: ${effect.names.join(`, `)}` };
         case "mcp":
@@ -45,7 +54,11 @@ const describe = (effect: CapabilityEffect): EffectRow => {
                 ? { icon: `cloud-upload`, label: `Writes a deploy config entry and provisions infrastructure now` }
                 : { icon: `server`, label: `Writes a deploy config entry — applied on the next provision` };
         case "trusted-code":
-            return { icon: `exclamation-triangle`, label: `Runs code inside the app with your session — owner-only; install only publishers you trust`, warn: true };
+            return {
+                icon: `exclamation-triangle`,
+                label: `Runs code inside the app with your session — owner-only; install only publishers you trust`,
+                warn: true,
+            };
         case "profile":
             return { icon: `globe`, label: `Keeps a logged-in ${effect.platform} browser profile in your sandbox` };
     }
