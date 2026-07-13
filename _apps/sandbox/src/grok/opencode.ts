@@ -1,7 +1,7 @@
-import { readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createOpencodeClient, createOpencodeServer, type OpencodeClient } from "@opencode-ai/sdk";
-import { discoverXaiModels } from "./grok-models.js";
+import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
 
 /* The shared OpenCode runtime for the Grok provider: one warm `opencode serve` per container plus its client.
  * Both the Grok adapter (runs turns) and the Grok auth routes (drive xAI's OAuth) need the same client, so
@@ -18,25 +18,35 @@ export interface OpenCodeService {
     // (the ground truth a device sign-in writes), NOT provider.list().connected, which OpenCode computes once at
     // server-init and never refreshes after a runtime auth.set() on our long-lived server.
     readonly connected: (providerID: string) => Promise<boolean>;
-    // xAI's live model catalog (id + label) plus a default id, queried from xAI's /v1/models with the OAuth token
-    // OpenCode persisted — supersedes provider.list() as the model source, since that catalog is a static
-    // models.dev snapshot whose xai models can be empty and whose default can be a retired id (grok-code-fast-1)
-    // xAI rejects. Empty ⇒ no token (not connected). Cached briefly (grok turns + the Claude delegation note both
-    // read it every turn).
-    readonly xaiModels: () => Promise<{ models: { id: string; label: string }[]; default?: string }>;
-    // Clear a provider's stored auth. No provider-scoped SDK removal exists, so we delete OpenCode's auth store
-    // (this instance is Grok-only). ponytail: file-level clear; swap for an SDK call if one lands.
+    // xAI's model catalog (id + humanized label) plus a default id — ALWAYS non-empty, so the picker is never
+    // blank and a send always resolves a model. Source, in order: live xAI discovery with the persisted OAuth
+    // token (best, when the token is unexpired), else the last-known-good catalog persisted by recordModels, else
+    // a compile-time seed floor. Supersedes provider.list() (a static models.dev snapshot whose xai list can be
+    // empty and whose default is a retired id xAI rejects). Cached briefly — only real (discovered/recorded)
+    // results, never the seed — so a freshened token is retried on the next read.
+    readonly xaiModels: () => Promise<{ models: { id: string; label: string }[]; default: string }>;
+    // Persist the models xAI itself named as valid (parsed from a "Did you mean: …" rejection during a turn) as
+    // the last-known-good catalog. This is the refresh-independent source of truth: it works even when the REST
+    // discovery endpoints reject the subscription-OAuth token. Refreshes the cache so the next xaiModels() serves
+    // them immediately. No-op for an empty/media-only list.
+    readonly recordModels: (ids: string[]) => Promise<void>;
+    // Clear a provider's stored auth AND the persisted catalog. No provider-scoped SDK removal exists, so we
+    // delete OpenCode's auth store (this instance is Grok-only). ponytail: file-level clear; swap for an SDK call.
     readonly disconnect: (providerID: string) => Promise<void>;
 }
 
-export const createOpenCodeService = (xdgDataHome: string): OpenCodeService => {
+export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fetch = fetch): OpenCodeService => {
     let client: OpencodeClient | undefined;
     // xAI's catalog rarely changes, so cache it briefly: a grok turn AND every Claude turn's delegation note read
-    // it, and each read is an api.x.ai round-trip. Only a token-backed result is cached — an empty (not-connected)
-    // result stays uncached so the first read after sign-in refetches. Cleared on disconnect.
-    let modelsCache: { value: { models: { id: string; label: string }[]; default?: string }; expiresAt: number } | undefined;
+    // it, and each read is an api.x.ai round-trip. Only a real result (live discovery or recordModels) is cached —
+    // the seed/persisted fallbacks stay uncached so a freshened token is retried on the next read. Cleared on
+    // disconnect.
+    let modelsCache: { value: { models: { id: string; label: string }[]; default: string }; expiresAt: number } | undefined;
     const MODELS_TTL_MS = 60_000;
-    const authPath = join(xdgDataHome, "opencode", "auth.json");
+    const opencodeDir = join(xdgDataHome, "opencode");
+    const authPath = join(opencodeDir, "auth.json");
+    // The last-known-good catalog, persisted next to auth.json so it survives daemon restarts.
+    const modelsPath = join(opencodeDir, "xai-models.json");
 
     const ensure = async (): Promise<OpencodeClient> => {
         if (client !== undefined) {
@@ -66,19 +76,44 @@ export const createOpenCodeService = (xdgDataHome: string): OpenCodeService => {
     };
 
     // OpenCode's persisted Auth store — each provider keyed at the top level:
-    // { xai: { type: "oauth", access, refresh, expires } }. {} when absent/unreadable.
-    const readAuth = async (): Promise<Record<string, { type?: string; access?: string } | undefined>> => {
+    // { xai: { type: "oauth", access, refresh, expires } } (`expires` is a ms epoch). {} when absent/unreadable.
+    const readAuth = async (): Promise<Record<string, { type?: string; access?: string; expires?: number } | undefined>> => {
         try {
-            return JSON.parse(await readFile(authPath, "utf8")) as Record<string, { type?: string; access?: string } | undefined>;
+            return JSON.parse(await readFile(authPath, "utf8")) as Record<string, { type?: string; access?: string; expires?: number } | undefined>;
         } catch {
             return {};
         }
     };
-    // The xAI subscription OAuth access token OpenCode persisted. undefined ⇒ no token yet / not connected.
-    const xaiAccessToken = async (): Promise<string | undefined> => {
+    // The xAI OAuth access token, but only when it's usable for a direct api.x.ai call — i.e. present AND not past
+    // its expiry. An expired token would 401 every discovery probe, so we skip discovery and serve the persisted/
+    // seed catalog instead; OpenCode refreshes the token on the next turn, after which discovery works again.
+    const usableXaiToken = async (): Promise<string | undefined> => {
         const entry = (await readAuth())["xai"];
-        return entry?.type === "oauth" && typeof entry.access === "string" ? entry.access : undefined;
+        if (entry?.type !== "oauth" || typeof entry.access !== "string") {
+            return undefined;
+        }
+        return entry.expires === undefined || Date.now() < entry.expires ? entry.access : undefined;
     };
+
+    // Read the persisted last-known-good catalog (an array of ids). [] when absent/unreadable.
+    const readPersistedModels = async (): Promise<string[]> => {
+        try {
+            const parsed = JSON.parse(await readFile(modelsPath, "utf8")) as unknown;
+            return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+        } catch {
+            return [];
+        }
+    };
+    const writePersistedModels = async (ids: string[]): Promise<void> => {
+        await mkdir(opencodeDir, { recursive: true });
+        await writeFile(modelsPath, JSON.stringify(ids));
+    };
+
+    // ids → the wire shape ({ models, default }); ids must be non-empty so default is always defined.
+    const toCatalog = (ids: string[]): { models: { id: string; label: string }[]; default: string } => ({
+        models: ids.map((id) => ({ id, label: humanizeModelId(id) })),
+        default: ids[0]!,
+    });
 
     return {
         client: ensure,
@@ -93,18 +128,33 @@ export const createOpenCodeService = (xdgDataHome: string): OpenCodeService => {
             if (modelsCache !== undefined && Date.now() < modelsCache.expiresAt) {
                 return modelsCache.value;
             }
-            const token = await xaiAccessToken();
-            if (token === undefined) {
-                return { models: [] };
+            const token = await usableXaiToken();
+            if (token !== undefined) {
+                const ids = (await discoverXaiModels(token, fetchImpl)).map((model) => model.id);
+                if (ids.length > 0) {
+                    await writePersistedModels(ids);
+                    const value = toCatalog(ids);
+                    modelsCache = { value, expiresAt: Date.now() + MODELS_TTL_MS };
+                    return value;
+                }
             }
-            const models = await discoverXaiModels(token);
-            const value = { models, ...(models[0] !== undefined ? { default: models[0].id } : {}) };
-            modelsCache = { value, expiresAt: Date.now() + MODELS_TTL_MS };
-            return value;
+            // No live catalog (no token, expired, or discovery came back empty): serve the last-known-good catalog,
+            // else the seed floor. Uncached so a usable token is retried next read.
+            const persisted = await readPersistedModels();
+            return toCatalog(persisted.length > 0 ? persisted : [...SEED_XAI_MODELS]);
+        },
+        recordModels: async (ids) => {
+            const valid = [...new Set(ids.filter(isChatModel))];
+            if (valid.length === 0) {
+                return;
+            }
+            await writePersistedModels(valid);
+            modelsCache = { value: toCatalog(valid), expiresAt: Date.now() + MODELS_TTL_MS };
         },
         disconnect: async () => {
             modelsCache = undefined;
             await rm(authPath, { force: true });
+            await rm(modelsPath, { force: true });
         },
     };
 };

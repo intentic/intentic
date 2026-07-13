@@ -1,4 +1,4 @@
-import type { IqResult, IqSearchMode } from "@intentic-app/api-contract";
+import type { WorkspaceSearchResult, WorkspaceSearchMode } from "@intentic-app/api-contract";
 import { keepPreviousData, useQuery } from "@tanstack/vue-query";
 import type { Ref } from "vue";
 import { computed, ref, watch } from "vue";
@@ -6,11 +6,11 @@ import { sandboxJson } from "../sandboxClient";
 import { useLayout } from "../useLayout";
 import { sandboxKey, useSandbox } from "../useSandbox";
 
-// Search over /work, read directly from the sandbox daemon (GET /workspace/search — backed by the iq engine,
-// so results come relevance-ranked and grouped). `mode` picks the iq verb: the default fused content search when
+// Search over /work, read directly from the sandbox daemon (GET /workspace/search — results come
+// relevance-ranked and grouped). `mode` picks the search verb: the default fused content search when
 // omitted, or `files` for filename quick-open. The input is debounced so a keystroke burst becomes one query;
 // keepPreviousData keeps the last results on screen while a refinement is in flight (no flash to the spinner).
-export function useWorkspaceSearch(filter: Ref<string>, active: Ref<boolean>, mode?: Ref<IqSearchMode | undefined>) {
+export function useWorkspaceSearch(filter: Ref<string>, active: Ref<boolean>, mode?: Ref<WorkspaceSearchMode | undefined>) {
     const { reachable } = useSandbox();
     const { includeIgnored } = useLayout();
 
@@ -29,7 +29,7 @@ export function useWorkspaceSearch(filter: Ref<string>, active: Ref<boolean>, mo
         // includeIgnored is in the key so flipping the toggle refetches with the wider/narrower result set.
         queryKey: computed(() => sandboxKey(`workspace`, `search`, mode?.value ?? `q`, debounced.value, includeIgnored.value ? `all` : `filtered`)),
         queryFn: () =>
-            sandboxJson<IqResult>(
+            sandboxJson<WorkspaceSearchResult>(
                 `/workspace/search?query=${encodeURIComponent(debounced.value)}${mode?.value ? `&mode=${mode.value}` : ``}${includeIgnored.value ? `&includeIgnored=true` : ``}`,
             ),
         enabled,

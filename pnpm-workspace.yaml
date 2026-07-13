@@ -4,11 +4,6 @@ packages:
   - "_tools/*"
   - "_extensions/*"
 
-injectWorkspacePackages: true
-
-syncInjectedDepsAfterScripts:
-  - build
-
 useNodeVersion: 24.18.0
 
 overrides:

@@ -1,4 +1,4 @@
-import type { IqTag } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchTag } from "@intentic/sandbox-contract";
 import type { IndexDb } from "../store/db.js";
 import type { EngineHit, SymbolRow } from "../types.js";
 import { globToRegExp } from "../workspace/glob.js";
@@ -27,7 +27,7 @@ const symbolRows = (db: IndexDb, where: string, ...params: string[]): StoredSymb
             heuristic: row["heuristic"] === 1,
         }));
 
-const defTags = (symbol: StoredSymbol): IqTag[] => (symbol.heuristic ? [{ kind: "def" }, { kind: "heuristic" }] : [{ kind: "def" }]);
+const defTags = (symbol: StoredSymbol): WorkspaceSearchTag[] => (symbol.heuristic ? [{ kind: "def" }, { kind: "heuristic" }] : [{ kind: "def" }]);
 
 // `iq def X` — exact-name definitions from the symbol table, exported first.
 export const defOf = (db: IndexDb, name: string, allowed: ReadonlySet<string>): EngineHit[] =>

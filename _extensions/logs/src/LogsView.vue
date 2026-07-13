@@ -143,7 +143,7 @@ watch(tail, () => {
                         {{ tailError }}
                     </div>
                     <div ref="pane" class="max-h-128 overflow-auto">
-                        <Code :code="tail?.text ?? (tailLoading ? `Loading…` : ``)" :wrap="true" :copyable="false" />
+                        <Code :code="tail?.text ?? (tailLoading ? `Loading…` : ``)" lang="log" :wrap="true" :copyable="false" />
                     </div>
                 </section>
             </div>

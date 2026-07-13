@@ -14,7 +14,7 @@ import { createServices } from "./composition.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
 import { ensureRootRepo } from "./git/root-repo.js";
-import { reconcileLspSkill } from "./settings/lsp-skill.js";
+import { reconcileSkills } from "./settings/skills.js";
 import { composeEnvironment } from "./environment/environment.js";
 import { loadConfig } from "./env.config.js";
 import { createLogger } from "./logger.js";
@@ -77,12 +77,12 @@ const main = async (): Promise<void> => {
     // Converge the drafts skill (how the agent writes post drafts for approval) so its prose tracks the daemon.
     void ensureDraftsSkill(services);
 
-    // Converge the lsp skill with the lspTools toggle — present only when the owner enabled it (the `lsp` CLI is
-    // always on PATH; the skill is what surfaces it to the agent).
+    // Converge the baked-tool skills with the settings `skills` list — each present only when named (the CLIs are
+    // always on PATH; the skill file is what surfaces one to the agent).
     void services.sandboxSettings
         .get()
-        .then((settings) => reconcileLspSkill(services, settings.lspTools))
-        .catch((error: unknown) => logger.warn({ err: error }, "lsp skill reconcile failed"));
+        .then((settings) => reconcileSkills(services, settings.skills))
+        .catch((error: unknown) => logger.warn({ err: error }, "skill reconcile failed"));
 
     // Preview routes for every existing repo (best-effort; the ensurer never throws) — self-heals any repo
     // whose creation-time mint was missed, so hostnames exist well before a browser ever resolves them.

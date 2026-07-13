@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { modelsFor, PROVIDERS } from "../composables/chat/catalog";
-import { type ChatProvider, providerAccounts } from "../composables/chat/conversation";
+import { PROVIDERS } from "../composables/chat/catalog";
+import { type ChatProvider, modelOptionsFor, providerAccounts } from "../composables/chat/conversation";
 import { useChat } from "../composables/chat/useChat";
 import ProviderLogo from "./ProviderLogo.vue";
 
 /* The provider / model / extended-thinking picker body — width-agnostic so the desktop panel hosts it in a
  * Popover and the mobile panel in a BottomSheet. All state is the useChat singleton. */
 
-const { provider, selectProvider, account, selectAccount, accounts, grokModels, model, thinking, streaming, messages } = useChat();
+const { provider, selectProvider, account, selectAccount, accounts, model, thinking, streaming, messages } = useChat();
 // A provider whose (any) connected account can no longer be refreshed — badge it so a broken credential doesn't
 // look identical to a healthy one until the user tries to chat.
 const providerNeedsReauth = (target: ChatProvider): boolean => providerAccounts.value[target].some((entry) => entry.needsReauth === true);
-// Grok's list is loaded live from OpenCode's catalog; the others are the static catalog.
-const models = computed(() => (provider.value === `grok` ? grokModels.value : modelsFor(provider.value)));
+// Grok's list is the live daemon catalog; the others are the static catalog. Shared with the composer chip.
+const models = computed(() => modelOptionsFor(provider.value));
 // The account the turn will use: the explicit pick, else the first (the daemon's default) — so the picker
 // always highlights the one in effect, even before the user touches it.
 const activeAccountId = computed(() => account.value ?? accounts.value[0]?.id);

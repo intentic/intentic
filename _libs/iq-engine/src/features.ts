@@ -1,5 +1,5 @@
 // Every retrieval stage is independently toggleable so pipeline configurations can be benchmarked against each
-// other. Default = everything on; the disabled set travels into IqResult.features as run provenance.
+// other. Default = everything on; the disabled set travels into WorkspaceSearchResult.features as run provenance.
 export const FEATURES = ["bm25", "semantic", "rerank", "prf", "confidence", "symctx", "graph", "boosts", "pack"] as const;
 
 export type Feature = (typeof FEATURES)[number];

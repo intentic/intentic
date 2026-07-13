@@ -37,6 +37,10 @@ test("the Grok model picker lists the live catalog and shows the real Grok logo"
     await page.goto("/workspace");
     await expect(page.locator('textarea[name="draft"]')).toBeVisible({ timeout: 30_000 });
 
+    // The composer chip shows the model NAME, not just the Grok icon — the reported "icon, no name" bug. Once the
+    // catalog loads, the empty grok selection is repointed to the default ("grok-4" → "Grok 4").
+    await expect(page.getByRole("button", { name: "Provider and model" })).toContainText("Grok 4", { timeout: 15_000 });
+
     // Open the provider/model popover from the composer pill (stable aria-label handle).
     await page.getByRole("button", { name: "Provider and model" }).click();
 

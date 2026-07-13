@@ -29,12 +29,6 @@ import {
     InventoryEntrySchema,
     InventoryProviderSchema,
     InventoryValuesSchema,
-    IqFreshnessSchema,
-    IqGroupSchema,
-    IqHitSchema,
-    IqResultSchema,
-    IqSearchQuerySchema,
-    IqTagSchema,
     LogFileEntrySchema,
     LogReadSchema,
     LogsListSchema,
@@ -62,6 +56,12 @@ import {
     TriggerSchema,
     WorkspaceChildrenSchema,
     WorkspaceFileSchema,
+    WorkspaceSearchFreshnessSchema,
+    WorkspaceSearchGroupSchema,
+    WorkspaceSearchHitSchema,
+    WorkspaceSearchQuerySchema,
+    WorkspaceSearchResultSchema,
+    WorkspaceSearchTagSchema,
     WorkspaceTreeEntrySchema,
     WorkspaceTreeSchema,
 } from "@intentic/sandbox-contract";
@@ -107,7 +107,6 @@ export {
     InventoryEntrySchema,
     InventoryProviderSchema,
     InventoryValuesSchema,
-    IqResultSchema,
     LogFileEntrySchema,
     LogReadSchema,
     LogsListSchema,
@@ -126,6 +125,7 @@ export {
     TriggerSchema,
     WorkspaceChildrenSchema,
     WorkspaceFileSchema,
+    WorkspaceSearchResultSchema,
     WorkspaceTreeEntrySchema,
     WorkspaceTreeSchema,
 } from "@intentic/sandbox-contract";
@@ -194,13 +194,13 @@ export interface WorkspaceFileResponse {
     readonly content: string;
 }
 
-// iq search results (the daemon's fused-search wire shape). IqSearchMode is the verb enum inside the query.
-export type IqTag = z.infer<typeof IqTagSchema>;
-export type IqHit = z.infer<typeof IqHitSchema>;
-export type IqGroup = z.infer<typeof IqGroupSchema>;
-export type IqFreshness = z.infer<typeof IqFreshnessSchema>;
-export type IqResult = z.infer<typeof IqResultSchema>;
-export type IqSearchMode = z.infer<typeof IqSearchQuerySchema>["mode"];
+// Workspace search results (the daemon's fused-search wire shape). WorkspaceSearchMode is the verb enum in the query.
+export type WorkspaceSearchTag = z.infer<typeof WorkspaceSearchTagSchema>;
+export type WorkspaceSearchHit = z.infer<typeof WorkspaceSearchHitSchema>;
+export type WorkspaceSearchGroup = z.infer<typeof WorkspaceSearchGroupSchema>;
+export type WorkspaceSearchFreshness = z.infer<typeof WorkspaceSearchFreshnessSchema>;
+export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
+export type WorkspaceSearchMode = z.infer<typeof WorkspaceSearchQuerySchema>["mode"];
 
 // Workspace history (daemon-captured snapshots). Daemon names: Snapshot / SnapshotsList / SnapshotDiff —
 // kept under the platform's historical *Response names as derived aliases.

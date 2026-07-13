@@ -24,6 +24,7 @@
         "@intentic/ext-automations": "workspace:*",
         "@intentic/ext-logs": "workspace:*",
         "@intentic/ext-preview": "workspace:*",
+        "@intentic/ext-viewers": "workspace:*",
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
@@ -40,7 +41,6 @@
         "@xterm/xterm": "catalog:",
         "better-auth": "catalog:",
         "croner": "catalog:",
-        "docx-preview": "catalog:",
         "dompurify": "catalog:",
         "idb-keyval": "catalog:",
         "marked": "catalog:",
@@ -51,7 +51,6 @@
         "tslib": "catalog:",
         "vue": "catalog:",
         "vue-router": "catalog:",
-        "xlsx": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

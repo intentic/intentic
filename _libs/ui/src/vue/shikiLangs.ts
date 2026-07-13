@@ -46,6 +46,7 @@ export const LANGS: Record<string, () => Promise<unknown>> = {
     swift: () => import(`@shikijs/langs/swift`),
     diff: () => import(`@shikijs/langs/diff`),
     markdown: () => import(`@shikijs/langs/markdown`),
+    log: () => import(`@shikijs/langs/log`),
 };
 
 // The @shikijs/langs packages Vite must pre-bundle (see the web app's vite.config optimizeDeps.include):

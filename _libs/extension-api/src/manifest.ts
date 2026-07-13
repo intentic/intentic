@@ -14,6 +14,17 @@ export const ViewContributionSchema = z.object({
 });
 export type ViewContribution = z.infer<typeof ViewContributionSchema>;
 
+// A custom file viewer the extension may register at runtime (api.viewers.register): the host resolves an open
+// file to this viewer by extension, fetches its bytes (`fetch: "blob"`) or text (`fetch: "text"`), and renders
+// the registered component with them — the host keeps the fetch + open-file lifecycle; the extension only renders.
+// `extensions` are bare file extensions (no dot), e.g. ["docx"]. This is the non-sidebar contribution point.
+export const ViewerContributionSchema = z.object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+    extensions: z.array(z.string().regex(/^[a-z0-9]+$/)).min(1),
+    fetch: z.enum(["text", "blob"]),
+});
+export type ViewerContribution = z.infer<typeof ViewerContributionSchema>;
+
 // A command the extension may register a handler for (api.commands.register); surfaced in the command palette.
 export const CommandContributionSchema = z.object({
     command: z.string().regex(/^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/),
@@ -150,9 +161,15 @@ export const ExtensionManifestSchema = z.object({
         .min(1)
         .refine((value) => !value.split("/").includes(".."), { message: "entry must stay inside the checkout" })
         .optional(),
+    // The daemon routes this extension may call through api.sandbox.request/json — each "<METHOD> <path-glob>"
+    // where `*` matches one path segment (e.g. "GET /panels", "POST /panels/*/start"). The host refuses any
+    // api.sandbox call whose method+path isn't declared here, so an extension's backend reach is explicit and
+    // reviewable instead of an ambient client to the whole daemon. Absent ⇒ the extension makes no api.sandbox calls.
+    permissions: z.object({ sandbox: z.array(z.string()) }).optional(),
     contributes: z
         .object({
             views: z.array(ViewContributionSchema).optional(),
+            viewers: z.array(ViewerContributionSchema).optional(),
             commands: z.array(CommandContributionSchema).optional(),
             settings: z.array(SettingContributionSchema).optional(),
             processes: z.array(ProcessContributionSchema).optional(),

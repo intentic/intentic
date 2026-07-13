@@ -10,7 +10,7 @@ import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-c
 const DEFAULTS: SandboxSettings = {
     searchPastChats: false,
     stableSystemPrompt: false,
-    lspTools: false,
+    skills: [],
     hashlineEdits: false,
     terseOutput: false,
     outputCleaners: "",

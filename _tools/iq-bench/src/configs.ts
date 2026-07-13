@@ -1,7 +1,7 @@
 import { type Feature, parseFeatures } from "@intentic/iq-engine";
 
 // Named pipeline configurations the tier-1 sweep compares. `spec` uses iq's --features syntax
-// (allow-list or default-minus) so provenance in IqResult.features matches real CLI usage.
+// (allow-list or default-minus) so provenance in WorkspaceSearchResult.features matches real CLI usage.
 export interface BenchConfig {
     readonly name: string;
     readonly spec?: string;

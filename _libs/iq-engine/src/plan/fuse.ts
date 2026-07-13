@@ -1,4 +1,4 @@
-import type { IqTag } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchTag } from "@intentic/sandbox-contract";
 import type { EngineResult, RankedGroup, RankedHit } from "../types.js";
 
 const RRF_K = 60;
@@ -17,8 +17,8 @@ export interface FuseContext {
 
 const TAG_ORDER = ["def", "path", "fuzzy", "rerank", "sem", "bm25", "import", "call", "type", "write", "text", "heuristic"];
 
-const dedupeTags = (tags: IqTag[]): IqTag[] => {
-    const seen = new Map<string, IqTag>();
+const dedupeTags = (tags: WorkspaceSearchTag[]): WorkspaceSearchTag[] => {
+    const seen = new Map<string, WorkspaceSearchTag>();
     for (const tag of tags) {
         const existing = seen.get(tag.kind);
         if (existing === undefined || (tag.score ?? 0) > (existing.score ?? 0)) {
@@ -32,7 +32,7 @@ const dedupeTags = (tags: IqTag[]): IqTag[] => {
 // Reciprocal-rank fusion across engines, keyed by path:line, then relevance boosts and grouping by file.
 // Deterministic: ties break by path then line, bytewise.
 export const fuse = (results: readonly EngineResult[], context: FuseContext): RankedGroup[] => {
-    const byKey = new Map<string, { path: string; line: number; text: string; start?: number; end?: number; tags: IqTag[]; score: number }>();
+    const byKey = new Map<string, { path: string; line: number; text: string; start?: number; end?: number; tags: WorkspaceSearchTag[]; score: number }>();
     for (const result of results) {
         result.hits.forEach((hit, rank) => {
             const key = `${hit.path}:${hit.line}`;

@@ -167,20 +167,12 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         }
         // Grok MUST ride an explicit, live-valid xAI model id: OpenCode's own default is a retired models.dev id
         // (grok-code-fast-1) xAI rejects, and its catalog is empty for xai — so an omitted model makes the turn
-        // fall back to that same retired default. Resolve from xAI's live catalog: keep the pinned model when xAI
-        // still serves it, else the live default.
+        // fall back to that same retired default. Resolve from the daemon's catalog (never empty — live discovery
+        // with a persisted/seed floor): keep the pinned model when it's offered, else the default. If the resolved
+        // id turns out stale, the runner self-heals it mid-turn from xAI's "Did you mean" rejection (grok-agent).
         const catalog = await services.openCode.xaiModels();
         const valid = new Set(catalog.models.map((entry) => entry.id));
         const model = input.model !== undefined && valid.has(input.model) ? input.model : catalog.default;
-        if (model === undefined) {
-            yield {
-                kind: "error",
-                code: "grok-model-invalid",
-                message: "xAI returned no available models for your account — check your Grok (SuperGrok / X Premium) subscription.",
-            };
-            yield { kind: "done" };
-            return;
-        }
         run = services.grokAgent;
         // OpenCode holds one xAI auth, so the single Grok account is "xai" (see grok.routes.ts).
         resolvedAccount = "xai";

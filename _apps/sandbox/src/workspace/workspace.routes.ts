@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { IqResultSchema, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
+import { WorkspaceSearchResultSchema, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -59,7 +59,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             return { path: input.path, content };
         }),
         // Shells into the iq CLI (on PATH in the image): one search implementation for the agent's Bash calls
-        // and this route. Exit 1 = zero hits, still a valid IqResult document.
+        // and this route. Exit 1 = zero hits, still a valid WorkspaceSearchResult document.
         search: i.search.handler(async ({ input }) => {
             const args = [input.mode ?? "q", input.query, "--json"];
             if (input.includeIgnored === true) {
@@ -81,7 +81,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                 }
                 throw error;
             });
-            return IqResultSchema.parse(JSON.parse(stdout));
+            return WorkspaceSearchResultSchema.parse(JSON.parse(stdout));
         }),
         // Read-only, no-LLM classification of the dropped workspace into coarse buckets. Runs over the same
         // filtered tree the file view uses, so it never sees .git/secrets/node_modules. The browser turns the

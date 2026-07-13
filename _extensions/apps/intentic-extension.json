@@ -3,6 +3,18 @@
     "name": "apps",
     "version": "1.0.0",
     "engines": { "intentic": "^0.2.0" },
+    "permissions": {
+        "sandbox": [
+            "GET /workspace/repos/*/apps",
+            "POST /workspace/repos/*/apps",
+            "POST /workspace/repos/*/apps/*/start",
+            "POST /workspace/repos/*/apps/*/stop",
+            "POST /workspace/repos/*/tests",
+            "GET /workspace/templates",
+            "GET /workspace/tree",
+            "GET /system/terminals"
+        ]
+    },
     "contributes": {
         "views": [{ "id": "apps", "label": "Apps", "surface": "directory" }]
     }

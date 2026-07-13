@@ -110,11 +110,11 @@ export const CodexPollResultSchema = z.object({ pending: z.boolean(), account: O
 // ponytail: OpenCode holds one xAI auth per data dir, so Grok stays single-account — the list is 0 or 1. Per
 // account would need an OpenCode server per data dir; add when there's demand.
 export const GrokDeviceStartSchema = z.object({ url: z.string(), code: z.string() });
-// xAI's live model catalog, read from OpenCode's provider.list() (the runtime source of truth) so the picker
-// never drifts from xAI's renames. `label` is the model's display name; `default` is OpenCode's default model
-// id for the provider (absent ⇒ the client falls back to the empty model, letting OpenCode choose).
+// xAI's model catalog, resolved daemon-side from live xAI discovery with a persisted last-known-good list and a
+// seed floor (see opencode.ts xaiModels) — never empty, so the picker is never blank. `label` is the humanized
+// display name; `default` is the model a fresh Grok chat seeds (always present).
 export const GrokModelSchema = z.object({ id: z.string(), label: z.string() });
-export const GrokModelsSchema = z.object({ models: z.array(GrokModelSchema), default: z.string().optional() });
+export const GrokModelsSchema = z.object({ models: z.array(GrokModelSchema), default: z.string() });
 
 // ---- sessions ----
 
@@ -129,8 +129,10 @@ export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTrans
 //   searchPastChats   — gates the search_past_chats agent tool (off ⇒ not registered, agent can't read prior chats).
 //   stableSystemPrompt — keeps the system prompt byte-stable across turns (the delegation note rides the user
 //                        message instead of the preset `append`) so the provider prompt cache survives.
-//   lspTools          — loads the `lsp` skill so the agent uses the baked LSP CLI (rename + diagnostics over the
-//                        TS language server); off ⇒ the skill isn't present so the agent doesn't reach for it.
+//   skills            — names of baked-tool skills to load into .claude/skills so the agent reaches for them
+//                        (e.g. "lsp" — TS rename + diagnostics over the language service); a name absent ⇒ its
+//                        skill file isn't written, so the agent doesn't reach for it. Data-driven: a new baked
+//                        tool is one daemon-side registry entry, not a new settings field.
 //   hashlineEdits     — swaps the native Read/Edit/Write for hash-anchored edits on the Claude path (stale-file
 //                        guard + fewer output tokens); off ⇒ the native file tools.
 //   terseOutput       — appends a concise-response steer to the end of the system prompt (a stable suffix, so it
@@ -144,13 +146,13 @@ export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTrans
 //   filterBackend     — which cleaner runs the compression: "native" (agent-output-filter, default) or "rtk"
 //                        (the rtk binary from its installed extension, rewritten at the PreToolUse hook) — an
 //                        A/B backend switch, so native and rtk can be benchmarked head-to-head.
-// The booleans default off, outputCleaners defaults "" (all cleaners on), outputHoldout 0, filterBackend
-// "native" — so a sandbox behaves as before until the owner changes them.
+// The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "" (all cleaners on),
+// outputHoldout 0, filterBackend "native" — so a sandbox behaves as before until the owner changes them.
 
 export const SandboxSettingsSchema = z.object({
     searchPastChats: z.boolean(),
     stableSystemPrompt: z.boolean(),
-    lspTools: z.boolean(),
+    skills: z.array(z.string()),
     hashlineEdits: z.boolean(),
     terseOutput: z.boolean(),
     outputCleaners: z.string(),
@@ -312,13 +314,14 @@ export const WorkspaceClassificationSchema = z.object({
     classifications: z.array(z.object({ path: z.string(), bucket: WorkspaceBucketSchema, reason: z.string() })),
 });
 export type WorkspaceClassification = z.infer<typeof WorkspaceClassificationSchema>;
-// ---- iq search ----
+// ---- workspace search ----
 
-// The iq search result — one wire shape for `iq --json` stdout, the daemon's /workspace/search route, and the
-// web client. Groups are relevance-ranked (best first, never path order); each hit carries the match-reason
-// tags the fused engines contributed. `start`/`end` are char offsets within `text` so clients highlight without
-// re-finding the needle.
-export const IqSearchQuerySchema = z.object({
+// The workspace-search wire shape — shared by the daemon's /workspace/search route and the web client.
+// (Implementation detail, not part of the contract: the daemon backs this route by shelling the baked search CLI
+// and parsing its JSON; the engine is interchangeable behind this shape.) Groups are relevance-ranked (best
+// first, never path order); each hit carries the match-reason tags the fused engines contributed. `start`/`end`
+// are char offsets within `text` so clients highlight without re-finding the needle.
+export const WorkspaceSearchQuerySchema = z.object({
     query: z.string().min(2).max(512),
     // Search verbs only — anchor/git verbs (outline, context, log, who, …) are CLI-only surface.
     mode: z.enum(["q", "find", "files", "def", "refs", "sym", "ast", "ask"]).optional(),
@@ -326,37 +329,37 @@ export const IqSearchQuerySchema = z.object({
     limit: z.coerce.number().int().positive().optional(),
     after: z.string().optional(),
 });
-export const IqTagSchema = z.object({
+export const WorkspaceSearchTagSchema = z.object({
     kind: z.enum(["def", "text", "sem", "bm25", "rerank", "path", "import", "call", "type", "write", "fuzzy", "heuristic"]),
     score: z.number().optional(),
 });
-export type IqTag = z.infer<typeof IqTagSchema>;
-export const IqHitSchema = z.object({
+export type WorkspaceSearchTag = z.infer<typeof WorkspaceSearchTagSchema>;
+export const WorkspaceSearchHitSchema = z.object({
     line: z.number(),
     text: z.string(),
     start: z.number().optional(),
     end: z.number().optional(),
-    tags: z.array(IqTagSchema),
+    tags: z.array(WorkspaceSearchTagSchema),
     // Enclosing symbol ("createWidget (fn)") — parent-document context so the reader often needs no follow-up.
     context: z.string().optional(),
 });
-export type IqHit = z.infer<typeof IqHitSchema>;
-export const IqGroupSchema = z.object({ path: z.string(), score: z.number(), hits: z.array(IqHitSchema) });
-export type IqGroup = z.infer<typeof IqGroupSchema>;
+export type WorkspaceSearchHit = z.infer<typeof WorkspaceSearchHitSchema>;
+export const WorkspaceSearchGroupSchema = z.object({ path: z.string(), score: z.number(), hits: z.array(WorkspaceSearchHitSchema) });
+export type WorkspaceSearchGroup = z.infer<typeof WorkspaceSearchGroupSchema>;
 // `building` = index still filling (progress 0..1, e.g. embeddings pending); `stale` = revalidation was skipped
 // (cursor replay). ageMs = time since the index last matched the disk state.
-export const IqFreshnessSchema = z.object({
+export const WorkspaceSearchFreshnessSchema = z.object({
     state: z.enum(["fresh", "building", "stale"]),
     ageMs: z.number().optional(),
     progress: z.number().optional(),
 });
-export type IqFreshness = z.infer<typeof IqFreshnessSchema>;
-export const IqResultSchema = z.object({
+export type WorkspaceSearchFreshness = z.infer<typeof WorkspaceSearchFreshnessSchema>;
+export const WorkspaceSearchResultSchema = z.object({
     mode: z.string(),
     total: z.number(),
     shown: z.number(),
-    groups: z.array(IqGroupSchema),
-    freshness: IqFreshnessSchema,
+    groups: z.array(WorkspaceSearchGroupSchema),
+    freshness: WorkspaceSearchFreshnessSchema,
     truncated: z.boolean(),
     cursor: z.string().optional(),
     hint: z.string().optional(),
@@ -365,7 +368,7 @@ export const IqResultSchema = z.object({
     // Run provenance for benchmarking: retrieval stages DISABLED this invocation (absent = full pipeline).
     features: z.array(z.string()).optional(),
 });
-export type IqResult = z.infer<typeof IqResultSchema>;
+export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
 
 // ---- workspace repos ----
 

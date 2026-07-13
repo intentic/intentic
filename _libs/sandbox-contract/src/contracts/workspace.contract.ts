@@ -5,8 +5,8 @@ import {
     AppsListSchema,
     CloneRepoSchema,
     CloneResultSchema,
-    IqResultSchema,
-    IqSearchQuerySchema,
+    WorkspaceSearchResultSchema,
+    WorkspaceSearchQuerySchema,
     OkSchema,
     RepoAppsParamSchema,
     ReposListSchema,
@@ -32,9 +32,9 @@ export const workspaceContract = {
     // and the client fetches them here on expand so a giant node_modules can't blow the tree walk's entry budget.
     children: oc.route({ method: "GET", path: "/workspace/children" }).input(WorkspaceChildrenQuerySchema).output(WorkspaceChildrenSchema),
     file: oc.route({ method: "GET", path: "/workspace/file" }).input(WorkspaceFileQuerySchema).output(WorkspaceFileSchema),
-    // Backed by the iq search CLI (the daemon shells into `iq --json`): ranked groups, match-reason tags,
-    // freshness, resumable cursor. `mode` narrows to one verb; default is auto-mode fusion.
-    search: oc.route({ method: "GET", path: "/workspace/search" }).input(IqSearchQuerySchema).output(IqResultSchema),
+    // Ranked groups, match-reason tags, freshness, resumable cursor. `mode` narrows to one verb; default is
+    // auto-mode fusion. (Implementation detail: the daemon backs this by shelling the baked search CLI.)
+    search: oc.route({ method: "GET", path: "/workspace/search" }).input(WorkspaceSearchQuerySchema).output(WorkspaceSearchResultSchema),
     // Deterministic, no-LLM classification of the dropped workspace into coarse buckets (repositories / documents
     // / media / archives / other). Read-only proposal: the browser renders it and applies accepted moves via the
     // existing /workspace/move route — this route never touches the tree.

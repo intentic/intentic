@@ -2,7 +2,7 @@ import type { AgentEvent, AskQuestion, ContextUsage, OauthAccount, TodoItem } fr
 import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandboxClient";
 import { sseData, sseFrames } from "../sse";
-import type { CatalogOption } from "./catalog";
+import { type CatalogOption, modelsFor, providerLabel } from "./catalog";
 import { formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus";
 
 // 'notice' is a small muted system line in the transcript (dismissed / kept planning / approved /
@@ -19,17 +19,26 @@ export type ChatMode = "plan" | "acceptEdits" | "default" | "bypassPermissions";
 // seeded with the transcript so far (see Conversation.send).
 export type ChatProvider = "claude" | "codex" | "grok";
 
-// Grok (xAI via OpenCode) needs an explicitly-named model. Its catalog is loaded live from the daemon
-// (/grok/models → OpenCode's provider.list, the runtime source of truth) into these refs, so the picker never
-// drifts from xAI's renames. useChat.loadGrokModels fills them when a daemon is reachable; resetChat clears them.
+// Grok (xAI via OpenCode) needs an explicitly-named model. Its catalog is daemon-owned (/grok/models → xAI
+// discovery with a persisted/seed floor, never empty) and loaded into these refs, so the picker tracks xAI's
+// renames without a static list. useChat.loadGrokModels fills them when a daemon is reachable; resetChat clears.
 export const grokModels = ref<CatalogOption[]>([]);
-// OpenCode's default xAI model id; empty until loaded — a turn then omits the model and OpenCode picks its own.
+// The daemon's default xAI model id; empty only until the first load, then always a concrete id.
 export const grokDefaultModel = ref<string>(``);
 
-// The model a fresh conversation seeds for a provider: Claude names Opus, Grok its live default (empty until
-// loaded ⇒ OpenCode's own default), Codex sends empty (the account default).
+// The model a fresh conversation seeds for a provider: Claude names Opus, Grok its live default (empty only
+// before the first catalog load), Codex sends empty (the account default).
 export const defaultModelFor = (provider: ChatProvider): string =>
     provider === `claude` ? `opus` : provider === `grok` ? grokDefaultModel.value : ``;
+
+// The model options for a provider's picker/chip: Grok's live daemon catalog, else the static catalog. Shared by
+// the composer pill and the popover/sheet menu bodies so their model list + label logic can't drift apart.
+export const modelOptionsFor = (provider: ChatProvider): CatalogOption[] =>
+    provider === `grok` ? grokModels.value : modelsFor(provider);
+// The display label for a selected model id — the option's label, else the provider name so the chip is never
+// blank (Grok's catalog can be briefly empty on first load; other providers always resolve their option).
+export const modelLabelFor = (provider: ChatProvider, modelId: string): string =>
+    modelOptionsFor(provider).find((option) => option.value === modelId)?.label ?? providerLabel(provider);
 
 // The provider tabs shown wherever accounts are picked (the account dialog + the composer's connect gate).
 // Labels differ from the internal ids (codex → "ChatGPT").
@@ -751,14 +760,13 @@ export class Conversation {
                     return;
                 }
                 if (event.code === `grok-model-invalid`) {
-                    // xAI rejected this turn's model id (OpenCode's catalog drifted from xAI's live models). Clear
-                    // this chat's pinned model so the daemon resolves a live-valid default on the retry, and reload
-                    // the live catalog (which also repoints any grok conversation off the now-invalid id). Self-
-                    // healed ⇒ a muted notice, not the red error ref. Dynamic import breaks the static cycle
-                    // (useChat imports this module), mirroring the terminal-panel import above.
-                    this.model.value = ``;
+                    // The daemon self-heals a stale model mid-turn (re-prompting with a model xAI named), so this
+                    // now reaches us only when that failed — xAI rejected the model AND named no alternative, a
+                    // genuine error. Surface it (red), and reload the catalog so the picker reflects whatever the
+                    // daemon last recorded. Dynamic import breaks the static cycle (useChat imports this module),
+                    // mirroring the terminal-panel import above.
                     void import(`./useChat`).then((chat) => chat.loadGrokModels());
-                    this.appendNotice(`Grok's model list changed — reloaded it. Send your message again to use a current model.`);
+                    this.error.value = event.message;
                     return;
                 }
                 this.error.value = event.message;

@@ -3,6 +3,9 @@
     "name": "logs",
     "version": "1.0.0",
     "engines": { "intentic": "^0.2.0" },
+    "permissions": {
+        "sandbox": ["GET /logs", "GET /logs/file"]
+    },
     "contributes": {
         "views": [{ "id": "logs", "label": "Logs", "surface": "rail" }]
     }

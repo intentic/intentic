@@ -1,7 +1,13 @@
 import { expect, test } from "vitest";
-import { discoverXaiModels, parseModelSuggestions } from "./grok-models.js";
+import { discoverXaiModels, humanizeModelId, parseModelSuggestions } from "./grok-models.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
+
+test("humanizeModelId title-cases the hyphen-split tokens for a polished label", () => {
+    expect(humanizeModelId("grok-4")).toBe("Grok 4");
+    expect(humanizeModelId("grok-4-fast")).toBe("Grok 4 Fast");
+    expect(humanizeModelId("grok-4.20-0309-reasoning")).toBe("Grok 4.20 0309 Reasoning");
+});
 
 test("parseModelSuggestions extracts the ids after 'Did you mean', not the rejected id", () => {
     const message =

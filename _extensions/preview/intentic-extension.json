@@ -3,6 +3,9 @@
     "name": "preview",
     "version": "1.0.0",
     "engines": { "intentic": "^0.2.0" },
+    "permissions": {
+        "sandbox": ["GET /panels", "POST /panels/*/start", "POST /panels/*/stop"]
+    },
     "contributes": {
         "views": [{ "id": "preview", "label": "Preview", "surface": "directory" }]
     }

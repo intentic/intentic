@@ -44,7 +44,7 @@ test("find: hits → 0, zero hits → 1, bad regex → 2", async () => {
     expect((await invoke(["find", "(*bad"])).exitCode).toBe(2);
 });
 
-test("--json emits a single IqResult document", async () => {
+test("--json emits a single WorkspaceSearchResult document", async () => {
     const { out } = await invoke(["files", "widget", "--json"]);
     const result = JSON.parse(out) as { mode: string; groups: { path: string }[] };
     expect(result.mode).toBe("files");

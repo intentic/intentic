@@ -11,9 +11,12 @@ import { rename } from "./rename.js";
 // test can read the rewritten files back.
 const scaffold = async (files: Record<string, string>): Promise<string> => {
     const dir = mkdtempSync(join(tmpdir(), "lsp-"));
+    // A package.json bounds nodenext's package-scope walk to this dir (declaring the files ESM), and `types: []`
+    // stops typeRoots from scanning ambient node_modules/@types up the tmpdir tree — keeping resolution hermetic.
+    await writeFile(join(dir, "package.json"), JSON.stringify({ type: "module" }));
     await writeFile(
         join(dir, "tsconfig.json"),
-        JSON.stringify({ compilerOptions: { module: "nodenext", moduleResolution: "nodenext", strict: true, noEmit: true }, include: ["*.ts"] }),
+        JSON.stringify({ compilerOptions: { module: "nodenext", moduleResolution: "nodenext", strict: true, noEmit: true, types: [] }, include: ["*.ts"] }),
     );
     for (const [name, content] of Object.entries(files)) {
         await writeFile(join(dir, name), content);

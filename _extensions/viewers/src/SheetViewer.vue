@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Segmented } from "@intentic-app/ui";
+import { Icon, Segmented } from "@intentic/extension-ui";
 import DOMPurify from "dompurify";
 import { computed, onMounted, ref, watch } from "vue";
 
 /* XLSX preview: parses a workbook with SheetJS (lazy-imported — it's a heavy lib) and renders each sheet as an
  * HTML table. A workbook is untrusted (cells can hold arbitrary markup), so sheet_to_html output is
- * DOMPurify-sanitized before v-html, exactly like MarkdownViewer. Multiple sheets get a tab switcher. */
+ * DOMPurify-sanitized before v-html. Multiple sheets get a tab switcher. The host (FileViewer) fetches the file's
+ * bytes and passes them as `blob`; this component only renders. */
 
 const { blob } = defineProps<{ blob: Blob }>();
 
@@ -47,7 +48,7 @@ const render = async (source: Blob): Promise<void> => {
     }
 };
 
-// ponytail: parses on the main thread; bounded by the viewer's 25 MiB raw cap. Move to a ?worker if a big sheet janks.
+// Parses on the main thread; bounded by the viewer's 25 MiB raw cap. Move to a ?worker if a big sheet janks.
 onMounted(() => void render(blob));
 watch(
     () => blob,

@@ -1,4 +1,4 @@
-import type { IqGroup, IqResult } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchGroup, WorkspaceSearchResult } from "@intentic/sandbox-contract";
 import type { Embedder } from "../embed/embedder.js";
 import type { Reranker } from "../embed/reranker.js";
 import { astSearch } from "../engines/astq.js";
@@ -497,11 +497,11 @@ const toResult = (
     rendered: Rendered,
     request: QueryRequest,
     offset: number,
-    freshness: IqResult["freshness"],
+    freshness: WorkspaceSearchResult["freshness"],
     hint: string | undefined,
     features: ReadonlySet<Feature>,
-): IqResult => {
-    const shownGroups: IqGroup[] = plan.groups.slice(offset, offset + rendered.shownGroups).map((group) => ({
+): WorkspaceSearchResult => {
+    const shownGroups: WorkspaceSearchGroup[] = plan.groups.slice(offset, offset + rendered.shownGroups).map((group) => ({
         path: group.path,
         score: group.score,
         hits: group.hits.map((hit) => ({

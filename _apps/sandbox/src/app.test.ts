@@ -179,7 +179,7 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         get: async () => ({
             searchPastChats: false,
             stableSystemPrompt: false,
-            lspTools: false,
+            skills: [],
             hashlineEdits: false,
             terseOutput: false,
             outputCleaners: "",
@@ -220,7 +220,8 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     openCode: {
         client: async () => ({}) as never,
         connected: async () => false,
-        xaiModels: async () => ({ models: [] }),
+        xaiModels: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }),
+        recordModels: async () => {},
         disconnect: async () => {},
     },
     intentic: async function* () {},
@@ -848,6 +849,7 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
                             models: [{ id: "grok-4.20-0309-reasoning", label: "grok-4.20-0309-reasoning" }],
                             default: "grok-4.20-0309-reasoning",
                         }),
+                        recordModels: async () => {},
                         disconnect: async () => {},
                     },
                     grokAgent: async function* (request) {
@@ -863,28 +865,9 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
     expect(seen).toEqual(["grok-4.20-0309-reasoning", "grok-4.20-0309-reasoning", "grok-4.20-0309-reasoning"]);
 });
 
-test("agent.run fails a Grok turn with grok-model-invalid when xAI serves no models", async () => {
-    let grokCalled = false;
-    const client = clientFor(
-        createApp(
-            services({
-                openCode: {
-                    client: async () => ({}) as never,
-                    connected: async () => true,
-                    xaiModels: async () => ({ models: [] }),
-                    disconnect: async () => {},
-                },
-                grokAgent: async function* () {
-                    grokCalled = true;
-                    yield { kind: "done" };
-                },
-            }),
-        ),
-    );
-    const events = await collect(await client.agent.run({ prompt: "hi", agent: "grok" }));
-    expect(grokCalled).toBe(false);
-    expect(events.some((event) => event.kind === "error" && event.code === "grok-model-invalid")).toBe(true);
-});
+// (The old "empty catalog ⇒ pre-flight grok-model-invalid bounce" test is gone: the daemon's catalog is now
+// never empty — live discovery with a persisted/seed floor — so the route always resolves a model and the turn
+// runs. A stale/renamed id self-heals mid-turn in the runner instead; see grok-agent.test.ts.)
 
 test("agent.run merges internal (env) tools with the mcp-kind capabilities for the turn", async () => {
     let seen: { tools?: readonly AgentTool[] } | undefined;
@@ -1379,7 +1362,7 @@ test("workspace.file reads any contained file (former-secret paths included), NO
 
 // Search is backed by the iq CLI (execFile "iq" … --json). Round-trip through a PATH shim to the built CLI
 // against a real tmp workspace; the min-length rejection is contract validation and never spawns anything.
-test("workspace.search shells into iq --json and round-trips the IqResult; rejects a too-short query", async () => {
+test("workspace.search shells into iq --json and round-trips the WorkspaceSearchResult; rejects a too-short query", async () => {
     const root = await mkdtemp(join(tmpdir(), "iq-daemon-"));
     const bin = await mkdtemp(join(tmpdir(), "iq-bin-"));
     const cli = fileURLToPath(new URL("../../iq/dist/cli.js", import.meta.url));

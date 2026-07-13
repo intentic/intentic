@@ -2,6 +2,7 @@ import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../agent/agent.js";
 import { createPlanRequest } from "../agent/agent-requests.js";
+import { isChatModel, parseModelSuggestions } from "./grok-models.js";
 import type { OpenCodeService } from "./opencode.js";
 
 /* The xAI Grok provider adapter: same seam as agent.ts's runAgent — AgentRequest in, AgentEvent frames out —
@@ -72,15 +73,24 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
             }
         }
         turn.signal.addEventListener("abort", () => void c.session.abort({ path: { id: sessionId } }).catch(() => {}), { once: true });
-        await c.session.promptAsync({
-            path: { id: sessionId },
-            query: { directory: turn.cwd },
-            body: {
-                agent: turn.agent,
-                ...(turn.model !== undefined && turn.model !== "" ? { model: { providerID: XAI, modelID: turn.model } } : {}),
-                parts: [{ type: "text", text: turn.prompt }],
-            },
-        });
+        // Fire the turn's prompt on the resolved session for a given model id (empty ⇒ let OpenCode choose). Reused
+        // by the self-heal below to re-prompt with a corrected model after a "model not found" rejection.
+        const sendPrompt = (modelId: string | undefined): ReturnType<typeof c.session.promptAsync> =>
+            c.session.promptAsync({
+                path: { id: sessionId },
+                query: { directory: turn.cwd },
+                body: {
+                    agent: turn.agent,
+                    ...(modelId !== undefined && modelId !== "" ? { model: { providerID: XAI, modelID: modelId } } : {}),
+                    parts: [{ type: "text", text: turn.prompt }],
+                },
+            });
+        await sendPrompt(turn.model);
+        // One self-heal attempt per turn: xAI names the account's valid models when it rejects a stale/renamed id.
+        let retried = false;
+        // After a self-heal re-prompt, a lingering session.idle from the FAILED prompt could end the turn before
+        // the corrected one streams. While true, ignore idle until the retry's first real event proves it started.
+        let awaitingRetryStart = false;
         // Drive the shared SSE iterator manually so each read can race an inactivity timeout (a `for await` can't),
         // and close it on exit (it's a per-turn subscription). Both session.idle and session.error are terminal —
         // OpenCode may not send idle after an error.
@@ -112,6 +122,30 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                     continue;
                 }
                 inactivityDeadline = Date.now() + inactivityMs;
+                // Self-heal a stale/renamed model in-place, instead of surfacing the error and making the user
+                // re-send: xAI's rejection NAMES the account's valid models (the authoritative catalog). Record
+                // them (fixes the picker + every future turn) and re-prompt this same session once with a valid
+                // one. Model-not-found is rejected before any content streams, so nothing is duplicated. A second
+                // failure (retried already true) falls through and surfaces as a real error.
+                if (event.type === "session.error" && !retried) {
+                    const message = errorText(event.properties.error);
+                    const suggestions = MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : [];
+                    if (suggestions[0] !== undefined) {
+                        retried = true;
+                        awaitingRetryStart = true;
+                        await openCode.recordModels(suggestions);
+                        await sendPrompt(suggestions[0]);
+                        continue;
+                    }
+                }
+                if (awaitingRetryStart) {
+                    // Drop a stale idle from the failed prompt; any other event (content, or the retry's own error)
+                    // means the corrected turn is under way, so resume normal processing.
+                    if (event.type === "session.idle") {
+                        continue;
+                    }
+                    awaitingRetryStart = false;
+                }
                 yield event;
                 if (event.type === "session.idle" || event.type === "session.error") {
                     return;

@@ -6,9 +6,11 @@ vi.mock("../sandboxClient", () => ({ sandboxRequest: vi.fn() }));
 const { sandboxRequest } = await import("../sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 
-// The grok-model-invalid self-heal dynamically imports useChat to reload the live catalog; stub it so the test
-// doesn't pull in the whole useChat module (router/sandbox side effects) — the reload itself isn't under test here.
-vi.mock("./useChat", () => ({ loadGrokModels: async () => {} }));
+// A grok-model-invalid error dynamically imports useChat to reload the live catalog; stub it (and spy) so the
+// test doesn't pull in the whole useChat module (router/sandbox side effects). vi.hoisted so the spy exists when
+// the hoisted vi.mock factory runs.
+const { loadGrokModelsMock } = vi.hoisted(() => ({ loadGrokModelsMock: vi.fn(async () => {}) }));
+vi.mock("./useChat", () => ({ loadGrokModels: loadGrokModelsMock }));
 
 // The typewriter drains via requestAnimationFrame; run frames synchronously so deltas land immediately.
 beforeEach(() => {
@@ -333,22 +335,25 @@ describe(`Conversation`, () => {
         expect(conversation.session.value).toMatchObject({ id: `s-2`, provider: `claude` });
     });
 
-    it(`self-heals a grok-model-invalid error: clears the pinned model and notices instead of erroring`, async () => {
+    it(`surfaces an unrecoverable grok-model-invalid error and reloads the catalog`, async () => {
+        loadGrokModelsMock.mockClear();
         const conversation = new Conversation(`c1`);
         conversation.provider.value = `grok`;
         conversation.model.value = `grok-code-fast-1`;
-        // xAI rejected the (retired) pinned model id mid-turn.
+        // The daemon self-heals a stale model in-turn (re-prompting with one xAI named), so this code now reaches
+        // the client only when that failed — xAI rejected the model AND named no alternative: a genuine error.
         sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `grok-model-invalid`, message: `Model not found: xai/grok-code-fast-1` }, { kind: `done` }]),
+            sseResponse([{ kind: `error`, code: `grok-model-invalid`, message: `xAI returned no available models for your account.` }, { kind: `done` }]),
         );
         await conversation.send(`hi`, { ...settings, agent: `grok`, model: `grok-code-fast-1` });
+        // The catalog reload is a fire-and-forget dynamic import; let its microtasks drain before asserting it.
+        await new Promise((resolve) => setTimeout(resolve, 0));
 
-        // Self-healed: the pinned model is cleared (so the next send lets the daemon pick a live-valid default),
-        // a muted notice, no red error ref, no error status.
-        expect(conversation.model.value).toBe(``);
-        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
-        expect(conversation.error.value).toBeNull();
-        expect(conversation.status.value).not.toBe(`error`);
+        // The server message surfaces as the red error ref (not a muted notice), and the catalog is reloaded so
+        // the picker reflects whatever the daemon last recorded.
+        expect(conversation.error.value).toBe(`xAI returned no available models for your account.`);
+        expect(conversation.messages.value.at(-1)!.role).not.toBe(`notice`);
+        expect(loadGrokModelsMock).toHaveBeenCalled();
     });
 
     it(`renders a rate_limit error as a muted notice, not the red error ref`, async () => {

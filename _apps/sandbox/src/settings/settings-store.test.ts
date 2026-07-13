@@ -16,7 +16,7 @@ const tempStore = () => {
 const ALL_OFF: SandboxSettings = {
     searchPastChats: false,
     stableSystemPrompt: false,
-    lspTools: false,
+    skills: [],
     hashlineEdits: false,
     terseOutput: false,
     outputCleaners: "",

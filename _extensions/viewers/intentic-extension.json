@@ -1,0 +1,12 @@
+{
+    "publisher": "intentic",
+    "name": "viewers",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.2.0" },
+    "contributes": {
+        "viewers": [
+            { "id": "docx", "extensions": ["docx"], "fetch": "blob" },
+            { "id": "xlsx", "extensions": ["xlsx"], "fetch": "blob" }
+        ]
+    }
+}

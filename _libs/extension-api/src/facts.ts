@@ -1,7 +1,12 @@
-/* The PUBLIC detection facts — the stable subset of the daemon's wire schemas that extension `detect()`
- * functions may read. The daemon's own summaries (PanelSummary, CapabilitySummary) are structural supersets and
- * flow in unmapped, but only THESE fields are part of the extension API: everything else on the wire stays free
- * to change. Optional fields carry `| undefined` so zod-inferred wire types assign under
+/* The stable DETECTION facts — the subset of the daemon's wire schemas an extension's `detect()` reads to decide
+ * when to activate a view. This is deliberately narrow (evidence over identity) so activation logic doesn't
+ * couple to the daemon's fuller summaries. It is NOT the data plane: an activated extension reads real data over
+ * `api.sandbox.request/json` against the `@intentic/sandbox-contract` schemas — the first-party wire contract,
+ * gated per-route by the manifest's `permissions.sandbox` allowlist. (Because every first-party extension is
+ * in-repo and compiled together, a wire change there is caught by the compiler and fixed atomically, so there is
+ * no separate "stable data API" to promote — only detection is version-stable.) The daemon's own summaries
+ * (PanelSummary, CapabilitySummary) are structural supersets and flow into `detect()` unmapped, but only THESE
+ * fields are guaranteed to it. Optional fields carry `| undefined` so zod-inferred wire types assign under
  * exactOptionalPropertyTypes. */
 
 // Daemon-computed content facts for one repository under /work/repositories — evidence over identity: a repo is

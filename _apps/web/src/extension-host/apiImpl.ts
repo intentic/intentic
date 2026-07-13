@@ -1,5 +1,5 @@
 import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, ProcessStatus, RepoFacts } from "@intentic/extension-api";
-import { extensionApiVersion, extensionIdOf } from "@intentic/extension-api";
+import { extensionApiVersion, extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-api";
 import { useTheme } from "@intentic-app/ui";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { watch } from "vue";
@@ -9,6 +9,7 @@ import { sandboxJson, sandboxRequest } from "../composables/sandboxClient";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { sandboxKey, useSandbox } from "../composables/useSandbox";
 import { registerView } from "../extensions/registry";
+import { registerViewer } from "../extensions/viewerRegistry";
 import { router } from "../router";
 
 /* The host's fulfillment of IntenticApi, one instance per activated extension. Every registration is gated on
@@ -36,6 +37,7 @@ export const createExtensionApi = (
 
     const contributes = summary.manifest.contributes;
     const declaredViews = new Map((contributes?.views ?? []).map((view) => [view.id, view]));
+    const declaredViewers = new Map((contributes?.viewers ?? []).map((viewer) => [viewer.id, viewer]));
     const declaredCommands = new Map((contributes?.commands ?? []).map((command) => [command.command, command]));
     const declaredSettings = contributes?.settings ?? [];
     const declaredProcesses = new Set((contributes?.processes ?? []).map((process) => process.name));
@@ -55,6 +57,18 @@ export const createExtensionApi = (
         return `/extensions/${encodeURIComponent(summary.id)}/processes/${encodeURIComponent(name)}`;
     };
 
+    // The manifest's declared sandbox-route allowlist gates api.sandbox.request/json: an undeclared method+path
+    // throws, so a bundle can only reach the daemon routes the owner approved at install — not the whole daemon.
+    const sandboxPermissions = summary.manifest.permissions?.sandbox ?? [];
+    const guardSandbox = (path: string, init?: RequestInit): void => {
+        const method = init?.method ?? `GET`;
+        if (!sandboxRouteAllowed(sandboxPermissions, method, path)) {
+            throw new Error(
+                `extension "${extensionId}" called undeclared sandbox route ${method.toUpperCase()} ${path} — declare it in permissions.sandbox in the manifest`,
+            );
+        }
+    };
+
     const { scheme } = useTheme();
 
     const api: IntenticApi = {
@@ -67,6 +81,24 @@ export const createExtensionApi = (
                 }
                 // The manifest's label is what the install dialog showed — it wins over the runtime value.
                 return track(registerView(extensionId, { ...view, label: declared.label }));
+            },
+        },
+        viewers: {
+            register: (viewer) => {
+                const declared = declaredViewers.get(viewer.id);
+                if (declared === undefined) {
+                    throw new Error(`viewer "${viewer.id}" is not declared in the manifest's contributes.viewers`);
+                }
+                // File extensions + fetch kind come from the approved manifest; the extension supplies only the component.
+                return track(
+                    registerViewer({
+                        owner: extensionId,
+                        id: viewer.id,
+                        extensions: declared.extensions,
+                        fetch: declared.fetch,
+                        component: viewer.component,
+                    }),
+                );
             },
         },
         commands: {
@@ -103,8 +135,14 @@ export const createExtensionApi = (
             },
         },
         sandbox: {
-            request: (path, init) => sandboxRequest(path, init),
-            json: (path, init) => sandboxJson(path, init),
+            request: (path, init) => {
+                guardSandbox(path, init);
+                return sandboxRequest(path, init);
+            },
+            json: (path, init) => {
+                guardSandbox(path, init);
+                return sandboxJson(path, init);
+            },
             reachable: () => useSandbox().reachable.value === true,
             key: (...parts) => sandboxKey(...parts),
             origin: () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { IqSearchMode } from "@intentic-app/api-contract";
+import type { WorkspaceSearchMode } from "@intentic-app/api-contract";
 import Dialog from "primevue/dialog";
 import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -10,7 +10,7 @@ import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { iconForEntry } from "@intentic-app/ui";
 
 /* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type — the sandbox
- * daemon's iq `files` search — and opens the pick as an editor tab. Mounted once in the desktop shell and opened
+ * daemon's `files` search — and opens the pick as an editor tab. Mounted once in the desktop shell and opened
  * from its global keydown. Server-ranked: no local tree load, no client-side fuzzy matcher. Below the 2-char
  * search floor it offers the open tabs as jump targets so Enter always has somewhere to go. A `>` prefix flips
  * the palette to COMMAND mode (VSCode's Ctrl+Shift+P folded into the same field), filtering the command
@@ -21,7 +21,7 @@ const router = useRouter();
 const { tabs } = useWorkspaceTabs();
 
 const query = ref(``);
-const mode = ref<IqSearchMode>(`files`);
+const mode = ref<WorkspaceSearchMode>(`files`);
 // `>` prefix = command mode; the rest of the text filters registered commands by title or id.
 const commandMode = computed(() => query.value.trimStart().startsWith(`>`));
 const commandQuery = computed(() => query.value.trimStart().slice(1).trim().toLowerCase());

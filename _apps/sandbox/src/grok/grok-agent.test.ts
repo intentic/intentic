@@ -255,9 +255,12 @@ test("a session error and a thrown runner become error events followed by done",
 // A fake OpenCode whose SSE stream yields `events` then STAYS OPEN (like the real global subscription) — so
 // these exercise how createGrokRunner terminates against an open stream (idle/error/timeout), which a fake
 // GrokRunner (a finite array) can't reproduce. `return()` releases the hang so the runner's cleanup never blocks.
-const fakeOpenCode = (events: Event[]): { openCode: OpenCodeService; aborted: () => boolean } => {
+const fakeOpenCode = (events: Event[]): { openCode: OpenCodeService; aborted: () => boolean; recorded: string[][]; prompts: (string | undefined)[] } => {
     let aborted = false;
     let releaseHang: (() => void) | undefined;
+    // Captures for the self-heal path: the model ids each promptAsync fired with, and every recordModels payload.
+    const prompts: (string | undefined)[] = [];
+    const recorded: string[][] = [];
     const stream = {
         [Symbol.asyncIterator]() {
             let i = 0;
@@ -282,14 +285,18 @@ const fakeOpenCode = (events: Event[]): { openCode: OpenCodeService; aborted: ()
         event: { subscribe: async () => ({ stream }) },
         session: {
             create: async () => ({ data: { id: "s1" } }),
-            promptAsync: async () => ({}),
+            promptAsync: async (options: { body?: { model?: { modelID?: string } } }) => {
+                prompts.push(options.body?.model?.modelID);
+                return {};
+            },
             abort: async () => {
                 aborted = true;
                 return {};
             },
         },
     };
-    return { openCode: { client: async () => client } as unknown as OpenCodeService, aborted: () => aborted };
+    const openCode = { client: async () => client, recordModels: async (ids: string[]) => void recorded.push(ids) };
+    return { openCode: openCode as unknown as OpenCodeService, aborted: () => aborted, recorded, prompts };
 };
 
 const runnerTurn: GrokTurn = { prompt: "hi", cwd: "/work", agent: "build", signal: new AbortController().signal };
@@ -315,4 +322,60 @@ test("createGrokRunner aborts and throws when no event arrives within the inacti
     };
     await expect(drain()).rejects.toThrow(/timed out/);
     expect(aborted()).toBe(true);
+});
+
+test("createGrokRunner self-heals a model-not-found rejection: records the named models and re-prompts once", async () => {
+    const { openCode, recorded, prompts } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        {
+            type: "session.error",
+            properties: { sessionID: "s1", error: { name: "ProviderModelNotFoundError", data: { message: "Model not found: xai/grok-4-stale. Did you mean: grok-4-latest?" } } },
+        } as unknown as Event,
+        // The corrected turn (same session) streams normally after the silent re-prompt.
+        { type: "message.part.updated", properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Fixed." } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, model: "grok-4-stale" })) {
+        seen.push(event.type);
+    }
+    // The rejection is swallowed (never yielded) and the turn produces the corrected content instead.
+    expect(seen).toEqual(["session.created", "message.part.updated", "session.idle"]);
+    expect(recorded).toEqual([["grok-4-latest"]]);
+    expect(prompts).toEqual(["grok-4-stale", "grok-4-latest"]);
+});
+
+test("createGrokRunner's self-heal ignores a stale idle from the failed prompt, waiting for the corrected turn", async () => {
+    const { openCode } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        {
+            type: "session.error",
+            properties: { sessionID: "s1", error: { data: { message: "Model not found: xai/grok-4-stale. Did you mean: grok-4-latest?" } } },
+        } as unknown as Event,
+        // A lingering idle from the rejected prompt — must NOT end the turn before the retry streams.
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+        { type: "message.part.updated", properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Fixed." } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, model: "grok-4-stale" })) {
+        seen.push(event.type);
+    }
+    expect(seen).toEqual(["session.created", "message.part.updated", "session.idle"]);
+});
+
+test("createGrokRunner surfaces a model error it cannot self-heal (no named alternatives), recording nothing", async () => {
+    const { openCode, recorded, prompts } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        { type: "session.error", properties: { sessionID: "s1", error: { data: { message: "Model not found: xai/grok-x." } } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, model: "grok-x" })) {
+        seen.push(event.type);
+    }
+    // No "Did you mean" ⇒ no retry: the error is surfaced (and terminal), and nothing is recorded/re-prompted.
+    expect(seen).toEqual(["session.created", "session.error"]);
+    expect(recorded).toEqual([]);
+    expect(prompts).toEqual(["grok-x"]);
 });

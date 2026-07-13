@@ -1,4 +1,4 @@
-import type { IqResult } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchResult } from "@intentic/sandbox-contract";
 import type { Anchor, CaseScore } from "./schema.js";
 
 const DEFAULT_TOLERANCE = 10;
@@ -12,7 +12,7 @@ export interface RankedAnchor {
 
 // Groups are already relevance-ranked and each is one rank — the unit an agent decides to open. `related`
 // definition anchors ("name — def path:line · refs: …") count as extra ranks after the groups.
-export const rankedAnchors = (result: IqResult): RankedAnchor[] => {
+export const rankedAnchors = (result: WorkspaceSearchResult): RankedAnchor[] => {
     const ranked: RankedAnchor[] = result.groups.map((group) => ({ file: group.path, lines: group.hits.map((hit) => hit.line) }));
     for (const entry of result.related ?? []) {
         const match = /def (\S+):(\d+)/.exec(entry);

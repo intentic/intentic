@@ -40,6 +40,14 @@ export interface ViewRegistration {
     readonly view: () => Promise<Component>;
 }
 
+// A custom file viewer's runtime registration — `id` must match a `contributes.viewers` entry in the approved
+// manifest (the host reads the file extensions + fetch kind from there). The host resolves an open file to this
+// viewer, fetches its content, and renders `component` with `{ path, text?, blob? }` bound.
+export interface ViewerRegistration {
+    readonly id: string;
+    readonly component: () => Promise<Component>;
+}
+
 export type SettingValue = string | number | boolean;
 
 export interface ProcessStatus {
@@ -55,6 +63,11 @@ export interface IntenticApi {
     readonly views: {
         register(view: ViewRegistration): Disposable;
     };
+    // Custom file viewers (contributes.viewers) — the host owns the fetch + open-file lifecycle and renders the
+    // registered component with the file's content; the extension only renders. See ViewerRegistration.
+    readonly viewers: {
+        register(viewer: ViewerRegistration): Disposable;
+    };
     readonly commands: {
         // `command` must match a `contributes.commands` entry in the approved manifest.
         register(command: string, handler: (...args: unknown[]) => unknown): Disposable;
@@ -67,7 +80,8 @@ export interface IntenticApi {
         onDidChange(listener: (key: string) => void): Disposable;
     };
     // The authenticated transport to the sandbox daemon's routes — auth is injected host-side; an extension
-    // never sees tokens.
+    // never sees tokens. Reach is scoped: request/json are gated by the manifest's `permissions.sandbox`
+    // allowlist, so a call to an undeclared method+path throws rather than reaching the whole daemon.
     readonly sandbox: {
         request(path: string, init?: RequestInit): Promise<Response>;
         json<T>(path: string, init?: RequestInit): Promise<T>;

@@ -3,6 +3,16 @@
     "name": "automations",
     "version": "1.0.0",
     "engines": { "intentic": "^0.2.0" },
+    "permissions": {
+        "sandbox": [
+            "GET /automations",
+            "POST /automations",
+            "DELETE /automations/*",
+            "GET /automations/pending",
+            "POST /automations/pending/*/approve",
+            "POST /automations/pending/*/reject"
+        ]
+    },
     "contributes": {
         "views": [{ "id": "automations", "label": "Automations", "surface": "rail" }]
     }

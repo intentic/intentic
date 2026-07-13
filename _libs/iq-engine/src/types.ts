@@ -1,4 +1,4 @@
-import type { IqFreshness, IqResult, IqTag } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchFreshness, WorkspaceSearchResult, WorkspaceSearchTag } from "@intentic/sandbox-contract";
 
 export type Verb = "q" | "find" | "files" | "def" | "refs" | "sym" | "ast" | "ask" | "outline" | "context" | "recent" | "log" | "who";
 
@@ -53,7 +53,7 @@ export interface QueryRequest {
 }
 
 export interface QueryOutcome {
-    readonly result: IqResult;
+    readonly result: WorkspaceSearchResult;
     readonly text: string;
     readonly exitCode: 0 | 1;
 }
@@ -75,7 +75,7 @@ export interface EngineHit {
     readonly text: string;
     readonly start?: number;
     readonly end?: number;
-    readonly tags: readonly IqTag[];
+    readonly tags: readonly WorkspaceSearchTag[];
     // Enclosing symbol ("createWidget (fn)") — filled by the symctx enrichment stage.
     context?: string;
 }
@@ -118,5 +118,5 @@ export interface IndexStatus {
     readonly chunks: number;
     readonly embedded: number;
     readonly generation: number;
-    readonly freshness: IqFreshness;
+    readonly freshness: WorkspaceSearchFreshness;
 }

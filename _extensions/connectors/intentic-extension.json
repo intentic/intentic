@@ -27,7 +27,15 @@
                 },
                 "fields": [
                     { "key": "token", "label": "Personal access token", "secret": true },
-                    { "key": "git", "label": "Git access", "default": "on", "options": [{ "value": "on", "label": "On" }, { "value": "off", "label": "Off" }] }
+                    {
+                        "key": "git",
+                        "label": "Git access",
+                        "default": "on",
+                        "options": [
+                            { "value": "on", "label": "On" },
+                            { "value": "off", "label": "Off" }
+                        ]
+                    }
                 ],
                 "env": { "GITHUB_TOKEN": "${token}" },
                 "skill": "skills/github/SKILL.md"
@@ -57,7 +65,15 @@
                 "fields": [
                     { "key": "url", "label": "Instance URL", "placeholder": "https://gitlab.com", "default": "https://gitlab.com" },
                     { "key": "token", "label": "Access token", "secret": true },
-                    { "key": "git", "label": "Git access", "default": "on", "options": [{ "value": "on", "label": "On" }, { "value": "off", "label": "Off" }] }
+                    {
+                        "key": "git",
+                        "label": "Git access",
+                        "default": "on",
+                        "options": [
+                            { "value": "on", "label": "On" },
+                            { "value": "off", "label": "Off" }
+                        ]
+                    }
                 ],
                 "env": { "GITLAB_TOKEN": "${token}", "GITLAB_URL": "${url}" },
                 "skill": "skills/gitlab/SKILL.md"

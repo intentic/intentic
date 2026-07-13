@@ -1,8 +1,8 @@
-import type { IqResult } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchResult } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { rankedAnchors, scoreCase } from "./score.js";
 
-const result = (groups: Array<{ path: string; lines: number[] }>, related?: string[]): IqResult => ({
+const result = (groups: Array<{ path: string; lines: number[] }>, related?: string[]): WorkspaceSearchResult => ({
     mode: "ask",
     total: groups.length,
     shown: groups.length,

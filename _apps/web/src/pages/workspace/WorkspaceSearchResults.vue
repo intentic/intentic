@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import type { IqGroup, IqHit } from "@intentic-app/api-contract";
+import type { WorkspaceSearchGroup, WorkspaceSearchHit } from "@intentic-app/api-contract";
 import { computed, nextTick, ref } from "vue";
 import { iconForEntry } from "@intentic-app/ui";
 
-/* iq search results for the explorer sidebar: relevance-ranked file header rows + indented hit rows (line
+/* Workspace search results for the explorer sidebar: relevance-ranked file header rows + indented hit rows (line
  * number + snippet with the hit <mark>ed via the daemon's start/end offsets when present — semantic hits carry
  * none and render unmarked; no client-side re-matching, no v-html). Clicking a hit (or a header, which stands
  * in for its first hit) opens the file at that line. Same dense row styling and roving-tabindex keyboard nav
  * as WorkspaceTree, minus the tree logic — the list is flat. */
 
 const { groups, truncated, searching, pending, error, query } = defineProps<{
-    groups: readonly IqGroup[];
+    groups: readonly WorkspaceSearchGroup[];
     truncated: boolean;
     searching: boolean;
     pending: boolean;
@@ -20,12 +20,12 @@ const { groups, truncated, searching, pending, error, query } = defineProps<{
 const emit = defineEmits<{ openMatch: [path: string, line: number] }>();
 
 type ResultRow =
-    | { key: string; kind: "file"; group: IqGroup }
+    | { key: string; kind: "file"; group: WorkspaceSearchGroup }
     | { key: string; kind: "match"; path: string; line: number; before: string; hit: string; after: string };
 
 // Snippet split around the daemon's match offsets (absent on semantic/def hits → whole line, no <mark>), with
 // the leading indentation dropped for a dense row.
-const toMatchRow = (path: string, hit: IqHit): ResultRow => {
+const toMatchRow = (path: string, hit: WorkspaceSearchHit): ResultRow => {
     const cut = hit.text.length - hit.text.trimStart().length;
     const text = hit.text.slice(cut);
     const start = hit.start === undefined ? text.length : Math.max(0, hit.start - cut);

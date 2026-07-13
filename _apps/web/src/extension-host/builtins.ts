@@ -5,6 +5,7 @@ import * as apps from "@intentic/ext-apps";
 import * as automations from "@intentic/ext-automations";
 import * as logs from "@intentic/ext-logs";
 import * as preview from "@intentic/ext-preview";
+import * as viewers from "@intentic/ext-viewers";
 import { createExtensionApi, type HostBindings } from "./apiImpl";
 
 /* The compiled-in first-party extensions. Each is a real in-repo extension package (its own
@@ -24,6 +25,7 @@ const builtins: readonly Builtin[] = [
     { manifest: agentActivity.manifest, module: agentActivity },
     { manifest: apps.manifest, module: apps },
     { manifest: preview.manifest, module: preview },
+    { manifest: viewers.manifest, module: viewers },
 ];
 
 // Activate every builtin at shell boot, ahead of the daemon-installed extensions. A builtin's activate() only

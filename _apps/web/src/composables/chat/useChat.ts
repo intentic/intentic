@@ -400,19 +400,23 @@ export const loadGrokModels = async (): Promise<void> => {
     if (!response.ok) {
         return;
     }
-    const body = (await response.json()) as { models?: { id: string; label: string }[]; default?: string };
-    grokModels.value = (body.models ?? []).map((entry) => ({ label: entry.label, value: entry.id }));
-    grokDefaultModel.value = body.default ?? grokModels.value[0]?.value ?? ``;
-    // Always repoint stale selections — including when the catalog came back empty. A since-renamed/retired id
-    // (e.g. a persisted `grok-code-fast-1`) must never keep riding the wire: reset it to the live default, or to
-    // `` ("let the daemon choose") when we have no catalog, so the daemon resolves a valid model itself.
+    const body = (await response.json()) as { models: { id: string; label: string }[]; default: string };
+    grokModels.value = body.models.map((entry) => ({ label: entry.label, value: entry.id }));
+    grokDefaultModel.value = body.default;
+    // The daemon's catalog is never empty, so every Grok selection should carry a concrete offered id — like
+    // Claude always carrying "opus". Repoint anything empty OR no-longer-offered (a since-renamed/retired id like
+    // `grok-code-fast-1`) to the default, so the picker highlights a selection and the chip always shows a name,
+    // never the bare icon. The length guard keeps us from ever pinning a selection to nothing.
+    if (grokModels.value.length === 0) {
+        return;
+    }
     const valid = new Set(grokModels.value.map((option) => option.value));
     for (const conversation of conversations.value) {
-        if (conversation.provider.value === `grok` && conversation.model.value !== `` && !valid.has(conversation.model.value)) {
+        if (conversation.provider.value === `grok` && !valid.has(conversation.model.value)) {
             conversation.model.value = grokDefaultModel.value;
         }
     }
-    if (turnDefaults.models.value.grok !== `` && !valid.has(turnDefaults.models.value.grok)) {
+    if (!valid.has(turnDefaults.models.value.grok)) {
         turnDefaults.models.value = { ...turnDefaults.models.value, grok: grokDefaultModel.value };
     }
 };

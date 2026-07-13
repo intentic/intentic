@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { WorkspaceFileResponse, WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { CopyButton, useDevice } from "@intentic-app/ui";
-import { computed, ref, watch } from "vue";
+import { computed, ref, shallowRef, watch, type Component } from "vue";
+import { viewerForExtension } from "../../extensions/viewerRegistry";
 import { sandboxBlob, SandboxHttpError, sandboxJson } from "../../composables/sandboxClient";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useLayout } from "../../composables/useLayout";
@@ -9,12 +10,10 @@ import { useMonaco } from "../../composables/workspace/useMonaco";
 import { changeEpochOf } from "../../composables/workspace/useWorkspaceLive";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import CodeView from "./CodeView.vue";
-import DocxViewer from "./DocxViewer.vue";
 import FileBreadcrumb from "./FileBreadcrumb.vue";
 import FileUnsupported from "./FileUnsupported.vue";
 import { resolveFile, type ViewMode } from "./fileType";
 import MarkdownViewer from "./MarkdownViewer.vue";
-import SheetViewer from "./SheetViewer.vue";
 import SvgViewer from "./SvgViewer.vue";
 
 /* Dispatches one open file to the right renderer (code / markdown / svg / image / pdf / fallback) and owns the
@@ -35,9 +34,12 @@ const mode = ref<ViewMode>(`empty`);
 const lang = ref<string | undefined>(undefined);
 const text = ref<string | null>(null);
 const blobUrl = ref<string | null>(null);
-// Raw bytes handed to a client-side parser (docx-preview / SheetJS); those viewers own their own render lifecycle,
-// so unlike blobUrl there is no object URL to revoke here.
+// Raw bytes handed to the registered extension viewer (docx/xlsx) to parse; the viewer owns its own render
+// lifecycle, so unlike blobUrl there is no object URL to revoke here.
 const fileBlob = ref<Blob | undefined>(undefined);
+// The extension viewer component (contributes.viewers) that renders docx/xlsx — resolved from the registry on
+// open, alongside the blob. The host owns the fetch; the component only renders the bytes it's handed.
+const viewerComponent = shallowRef<Component | undefined>(undefined);
 const loading = ref(false);
 const error = ref<string | null>(null);
 // Set when the open file changed on disk WHILE it has unsaved edits: we keep the buffer and offer Reload instead
@@ -124,6 +126,7 @@ watch(
         text.value = null;
         blobUrl.value = null;
         fileBlob.value = undefined;
+        viewerComponent.value = undefined;
         error.value = null;
         loading.value = false;
         mode.value = resolution.mode;
@@ -201,14 +204,17 @@ watch(
             return;
         }
 
-        // docx / xlsx: hand the raw bytes to the parsing viewer, which owns its own render + spinner.
+        // docx / xlsx: an extension viewer (contributes.viewers) renders the bytes. The host resolves the
+        // registered component and fetches the blob in parallel, then hands the component the bytes to render.
         if (resolution.mode === `docx` || resolution.mode === `xlsx`) {
             loading.value = true;
-            readBlob(currentPath).then((blob) => {
+            const viewer = viewerForExtension(resolution.mode);
+            Promise.all([viewer?.component(), readBlob(currentPath)]).then(([component, blob]) => {
                 if (id !== seq) {
                     return;
                 }
                 loading.value = false;
+                viewerComponent.value = component;
                 fileBlob.value = blob;
             }, fail);
             return;
@@ -380,8 +386,8 @@ const onEditorSave = (value: string): void =>
                 <div v-else-if="mode === 'audio' && blobUrl" class="flex h-full items-center justify-center p-6">
                     <audio :src="blobUrl" controls class="w-full max-w-xl" />
                 </div>
-                <DocxViewer v-else-if="mode === 'docx' && fileBlob" :blob="fileBlob" />
-                <SheetViewer v-else-if="mode === 'xlsx' && fileBlob" :blob="fileBlob" />
+                <component :is="viewerComponent" v-else-if="(mode === 'docx' || mode === 'xlsx') && viewerComponent && fileBlob" :blob="fileBlob" />
+                <FileUnsupported v-else-if="mode === 'docx' || mode === 'xlsx'" mode="binary" @download="download" />
                 <FileUnsupported v-else-if="mode === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
                 <FileUnsupported v-else-if="mode === 'binary'" mode="binary" @download="download" />
                 <FileUnsupported v-else mode="empty" />

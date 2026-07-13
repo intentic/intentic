@@ -1,4 +1,4 @@
-import type { IqFreshness, IqTag } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchFreshness, WorkspaceSearchTag } from "@intentic/sandbox-contract";
 import type { RankedGroup, RankedHit } from "../types.js";
 import { estimateTokens } from "./budget.js";
 import { encodeCursor } from "./cursor.js";
@@ -15,7 +15,7 @@ export interface RenderRequest {
     readonly groups: readonly RankedGroup[];
     // Groups already delivered by an earlier page — skipped here, but counted in the totals.
     readonly offset: number;
-    readonly freshness: IqFreshness;
+    readonly freshness: WorkspaceSearchFreshness;
     readonly budget: number;
     readonly limit?: number;
     readonly filesOnly?: boolean;
@@ -40,10 +40,10 @@ export interface Rendered {
     readonly exitCode: 0 | 1;
 }
 
-const tagText = (tags: readonly IqTag[]): string =>
+const tagText = (tags: readonly WorkspaceSearchTag[]): string =>
     tags.map((tag) => (tag.score === undefined ? `[${tag.kind}]` : `[${tag.kind} ${tag.score.toFixed(2)}]`)).join(" ");
 
-const freshnessText = (freshness: IqFreshness): string => {
+const freshnessText = (freshness: WorkspaceSearchFreshness): string => {
     if (freshness.state === "building") {
         return `index building ${Math.round((freshness.progress ?? 0) * 100)}%`;
     }

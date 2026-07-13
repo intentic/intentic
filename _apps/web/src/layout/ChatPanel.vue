@@ -3,8 +3,8 @@ import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { effortsFor, modelsFor, MODES, providerLabel } from "../composables/chat/catalog";
-import type { ChatAttachment, ChatMessage, PendingAttachment } from "../composables/chat/conversation";
+import { effortsFor, MODES, providerLabel } from "../composables/chat/catalog";
+import { type ChatAttachment, type ChatMessage, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
 import { formatReset, usageStatusFor, usageWindowLabel } from "../composables/chat/usageStatus";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -41,7 +41,6 @@ const {
     provider,
     account,
     accounts,
-    grokModels,
     model,
     effort,
     draft,
@@ -67,9 +66,9 @@ const resizing = ref(false);
 // Pill labels — rendered as our own text (not a PrimeVue Select); always a real model name. The option
 // catalogs themselves live in chat/catalog.ts, shared with the menu bodies.
 const providerName = computed(() => providerLabel(provider.value));
-// Grok's list is loaded live from OpenCode's catalog; the others are the static catalog.
-const models = computed(() => (provider.value === `grok` ? grokModels.value : modelsFor(provider.value)));
-const modelLabelText = computed(() => models.value.find((m) => m.value === model.value)?.label ?? model.value);
+// The chip's model name: shared with the picker menu so they can't drift; falls back to the provider name (never
+// blank) while Grok's daemon catalog is still loading.
+const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
 const efforts = computed(() => effortsFor(provider.value));
 
 // The mobile pickers: pill taps open bottom sheets instead of anchored popovers.
