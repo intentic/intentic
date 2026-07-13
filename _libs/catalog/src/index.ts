@@ -168,7 +168,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         category: "platform",
         description: "Self-host and deploy: scaffolds your intent + desired-state repos, each with its own operator panel.",
         fields: [],
-        hint: "One-time setup. Adds the intent + desired-state repos so you can provision hosts, services and apps.",
+        hint: "One-time setup — then provision hosts, services and apps.",
     },
     {
         id: "monorepo",
@@ -260,7 +260,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             },
             { key: "voiceLanguage", label: "Voice language", placeholder: "auto", optional: true },
         ],
-        hint: "Voice transcription runs a local whisper model: bigger = more accurate but slower on CPU (Medium ≈ 1.5GB download on first use). Set the voice language to an ISO code like pl or en to pin transcription (auto-detect can misfire on short utterances). It needs a one-time sandbox rebuild (Environment card) after adding.",
+        hint: "Voice transcription runs a local whisper model: bigger = more accurate but slower on CPU (Medium ≈ 1.5GB download on first use). Set the voice language to an ISO code like pl or en to pin transcription (auto-detect can misfire on short utterances).",
         guide: {
             url: "https://discord.com/developers/applications",
             linkLabel: "Open the Discord developer portal",
@@ -355,7 +355,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             { key: "password", label: "Password", secret: true },
             { key: "database", label: "Database", placeholder: "app" },
         ],
-        hint: "The agent queries your database with psql/mysql. Installing the client extends the sandbox image — run the one-time rebuild the Environment card shows after adding.",
+        hint: "The agent queries your database with psql/mysql.",
         guide: {
             steps: [
                 "No external token — use an existing DB user, ideally a read-only one.",
@@ -374,7 +374,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         description: "Connect your Stripe account for the agent and app.",
         requires: ["devops"],
         fields: [{ key: "provider", label: "", value: "stripe" }],
-        hint: "The API key is read from your sandbox env (STRIPE_API_KEY) on the next provision. Requires DevOps.",
+        hint: "The API key is read from your sandbox env (STRIPE_API_KEY) on the next provision.",
     },
     {
         id: "redmine",
@@ -504,7 +504,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 ],
             },
         ],
-        hint: "Re-add the same name to reconfigure or flip the connection on/off. Adding a VPN extends the sandbox image — run the one-time rebuild the Environment card shows; after it, an enabled tunnel survives restarts.",
+        hint: "Re-add the same name to reconfigure or flip the connection on/off; an enabled tunnel survives restarts.",
         guide: {
             steps: [
                 "Get a WireGuard .conf ([Interface] + [Peer]) from your VPN provider or server.",
@@ -532,7 +532,6 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 ],
             },
         ],
-        hint: "Adds Docker Engine + Compose to the sandbox so `pnpm db:up` runs a dev Postgres locally. This extends the sandbox image and needs a privileged runtime — run the one-time rebuild the Environment card shows; after it, the daemon starts on restart.",
     },
     {
         id: "reddit",
@@ -542,7 +541,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         logo: "reddit",
         description: "Read, comment, post, vote and join subreddits — the agent acts as you in a real logged-in browser.",
         fields: [{ key: "platform", label: "", value: "reddit" }],
-        hint: "Adds a Chromium browser to the sandbox (one-time rebuild via the Environment card), then use Log in to sign in once. The agent then acts as you on Reddit. Automating an account may be against Reddit's terms — use your own.",
+        hint: "Use Log in to sign in once — the agent then acts as you on Reddit. Automating an account may be against Reddit's terms — use your own.",
     },
     {
         id: "x",
@@ -552,7 +551,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         logo: "x/f5f5f5",
         description: "Read, reply, post, like, follow and join Communities — the agent acts as you in a real logged-in browser.",
         fields: [{ key: "platform", label: "", value: "x" }],
-        hint: "Adds a Chromium browser to the sandbox (one-time rebuild via the Environment card), then use Log in to sign in once. The agent then acts as you on X. Automating an account may be against X's terms — use your own.",
+        hint: "Use Log in to sign in once — the agent then acts as you on X. Automating an account may be against X's terms — use your own.",
     },
     {
         id: "youtube",
@@ -562,7 +561,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         logo: "youtube",
         description: "Watch, comment, reply, like and subscribe (join channels) — the agent acts as you in a real logged-in browser.",
         fields: [{ key: "platform", label: "", value: "youtube" }],
-        hint: "Adds a Chromium browser to the sandbox (one-time rebuild via the Environment card), then use Log in to sign in once. The agent then acts as you on YouTube. Google is strict about automated logins — completing sign-in yourself in the window is what gets past that.",
+        hint: "Use Log in to sign in once — the agent then acts as you on YouTube. Google is strict about automated logins — completing sign-in yourself in the window is what gets past that.",
     },
     {
         id: "custom",
@@ -594,7 +593,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             { key: "path", label: "Subdirectory", optional: true },
             { key: "token", label: "Access token", secret: true, optional: true },
         ],
-        hint: "Cloned into your sandbox and loaded by the agent next turn. Re-adding the same name updates it.",
+        hint: "Loaded by the agent next turn. Re-adding the same name updates it.",
         guide: {
             scopes: "private repos: read access (e.g. GitHub repo)",
             steps: [
@@ -619,7 +618,6 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             { key: "path", label: "Subdirectory", optional: true },
             { key: "token", label: "Access token", secret: true, optional: true },
         ],
-        hint: "Owner-only. Extension code runs inside the app with your session — install only publishers you trust.",
         guide: {
             scopes: "private repos: read access (e.g. GitHub repo)",
             steps: [

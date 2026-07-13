@@ -39,6 +39,7 @@ export { sessionsContract } from "./contracts/sessions.contract.js";
 export { settingsContract } from "./contracts/settings.contract.js";
 export { systemContract } from "./contracts/system.contract.js";
 export { workspaceContract } from "./contracts/workspace.contract.js";
+export * from "./effects.js";
 export * from "./events.js";
 export * from "./hostnames.js";
 export * from "./schemas.js";

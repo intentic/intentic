@@ -225,7 +225,7 @@
                     "logo": "postgresql",
                     "description": "Query your PostgreSQL database from the agent with psql.",
                     "category": "data",
-                    "hint": "The agent queries your database with psql. Installing the client extends the sandbox image — run the one-time rebuild the Environment card shows after adding.",
+                    "hint": "The agent queries your database with psql.",
                     "guide": {
                         "steps": [
                             "No external token — use an existing DB user, ideally a read-only one.",
@@ -254,7 +254,7 @@
                     "logo": "mysql",
                     "description": "Query your MySQL / MariaDB database from the agent.",
                     "category": "data",
-                    "hint": "The agent queries your database with the mysql client. Installing the client extends the sandbox image — run the one-time rebuild the Environment card shows after adding.",
+                    "hint": "The agent queries your database with the mysql client.",
                     "guide": {
                         "steps": [
                             "No external token — use an existing DB user, ideally a read-only one.",

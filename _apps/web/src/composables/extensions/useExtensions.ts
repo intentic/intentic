@@ -1,3 +1,4 @@
+import type { ConnectorContribution } from "@intentic/extension-api";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -17,8 +18,14 @@ export function useExtensions() {
         queryFn: async () => ExtensionsListSchema.parse(await sandboxJson(`/extensions`)).extensions,
         enabled: reachable,
     });
+    const extensions = computed<ExtensionSummary[]>(() => query.data.value ?? []);
+    // A cli provider's connector spec from the installed extensions' contributes.connectors — the data
+    // capabilityEffects derives a cli card's secret/image effects from. Undefined until /extensions loads.
+    const connectorOf = (provider: string): ConnectorContribution | undefined =>
+        extensions.value.flatMap((extension) => extension.manifest.contributes?.connectors ?? []).find((connector) => connector.provider === provider);
     return {
-        extensions: computed<ExtensionSummary[]>(() => query.data.value ?? []),
+        extensions,
+        connectorOf,
         error: computed(() => (query.error.value ? query.error.value.message : null)),
         isLoading: query.isLoading,
         refetch: query.refetch,

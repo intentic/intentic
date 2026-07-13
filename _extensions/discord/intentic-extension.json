@@ -13,7 +13,7 @@
                     "logo": "discord",
                     "description": "Let the agent read and post in your Discord server.",
                     "category": "communication",
-                    "hint": "Voice transcription runs a local whisper model: bigger = more accurate but slower on CPU (Medium ≈ 1.5GB download on first use). Set the voice language to an ISO code like pl or en to pin transcription (auto-detect can misfire on short utterances). It needs a one-time sandbox rebuild (Environment card) after adding.",
+                    "hint": "Voice transcription runs a local whisper model: bigger = more accurate but slower on CPU (Medium ≈ 1.5GB download on first use). Set the voice language to an ISO code like pl or en to pin transcription (auto-detect can misfire on short utterances).",
                     "guide": {
                         "url": "https://discord.com/developers/applications",
                         "linkLabel": "Open the Discord developer portal",

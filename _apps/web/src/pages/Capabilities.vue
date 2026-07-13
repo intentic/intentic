@@ -8,14 +8,17 @@ import {
 } from "@intentic-app/catalog";
 import { type CapabilitySummary, type Marketplace, type MarketplacePlugin } from "@intentic-app/api-contract";
 import { cmp, type IconName, Page, Segmented } from "@intentic-app/ui";
+import { type CapabilityEffect, capabilityEffects } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BrowserLoginDialog from "../components/BrowserLoginDialog.vue";
+import CapabilityEffects from "../components/CapabilityEffects.vue";
 import CredentialGuide from "../components/CredentialGuide.vue";
 import { devFillGet, devFillSet } from "../composables/devFill";
 import { browseMarketplace, useCapabilities } from "../composables/extensions/useCapabilities";
+import { useExtensions } from "../composables/extensions/useExtensions";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 
 /* The rail's "+" → the /capabilities page. Capabilities are connectors that give the agent tools (GitHub, MCP
@@ -27,6 +30,7 @@ const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const URL_RE = /^https?:\/\/.+/i;
 
 const { hasCapability, capabilities, error: listError, add, remove, refetch } = useCapabilities();
+const { connectorOf, extensions } = useExtensions();
 
 const route = useRoute();
 const router = useRouter();
@@ -171,6 +175,54 @@ const whenMet = (field: CapabilityField): boolean => field.when === undefined ||
 const visibleFields = (entry: CapabilityCatalogEntry): CapabilityCatalogEntry["fields"] =>
     entry.fields.filter((field) => field.value === undefined && whenMet(field));
 const requiresMet = computed(() => (selected.value ? (selected.value.requires ?? []).every((kind) => hasCapability(kind)) : false));
+
+// --- effect derivation (the "This will add to your sandbox" disclosure) ---
+// The config as capabilityEffects sees it: fixed fields baked in (like buildInput), the rest from a source —
+// the live form values, the card's declared defaults (grid badges), or an instance's echoed config.
+const effectConfig = (entry: CapabilityCatalogEntry, source: (field: CapabilityField) => string | undefined): Record<string, string> => {
+    const config: Record<string, string> = {};
+    for (const field of entry.fields) {
+        const value = field.value ?? source(field);
+        if (value !== undefined) {
+            config[field.key] = value;
+        }
+    }
+    return config;
+};
+// Live over the form state, so the plugin clone URL and the SQL engine's client image track as the user types.
+// hasSecret is synthesized from the card's own secret-marked fields, so a cli card's secret row shows even
+// before /extensions resolves its connector spec (the deriver's echo fallback consumes it).
+const liveEffects = computed<readonly CapabilityEffect[]>(() => {
+    const entry = selected.value;
+    if (entry === undefined) {
+        return [];
+    }
+    const config = effectConfig(entry, (field) => (values[field.key] ?? ``).trim());
+    return capabilityEffects({
+        kind: entry.kind,
+        id: name.value.trim() || undefined,
+        config: { ...config, hasSecret: entry.fields.some((field) => field.secret === true) },
+        connector: connectorOf(config[`provider`] ?? ``),
+    });
+});
+// The consequential effects a card statically implies, badged on its grid tile — image/runtime/trusted-code
+// only (the full list is one click away). Defaults decide config-dependent ones (the SQL card's default engine).
+const badgeEffects = (entry: CapabilityCatalogEntry): readonly CapabilityEffect[] => {
+    const config = effectConfig(entry, (field) => field.default);
+    return capabilityEffects({ kind: entry.kind, config, connector: connectorOf(config[`provider`] ?? ``) }).filter(
+        (effect) => effect.kind === `image` || effect.kind === `runtime` || effect.kind === `trusted-code`,
+    );
+};
+// A connected instance's effects from its secret-stripped config echo; an installed extension also resolves
+// its manifest so process/image contributions show.
+const instanceEffects = (instance: CapabilitySummary): readonly CapabilityEffect[] =>
+    capabilityEffects({
+        kind: instance.kind,
+        id: instance.id,
+        config: instance.config,
+        connector: connectorOf(String(instance.config[`provider`] ?? ``)),
+        manifest: instance.kind === `extension` ? extensions.value.find((extension) => extension.id === instance.id)?.manifest : undefined,
+    });
 
 const canSubmit = computed(() => {
     const entry = selected.value;
@@ -442,6 +494,7 @@ const submitLabel = computed(() =>
                                     </Button>
                                 </div>
                             </div>
+                            <CapabilityEffects :effects="instanceEffects(instance)" :compact="true" />
                             <!-- A browser capability that's installed but not signed in is pending on the LOGIN, not a
                                  rebuild — make the hint open the login window (same action as the button above), never
                                  the /sandbox rebuild hub. Keyed off the daemon's "rebuild" detail (see handlers/browser.ts). -->
@@ -557,11 +610,8 @@ const submitLabel = computed(() =>
                         {{ fieldError(field) }}
                     </span>
                 </label>
+                <CapabilityEffects :effects="liveEffects" />
                 <p v-if="selected.hint" class="text-xs text-muted">{{ selected.hint }}</p>
-                <p class="inline-flex items-center gap-1.5 text-2xs text-subtle">
-                    <Icon name="lock" />
-                    Credentials are stored securely inside your sandbox and never shown in Files.
-                </p>
 
                 <!-- Streamed apply progress (devops scaffolding, service provisioning). -->
                 <pre
@@ -621,6 +671,7 @@ const submitLabel = computed(() =>
                                             <Icon name="check-circle" />
                                             {{ instancesOf(entry).length }} connected
                                         </span>
+                                        <CapabilityEffects :effects="badgeEffects(entry)" :compact="true" />
                                     </div>
                                     <div class="mt-0.5 text-xs text-muted">{{ entry.description }}</div>
                                     <div v-if="entry.requires?.includes('devops') && !hasCapability('devops')" class="mt-1 text-xs text-muted">

@@ -42,7 +42,9 @@
     },
     "scripts": {
         "build": "tsc",
-        "watch": "tsc --build --watch"
+        "watch": "tsc --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
     },
     "dependencies": {
         "@intentic/extension-api": "workspace:*",
@@ -52,6 +54,7 @@
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
-        "typescript": "catalog:"
+        "typescript": "catalog:",
+        "vitest": "catalog:"
     }
 }
