@@ -53,6 +53,7 @@
         "@ast-grep/lang-python": "catalog:",
         "@ast-grep/lang-rust": "catalog:",
         "@ast-grep/napi": "catalog:",
+        "@huggingface/hub": "catalog:",
         "@huggingface/transformers": "catalog:",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",

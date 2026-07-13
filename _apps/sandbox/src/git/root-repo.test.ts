@@ -7,7 +7,7 @@ import { afterEach, expect, test } from "vitest";
 import { ROOT_EXCLUDES } from "../history/history.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { changedFiles } from "./changes.js";
-import { ensureRootRepo } from "./root-repo.js";
+import { commitRootBaseline, ensureRootRepo } from "./root-repo.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -34,7 +34,8 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
     await mkdir(join(work, ".intentic"), { recursive: true });
     await writeFile(join(work, ".intentic", "owner.json"), "{}\n");
 
-    await ensureRootRepo(workspacePaths(work), historyRoot);
+    expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
+    await commitRootBaseline(workspacePaths(work));
 
     // Pointer file in the worktree, real git dir on the history volume, excludes converged.
     expect(await readFile(join(work, ".git"), "utf8")).toBe(`gitdir: ${join(historyRoot, "gits", "root")}\n`);
@@ -44,13 +45,27 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
     expect((await changedFiles(work)).changes).toEqual([]);
 });
 
+test("daemon-owned skill files converged before the baseline read clean", async () => {
+    const { work, historyRoot } = await tempBase();
+
+    expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
+    // The boot sequence converges .claude skills (e.g. the drafts skill) BEFORE committing the baseline.
+    await mkdir(join(work, ".claude", "skills", "drafts"), { recursive: true });
+    await writeFile(join(work, ".claude", "skills", "drafts", "SKILL.md"), "converged\n");
+    await commitRootBaseline(workspacePaths(work));
+
+    expect(await sh(work, "ls-files")).toBe(".claude/skills/drafts/SKILL.md");
+    expect((await changedFiles(work)).changes).toEqual([]);
+});
+
 test("re-ensure is idempotent and heals a deleted .git pointer without a new baseline", async () => {
     const { work, historyRoot } = await tempBase();
-    await ensureRootRepo(workspacePaths(work), historyRoot);
+    expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
+    await commitRootBaseline(workspacePaths(work));
     const head = await sh(work, "rev-parse", "HEAD");
 
     await rm(join(work, ".git"));
-    await ensureRootRepo(workspacePaths(work), historyRoot);
+    expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(false);
     expect(await sh(work, "rev-parse", "HEAD")).toBe(head);
     expect(await sh(work, "log", "--format=%s")).toBe("Initialize workspace");
 });

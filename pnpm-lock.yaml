@@ -46,6 +46,9 @@ catalogs:
     '@hono/otel':
       specifier: 1.1.2
       version: 1.1.2
+    '@huggingface/hub':
+      specifier: 2.13.3
+      version: 2.13.3
     '@huggingface/transformers':
       specifier: 4.2.0
       version: 4.2.0
@@ -697,6 +700,9 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
+      '@huggingface/hub':
+        specifier: 'catalog:'
+        version: 2.13.3
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../../_tools/tsconfig
@@ -1047,6 +1053,9 @@ importers:
       '@discordjs/voice':
         specifier: ^0.19.2
         version: 0.19.2(@discordjs/opus@0.10.0)(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.2)
+      '@huggingface/hub':
+        specifier: 'catalog:'
+        version: 2.13.3
       discord.js:
         specifier: ^14.26.4
         version: 14.26.5
@@ -1327,6 +1336,9 @@ importers:
       '@ast-grep/napi':
         specifier: 'catalog:'
         version: 0.44.1
+      '@huggingface/hub':
+        specifier: 'catalog:'
+        version: 2.13.3
       '@huggingface/transformers':
         specifier: 'catalog:'
         version: 4.2.0
@@ -2597,15 +2609,29 @@ packages:
     peerDependencies:
       hono: '>=4.0.0'
 
+  '@huggingface/blake3-jit@0.0.2':
+    resolution: {integrity: sha512-Bq7B5qabyjrJfhBsl85Jd2QBtf+HzRD7h7A9GfN2lzrrsABhOa5evVPgzoCTxR7Ub0QFj7YDK1YkYRWBU25+2w==}
+
+  '@huggingface/hub@2.13.3':
+    resolution: {integrity: sha512-qAEbZ0x1vUQIUSComJ5EPgII+eI3nJB3gTPNTzjir6Kk/aCHHvPfCNMreS4iUg6gT17YDkvt7XBTndzh7617KQ==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   '@huggingface/jinja@0.5.9':
     resolution: {integrity: sha512-uWTG+l3VJRsl7EXxYizuL3P+cCPoc3cRqbWWRcQN0FhejRfbdq0RNhCmbY/YDtnTcz9icdLYuLDjsnz4d8JMuw==}
     engines: {node: '>=18'}
+
+  '@huggingface/tasks@0.21.25':
+    resolution: {integrity: sha512-u71rRx80Ynzy2oEDpRTSgOLyrzAV86gtnt4ajGHHI+1SQmsqmIUyzZG4Wi0TavDKdRsTa5QC/REDeJ3cFvkxvA==}
 
   '@huggingface/tokenizers@0.1.3':
     resolution: {integrity: sha512-8rF/RRT10u+kn7YuUbUg0OF30K8rjTc78aHpxT+qJ1uWSqxT1MHi8+9ltwYfkFYJzT/oS+qw3JVfHtNMGAdqyA==}
 
   '@huggingface/transformers@4.2.0':
     resolution: {integrity: sha512-8BRCoBMH0XsWaEIamuR0LrJGAfftgHAfb2Vrffy0VKlSAE/MnUJ5/h/zTfEP3fDIft+nk7TqB8xXEyABGitBjQ==}
+
+  '@huggingface/xetchunk-wasm@0.1.0':
+    resolution: {integrity: sha512-wWpp2qwPgf9kv1KLJjcDUk/OrpDOsFoQ3Qpz0U5LGn20csoymBf8eneOv6wm/GzPBzlWac1OYiR0aa1vT6aM2Q==}
 
   '@iconify-json/hugeicons@1.2.30':
     resolution: {integrity: sha512-L38YPId/uZ8xZJL+rdwB5/uI/jpnbzqXetfo1b0wbBi6h2pnyEy6HpQouCJXMBUOkp2iVWu8C1VdFRG+JRFwpg==}
@@ -5174,6 +5200,10 @@ packages:
     engines: {node: '>=8.0.0', npm: '>=5.0.0'}
     hasBin: true
 
+  cli-progress@3.12.0:
+    resolution: {integrity: sha512-tRkV3HJ1ASwm19THiiLIXLO7Im7wlTuKnvkYaTkyoAPefqjNg7W7DHKUlGRxy9vxDvbyCYQkQozvptuMkGCg8A==}
+    engines: {node: '>=4'}
+
   cli-table3@0.6.5:
     resolution: {integrity: sha512-+W/5efTR7y5HRD7gACw9yQjqMVvEMLBHmboM/kPWam+H+Hmyrgjh6YncVKK122YZkXrLudzTuAukUw9FnMf7IQ==}
     engines: {node: 10.* || >= 12.*}
@@ -5888,6 +5918,9 @@ packages:
     resolution: {integrity: sha512-+5J6MS/5XksCuXq++uFRsnUd7Ovu1XenbeuIuNRJxYWjgQbPuFhT14lAvsWfqfAmnwluf1OwMjz39HjfLPci0Q==}
     engines: {node: '>=10'}
     deprecated: This package is no longer supported.
+
+  gearhash-jit@1.0.2:
+    resolution: {integrity: sha512-UhzJL4KXSdqAKepy/tZwmi2Rcy0YMmtiC4DQS4SURCuIWdh8ECZtnXK2ePRMLigfB61hRKdLK/Vgg2bSw73izQ==}
 
   generate-function@2.3.1:
     resolution: {integrity: sha512-eeB5GfMNeevm/GRYq20ShmsaGcmI81kIX2K9XQx5miC8KdHaC6Jm0qQ8ZNeGOi7wYB8OsdxKs+Y2oVuTFuVwKQ==}
@@ -9630,7 +9663,18 @@ snapshots:
       '@opentelemetry/semantic-conventions': 1.41.1
       hono: 4.12.27
 
+  '@huggingface/blake3-jit@0.0.2': {}
+
+  '@huggingface/hub@2.13.3':
+    dependencies:
+      '@huggingface/tasks': 0.21.25
+      '@huggingface/xetchunk-wasm': 0.1.0
+    optionalDependencies:
+      cli-progress: 3.12.0
+
   '@huggingface/jinja@0.5.9': {}
+
+  '@huggingface/tasks@0.21.25': {}
 
   '@huggingface/tokenizers@0.1.3': {}
 
@@ -9641,6 +9685,11 @@ snapshots:
       onnxruntime-node: 1.24.3
       onnxruntime-web: 1.26.0-dev.20260416-b7804b056c
       sharp: 0.34.5
+
+  '@huggingface/xetchunk-wasm@0.1.0':
+    dependencies:
+      '@huggingface/blake3-jit': 0.0.2
+      gearhash-jit: 1.0.2
 
   '@iconify-json/hugeicons@1.2.30':
     dependencies:
@@ -12149,6 +12198,11 @@ snapshots:
       parse5-htmlparser2-tree-adapter: 6.0.1
       yargs: 16.2.2
 
+  cli-progress@3.12.0:
+    dependencies:
+      string-width: 4.2.3
+    optional: true
+
   cli-table3@0.6.5:
     dependencies:
       string-width: 4.2.3
@@ -12907,6 +12961,8 @@ snapshots:
       string-width: 4.2.3
       strip-ansi: 6.0.1
       wide-align: 1.1.5
+
+  gearhash-jit@1.0.2: {}
 
   generate-function@2.3.1:
     dependencies:

@@ -13,7 +13,7 @@ import { reconnectVpns } from "./capabilities/handlers/vpn.js";
 import { createServices } from "./composition.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
-import { ensureRootRepo } from "./git/root-repo.js";
+import { commitRootBaseline, ensureRootRepo } from "./git/root-repo.js";
 import { reconcileSkills } from "./settings/skills.js";
 import { composeEnvironment } from "./environment/environment.js";
 import { loadConfig } from "./env.config.js";
@@ -65,24 +65,37 @@ const main = async (): Promise<void> => {
     );
 
     // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge
-    // excludes. Awaited (cheap, and the git routes assume it), but a failure must not take the daemon down.
-    await ensureRootRepo(services.workspace, config.historyRoot).catch((error: unknown) =>
-        logger.warn({ err: error }, "root workspace repo not ensured — the Changes review will degrade"),
-    );
+    // excludes. Awaited (cheap, and the git routes assume it), but a failure must not take the daemon down — a
+    // failure reads as "not fresh" so we skip the baseline commit below.
+    const freshRoot = await ensureRootRepo(services.workspace, config.historyRoot).catch((error: unknown) => {
+        logger.warn({ err: error }, "root workspace repo not ensured — the Changes review will degrade");
+        return false;
+    });
 
     // Recompose the environment overlay from the manifest — converges fragment drift (a daemon update that
     // changes a capability's fragment flips the derived state to "pending rebuild"); no-op on fresh sandboxes.
+    // Writes only under .intentic/ (in ROOT_EXCLUDES), so it never affects the baseline below.
     void composeEnvironment(services);
 
-    // Converge the drafts skill (how the agent writes post drafts for approval) so its prose tracks the daemon.
-    void ensureDraftsSkill(services);
-
-    // Converge the baked-tool skills with the settings `skills` list — each present only when named (the CLIs are
-    // always on PATH; the skill file is what surfaces one to the agent).
-    void services.sandboxSettings
+    // Converge the daemon-owned /work skill files BEFORE the baseline commit so a fresh sandbox reads clean
+    // instead of surfacing them as a phantom add. Awaited for exactly that ordering; still log-and-continue, and
+    // on a non-fresh boot (no baseline) their writes become ordinary pending changes for the Changes review.
+    // - the drafts skill: how the agent writes post drafts for approval, so its prose tracks the daemon.
+    await ensureDraftsSkill(services).catch((error: unknown) => logger.warn({ err: error }, "drafts skill not converged"));
+    // - the baked-tool skills, per the settings `skills` list — each present only when named (the CLIs are
+    //   always on PATH; the skill file is what surfaces one to the agent).
+    await services.sandboxSettings
         .get()
         .then((settings) => reconcileSkills(services, settings.skills))
         .catch((error: unknown) => logger.warn({ err: error }, "skill reconcile failed"));
+
+    // Baseline "Initialize workspace" commit, taken once on a fresh sandbox now that the daemon's /work-owned
+    // files exist — so the Changes review starts with zero pending changes.
+    if (freshRoot) {
+        await commitRootBaseline(services.workspace).catch((error: unknown) =>
+            logger.warn({ err: error }, "root baseline commit failed — the Changes review will start dirty"),
+        );
+    }
 
     // Preview routes for every existing repo (best-effort; the ensurer never throws) — self-heals any repo
     // whose creation-time mint was missed, so hostnames exist well before a browser ever resolves them.

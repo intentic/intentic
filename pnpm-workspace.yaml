@@ -61,6 +61,7 @@ catalog:
   "@commitlint/types": 20.0.0
   "@hono/node-server": 2.0.6
   "@hono/otel": 1.1.2
+  "@huggingface/hub": 2.13.3
   "@huggingface/transformers": 4.2.0
   "@iconify-json/hugeicons": 1.2.30
   "@iconify-json/ph": 1.2.2

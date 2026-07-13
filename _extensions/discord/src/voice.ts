@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 // CJS with native bindings — its named exports aren't statically analyzable, so ESM must default-import.
 import opus from "@discordjs/opus";
 import { EndBehaviorType, entersState, joinVoiceChannel, type VoiceConnection, VoiceConnectionStatus } from "@discordjs/voice";
+import { downloadFile } from "@huggingface/hub";
 import type { Client, VoiceBasedChannel, VoiceState } from "discord.js";
 import { createTranscriber, MIN_UTTERANCE_BYTES, type Transcriber, WHISPER_MISSING, whisperCliMissing } from "./audio.js";
 import { ensureDiscordClient, releaseDiscordClient } from "./client.js";
@@ -25,7 +26,7 @@ import type { DiscordConnectorConfig } from "./daemon.js";
  *
  * A module singleton: one session per sandbox. ponytail — a map per channel if concurrent calls ever matter. */
 
-const MODEL_BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
+const MODEL_REPO = "ggerganov/whisper.cpp";
 
 const fileExists = async (path: string): Promise<boolean> =>
     stat(path).then(
@@ -44,15 +45,16 @@ const ensureWhisperModel = async (ctx: GatewayCtx, config: DiscordConnectorConfi
         return path;
     }
     ctx.log.info({ model: file }, "downloading whisper model (first voice session)");
-    const response = await fetch(`${MODEL_BASE_URL}/${file}`);
-    if (!response.ok || response.body === null) {
-        throw new Error(`whisper model download failed: HTTP ${response.status} for ${file}`);
+    // HF's CAS bridge 403s anonymous plain-HTTP fetches — downloadFile speaks the Xet protocol instead.
+    const blob = await downloadFile({ repo: MODEL_REPO, path: file });
+    if (blob === null) {
+        throw new Error(`whisper model download failed: ${MODEL_REPO} has no ${file}`);
     }
     await mkdir(dirname(path), { recursive: true });
     // Stream straight to disk (up to ~1.5GB — never buffer it); a torn download is removed so the next join retries.
     try {
-        // undici's web ReadableStream and the DOM lib's disagree on generics — same object at runtime.
-        await pipeline(Readable.fromWeb(response.body as import("node:stream/web").ReadableStream), createWriteStream(path));
+        // hub's web ReadableStream and the DOM lib's disagree on generics — same object at runtime.
+        await pipeline(Readable.fromWeb(blob.stream() as import("node:stream/web").ReadableStream), createWriteStream(path));
     } catch (error) {
         await rm(path, { force: true });
         throw error;

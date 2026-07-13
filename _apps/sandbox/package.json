@@ -53,6 +53,7 @@
         "zod": "catalog:"
     },
     "devDependencies": {
+        "@huggingface/hub": "catalog:",
         "@intentic/tsconfig": "workspace:*",
         "@orpc/client": "catalog:",
         "@orpc/openapi-client": "catalog:",

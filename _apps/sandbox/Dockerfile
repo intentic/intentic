@@ -37,7 +37,8 @@ RUN pnpm --filter @intentic/lsp deploy --prod /out/lsp
 # compiled @discordjs/opus land in its own node_modules, ready to bake below.
 RUN pnpm --filter @intentic/ext-discord deploy --prod /out/extensions/discord
 # Bake the iq models so `iq ask` works fully offline from first boot: bge-small embedder (~34MB) + ms-marco
-# cross-encoder reranker (~23MB), both int8.
+# cross-encoder reranker (~23MB), both int8. The script downloads over HF's Xet protocol (@huggingface/hub) —
+# the CAS bridge 403s anonymous plain-HTTP fetches — then validates the layout offline with Transformers.js.
 RUN node _libs/iq-engine/scripts/fetch-model.mjs /opt/iq-models
 
 FROM node:24.18.0-bookworm-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc AS runtime

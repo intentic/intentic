@@ -2,6 +2,7 @@ import { mkdir, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { downloadFile } from "@huggingface/hub";
 import { sandboxContract } from "@intentic/sandbox-contract";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
@@ -44,10 +45,9 @@ const enabled =
 // The whisper model + speech fixture, cached across runs (the model is ~75 MB; the fixture is whisper.cpp's own
 // smoke sample — public-domain JFK speech — fetched from the same v1.9.1 tag the overlay fragment builds).
 const CACHE_DIR = join(homedir(), ".cache", "intentic-e2e", "whisper");
-const MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin";
 const SAMPLE_URL = "https://raw.githubusercontent.com/ggml-org/whisper.cpp/v1.9.1/samples/jfk.wav";
 
-const ensureCached = async (url: string, file: string): Promise<string> => {
+const ensureCached = async (file: string, fetchBlob: () => Promise<Blob>): Promise<string> => {
     const path = join(CACHE_DIR, file);
     if (
         await stat(path).then(
@@ -58,11 +58,7 @@ const ensureCached = async (url: string, file: string): Promise<string> => {
         return path;
     }
     await mkdir(CACHE_DIR, { recursive: true });
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`fetching ${url} failed: ${response.status}`);
-    }
-    await writeFile(path, Buffer.from(await response.arrayBuffer()));
+    await writeFile(path, Buffer.from(await (await fetchBlob()).arrayBuffer()));
     return path;
 };
 
@@ -158,8 +154,21 @@ describe.skipIf(!enabled)("discord + whisper end-to-end (real gateway, real bina
         // cache makes reruns cheap) and run the REAL binary on real speech, with the exact flags voice.ts uses.
         overlayBuilt = true;
         await dockerBuild(approved.content, overlayTag);
-        const model = await ensureCached(MODEL_URL, "ggml-tiny.en.bin");
-        const sample = await ensureCached(SAMPLE_URL, "jfk.wav");
+        // HF's CAS bridge 403s anonymous plain-HTTP fetches — downloadFile speaks the Xet protocol instead.
+        const model = await ensureCached("ggml-tiny.en.bin", async () => {
+            const blob = await downloadFile({ repo: "ggerganov/whisper.cpp", path: "ggml-tiny.en.bin" });
+            if (blob === null) {
+                throw new Error("ggerganov/whisper.cpp has no ggml-tiny.en.bin");
+            }
+            return blob;
+        });
+        const sample = await ensureCached("jfk.wav", async () => {
+            const response = await fetch(SAMPLE_URL);
+            if (!response.ok) {
+                throw new Error(`fetching ${SAMPLE_URL} failed: ${response.status}`);
+            }
+            return response.blob();
+        });
         const output = await dockerRun(
             overlayTag,
             [
