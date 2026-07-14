@@ -121,6 +121,15 @@ const toggleTerseOutput = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, terseOutput: value });
 };
 
+// iq code search: load the iq plugin so the agent reaches for the iq CLI over grep/find/glob.
+const toggleIqSearch = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, iqSearch: value });
+};
+
 // --- Per-cleaner toggles (the `outputCleaners` spec, edited as a checklist) ---------------------------------
 // Every cleaner id + a short label, in the order of bin/cleaners.mjs CLEANERS (keep in sync). Each renders one
 // switch; the checklist round-trips through the spec string the daemon already threads to the filter, so every
@@ -542,6 +551,23 @@ const importMemory = async (): Promise<void> => {
                 :model-value="sandboxSettings?.terseOutput ?? false"
                 :disabled="sandboxSettings === undefined"
                 @update:model-value="toggleTerseOutput"
+            />
+        </Card>
+
+        <!-- iq code search — loads the iq plugin (skill + nudge) so the assistant reaches for the iq CLI instead
+             of grep/find/glob. Opt-in per sandbox; the browser Search box uses iq regardless. -->
+        <Card class="flex items-center justify-between">
+            <div class="flex min-w-0 items-center gap-2.5">
+                <Icon name="search" class="text-lg text-muted" />
+                <div class="min-w-0">
+                    <h2 class="font-semibold leading-tight">iq code search</h2>
+                    <p class="text-xs text-muted">Let the assistant use the iq search CLI instead of grep / find / glob.</p>
+                </div>
+            </div>
+            <ToggleSwitch
+                :model-value="sandboxSettings?.iqSearch ?? false"
+                :disabled="sandboxSettings === undefined"
+                @update:model-value="toggleIqSearch"
             />
         </Card>
 

@@ -13,7 +13,8 @@ const DEFAULTS: SandboxSettings = {
     skills: [],
     hashlineEdits: false,
     terseOutput: false,
-    outputCleaners: "",
+    iqSearch: false,
+    outputCleaners: "off",
     outputHoldout: 0,
     filterBackend: "native",
 };

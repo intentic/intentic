@@ -19,7 +19,8 @@ const ALL_OFF: SandboxSettings = {
     skills: [],
     hashlineEdits: false,
     terseOutput: false,
-    outputCleaners: "",
+    iqSearch: false,
+    outputCleaners: "off",
     outputHoldout: 0,
     filterBackend: "native",
 };

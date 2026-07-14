@@ -182,6 +182,7 @@ const services = (overrides: Partial<Services> = {}): Services => ({
             skills: [],
             hashlineEdits: false,
             terseOutput: false,
+            iqSearch: false,
             outputCleaners: "",
             outputHoldout: 0,
             filterBackend: "native" as const,

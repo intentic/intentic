@@ -214,23 +214,24 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities — a same-named
         // external tool overrides, matching mcpServersOf's last-wins merge.
         const tools = [...services.tools, ...mcpToolsOf(capabilities)];
-        // The image-baked iq plugin (skill + SessionStart nudge) loads on every turn, ahead of any user-added
-        // plugin-kind capabilities, so iq is the default code-search tool. Empty outside the container ⇒ skipped.
+        // Per-sandbox agent toggles. searchPastChats gives the agent the search_past_chats tool over this
+        // workspace's prior sessions (Claude-only — Codex has no equivalent in-process tool seam).
+        // stableSystemPrompt keeps the preset system prompt byte-stable so the provider prompt cache survives the
+        // turn — the cross-provider delegation note then rides the user message instead of the system prompt.
+        const { searchPastChats, stableSystemPrompt, hashlineEdits, iqSearch, outputCleaners, outputHoldout, filterBackend, terseOutput } =
+            await services.sandboxSettings.get();
+        // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
+        // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle
+        // (opt-in, default off). Empty dir outside the container ⇒ skipped regardless.
         // Extension checkouts with a contributes.agent manifest entry ride the same SDK plugin loader.
         const plugins = [
-            ...(services.config.iqPluginDir !== "" ? [services.config.iqPluginDir] : []),
+            ...(services.config.iqPluginDir !== "" && iqSearch ? [services.config.iqPluginDir] : []),
             ...pluginDirsOf(capabilities, services.workspace.root),
             ...(await extensionAgentDirsOf(services)),
         ];
         // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
         // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join).
         const browserServers = await browserServersOf(capabilities, services.workspace.root);
-        // Per-sandbox agent toggles. searchPastChats gives the agent the search_past_chats tool over this
-        // workspace's prior sessions (Claude-only — Codex has no equivalent in-process tool seam).
-        // stableSystemPrompt keeps the preset system prompt byte-stable so the provider prompt cache survives the
-        // turn — the cross-provider delegation note then rides the user message instead of the system prompt.
-        const { searchPastChats, stableSystemPrompt, hashlineEdits, outputCleaners, outputHoldout, filterBackend, terseOutput } =
-            await services.sandboxSettings.get();
         const sdkServers = {
             ...browserServers,
             ...(searchPastChats ? { pastChats: createSessionSearchServer(services.workspace.root, input.sessionId) } : {}),
@@ -289,8 +290,8 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
             // hashlineEdits owns file mutation via the hashline MCP server above, so drop the native Edit/Write
             // from the model's context (native Read stays for viewing images/PDFs).
             ...(hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),
-            // Forward the Bash output-cleaner spec (default "" ⇒ omit ⇒ filter's all-on default), the holdout
-            // control fraction, and the cleaner backend (default "native" ⇒ omit).
+            // Forward the Bash output-cleaner spec (default "off" ⇒ forwarded ⇒ filter disabled; "" ⇒ omit ⇒
+            // filter's all-on default), the holdout control fraction, and the cleaner backend (default "native" ⇒ omit).
             ...(outputCleaners !== "" ? { outputCleaners } : {}),
             ...(outputHoldout > 0 ? { outputHoldout } : {}),
             ...(filterBackend !== "native" ? { filterBackend } : {}),

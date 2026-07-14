@@ -137,8 +137,11 @@ export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTrans
 //                        guard + fewer output tokens); off ⇒ the native file tools.
 //   terseOutput       — appends a concise-response steer to the end of the system prompt (a stable suffix, so it
 //                        composes with stableSystemPrompt) to cut the model's OWN output tokens.
-//   outputCleaners    — the Bash output-cleaner spec (agent-output-filter): "" = all cleaners on (default),
-//                        "off" = disable the filter (raw baseline), else an iq-style allow-list / default-minus
+//   iqSearch          — loads the image-baked iq Claude Code plugin (skill + SessionStart nudge) so the agent
+//                        prefers the iq CLI over grep/find/Glob; off ⇒ plugin not loaded, native search tools
+//                        only. Opt-in (default off); the browser Search box uses iq regardless.
+//   outputCleaners    — the Bash output-cleaner spec (agent-output-filter): "off" = filter disabled (default),
+//                        "" = all cleaners on, else an iq-style allow-list / default-minus
 //                        spec ("git,pnpm" = only those; "-cap" = all except). Threaded to the filter via env.
 //   outputHoldout     — measurement control: a fraction [0,1] of Bash commands whose output bypasses cleaning
 //                        (recorded raw as `heldOut`), so the savings report compares a real cleaned-vs-raw
@@ -146,8 +149,8 @@ export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTrans
 //   filterBackend     — which cleaner runs the compression: "native" (agent-output-filter, default) or "rtk"
 //                        (the rtk binary from its installed extension, rewritten at the PreToolUse hook) — an
 //                        A/B backend switch, so native and rtk can be benchmarked head-to-head.
-// The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "" (all cleaners on),
-// outputHoldout 0, filterBackend "native" — so a sandbox behaves as before until the owner changes them.
+// The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "off" (cleaning off),
+// outputHoldout 0, filterBackend "native" — a fresh sandbox starts with cleaning and iq off until the owner enables them.
 
 export const SandboxSettingsSchema = z.object({
     searchPastChats: z.boolean(),
@@ -155,6 +158,7 @@ export const SandboxSettingsSchema = z.object({
     skills: z.array(z.string()),
     hashlineEdits: z.boolean(),
     terseOutput: z.boolean(),
+    iqSearch: z.boolean(),
     outputCleaners: z.string(),
     outputHoldout: z.number().min(0).max(1),
     filterBackend: z.enum(["native", "rtk"]),
