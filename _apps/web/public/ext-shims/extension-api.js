@@ -3,11 +3,16 @@
 const m = globalThis.__intenticHost.modules["@intentic/extension-api"];
 export const AgentContributionSchema = m["AgentContributionSchema"];
 export const CommandContributionSchema = m["CommandContributionSchema"];
+export const ConnectorContributionSchema = m["ConnectorContributionSchema"];
+export const ConnectorFieldSchema = m["ConnectorFieldSchema"];
 export const EnvironmentContributionSchema = m["EnvironmentContributionSchema"];
 export const ExtensionManifestSchema = m["ExtensionManifestSchema"];
+export const ListenerContributionSchema = m["ListenerContributionSchema"];
 export const ProcessContributionSchema = m["ProcessContributionSchema"];
 export const SettingContributionSchema = m["SettingContributionSchema"];
 export const ViewContributionSchema = m["ViewContributionSchema"];
+export const ViewerContributionSchema = m["ViewerContributionSchema"];
 export const extensionApiVersion = m["extensionApiVersion"];
 export const extensionIdOf = m["extensionIdOf"];
 export const readDaemonStream = m["readDaemonStream"];
+export const sandboxRouteAllowed = m["sandboxRouteAllowed"];

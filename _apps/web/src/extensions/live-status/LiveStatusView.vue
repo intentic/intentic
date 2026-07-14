@@ -24,7 +24,7 @@ const { state, error: wsError, isLoading: wsLoading, refetch: refetchState } = u
 const { deployments, komodoReachable, error: appsError, isLoading: appsLoading, refetch: refetchDeployments } = useDeployments();
 
 // Shared with the dependency graph: selecting a node highlights its matching actual-state card.
-const selectedId = ref<string | null>(null);
+const selectedId = ref<string | undefined>(undefined);
 const selectedNode = computed(() => state.value?.resources.find((r) => r.id === selectedId.value));
 
 // Live `intentic plan` stream state.

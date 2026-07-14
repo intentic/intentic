@@ -10,12 +10,16 @@
             "POST /workspace/repos/*/apps/*/start",
             "POST /workspace/repos/*/apps/*/stop",
             "POST /workspace/repos/*/tests",
+            "GET /workspace/repos/*/graph",
             "GET /workspace/templates",
             "GET /workspace/tree",
             "GET /system/terminals"
         ]
     },
     "contributes": {
-        "views": [{ "id": "apps", "label": "Apps", "surface": "directory" }]
+        "views": [
+            { "id": "apps", "label": "Apps", "surface": "directory" },
+            { "id": "dependencies", "label": "Dependencies", "surface": "directory" }
+        ]
     }
 }

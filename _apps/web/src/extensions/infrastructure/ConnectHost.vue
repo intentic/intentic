@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { HostTunnelSchema, type HostTunnel } from "@intentic-app/api-contract";
-import { Card, cmp, Code, InfoHint, Segmented, useOsPreference } from "@intentic-app/ui";
+import { cmp, Code, InfoHint, Segmented, useOsPreference } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, onUnmounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandboxClient";
@@ -10,8 +10,8 @@ import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import { zoneFromUrl } from "@intentic/sandbox-contract";
 import { normalizeHostName } from "./hostName";
 
-/* The connect-a-server requirement card, shown by InfraDeclare when something the user wants needs a deploy
- * target and none is connected yet (it unmounts itself once a host registers). Run a single connect-host
+/* The connect-a-server requirement, shown by InfraDeclare and the Add dialog when something the user wants
+ * needs a deploy target and none is connected yet (it unmounts itself once a host registers). Run a single connect-host
  * command on each host you want to deploy onto — it sets up the host (service user + SSH key + its own
  * Cloudflare tunnel) and self-registers with the sandbox via /enroll (authed by the connection token) — no
  * sandbox recreate, no keys pasted here. On an own-Cloudflare sandbox the command carries the user's CF token;
@@ -126,13 +126,21 @@ const connectHostCommand = computed(() => {
         if (minted.value === undefined || !mintCurrent.value) {
             return ``;
         }
-        return bashCommand(`hostSh`, `sudo env SANDBOX_URL='${url}' CONNECT_TOKEN='${sandbox.token}' HOST_SSH_TUNNEL_TOKEN='${minted.value.tunnelToken}' HOST_SSH_HOSTNAME='${minted.value.hostname}' HOST_NAME='${mintedName.value}' `, ``);
+        return bashCommand(
+            `hostSh`,
+            `sudo env SANDBOX_URL='${url}' CONNECT_TOKEN='${sandbox.token}' HOST_SSH_TUNNEL_TOKEN='${minted.value.tunnelToken}' HOST_SSH_HOSTNAME='${minted.value.hostname}' HOST_NAME='${mintedName.value}' `,
+            ``,
+        );
     }
     if (zone.value === undefined) {
         return ``;
     }
     const nameEnv = canonicalHostName.value !== `` ? ` HOST_NAME='${canonicalHostName.value}'` : ``;
-    return bashCommand(`hostSh`, `sudo env SANDBOX_URL='${url}' CONNECT_TOKEN='${sandbox.token}' CF_TOKEN='${cfToken.value.trim()}' ZONE='${zone.value}'${nameEnv} `, ``);
+    return bashCommand(
+        `hostSh`,
+        `sudo env SANDBOX_URL='${url}' CONNECT_TOKEN='${sandbox.token}' CF_TOKEN='${cfToken.value.trim()}' ZONE='${zone.value}'${nameEnv} `,
+        ``,
+    );
 });
 
 // The PowerShell equivalent (Windows deploy target). Same reactive inputs as the bash one-liner above, but the
@@ -149,7 +157,10 @@ const connectHostCommandPs = computed(() => {
         if (minted.value === undefined || !mintCurrent.value) {
             return ``;
         }
-        return psCommand(`hostPs1`, `${base}$env:HOST_SSH_TUNNEL_TOKEN='${minted.value.tunnelToken}'; $env:HOST_SSH_HOSTNAME='${minted.value.hostname}'; $env:HOST_NAME='${mintedName.value}'; `);
+        return psCommand(
+            `hostPs1`,
+            `${base}$env:HOST_SSH_TUNNEL_TOKEN='${minted.value.tunnelToken}'; $env:HOST_SSH_HOSTNAME='${minted.value.hostname}'; $env:HOST_NAME='${mintedName.value}'; `,
+        );
     }
     if (zone.value === undefined) {
         return ``;
@@ -164,28 +175,26 @@ onUnmounted(() => clearInterval(timer));
 </script>
 
 <template>
-    <Card class="flex flex-col gap-3">
-        <div class="flex items-start gap-2.5">
-            <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                    <h3 class="font-semibold text-content">Connect a server</h3>
-                    <InfoHint label="How connecting a machine works">
-                        <span class="block text-sm font-medium text-content">Connect a machine</span>
-                        <span class="mt-1 block text-xs text-muted">
-                            Run the command on any host (the machine this sandbox runs on, or another). It creates a service user + SSH key + a
-                            Cloudflare tunnel and registers the host with your sandbox. Run it on more machines to spread services across them.
-                        </span>
-                    </InfoHint>
-                </div>
-                <p class="mt-0.5 text-xs text-muted">
-                    What you want needs a server to run on.
-                    {{
-                        provided
-                            ? `One command per machine, run on it as root. No Cloudflare account needed — intentic hosts the tunnel.`
-                            : `One command, run on the target host as root. Cloudflare is set up as part of it.`
-                    }}
-                </p>
+    <div class="flex flex-col gap-3">
+        <div>
+            <div class="flex items-center gap-2">
+                <h3 class="font-semibold text-content">Connect a server</h3>
+                <InfoHint label="How connecting a machine works">
+                    <span class="block text-sm font-medium text-content">Connect a machine</span>
+                    <span class="mt-1 block text-xs text-muted">
+                        Run the command on any host (the machine this sandbox runs on, or another). It creates a service user + SSH key + a Cloudflare
+                        tunnel and registers the host with your sandbox. Run it on more machines to spread services across them.
+                    </span>
+                </InfoHint>
             </div>
+            <p class="mt-0.5 text-xs text-muted">
+                What you want needs a server to run on.
+                {{
+                    provided
+                        ? `One command per machine, run on it as root. No Cloudflare account needed — intentic hosts the tunnel.`
+                        : `One command, run on the target host as root. Cloudflare is set up as part of it.`
+                }}
+            </p>
         </div>
 
         <form class="flex flex-col gap-3" @submit.prevent="mint">
@@ -278,5 +287,5 @@ onUnmounted(() => clearInterval(timer));
                 }}</span>
             </div>
         </form>
-    </Card>
+    </div>
 </template>

@@ -18,10 +18,12 @@
         "typecheck": "vue-tsc --noEmit"
     },
     "dependencies": {
+        "@dagrejs/dagre": "catalog:",
         "@iconify/vue": "catalog:",
         "@primeuix/themes": "catalog:",
         "@shikijs/langs": "catalog:",
         "@shikijs/themes": "catalog:",
+        "@vue-flow/core": "catalog:",
         "primevue": "catalog:",
         "shiki": "catalog:",
         "tailwind-merge": "catalog:",

@@ -59,6 +59,7 @@ catalog:
   "@commitlint/cli": 20.1.0
   "@commitlint/config-conventional": 20.0.0
   "@commitlint/types": 20.0.0
+  "@dagrejs/dagre": 3.0.0
   "@hono/node-server": 2.0.6
   "@hono/otel": 1.1.2
   "@huggingface/hub": 2.13.3
@@ -105,6 +106,7 @@ catalog:
   "@types/tar-stream": 3.1.4
   "@types/ws": 8.18.1
   "@vitejs/plugin-vue": 6.0.7
+  "@vue-flow/core": 1.48.2
   "@xterm/addon-fit": 0.11.0
   "@xterm/addon-serialize": 0.14.0
   "@xterm/xterm": 6.0.0

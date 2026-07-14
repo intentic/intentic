@@ -3,6 +3,8 @@ export { default as BottomSheet } from "./components/BottomSheet.vue";
 export { default as Card } from "./components/Card.vue";
 export { default as Code } from "./components/Code.vue";
 export { default as CopyButton } from "./components/CopyButton.vue";
+export { default as DagGraph } from "./components/DagGraph.vue";
+export { type DagEdge, type DagNode } from "./components/dagLayout.js";
 export { default as Icon } from "./components/Icon.vue";
 export { default as InfoHint } from "./components/InfoHint.vue";
 export { default as Page } from "./components/Page.vue";

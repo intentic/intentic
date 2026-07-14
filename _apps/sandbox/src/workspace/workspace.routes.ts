@@ -12,6 +12,7 @@ import { probePort } from "../panels/panel-processes.js";
 import { shellQuote } from "../system/terminal-run.js";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 import { classifyWorkspace } from "./classify.js";
+import { readPackageGraph } from "./package-graph.js";
 import { isValidRepoName, listRepos } from "./repos.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./templates-config.js";
@@ -179,6 +180,8 @@ export const createWorkspaceRoutes = (services: Services) => {
             );
             return { apps };
         }),
+        // The monorepo's workspace package dependency graph — drives the apps extension's Dependencies view.
+        packageGraph: i.packageGraph.handler(({ input }) => readPackageGraph(join(services.workspace.repositories, monorepoOf(input.repo)))),
         // Start one app instance's preview dev server (its own process + port + preview-<repo>--<app>-<id>.<zone> host).
         startApp: i.startApp.handler(async ({ input }) => {
             const repo = monorepoOf(input.repo);

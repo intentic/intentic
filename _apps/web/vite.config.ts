@@ -20,7 +20,17 @@ export default defineConfig({
         // and pre-bundles them. The grammars, though, load via dynamic import from the source-linked ui lib,
         // which the optimizer leaves un-prebundled — it then serves 504 for every grammar chunk, so the
         // <Code> highlighter (and Monaco) silently fall back to unhighlighted text. Pre-bundle them all.
-        include: [`shiki/core`, `shiki/engine/javascript`, `@shikijs/themes/light-plus`, `@shikijs/themes/dark-plus`, ...shikiLangDeps],
+        // Vue Flow + dagre reach the graph the same way (lazy views importing DagGraph from the source-linked
+        // ui lib), so they need the same treatment.
+        include: [
+            `shiki/core`,
+            `shiki/engine/javascript`,
+            `@shikijs/themes/light-plus`,
+            `@shikijs/themes/dark-plus`,
+            `@vue-flow/core`,
+            `@dagrejs/dagre`,
+            ...shikiLangDeps,
+        ],
     },
     server: {
         host: "localhost",

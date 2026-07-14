@@ -38,17 +38,38 @@ const range = computed(() => {
     const span = PRESET_MS.get(windowChoice.value);
     return { since: span === undefined ? -Infinity : Date.now() - span, until: Infinity };
 });
-const filteredFiles = computed(() => files.value.filter((file) => file.modifiedAt >= range.value.since && file.modifiedAt <= range.value.until));
+const timeFiltered = computed(() => files.value.filter((file) => file.modifiedAt >= range.value.since && file.modifiedAt <= range.value.until));
 
-// Group the filtered file list by its top-level dir so terminals / intentic-runs / daemon.log read as sections.
+// Name filter + group tabs over the time-filtered list. Tabs derive from ALL files (sorted, so they never
+// appear/disappear as filters change); badges count the current time+name matches per group.
+const groupOf = (file: { name: string }): string => (file.name.includes(`/`) ? file.name.split(`/`)[0]! : `daemon`);
+const query = ref(``);
+const groupChoice = ref(`all`);
+const queryFiltered = computed(() => {
+    const needle = query.value.trim().toLowerCase();
+    return needle === `` ? timeFiltered.value : timeFiltered.value.filter((file) => file.name.toLowerCase().includes(needle));
+});
+const groupTabs = computed(() => [
+    { label: `All`, value: `all`, badge: queryFiltered.value.length },
+    ...[...new Set(files.value.map(groupOf))].sort().map((name) => ({
+        label: name,
+        value: name,
+        badge: queryFiltered.value.filter((file) => groupOf(file) === name).length,
+    })),
+]);
+const visible = computed(() => (groupChoice.value === `all` ? queryFiltered.value : queryFiltered.value.filter((file) => groupOf(file) === groupChoice.value)));
+
+// Group the visible list by its top-level dir so the All tab reads as sections; a specific tab renders as
+// one flat list with the redundant group prefix stripped from displayed names.
 const groups = computed(() => {
     const byGroup = new Map<string, typeof files.value>();
-    for (const file of filteredFiles.value) {
-        const group = file.name.includes(`/`) ? file.name.split(`/`)[0]! : `daemon`;
+    for (const file of visible.value) {
+        const group = groupOf(file);
         byGroup.set(group, [...(byGroup.get(group) ?? []), file]);
     }
     return [...byGroup.entries()].map(([title, entries]) => ({ title, entries }));
 });
+const displayName = (name: string): string => (groupChoice.value === `all` ? name : name.slice(name.indexOf(`/`) + 1));
 
 // Auto-scroll to the newest lines whenever a fresh tail arrives.
 const pane = ref<HTMLElement>();
@@ -81,46 +102,50 @@ watch(tail, () => {
                 <section class="rounded-lg border border-line bg-card p-4">
                     <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
                         <h3 :class="cmp.sectionLabel()">Files</h3>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <Segmented
-                                v-model="windowChoice"
-                                size="xs"
-                                :options="[
-                                    { label: `1h`, value: `1h` },
-                                    { label: `24h`, value: `24h` },
-                                    { label: `7d`, value: `7d` },
-                                    { label: `All`, value: `all` },
-                                ]"
-                            />
-                            <input v-model="customFrom" type="datetime-local" title="Modified after" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
-                            <input v-model="customTo" type="datetime-local" title="Modified before" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
-                        </div>
+                        <Segmented v-model="groupChoice" size="xs" :options="groupTabs" />
                     </div>
-                    <div v-for="group in groups" :key="group.title" class="mb-2">
-                        <p class="mb-1 font-mono text-2xs uppercase text-subtle/70">{{ group.title }}</p>
-                        <div class="flex flex-col divide-y divide-line">
-                            <button
-                                v-for="file in group.entries"
-                                :key="file.name"
-                                type="button"
-                                class="flex items-center gap-3 py-1.5 text-left hover:bg-hover"
-                                :class="selected === file.name ? `text-content` : `text-muted`"
-                                @click="selected = file.name"
-                            >
-                                <Icon name="file" class="text-xs" :class="selected === file.name ? `text-link` : `text-subtle`" />
-                                <span class="min-w-0 flex-1 truncate font-mono text-xs">{{ file.name }}</span>
-                                <span class="shrink-0 text-2xs text-subtle">{{ formatBytes(file.sizeBytes) }}</span>
-                                <span class="shrink-0 text-2xs text-subtle" :title="new Date(file.modifiedAt).toLocaleString()">
-                                    {{ timeAgo(file.modifiedAt) }}
-                                </span>
-                            </button>
+                    <div class="mb-3 flex flex-wrap items-center gap-2">
+                        <input v-model="query" type="search" placeholder="Filter by name…" :class="cmp.input(`h-7 w-44 px-2 py-0 text-2xs`)" />
+                        <Segmented
+                            v-model="windowChoice"
+                            size="xs"
+                            :options="[
+                                { label: `1h`, value: `1h` },
+                                { label: `24h`, value: `24h` },
+                                { label: `7d`, value: `7d` },
+                                { label: `All`, value: `all` },
+                            ]"
+                        />
+                        <input v-model="customFrom" type="datetime-local" title="Modified after" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
+                        <input v-model="customTo" type="datetime-local" title="Modified before" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
+                    </div>
+                    <div class="max-h-80 overflow-auto">
+                        <div v-for="group in groups" :key="group.title" class="mb-2">
+                            <p v-if="groupChoice === `all`" class="mb-1 font-mono text-2xs uppercase text-subtle/70">{{ group.title }}</p>
+                            <div class="flex flex-col divide-y divide-line">
+                                <button
+                                    v-for="file in group.entries"
+                                    :key="file.name"
+                                    type="button"
+                                    class="flex items-center gap-3 py-1.5 text-left hover:bg-hover"
+                                    :class="selected === file.name ? `text-content` : `text-muted`"
+                                    @click="selected = file.name"
+                                >
+                                    <Icon name="file" class="text-xs" :class="selected === file.name ? `text-link` : `text-subtle`" />
+                                    <span class="min-w-0 flex-1 truncate font-mono text-xs" :title="file.name">{{ displayName(file.name) }}</span>
+                                    <span class="shrink-0 text-2xs text-subtle">{{ formatBytes(file.sizeBytes) }}</span>
+                                    <span class="shrink-0 text-2xs text-subtle" :title="new Date(file.modifiedAt).toLocaleString()">
+                                        {{ timeAgo(file.modifiedAt) }}
+                                    </span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <p v-if="files.length === 0 && !isLoading" class="py-6 text-center text-sm text-muted">
                         Nothing yet. Logs appear as terminals run, infra commands execute, and the daemon works.
                     </p>
-                    <p v-else-if="files.length > 0 && filteredFiles.length === 0" class="py-6 text-center text-sm text-muted">
-                        No files match this time range.
+                    <p v-else-if="files.length > 0 && visible.length === 0" class="py-6 text-center text-sm text-muted">
+                        No files match the current filters.
                     </p>
                 </section>
 

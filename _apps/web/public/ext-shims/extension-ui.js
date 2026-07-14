@@ -8,6 +8,7 @@ export const Checkbox = m["Checkbox"];
 export const Code = m["Code"];
 export const ContextMenu = m["ContextMenu"];
 export const CopyButton = m["CopyButton"];
+export const DagGraph = m["DagGraph"];
 export const Dialog = m["Dialog"];
 export const Icon = m["Icon"];
 export const InfoHint = m["InfoHint"];

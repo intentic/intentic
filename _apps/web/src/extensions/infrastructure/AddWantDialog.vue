@@ -10,7 +10,7 @@ import { sandboxJson } from "../../composables/sandboxClient";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { usePanels } from "../../composables/extensions/usePanels";
 import CloudflareConnect from "./CloudflareConnect.vue";
-import ConnectHostCard from "./ConnectHostCard.vue";
+import ConnectHost from "./ConnectHost.vue";
 
 /* The Infra "Add" dialog — the single entry point for declaring a want. Step 1 is a catalog with two groups:
  * YOUR APPS (the apps present in workspace monorepos, via the daemon's per-repo apps routes — each addable as
@@ -126,7 +126,7 @@ const pick = async (picked: Picked): Promise<void> => {
     on.value = hostOptions.value.includes(`self`) ? `self` : (hostOptions.value[0] ?? ``);
 };
 
-// A server that registers while the dialog is open (the inline ConnectHostCard flow) becomes the binding —
+// A server that registers while the dialog is open (the inline ConnectHost flow) becomes the binding —
 // the form appears with `on` already wired, no re-pick needed.
 watch(hostOptions, (hosts) => {
     if (on.value === ``) {
@@ -184,7 +184,7 @@ const submit = async (): Promise<void> => {
                 <Icon name="arrow-left" class="text-2xs" /> Back
             </button>
 
-            <div class="mb-3 flex items-center gap-3">
+            <div class="mb-4 flex items-center gap-3">
                 <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-canvas">
                     <template v-if="selected.kind === `service`">
                         <img
@@ -206,12 +206,14 @@ const submit = async (): Promise<void> => {
                 </div>
             </div>
 
+            <div class="mb-4 border-t border-line"></div>
+
             <div v-if="error" :class="cmp.alertDanger('mb-3')">{{ error }}</div>
 
             <!-- A want needs Cloudflare for its domain and a server to run on. Rather than send the user off,
                  collect each missing one right here; the created entries then flip this into the form below. -->
             <CloudflareConnect v-if="cloudflareEntries.length === 0" />
-            <ConnectHostCard v-else-if="hostOptions.length === 0" />
+            <ConnectHost v-else-if="hostOptions.length === 0" />
             <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
                 <label class="ui-field">
                     <span class="ui-field-label">Name</span>

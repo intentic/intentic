@@ -6,7 +6,7 @@ vi.mock("./useSandbox", () => ({ useSandbox: () => ({ active: { value: { token: 
 const { sandboxJson } = await import("./sandboxClient");
 
 // A daemon that accepts the request but never answers — settles only when the caller's signal aborts, like
-// real fetch. Guards the contract ConnectHostCard's mint timeout relies on: a signal in the init reaches
+// real fetch. Guards the contract ConnectHost's mint timeout relies on: a signal in the init reaches
 // fetch through sandboxRequest, and its expiry rejects the hung call with a TimeoutError.
 const fetchMock = vi.fn(
     (_url: string, init?: RequestInit) =>

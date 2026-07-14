@@ -50,6 +50,7 @@
         "tar-stream": "catalog:",
         "tslib": "catalog:",
         "ws": "catalog:",
+        "yaml": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

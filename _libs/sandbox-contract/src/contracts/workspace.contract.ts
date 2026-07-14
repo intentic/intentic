@@ -18,6 +18,7 @@ import {
     WorkspaceDirSchema,
     WorkspaceFileQuerySchema,
     WorkspaceFileSchema,
+    WorkspaceGraphSchema,
     WorkspaceMoveSchema,
     WorkspaceSyncSchema,
     WorkspaceTreeSchema,
@@ -61,6 +62,9 @@ export const workspaceContract = {
     // surface; the extension polls the session's `running` for completion. It returns immediately (an ack).
     addApps: oc.route({ method: "POST", path: "/workspace/repos/{repo}/apps" }).input(AddAppsSchema).output(OkSchema),
     appsList: oc.route({ method: "GET", path: "/workspace/repos/{repo}/apps" }).input(RepoAppsParamSchema).output(AppsListSchema),
+    // The monorepo's workspace package dependency graph (pnpm-workspace.yaml globs + per-package package.json
+    // workspace deps) — drives the apps extension's Dependencies view.
+    packageGraph: oc.route({ method: "GET", path: "/workspace/repos/{repo}/graph" }).input(RepoAppsParamSchema).output(WorkspaceGraphSchema),
     startApp: oc.route({ method: "POST", path: "/workspace/repos/{repo}/apps/{app}/start" }).input(AppParamSchema).output(OkSchema),
     stopApp: oc.route({ method: "POST", path: "/workspace/repos/{repo}/apps/{app}/stop" }).input(AppParamSchema).output(OkSchema),
     // Run vitest for the given repo-relative project dirs in a one-shot tmux panel session

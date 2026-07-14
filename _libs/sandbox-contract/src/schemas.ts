@@ -437,6 +437,19 @@ export const RepoAppSchema = z.object({
 export type RepoApp = z.infer<typeof RepoAppSchema>;
 export const AppsListSchema = z.object({ apps: z.array(RepoAppSchema) });
 export type AppsList = z.infer<typeof AppsListSchema>;
+// One workspace package in a pnpm monorepo, discovered from pnpm-workspace.yaml's packages globs. `dir` is the
+// repo-relative package dir (e.g. "_apps/web"); `group` is its top-level dir segment (e.g. "_apps"), the
+// dependencies view's coloring axis.
+export const WorkspacePackageSchema = z.object({ name: z.string(), dir: z.string(), group: z.string() });
+export type WorkspacePackage = z.infer<typeof WorkspacePackageSchema>;
+export const WorkspaceDepTypeSchema = z.enum(["prod", "dev", "peer"]);
+export type WorkspaceDepType = z.infer<typeof WorkspaceDepTypeSchema>;
+// A workspace-internal dependency edge: `from` DEPENDS ON `to` (from's package.json lists to), typed by which
+// dependency block declared it. Pure data — layout/direction is the client's concern.
+export const WorkspaceDepEdgeSchema = z.object({ from: z.string(), to: z.string(), type: WorkspaceDepTypeSchema });
+export type WorkspaceDepEdge = z.infer<typeof WorkspaceDepEdgeSchema>;
+export const WorkspaceGraphSchema = z.object({ packages: z.array(WorkspacePackageSchema), edges: z.array(WorkspaceDepEdgeSchema) });
+export type WorkspaceGraph = z.infer<typeof WorkspaceGraphSchema>;
 // Path params for the per-repo apps routes: the monorepo name (validated in the handler like PanelRepoParam)
 // and, for per-app preview control (start/stop), the app key (api/web/landing).
 export const RepoAppsParamSchema = z.object({ repo: z.string() });

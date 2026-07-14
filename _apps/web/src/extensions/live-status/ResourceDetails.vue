@@ -16,7 +16,7 @@ const { resource, resources, deployments } = defineProps<{
     deployments: readonly Deployment[];
 }>();
 // Same selection model as the graph — setting it re-selects (and re-highlights) a dependency.
-const selectedId = defineModel<string | null>();
+const selectedId = defineModel<string | undefined>();
 
 // The resources that list this one in their dependsOn — the reverse of the edges the graph draws.
 const requiredBy = computed(() => resources.filter((r) => r.dependsOn.includes(resource.id)).map((r) => r.id));
@@ -73,7 +73,7 @@ const logoFailed = reactive(new Set<string>());
                 >
                     <template #icon><Icon name="cog" /></template>
                 </Button>
-                <Button size="small" :text="true" severity="secondary" aria-label="Close details" @click="selectedId = null">
+                <Button size="small" :text="true" severity="secondary" aria-label="Close details" @click="selectedId = undefined">
                     <template #icon><Icon name="times" /></template>
                 </Button>
             </div>

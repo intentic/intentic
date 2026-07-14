@@ -17,7 +17,7 @@ import AddWantDialog from "./AddWantDialog.vue";
 import ApplyProgress from "./ApplyProgress.vue";
 import ChangePreview from "./ChangePreview.vue";
 import CloudflareConnect from "./CloudflareConnect.vue";
-import ConnectHostCard from "./ConnectHostCard.vue";
+import ConnectHost from "./ConnectHost.vue";
 import { useApplyProgress } from "./useApplyProgress";
 import { usePlanPreview } from "./usePlanPreview";
 import { wantedApps } from "./wanted";
@@ -411,7 +411,9 @@ onUnmounted(progress.stopWatching);
 
     <!-- REQUIREMENTS — the haves the declared wants pull in, defined inline right where they block the apply. -->
     <section v-if="needsHost || needsCloudflare" class="mb-6 flex flex-col gap-3">
-        <ConnectHostCard v-if="needsHost" />
+        <Card v-if="needsHost" class="flex flex-col gap-3">
+            <ConnectHost />
+        </Card>
         <Card v-if="needsCloudflare" class="flex flex-col gap-3">
             <div class="min-w-0">
                 <span class="font-medium text-content">Connect Cloudflare</span>

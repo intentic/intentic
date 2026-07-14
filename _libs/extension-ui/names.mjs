@@ -9,6 +9,7 @@ export const extensionUiNames = [
     "Code",
     "ContextMenu",
     "CopyButton",
+    "DagGraph",
     "Dialog",
     "Icon",
     "InfoHint",
