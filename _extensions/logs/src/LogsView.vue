@@ -119,7 +119,11 @@ watch(tail, () => {
                         <input v-model="customFrom" type="datetime-local" title="Modified after" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
                         <input v-model="customTo" type="datetime-local" title="Modified before" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
                     </div>
-                    <div class="max-h-80 overflow-auto">
+                    <!-- Fixed default height, natively resizable (drag the bottom-right grip) so the user can trade
+                         list height against the viewer below; only mounted when there are rows, so the empty state
+                         never sits under a tall empty box. Height is an inline style, not a Tailwind class: the app's
+                         tailwind @source globs don't scan _extensions, so a novel height utility would be dropped. -->
+                    <div v-if="visible.length > 0" class="resize-y overflow-auto" style="height: 20rem; min-height: 8rem">
                         <div v-for="group in groups" :key="group.title" class="mb-2">
                             <p v-if="groupChoice === `all`" class="mb-1 font-mono text-2xs uppercase text-subtle/70">{{ group.title }}</p>
                             <div class="flex flex-col divide-y divide-line">
@@ -141,10 +145,10 @@ watch(tail, () => {
                             </div>
                         </div>
                     </div>
-                    <p v-if="files.length === 0 && !isLoading" class="py-6 text-center text-sm text-muted">
+                    <p v-else-if="files.length === 0 && !isLoading" class="py-6 text-center text-sm text-muted">
                         Nothing yet. Logs appear as terminals run, infra commands execute, and the daemon works.
                     </p>
-                    <p v-else-if="files.length > 0 && visible.length === 0" class="py-6 text-center text-sm text-muted">
+                    <p v-else-if="files.length > 0" class="py-6 text-center text-sm text-muted">
                         No files match the current filters.
                     </p>
                 </section>
