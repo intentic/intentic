@@ -255,7 +255,10 @@ test("a session error and a thrown runner become error events followed by done",
 // A fake OpenCode whose SSE stream yields `events` then STAYS OPEN (like the real global subscription) — so
 // these exercise how createGrokRunner terminates against an open stream (idle/error/timeout), which a fake
 // GrokRunner (a finite array) can't reproduce. `return()` releases the hang so the runner's cleanup never blocks.
-const fakeOpenCode = (events: Event[]): { openCode: OpenCodeService; aborted: () => boolean; recorded: string[][]; prompts: (string | undefined)[] } => {
+const fakeOpenCode = (
+    events: Event[],
+    rejectModel?: { id: string; message: string },
+): { openCode: OpenCodeService; aborted: () => boolean; recorded: string[][]; prompts: (string | undefined)[] } => {
     let aborted = false;
     let releaseHang: (() => void) | undefined;
     // Captures for the self-heal path: the model ids each promptAsync fired with, and every recordModels payload.
@@ -286,7 +289,13 @@ const fakeOpenCode = (events: Event[]): { openCode: OpenCodeService; aborted: ()
         session: {
             create: async () => ({ data: { id: "s1" } }),
             promptAsync: async (options: { body?: { model?: { modelID?: string } } }) => {
-                prompts.push(options.body?.model?.modelID);
+                const modelID = options.body?.model?.modelID;
+                prompts.push(modelID);
+                // Mimic OpenCode/xAI REJECTING an unknown model id (a thrown ProviderModelNotFoundError, the way
+                // the real server does) instead of emitting a session.error event — the initial-send path.
+                if (rejectModel !== undefined && modelID === rejectModel.id) {
+                    throw new Error(rejectModel.message);
+                }
                 return {};
             },
             abort: async () => {
@@ -376,6 +385,45 @@ test("createGrokRunner surfaces a model error it cannot self-heal (no named alte
     }
     // No "Did you mean" ⇒ no retry: the error is surfaced (and terminal), and nothing is recorded/re-prompted.
     expect(seen).toEqual(["session.created", "session.error"]);
+    expect(recorded).toEqual([]);
+    expect(prompts).toEqual(["grok-x"]);
+});
+
+test("createGrokRunner self-heals a model-not-found REJECTION from the initial prompt (thrown, not a session.error event)", async () => {
+    // The real promptAsync REJECTS on a bad model (a thrown ProviderModelNotFoundError with the SessionPrompt
+    // stack) rather than emitting a session.error — and the initial send is OUTSIDE the event loop, so this is the
+    // path that surfaced raw in production. It must heal identically: record xAI's named models, re-prompt once.
+    const { openCode, recorded, prompts } = fakeOpenCode(
+        [
+            { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+            {
+                type: "message.part.updated",
+                properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Fixed." } },
+            } as unknown as Event,
+            { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+        ],
+        { id: "grok-4", message: "Model not found: xai/grok-4. Did you mean: grok-4.3?" },
+    );
+    const seen: string[] = [];
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, model: "grok-4" })) {
+        seen.push(event.type);
+    }
+    // The thrown rejection is swallowed (never surfaced) and the corrected turn's content streams instead.
+    expect(seen).toEqual(["session.created", "message.part.updated", "session.idle"]);
+    expect(recorded).toEqual([["grok-4.3"]]);
+    expect(prompts).toEqual(["grok-4", "grok-4.3"]);
+});
+
+test("a thrown model-not-found with no named alternatives surfaces as a tagged grok-model-invalid error", async () => {
+    // promptAsync rejects with a model error that names no alternatives, so the runner can't self-heal and
+    // re-throws. runGrokAgent must tag it grok-model-invalid (parity with the event path) so the client reloads the
+    // catalog + drops the bad pinned model, instead of surfacing the raw stack-trace error.
+    const { openCode, recorded, prompts } = fakeOpenCode([], { id: "grok-x", message: "Model not found: xai/grok-x." });
+    const events = await collect(createGrokAgent(createGrokRunner(openCode)), { ...request, model: "grok-x" });
+    expect(events).toEqual([
+        { kind: "error", code: "grok-model-invalid", message: "Model not found: xai/grok-x." },
+        { kind: "done" },
+    ]);
     expect(recorded).toEqual([]);
     expect(prompts).toEqual(["grok-x"]);
 });

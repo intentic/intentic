@@ -85,12 +85,28 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                     parts: [{ type: "text", text: turn.prompt }],
                 },
             });
-        await sendPrompt(turn.model);
         // One self-heal attempt per turn: xAI names the account's valid models when it rejects a stale/renamed id.
         let retried = false;
         // After a self-heal re-prompt, a lingering session.idle from the FAILED prompt could end the turn before
         // the corrected one streams. While true, ignore idle until the retry's first real event proves it started.
         let awaitingRetryStart = false;
+        // Fire the initial prompt. xAI rejects a stale/renamed (or seed) model id by REJECTING promptAsync (a thrown
+        // ProviderModelNotFoundError) rather than via a session.error event, so the in-loop self-heal below never
+        // sees it — heal it here the same way (record xAI's named models, re-prompt once with a valid one) so a
+        // stale pinned/default model self-corrects silently instead of surfacing raw. A rejected prompt streamed no
+        // events, so there's no stale idle to skip (no awaitingRetryStart needed).
+        try {
+            await sendPrompt(turn.model);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            const suggestions = MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : [];
+            if (suggestions[0] === undefined) {
+                throw error;
+            }
+            retried = true;
+            await openCode.recordModels(suggestions);
+            await sendPrompt(suggestions[0]);
+        }
         // Drive the shared SSE iterator manually so each read can race an inactivity timeout (a `for await` can't),
         // and close it on exit (it's a per-turn subscription). Both session.idle and session.error are terminal —
         // OpenCode may not send idle after an error.
@@ -391,7 +407,11 @@ export const createGrokAgent = (runner: GrokRunner) =>
             }
         } catch (error) {
             if (!surfacedError) {
-                yield { kind: "error", message: error instanceof Error ? error.message : "grok agent failed" };
+                const message = error instanceof Error ? error.message : "grok agent failed";
+                // A thrown model-not-found (promptAsync rejected and the runner couldn't self-heal it — no named
+                // alternatives) gets the same code as the event path, so the client reloads the catalog and drops
+                // the bad pinned model rather than showing the raw error.
+                yield { kind: "error", message, ...(MODEL_INVALID.test(message) ? { code: "grok-model-invalid" as const } : {}) };
             }
         }
         yield { kind: "done" };
