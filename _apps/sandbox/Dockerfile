@@ -114,7 +114,7 @@ RUN printf '%s\n' \
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 # chmod as in the build stage: in-sandbox `pnpm install` (dev in /work, scaffold inject) compiles node-pty
 # from source, and corepack strips the exec bit off its bundled node-gyp gyp_main.py (else Error 126).
-RUN corepack enable && corepack prepare pnpm@11.9.0 --activate \
+RUN corepack enable && corepack prepare pnpm@11.13.1 --activate \
     && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
 # The `opencode` CLI on PATH — the Grok provider (grok/opencode.ts) spawns `opencode serve` via
 # @opencode-ai/sdk's createOpencodeServer, which shells out to this binary. xAI OAuth tokens are persisted by
