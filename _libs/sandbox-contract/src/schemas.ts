@@ -21,6 +21,15 @@ export const RepoParamSchema = z.object({ repo: z.string() });
 
 export const SessionTranscriptMessageSchema = z.object({ role: z.enum(["user", "assistant"]), text: z.string() });
 
+// The agent runtimes the daemon can serve (the provider adapters) — the vocabulary every surface that picks
+// an agent shares (chat turns, automations). See AgentTurnSchema.agent for the dispatch semantics.
+export const AgentProviderSchema = z.enum(["claude", "codex", "grok"]);
+export type AgentProvider = z.infer<typeof AgentProviderSchema>;
+
+// The harness (agentic loop) a turn runs on, orthogonal to the provider. See AgentTurnSchema.harness.
+export const AgentHarnessSchema = z.enum(["native", "claude-code"]);
+export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
+
 export const AgentTurnSchema = z
     .object({
         prompt: z.string(),
@@ -31,13 +40,13 @@ export const AgentTurnSchema = z
         // Which provider (model + account) serves the turn; absent = claude. A sessionId only resumes on the
         // provider that minted it (Claude Code sessions vs Codex threads vs Grok/OpenCode sessions are separate
         // stores) — a mid-conversation provider/account/harness switch sends `history` instead of resuming.
-        agent: z.enum(["claude", "codex", "grok"]).optional(),
+        agent: AgentProviderSchema.optional(),
         // Which harness (agentic loop) runs the turn, orthogonal to the provider above. Absent = "native": each
         // provider on its own runtime (Claude Code SDK / Codex CLI / opencode) with its subscription OAuth.
         // "claude-code" forces the Claude Code Agent SDK loop for ANY provider — codex/grok then drive their model
         // through the sandbox's bundled Anthropic↔OpenAI translator, which needs that provider's API key (its
         // subscription OAuth can't reach a gateway). For the claude provider the two are identical.
-        harness: z.enum(["native", "claude-code"]).optional(),
+        harness: AgentHarnessSchema.optional(),
         // Which connected account of that provider serves the turn; absent = the provider's first account.
         account: z.string().optional(),
         sessionId: z.string().optional(),
@@ -815,7 +824,11 @@ export const AutomationSchema = z.object({
     // Shell command run in the workspace root before waking; exit 0 ⇒ wake, non-zero ⇒ the run is "skipped".
     guard: z.string().min(1).optional(),
     prompt: z.string().min(1),
-    // Which Claude model the wake runs on (opus/sonnet/haiku); absent ⇒ the account/subscription default.
+    // Which provider adapter serves the wake; absent ⇒ claude. Same dispatch as a chat turn (AgentTurnSchema.agent).
+    agent: AgentProviderSchema.optional(),
+    // Which harness (agentic loop) runs the wake; absent ⇒ native. Same semantics as AgentTurnSchema.harness.
+    harness: AgentHarnessSchema.optional(),
+    // Which model the wake runs on (see agent-catalog.ts modelsFor); absent ⇒ the provider's default.
     model: z.string().optional(),
     // When true, a fire doesn't wake the agent — it's held in the approvals queue until the owner approves.
     requireApproval: z.boolean().optional(),

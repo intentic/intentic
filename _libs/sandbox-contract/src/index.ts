@@ -43,6 +43,7 @@ export { systemContract } from "./contracts/system.contract.js";
 export { workspaceContract } from "./contracts/workspace.contract.js";
 export * from "./effects.js";
 export * from "./events.js";
+export * from "./agent-catalog.js";
 export * from "./hostnames.js";
 export * from "./schemas.js";
 export * from "./terminal-protocol.js";

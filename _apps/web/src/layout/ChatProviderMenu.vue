@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { HARNESSES, PROVIDERS } from "../composables/chat/catalog";
-import { type ChatProvider, modelOptionsFor, providerAccounts } from "../composables/chat/conversation";
+import { type AgentProvider, HARNESSES, PROVIDERS } from "@intentic/sandbox-contract";
+import { modelOptionsFor, providerAccounts } from "../composables/chat/conversation";
 import { useChat } from "../composables/chat/useChat";
 import ProviderLogo from "./ProviderLogo.vue";
 
@@ -11,7 +11,7 @@ import ProviderLogo from "./ProviderLogo.vue";
 const { provider, selectProvider, harness, selectHarness, account, selectAccount, accounts, model, thinking, streaming, messages } = useChat();
 // A provider whose (any) connected account can no longer be refreshed — badge it so a broken credential doesn't
 // look identical to a healthy one until the user tries to chat.
-const providerNeedsReauth = (target: ChatProvider): boolean => providerAccounts.value[target].some((entry) => entry.needsReauth === true);
+const providerNeedsReauth = (target: AgentProvider): boolean => providerAccounts.value[target].some((entry) => entry.needsReauth === true);
 // Native Grok's list is the live daemon catalog; the others (and any claude-code-harness list) are the static,
 // harness-aware catalog. Shared with the composer chip.
 const models = computed(() => modelOptionsFor(provider.value, harness.value));

@@ -214,6 +214,9 @@ const MODEL_INVALID = /model not found|does not exist|no such model|did you mean
 interface TurnCapture {
     sessionId?: string;
     planText?: string;
+    // Set when the plan phase hit a session.error, so runGrokPlanTurn suppresses the plan frame — a failed turn
+    // must not surface a "plan" (the error already streamed), even if partial/echoed text reached planText.
+    errored?: boolean;
 }
 
 // Normalize one Grok turn's OpenCode Event stream onto AgentEvents. `capture` set ⇒ plan phase: text is
@@ -231,6 +234,9 @@ async function* streamTurn(events: AsyncIterable<Event>, capture?: TurnCapture):
         string,
         { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUsd: number }
     >();
+    // Message id → role, so a text part is attributed to its owner. OpenCode broadcasts the USER message's parts on
+    // this same session stream, and a text Part carries no role — without this, the prompt echoes into planText/delta.
+    const roleOf = new Map<string, "user" | "assistant">();
 
     for await (const event of events) {
         if (event.type === "session.created") {
@@ -240,7 +246,9 @@ async function* streamTurn(events: AsyncIterable<Event>, capture?: TurnCapture):
             yield { kind: "session", sessionId: event.properties.info.id };
         } else if (event.type === "message.part.updated") {
             const part = event.properties.part;
-            if (part.type === "text") {
+            // Only the ASSISTANT's text is the answer/plan. A part whose message is the user's (the echoed prompt)
+            // is skipped; unknown (role not yet seen) is treated as assistant so early assistant text isn't dropped.
+            if (part.type === "text" && roleOf.get(part.messageID) !== "user") {
                 const prev = emitted.get(part.id) ?? 0;
                 if (part.text.length > prev) {
                     const slice = part.text.slice(prev);
@@ -286,6 +294,8 @@ async function* streamTurn(events: AsyncIterable<Event>, capture?: TurnCapture):
             };
         } else if (event.type === "message.updated") {
             const info = event.properties.info;
+            // Attribute this message's role so its text parts are captured (assistant) or skipped (user) above.
+            roleOf.set(info.id, info.role);
             if (info.role === "assistant") {
                 usage.set(info.id, {
                     inputTokens: info.tokens.input,
@@ -298,6 +308,9 @@ async function* streamTurn(events: AsyncIterable<Event>, capture?: TurnCapture):
         } else if (event.type === "session.error") {
             const message = errorText(event.properties.error);
             yield { kind: "error", message, ...(MODEL_INVALID.test(message) ? { code: "grok-model-invalid" as const } : {}) };
+            if (capture !== undefined) {
+                capture.errored = true;
+            }
             // Terminal: OpenCode does not reliably emit session.idle after an error, so ending here (rather than
             // waiting for an idle that never comes) is what lets runGrokAgent reach its `done`.
             return;
@@ -343,8 +356,9 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner): Asyn
             capture,
         );
         sessionId = capture.sessionId;
-        if (capture.planText === undefined || capture.planText.trim() === "" || request.signal.aborted) {
-            // The planning turn errored/aborted without producing a plan — the error frame already streamed.
+        if (capture.errored === true || capture.planText === undefined || capture.planText.trim() === "" || request.signal.aborted) {
+            // The planning turn errored/aborted (or produced no plan text) — the error frame already streamed, so
+            // don't propose a plan built from partial/echoed output.
             return;
         }
         const { id, wait } = createPlanRequest();

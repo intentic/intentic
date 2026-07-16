@@ -1,12 +1,10 @@
-import type { OauthAccount, UsageAccount } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, AgentProviderSchema, type OauthAccount, type UsageAccount } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
 import {
     type ChatAttachment,
-    type ChatHarness,
     type ChatMessage,
     type ChatMode,
-    type ChatProvider,
     type ChatRole,
     Conversation,
     grokDefaultModel,
@@ -52,14 +50,14 @@ const activeId = ref<string>(``);
 // metadata) — persist as one JSON blob, so a refresh or a switch back to the sandbox restores its open chats.
 // Transcripts are NOT persisted; the rehydration watch below re-fetches them from the daemon's session store.
 const chatTabsKey = (sandboxId: string): string => `intentic.chatTabs.${sandboxId}`;
-const PROVIDERS: readonly ChatProvider[] = [`claude`, `codex`, `grok`];
+const PROVIDERS: readonly AgentProvider[] = AgentProviderSchema.options;
 
 interface StoredTab {
     // The tab's turn selection; the session's provider may differ while a switch is picked but not yet sent.
-    readonly provider?: ChatProvider;
+    readonly provider?: AgentProvider;
     // The tab's harness selection (native vs the Claude Code loop); absent ⇒ the current default on restore.
-    readonly harness?: ChatHarness;
-    readonly session?: { id: string; provider: ChatProvider };
+    readonly harness?: AgentHarness;
+    readonly session?: { id: string; provider: AgentProvider };
     readonly title?: string;
     readonly draft: string;
     readonly attachments: { name: string; path: string }[];
@@ -89,16 +87,16 @@ const readTabs = (sandboxId: string | undefined): { active: number; tabs: Stored
                 typeof session === `object` &&
                 session !== null &&
                 typeof session[`id`] === `string` &&
-                PROVIDERS.includes(session[`provider`] as ChatProvider)
-                    ? { id: session[`id`] as string, provider: session[`provider`] as ChatProvider }
+                PROVIDERS.includes(session[`provider`] as AgentProvider)
+                    ? { id: session[`id`] as string, provider: session[`provider`] as AgentProvider }
                     : undefined;
             tabs.push({
                 draft: tab[`draft`],
                 attachments: (Array.isArray(tab[`attachments`]) ? (tab[`attachments`] as Record<string, unknown>[]) : [])
                     .filter((entry) => typeof entry[`name`] === `string` && typeof entry[`path`] === `string`)
                     .map((entry) => ({ name: entry[`name`] as string, path: entry[`path`] as string })),
-                ...(PROVIDERS.includes(tab[`provider`] as ChatProvider) ? { provider: tab[`provider`] as ChatProvider } : {}),
-                ...(tab[`harness`] === `claude-code` || tab[`harness`] === `native` ? { harness: tab[`harness`] as ChatHarness } : {}),
+                ...(PROVIDERS.includes(tab[`provider`] as AgentProvider) ? { provider: tab[`provider`] as AgentProvider } : {}),
+                ...(tab[`harness`] === `claude-code` || tab[`harness`] === `native` ? { harness: tab[`harness`] as AgentHarness } : {}),
                 ...(validSession !== undefined ? { session: validSession } : {}),
                 ...(typeof tab[`title`] === `string` ? { title: tab[`title`] } : {}),
             });
@@ -244,8 +242,8 @@ const mode = computed<ChatMode>({
 // Active-conversation turn settings (read+write) — the composer binds these; they forward to the active tab
 // so switching tabs shows that chat's provider/model/effort/thinking. All of it is switchable mid-chat: a
 // provider/account switch takes effect at the next send (see Conversation.send's segment cut).
-const provider = computed<ChatProvider>(() => active.value.provider.value);
-const selectProvider = (p: ChatProvider): void => {
+const provider = computed<AgentProvider>(() => active.value.provider.value);
+const selectProvider = (p: AgentProvider): void => {
     active.value.selectProvider(p);
     // Grok's catalog is daemon-owned and can be stale (loaded empty before the account connected, or an empty
     // transient) — refetch on landing on Grok so the model picker is always populated on arrival.
@@ -255,8 +253,8 @@ const selectProvider = (p: ChatProvider): void => {
 };
 // The active conversation's harness (native runtime vs the Claude Code loop) + its picker. Only meaningful for
 // codex/grok; the composer surfaces it there. A switch retires the session at the next send (like a provider switch).
-const harness = computed<ChatHarness>(() => active.value.harness.value);
-const selectHarness = (h: ChatHarness): void => active.value.selectHarness(h);
+const harness = computed<AgentHarness>(() => active.value.harness.value);
+const selectHarness = (h: AgentHarness): void => active.value.selectHarness(h);
 const model = computed<string>({
     get: () => active.value.model.value,
     set: (value) => {
@@ -303,12 +301,12 @@ const attachments = computed<PendingAttachment[]>({
 });
 
 // Per-provider labels + the route prefix each provider's daemon routes live under.
-const providerLabel = (p: ChatProvider): string => (p === `codex` ? `ChatGPT` : p === `grok` ? `Grok` : `Claude`);
-const providerBase = (p: ChatProvider): string => (p === `codex` ? `/codex` : p === `grok` ? `/grok` : `/claude`);
+const providerLabel = (p: AgentProvider): string => (p === `codex` ? `ChatGPT` : p === `grok` ? `Grok` : `Claude`);
+const providerBase = (p: AgentProvider): string => (p === `codex` ? `/codex` : p === `grok` ? `/grok` : `/claude`);
 
 // Which account the manage/connect card acts on — decoupled from the chat-turn provider so connecting or
 // disconnecting one account never mutates the active conversation's provider.
-const managedProvider = ref<ChatProvider>(turnDefaults.provider.value);
+const managedProvider = ref<AgentProvider>(turnDefaults.provider.value);
 
 // Per-account token/cost totals (from the daemon's /system/usage aggregation of the activity log), keyed by
 // account id. Loaded when the manage card opens; empty until then.
@@ -328,7 +326,7 @@ const loadUsage = async (): Promise<void> => {
 
 // Point the account card at a provider and prep its connect handshake: an in-progress handshake belongs to
 // the previous account, so drop it, and (when the card is open on a provider with no account) start a fresh one.
-const setManagedProvider = (target: ChatProvider): void => {
+const setManagedProvider = (target: AgentProvider): void => {
     // Re-selecting the already-managed provider while a handshake is live must NOT re-authorize: a fresh device
     // code would diverge from the sign-in tab the user already opened. Only (re)start on an actual switch.
     if (managedProvider.value === target && (authorizeUrl.value !== null || userCode.value !== null)) {
@@ -347,7 +345,7 @@ const setManagedProvider = (target: ChatProvider): void => {
 // per-turn chat errors live on each Conversation. `connected` = the ACTIVE conversation's provider has an
 // account; `claudeConnected` = Claude specifically (the Sandbox page's card).
 const error = ref<string | null>(null);
-const hasAccount = (provider: ChatProvider): boolean => providerAccounts.value[provider].length > 0;
+const hasAccount = (provider: AgentProvider): boolean => providerAccounts.value[provider].length > 0;
 const connected = computed(() => hasAccount(provider.value));
 const claudeConnected = computed(() => hasAccount(`claude`));
 
@@ -388,7 +386,7 @@ const userCode = ref<string | null>(null);
 const connectLabel = ref(``);
 
 // Add a freshly-connected account to its provider's list and make it the selected one.
-const addAccount = (provider: ChatProvider, account: OauthAccount): void => {
+const addAccount = (provider: AgentProvider, account: OauthAccount): void => {
     const existing = providerAccounts.value[provider].filter((a) => a.id !== account.id);
     providerAccounts.value = { ...providerAccounts.value, [provider]: [...existing, account] };
     selectedAccountId.value = { ...selectedAccountId.value, [provider]: account.id };
@@ -396,7 +394,7 @@ const addAccount = (provider: ChatProvider, account: OauthAccount): void => {
 
 // Pull a provider's account list from its daemon and keep the selection valid (first account when the current
 // pick is gone). The single reader of the `/accounts` routes.
-const refreshAccounts = async (provider: ChatProvider): Promise<OauthAccount[]> => {
+const refreshAccounts = async (provider: AgentProvider): Promise<OauthAccount[]> => {
     const response = await sandboxRequest(`${providerBase(provider)}/accounts`);
     if (!response.ok) {
         return [...providerAccounts.value[provider]];

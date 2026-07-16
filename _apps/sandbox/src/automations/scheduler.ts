@@ -106,7 +106,13 @@ export const fireAutomation = async (
         const prompt = stream !== undefined ? `${STREAM_NOTE}\n\n${body}` : body;
         let failure: string | undefined;
         let sessionId: string | undefined;
-        for await (const event of wake(services, { prompt, ...(automation.model !== undefined ? { model: automation.model } : {}) }, undefined)) {
+        const turn = {
+            prompt,
+            ...(automation.agent !== undefined ? { agent: automation.agent } : {}),
+            ...(automation.harness !== undefined ? { harness: automation.harness } : {}),
+            ...(automation.model !== undefined ? { model: automation.model } : {}),
+        };
+        for await (const event of wake(services, turn, undefined)) {
             if (event.kind === "session") {
                 sessionId = event.sessionId;
             }

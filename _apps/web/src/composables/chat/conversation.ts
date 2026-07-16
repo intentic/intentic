@@ -1,8 +1,18 @@
-import type { AgentEvent, AskQuestion, ContextUsage, OauthAccount, TodoItem } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    type AgentHarness,
+    type AgentProvider,
+    type AskQuestion,
+    type CatalogOption,
+    type ContextUsage,
+    modelsFor,
+    type OauthAccount,
+    providerLabel,
+    type TodoItem,
+} from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandboxClient";
 import { sseData, sseFrames } from "../sse";
-import { type CatalogOption, modelsFor, providerLabel } from "./catalog";
 import { formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus";
 
 // 'notice' is a small muted system line in the transcript (dismissed / kept planning / approved /
@@ -14,17 +24,10 @@ export type ChatRole = "user" | "assistant" | "notice";
 // directly (accept edits / ask before edits / bypass all prompts).
 export type ChatMode = "plan" | "acceptEdits" | "default" | "bypassPermissions";
 
-// Which agent runtime serves a turn (the daemon's provider adapters). Switchable mid-conversation: a session
-// id only resumes on the runtime that minted it, so a switched turn retires the session and starts a fresh one
-// seeded with the transcript so far (see Conversation.send).
-export type ChatProvider = "claude" | "codex" | "grok";
-
-// Which harness (agentic loop) runs a turn, orthogonal to the provider above. `native` = each provider on its
-// own runtime (Claude Code SDK / Codex CLI / opencode) with its subscription account — today's behavior.
-// `claude-code` forces the Claude Code loop for ANY provider; for codex/grok that runs their model through the
-// sandbox's translator and needs an API key (not the subscription). For the claude provider the two are identical,
-// so the selector only surfaces for codex/grok. Like a provider switch, a harness switch retires the session.
-export type ChatHarness = "native" | "claude-code";
+// The provider (AgentProvider) and harness (AgentHarness) a turn runs on are the contract's wire enums —
+// see schemas.ts for their semantics. Both are switchable mid-conversation: a session id only resumes on the
+// runtime that minted it, so a switched turn retires the session and starts a fresh one seeded with the
+// transcript so far (see Conversation.send).
 
 // Grok (xAI via OpenCode) needs an explicitly-named model. Its catalog is daemon-owned (/grok/models → xAI
 // discovery with a persisted/seed floor, never empty) and loaded into these refs, so the picker tracks xAI's
@@ -36,7 +39,7 @@ export const grokDefaultModel = ref<string>(``);
 // The model a fresh conversation seeds for a provider+harness: Claude names Opus. Under the Claude Code harness a
 // non-Claude provider sends the translator's mapped id (gpt-5-codex / grok-4). Natively, Grok names its live
 // default (empty only before the first catalog load) and Codex sends empty (the account default).
-export const defaultModelFor = (provider: ChatProvider, harness: ChatHarness): string =>
+export const defaultModelFor = (provider: AgentProvider, harness: AgentHarness): string =>
     provider === `claude`
         ? `opus`
         : harness === `claude-code`
@@ -49,16 +52,16 @@ export const defaultModelFor = (provider: ChatProvider, harness: ChatHarness): s
 
 // The model options for a provider+harness picker/chip: native Grok's live daemon catalog, else the static
 // (harness-aware) catalog. Shared by the composer pill and the menu bodies so their list + label logic can't drift.
-export const modelOptionsFor = (provider: ChatProvider, harness: ChatHarness): CatalogOption[] =>
+export const modelOptionsFor = (provider: AgentProvider, harness: AgentHarness): CatalogOption[] =>
     provider === `grok` && harness === `native` ? grokModels.value : modelsFor(provider, harness);
 // The display label for a selected model id — the option's label, else the provider name so the chip is never
 // blank (Grok's catalog can be briefly empty on first load; other providers always resolve their option).
-export const modelLabelFor = (provider: ChatProvider, harness: ChatHarness, modelId: string): string =>
+export const modelLabelFor = (provider: AgentProvider, harness: AgentHarness, modelId: string): string =>
     modelOptionsFor(provider, harness).find((option) => option.value === modelId)?.label ?? providerLabel(provider);
 
 // The provider tabs shown wherever accounts are picked (the account dialog + the composer's connect gate).
 // Labels differ from the internal ids (codex → "ChatGPT").
-export const providerTabs: readonly { value: ChatProvider; label: string }[] = [
+export const providerTabs: readonly { value: AgentProvider; label: string }[] = [
     { value: `claude`, label: `Claude` },
     { value: `codex`, label: `ChatGPT` },
     { value: `grok`, label: `Grok` },
@@ -166,9 +169,9 @@ export type ConversationStatus = "idle" | "streaming" | "awaiting" | "error";
 // The turn settings passed into a send — the active conversation's own selected provider/model/effort/thinking
 // (see useChat's active-conversation facades), captured at send time.
 export interface TurnSettings {
-    readonly agent: ChatProvider;
+    readonly agent: AgentProvider;
     // Which harness runs the turn (native runtime vs the Claude Code loop). Orthogonal to `agent`.
-    readonly harness: ChatHarness;
+    readonly harness: AgentHarness;
     // Which connected account of the provider serves the turn; undefined ⇒ the daemon's first account.
     readonly account: string | undefined;
     readonly model: string;
@@ -183,9 +186,9 @@ const TURN_DEFAULTS_KEY = `intentic.turnDefaults`;
 const MODES: readonly ChatMode[] = [`plan`, `acceptEdits`, `default`, `bypassPermissions`];
 
 interface TurnDefaults {
-    readonly provider: ChatProvider;
-    readonly harness: ChatHarness;
-    readonly models: Record<ChatProvider, string>;
+    readonly provider: AgentProvider;
+    readonly harness: AgentHarness;
+    readonly models: Record<AgentProvider, string>;
     readonly effort: string;
     readonly thinking: boolean;
     readonly mode: ChatMode;
@@ -194,9 +197,9 @@ interface TurnDefaults {
 // Per-provider NATIVE model map: a stored string per provider, each degrading to that provider's native default
 // when absent or malformed. The single point that parses the persisted record. (Claude-Code-harness models are
 // deterministic — gpt-5-codex / grok-4 — so they aren't persisted; rememberedModelFor derives them.)
-const readModels = (stored: unknown): Record<ChatProvider, string> => {
+const readModels = (stored: unknown): Record<AgentProvider, string> => {
     const raw = (typeof stored === `object` && stored !== null ? stored : {}) as Record<string, unknown>;
-    const modelFor = (provider: ChatProvider): string =>
+    const modelFor = (provider: AgentProvider): string =>
         typeof raw[provider] === `string` ? (raw[provider] as string) : defaultModelFor(provider, `native`);
     return { claude: modelFor(`claude`), codex: modelFor(`codex`), grok: modelFor(`grok`) };
 };
@@ -217,7 +220,7 @@ const readTurnDefaults = (): TurnDefaults => {
         }
         const stored = JSON.parse(raw) as Record<string, unknown>;
         return {
-            provider: stored[`provider`] === `codex` || stored[`provider`] === `grok` ? (stored[`provider`] as ChatProvider) : `claude`,
+            provider: stored[`provider`] === `codex` || stored[`provider`] === `grok` ? (stored[`provider`] as AgentProvider) : `claude`,
             harness: stored[`harness`] === `claude-code` ? `claude-code` : `native`,
             models: readModels(stored[`models`]),
             effort: typeof stored[`effort`] === `string` ? stored[`effort`] : fallback.effort,
@@ -235,9 +238,9 @@ const seed = readTurnDefaults();
 // writes back here (see Conversation.selectProvider), and useChat's facade setters write model/effort/
 // thinking/mode through, so the next new chat — and the next session — inherit the last-used settings.
 export const turnDefaults = {
-    provider: ref<ChatProvider>(seed.provider),
-    harness: ref<ChatHarness>(seed.harness),
-    models: ref<Record<ChatProvider, string>>(seed.models),
+    provider: ref<AgentProvider>(seed.provider),
+    harness: ref<AgentHarness>(seed.harness),
+    models: ref<Record<AgentProvider, string>>(seed.models),
     effort: ref<string>(seed.effort),
     thinking: ref<boolean>(seed.thinking),
     mode: ref<ChatMode>(seed.mode),
@@ -258,7 +261,7 @@ watch(
 // the translator's deterministic mapped id; natively it's the one the user last picked for that provider
 // (persisted), else the provider's default. The single source every model-reset site routes through, so a
 // per-provider pick survives switching provider/harness away and back.
-export const rememberedModelFor = (provider: ChatProvider, harness: ChatHarness): string =>
+export const rememberedModelFor = (provider: AgentProvider, harness: AgentHarness): string =>
     harness === `claude-code` && provider !== `claude`
         ? defaultModelFor(provider, harness)
         : turnDefaults.models.value[provider] || defaultModelFor(provider, harness);
@@ -267,12 +270,12 @@ export const rememberedModelFor = (provider: ChatProvider, harness: ChatHarness)
 // turnDefaults): account ids are daemon-minted per sandbox, so they'd be meaningless across a sandbox switch —
 // useChat.loadAccountStatus fills these when a daemon becomes reachable and resetChat clears them. Kept here
 // (not in useChat) so a Conversation can seed/reset its account without importing useChat (a cycle).
-export const providerAccounts = ref<Record<ChatProvider, readonly OauthAccount[]>>({ claude: [], codex: [], grok: [] });
-export const selectedAccountId = ref<Record<ChatProvider, string | undefined>>({ claude: undefined, codex: undefined, grok: undefined });
+export const providerAccounts = ref<Record<AgentProvider, readonly OauthAccount[]>>({ claude: [], codex: [], grok: [] });
+export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>({ claude: undefined, codex: undefined, grok: undefined });
 
 // The account a fresh turn on a provider uses: the user's explicit pick when it's still connected, else the
 // provider's first connected account. The single source every account-reset site routes through.
-export const rememberedAccountFor = (provider: ChatProvider): string | undefined => {
+export const rememberedAccountFor = (provider: AgentProvider): string | undefined => {
     const accounts = providerAccounts.value[provider];
     const picked = selectedAccountId.value[provider];
     return accounts.some((account) => account.id === picked) ? picked : accounts[0]?.id;
@@ -294,10 +297,10 @@ export const transcriptOf = (messages: readonly ChatMessage[]): { role: "user" |
 // runtime/account; a mismatched selection at send time retires it.
 export interface SessionRef {
     readonly id: string;
-    readonly provider: ChatProvider;
+    readonly provider: AgentProvider;
     readonly account: string | undefined;
     // The harness that minted it — a session only resumes on the same runtime, so a harness switch retires it too.
-    readonly harness: ChatHarness;
+    readonly harness: AgentHarness;
 }
 
 // One in-flight turn's streaming context: which assistant bubble frames write into (`id` is mutable so a plan
@@ -305,9 +308,9 @@ export interface SessionRef {
 // the turn — the attribution captured onto the session the stream mints.
 interface TurnContext {
     id: number | null;
-    readonly provider: ChatProvider;
+    readonly provider: AgentProvider;
     readonly account: string | undefined;
-    readonly harness: ChatHarness;
+    readonly harness: AgentHarness;
 }
 
 /* One chat conversation: its transcript, the resumed sandbox session, and the streaming machinery for a
@@ -363,8 +366,8 @@ export class Conversation {
     // This conversation's turn selection, seeded from the module defaults at construction. All of it — provider
     // and account included — is switchable mid-chat (the composer binds them); send() decides whether the
     // session above still matches (resume) or a fresh one starts seeded with the transcript so far.
-    readonly provider = ref<ChatProvider>(turnDefaults.provider.value);
-    readonly harness = ref<ChatHarness>(turnDefaults.harness.value);
+    readonly provider = ref<AgentProvider>(turnDefaults.provider.value);
+    readonly harness = ref<AgentHarness>(turnDefaults.harness.value);
     readonly account = ref<string | undefined>(rememberedAccountFor(turnDefaults.provider.value));
     readonly model = ref<string>(rememberedModelFor(turnDefaults.provider.value, turnDefaults.harness.value));
     readonly effort = ref<string>(turnDefaults.effort.value);
@@ -404,7 +407,7 @@ export class Conversation {
     // tops out at xhigh. Writes the pick back to the module default so the next new chat inherits it. Mid-chat,
     // the switch takes effect at the next send — the current session is retired then and the new provider's
     // fresh session is seeded with the transcript so far (see send); browsing the picker never destroys it.
-    selectProvider(next: ChatProvider): void {
+    selectProvider(next: AgentProvider): void {
         if (this.streaming.value || next === this.provider.value) {
             return;
         }
@@ -437,7 +440,7 @@ export class Conversation {
     // list diverges by harness for codex/grok). Writes the pick back to the module default so the next new chat
     // inherits it. Mid-chat this retires the session at the next send, exactly like a provider/account switch —
     // the runtimes mint incompatible sessions. Meaningful only for codex/grok; claude is always its own loop.
-    selectHarness(next: ChatHarness): void {
+    selectHarness(next: AgentHarness): void {
         if (this.streaming.value || next === this.harness.value) {
             return;
         }

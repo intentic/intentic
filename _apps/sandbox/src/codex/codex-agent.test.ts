@@ -171,6 +171,24 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
     expect(calls[1]!.sessionId).toBe("thr-3");
 });
 
+test("a plan turn that fails after holding a message emits the error and NO plan frame", async () => {
+    // The plan phase held an agent_message, then the turn failed (e.g. out of credits). A failed turn must surface
+    // only the error — never a "plan" built from the pre-error message — and must not run the execute turn.
+    const { runner, calls } = fakeRunner([
+        { type: "thread.started", thread_id: "thr-7" },
+        { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Partial plan." } },
+        { type: "turn.failed", error: { message: "Payment Required" } },
+    ]);
+    const events = await collect(createCodexAgent("/home", runner), { ...request, plan: true });
+    expect(events).toEqual([
+        { kind: "session", sessionId: "thr-7" },
+        { kind: "error", message: "Payment Required" },
+        { kind: "done" },
+    ]);
+    expect(events.some((event) => event.kind === "plan")).toBe(false);
+    expect(calls).toHaveLength(1);
+});
+
 test("turn failures and thrown runners become error events followed by done", async () => {
     const failing = fakeRunner([{ type: "turn.failed", error: { message: "usage limit reached" } }]);
     expect(await collect(createCodexAgent("/home", failing.runner), request)).toEqual([

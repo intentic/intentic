@@ -214,6 +214,56 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
     expect(calls[1]!.sessionId).toBe("s3");
 });
 
+test("a plan turn captures only the assistant's text, never the echoed user prompt", async () => {
+    // OpenCode broadcasts the USER message (the echoed prompt) on the SAME session stream as the assistant's, and a
+    // text part carries no role — the plan must be the assistant's text alone (regression: prompt leaking into planText).
+    const { runner } = fakeRunner(
+        [
+            { type: "session.created", properties: { info: { id: "s5" } } },
+            // The user message + its text part (the prompt echo) — role recorded, then the part is skipped.
+            { type: "message.updated", properties: { info: { id: "mu", sessionID: "s5", role: "user" } } },
+            {
+                type: "message.part.updated",
+                properties: { part: { type: "text", id: "up1", sessionID: "s5", messageID: "mu", text: "Before making any changes… add a /ping route" } },
+            },
+            // The assistant's actual plan.
+            {
+                type: "message.updated",
+                properties: { info: { id: "ma", sessionID: "s5", role: "assistant", cost: 0, tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } } } },
+            },
+            {
+                type: "message.part.updated",
+                properties: { part: { type: "text", id: "ap1", sessionID: "s5", messageID: "ma", text: "Plan: add the route." } },
+            },
+            { type: "session.idle", properties: { sessionID: "s5" } },
+        ],
+        [{ type: "session.idle", properties: { sessionID: "s5" } }],
+    );
+    const events = await collect(createGrokAgent(runner), { ...request, plan: true }, () => ({ approve: true }));
+    const plan = events.find((event) => event.kind === "plan") as { text: string } | undefined;
+    expect(plan?.text).toBe("Plan: add the route.");
+});
+
+test("a plan turn that errors after partial text emits the error and NO plan frame", async () => {
+    // Partial assistant text was captured, then the turn errored (e.g. out of credits) — a failed turn must surface
+    // only the error, never a bogus plan built from the partial/echoed text.
+    const { runner } = fakeRunner([
+        { type: "session.created", properties: { info: { id: "s6" } } },
+        {
+            type: "message.part.updated",
+            properties: { part: { type: "text", id: "ap1", sessionID: "s6", messageID: "ma", text: "Partial plan…" } },
+        },
+        { type: "session.error", properties: { sessionID: "s6", error: { name: "PaymentRequiredError", data: { message: "Payment Required" } } } },
+    ]);
+    const events = await collect(createGrokAgent(runner), { ...request, plan: true });
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s6" },
+        { kind: "error", message: "Payment Required" },
+        { kind: "done" },
+    ]);
+    expect(events.some((event) => event.kind === "plan")).toBe(false);
+});
+
 test("a session error and a thrown runner become error events followed by done", async () => {
     const failing = fakeRunner([
         { type: "session.error", properties: { sessionID: "s1", error: { name: "UnknownError", data: { message: "xai auth rejected" } } } },

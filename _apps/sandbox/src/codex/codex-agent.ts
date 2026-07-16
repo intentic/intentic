@@ -114,6 +114,9 @@ const mcpResultText = (item: Extract<ThreadItem, { type: "mcp_tool_call" }>): st
 interface TurnCapture {
     threadId?: string;
     heldMessage?: string;
+    // Set when the plan phase hit a terminal error (turn.failed / error / item error), so runCodexPlanTurn
+    // suppresses the plan frame — a failed turn must not surface a "plan" even if a message was held first.
+    errored?: boolean;
 }
 
 // Normalize one Codex turn's ThreadEvent stream onto AgentEvents. `capture` set ⇒ plan phase: agent messages
@@ -191,6 +194,9 @@ async function* streamTurn(events: AsyncIterable<ThreadEvent>, capture?: TurnCap
             } else if (item.type === "error") {
                 if (event.type === "item.completed") {
                     yield { kind: "error", message: item.message };
+                    if (capture !== undefined) {
+                        capture.errored = true;
+                    }
                 }
             }
         } else if (event.type === "turn.completed") {
@@ -203,8 +209,14 @@ async function* streamTurn(events: AsyncIterable<ThreadEvent>, capture?: TurnCap
             };
         } else if (event.type === "turn.failed") {
             yield { kind: "error", message: event.error.message };
+            if (capture !== undefined) {
+                capture.errored = true;
+            }
         } else if (event.type === "error") {
             yield { kind: "error", message: event.message };
+            if (capture !== undefined) {
+                capture.errored = true;
+            }
         }
         // turn.started has no UI mapping — dropped, like the Claude path's unmapped SDK messages.
     }
@@ -240,8 +252,9 @@ async function* runCodexPlanTurn(request: AgentRequest, runner: CodexRunner, env
         );
         images = [];
         sessionId = capture.threadId ?? sessionId;
-        if (capture.heldMessage === undefined || request.signal.aborted) {
-            // The planning turn errored/aborted without a trailing message — the error frame already streamed.
+        if (capture.errored === true || capture.heldMessage === undefined || request.signal.aborted) {
+            // The planning turn errored/aborted without a usable trailing message — the error frame already
+            // streamed, so don't propose a plan built from a message held before the failure.
             return;
         }
         const { id, wait } = createPlanRequest();

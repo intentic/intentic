@@ -1,6 +1,17 @@
 <script setup lang="ts">
-import { type AutomationRun, type AutomationSummary } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    type AutomationRun,
+    type AutomationSummary,
+    type CatalogOption,
+    GrokModelsSchema,
+    HARNESSES,
+    modelsFor,
+    PROVIDERS,
+} from "@intentic/sandbox-contract";
 import { Button, Card, cmp, CopyButton, Dialog, Icon, Page, StatusBadge, type StatusVariant, ToggleSwitch } from "@intentic/extension-ui";
+import { useQuery } from "@tanstack/vue-query";
 import { Cron } from "croner";
 import { computed, nextTick, reactive, ref } from "vue";
 import { cronOf, defaultSchedule, parseCron, scheduleLabel } from "./cronSchedule";
@@ -29,14 +40,6 @@ const FREQ_OPTIONS = [
     { value: `weekly`, label: `Weekly` },
     { value: `monthly`, label: `Monthly` },
     { value: `custom`, label: `Custom` },
-] as const;
-// Claude models a wake can be pinned to (automations always run the Claude adapter); "" = the account default.
-// ponytail: duplicated from ChatPanel.vue's inline models computed; extract a shared const if a third consumer appears.
-const MODEL_OPTIONS = [
-    { value: ``, label: `Default` },
-    { value: `opus`, label: `Opus` },
-    { value: `sonnet`, label: `Sonnet` },
-    { value: `haiku`, label: `Haiku` },
 ] as const;
 const DAY_OPTIONS = [
     { value: 1, label: `Mon` },
@@ -68,14 +71,43 @@ const { automations, pending, error: listError, save, remove, approve, reject } 
 // Capability facts from the host — reactive because reading them inside a computed tracks the underlying store.
 const capabilities = computed(() => host().workspace.capabilities());
 
+// Native Grok's model list is the live daemon catalog (same source chat uses) — fetched lazily, only while the
+// form actually has native Grok picked. Every other provider+harness reads the static shared catalog.
+const grokModels = useQuery({
+    queryKey: host().sandbox.key(`grok-models`),
+    queryFn: async (): Promise<CatalogOption[]> =>
+        GrokModelsSchema.parse(await host().sandbox.json(`/grok/models`)).models.map((model) => ({ value: model.id, label: model.label })),
+    enabled: computed(() => host().sandbox.reachable() && form.agent === `grok` && form.harness === `native`),
+});
+
+// The wake's model chips: "Default" (empty — the daemon resolves the provider's own default) plus the pinnable
+// ids for the picked provider+harness. Native codex's only catalog entry IS the empty account default, so it
+// dedupes away and Default stands alone.
+const modelOptions = computed<CatalogOption[]>(() => {
+    const catalog = form.agent === `grok` && form.harness === `native` ? (grokModels.data.value ?? []) : modelsFor(form.agent, form.harness);
+    return [{ value: ``, label: `Default` }, ...catalog.filter((option) => option.value !== ``)];
+});
+
+// A provider/harness switch invalidates a pinned model — back to that provider's default.
+const setAgent = (agent: AgentProvider): void => {
+    form.agent = agent;
+    form.model = ``;
+};
+const setHarness = (harness: AgentHarness): void => {
+    form.harness = harness;
+    form.model = ``;
+};
+
 const createOpen = ref(false);
-// Guard/model/approval fold away by default — revealed on demand or when a recipe prefills a guard.
+// Guard/agent/approval fold away by default — revealed on demand or when a recipe prefills a guard.
 const advancedOpen = ref(false);
 const form = reactive({
     kind: `schedule` as `schedule` | `event` | `listener`,
     id: ``,
     guard: ``,
     prompt: ``,
+    agent: `claude` as AgentProvider,
+    harness: `native` as AgentHarness,
     model: ``,
     requireApproval: false,
     provider: `discord` as keyof typeof LISTENER_SOURCES,
@@ -205,6 +237,8 @@ const resetForm = (): void => {
     form.id = ``;
     form.guard = ``;
     form.prompt = ``;
+    form.agent = `claude`;
+    form.harness = `native`;
     form.model = ``;
     form.requireApproval = false;
     form.provider = `discord`;
@@ -258,6 +292,10 @@ const submit = async (): Promise<void> => {
                         },
             ...(form.guard.trim() !== `` ? { guard: form.guard.trim() } : {}),
             prompt: form.prompt,
+            // Defaults stay absent (schema: absent agent = claude, absent harness = native); claude never
+            // carries a harness — the two loops are identical for it.
+            ...(form.agent !== `claude` ? { agent: form.agent } : {}),
+            ...(form.agent !== `claude` && form.harness !== `native` ? { harness: form.harness } : {}),
             ...(form.model !== `` ? { model: form.model } : {}),
             ...(form.requireApproval ? { requireApproval: true } : {}),
             enabled: true,
@@ -284,6 +322,8 @@ const toggle = async (automation: AutomationSummary, enabled: boolean): Promise<
             trigger: automation.trigger,
             ...(automation.guard !== undefined ? { guard: automation.guard } : {}),
             prompt: automation.prompt,
+            ...(automation.agent !== undefined ? { agent: automation.agent } : {}),
+            ...(automation.harness !== undefined ? { harness: automation.harness } : {}),
             ...(automation.model !== undefined ? { model: automation.model } : {}),
             ...(automation.requireApproval !== undefined ? { requireApproval: automation.requireApproval } : {}),
             enabled,
@@ -712,7 +752,7 @@ const outcomeVariant = (outcome: string): StatusVariant => (outcome === `complet
                     >
                         <Icon class="text-2xs" :name="advancedOpen ? 'chevron-down' : 'chevron-right'" />
                         <span>Advanced</span>
-                        <span v-if="!advancedOpen" class="font-normal normal-case tracking-normal">· guard, model, approval</span>
+                        <span v-if="!advancedOpen" class="font-normal normal-case tracking-normal">· guard, provider, model, approval</span>
                     </button>
                     <template v-if="advancedOpen">
                         <label class="ui-field">
@@ -733,10 +773,46 @@ const outcomeVariant = (outcome: string): StatusVariant => (outcome === `complet
                             </p>
                         </label>
                         <div class="ui-field">
+                            <span class="ui-field-label">Provider</span>
+                            <div class="flex flex-wrap gap-1.5">
+                                <button
+                                    v-for="option in PROVIDERS"
+                                    :key="option.value"
+                                    type="button"
+                                    :class="[CHIP_BASE, form.agent === option.value ? CHIP_SELECTED : CHIP_IDLE]"
+                                    :aria-pressed="form.agent === option.value"
+                                    @click="setAgent(option.value)"
+                                >
+                                    {{ option.label }}
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Harness (the agentic loop), orthogonal to the provider — only codex/grok can switch;
+                             claude is always its own Claude Code loop. Same semantics as chat's picker. -->
+                        <div v-if="form.agent !== 'claude'" class="ui-field">
+                            <span class="ui-field-label">Harness</span>
+                            <div class="flex flex-wrap gap-1.5">
+                                <button
+                                    v-for="option in HARNESSES"
+                                    :key="option.value"
+                                    type="button"
+                                    :class="[CHIP_BASE, form.harness === option.value ? CHIP_SELECTED : CHIP_IDLE]"
+                                    :aria-pressed="form.harness === option.value"
+                                    @click="setHarness(option.value)"
+                                >
+                                    {{ option.label }}
+                                </button>
+                            </div>
+                            <p v-if="form.harness === 'claude-code'" class="text-xs text-muted">
+                                Runs this model through the Claude Code harness — set an {{ form.agent === "codex" ? "OpenAI" : "xAI" }} API key in
+                                Sandbox ▸ Agent (your subscription sign-in can't be used here).
+                            </p>
+                        </div>
+                        <div class="ui-field">
                             <span class="ui-field-label">Model</span>
                             <div class="flex flex-wrap gap-1.5">
                                 <button
-                                    v-for="option in MODEL_OPTIONS"
+                                    v-for="option in modelOptions"
                                     :key="option.value"
                                     type="button"
                                     :class="[CHIP_BASE, form.model === option.value ? CHIP_SELECTED : CHIP_IDLE]"

@@ -91,9 +91,9 @@ test("event automations never tick; fireAutomation hands the payload to the guar
     expect(prompts).toHaveLength(2);
 });
 
-test("an automation's model rides the wake; an unset model leaves the turn model-less", async () => {
+test("an automation's agent/harness/model ride the wake; unset fields leave the turn bare", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
-    await services.automations.upsert(automation("pinned", { model: "sonnet" }));
+    await services.automations.upsert(automation("pinned", { agent: "codex", harness: "claude-code", model: "gpt-5-codex" }));
     await services.automations.upsert(automation("plain"));
     const inputs: AgentTurn[] = [];
     const capture: WakeFn = async function* (_services, input) {
@@ -102,7 +102,7 @@ test("an automation's model rides the wake; an unset model leaves the turn model
     };
     await fireAutomation(services, (await services.automations.get("pinned")) as AutomationRecord, undefined, capture);
     await fireAutomation(services, (await services.automations.get("plain")) as AutomationRecord, undefined, capture);
-    expect(inputs[0]).toEqual({ prompt: "wake:pinned", model: "sonnet" });
+    expect(inputs[0]).toEqual({ prompt: "wake:pinned", agent: "codex", harness: "claude-code", model: "gpt-5-codex" });
     expect(inputs[1]).toEqual({ prompt: "wake:plain" });
 });
 

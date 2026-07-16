@@ -3,7 +3,8 @@ import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { effortsFor, MODES, providerLabel } from "../composables/chat/catalog";
+import { providerLabel } from "@intentic/sandbox-contract";
+import { effortsFor, MODES } from "../composables/chat/catalog";
 import { type ChatAttachment, type ChatMessage, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
 import { formatReset, usageStatusFor, usageWindowLabel } from "../composables/chat/usageStatus";
 import { useChat } from "../composables/chat/useChat";
@@ -65,7 +66,7 @@ const { mobile, keyboardInset } = useDevice();
 const resizing = ref(false);
 
 // Pill labels — rendered as our own text (not a PrimeVue Select); always a real model name. The option
-// catalogs themselves live in chat/catalog.ts, shared with the menu bodies.
+// catalogs live in the contract's agent-catalog.ts (shared with the automations dialog) and chat/catalog.ts.
 const providerName = computed(() => providerLabel(provider.value));
 // The chip's model name: shared with the picker menu so they can't drift; falls back to the provider name (never
 // blank) while Grok's daemon catalog is still loading.

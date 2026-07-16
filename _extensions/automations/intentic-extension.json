@@ -6,6 +6,7 @@
     "permissions": {
         "sandbox": [
             "GET /automations",
+            "GET /grok/models",
             "POST /automations",
             "DELETE /automations/*",
             "GET /automations/pending",

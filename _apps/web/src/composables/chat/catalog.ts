@@ -1,54 +1,14 @@
 import type { IconName } from "@intentic-app/ui";
-import type { ChatHarness, ChatMode, ChatProvider, ConversationStatus } from "./conversation";
+import type { AgentProvider, CatalogOption } from "@intentic/sandbox-contract";
+import type { ChatMode, ConversationStatus } from "./conversation";
 
-/* Chat UI metadata shared by the desktop panel, the mobile header, and the menu bodies: the provider/model/
- * effort catalogs, the permission modes, and the small presentational helpers (tab status icon, relative
- * time). Pure data + pure functions — all live state stays in the useChat singleton. */
-
-export interface CatalogOption {
-    readonly label: string;
-    readonly value: string;
-}
-
-// The agent runtimes the daemon can serve; new conversations use the selection, open ones stay locked (the
-// pill reflects the locked provider). The brand logo per provider is drawn by ProviderLogo (by value).
-export const PROVIDERS: readonly { label: string; value: ChatProvider }[] = [
-    { label: `Claude Code`, value: `claude` },
-    { label: `Codex`, value: `codex` },
-    { label: `Grok`, value: `grok` },
-];
-
-export const providerLabel = (provider: ChatProvider): string => PROVIDERS.find((p) => p.value === provider)?.label ?? `Claude Code`;
-
-// The harness (agentic loop) a turn runs on, orthogonal to the provider. `native` = the provider's own runtime;
-// `claude-code` = the Claude Code loop for any provider (codex/grok then route through the translator). Only
-// surfaced for codex/grok — claude is always its own Claude Code loop. See ChatHarness in conversation.ts.
-export const HARNESSES: readonly { label: string; value: ChatHarness }[] = [
-    { label: `Native`, value: `native` },
-    { label: `Claude Code`, value: `claude-code` },
-];
-
-// Available models per provider+harness; Opus is the Claude default. NATIVE Codex has no public model list and its
-// ChatGPT-account auth rejects an explicitly-named model, so it uses the account default (empty value the turn
-// omits — see conversation.ts); native Grok is NOT here (its list loads live from OpenCode's catalog, see
-// modelOptionsFor). UNDER the Claude Code harness a non-Claude provider routes through the translator, which needs
-// a concrete id, so codex/grok return one.
-export const modelsFor = (provider: ChatProvider, harness: ChatHarness): CatalogOption[] => {
-    if (provider === `codex`) {
-        return harness === `claude-code` ? [{ label: `GPT-5 Codex`, value: `gpt-5-codex` }] : [{ label: `GPT-5 Codex`, value: `` }];
-    }
-    if (provider === `grok`) {
-        return harness === `claude-code` ? [{ label: `Grok 4`, value: `grok-4` }] : [];
-    }
-    return [
-        { label: `Opus`, value: `opus` },
-        { label: `Sonnet`, value: `sonnet` },
-        { label: `Haiku`, value: `haiku` },
-    ];
-};
+/* Chat UI metadata shared by the desktop panel, the mobile header, and the menu bodies: the effort catalog,
+ * the permission modes, and the small presentational helpers (tab status icon, relative time). The provider/
+ * harness/model catalog lives in @intentic/sandbox-contract (agent-catalog.ts) — shared with the automations
+ * dialog. Pure data + pure functions — all live state stays in the useChat singleton. */
 
 // Reasoning effort levels (SDK EffortLevel); 'xhigh' is the default in useChat. Codex's scale ends at xhigh.
-export const effortsFor = (provider: ChatProvider): CatalogOption[] => [
+export const effortsFor = (provider: AgentProvider): CatalogOption[] => [
     { label: `Low`, value: `low` },
     { label: `Medium`, value: `medium` },
     { label: `High`, value: `high` },
