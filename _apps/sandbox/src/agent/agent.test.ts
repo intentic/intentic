@@ -65,6 +65,23 @@ test("the SDK env always marks the sandbox and carries the per-turn oauth token 
     expect(captured?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
 });
 
+test("a custom endpoint points the SDK at ANTHROPIC_BASE_URL and withholds the subscription OAuth token", async () => {
+    let captured: Options | undefined;
+    const capture: QueryFn = async function* (args) {
+        captured = args.options;
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+
+    // A routed turn (codex/grok under the Claude Code harness) carries baseUrl + authToken. The Anthropic
+    // subscription token must NEVER leave for a foreign endpoint — even if an oauthToken is also present, baseUrl
+    // wins and CLAUDE_CODE_OAUTH_TOKEN is dropped.
+    await collect({ ...request, baseUrl: "http://127.0.0.1:8788", authToken: "router-key", oauthToken: "tok-xyz", model: "gpt-5-codex" }, capture);
+    expect(captured?.env?.["ANTHROPIC_BASE_URL"]).toBe("http://127.0.0.1:8788");
+    expect(captured?.env?.["ANTHROPIC_AUTH_TOKEN"]).toBe("router-key");
+    expect(captured?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
+    expect(captured?.model).toBe("gpt-5-codex");
+});
+
 test("systemAppend rides into the preset system prompt only when given", async () => {
     let captured: Options | undefined;
     const capture: QueryFn = async function* (args) {

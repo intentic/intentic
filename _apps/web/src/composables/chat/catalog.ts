@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic-app/ui";
-import type { ChatMode, ChatProvider, ConversationStatus } from "./conversation";
+import type { ChatHarness, ChatMode, ChatProvider, ConversationStatus } from "./conversation";
 
 /* Chat UI metadata shared by the desktop panel, the mobile header, and the menu bodies: the provider/model/
  * effort catalogs, the permission modes, and the small presentational helpers (tab status icon, relative
@@ -20,13 +20,25 @@ export const PROVIDERS: readonly { label: string; value: ChatProvider }[] = [
 
 export const providerLabel = (provider: ChatProvider): string => PROVIDERS.find((p) => p.value === provider)?.label ?? `Claude Code`;
 
-// Available models per provider; Opus is the Claude default. Codex has no public model list and its
-// ChatGPT-account auth rejects an explicitly-named model, so it uses the account default (empty value the
-// turn omits — see conversation.ts). The label names that default (gpt-5-codex) without pinning it. Grok is
-// NOT here: its list is loaded live from OpenCode's catalog (useChat.grokModels) so it tracks xAI's renames.
-export const modelsFor = (provider: ChatProvider): CatalogOption[] => {
+// The harness (agentic loop) a turn runs on, orthogonal to the provider. `native` = the provider's own runtime;
+// `claude-code` = the Claude Code loop for any provider (codex/grok then route through the translator). Only
+// surfaced for codex/grok — claude is always its own Claude Code loop. See ChatHarness in conversation.ts.
+export const HARNESSES: readonly { label: string; value: ChatHarness }[] = [
+    { label: `Native`, value: `native` },
+    { label: `Claude Code`, value: `claude-code` },
+];
+
+// Available models per provider+harness; Opus is the Claude default. NATIVE Codex has no public model list and its
+// ChatGPT-account auth rejects an explicitly-named model, so it uses the account default (empty value the turn
+// omits — see conversation.ts); native Grok is NOT here (its list loads live from OpenCode's catalog, see
+// modelOptionsFor). UNDER the Claude Code harness a non-Claude provider routes through the translator, which needs
+// a concrete id, so codex/grok return one.
+export const modelsFor = (provider: ChatProvider, harness: ChatHarness): CatalogOption[] => {
     if (provider === `codex`) {
-        return [{ label: `GPT-5 Codex`, value: `` }];
+        return harness === `claude-code` ? [{ label: `GPT-5 Codex`, value: `gpt-5-codex` }] : [{ label: `GPT-5 Codex`, value: `` }];
+    }
+    if (provider === `grok`) {
+        return harness === `claude-code` ? [{ label: `Grok 4`, value: `grok-4` }] : [];
     }
     return [
         { label: `Opus`, value: `opus` },

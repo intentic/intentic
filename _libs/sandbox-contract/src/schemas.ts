@@ -28,10 +28,16 @@ export const AgentTurnSchema = z
         // (the browser puts them under .intentic/attachments/<uuid>/<name>). The daemon hands them to the
         // provider: Claude reads them from disk via its Read tool; Codex gets images as native inputs.
         attachments: z.array(z.string().min(1)).max(20).optional(),
-        // Which agent runtime serves the turn; absent = claude. A sessionId only resumes on the provider that
-        // minted it (Claude Code sessions vs Codex threads vs Grok/OpenCode sessions are separate stores) —
-        // a mid-conversation provider/account switch sends `history` instead of resuming.
+        // Which provider (model + account) serves the turn; absent = claude. A sessionId only resumes on the
+        // provider that minted it (Claude Code sessions vs Codex threads vs Grok/OpenCode sessions are separate
+        // stores) — a mid-conversation provider/account/harness switch sends `history` instead of resuming.
         agent: z.enum(["claude", "codex", "grok"]).optional(),
+        // Which harness (agentic loop) runs the turn, orthogonal to the provider above. Absent = "native": each
+        // provider on its own runtime (Claude Code SDK / Codex CLI / opencode) with its subscription OAuth.
+        // "claude-code" forces the Claude Code Agent SDK loop for ANY provider — codex/grok then drive their model
+        // through the sandbox's bundled Anthropic↔OpenAI translator, which needs that provider's API key (its
+        // subscription OAuth can't reach a gateway). For the claude provider the two are identical.
+        harness: z.enum(["native", "claude-code"]).optional(),
         // Which connected account of that provider serves the turn; absent = the provider's first account.
         account: z.string().optional(),
         sessionId: z.string().optional(),
@@ -54,6 +60,21 @@ export const AgentTurnSchema = z
         message: "history and sessionId are mutually exclusive",
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
+
+// ---- provider API keys ----
+
+// The providers whose model can run UNDER the Claude Code harness through the bundled translator, and which
+// therefore need a real API key (their subscription OAuth can't reach a gateway). The `claude` provider is
+// absent — native Anthropic OAuth serves it, no key. Env fallbacks: OPENAI_API_KEY (codex), XAI_API_KEY (grok).
+export const KeyedProviderSchema = z.enum(["codex", "grok"]);
+export type KeyedProvider = z.infer<typeof KeyedProviderSchema>;
+
+// hasKey per keyed provider — the stored secret is NEVER echoed, only whether one is present (from the store or
+// the container-env fallback). Drives the "API key set / add a key" state in Sandbox ▸ Agent.
+export const ProviderKeyStatusSchema = z.object({ codex: z.boolean(), grok: z.boolean() });
+export type ProviderKeyStatus = z.infer<typeof ProviderKeyStatusSchema>;
+
+export const SetProviderKeySchema = z.object({ provider: KeyedProviderSchema, key: z.string().min(1) });
 
 // Side-channel bodies: the UI posts these to resolve a turn paused on a plan approval / question.
 export const DecisionSchema = z.object({ decisionId: z.string().min(1), approve: z.boolean(), feedback: z.string().optional() });

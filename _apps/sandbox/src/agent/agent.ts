@@ -31,6 +31,12 @@ export interface AgentRequest {
     // the sandbox's own stored credentials (the platform no longer relays it); undefined falls back to the
     // container's ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN env.
     readonly oauthToken?: string;
+    // A custom Anthropic-Messages endpoint + bearer token for this turn, set when the Claude Code harness serves
+    // a non-Claude provider (codex/grok) through the sandbox's translator. Injected as ANTHROPIC_BASE_URL /
+    // ANTHROPIC_AUTH_TOKEN; when baseUrl is present the subscription OAuth token is WITHHELD so it never reaches
+    // a foreign endpoint. Absent ⇒ native Anthropic endpoint with the OAuth token above.
+    readonly baseUrl?: string;
+    readonly authToken?: string;
     // The selected Codex account's CODEX_HOME for this turn (Codex path only). Absent ⇒ the adapter's default
     // base dir, which resolves the container's OPENAI_API_KEY fallback.
     readonly codexHome?: string;
@@ -382,7 +388,15 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
         // isolation boundary. Claude Code refuses that flag under root (the sandbox runs as root) unless
         // IS_SANDBOX marks the environment as already-sandboxed — which this container is.
         IS_SANDBOX: "1",
-        ...(request.oauthToken !== undefined ? { CLAUDE_CODE_OAUTH_TOKEN: request.oauthToken } : {}),
+        // A custom endpoint (the Claude Code harness serving a non-Claude provider through the translator) points
+        // the harness at ANTHROPIC_BASE_URL + its bearer token, and WITHHOLDS the subscription OAuth token so it
+        // never leaves for a foreign endpoint. A native Claude turn (no baseUrl) keeps the OAuth token and the
+        // default (unset) base URL. The per-turn value wins over any container-env ANTHROPIC_BASE_URL default.
+        ...(request.baseUrl !== undefined
+            ? { ANTHROPIC_BASE_URL: request.baseUrl, ...(request.authToken !== undefined ? { ANTHROPIC_AUTH_TOKEN: request.authToken } : {}) }
+            : request.oauthToken !== undefined
+              ? { CLAUDE_CODE_OAUTH_TOKEN: request.oauthToken }
+              : {}),
         // The output-cleaner spec/holdout (or the filter-off flag) that the agent's Bash → tmux-run → agent-output-filter reads.
         ...cleanerEnv(request),
     },

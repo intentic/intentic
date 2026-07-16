@@ -132,6 +132,15 @@ RUN mkdir -p /root/.config/opencode \
 # (`codex exec`, agent/delegation.ts), authenticated via the CODEX_HOME injected per turn. Pin in lockstep
 # with @openai/codex-sdk in _apps/sandbox/package.json (the Codex primary adapter), same rationale as opencode.
 RUN npm install -g @openai/codex@0.142.5 && codex --version
+# The `litellm` proxy on PATH — the Anthropic↔OpenAI translator that lets the Claude Code harness drive OpenAI
+# (Codex) and xAI (Grok) models (agent/translator.ts spawns it, points a routed turn's ANTHROPIC_BASE_URL at it).
+# A Python tool in a Node image: install python3 + pip and the proxy extras, pinned like the npm CLIs above.
+# ponytail: bump the pin deliberately; a LiteLLM Anthropic-`/v1/messages` or model-routing change surfaces as a
+# translator-only failure (native-harness turns never touch it).
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip \
+    && pip3 install --no-cache-dir --break-system-packages 'litellm[proxy]==1.55.10' \
+    && litellm --version \
+    && rm -rf /var/lib/apt/lists/*
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
 # connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
 # runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as
@@ -198,6 +207,11 @@ WORKDIR /work
 # LANG: without a UTF-8 locale zsh's line editor counts BYTES as columns, so bira's multibyte prompt glyphs
 # (╰─, ↵) desync the cursor and corrupt the prompt after any non-zero exit status. C.utf8 is glibc-built-in.
 ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 IQ_MODEL_DIR=/opt/iq-models IQ_PLUGIN_DIR=/opt/iq-plugin EXTENSIONS_DIR=/opt/extensions
+# The bundled translator's fixed localhost endpoint + a loopback-only bearer (the token is just what Claude Code
+# must send as ANTHROPIC_AUTH_TOKEN to a same-host proxy). Baked so config.translator.url is set in the image; a
+# bare `tsx watch` dev run leaves both empty ⇒ no translator, and routed (codex/grok-under-Claude-Code) turns
+# surface streamAgent's clean "no translator" error.
+ENV TRANSLATOR_URL=http://127.0.0.1:8788 TRANSLATOR_TOKEN=intentic-translator-local
 # Privacy hardening for every agent CLI the daemon spawns (they all inherit process.env): telemetry, error
 # reporting, feedback uploads, and update checks off — the CLIs are version-pinned in this image, so an update
 # probe is pure phone-home. DO_NOT_TRACK covers Claude Code and anything else honoring the convention; Codex

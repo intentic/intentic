@@ -1,5 +1,6 @@
 import { createActivityRoutes } from "./activity/activity.routes.js";
 import { createAgentRoutes } from "./agent/agent.routes.js";
+import { createProviderKeysRoutes } from "./agent/provider-keys.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
 import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
 import { createClaudeRoutes } from "./claude/claude.routes.js";
@@ -41,6 +42,7 @@ export const createRouter = (services: Services) => ({
     inventory: createInventoryRoutes(services),
     logs: createLogsRoutes(services),
     panels: createPanelsRoutes(services),
+    providerKeys: createProviderKeysRoutes(services),
     secrets: createSecretsRoutes(services),
     system: createSystemRoutes(services),
 });

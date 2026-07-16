@@ -8,6 +8,7 @@ import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
+import { startTranslator } from "./agent/translator.js";
 import { DOCKER_PANEL_KEY, startEnabledDocker } from "./capabilities/handlers/docker.js";
 import { reconnectVpns } from "./capabilities/handlers/vpn.js";
 import { writeCodexConfig } from "./codex/codex-credentials.js";
@@ -131,6 +132,10 @@ const main = async (): Promise<void> => {
     // the boot path).
     void reconnectVpns(capabilityCtx(services));
     void startEnabledDocker(capabilityCtx(services));
+    // The Anthropic↔OpenAI translator (LiteLLM) backing "Codex/Grok under the Claude Code harness": starts when
+    // TRANSLATOR_URL is baked (no-op on a bare dev run), converged with the stored provider keys. Best-effort —
+    // a routed turn that finds it down surfaces its own error, and a native-harness turn never touches it.
+    startTranslator(services);
     // Installed extensions' declared autoStart processes come back the same way (manifests on /work).
     void startAllExtensionProcesses(services);
 

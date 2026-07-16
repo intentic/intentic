@@ -18,6 +18,7 @@ import {
 import type { Logger } from "pino";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/agent.js";
+import { type ProviderKeysStore, fileProviderKeysStore } from "./agent/provider-keys.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
@@ -104,6 +105,10 @@ export interface Services {
     readonly claudeStore: ClaudeStore;
     // ChatGPT (Codex) accounts, each in Codex's native auth.json under its own CODEX_HOME (.intentic/codex/<id>).
     readonly codexStore: CodexStore;
+    // Provider API keys (.intentic/provider-keys.json) the Claude Code harness uses — via the bundled translator —
+    // to serve non-Claude providers (codex → OpenAI, grok → xAI); their subscription OAuth can't reach a gateway.
+    // /provider-keys edits it; streamAgent reads it (with the container-env key as fallback) to gate a routed turn.
+    readonly providerKeys: ProviderKeysStore;
     // Proactive Codex credential health: undefined ⇒ healthy/unknown, else the "needs reconnect" verdict. Cached
     // briefly so back-to-back account-list loads don't re-hit OpenAI's token endpoint on a revoked account.
     // /codex/accounts and the turn gate read it to surface a revoked sign-in before an opaque mid-turn failure.
@@ -253,6 +258,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         sandboxSettings: fileSandboxSettingsStore(join(workspace.root, ".intentic", "settings.json")),
         claudeStore: fileClaudeStore(join(authRoot, "claude")),
         codexStore,
+        providerKeys: fileProviderKeysStore(join(workspace.root, ".intentic", "provider-keys.json")),
         codexHealth,
         locateCodexThread: async (threadId) =>
             locateCodexThread(

@@ -3,6 +3,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
 import {
     type ChatAttachment,
+    type ChatHarness,
     type ChatMessage,
     type ChatMode,
     type ChatProvider,
@@ -56,6 +57,8 @@ const PROVIDERS: readonly ChatProvider[] = [`claude`, `codex`, `grok`];
 interface StoredTab {
     // The tab's turn selection; the session's provider may differ while a switch is picked but not yet sent.
     readonly provider?: ChatProvider;
+    // The tab's harness selection (native vs the Claude Code loop); absent ⇒ the current default on restore.
+    readonly harness?: ChatHarness;
     readonly session?: { id: string; provider: ChatProvider };
     readonly title?: string;
     readonly draft: string;
@@ -95,6 +98,7 @@ const readTabs = (sandboxId: string | undefined): { active: number; tabs: Stored
                     .filter((entry) => typeof entry[`name`] === `string` && typeof entry[`path`] === `string`)
                     .map((entry) => ({ name: entry[`name`] as string, path: entry[`path`] as string })),
                 ...(PROVIDERS.includes(tab[`provider`] as ChatProvider) ? { provider: tab[`provider`] as ChatProvider } : {}),
+                ...(tab[`harness`] === `claude-code` || tab[`harness`] === `native` ? { harness: tab[`harness`] as ChatHarness } : {}),
                 ...(validSession !== undefined ? { session: validSession } : {}),
                 ...(typeof tab[`title`] === `string` ? { title: tab[`title`] } : {}),
             });
@@ -127,15 +131,23 @@ const restoreTabs = (): Conversation[] => {
             progress: 1,
         }));
         conversation.title.value = tab.title ?? null;
+        // Restore the harness before the model — the native/claude-code model lists diverge for codex/grok.
+        if (tab.harness !== undefined) {
+            conversation.harness.value = tab.harness;
+        }
         if (tab.provider !== undefined) {
             conversation.provider.value = tab.provider;
             conversation.account.value = rememberedAccountFor(tab.provider);
-            conversation.model.value = rememberedModelFor(tab.provider);
+            conversation.model.value = rememberedModelFor(tab.provider, conversation.harness.value);
         }
         if (tab.session !== undefined) {
             // Account ids are daemon-minted and loaded fresh per sandbox, so a restored session re-derives its
-            // account from the provider's remembered pick.
-            conversation.session.value = { ...tab.session, account: rememberedAccountFor(tab.session.provider) };
+            // account from the provider's remembered pick; its harness moves with the tab.
+            conversation.session.value = {
+                ...tab.session,
+                account: rememberedAccountFor(tab.session.provider),
+                harness: conversation.harness.value,
+            };
         }
         return conversation;
     });
@@ -160,6 +172,7 @@ watch(
             tabs: conversations.value.map((conversation) => ({
                 // JSON.stringify drops undefined keys, matching StoredTab's optional fields.
                 provider: conversation.provider.value,
+                harness: conversation.harness.value,
                 session: conversation.session.value && { id: conversation.session.value.id, provider: conversation.session.value.provider },
                 title: conversation.title.value ?? undefined,
                 draft: conversation.draft.value,
@@ -240,6 +253,10 @@ const selectProvider = (p: ChatProvider): void => {
         void loadGrokModels();
     }
 };
+// The active conversation's harness (native runtime vs the Claude Code loop) + its picker. Only meaningful for
+// codex/grok; the composer surfaces it there. A switch retires the session at the next send (like a provider switch).
+const harness = computed<ChatHarness>(() => active.value.harness.value);
+const selectHarness = (h: ChatHarness): void => active.value.selectHarness(h);
 const model = computed<string>({
     get: () => active.value.model.value,
     set: (value) => {
@@ -572,6 +589,7 @@ const send = (prompt: string, attachments?: readonly ChatAttachment[]): Promise<
         prompt,
         {
             agent: active.value.provider.value,
+            harness: active.value.harness.value,
             account: active.value.account.value,
             model: active.value.model.value,
             effort: active.value.effort.value,
@@ -587,6 +605,7 @@ const editAndResend = (message: ChatMessage, text: string): Promise<void> => {
     track(`message_sent`, { agent: active.value.provider.value, edited: true });
     return active.value.editAndResend(message.id, text, {
         agent: active.value.provider.value,
+        harness: active.value.harness.value,
         account: active.value.account.value,
         model: active.value.model.value,
         effort: active.value.effort.value,
@@ -821,6 +840,8 @@ export function useChat() {
         mode,
         provider,
         selectProvider,
+        harness,
+        selectHarness,
         account,
         selectAccount,
         accounts,

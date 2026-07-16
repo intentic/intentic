@@ -53,7 +53,7 @@ const sseResponse = (events: AgentEvent[], options?: { stayOpen?: boolean }): ((
     };
 };
 
-const settings = { agent: `claude`, account: undefined, model: `opus`, effort: `high`, thinking: false } as const;
+const settings = { agent: `claude`, harness: `native`, account: undefined, model: `opus`, effort: `high`, thinking: false } as const;
 
 describe(`Conversation`, () => {
     it(`streams deltas into the assistant bubble and captures session, model, and title`, async () => {
@@ -73,7 +73,7 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value).toHaveLength(2);
         expect(conversation.messages.value[0]).toMatchObject({ role: `user`, text: `Hi there` });
         expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `Hello world` });
-        expect(conversation.session.value).toEqual({ id: `s-1`, provider: `claude`, account: undefined });
+        expect(conversation.session.value).toEqual({ id: `s-1`, provider: `claude`, account: undefined, harness: `native` });
         expect(conversation.activeModel.value).toBe(`claude-opus`);
         expect(conversation.title.value).toBe(`Hi there`);
         expect(conversation.streaming.value).toBe(false);
@@ -190,6 +190,7 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `thr-1` }]));
         await conversation.send(`hi`, {
             agent: conversation.provider.value,
+            harness: conversation.harness.value,
             account: conversation.account.value,
             model: conversation.model.value,
             effort: conversation.effort.value,

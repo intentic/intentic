@@ -17,6 +17,13 @@ import { resolveWithin } from "../workspace/workspace-files.js";
 import type { AgentRequest } from "./agent.js";
 import { resolvePlanDecision, resolveQuestionAnswer } from "./agent-requests.js";
 import { delegationNote } from "./delegation.js";
+import { resolveProviderKey } from "./provider-keys.js";
+
+// The upstream model id a routed turn (codex/grok under the Claude Code harness) hands the translator, which maps
+// it to its provider. Unlike native Codex (which uses the ChatGPT account default and omits the model), the router
+// requires an explicit id — the UI catalog supplies one per provider under the claude-code harness; this is the floor.
+const routedModel = (provider: "codex" | "grok", model: string | undefined): string =>
+    model !== undefined && model !== "" ? model : provider === "codex" ? "gpt-5-codex" : "grok-4";
 
 // Fold attached-file paths into the prompt — Claude Code's canonical attachment mechanism (its Read tool
 // handles images and PDFs from disk natively, same as dragging a file into the CLI).
@@ -99,7 +106,11 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
     // The provider account that serves this turn (the selected one, else the provider's first) — the
     // attribution key stamped onto the usage/rate-limit frames and the activity log below.
     let resolvedAccount: string | undefined;
-    if (input.agent === "codex") {
+    // Harness (agentic loop) is orthogonal to provider: "native" runs each provider on its own runtime;
+    // "claude-code" forces the Claude Code Agent SDK loop for ANY provider — codex/grok then fall through to the
+    // claude branch below, which serves them by pointing the harness at the sandbox's translator.
+    const harness = input.harness ?? "native";
+    if (input.agent === "codex" && harness === "native") {
         // Codex reads its credential itself from the account's CODEX_HOME/auth.json (and refreshes it in place);
         // the gate only checks something is there. Claude-only fields (plugins, MCP, thinking) don't apply.
         // A resume must run under the CODEX_HOME that MINTED the thread — its rollout lives under exactly one home
@@ -154,7 +165,7 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         // prompt (split in the adapter).
         const withHome = codexHome !== undefined ? { ...base, codexHome } : base;
         request = attachmentPaths.length > 0 ? { ...withHome, attachments: attachmentPaths } : withHome;
-    } else if (input.agent === "grok") {
+    } else if (input.agent === "grok" && harness === "native") {
         // Grok rides OpenCode with xAI subscription OAuth (OpenCode owns the credential). Gate on OpenCode's own
         // connection view. Claude-only fields (plugins, MCP tools, thinking) don't apply.
         if (!(await services.openCode.connected("xai"))) {
@@ -181,22 +192,51 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         const withModel = { ...base, model };
         request = attachmentPaths.length > 0 ? { ...withModel, attachments: attachmentPaths } : withModel;
     } else {
-        const accountId = input.account ?? (await services.claudeStore.list())[0]?.id;
+        // Endpoint + credentials for the Claude Code harness. A native Claude turn authenticates with the user's
+        // Anthropic subscription OAuth. A codex/grok provider running UNDER this harness (harness === "claude-code")
+        // instead points the harness at the sandbox's translator with that provider's API key — its subscription
+        // OAuth can't reach a gateway, so an explicit key (stored, or the container-env fallback) is required.
         let oauthToken: string | undefined;
-        if (accountId !== undefined) {
-            try {
-                oauthToken = await ensureFreshToken(services.claudeStore, accountId);
-            } catch (error) {
-                yield { kind: "error", message: error instanceof Error ? error.message : "claude credentials unavailable" };
+        let endpoint: { baseUrl: string; authToken: string; model: string } | undefined;
+        if (input.agent === "codex" || input.agent === "grok") {
+            if (services.config.translator.url === "") {
+                yield {
+                    kind: "error",
+                    message:
+                        "This sandbox has no model translator, so a non-Claude model can't run under the Claude Code harness here. Use the provider's native harness, or run a sandbox built from the published image.",
+                };
                 yield { kind: "done" };
                 return;
             }
-        }
-        resolvedAccount = oauthToken !== undefined ? accountId : undefined;
-        if (oauthToken === undefined && services.config.claudeCodeOauthToken === "" && services.config.anthropicApiKey === "") {
-            yield { kind: "error", message: "No Claude account connected — connect it in Setup before chatting." };
-            yield { kind: "done" };
-            return;
+            const key = await resolveProviderKey(services.providerKeys, services.config, input.agent);
+            if (key === undefined) {
+                const label = input.agent === "codex" ? "OpenAI" : "xAI";
+                yield {
+                    kind: "error",
+                    code: "api-key-required",
+                    message: `Add an ${label} API key in Sandbox ▸ Agent to run ${input.agent} under the Claude Code harness — its subscription sign-in can't be used here.`,
+                };
+                yield { kind: "done" };
+                return;
+            }
+            endpoint = { baseUrl: services.config.translator.url, authToken: services.config.translator.token, model: routedModel(input.agent, input.model) };
+        } else {
+            const accountId = input.account ?? (await services.claudeStore.list())[0]?.id;
+            if (accountId !== undefined) {
+                try {
+                    oauthToken = await ensureFreshToken(services.claudeStore, accountId);
+                } catch (error) {
+                    yield { kind: "error", message: error instanceof Error ? error.message : "claude credentials unavailable" };
+                    yield { kind: "done" };
+                    return;
+                }
+            }
+            resolvedAccount = oauthToken !== undefined ? accountId : undefined;
+            if (oauthToken === undefined && services.config.claudeCodeOauthToken === "" && services.config.anthropicApiKey === "") {
+                yield { kind: "error", message: "No Claude account connected — connect it in Setup before chatting." };
+                yield { kind: "done" };
+                return;
+            }
         }
         // Pre-flight the resume target: a session id that outlived its transcript (deleted, or minted before
         // the store persisted across rebuilds) would otherwise spawn the CLI just to fail opaquely — on every
@@ -279,11 +319,17 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         request = {
             ...base,
             prompt,
-            // Fall back to the daemon-wide default model when the turn didn't pin one (a per-automation
-            // `model` already rode into `base` above and wins). Empty config ⇒ the subscription default.
-            ...(input.model === undefined && services.config.intenticAgentModel !== "" ? { model: services.config.intenticAgentModel } : {}),
+            // A routed turn (codex/grok under the Claude Code harness) pins the translator endpoint + bearer +
+            // mapped model and withholds the Anthropic OAuth token (baseUrl in agent.ts drops CLAUDE_CODE_OAUTH_TOKEN).
+            // A native Claude turn keeps its OAuth token and falls back to the daemon-wide default model when the turn
+            // didn't pin one (a per-automation `model` already rode into `base` above and wins; empty ⇒ subscription default).
+            ...(endpoint !== undefined
+                ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken, model: endpoint.model }
+                : {
+                      ...(input.model === undefined && services.config.intenticAgentModel !== "" ? { model: services.config.intenticAgentModel } : {}),
+                      ...(oauthToken !== undefined ? { oauthToken } : {}),
+                  }),
             ...(plugins.length > 0 ? { plugins } : {}),
-            ...(oauthToken !== undefined ? { oauthToken } : {}),
             ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
             ...(tools.length > 0 ? { tools } : {}),
             ...(Object.keys(sdkServers).length > 0 ? { sdkServers } : {}),

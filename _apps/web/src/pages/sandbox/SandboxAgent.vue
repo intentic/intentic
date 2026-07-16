@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import type { KeyedProvider, ProviderKeyStatus } from "@intentic/sandbox-contract";
 import { Card, cmp, CopyButton } from "@intentic-app/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
+import { sandboxJson, sandboxRequest } from "../../composables/sandboxClient";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { useCleanerSavings } from "../../composables/sandbox/useCleanerSavings";
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
@@ -37,8 +39,57 @@ const {
     disconnect,
 } = useChat();
 
-onMounted(() => openAccountManage());
+onMounted(() => {
+    openAccountManage();
+    void loadProviderKeys();
+});
 onUnmounted(() => closeAccountManage());
+
+// --- Provider API keys (Codex/Grok UNDER the Claude Code harness) -------------------------------------------
+// Running Codex or Grok on the Claude Code harness routes their model through the sandbox's translator, which
+// needs a real API key — the subscription OAuth above can't reach a gateway. Presence-only (hasKey); the secret
+// is write-only, never read back.
+const providerKeyStatus = ref<ProviderKeyStatus>({ codex: false, grok: false });
+const keyInputs = ref<Record<KeyedProvider, string>>({ codex: ``, grok: `` });
+const keyBusy = ref<KeyedProvider | undefined>(undefined);
+const loadProviderKeys = async (): Promise<void> => {
+    try {
+        providerKeyStatus.value = await sandboxJson<ProviderKeyStatus>(`/provider-keys`);
+    } catch {
+        // Non-fatal; the card shows "no key" until the sandbox is reachable.
+    }
+};
+const saveProviderKey = async (provider: KeyedProvider): Promise<void> => {
+    const key = keyInputs.value[provider].trim();
+    if (key === `` || keyBusy.value !== undefined) {
+        return;
+    }
+    keyBusy.value = provider;
+    try {
+        await sandboxRequest(`/provider-keys`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ provider, key }),
+        });
+        keyInputs.value = { ...keyInputs.value, [provider]: `` };
+        await loadProviderKeys();
+    } finally {
+        keyBusy.value = undefined;
+    }
+};
+const removeProviderKey = async (provider: KeyedProvider): Promise<void> => {
+    keyBusy.value = provider;
+    try {
+        await sandboxRequest(`/provider-keys/${provider}`, { method: `DELETE` });
+        await loadProviderKeys();
+    } finally {
+        keyBusy.value = undefined;
+    }
+};
+const PROVIDER_KEY_FIELDS = [
+    { provider: `codex` as const, label: `OpenAI`, hint: `sk-… from platform.openai.com` },
+    { provider: `grok` as const, label: `xAI`, hint: `key from console.x.ai` },
+];
 
 // Compact "142k" token count and a short usage summary line per account (from /system/usage).
 const shortTokens = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
@@ -401,6 +452,64 @@ const importMemory = async (): Promise<void> => {
                         </div>
                     </div>
                 </template>
+            </div>
+        </Card>
+
+        <!-- Model API keys — used only when Codex/Grok run UNDER the Claude Code harness (they route through the
+             sandbox's translator, which needs a real API key; the subscription sign-in above can't be used). -->
+        <Card class="flex flex-col gap-3">
+            <div class="flex items-center gap-2.5">
+                <Icon name="key" class="text-lg text-muted" />
+                <div class="min-w-0">
+                    <h2 class="font-semibold leading-tight">Model API keys</h2>
+                    <p class="text-xs text-muted">
+                        Needed only to run Codex or Grok <span class="font-medium text-content">under the Claude Code harness</span>. Your ChatGPT /
+                        SuperGrok subscription sign-in can't be used here — a gateway requires a real API key.
+                    </p>
+                </div>
+            </div>
+            <div
+                v-for="field in PROVIDER_KEY_FIELDS"
+                :key="field.provider"
+                class="flex flex-col gap-1.5 border-t border-line pt-2 first:border-t-0 first:pt-0"
+            >
+                <div class="flex items-center justify-between gap-2">
+                    <span class="flex items-center gap-2 text-sm text-content">
+                        <Icon
+                            name="circle-fill"
+                            class="text-[0.5rem]"
+                            :class="providerKeyStatus[field.provider] ? 'text-success' : 'text-subtle'"
+                        />
+                        {{ field.label }}
+                        <span class="text-2xs text-subtle">{{ providerKeyStatus[field.provider] ? "key set" : "no key" }}</span>
+                    </span>
+                    <Button
+                        v-if="providerKeyStatus[field.provider]"
+                        label="Remove"
+                        size="small"
+                        severity="danger"
+                        :text="true"
+                        :loading="keyBusy === field.provider"
+                        @click="removeProviderKey(field.provider)"
+                    />
+                </div>
+                <div class="flex gap-2">
+                    <input
+                        v-model="keyInputs[field.provider]"
+                        type="password"
+                        :name="`${field.provider}ApiKey`"
+                        :placeholder="field.hint"
+                        class="min-w-0 flex-1 rounded-md border border-line bg-card px-3 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                        @keydown.enter="saveProviderKey(field.provider)"
+                    />
+                    <Button
+                        :label="providerKeyStatus[field.provider] ? `Replace` : `Save`"
+                        size="small"
+                        :disabled="keyInputs[field.provider].trim().length === 0"
+                        :loading="keyBusy === field.provider"
+                        @click="saveProviderKey(field.provider)"
+                    />
+                </div>
             </div>
         </Card>
 

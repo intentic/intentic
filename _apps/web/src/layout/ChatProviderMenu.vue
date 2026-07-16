@@ -1,19 +1,20 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { PROVIDERS } from "../composables/chat/catalog";
+import { HARNESSES, PROVIDERS } from "../composables/chat/catalog";
 import { type ChatProvider, modelOptionsFor, providerAccounts } from "../composables/chat/conversation";
 import { useChat } from "../composables/chat/useChat";
 import ProviderLogo from "./ProviderLogo.vue";
 
-/* The provider / model / extended-thinking picker body — width-agnostic so the desktop panel hosts it in a
- * Popover and the mobile panel in a BottomSheet. All state is the useChat singleton. */
+/* The provider / harness / model / extended-thinking picker body — width-agnostic so the desktop panel hosts it
+ * in a Popover and the mobile panel in a BottomSheet. All state is the useChat singleton. */
 
-const { provider, selectProvider, account, selectAccount, accounts, model, thinking, streaming, messages } = useChat();
+const { provider, selectProvider, harness, selectHarness, account, selectAccount, accounts, model, thinking, streaming, messages } = useChat();
 // A provider whose (any) connected account can no longer be refreshed — badge it so a broken credential doesn't
 // look identical to a healthy one until the user tries to chat.
 const providerNeedsReauth = (target: ChatProvider): boolean => providerAccounts.value[target].some((entry) => entry.needsReauth === true);
-// Grok's list is the live daemon catalog; the others are the static catalog. Shared with the composer chip.
-const models = computed(() => modelOptionsFor(provider.value));
+// Native Grok's list is the live daemon catalog; the others (and any claude-code-harness list) are the static,
+// harness-aware catalog. Shared with the composer chip.
+const models = computed(() => modelOptionsFor(provider.value, harness.value));
 // The account the turn will use: the explicit pick, else the first (the daemon's default) — so the picker
 // always highlights the one in effect, even before the user touches it.
 const activeAccountId = computed(() => account.value ?? accounts.value[0]?.id);
@@ -71,6 +72,30 @@ const activeAccountId = computed(() => account.value ?? accounts.value[0]?.id);
                     />
                 </button>
             </div>
+        </template>
+
+        <!-- Harness (the agentic loop), orthogonal to the provider. Only codex/grok can switch — claude is always
+             its own Claude Code loop. Running codex/grok under Claude Code routes their model through the sandbox's
+             translator, which needs that provider's API key (the subscription sign-in can't be used). -->
+        <template v-if="provider !== `claude`">
+            <span class="text-2xs uppercase tracking-wide text-subtle">Harness</span>
+            <div class="flex gap-1">
+                <button
+                    v-for="h in HARNESSES"
+                    :key="h.value"
+                    type="button"
+                    class="qopt flex h-8 min-w-0 flex-1 items-center justify-center rounded-lg border px-2 text-xs max-md:h-11"
+                    :class="{ 'qopt-on': harness === h.value }"
+                    :disabled="streaming"
+                    @click="selectHarness(h.value)"
+                >
+                    <span class="truncate text-content">{{ h.label }}</span>
+                </button>
+            </div>
+            <p v-if="harness === `claude-code`" class="text-2xs text-subtle">
+                Runs this model through the Claude Code harness — set an {{ provider === `codex` ? "OpenAI" : "xAI" }} API key in Sandbox ▸ Agent (your
+                subscription sign-in can't be used here).
+            </p>
         </template>
 
         <span class="text-2xs uppercase tracking-wide text-subtle">Model</span>
