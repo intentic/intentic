@@ -1,23 +1,35 @@
 {
-    "permissions": {
-        "allow": [
-            "Bash(*)",
-            "Read(*)",
-            "Write(*)",
-            "Edit(*)",
-            "MultiEdit(*)",
-            "Glob(*)",
-            "Grep(*)",
-            "WebFetch(*)",
-            "Skill(claude-api)",
-            "Skill(claude-api:*)",
-            "Bash(mkdir -p /home/radarsu/.claude/plans 2>&1 && echo \"plans dir ready\")",
-            "Skill(update-config)",
-            "Skill(update-config:*)",
-            "WebFetch(domain:raw.githubusercontent.com)",
-            "Bash(mkdir -p /home/radarsu/.claude/plans)"
-        ],
-        "additionalDirectories": ["/home/radarsu/.claude/plans"]
-    },
-    "effortLevel": "high"
+  "env": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "DISABLE_AUTOUPDATER": "1",
+    "DISABLE_ERROR_REPORTING": "1",
+    "DISABLE_FEEDBACK_COMMAND": "1",
+    "DISABLE_TELEMETRY": "1",
+    "DO_NOT_TRACK": "1"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "MultiEdit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "WebSearch(*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "mcp__playwright__browser_resize",
+      "mcp__playwright__browser_navigate"
+    ]
+  },
+  "model": "fable",
+  "autoMemoryEnabled": true,
+  "theme": "dark-daltonized",
+  "switchModelsOnFlag": false
 }
