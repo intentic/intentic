@@ -11,6 +11,7 @@ import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSpeechInput } from "../composables/chat/useSpeechInput";
 import { sandboxJson, sandboxUpload } from "../composables/sandbox/sandboxClient";
+import { useFollowAlong } from "../composables/workspace/useFollowAlong";
 import { useLayout } from "../composables/useLayout";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { collectDroppedFiles } from "../pages/workspace/dropEntries";
@@ -58,6 +59,7 @@ const {
 } = useChat();
 const router = useRouter();
 const layout = useLayout();
+const followAlong = useFollowAlong();
 const { overlayTarget, poppedOut } = useChatPopout();
 const { reachable, denied } = useSandbox();
 const { mobile, keyboardInset } = useDevice();
@@ -71,7 +73,9 @@ const providerName = computed(() => providerLabel(provider.value));
 // The chip's model name: shared with the picker menu so they can't drift; falls back to the provider name (never
 // blank) while Grok's daemon catalog is still loading.
 const modelLabelText = computed(() => modelLabelFor(provider.value, harness.value, model.value));
-const efforts = computed(() => effortsFor(provider.value, model.value));
+// An ACP provider owns its own model AND reasoning settings — no effort scale to offer (the segments hide).
+const nativeProvider = computed(() => provider.value === `claude` || provider.value === `codex` || provider.value === `grok`);
+const efforts = computed(() => (nativeProvider.value ? effortsFor(provider.value, model.value) : []));
 
 // The mobile pickers: pill taps open bottom sheets instead of anchored popovers.
 const modelSheetOpen = ref(false);
@@ -601,7 +605,7 @@ watch(keyboardInset, () => {
                                 <Icon name="chevron-down" class="text-2xs text-subtle" />
                             </button>
 
-                            <div class="flex items-center gap-1.5" role="group" aria-label="Reasoning effort">
+                            <div v-if="efforts.length > 0" class="flex items-center gap-1.5" role="group" aria-label="Reasoning effort">
                                 <div class="flex items-center gap-0.5">
                                     <button
                                         v-for="(e, i) in efforts"
@@ -627,6 +631,18 @@ watch(keyboardInset, () => {
                                 <Icon :name="modeIcon" class="text-2xs text-link" />
                                 <span>{{ modeLabel }}</span>
                                 <Icon name="chevron-down" class="text-2xs text-subtle" />
+                            </button>
+
+                            <button
+                                type="button"
+                                class="composer-ghost h-8 w-8 max-md:h-11 max-md:w-11"
+                                :class="{ 'composer-active': followAlong.enabled.value }"
+                                @click="followAlong.setEnabled(!followAlong.enabled.value)"
+                                v-tooltip.top="followAlong.enabled.value ? 'Stop following agent edits' : 'Follow agent edits live'"
+                                :aria-pressed="followAlong.enabled.value"
+                                aria-label="Follow agent edits"
+                            >
+                                <Icon :name="followAlong.enabled.value ? 'eye' : 'eye-slash'" class="text-sm max-md:text-base" />
                             </button>
 
                             <button

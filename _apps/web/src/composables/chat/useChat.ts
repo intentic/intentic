@@ -1,7 +1,8 @@
-import { type AgentHarness, type AgentProvider, AgentProviderSchema, type OauthAccount, type UsageAccount } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, NATIVE_PROVIDERS, type OauthAccount, type UsageAccount } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
 import {
+    acpProviders,
     type ChatAttachment,
     type ChatMessage,
     type ChatMode,
@@ -20,7 +21,7 @@ import {
     turnDefaults,
 } from "./conversation";
 import { track } from "../analytics";
-import { sandboxRequest } from "../sandbox/sandboxClient";
+import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { useSandbox } from "../sandbox/useSandbox";
 import { useWorkspaceTabs } from "../workspace/useWorkspaceTabs";
 
@@ -51,7 +52,9 @@ const activeId = ref<string>(``);
 // metadata) — persist as one JSON blob, so a refresh or a switch back to the sandbox restores its open chats.
 // Transcripts are NOT persisted; the rehydration watch below re-fetches them from the daemon's session store.
 const chatTabsKey = (sandboxId: string): string => `intentic.chatTabs.${sandboxId}`;
-const PROVIDERS: readonly AgentProvider[] = AgentProviderSchema.options;
+// Providers are an open string vocabulary (native ids + installed ACP agent ids) — a stored provider is valid
+// when non-empty; a since-removed ACP id degrades at send time (the daemon's unknown-provider error frame).
+const validProvider = (value: unknown): value is AgentProvider => typeof value === `string` && value !== ``;
 
 interface StoredTab {
     // The stable daemon-side conversation identity (fleet registry + worktree key); absent on a legacy
@@ -91,11 +94,8 @@ const readTabs = (sandboxId: string | undefined): { active: number; tabs: Stored
             }
             const session = tab[`session`] as Record<string, unknown> | null | undefined;
             const validSession =
-                typeof session === `object` &&
-                session !== null &&
-                typeof session[`id`] === `string` &&
-                PROVIDERS.includes(session[`provider`] as AgentProvider)
-                    ? { id: session[`id`] as string, provider: session[`provider`] as AgentProvider }
+                typeof session === `object` && session !== null && typeof session[`id`] === `string` && validProvider(session[`provider`])
+                    ? { id: session[`id`] as string, provider: session[`provider`] }
                     : undefined;
             tabs.push({
                 draft: tab[`draft`],
@@ -104,7 +104,7 @@ const readTabs = (sandboxId: string | undefined): { active: number; tabs: Stored
                     .map((entry) => ({ name: entry[`name`] as string, path: entry[`path`] as string })),
                 ...(typeof tab[`conversationId`] === `string` ? { conversationId: tab[`conversationId`] } : {}),
                 ...(typeof tab[`isolated`] === `boolean` ? { isolated: tab[`isolated`] } : {}),
-                ...(PROVIDERS.includes(tab[`provider`] as AgentProvider) ? { provider: tab[`provider`] as AgentProvider } : {}),
+                ...(validProvider(tab[`provider`]) ? { provider: tab[`provider`] } : {}),
                 ...(tab[`harness`] === `claude-code` || tab[`harness`] === `native` ? { harness: tab[`harness`] as AgentHarness } : {}),
                 ...(validSession !== undefined ? { session: validSession } : {}),
                 ...(typeof tab[`title`] === `string` ? { title: tab[`title`] } : {}),
@@ -315,8 +315,11 @@ const thinking = computed<boolean>({
 // provider's connected accounts for the composer switcher; `managedAccounts` the manage card's.
 const account = computed<string | undefined>(() => active.value.account.value);
 const selectAccount = (id: string): void => active.value.selectAccount(id);
-const accounts = computed<readonly OauthAccount[]>(() => providerAccounts.value[active.value.provider.value]);
-const managedAccounts = computed<readonly OauthAccount[]>(() => providerAccounts.value[managedProvider.value]);
+// Providers are an open string vocabulary — an unseeded key (an ACP agent, which owns its own credentials)
+// simply has no daemon account list.
+const accountsOf = (provider: AgentProvider): readonly OauthAccount[] => providerAccounts.value[provider] ?? [];
+const accounts = computed<readonly OauthAccount[]>(() => accountsOf(active.value.provider.value));
+const managedAccounts = computed<readonly OauthAccount[]>(() => accountsOf(managedProvider.value));
 
 // The active conversation's composer draft (text + staged attachments) — per-tab, so switching tabs swaps the
 // composer back to whatever was typed and attached there.
@@ -366,7 +369,7 @@ const setManagedProvider = (target: AgentProvider): void => {
         return;
     }
     managedProvider.value = target;
-    if (accountManageOpen.value && providerAccounts.value[target].length === 0) {
+    if (accountManageOpen.value && accountsOf(target).length === 0) {
         void startConnect(); // startConnect drops any prior handshake first
         return;
     }
@@ -378,8 +381,9 @@ const setManagedProvider = (target: AgentProvider): void => {
 // per-turn chat errors live on each Conversation. `connected` = the ACTIVE conversation's provider has an
 // account; `claudeConnected` = Claude specifically (the Sandbox page's card).
 const error = ref<string | null>(null);
-const hasAccount = (provider: AgentProvider): boolean => providerAccounts.value[provider].length > 0;
-const connected = computed(() => hasAccount(provider.value));
+const hasAccount = (provider: AgentProvider): boolean => accountsOf(provider).length > 0;
+// An ACP provider is its own credential store — installed means chat-ready, so it never gates the composer.
+const connected = computed(() => hasAccount(provider.value) || acpProviders.value.some((agent) => agent.id === provider.value));
 const claudeConnected = computed(() => hasAccount(`claude`));
 
 // Keep the composer usable whenever ANY provider has an account: when the account lists change (initial load,
@@ -420,7 +424,7 @@ const connectLabel = ref(``);
 
 // Add a freshly-connected account to its provider's list and make it the selected one.
 const addAccount = (provider: AgentProvider, account: OauthAccount): void => {
-    const existing = providerAccounts.value[provider].filter((a) => a.id !== account.id);
+    const existing = accountsOf(provider).filter((a) => a.id !== account.id);
     providerAccounts.value = { ...providerAccounts.value, [provider]: [...existing, account] };
     selectedAccountId.value = { ...selectedAccountId.value, [provider]: account.id };
 };
@@ -430,7 +434,7 @@ const addAccount = (provider: AgentProvider, account: OauthAccount): void => {
 const refreshAccounts = async (provider: AgentProvider): Promise<OauthAccount[]> => {
     const response = await sandboxRequest(`${providerBase(provider)}/accounts`);
     if (!response.ok) {
-        return [...providerAccounts.value[provider]];
+        return [...accountsOf(provider)];
     }
     const list = ((await response.json()) as { accounts?: OauthAccount[] }).accounts ?? [];
     providerAccounts.value = { ...providerAccounts.value, [provider]: list };
@@ -488,15 +492,18 @@ export const loadProviderModels = async (provider: AgentProvider): Promise<void>
             conversation.model.value = body.default;
         }
     }
-    if (!valid.has(turnDefaults.models.value[provider])) {
+    if (!valid.has(turnDefaults.models.value[provider] ?? ``)) {
         turnDefaults.models.value = { ...turnDefaults.models.value, [provider]: body.default };
     }
 };
 
-// Refresh every provider's catalog (skipping ones already in flight) — the reachable seam and the picker's
-// on-open refresh both use this, so searching across providers always has all lists warm.
+// Refresh every NATIVE provider's catalog (skipping ones already in flight) — the reachable seam and the
+// picker's on-open refresh both use this, so searching across providers always has all lists warm. ACP
+// providers have no daemon catalog (the agent owns its own model).
 export const loadAllProviderModels = async (): Promise<void> => {
-    await Promise.all(PROVIDERS.filter((target) => providerModelsState.value[target] !== `loading`).map((target) => loadProviderModels(target)));
+    await Promise.all(
+        NATIVE_PROVIDERS.filter((target) => providerModelsState.value[target] !== `loading`).map((target) => loadProviderModels(target)),
+    );
 };
 
 // Device-code sign-in expires after 15 minutes; stop polling past it.
@@ -878,7 +885,21 @@ export const loadAccountStatus = async (): Promise<void> => {
         }),
         // Model lists are daemon-owned too — load them on the same reachable seam so the pickers are ready.
         loadAllProviderModels(),
+        // Installed ACP agents are providers too — surface them in the picker on the same seam.
+        loadAcpProviders(),
     ]);
+};
+
+// Installed `agent`-kind capabilities (ACP agents), projected to picker entries: id + display label.
+const loadAcpProviders = async (): Promise<void> => {
+    try {
+        const body = (await sandboxJson(`/capabilities`)) as { capabilities?: { id: string; kind: string; config: Record<string, unknown> }[] };
+        acpProviders.value = (body.capabilities ?? [])
+            .filter((entry) => entry.kind === `agent`)
+            .map((entry) => ({ id: entry.id, label: typeof entry.config[`name`] === `string` ? (entry.config[`name`] as string) : entry.id }));
+    } catch {
+        // Leave the last list; the picker simply misses new agents until the next reachable load.
+    }
 };
 
 // Step 2 of the paste-back connects. Claude: exchange the code Anthropic showed against the PKCE handshake.
@@ -921,7 +942,7 @@ const disconnect = async (id: string): Promise<void> => {
         headers: { "content-type": `application/json` },
         body: JSON.stringify({ id }),
     }).catch(() => undefined);
-    const remaining = providerAccounts.value[target].filter((account) => account.id !== id);
+    const remaining = accountsOf(target).filter((account) => account.id !== id);
     providerAccounts.value = { ...providerAccounts.value, [target]: remaining };
     if (selectedAccountId.value[target] === id) {
         selectedAccountId.value = { ...selectedAccountId.value, [target]: remaining[0]?.id };

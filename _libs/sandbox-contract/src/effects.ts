@@ -123,5 +123,13 @@ export const capabilityEffects = (input: CapabilityEffectInput): readonly Capabi
             }
             return effects;
         }
+        case "agent": {
+            // The spawned ACP subprocess is the standing consequence; a pasted env block is a stored credential.
+            const effects: CapabilityEffect[] = [{ kind: "process", names: input.id === undefined || input.id.length === 0 ? [] : [input.id] }];
+            if (filled(input.config["env"]) || input.config["hasSecret"] === true) {
+                effects.push({ kind: "secret", exposure: "disk" });
+            }
+            return effects;
+        }
     }
 };

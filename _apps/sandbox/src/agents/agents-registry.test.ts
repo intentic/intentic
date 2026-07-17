@@ -101,7 +101,7 @@ describe("agents registry", () => {
         const registry = createAgentsRegistry(memoryStore());
         await registry.init();
         await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "tool", name: "Edit", target: "src/app.ts" });
+        registry.observe("c1", { kind: "tool_call", id: "t1", name: "Edit", category: "edit", status: "in_progress", target: "src/app.ts" });
         registry.observe("c1", {
             kind: "todos",
             items: [

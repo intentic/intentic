@@ -173,7 +173,9 @@ const kindIcon = (kind: string): IconName =>
                 ? `th-large`
                 : kind === `browser`
                   ? `globe`
-                  : `bolt`;
+                  : kind === `agent`
+                    ? `sparkles`
+                    : `bolt`;
 
 // Guided browser-login dialog state (browser-kind capabilities: the session is a real logged-in browser, not a
 // pasted token, so it's connected out-of-band over the /system/browser-login WebSocket).

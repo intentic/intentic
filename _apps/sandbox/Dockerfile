@@ -143,7 +143,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
     && arch="$(dpkg --print-architecture)" \
     && mkdir -p /tmp/cliproxy \
     && curl -fsSL "https://github.com/router-for-me/CLIProxyAPI/releases/download/v${CLIPROXY_VERSION}/CLIProxyAPI_${CLIPROXY_VERSION}_linux_${arch}.tar.gz" | tar -xz -C /tmp/cliproxy \
-    && install -m 0755 "$(find /tmp/cliproxy -type f -name CLIProxyAPI | head -n1)" /usr/local/bin/cli-proxy-api \
+    && install -m 0755 "$(find /tmp/cliproxy -type f -name cli-proxy-api | head -n1)" /usr/local/bin/cli-proxy-api \
     && test -x /usr/local/bin/cli-proxy-api \
     && rm -rf /tmp/cliproxy /var/lib/apt/lists/*
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and

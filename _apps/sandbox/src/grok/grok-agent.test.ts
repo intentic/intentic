@@ -103,8 +103,8 @@ test("a turn maps OpenCode events onto session, thinking, tools, todos, deltas, 
     expect(events).toEqual([
         { kind: "session", sessionId: "s1" },
         { kind: "thinking", text: "planning the edit" },
-        { kind: "tool", id: "c1", name: "Bash", target: "pnpm test" },
-        { kind: "tool_result", id: "c1", output: "1 passed" },
+        { kind: "tool_call", id: "c1", name: "Bash", category: "execute", status: "in_progress", target: "pnpm test" },
+        { kind: "tool_call_update", id: "c1", status: "completed", content: [{ type: "text", text: "1 passed" }] },
         { kind: "todos", items: [{ content: "add route", status: "pending" }] },
         { kind: "delta", text: "Added the route." },
         { kind: "usage", inputTokens: 1000, outputTokens: 200, cacheReadTokens: 800, cacheCreationTokens: 120, costUsd: 0.02 },
@@ -128,7 +128,7 @@ test("a build turn resumes the session on the xai provider, passes the model, an
     expect(turn.prompt).toContain("/work/.intentic/attachments/a/report.pdf");
 });
 
-test("a failing tool surfaces its error as an error tool result", async () => {
+test("a failing tool first seen at its error state arrives as one whole failed tool_call", async () => {
     const { runner } = fakeRunner([
         {
             type: "message.part.updated",
@@ -148,8 +148,15 @@ test("a failing tool surfaces its error as an error tool result", async () => {
     ]);
     const events = await collect(createGrokAgent(runner), request);
     expect(events).toEqual([
-        { kind: "tool", id: "c1", name: "Bash", target: "pnpm test" },
-        { kind: "tool_result", id: "c1", output: "1 failed", isError: true },
+        {
+            kind: "tool_call",
+            id: "c1",
+            name: "Bash",
+            category: "execute",
+            status: "failed",
+            target: "pnpm test",
+            content: [{ type: "text", text: "1 failed" }],
+        },
         { kind: "done" },
     ]);
 });

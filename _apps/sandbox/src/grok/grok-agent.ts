@@ -1,7 +1,9 @@
 import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../agent/agent.js";
-import { createPlanRequest } from "../agent/agent-requests.js";
+import { withFileNote } from "../agent/attachment-note.js";
+import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
+import { displayNameOf, editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import { isChatModel, parseModelSuggestions } from "./grok-models.js";
 import type { OpenCodeService } from "./opencode.js";
 
@@ -172,32 +174,6 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
         }
     };
 
-// OpenCode's lowercase tool ids → the display names the UI already styles (Claude-style). Unknown tools pass
-// through unchanged. `todowrite` is intentionally absent — its checklist renders from the todo.updated event.
-const TOOL_NAMES: Record<string, string> = {
-    bash: "Bash",
-    edit: "Edit",
-    write: "Write",
-    read: "Read",
-    grep: "Grep",
-    glob: "Glob",
-    list: "LS",
-    webfetch: "WebFetch",
-    task: "Task",
-    patch: "Edit",
-};
-
-// The file / command / query a tool acts on, for the `tool` frame's target — mirrors agent.ts's toolTarget.
-const toolTarget = (input: Record<string, unknown>): string | undefined => {
-    for (const key of ["filePath", "file_path", "command", "pattern", "url", "path"]) {
-        const value = input[key];
-        if (typeof value === "string") {
-            return value;
-        }
-    }
-    return undefined;
-};
-
 // Flatten an OpenCode session error onto a message (every NamedError carries data.message).
 const errorText = (error: unknown): string => {
     const named = error as { data?: { message?: string }; name?: string } | undefined;
@@ -222,11 +198,12 @@ interface TurnCapture {
 // Normalize one Grok turn's OpenCode Event stream onto AgentEvents. `capture` set ⇒ plan phase: text is
 // accumulated (not streamed) so the whole plan surfaces as one `plan` frame. Ends on session.idle; does NOT
 // emit the terminal `done` (the caller does once the whole turn settles).
-async function* streamTurn(events: AsyncIterable<Event>, capture?: TurnCapture): AsyncGenerator<AgentEvent> {
+async function* streamTurn(events: AsyncIterable<Event>, cwd: string, capture?: TurnCapture): AsyncGenerator<AgentEvent> {
     // Per-part emitted text length, so each message.part.updated yields only the new suffix (works whether the
     // server sends incremental deltas or full snapshots).
     const emitted = new Map<string, number>();
-    // callIDs that have already emitted their opening `tool` frame, so a completed/error state doesn't repeat it.
+    // callIDs that have already emitted their opening tool_call frame, so later states ride tool_call_update
+    // instead of repeating it.
     const started = new Set<string>();
     // Token/cost accounting per assistant message: OpenCode carries it on the message info (not its parts) and an
     // agentic turn has several assistant messages, so key by id (latest snapshot wins) and sum once at idle.
@@ -266,17 +243,54 @@ async function* streamTurn(events: AsyncIterable<Event>, capture?: TurnCapture):
                     emitted.set(part.id, part.text.length);
                 }
             } else if (part.type === "tool" && part.tool !== "todowrite") {
-                const name = TOOL_NAMES[part.tool] ?? part.tool;
+                const name = displayNameOf(part.tool);
                 const state = part.state;
-                if ((state.status === "running" || state.status === "completed" || state.status === "error") && !started.has(part.callID)) {
-                    started.add(part.callID);
-                    const target = toolTarget(state.input);
-                    yield { kind: "tool", id: part.callID, name, ...(target !== undefined ? { target } : {}) };
+                // `pending` is skipped: OpenCode is still streaming the input args, so a target/locations read
+                // now could be partial. The first useful state is `running` (input settled).
+                if (state.status === "pending") {
+                    continue;
                 }
-                if (state.status === "completed") {
-                    yield { kind: "tool_result", id: part.callID, output: state.output };
-                } else if (state.status === "error") {
-                    yield { kind: "tool_result", id: part.callID, output: state.error, isError: true };
+                const first = !started.has(part.callID);
+                if (first) {
+                    started.add(part.callID);
+                }
+                if (state.status === "running") {
+                    if (first) {
+                        const target = toolTarget(state.input);
+                        const locations = toolLocations(state.input, cwd);
+                        yield {
+                            kind: "tool_call",
+                            id: part.callID,
+                            name,
+                            category: toolCategoryOf(name),
+                            status: "in_progress",
+                            ...(target !== undefined ? { target } : {}),
+                            ...(locations !== undefined ? { locations } : {}),
+                        };
+                    }
+                    continue;
+                }
+                // completed | error. An edit/write completion derives its diff from the (now-final) input — the
+                // authoritative content; otherwise the tool's text output/error is. A call first seen here (the
+                // stream skipped running) arrives as one whole tool_call carrying its final status.
+                const failed = state.status === "error";
+                const diff = failed ? undefined : editDiffContent(name, state.input, cwd);
+                const content = [diff ?? { type: "text" as const, text: failed ? state.error : state.output }];
+                if (first) {
+                    const target = toolTarget(state.input);
+                    const locations = toolLocations(state.input, cwd);
+                    yield {
+                        kind: "tool_call",
+                        id: part.callID,
+                        name,
+                        category: toolCategoryOf(name),
+                        status: failed ? "failed" : "completed",
+                        ...(target !== undefined ? { target } : {}),
+                        ...(locations !== undefined ? { locations } : {}),
+                        content,
+                    };
+                } else {
+                    yield { kind: "tool_call_update", id: part.callID, status: failed ? "failed" : "completed", content };
                 }
             }
         } else if (event.type === "todo.updated") {
@@ -331,18 +345,12 @@ async function* streamTurn(events: AsyncIterable<Event>, capture?: TurnCapture):
     }
 }
 
-const PLAN_PREAMBLE =
-    "Before making any changes, propose a clear, concise plan for the request below and stop — do not execute it yet. End your reply with the plan itself.\n\n";
-
-// Always-plan flow, two phases (mirrors runCodexPlanTurn): a read-only planning turn on the `plan` agent whose
-// assistant text becomes the `plan` frame, then — once approved on the shared decision bridge — an execution
-// turn on the `build` agent resumed on the same session. Rejection feedback loops another planning turn.
+// Always-plan flow over the shared skeleton: a read-only planning turn on the `plan` agent whose assistant
+// text becomes the plan, then an execution turn on the `build` agent resumed on the same session.
 // ponytail: no `question` frames — OpenCode's permission channel maps to per-tool approvals, not multiple-choice
 // clarifying questions; a dedicated ask-tool is the upgrade path.
 async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner): AsyncGenerator<AgentEvent> {
-    let prompt = PLAN_PREAMBLE + request.prompt;
-    let sessionId = request.sessionId;
-    for (;;) {
+    const planPhase: PlanPhase = async function* (prompt, sessionId) {
         const capture: TurnCapture = sessionId !== undefined ? { sessionId } : {};
         yield* streamTurn(
             runner({
@@ -353,44 +361,25 @@ async function* runGrokPlanTurn(request: AgentRequest, runner: GrokRunner): Asyn
                 agent: "plan",
                 signal: request.signal,
             }),
+            request.cwd,
             capture,
         );
-        sessionId = capture.sessionId;
-        if (capture.errored === true || capture.planText === undefined || capture.planText.trim() === "" || request.signal.aborted) {
-            // The planning turn errored/aborted (or produced no plan text) — the error frame already streamed, so
-            // don't propose a plan built from partial/echoed output.
-            return;
-        }
-        const { id, wait } = createPlanRequest();
-        yield { kind: "plan", decisionId: id, text: capture.planText };
-        const decision = await wait(request.signal);
-        if (request.signal.aborted) {
-            return;
-        }
-        if (!decision.approve) {
-            const feedback = decision.feedback?.trim();
-            prompt =
-                feedback !== undefined && feedback !== ""
-                    ? `The user rejected the plan with this feedback:\n${feedback}\n\nRevise the plan. Still do not execute it.`
-                    : "The user rejected the plan. Revise it. Still do not execute it.";
-            continue;
-        }
-        yield* streamTurn(
+        return { sessionId: capture.sessionId, planText: capture.planText, errored: capture.errored === true };
+    };
+    const executePhase: ExecutePhase = (sessionId) =>
+        streamTurn(
             runner({
-                prompt: "The plan is approved — execute it now.",
+                prompt: EXECUTE_PROMPT,
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 cwd: request.cwd,
                 ...(request.model !== undefined ? { model: request.model } : {}),
                 agent: "build",
                 signal: request.signal,
             }),
+            request.cwd,
         );
-        return;
-    }
+    yield* runPlanEmulation(request.signal, PLAN_PREAMBLE + request.prompt, request.sessionId, planPhase, executePhase);
 }
-
-const withFileNote = (prompt: string, files: readonly string[]): string =>
-    files.length === 0 ? prompt : `${prompt}\n\nThe user attached these files — read them as needed:\n${files.map((path) => `- ${path}`).join("\n")}`;
 
 // Build the Grok provider for the Services seam: AgentRequest in, AgentEvent frames out. The agent route has
 // already gated that xAI is connected. Ignores the Claude-only request fields (oauthToken, permissionMode,
@@ -410,6 +399,7 @@ export const createGrokAgent = (runner: GrokRunner) =>
                           agent: "build",
                           signal: request.signal,
                       }),
+                      request.cwd,
                   );
         let surfacedError = false;
         try {

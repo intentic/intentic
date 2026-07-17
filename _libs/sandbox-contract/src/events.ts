@@ -49,11 +49,42 @@ export const ContextUsageSchema = z.object({
 });
 export type ContextUsage = z.infer<typeof ContextUsageSchema>;
 
+// ACP-aligned tool taxonomy (Agent Client Protocol's ToolKind, verbatim): what a tool call *does*, driving
+// the card icon and follow-along behavior regardless of which backend named the tool.
+export const ToolKindSchema = z.enum(["read", "edit", "delete", "move", "search", "execute", "think", "fetch", "other"]);
+export type ToolKind = z.infer<typeof ToolKindSchema>;
+
+export const ToolCallStatusSchema = z.enum(["pending", "in_progress", "completed", "failed"]);
+export type ToolCallStatus = z.infer<typeof ToolCallStatusSchema>;
+
+// A file a tool call touches. Workspace-root-relative, forward-slash (the tree/file route space) — adapters
+// normalize from the turn's cwd. `line` is 1-based.
+export const ToolCallLocationSchema = z.object({
+    path: z.string(),
+    line: z.number().optional(),
+});
+export type ToolCallLocation = z.infer<typeof ToolCallLocationSchema>;
+
+// Structured tool output (ACP's ToolCallContent diff shape, verbatim). `diff` is hunk-level for Edit-style
+// tools (old_string/new_string) and whole-file for Write; an absent oldText means a new file / unknown
+// previous content. Sides are capped daemon-side; `truncated` marks a clipped side.
+export const ToolCallContentSchema = z.discriminatedUnion("type", [
+    z.object({ type: z.literal("text"), text: z.string() }),
+    z.object({
+        type: z.literal("diff"),
+        path: z.string(),
+        oldText: z.string().optional(),
+        newText: z.string(),
+        truncated: z.boolean().optional(),
+    }),
+]);
+export type ToolCallContent = z.infer<typeof ToolCallContentSchema>;
+
 // One frame from an agent turn, relayed to the UI. `kind`-discriminated. The daemon normalizes the SDK's
 // ~40 SDKMessage types down to this union: high-value block types get a dedicated frame
-// (delta/thinking/tool/tool_result/todos/usage/rate_limit_info/context_usage/init/compact); any SDK message without a UI
-// mapping is dropped. `plan`/`question` pause the turn until the user answers on a side channel. `parentToolUseId`
-// tags frames produced inside a subagent (Task tool).
+// (delta/thinking/tool_call/tool_call_update/todos/usage/rate_limit_info/context_usage/init/compact); any SDK message
+// without a UI mapping is dropped. `plan`/`question` pause the turn until the user answers on a side channel.
+// `parentToolUseId` tags frames produced inside a subagent (Task tool).
 export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("session"), sessionId: z.string() }),
     // First frame of an isolated turn: the conversation's worktree identity — its branch (agent/<id>) and the
@@ -63,15 +94,28 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("init"), model: z.string() }),
     z.object({ kind: z.literal("delta"), text: z.string(), parentToolUseId: z.string().optional() }),
     z.object({ kind: z.literal("thinking"), text: z.string(), parentToolUseId: z.string().optional() }),
+    // A tool call starting (or, for backends that only report completions, arriving whole). `content` carries
+    // structured output known at call time — an Edit's diff is derived from its input, no result needed.
     z.object({
-        kind: z.literal("tool"),
-        id: z.string().optional(),
+        kind: z.literal("tool_call"),
+        id: z.string(),
         name: z.string(),
+        category: ToolKindSchema,
+        status: ToolCallStatusSchema,
         target: z.string().optional(),
+        locations: z.array(ToolCallLocationSchema).optional(),
+        content: z.array(ToolCallContentSchema).optional(),
         parentToolUseId: z.string().optional(),
     }),
-    // The result of a tool call (edit diff / bash output), correlated to its `tool` frame by `id`.
-    z.object({ kind: z.literal("tool_result"), id: z.string().optional(), output: z.string(), isError: z.boolean().optional() }),
+    // A later state of a tool call, correlated by `id`. N updates per call: status transitions and/or fresh
+    // content/locations — both REPLACE the prior value (snapshot semantics, not append); absent ⇒ unchanged.
+    z.object({
+        kind: z.literal("tool_call_update"),
+        id: z.string(),
+        status: ToolCallStatusSchema.optional(),
+        content: z.array(ToolCallContentSchema).optional(),
+        locations: z.array(ToolCallLocationSchema).optional(),
+    }),
     // The agent just started running Bash in its live `agent-<id>` tmux session — the client surfaces that
     // terminal in the global panel. One per turn (the session is reused across a turn's commands, incl. subagents').
     z.object({ kind: z.literal("terminal"), session: z.string() }),

@@ -615,6 +615,9 @@ importers:
 
   _apps/sandbox:
     dependencies:
+      '@agentclientprotocol/sdk':
+        specifier: ^1.2.1
+        version: 1.2.1(zod@4.4.3)
       '@anthropic-ai/claude-agent-sdk':
         specifier: 'catalog:'
         version: 0.3.195(@anthropic-ai/sdk@0.111.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
@@ -1760,6 +1763,11 @@ packages:
 
   '@actions/io@3.0.2':
     resolution: {integrity: sha512-nRBchcMM+QK1pdjO7/idu86rbJI5YHUKCvKs0KxnSYbVe3F51UfGxuZX4Qy/fWlp6l7gWFwIkrOzN+oUK03kfw==}
+
+  '@agentclientprotocol/sdk@1.2.1':
+    resolution: {integrity: sha512-jwYUdOQR7tc+Zfch53VL4JJyUNK/46q03uUTYb+PjECsmnNl94XFXOfYLJ8RBpMNidXd1rpOAVgb0vqD98xImA==}
+    peerDependencies:
+      zod: 4.4.3
 
   '@antfu/install-pkg@1.1.0':
     resolution: {integrity: sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ==}
@@ -8951,6 +8959,10 @@ snapshots:
       undici: 6.27.0
 
   '@actions/io@3.0.2': {}
+
+  '@agentclientprotocol/sdk@1.2.1(zod@4.4.3)':
+    dependencies:
+      zod: 4.4.3
 
   '@antfu/install-pkg@1.1.0':
     dependencies:

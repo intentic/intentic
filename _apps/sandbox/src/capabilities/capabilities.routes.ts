@@ -122,6 +122,11 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 throw new ORPCError("CONFLICT", { message: `the ${capability.kind} capability can't be removed` });
             }
             await handler.remove(ctx, capability.id, capability.config);
+            // A removed ACP agent's warm subprocess dies with its capability (re-adds respawn lazily; a
+            // config edit respawns on the next turn via the pool's config-key check).
+            if (capability.kind === "agent") {
+                services.acpConnections.drop(capability.id);
+            }
             await services.capabilities.remove(input.id);
             await composeEnvironment(services);
             void reconcileListenerProcesses(services);

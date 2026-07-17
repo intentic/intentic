@@ -369,6 +369,62 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             ],
         },
     },
+    // ACP agents (Agent Client Protocol): any agent speaking ACP over stdio becomes a chat provider. Curated
+    // presets pre-fill the command; the custom card takes any command from the ACP registry.
+    {
+        id: "opencode-acp",
+        name: "OpenCode",
+        kind: "agent",
+        category: "extend",
+        logo: "opencode",
+        description: "Run OpenCode as a chat provider over ACP — its own models, tools and config, driven from this chat.",
+        fields: [
+            { key: "command", label: "Command", default: "opencode acp" },
+            { key: "name", label: "Display name", default: "OpenCode", optional: true },
+            { key: "env", label: "Environment (KEY=VALUE per line)", secret: true, optional: true, multiline: true },
+            { key: "loginCommand", label: "Login command", default: "opencode auth login", optional: true },
+        ],
+        hint: "Sign in by running the login command in a Terminal once — the agent keeps its own credentials in the sandbox.",
+    },
+    {
+        id: "gemini-acp",
+        name: "Gemini CLI",
+        kind: "agent",
+        category: "extend",
+        logo: "googlegemini",
+        description: "Run Google's Gemini CLI as a chat provider over ACP.",
+        fields: [
+            { key: "command", label: "Command", default: "gemini --experimental-acp" },
+            { key: "name", label: "Display name", default: "Gemini", optional: true },
+            { key: "env", label: "Environment (KEY=VALUE per line)", placeholder: "GEMINI_API_KEY=…", secret: true, optional: true, multiline: true },
+            { key: "loginCommand", label: "Login command", optional: true },
+        ],
+        hint: "Provide GEMINI_API_KEY in the environment, or run the CLI's login in a Terminal once.",
+    },
+    {
+        id: "acp-agent",
+        name: "Custom ACP agent",
+        kind: "agent",
+        category: "extend",
+        description: "Run any agent speaking the Agent Client Protocol (stdio) as a chat provider — Goose, Qwen Code, anything from the ACP registry.",
+        fields: [
+            { key: "command", label: "Command", placeholder: "npx -y my-acp-agent" },
+            { key: "name", label: "Display name", optional: true },
+            { key: "env", label: "Environment (KEY=VALUE per line)", secret: true, optional: true, multiline: true },
+            { key: "loginCommand", label: "Login command", optional: true },
+        ],
+        hint: "The command must be on the sandbox PATH and speak ACP over stdio (split on whitespace — no shell quoting). Credentials go in the environment block, or run the login command in a Terminal once.",
+        guide: {
+            url: "https://agentclientprotocol.com",
+            linkLabel: "Browse ACP agents",
+            steps: [
+                "Pick an agent from the ACP registry (agentclientprotocol.com) and note its run command.",
+                "If it needs an API key, add it as a KEY=VALUE line in the environment block.",
+                "For device-code sign-ins, add the agent's login command and run it in a Terminal after adding.",
+                "The agent then appears as a provider in the chat's model picker.",
+            ],
+        },
+    },
 ];
 
 const isCapabilityCategory = (category: string): category is CapabilityCategory => CAPABILITY_CATEGORIES.some((entry) => entry.id === category);

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/sandbox",
     "version": "0.0.0",
-    "description": "Remote AI-agent dev workspace daemon \u2014 runs inside a per-project sandbox container on the customer's host",
+    "description": "Remote AI-agent dev workspace daemon — runs inside a per-project sandbox container on the customer's host",
     "license": "MIT",
     "private": true,
     "type": "module",
@@ -20,6 +20,7 @@
         "bench:cleaners": "node bench/cleaner-bench.mjs"
     },
     "dependencies": {
+        "@agentclientprotocol/sdk": "^1.2.1",
         "@anthropic-ai/claude-agent-sdk": "catalog:",
         "@discordjs/opus": "^0.10.0",
         "@discordjs/voice": "^0.19.2",

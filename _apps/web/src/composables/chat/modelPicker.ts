@@ -8,7 +8,7 @@ import {
     providerLabel,
 } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { modelOptionsFor } from "./conversation";
+import { acpProviders, modelOptionsFor } from "./conversation";
 
 /* The unified model-picker list: every provider's models flattened into one searchable entry set. Pure
  * derivation over the live catalogs (conversation.ts) plus the curated metadata (sandbox-contract) — the
@@ -39,13 +39,15 @@ const entryFor = (provider: AgentProvider, harness: AgentHarness, option: { labe
 
 // Every pickable model across providers, in PROVIDERS order: each provider's native catalog (live, with the
 // static floor pre-load), then — for codex/grok — its deterministic "via Claude Code" translator row. Claude
-// is always its own Claude Code loop, so it contributes native entries only.
-export const pickerEntries = computed<readonly PickerEntry[]>(() =>
-    PROVIDERS.flatMap(({ value: provider }) => [
+// is always its own Claude Code loop, so it contributes native entries only. Installed ACP agents append one
+// row each: the agent owns its own model, so the row IS the provider (empty model id).
+export const pickerEntries = computed<readonly PickerEntry[]>(() => [
+    ...PROVIDERS.flatMap(({ value: provider }) => [
         ...modelOptionsFor(provider, `native`).map((option) => entryFor(provider, `native`, option)),
         ...(provider === `claude` ? [] : modelsFor(provider, `claude-code`).map((option) => entryFor(provider, `claude-code`, option))),
     ]),
-);
+    ...acpProviders.value.map((agent) => entryFor(agent.id, `native`, { label: agent.label, value: `` })),
+]);
 
 // Lowercase and strip separators on both sides, so "gpt5" matches "GPT-5" and "45" matches "4.5".
 const normalize = (text: string): string => text.toLowerCase().replace(/[\s.\-_]/g, ``);
@@ -93,7 +95,9 @@ export const pickerSections = (
     activeProvider: AgentProvider,
     rail: AgentProvider | undefined,
 ): readonly { provider: AgentProvider; entries: readonly PickerEntry[] }[] => {
-    const providers = PROVIDERS.map((option) => option.value).filter((provider) => rail === undefined || provider === rail);
+    const providers: AgentProvider[] = [...PROVIDERS.map((option) => option.value), ...acpProviders.value.map((agent) => agent.id)].filter(
+        (provider) => rail === undefined || provider === rail,
+    );
     const order = providers.includes(activeProvider) ? [activeProvider, ...providers.filter((provider) => provider !== activeProvider)] : providers;
     return order.map((provider) => ({ provider, entries: entries.filter((entry) => entry.provider === provider) }));
 };

@@ -21,9 +21,14 @@ export const RepoParamSchema = z.object({ repo: z.string() });
 
 export const SessionTranscriptMessageSchema = z.object({ role: z.enum(["user", "assistant"]), text: z.string() });
 
-// The agent runtimes the daemon can serve (the provider adapters) — the vocabulary every surface that picks
-// an agent shares (chat turns, automations). See AgentTurnSchema.agent for the dispatch semantics.
-export const AgentProviderSchema = z.enum(["claude", "codex", "grok"]);
+// The agent runtimes the daemon can serve — the vocabulary every surface that picks an agent shares (chat
+// turns, automations). The three NATIVE providers have dedicated adapters (and their ids are reserved); any
+// other value is the id of an installed `agent`-kind capability served over ACP (Agent Client Protocol).
+// Kept as a bare string on the wire (not an enum) so an unknown id is a clean error frame from the agent
+// route — the same bet RepoParamSchema makes — and adding an ACP agent needs no contract change.
+export const NATIVE_PROVIDERS = ["claude", "codex", "grok"] as const;
+export type NativeProvider = (typeof NATIVE_PROVIDERS)[number];
+export const AgentProviderSchema = z.string().min(1);
 export type AgentProvider = z.infer<typeof AgentProviderSchema>;
 
 // The harness (agentic loop) a turn runs on, orthogonal to the provider. See AgentTurnSchema.harness.
@@ -650,6 +655,7 @@ export const CapabilityKindSchema = z.enum([
     "vpn",
     "docker",
     "browser",
+    "agent",
 ]);
 export type CapabilityKind = z.infer<typeof CapabilityKindSchema>;
 export const CapabilityStateSchema = z.enum(["active", "pending", "error", "inactive"]);
@@ -747,6 +753,19 @@ export const DockerConfigSchema = z.object({ enabled: z.enum(["on", "off"]).defa
 // Dockerfile fragment, applied on an owner rebuild. One capability = one platform (the id doubles as the profile).
 export const BrowserPlatformSchema = z.enum(["reddit", "x", "youtube"]);
 export const BrowserConfigSchema = z.object({ platform: BrowserPlatformSchema });
+// An ACP (Agent Client Protocol) agent served as a chat provider: the daemon spawns `command` as a long-lived
+// subprocess speaking JSON-RPC over stdio, and the capability id becomes the provider id in the chat picker
+// (see AgentProviderSchema). `command` is split on whitespace — no shell quoting. `env` is a pasted KEY=VALUE
+// block (one per line); credentials ride here, so the whole block is the secret field (echoed as hasSecret) —
+// the vpn-conf precedent. `loginCommand` is an interactive login the user completes in a visible terminal
+// (device-code flows); the agent persists credentials in its own store inside the container. `name` is the
+// picker's display label; absent = the id.
+export const AcpAgentConfigSchema = z.object({
+    command: z.string().min(1),
+    name: z.string().min(1).optional(),
+    env: z.string().optional(),
+    loginCommand: z.string().min(1).optional(),
+});
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type ServiceConfig = z.infer<typeof ServiceConfigSchema>;
 export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
@@ -758,6 +777,7 @@ export type VpnConfig = z.infer<typeof VpnConfigSchema>;
 export type DockerConfig = z.infer<typeof DockerConfigSchema>;
 export type BrowserPlatform = z.infer<typeof BrowserPlatformSchema>;
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
+export type AcpAgentConfig = z.infer<typeof AcpAgentConfigSchema>;
 
 export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("devops"), config: z.object({}) }),
@@ -774,6 +794,7 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId.max(15), kind: z.literal("vpn"), config: VpnConfigSchema }),
     z.object({ id: entryId, kind: z.literal("docker"), config: DockerConfigSchema }),
     z.object({ id: entryId, kind: z.literal("browser"), config: BrowserConfigSchema }),
+    z.object({ id: entryId, kind: z.literal("agent"), config: AcpAgentConfigSchema }),
 ]);
 export type Capability = z.infer<typeof CapabilitySchema>;
 

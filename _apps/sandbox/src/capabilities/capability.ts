@@ -105,6 +105,9 @@ export const secretField = (capability: Capability, connectors: Map<string, Reso
         case "vpn":
             // The whole pasted WireGuard conf — it holds the private key.
             return "config";
+        case "agent":
+            // The whole pasted KEY=VALUE env block — credentials ride in it (the vpn-conf precedent).
+            return capability.config.env !== undefined ? "env" : undefined;
         case "devops":
         case "monorepo":
         case "service":
@@ -173,5 +176,12 @@ export const echoConfig = (capability: Capability, connectors: Map<string, Resol
             return {};
         case "browser":
             return { platform: capability.config.platform };
+        case "agent":
+            return {
+                command: capability.config.command,
+                ...(capability.config.name !== undefined ? { name: capability.config.name } : {}),
+                ...(capability.config.loginCommand !== undefined ? { loginCommand: capability.config.loginCommand } : {}),
+                hasSecret: capability.config.env !== undefined && capability.config.env !== "",
+            };
     }
 };

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import type { AgentEvent, FileDiff, GitChange, IntenticLine, WorkspaceChildren, WorkspaceTree } from "@intentic/sandbox-contract";
+import type { AcpAgentConfig, AgentEvent, FileDiff, GitChange, IntenticLine, WorkspaceChildren, WorkspaceTree } from "@intentic/sandbox-contract";
 import {
     type GitCloneOptions,
     type GitStatus,
@@ -16,6 +16,8 @@ import {
     gitSync,
 } from "@intentic/scaffold";
 import type { Logger } from "pino";
+import { createAcpAgent } from "./acp/acp-agent.js";
+import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/agent.js";
 import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
@@ -138,10 +140,14 @@ export interface Services {
     // Daemon-owned workspace snapshots on /history (outside the agent's reach): auto-captured per turn + on an
     // interval, diffed and restored through the /history routes.
     readonly history: WorkspaceHistory;
-    // The provider adapters — one function shape, three agent runtimes. streamAgent picks per turn.
+    // The provider adapters — one function shape, three native agent runtimes. streamAgent picks per turn.
     readonly agent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
     readonly codexAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
     readonly grokAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
+    // The generic ACP adapter serving every `agent`-kind capability (any provider id outside NATIVE_PROVIDERS);
+    // streamAgent resolves the capability and passes it in. The pool keeps one warm subprocess per agent.
+    readonly acpAgent: (id: string, config: AcpAgentConfig, request: AgentRequest) => AsyncGenerator<AgentEvent>;
+    readonly acpConnections: AcpConnections;
     readonly intentic: (run: IntenticRun, signal?: AbortSignal) => AsyncGenerator<IntenticLine>;
     readonly git: {
         readonly init: (dir: string, separateGitDir?: string) => Promise<void>;
@@ -261,6 +267,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         return verdict;
     };
 
+    const acpConnections = createAcpConnections(logger);
+
     return {
         config,
         logger,
@@ -298,6 +306,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         agent: runAgent,
         codexAgent: createCodexAgent(codexBase),
         grokAgent: createGrokAgent(createGrokRunner(openCode)),
+        acpAgent: createAcpAgent(acpConnections),
+        acpConnections,
         // Bound to the daemon logger so every CLI run's lifecycle (spawn/kill/exit) is attributable from
         // daemon.log — the runs themselves are transient subprocesses whose absence proves nothing.
         intentic: (run, signal) => runIntentic(run, signal, logger),

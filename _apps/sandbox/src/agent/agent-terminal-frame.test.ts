@@ -35,9 +35,13 @@ test("under the tmux gate, the first Bash tool_use emits ONE `terminal` frame na
             {
                 type: "assistant",
                 session_id: "3f2a9b1c-0000",
-                message: { content: [{ type: "tool_use", name: "Bash", input: { command: "ls -la" } }] },
+                message: { content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "ls -la" } }] },
             },
-            { type: "assistant", session_id: "3f2a9b1c-0000", message: { content: [{ type: "tool_use", name: "Bash", input: { command: "pwd" } }] } },
+            {
+                type: "assistant",
+                session_id: "3f2a9b1c-0000",
+                message: { content: [{ type: "tool_use", id: "b2", name: "Bash", input: { command: "pwd" } }] },
+            },
             { type: "result", subtype: "success" },
         ),
     );
@@ -45,8 +49,8 @@ test("under the tmux gate, the first Bash tool_use emits ONE `terminal` frame na
     expect(events).toEqual([
         { kind: "session", sessionId: "3f2a9b1c-0000" },
         { kind: "terminal", session: "agent-3f2a9b1c" },
-        { kind: "tool", name: "Bash", target: "ls -la" },
-        { kind: "tool", name: "Bash", target: "pwd" },
+        { kind: "tool_call", id: "b1", name: "Bash", category: "execute", status: "in_progress", target: "ls -la" },
+        { kind: "tool_call", id: "b2", name: "Bash", category: "execute", status: "in_progress", target: "pwd" },
         { kind: "done" },
     ]);
 });
@@ -68,13 +72,13 @@ test("re-emits the terminal frame at the first Bash tool_result (session guarant
             { type: "result", subtype: "success" },
         ),
     );
-    // Backstop for the cold-start race: a second `terminal` frame lands just before the Bash tool_result.
+    // Backstop for the cold-start race: a second `terminal` frame lands just before the Bash result update.
     expect(events).toEqual([
         { kind: "session", sessionId: "3f2a9b1c-0000" },
         { kind: "terminal", session: "agent-3f2a9b1c" },
-        { kind: "tool", name: "Bash", id: "b1", target: "la" },
+        { kind: "tool_call", id: "b1", name: "Bash", category: "execute", status: "in_progress", target: "la" },
         { kind: "terminal", session: "agent-3f2a9b1c" },
-        { kind: "tool_result", output: "not found", id: "b1", isError: true },
+        { kind: "tool_call_update", id: "b1", status: "failed", content: [{ type: "text", text: "not found" }] },
         { kind: "done" },
     ]);
 });

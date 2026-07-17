@@ -2,9 +2,10 @@
 import { type IconName, useDevice } from "@intentic-app/ui";
 import type { AskQuestion, TodoItem } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
-import { type ChatMessage, type ChatTool, planParts, type PlanRequest } from "../composables/chat/conversation";
+import { type ChatMessage, planParts, type PlanRequest } from "../composables/chat/conversation";
 import { renderMarkdown } from "../composables/renderMarkdown";
 import { useChat } from "../composables/chat/useChat";
+import ChatToolCard from "./ChatToolCard.vue";
 
 /* One transcript entry: user bubble, notice line, or the assistant turn's stack (thinking, tools, todos,
  * markdown text, plan card, question card, typing loader). Card decisions go straight to the useChat
@@ -39,13 +40,6 @@ const LOADER_WORDS = [
 
 // --- Markdown / rendering --------------------------------------------------------------------
 const render = (text: string): string => renderMarkdown(text);
-
-// Cap a tool's output so a large file read / chatty command can't bloat the DOM (the box scrolls anyway).
-// ponytail: 4k-char cap, raise it if real outputs get clipped.
-const toolOutput = (tool: ChatTool): string => {
-    const out = tool.output ?? ``;
-    return out.length > 4000 ? `${out.slice(0, 4000)}\n… (truncated)` : out;
-};
 
 const todoIcon = (todo: TodoItem): { name: IconName; spin?: boolean; class: string } => {
     if (todo.status === `completed`) {
@@ -297,18 +291,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             </div>
 
             <div v-if="message.tools?.length" class="flex w-full flex-col gap-1">
-                <div v-for="(tool, index) in message.tools" :key="index" class="flex flex-col gap-0.5">
-                    <div class="flex items-center gap-1.5 text-2xs text-subtle">
-                        <Icon name="angle-right" class="text-2xs text-link" />
-                        <span class="font-medium text-muted">{{ tool.name }}</span>
-                        <span v-if="tool.target" class="truncate font-mono">{{ tool.target }}</span>
-                    </div>
-                    <pre
-                        v-if="tool.output"
-                        class="scrollbar-thin ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs leading-relaxed"
-                        :class="tool.isError ? 'text-danger' : 'text-muted'"
-                        >{{ toolOutput(tool) }}</pre>
-                </div>
+                <ChatToolCard v-for="tool in message.tools" :key="tool.id" :tool="tool" />
             </div>
 
             <div v-if="message.todos?.length" class="flex w-full flex-col gap-1 rounded-lg border border-line bg-overlay/40 px-3 py-2">

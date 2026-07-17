@@ -14,7 +14,7 @@ const EFFORT_LABELS: Record<string, string> = { minimal: `Minimal`, low: `Low`, 
 // the default in useChat; Codex's scale ends at xhigh. Model-aware so a release with a different scale adjusts
 // the picker with no code change.
 export const effortsFor = (provider: AgentProvider, modelId?: string): CatalogOption[] => {
-    const efforts = providerModels.value[provider].find((option) => option.value === modelId)?.efforts;
+    const efforts = (providerModels.value[provider] ?? []).find((option) => option.value === modelId)?.efforts;
     if (efforts !== undefined && efforts.length > 0) {
         return efforts.map((value) => ({ label: EFFORT_LABELS[value] ?? value, value }));
     }

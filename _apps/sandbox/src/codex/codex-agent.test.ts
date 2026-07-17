@@ -54,9 +54,17 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-1" },
         { kind: "thinking", text: "planning the edit" },
-        { kind: "tool", id: "c1", name: "Bash", target: "pnpm test" },
-        { kind: "tool_result", id: "c1", output: "1 passed" },
-        { kind: "tool", id: "f1", name: "Edit", target: "update src/app.ts" },
+        { kind: "tool_call", id: "c1", name: "Bash", category: "execute", status: "in_progress", target: "pnpm test" },
+        { kind: "tool_call_update", id: "c1", status: "completed", content: [{ type: "text", text: "1 passed" }] },
+        {
+            kind: "tool_call",
+            id: "f1",
+            name: "Edit",
+            category: "edit",
+            status: "completed",
+            target: "update src/app.ts",
+            locations: [{ path: "src/app.ts" }],
+        },
         { kind: "todos", items: [{ content: "add route", status: "pending" }] },
         { kind: "delta", text: "Added the route." },
         { kind: "usage", inputTokens: 10, outputTokens: 5, cacheReadTokens: 3 },
@@ -89,7 +97,7 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
     expect(turn.env["DISCORD_BOT_TOKEN"]).toBe("tok");
 });
 
-test("a failed command surfaces its output as an error tool result", async () => {
+test("a failed command surfaces its output as a failed update", async () => {
     const { runner } = fakeRunner([
         {
             type: "item.completed",
@@ -97,7 +105,10 @@ test("a failed command surfaces its output as an error tool result", async () =>
         },
     ]);
     const events = await collect(createCodexAgent("/home", runner), request);
-    expect(events).toEqual([{ kind: "tool_result", id: "c1", output: "1 failed", isError: true }, { kind: "done" }]);
+    expect(events).toEqual([
+        { kind: "tool_call_update", id: "c1", status: "failed", content: [{ type: "text", text: "1 failed" }] },
+        { kind: "done" },
+    ]);
 });
 
 test("attached images ride as native inputs while other files are referenced in the prompt", async () => {

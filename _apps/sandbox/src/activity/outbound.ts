@@ -109,28 +109,26 @@ export const createOutboundSniffer = (services: Services): OutboundSniffer => {
                 sessionId = event.sessionId;
                 return;
             }
-            if (event.kind === "tool" && event.name === "Bash" && event.target !== undefined) {
+            if (event.kind === "tool_call" && event.name === "Bash" && event.target !== undefined) {
                 for (const match of matchers) {
                     const call = match(event.target);
                     if (call === undefined) {
                         continue;
                     }
-                    if (event.id === undefined) {
-                        record(call);
-                    } else {
-                        pending.set(event.id, call);
-                    }
+                    pending.set(event.id, call);
                     return;
                 }
                 return;
             }
-            if (event.kind === "tool_result" && event.id !== undefined) {
+            // Only a TERMINAL update settles the call — interim updates (live output snapshots) keep it pending.
+            if (event.kind === "tool_call_update" && (event.status === "completed" || event.status === "failed")) {
                 const call = pending.get(event.id);
                 if (call === undefined) {
                     return;
                 }
                 pending.delete(event.id);
-                record(call, outcomeOf(event.output, event.isError));
+                const text = event.content?.find((entry) => entry.type === "text")?.text ?? "";
+                record(call, outcomeOf(text, event.status === "failed"));
             }
         },
         flush: () => {

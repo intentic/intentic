@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useDevice, useListNavigation } from "@intentic-app/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
-import { type AgentProvider, PROVIDERS, providerLabel } from "@intentic/sandbox-contract";
+import { type AgentProvider, PROVIDERS } from "@intentic/sandbox-contract";
 import { BADGE_META } from "../composables/chat/catalog";
-import { providerAccounts, providerModelsState } from "../composables/chat/conversation";
+import { acpProviders, providerAccounts, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
 import { filterEntries, type PickerEntry, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
 import { loadAllProviderModels, loadProviderModels, useChat } from "../composables/chat/useChat";
 import ProviderLogo from "./ProviderLogo.vue";
@@ -91,12 +91,18 @@ const railTo = (target: AgentProvider | undefined): void => {
 const rowAriaLabel = (entry: PickerEntry): string =>
     `${entry.label}${entry.harness === `claude-code` ? ` via Claude Code` : ``}${isSelected(entry) ? ` — current model` : ``}`;
 
+// The provider rail: the native three plus every installed ACP agent.
+const railProviders = computed<readonly { label: string; value: AgentProvider }[]>(() => [
+    ...PROVIDERS,
+    ...acpProviders.value.map((agent) => ({ label: agent.label, value: agent.id })),
+]);
+
 // A provider whose (any) connected account can no longer be refreshed — badge it so a broken credential
 // doesn't look identical to a healthy one until the user tries to chat.
-const providerNeedsReauth = (target: AgentProvider): boolean => providerAccounts.value[target].some((entry) => entry.needsReauth === true);
+const providerNeedsReauth = (target: AgentProvider): boolean => (providerAccounts.value[target] ?? []).some((entry) => entry.needsReauth === true);
 
 const railTooltip = (target: AgentProvider): string =>
-    `${providerLabel(target)}${target === provider.value ? ` · active` : ``}${providerNeedsReauth(target) ? ` · needs reconnect` : ``}`;
+    `${providerDisplayLabel(target)}${target === provider.value ? ` · active` : ``}${providerNeedsReauth(target) ? ` · needs reconnect` : ``}`;
 
 // A group whose native catalog hasn't produced rows yet (only the deterministic translator row, if any) gets
 // a state row: the codex/grok native lists have no static floor, so pre-load/error would otherwise read as
@@ -164,7 +170,7 @@ onMounted(() => {
                 </button>
                 <div class="mx-auto my-0.5 h-px w-5 shrink-0 bg-line max-md:mx-0.5 max-md:my-auto max-md:h-5 max-md:w-px" aria-hidden="true"></div>
                 <button
-                    v-for="p in PROVIDERS"
+                    v-for="p in railProviders"
                     :key="p.value"
                     type="button"
                     role="radio"
@@ -195,7 +201,7 @@ onMounted(() => {
                         class="flex items-center gap-1.5 px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-subtle"
                         role="presentation"
                     >
-                        {{ providerLabel(section.provider) }}
+                        {{ providerDisplayLabel(section.provider) }}
                         <Icon
                             v-if="providerNeedsReauth(section.provider)"
                             name="exclamation-triangle"

@@ -220,20 +220,31 @@ describe(`Conversation`, () => {
         expect(conversation.model.value).toBe(`haiku`);
     });
 
-    it(`attaches tool output to the matching tool by id and drops results with no match`, async () => {
+    it(`merges updates into the matching tool by id and drops updates with no match`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
             sseResponse([
-                { kind: `tool`, id: `t1`, name: `Bash`, target: `ls` },
-                { kind: `tool_result`, id: `t1`, output: `file.txt`, isError: false },
-                { kind: `tool_result`, id: `missing`, output: `dropped` },
+                { kind: `tool_call`, id: `t1`, name: `Bash`, category: `execute`, status: `in_progress`, target: `ls` },
+                // Interim snapshot (live output), then the terminal status — content replaces each time.
+                { kind: `tool_call_update`, id: `t1`, content: [{ type: `text`, text: `fi` }] },
+                { kind: `tool_call_update`, id: `t1`, status: `completed`, content: [{ type: `text`, text: `file.txt` }] },
+                { kind: `tool_call_update`, id: `missing`, status: `completed`, content: [{ type: `text`, text: `dropped` }] },
             ]),
         );
 
         await conversation.send(`run it`, settings);
 
         const assistant = conversation.messages.value[1]!;
-        expect(assistant.tools).toEqual([{ id: `t1`, name: `Bash`, target: `ls`, output: `file.txt`, isError: false }]);
+        expect(assistant.tools).toEqual([
+            {
+                id: `t1`,
+                name: `Bash`,
+                category: `execute`,
+                status: `completed`,
+                target: `ls`,
+                content: [{ type: `text`, text: `file.txt` }],
+            },
+        ]);
     });
 
     it(`surfaces thinking, todos, and end-of-turn usage on the assistant bubble`, async () => {

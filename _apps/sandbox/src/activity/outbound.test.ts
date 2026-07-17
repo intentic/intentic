@@ -14,12 +14,12 @@ const capture = (): { appended: Partial<ActivityEvent>[]; services: Services } =
     return { appended, services };
 };
 
-const tool = (command: string, id = "t1"): AgentEvent => ({ kind: "tool", id, name: "Bash", target: command });
+const tool = (command: string, id = "t1"): AgentEvent => ({ kind: "tool_call", id, name: "Bash", category: "execute", status: "in_progress", target: command });
 const result = (output: string, id = "t1", isError?: boolean): AgentEvent => ({
-    kind: "tool_result",
+    kind: "tool_call_update",
     id,
-    output,
-    ...(isError !== undefined ? { isError } : {}),
+    status: isError === true ? "failed" : "completed",
+    content: [{ type: "text", text: output }],
 });
 
 // The exact command shapes DISCORD_SKILL teaches (capabilities/cli/providers.ts) — what real turns produce.
@@ -69,7 +69,7 @@ test("non-discord commands and non-Bash tools record nothing", () => {
     const { appended, services } = capture();
     const sniffer = createOutboundSniffer(services);
     sniffer.observe(tool(`curl -s https://api.github.com/user | jq .login`));
-    sniffer.observe({ kind: "tool", id: "t9", name: "Read", target: "https://discord.com/api/v10/users/@me" });
+    sniffer.observe({ kind: "tool_call", id: "t9", name: "Read", category: "read", status: "in_progress", target: "https://discord.com/api/v10/users/@me" });
     sniffer.observe(result("{}", "t9"));
     sniffer.flush();
     expect(appended.filter((event) => event.direction === "out")).toEqual([]);
@@ -98,9 +98,12 @@ test("flush records calls whose results never arrived, without an outcome", () =
     expect(appended[0]?.outcome).toBeUndefined();
 });
 
-test("a tool event without an id records immediately (nothing to pair against)", () => {
+test("an interim update (live output snapshot, no status) keeps the call pending", () => {
     const { appended, services } = capture();
     const sniffer = createOutboundSniffer(services);
-    sniffer.observe({ kind: "tool", name: "Bash", target: SEND });
-    expect(appended).toEqual([expect.objectContaining({ type: "message.send" })]);
+    sniffer.observe(tool(SEND));
+    sniffer.observe({ kind: "tool_call_update", id: "t1", content: [{ type: "text", text: "partial" }] });
+    expect(appended).toEqual([]);
+    sniffer.observe(result(`{"id":"999","content":"hello"}`));
+    expect(appended).toEqual([expect.objectContaining({ type: "message.send", outcome: "ok" })]);
 });

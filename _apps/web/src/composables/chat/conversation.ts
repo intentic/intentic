@@ -9,6 +9,10 @@ import {
     type OauthAccount,
     providerLabel,
     type TodoItem,
+    type ToolCallContent,
+    type ToolCallLocation,
+    type ToolCallStatus,
+    type ToolKind,
 } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
@@ -55,7 +59,8 @@ export const defaultModelFor = (provider: AgentProvider, harness: AgentHarness):
     if (harness === `claude-code` && provider !== `claude`) {
         return modelsFor(provider, harness)[0]?.value ?? ``;
     }
-    const live = providerDefaultModel.value[provider];
+    // An unseeded provider key (an ACP agent) has no catalog — the agent owns its own model, so empty rides.
+    const live = providerDefaultModel.value[provider] ?? ``;
     if (live !== ``) {
         return live;
     }
@@ -70,13 +75,22 @@ export const modelOptionsFor = (provider: AgentProvider, harness: AgentHarness):
     if (harness === `claude-code` && provider !== `claude`) {
         return modelsFor(provider, harness);
     }
-    const live = providerModels.value[provider];
+    const live = providerModels.value[provider] ?? [];
     return live.length > 0 ? live : modelsFor(provider, `native`);
 };
+// Installed ACP agent providers (agent-kind capabilities): id + display label, loaded on the same reachable
+// seam as accounts/models (useChat.loadAcpProviders) so the picker lists them. Empty until the first load.
+export const acpProviders = ref<readonly { id: string; label: string }[]>([]);
+
+// The display label for any provider: an ACP agent's capability name when known, else the shared static
+// label (which itself falls back to the raw id).
+export const providerDisplayLabel = (provider: AgentProvider): string =>
+    acpProviders.value.find((agent) => agent.id === provider)?.label ?? providerLabel(provider);
+
 // The display label for a selected model id — the option's label, else the provider name so the chip is never
-// blank (Grok's catalog can be briefly empty on first load; other providers always resolve their option).
+// blank (Grok's catalog can be briefly empty on first load; an ACP agent has no model options at all).
 export const modelLabelFor = (provider: AgentProvider, harness: AgentHarness, modelId: string): string =>
-    modelOptionsFor(provider, harness).find((option) => option.value === modelId)?.label ?? providerLabel(provider);
+    modelOptionsFor(provider, harness).find((option) => option.value === modelId)?.label ?? providerDisplayLabel(provider);
 
 // The provider tabs shown wherever accounts are picked (the account dialog + the composer's connect gate).
 // Labels differ from the internal ids (codex → "ChatGPT").
@@ -118,14 +132,16 @@ export interface QuestionRequest {
     readonly answers?: Record<string, string[]>;
 }
 
-// One tool action the sandbox agent took during a turn (surfaced so the UI shows what it's doing). `id` is
-// the SDK tool_use id, used to attach the matching `output` (edit diff / bash output) when its result lands.
+// One tool call the sandbox agent made during a turn, built from its tool_call frame and merged-by-id with
+// every later tool_call_update (status transitions, fresh content/locations — snapshots, not appends).
 export interface ChatTool {
-    readonly id?: string;
+    readonly id: string;
     readonly name: string;
+    readonly category: ToolKind;
+    readonly status: ToolCallStatus;
     readonly target?: string;
-    readonly output?: string;
-    readonly isError?: boolean;
+    readonly locations?: readonly ToolCallLocation[];
+    readonly content?: readonly ToolCallContent[];
 }
 
 // A file the user attached to a turn, already uploaded to the workspace before send. `previewUrl` is an
@@ -295,7 +311,8 @@ export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>(
 // The account a fresh turn on a provider uses: the user's explicit pick when it's still connected, else the
 // provider's first connected account. The single source every account-reset site routes through.
 export const rememberedAccountFor = (provider: AgentProvider): string | undefined => {
-    const accounts = providerAccounts.value[provider];
+    // An unseeded provider key (an ACP agent) has no daemon account store — its own credential store serves it.
+    const accounts = providerAccounts.value[provider] ?? [];
     const picked = selectedAccountId.value[provider];
     return accounts.some((account) => account.id === picked) ? picked : accounts[0]?.id;
 };
@@ -515,7 +532,9 @@ export class Conversation {
             }
             return;
         }
-        const label = providerTabs.find((tab) => tab.value === this.provider.value)!.label;
+        // ACP providers have no tab entry — the shared label fallback (capability name layered by the picker,
+        // else the raw id) covers them.
+        const label = providerTabs.find((tab) => tab.value === this.provider.value)?.label ?? providerLabel(this.provider.value);
         // A restored codex/grok tab has a session but no readable transcript (the daemon's reader is
         // Claude-only) — there is nothing to carry over, so say so instead of promising continuity.
         const text = this.messages.value.some((message) => message.role !== `notice`)
@@ -781,13 +800,18 @@ export class Conversation {
                     this.appendThinkingDelta(this.currentTextId(turn), event.text);
                 }
                 return;
-            case `tool`:
+            case `tool_call`: {
                 this.appendTool(this.currentTextId(turn), event);
+                // Follow-along: auto-open the file an edit touches (lazy import mirrors the terminal frame —
+                // the chat model doesn't statically pull in the workspace-tabs chain).
+                const toolCall = event;
+                void import(`../workspace/useFollowAlong`).then((m) => m.useFollowAlong().followToolCall(toolCall));
                 return;
-            case `tool_result`:
-                // Attach the diff / output to the tool that produced it (matched by id); a result with no
+            }
+            case `tool_call_update`:
+                // Merge the update into the call that produced it (matched by id); an update with no
                 // matching tool is dropped rather than shown loose.
-                this.attachToolResult(event);
+                this.mergeToolUpdate(event);
                 return;
             case `todos`:
                 this.setTodos(this.currentTextId(turn), event.items);
@@ -870,11 +894,12 @@ export class Conversation {
                     // light the account's reauth badge immediately (the proactive probe confirms it on the next
                     // status load) by marking the matching account in the shared list — no daemon round-trip.
                     const provider = this.provider.value;
-                    const accountId = this.account.value ?? providerAccounts.value[provider][0]?.id;
+                    const accounts = providerAccounts.value[provider] ?? [];
+                    const accountId = this.account.value ?? accounts[0]?.id;
                     const message = event.message;
                     const markReauth = (account: OauthAccount): OauthAccount =>
                         account.id === accountId ? { ...account, needsReauth: true, detail: message } : account;
-                    providerAccounts.value = { ...providerAccounts.value, [provider]: providerAccounts.value[provider].map(markReauth) };
+                    providerAccounts.value = { ...providerAccounts.value, [provider]: accounts.map(markReauth) };
                     this.error.value = message;
                     return;
                 }
@@ -908,30 +933,38 @@ export class Conversation {
         return turn.id;
     }
 
-    // Append a tool action to a bubble. `id` (the SDK tool_use id) lets a later tool_result attach its output.
-    private appendTool(id: number, event: { id?: string; name: string; target?: string }): void {
+    // Append a tool call to a bubble. Its id lets every later tool_call_update merge into the same card.
+    private appendTool(id: number, event: Extract<AgentEvent, { kind: "tool_call" }>): void {
         const tool: ChatTool = {
+            id: event.id,
             name: event.name,
-            ...(event.id !== undefined ? { id: event.id } : {}),
+            category: event.category,
+            status: event.status,
             ...(event.target !== undefined ? { target: event.target } : {}),
+            ...(event.locations !== undefined ? { locations: event.locations } : {}),
+            ...(event.content !== undefined ? { content: event.content } : {}),
         };
         this.messages.value = this.messages.value.map((message) =>
             message.id === id ? { ...message, tools: [...(message.tools ?? []), tool] } : message,
         );
     }
 
-    // Attach a tool's output (edit diff / bash output) to the matching tool by id, wherever it lives.
-    private attachToolResult(event: { id?: string; output: string; isError?: boolean }): void {
-        if (event.id === undefined) {
-            return;
-        }
+    // Merge an update into the matching tool by id, wherever it lives. Present fields REPLACE the prior
+    // value (snapshot semantics — Codex streams a command's growing output as whole snapshots); absent
+    // fields leave it unchanged.
+    private mergeToolUpdate(event: Extract<AgentEvent, { kind: "tool_call_update" }>): void {
         this.messages.value = this.messages.value.map((message) =>
             message.tools?.some((tool) => tool.id === event.id)
                 ? {
                       ...message,
                       tools: message.tools.map((tool) =>
                           tool.id === event.id
-                              ? { ...tool, output: event.output, ...(event.isError !== undefined ? { isError: event.isError } : {}) }
+                              ? {
+                                    ...tool,
+                                    ...(event.status !== undefined ? { status: event.status } : {}),
+                                    ...(event.content !== undefined ? { content: event.content } : {}),
+                                    ...(event.locations !== undefined ? { locations: event.locations } : {}),
+                                }
                               : tool,
                       ),
                   }

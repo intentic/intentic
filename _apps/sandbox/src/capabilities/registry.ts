@@ -1,5 +1,6 @@
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 import type { CapabilityHandler } from "./capability.js";
+import { agentHandler } from "./handlers/agent.js";
 import { browserHandler } from "./handlers/browser.js";
 import { cliHandler } from "./handlers/cli.js";
 import { devopsHandler } from "./handlers/devops.js";
@@ -27,4 +28,5 @@ export const registry: Record<CapabilityKind, CapabilityHandler> = {
     vpn: vpnHandler,
     docker: dockerHandler,
     browser: browserHandler,
+    agent: agentHandler,
 };

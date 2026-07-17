@@ -1,4 +1,4 @@
-import { type ActivityEvent, type AgentEvent, type AgentTurn, agentContract } from "@intentic/sandbox-contract";
+import { type ActivityEvent, type AgentEvent, type AgentTurn, agentContract, NATIVE_PROVIDERS } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { createOutboundSniffer } from "../activity/outbound.js";
 import { browserServersOf } from "../browser/browser-tools.js";
@@ -251,6 +251,22 @@ async function* runTurn(
         // (OpenCode's tools read them from disk).
         const withModel = { ...base, model };
         request = attachmentPaths.length > 0 ? { ...withModel, attachments: attachmentPaths } : withModel;
+    } else if (input.agent !== undefined && !(NATIVE_PROVIDERS as readonly string[]).includes(input.agent)) {
+        // An ACP provider: the id of an installed `agent`-kind capability, spawned and driven over the Agent
+        // Client Protocol. Harness doesn't apply (the agent IS its own loop) and neither do the Claude-only
+        // request fields; the adapter passes http MCP tools through when the agent advertises support.
+        const provider = input.agent;
+        const capability = capabilities.find((entry) => entry.kind === "agent" && entry.id === provider);
+        if (capability === undefined || capability.kind !== "agent") {
+            yield { kind: "error", message: `Unknown agent provider "${provider}" — add it as an Agent capability first.` };
+            yield { kind: "done" };
+            return;
+        }
+        const acpConfig = capability.config;
+        run = (turnRequest) => services.acpAgent(provider, acpConfig, turnRequest);
+        const tools = [...services.tools, ...mcpToolsOf(capabilities)];
+        const withTools = tools.length > 0 ? { ...base, tools } : base;
+        request = attachmentPaths.length > 0 ? { ...withTools, attachments: attachmentPaths } : withTools;
     } else {
         // Endpoint + credentials for the Claude Code harness. A native Claude turn authenticates with the user's
         // Anthropic subscription OAuth. A codex/grok provider running UNDER this harness (harness === "claude-code")

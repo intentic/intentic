@@ -13,6 +13,7 @@ import { z } from "zod";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createPlanRequest, createQuestionRequest, type QuestionResponse } from "./agent-requests.js";
 import { agentSessionName, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
+import { editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 
 export interface AgentRequest {
     readonly prompt: string;
@@ -84,20 +85,6 @@ export interface AgentRequest {
 export type QueryFn = (args: { readonly prompt: string; readonly options: Options }) => AsyncIterable<SDKMessage>;
 const defaultQuery: QueryFn = (args) => query(args);
 
-// The file path (Read/Write/Edit) or command (Bash) a tool acts on, for the `tool` event's target.
-const toolTarget = (input: unknown): string | undefined => {
-    if (typeof input !== "object" || input === null) {
-        return undefined;
-    }
-    const record = input as Record<string, unknown>;
-    const path = record["file_path"];
-    if (typeof path === "string") {
-        return path;
-    }
-    const command = record["command"];
-    return typeof command === "string" ? command : undefined;
-};
-
 // Flatten a tool_result block's content (a string, or an array of text/other blocks) to plain text — the
 // edit diff / bash output the UI shows under the tool card. Non-text blocks are summarised by type.
 const resultText = (content: unknown): string => {
@@ -137,7 +124,7 @@ const todoItems = (input: unknown): TodoItem[] | undefined => {
 // Normalize the SDK's SDKMessage stream onto AgentEvents. High-value block types get a dedicated frame;
 // any SDK message without a mapping is dropped. Shared by the plain and plan paths; does NOT emit the
 // terminal `done` (callers do that once the whole turn settles).
-async function* streamSdk(queryFn: QueryFn, prompt: string, options: Options, tmuxEnabled: boolean): AsyncGenerator<AgentEvent> {
+async function* streamSdk(queryFn: QueryFn, prompt: string, options: Options, cwd: string, tmuxEnabled: boolean): AsyncGenerator<AgentEvent> {
     let sessionSent = false;
     let terminalSent = false;
     // The agent's live tmux terminal is surfaced twice: once at the first Bash tool_use (so a long command is
@@ -147,6 +134,9 @@ async function* streamSdk(queryFn: QueryFn, prompt: string, options: Options, tm
     let terminalResurfaced = false;
     let agentSession: string | undefined;
     const bashToolIds = new Set<string>();
+    // tool_use ids whose tool_call already carried the authoritative diff (derived from the Edit/Write input),
+    // so the success result's redundant "file updated" text must not REPLACE it (update content is a snapshot).
+    const diffToolIds = new Set<string>();
     // Context-window fill for the turn: the latest message_start reports the request's input size (grows
     // monotonically within a turn); the result reports the model's contextWindow. Paired into one
     // context_usage frame at the result so the UI can warn as the chat nears auto-compaction.
@@ -200,7 +190,8 @@ async function* streamSdk(queryFn: QueryFn, prompt: string, options: Options, tm
             } else {
                 const content = message.message.content as ReadonlyArray<{ type: string; id?: string; name?: string; input?: unknown }>;
                 for (const block of content) {
-                    if (block.type !== "tool_use" || typeof block.name !== "string") {
+                    // A tool_use without an id can't be correlated to its result — real streams always carry one.
+                    if (block.type !== "tool_use" || typeof block.name !== "string" || block.id === undefined) {
                         continue;
                     }
                     if (block.name === "TodoWrite") {
@@ -217,9 +208,7 @@ async function* streamSdk(queryFn: QueryFn, prompt: string, options: Options, tm
                     if (block.name === "Bash" && tmuxEnabled && typeof sessionId === "string") {
                         agentSession ??= agentSessionName(sessionId);
                         if (agentSession !== undefined) {
-                            if (block.id !== undefined) {
-                                bashToolIds.add(block.id);
-                            }
+                            bashToolIds.add(block.id);
                             if (!terminalSent) {
                                 terminalSent = true;
                                 yield { kind: "terminal", session: agentSession };
@@ -227,11 +216,20 @@ async function* streamSdk(queryFn: QueryFn, prompt: string, options: Options, tm
                         }
                     }
                     const target = toolTarget(block.input);
+                    const locations = toolLocations(block.input, cwd);
+                    const diff = editDiffContent(block.name, block.input, cwd);
+                    if (diff !== undefined) {
+                        diffToolIds.add(block.id);
+                    }
                     yield {
-                        kind: "tool",
+                        kind: "tool_call",
+                        id: block.id,
                         name: block.name,
-                        ...(block.id !== undefined ? { id: block.id } : {}),
+                        category: toolCategoryOf(block.name),
+                        status: "in_progress",
                         ...(target !== undefined ? { target } : {}),
+                        ...(locations !== undefined ? { locations } : {}),
+                        ...(diff !== undefined ? { content: [diff] } : {}),
                         ...withParent,
                     };
                 }
@@ -242,20 +240,24 @@ async function* streamSdk(queryFn: QueryFn, prompt: string, options: Options, tm
             const content = message.message.content;
             if (Array.isArray(content)) {
                 for (const block of content as ReadonlyArray<{ type?: string; tool_use_id?: string; content?: unknown; is_error?: boolean }>) {
-                    if (block.type !== "tool_result") {
+                    // A result without a tool_use_id can't be correlated — real streams always carry one.
+                    if (block.type !== "tool_result" || block.tool_use_id === undefined) {
                         continue;
                     }
                     // Backstop: the first Bash tool_result guarantees tmux-run has created the session, so
                     // re-surface the terminal in case the tool_use-time relist raced ahead of session creation.
-                    if (!terminalResurfaced && agentSession !== undefined && block.tool_use_id !== undefined && bashToolIds.has(block.tool_use_id)) {
+                    if (!terminalResurfaced && agentSession !== undefined && bashToolIds.has(block.tool_use_id)) {
                         terminalResurfaced = true;
                         yield { kind: "terminal", session: agentSession };
                     }
+                    // A successful Edit/Write result is only the redundant "file updated" snippet — status alone,
+                    // so the call-time diff stays the card's content. Errors DO replace it (the text is the reason).
+                    const failed = block.is_error === true;
                     yield {
-                        kind: "tool_result",
-                        output: resultText(block.content),
-                        ...(block.tool_use_id !== undefined ? { id: block.tool_use_id } : {}),
-                        ...(block.is_error === true ? { isError: true } : {}),
+                        kind: "tool_call_update",
+                        id: block.tool_use_id,
+                        status: failed ? "failed" : "completed",
+                        ...(diffToolIds.has(block.tool_use_id) && !failed ? {} : { content: [{ type: "text", text: resultText(block.content) }] }),
                     };
                 }
             }
@@ -443,7 +445,7 @@ export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaul
         ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
     };
     try {
-        yield* streamSdk(queryFn, request.prompt, options, tmuxEnabled);
+        yield* streamSdk(queryFn, request.prompt, options, request.cwd, tmuxEnabled);
     } catch (error) {
         yield { kind: "error", message: errorMessage(error, stderr) };
     }
@@ -529,7 +531,7 @@ async function* runPlanTurn(request: AgentRequest, queryFn: QueryFn, abortContro
 
     const pump = (async () => {
         try {
-            for await (const event of streamSdk(queryFn, request.prompt, options, tmuxEnabled)) {
+            for await (const event of streamSdk(queryFn, request.prompt, options, request.cwd, tmuxEnabled)) {
                 push(event);
             }
         } catch (error) {

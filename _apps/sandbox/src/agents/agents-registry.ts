@@ -230,7 +230,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                     state.awaiting = true;
                     state.question = true;
                     break;
-                case "tool":
+                case "tool_call":
                     state.activity = { tool: event.name, ...(event.target !== undefined ? { target: event.target } : {}), ...(state.activity?.todo !== undefined ? { todo: state.activity.todo } : {}) };
                     break;
                 case "todos": {
