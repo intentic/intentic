@@ -723,7 +723,7 @@ watch(keyboardInset, () => {
     border: 1px solid var(--color-line);
 }
 .chat-markdown {
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
     line-height: 1.6;
 }
 .chat-markdown > :first-child {

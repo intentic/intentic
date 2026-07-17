@@ -25,7 +25,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "mcp__playwright__browser_resize",
-      "mcp__playwright__browser_navigate"
+      "mcp__playwright__browser_navigate",
+      "WebFetch(domain:help.router-for.me)"
     ],
     "defaultMode": "bypassPermissions"
   },
