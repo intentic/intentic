@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
-import { changedFiles, commitPaths, discardPaths, workingFileDiff } from "./changes.js";
+import { changedFiles, changesAgainstBase, commitPaths, discardPaths, workingFileDiff } from "./changes.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -124,14 +124,58 @@ test("discardPaths without paths discards everything but ignored files survive",
 test("workingFileDiff ships both sides, one side for added/deleted, and flags binary", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "a.txt"), "two\n");
-    expect(await workingFileDiff(dir, "a.txt")).toEqual({ before: "one\n", after: "two\n" });
+    expect(await workingFileDiff(dir, "a.txt", "HEAD")).toEqual({ before: "one\n", after: "two\n" });
 
     await writeFile(join(dir, "new.txt"), "new\n");
-    expect(await workingFileDiff(dir, "new.txt")).toEqual({ after: "new\n" });
+    expect(await workingFileDiff(dir, "new.txt", "HEAD")).toEqual({ after: "new\n" });
 
     await rm(join(dir, "a.txt"));
-    expect(await workingFileDiff(dir, "a.txt")).toEqual({ before: "one\n" });
+    expect(await workingFileDiff(dir, "a.txt", "HEAD")).toEqual({ before: "one\n" });
 
     await writeFile(join(dir, "blob.bin"), Buffer.from([0, 1, 2]));
-    expect(await workingFileDiff(dir, "blob.bin")).toEqual({ binary: true });
+    expect(await workingFileDiff(dir, "blob.bin", "HEAD")).toEqual({ binary: true });
+});
+
+test("workingFileDiff against a fixed base sees committed work as changed", async () => {
+    const dir = await tempRepo();
+    const base = await sh(dir, "rev-parse", "HEAD");
+    await writeFile(join(dir, "a.txt"), "committed\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "agent work");
+    // vs HEAD the file is clean; vs the base it shows the full cumulative change.
+    expect(await workingFileDiff(dir, "a.txt", "HEAD")).toEqual({ before: "committed\n", after: "committed\n" });
+    expect(await workingFileDiff(dir, "a.txt", base)).toEqual({ before: "one\n", after: "committed\n" });
+});
+
+test("changesAgainstBase folds committed + staged + unstaged + untracked into one delta", async () => {
+    const dir = await tempRepo();
+    const base = await sh(dir, "rev-parse", "HEAD");
+    // Committed since base:
+    await writeFile(join(dir, "a.txt"), "committed\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "agent work");
+    // Staged:
+    await writeFile(join(dir, "staged.txt"), "staged\n");
+    await sh(dir, "add", "staged.txt");
+    // Unstaged edit on top of the commit:
+    await writeFile(join(dir, "a.txt"), "unstaged on top\n");
+    // Untracked:
+    await writeFile(join(dir, "fresh.txt"), "fresh\n");
+    // Ignored — must not appear:
+    await writeFile(join(dir, ".env"), "SECRET=x\n");
+
+    const changes = await changesAgainstBase(dir, base);
+    expect(changes).toContainEqual({ path: "a.txt", status: "modified" });
+    expect(changes).toContainEqual({ path: "staged.txt", status: "added" });
+    expect(changes).toContainEqual({ path: "fresh.txt", status: "added" });
+    expect(changes.some((change) => change.path.includes(".env"))).toBe(false);
+    expect(changes).toHaveLength(3);
+});
+
+test("changesAgainstBase reports a committed rename with its original path", async () => {
+    const dir = await tempRepo();
+    const base = await sh(dir, "rev-parse", "HEAD");
+    await sh(dir, "mv", "a.txt", "b.txt");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "rename");
+    expect(await changesAgainstBase(dir, base)).toEqual([{ path: "b.txt", status: "renamed", from: "a.txt" }]);
 });

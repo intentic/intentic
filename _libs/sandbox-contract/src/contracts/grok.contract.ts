@@ -1,5 +1,5 @@
 import { oc } from "@orpc/contract";
-import { AccountIdSchema, GrokDeviceStartSchema, ModelsSchema, OauthAccountListSchema, OkSchema } from "../schemas.js";
+import { AccountIdSchema, DeviceStartSchema, ModelsSchema, OauthAccountListSchema, OkSchema } from "../schemas.js";
 
 // xAI Grok (via OpenCode) uses subscription OAuth — the sandbox owns the credential (OpenCode persists the
 // tokens and refreshes them). `start` authorizes xAI's headless device-code method and returns the verification
@@ -8,7 +8,7 @@ import { AccountIdSchema, GrokDeviceStartSchema, ModelsSchema, OauthAccountListS
 // ponytail: OpenCode holds one xAI auth per data dir, so `accounts` is 0 or 1 — the list shape matches the
 // other providers without paying for per-account OpenCode servers yet.
 export const grokContract = {
-    start: oc.route({ method: "POST", path: "/grok/oauth/start" }).output(GrokDeviceStartSchema),
+    start: oc.route({ method: "POST", path: "/grok/oauth/start" }).output(DeviceStartSchema),
     // xAI's live models (via OpenCode) for the model picker — the source of truth for valid model ids.
     models: oc.route({ method: "GET", path: "/grok/models" }).output(ModelsSchema),
     accounts: oc.route({ method: "GET", path: "/grok/accounts" }).output(OauthAccountListSchema),

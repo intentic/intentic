@@ -1,5 +1,6 @@
-import { HelloSchema, PresenceSchema } from "@intentic/sandbox-contract";
+import { AgentsSchema, HelloSchema, PresenceSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
+import { resetAgents, setAgents } from "../agents/useAgents";
 import { useChat } from "../chat/useChat";
 import { readIntenticLines } from "../intenticStream";
 import { queryClient } from "../queryPersistence";
@@ -124,6 +125,14 @@ const stream = async (): Promise<void> => {
             }
             continue;
         }
+        // Fleet roster snapshot — same last-frame-wins contract as presence, handed to the useAgents store.
+        if (frame[`kind`] === `agents`) {
+            const parsed = AgentsSchema.safeParse(frame);
+            if (parsed.success) {
+                setAgents(parsed.data.agents);
+            }
+            continue;
+        }
         const paths = frame[`paths`];
         if (frame[`kind`] === `workspaceChanged` && Array.isArray(paths)) {
             const changed = paths.filter((path): path is string => typeof path === `string`);
@@ -184,8 +193,9 @@ const loop = async (): Promise<void> => {
                 continue;
             }
             reachable.value = false;
-            // A disconnected roster is meaningless — clear it; the reconnect's immediate snapshot repaints it.
+            // Disconnected rosters are meaningless — clear both; the reconnect's immediate snapshots repaint them.
             resetPresence();
+            resetAgents();
             // Switch-aborts were handled above, so an AbortError here is the watchdog's: no response within the
             // watchdog window — a cause worth naming, and the signal that flips the shell from cached paint to
             // the connecting gate (probeError !== undefined ⇔ a connect attempt actually failed).

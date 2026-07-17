@@ -1,0 +1,45 @@
+import type { IconName } from "@intentic-app/ui";
+import type { AgentStatus } from "@intentic/sandbox-contract";
+
+/* Presentational metadata for fleet-agent statuses + the card's number formatters. Extends the conversation
+ * status idiom (catalog.ts statusIcon) with the registry-only outcomes (landed / conflict); kept separate
+ * because the fleet renders AgentStatus (the wire enum), not ConversationStatus (the live-stream union). */
+
+export const agentStatusMeta = (status: AgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } => {
+    if (status === `running`) {
+        return { icon: `spinner`, spin: true, label: `Running`, class: `text-link` };
+    }
+    if (status === `awaiting`) {
+        return { icon: `exclamation-circle`, label: `Needs you`, class: `text-primary-500` };
+    }
+    if (status === `landed`) {
+        return { icon: `check-circle`, label: `Landed`, class: `text-success` };
+    }
+    if (status === `conflict`) {
+        return { icon: `exclamation-triangle`, label: `Conflict`, class: `text-warning` };
+    }
+    if (status === `error`) {
+        return { icon: `exclamation-triangle`, label: `Error`, class: `text-danger` };
+    }
+    return { icon: `circle-fill`, label: `Idle`, class: `text-subtle` };
+};
+
+// Dollars with sensible precision: sub-cent turns still show something, big totals stay short.
+export const formatCost = (usd: number): string => (usd >= 10 ? `$${usd.toFixed(0)}` : usd >= 0.1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(3)}`);
+
+export const formatTokens = (tokens: number): string =>
+    tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1_000 ? `${(tokens / 1_000).toFixed(0)}k` : `${tokens}`;
+
+// Elapsed readout for a running turn's startedAt (ms since epoch).
+export const formatElapsed = (startedAt: number, now: number): string => {
+    const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+    if (seconds < 60) {
+        return `${seconds}s`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+};
+
+// Context-window fill percentage (0–100), clamped; undefined when either side is unknown.
+export const contextPct = (tokens: number | undefined, window: number | undefined): number | undefined =>
+    tokens === undefined || window === undefined || window === 0 ? undefined : Math.min(100, Math.round((tokens / window) * 100));

@@ -17,7 +17,6 @@ import { resolveWithin } from "../workspace/workspace-files.js";
 import type { AgentRequest } from "./agent.js";
 import { resolvePlanDecision, resolveQuestionAnswer } from "./agent-requests.js";
 import { delegationNote } from "./delegation.js";
-import { resolveProviderKey } from "./provider-keys.js";
 
 // The upstream model id a routed turn (codex/grok under the Claude Code harness) hands the translator, which maps
 // it to its provider. Unlike native Codex (which uses the ChatGPT account default and omits the model), the router
@@ -61,7 +60,56 @@ const withHistory = (prompt: string, history: NonNullable<AgentTurn["history"]>)
 // container env as fallback. A turn with no stored account and no env fallback surfaces an actionable error
 // rather than an opaque CLI failure.
 // Exported because it IS "wake the agent" — the automations scheduler drives the same composition headlessly.
+// An ISOLATED turn (isolated + conversationId) is wrapped in the fleet-registry lifecycle here — mutex acquire
+// + worktree ensure before the turn, finish (usage flush + mutex release) in a finally — so EVERY exit of the
+// turn body (provider gates, stream errors, aborts) releases the conversation. The wake paths never set
+// `isolated`, so automations/webchat/listeners run the main-tree body unchanged.
 export async function* streamAgent(services: Services, input: AgentTurn, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
+    if (input.isolated !== true || input.conversationId === undefined) {
+        yield* runTurn(services, input, signal, undefined);
+        return;
+    }
+    const conversationId = input.conversationId;
+    const began = await services.agents.begin(
+        {
+            conversationId,
+            prompt: input.prompt,
+            provider: input.agent ?? "claude",
+            harness: input.harness ?? "native",
+            ...(input.model !== undefined ? { model: input.model } : {}),
+            ...(input.account !== undefined ? { account: input.account } : {}),
+        },
+        Date.now(),
+    );
+    if (!began) {
+        yield { kind: "error", code: "agent-busy", message: "This agent is already running a turn — wait for it to finish." };
+        yield { kind: "done" };
+        return;
+    }
+    try {
+        // Lazily create (first turn) or repair the conversation's worktree composition, then announce it.
+        const entry = services.agents.entry(conversationId);
+        const worktree = await services.agentWorktrees.ensure(conversationId, entry?.repos ?? []);
+        if ((entry?.repos.length ?? 0) === 0) {
+            await services.agents.recordWorktree(conversationId, worktree.repos);
+        }
+        const base = (worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0])?.base.slice(0, 7) ?? "";
+        yield { kind: "worktree", branch: worktree.branch, base };
+        yield* runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd });
+    } finally {
+        await services.agents.finish(conversationId, Date.now());
+    }
+}
+
+// One agent turn's body, on the main tree (`conversation` undefined) or inside an isolated conversation's
+// worktree — the cwd override is the single binding point every provider adapter, the tmux Bash path, and the
+// SDK session store follow.
+async function* runTurn(
+    services: Services,
+    input: AgentTurn,
+    signal: AbortSignal | undefined,
+    conversation: { readonly id: string; readonly cwd: string } | undefined,
+): AsyncGenerator<AgentEvent> {
     // cli-kind capabilities contribute env vars (their stored credentials) so either agent's shell can run
     // their CLI tools; extension `contributes.settings` with an `env` name inject theirs the same way.
     const capabilities = await services.capabilities.list();
@@ -83,17 +131,23 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         }
         attachmentPaths.push(abs);
     }
+    const effectiveCwd = conversation?.cwd ?? services.workspace.root;
     // Kick the repo sync off now so its network git-fetch overlaps the token refresh, browser-server setup,
     // and config reads below instead of running strictly after them. Throttled to 60s, so it's a no-op on most
     // turns; awaited just before the snapshot, which must see the pulled files (the attribution fence below).
     // A top-level failure degrades to no advisory — per-repo errors already ride inside the outcomes.
-    const syncPromise = syncWorkspaceRepos(services, 60_000).catch((error: unknown) => {
-        services.logger.warn({ err: error }, "repo sync failed");
-        return [];
-    });
+    // Isolated turns skip it entirely: the worktree pins a stable base by design, and fast-forwarding the main
+    // checkout mid-conversation would only manufacture land conflicts.
+    const syncPromise =
+        conversation !== undefined
+            ? undefined
+            : syncWorkspaceRepos(services, 60_000).catch((error: unknown) => {
+                  services.logger.warn({ err: error }, "repo sync failed");
+                  return [];
+              });
     const base: AgentRequest = {
         prompt: input.history !== undefined && input.history.length > 0 ? withHistory(input.prompt, input.history) : input.prompt,
-        cwd: services.workspace.root,
+        cwd: effectiveCwd,
         signal: signal ?? new AbortController().signal,
         ...(Object.keys(cliEnv).length > 0 ? { cliEnv } : {}),
         ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
@@ -200,8 +254,8 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
     } else {
         // Endpoint + credentials for the Claude Code harness. A native Claude turn authenticates with the user's
         // Anthropic subscription OAuth. A codex/grok provider running UNDER this harness (harness === "claude-code")
-        // instead points the harness at the sandbox's translator with that provider's API key — its subscription
-        // OAuth can't reach a gateway, so an explicit key (stored, or the container-env fallback) is required.
+        // instead points the harness at the sandbox's translator (CLIProxyAPI), which serves that provider on its
+        // connected SUBSCRIPTION OAuth — so the turn only needs the provider's subscription connected in the translator.
         let oauthToken: string | undefined;
         let endpoint: { baseUrl: string; authToken: string; model: string } | undefined;
         if (input.agent === "codex" || input.agent === "grok") {
@@ -214,13 +268,12 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
                 yield { kind: "done" };
                 return;
             }
-            const key = await resolveProviderKey(services.providerKeys, services.config, input.agent);
-            if (key === undefined) {
-                const label = input.agent === "codex" ? "OpenAI" : "xAI";
+            if (!(await services.cliProxy.accounts())[input.agent]) {
+                const label = input.agent === "codex" ? "ChatGPT" : "SuperGrok";
                 yield {
                     kind: "error",
-                    code: "api-key-required",
-                    message: `Add an ${label} API key in Sandbox ▸ Agent to run ${input.agent} under the Claude Code harness — its subscription sign-in can't be used here.`,
+                    code: "subscription-required",
+                    message: `Connect your ${label} subscription in Sandbox ▸ Agent to run ${input.agent} under the Claude Code harness.`,
                 };
                 yield { kind: "done" };
                 return;
@@ -247,7 +300,7 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         // Pre-flight the resume target: a session id that outlived its transcript (deleted, or minted before
         // the store persisted across rebuilds) would otherwise spawn the CLI just to fail opaquely — on every
         // retry. The coded error lets the UI drop the dead id so the next send starts fresh.
-        if (input.sessionId !== undefined && !(await services.sessions.exists(services.workspace.root, input.sessionId))) {
+        if (input.sessionId !== undefined && !(await services.sessions.exists(effectiveCwd, input.sessionId))) {
             yield {
                 kind: "error",
                 code: "session-not-found",
@@ -278,11 +331,14 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
         // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join).
         const browserServers = await browserServersOf(capabilities, services.workspace.root);
+        // Turn-scoped roots follow the effective cwd: hashline edits must anchor in the worktree an isolated
+        // turn edits, and session search reads that worktree's own session namespace. Browser profiles, plugin
+        // checkouts, and attachments stay on /work — absolute-path inputs, not edit targets.
         const sdkServers = {
             ...browserServers,
-            ...(searchPastChats ? { pastChats: createSessionSearchServer(services.workspace.root, input.sessionId) } : {}),
+            ...(searchPastChats ? { pastChats: createSessionSearchServer(effectiveCwd, input.sessionId) } : {}),
             // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
-            ...(hashlineEdits ? { hashline: createHashlineServer(services.workspace.root) } : {}),
+            ...(hashlineEdits ? { hashline: createHashlineServer(effectiveCwd) } : {}),
         };
         // Cross-provider delegation via the shell: when a Codex/Grok account is connected, the agent's Bash
         // gets the codex CLI's CODEX_HOME (first connected account, same resolution as a primary turn) and the
@@ -357,14 +413,20 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
     // reported into the prompt so the agent knows. Throttled per repo; a network failure on one repo is isolated
     // into its outcome, never blocking the turn. Runs before the attribution snapshot so pulled files land as
     // user-authored, not attributed to this turn.
-    const advisory = syncAdvisory(await syncPromise);
+    const advisory = syncPromise === undefined ? undefined : syncAdvisory(await syncPromise);
     if (advisory !== undefined) {
         request = { ...request, prompt: `${advisory}\n\n${request.prompt}` };
     }
     // Attribution fence: capture anything pending as user-authored (terminal edits, desktop-sync arrivals,
     // unflushed UI writes) BEFORE the agent runs, so the turn-end snapshot below is purely the agent's work.
-    // A no-op skip when the tree is clean; a history failure never blocks a turn.
-    await services.history.snapshot("user").catch((error: unknown) => services.logger.warn({ err: error }, "history: turn-start snapshot failed"));
+    // A no-op skip when the tree is clean; a history failure never blocks a turn. Isolated turns skip BOTH
+    // snapshots: history captures the MAIN tree, which an isolated turn never touches — the worktree branch's
+    // diff-vs-base is that conversation's review and rollback surface.
+    if (conversation === undefined) {
+        await services.history
+            .snapshot("user")
+            .catch((error: unknown) => services.logger.warn({ err: error }, "history: turn-start snapshot failed"));
+    }
     // Tee every frame past the activity sniffer — outbound provider calls (discord curl) are only visible
     // here, and every turn origin (chat, automation wake, voice wake) flows through this generator.
     const sniffer = createOutboundSniffer(services);
@@ -389,6 +451,10 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
     try {
         for await (const event of run(request)) {
             sniffer.observe(event);
+            // Fold every frame into the fleet registry so the card shows live status/activity/cost.
+            if (conversation !== undefined) {
+                services.agents.observe(conversation.id, event);
+            }
             if (event.kind === "session") {
                 sessionId = event.sessionId;
             } else if (event.kind === "usage") {
@@ -413,9 +479,12 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         sniffer.flush();
         // Fire-and-forget workspace snapshot at turn end (aborted turns included) — history must never delay
         // or fail a turn. The raw prompt (not the enriched request) labels the checkpoint in the user's words.
-        services.history
-            .snapshot("turn", input.prompt)
-            .catch((error: unknown) => services.logger.warn({ err: error }, "history: turn snapshot failed"));
+        // Isolated turns skip it (main tree untouched); their registry finish lives in streamAgent's finally.
+        if (conversation === undefined) {
+            services.history
+                .snapshot("turn", input.prompt)
+                .catch((error: unknown) => services.logger.warn({ err: error }, "history: turn snapshot failed"));
+        }
     }
 }
 

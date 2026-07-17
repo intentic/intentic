@@ -2,6 +2,7 @@
 import type { IconName } from "@intentic-app/ui";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterView, useRoute } from "vue-router";
+import { useAgents } from "../composables/agents/useAgents";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
@@ -40,6 +41,8 @@ const { drafts, invalid: invalidDrafts } = useDrafts();
 const { reachable } = useSandbox();
 // Uncommitted workspace changes surface as a count badge on the Workspace rail tile, visible from any area.
 const changes = useChanges();
+// "Agents need you" (pending plans/questions, land conflicts, unread finishes) badges the Agents tile.
+const { attention: agentAttention } = useAgents();
 const layout = useLayout();
 const { poppedOut, pipBody, dock } = useChatPopout();
 const route = useRoute();
@@ -55,6 +58,7 @@ const isNavActive = (to: string): boolean => route.path === to || route.path.sta
 // status/management view lives behind the switcher chip, not a rail tile. The rail is capability-first: a repo
 // no extension serves lives only in the Workspace file tree.
 const fixedTiles: readonly AreaTile[] = [
+    { to: `/agents`, label: `Agents`, icon: `comments` },
     { to: `/workspace`, label: `Workspace`, icon: `folder` },
     { to: `/secrets`, label: `Secrets`, icon: `key` },
 ];
@@ -160,6 +164,12 @@ onUnmounted(() => {
                     class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
                     v-tooltip.right="`${changes.count.value} uncommitted ${changes.count.value === 1 ? 'change' : 'changes'}`"
                     >{{ changes.count.value > 99 ? "99+" : changes.count.value }}</span
+                >
+                <span
+                    v-if="tile.to === '/agents' && agentAttention > 0"
+                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
+                    v-tooltip.right="`${agentAttention} agent${agentAttention === 1 ? '' : 's'} need${agentAttention === 1 ? 's' : ''} you`"
+                    >{{ agentAttention > 99 ? "99+" : agentAttention }}</span
                 >
             </RouterLink>
 

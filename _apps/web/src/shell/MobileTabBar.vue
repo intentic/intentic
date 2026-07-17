@@ -2,14 +2,16 @@
 import type { IconName } from "@intentic-app/ui";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
+import { useAgents } from "../composables/agents/useAgents";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { useChanges } from "../composables/workspace/useChanges";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
-/* The mobile shell's bottom navigation: four fixed thumb-size tabs. Chat is the primary on-the-go surface;
- * Review carries the things-to-act-on badge (agent drafts + uncommitted changes); everything the desktop rail
- * holds beyond these lives on the Menu page. Tabs that talk to the daemon are inert while it's unreachable —
- * Menu stays live because sandbox switching lives there. */
+/* The mobile shell's bottom navigation: four fixed thumb-size tabs. Agents is the primary on-the-go surface —
+ * glance at the fleet, tap in to drive one — and carries the "agents need you" badge; Review carries the
+ * things-to-act-on badge (agent drafts + uncommitted changes); everything the desktop rail holds beyond these
+ * lives on the Menu page. Tabs that talk to the daemon are inert while it's unreachable — Menu stays live
+ * because sandbox switching lives there. */
 
 interface Tab {
     readonly to: string;
@@ -20,7 +22,7 @@ interface Tab {
 }
 
 const TABS: readonly Tab[] = [
-    { to: `/chat`, label: `Chat`, icon: `comments`, needsSandbox: true },
+    { to: `/agents`, label: `Agents`, icon: `comments`, needsSandbox: true },
     { to: `/workspace`, label: `Files`, icon: `folder`, needsSandbox: true },
     { to: `/drafts`, label: `Review`, icon: `send`, needsSandbox: true },
     { to: `/menu`, label: `Menu`, icon: `bars`, needsSandbox: false },
@@ -28,6 +30,7 @@ const TABS: readonly Tab[] = [
 
 const { reachable } = useSandbox();
 const { drafts, invalid: invalidDrafts } = useDrafts();
+const { attention } = useAgents();
 const changes = useChanges();
 const reviewBadge = computed(() => drafts.value.length + invalidDrafts.value.length + changes.count.value);
 
@@ -55,6 +58,11 @@ const isNavActive = (to: string): boolean => route.path === to || route.path.sta
                     v-if="tab.to === '/drafts' && reviewBadge > 0"
                     class="absolute -right-2.5 -top-1 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
                     >{{ reviewBadge > 99 ? "99+" : reviewBadge }}</span
+                >
+                <span
+                    v-if="tab.to === '/agents' && attention > 0"
+                    class="absolute -right-2.5 -top-1 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
+                    >{{ attention > 99 ? "99+" : attention }}</span
                 >
             </span>
             <span class="text-2xs font-medium">{{ tab.label }}</span>

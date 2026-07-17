@@ -382,6 +382,25 @@ export class Conversation {
     // already-open tab when the user reopens the same conversation from history.
     readonly session = ref<SessionRef | undefined>();
 
+    // Whether this conversation's turns run in an isolated git worktree (the parallel-agents mode, the default
+    // for new chats) or on the shared /work tree. Flipped off for history-menu restores (their sessions live in
+    // the main tree's namespace) and legacy restored tabs.
+    readonly isolated = ref(true);
+
+    // The conversation's worktree identity from the turn's `worktree` frame: its agent/<id> branch and the
+    // root repo's short base sha. Undefined until the first isolated turn runs (or on main-tree conversations).
+    readonly worktree = ref<{ branch: string; base: string } | undefined>();
+
+    // Lifetime accounting across the conversation's turns (finally surfaced — the fleet card and the usage
+    // popover read these). The daemon's registry is the authoritative cross-device total; these accumulate the
+    // turns THIS tab streamed, which matches it whenever the tab saw every turn.
+    readonly costUsd = ref(0);
+    readonly inputTokens = ref(0);
+    readonly outputTokens = ref(0);
+
+    // Start of the in-flight turn (ms), for the card's elapsed readout; undefined while idle.
+    readonly turnStartedAt = ref<number | undefined>();
+
     // This conversation's turn selection, seeded from the module defaults at construction. All of it — provider
     // and account included — is switchable mid-chat (the composer binds them); send() decides whether the
     // session above still matches (resume) or a fresh one starts seeded with the transcript so far.
@@ -413,7 +432,14 @@ export class Conversation {
     private typeId: number | null = null;
     private rafId: number | null = null;
 
-    constructor(readonly id: string) {
+    // `id` is the ephemeral tab id (c1, c2, … — never persisted); `conversationId` is the STABLE identity the
+    // daemon keys the fleet registry entry and the worktree on. It survives provider/harness switches (which
+    // retire sessions) and reloads (persisted in the tab snapshot), and its shape satisfies the wire's
+    // branch/path-safety regex (a UUID: hex + hyphens, starts alphanumeric).
+    constructor(
+        readonly id: string,
+        readonly conversationId: string = crypto.randomUUID(),
+    ) {
         // Codex/Grok have no 'max' effort tier (only Claude does) — clamp a restored 'max'. The model is already
         // provider-correct from the seed (rememberedModelFor), so no model re-scope is needed.
         if (this.provider.value !== `claude` && this.effort.value === `max`) {
@@ -507,6 +533,9 @@ export class Conversation {
     // session so the next turn resumes it in the sandbox.
     loadTranscript(messages: { role: ChatRole; text: string }[], sessionId: string, title: string | null): void {
         this.messages.value = messages.map((m) => ({ id: this.nextId++, role: m.role, text: m.text }));
+        // History-menu sessions live in the MAIN tree's session namespace — resuming one in a worktree would
+        // miss it. The fleet's own open path rehydrates isolated conversations separately.
+        this.isolated.value = false;
         // The history menu lists Claude sessions only, so a restored conversation resumes on Claude, under the
         // current default Claude account (the transcript carries no account of its own).
         const account = rememberedAccountFor(`claude`);
@@ -554,6 +583,7 @@ export class Conversation {
         this.append({ id: assistantId, role: `assistant`, text: ``, thinking: `` });
         const turn: TurnContext = { id: assistantId, provider: agent, account, harness };
         this.streaming.value = true;
+        this.turnStartedAt.value = Date.now();
         const controller = new AbortController();
         this.inflight = controller;
 
@@ -566,6 +596,10 @@ export class Conversation {
                     prompt: text,
                     ...(attachments.length > 0 ? { attachments: attachments.map((file) => file.path) } : {}),
                     agent,
+                    // The stable conversation identity + the worktree opt-in: an isolated turn runs in this
+                    // conversation's own git worktree (branch agent/<conversationId>) instead of /work.
+                    conversationId: this.conversationId,
+                    ...(this.isolated.value ? { isolated: true } : {}),
                     // The harness (loop) for the turn; `native` is the daemon's default, so only `claude-code`
                     // rides the wire — that's what routes codex/grok through the translator under the Claude Code loop.
                     ...(harness === `claude-code` ? { harness } : {}),
@@ -600,6 +634,7 @@ export class Conversation {
             this.flushType();
             this.inflight = null;
             this.streaming.value = false;
+            this.turnStartedAt.value = undefined;
         }
     }
 
@@ -795,6 +830,10 @@ export class Conversation {
                 // detectable at send time.
                 this.session.value = { id: event.sessionId, provider: turn.provider, account: turn.account, harness: turn.harness };
                 return;
+            case `worktree`:
+                // First frame of an isolated turn: which branch/base this conversation works on.
+                this.worktree.value = { branch: event.branch, base: event.base };
+                return;
             case `terminal`: {
                 // The agent started running Bash in its live `agent-<id>` tmux terminal — surface it as a tab in
                 // the global panel (relist so it appears; no auto-open, no focus steal). Lazily imported so the
@@ -904,8 +943,12 @@ export class Conversation {
         this.messages.value = this.messages.value.map((message) => (message.id === id ? { ...message, todos: items } : message));
     }
 
-    // Usage lands at end-of-turn; attach it to the last assistant bubble rather than spawning an empty one.
+    // Usage lands at end-of-turn; attach it to the last assistant bubble rather than spawning an empty one,
+    // and fold it into the conversation's lifetime totals (the fleet card's cost/token readout).
     private setUsage(usage: ChatUsage): void {
+        this.costUsd.value += usage.costUsd ?? 0;
+        this.inputTokens.value += usage.inputTokens ?? 0;
+        this.outputTokens.value += usage.outputTokens ?? 0;
         const target = this.messages.value.findLast((message) => message.role === `assistant`);
         if (target) {
             this.messages.value = this.messages.value.map((message) => (message.id === target.id ? { ...message, usage } : message));

@@ -65,10 +65,11 @@ const configSchema = z.object({
     // extension capabilities by installedExtensions(). Empty on a bare `tsx watch` dev run ⇒ none baked (point
     // it at the repo's _extensions/ for local dev, see .env.example).
     extensionsDir: z.string().default(""),
-    // The bundled Anthropic↔OpenAI translator (claude-code-router) the Claude Code harness points at to serve
-    // NON-Claude providers (codex/grok) under it. `url` is what ANTHROPIC_BASE_URL is set to for a routed turn —
-    // empty ⇒ no translator baked (e.g. a bare `tsx watch` dev run) ⇒ routed turns surface a clean error; `token`
-    // is a fixed local bearer the localhost-only router accepts as ANTHROPIC_AUTH_TOKEN. Both set by the Dockerfile.
+    // The bundled translator (CLIProxyAPI) the Claude Code harness points at to serve NON-Claude providers
+    // (codex/grok) under it on the user's subscription. `url` is what ANTHROPIC_BASE_URL is set to for a routed
+    // turn (and the base for CLIProxyAPI's localhost Management API) — empty ⇒ no translator baked (e.g. a bare
+    // `tsx watch` dev run) ⇒ routed turns surface a clean error; `token` is a fixed local bearer, accepted both as
+    // ANTHROPIC_AUTH_TOKEN (downstream) and as the Management API key. Both set by the Dockerfile.
     translator: z
         .object({
             url: z.string().default(""),
@@ -78,12 +79,9 @@ const configSchema = z.object({
     // Container-env Claude fallback creds: used only to decide whether a turn can run when no account is stored.
     claudeCodeOauthToken: z.string().default("").meta({ secret: true }),
     anthropicApiKey: z.string().default("").meta({ secret: true }),
-    // Container-env OpenAI fallback cred: gates native Codex turns, and the translator's upstream key when the
-    // Codex model runs under the Claude Code harness.
+    // Container-env OpenAI fallback cred: gates native Codex turns (the OPENAI_API_KEY fallback CODEX_HOME when a
+    // turn resolved no connected ChatGPT account).
     openaiApiKey: z.string().default("").meta({ secret: true }),
-    // Container-env xAI fallback cred: the translator's upstream key when the Grok model runs under the Claude
-    // Code harness (Grok's native path authenticates through OpenCode's xAI OAuth instead).
-    xaiApiKey: z.string().default("").meta({ secret: true }),
     // The user's Cloudflare API token, set by connect.{sh,ps1} on the own-Cloudflare path (empty on the
     // intentic-provided path — the user has no token). The infra panel's context reads its presence to know
     // whether host tunnels are minted by the user's CF (own) or relayed to the platform (intentic-provided).

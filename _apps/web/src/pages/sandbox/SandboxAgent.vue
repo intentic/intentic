@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { KeyedProvider, ProviderKeyStatus } from "@intentic/sandbox-contract";
+import type { KeyedProvider, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { Card, cmp, CopyButton } from "@intentic-app/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -41,54 +41,81 @@ const {
 
 onMounted(() => {
     openAccountManage();
-    void loadProviderKeys();
+    void loadTranslatorAccounts();
 });
-onUnmounted(() => closeAccountManage());
+onUnmounted(() => {
+    closeAccountManage();
+    stopAccountsPoll();
+});
 
-// --- Provider API keys (Codex/Grok UNDER the Claude Code harness) -------------------------------------------
-// Running Codex or Grok on the Claude Code harness routes their model through the sandbox's translator, which
-// needs a real API key — the subscription OAuth above can't reach a gateway. Presence-only (hasKey); the secret
-// is write-only, never read back.
-const providerKeyStatus = ref<ProviderKeyStatus>({ codex: false, grok: false });
-const keyInputs = ref<Record<KeyedProvider, string>>({ codex: ``, grok: `` });
-const keyBusy = ref<KeyedProvider | undefined>(undefined);
-const loadProviderKeys = async (): Promise<void> => {
+// --- Routed-provider subscriptions (Codex/Grok UNDER the Claude Code harness) -------------------------------
+// Running Codex or Grok on the Claude Code harness routes their model through the sandbox's translator
+// (CLIProxyAPI), which serves them on the user's SUBSCRIPTION OAuth — connect it here with a device-code login
+// (open a URL, enter the code). The translator finishes the login in the background, so we poll `accounts` until
+// the provider flips connected.
+const translatorAccounts = ref<TranslatorAccounts>({ codex: false, grok: false });
+const connectBusy = ref<KeyedProvider | undefined>(undefined);
+const connectFlow = ref<{ provider: KeyedProvider; url: string; code: string } | undefined>(undefined);
+let accountsPoll: ReturnType<typeof setInterval> | undefined;
+
+const loadTranslatorAccounts = async (): Promise<void> => {
     try {
-        providerKeyStatus.value = await sandboxJson<ProviderKeyStatus>(`/provider-keys`);
+        translatorAccounts.value = await sandboxJson<TranslatorAccounts>(`/translator/accounts`);
     } catch {
-        // Non-fatal; the card shows "no key" until the sandbox is reachable.
+        // Non-fatal; the card shows "not connected" until the sandbox is reachable.
     }
 };
-const saveProviderKey = async (provider: KeyedProvider): Promise<void> => {
-    const key = keyInputs.value[provider].trim();
-    if (key === `` || keyBusy.value !== undefined) {
+
+const stopAccountsPoll = (): void => {
+    if (accountsPoll !== undefined) {
+        clearInterval(accountsPoll);
+        accountsPoll = undefined;
+    }
+};
+
+const pollUntilConnected = (provider: KeyedProvider): void => {
+    stopAccountsPoll();
+    accountsPoll = setInterval(() => {
+        void loadTranslatorAccounts().then(() => {
+            if (translatorAccounts.value[provider]) {
+                stopAccountsPoll();
+                if (connectFlow.value?.provider === provider) {
+                    connectFlow.value = undefined;
+                }
+            }
+        });
+    }, 3_000);
+};
+
+const connectSubscription = async (provider: KeyedProvider): Promise<void> => {
+    if (connectBusy.value !== undefined) {
         return;
     }
-    keyBusy.value = provider;
+    connectBusy.value = provider;
     try {
-        await sandboxRequest(`/provider-keys`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ provider, key }),
-        });
-        keyInputs.value = { ...keyInputs.value, [provider]: `` };
-        await loadProviderKeys();
+        connectFlow.value = { provider, ...(await sandboxJson<{ url: string; code: string }>(`/translator/${provider}/connect`, { method: `POST` })) };
+        pollUntilConnected(provider);
     } finally {
-        keyBusy.value = undefined;
+        connectBusy.value = undefined;
     }
 };
-const removeProviderKey = async (provider: KeyedProvider): Promise<void> => {
-    keyBusy.value = provider;
+
+const disconnectSubscription = async (provider: KeyedProvider): Promise<void> => {
+    connectBusy.value = provider;
     try {
-        await sandboxRequest(`/provider-keys/${provider}`, { method: `DELETE` });
-        await loadProviderKeys();
+        await sandboxRequest(`/translator/${provider}/disconnect`, { method: `POST` });
+        if (connectFlow.value?.provider === provider) {
+            connectFlow.value = undefined;
+        }
+        await loadTranslatorAccounts();
     } finally {
-        keyBusy.value = undefined;
+        connectBusy.value = undefined;
     }
 };
-const PROVIDER_KEY_FIELDS = [
-    { provider: `codex` as const, label: `OpenAI`, hint: `sk-… from platform.openai.com` },
-    { provider: `grok` as const, label: `xAI`, hint: `key from console.x.ai` },
+
+const SUBSCRIPTION_FIELDS = [
+    { provider: `codex` as const, label: `ChatGPT (Codex)`, hint: `Open ChatGPT, sign in, and enter this one-time code.` },
+    { provider: `grok` as const, label: `SuperGrok (Grok)`, hint: `Open x.ai with your SuperGrok / X Premium account and enter this code.` },
 ];
 
 // Compact "142k" token count and a short usage summary line per account (from /system/usage).
@@ -455,56 +482,65 @@ const importMemory = async (): Promise<void> => {
             </div>
         </Card>
 
-        <!-- Model API keys — used only when Codex/Grok run UNDER the Claude Code harness (they route through the
-             sandbox's translator, which needs a real API key; the subscription sign-in above can't be used). -->
+        <!-- Run Codex / Grok under Claude Code — connect the ChatGPT / SuperGrok subscription that serves them when
+             they run UNDER the Claude Code harness (their model routes through the sandbox's translator, CLIProxyAPI,
+             on your subscription OAuth — no API key). A device-code login: open the URL, enter the code. -->
         <Card class="flex flex-col gap-3">
             <div class="flex items-center gap-2.5">
-                <Icon name="key" class="text-lg text-muted" />
+                <Icon name="link" class="text-lg text-muted" />
                 <div class="min-w-0">
-                    <h2 class="font-semibold leading-tight">Model API keys</h2>
+                    <h2 class="font-semibold leading-tight">Run Codex / Grok under Claude Code</h2>
                     <p class="text-xs text-muted">
-                        Needed only to run Codex or Grok <span class="font-medium text-content">under the Claude Code harness</span>. Your ChatGPT /
-                        SuperGrok subscription sign-in can't be used here — a gateway requires a real API key.
+                        Connect your <span class="font-medium text-content">ChatGPT / SuperGrok subscription</span> to run these models under the
+                        Claude Code harness — no API key, it uses your subscription.
                     </p>
                 </div>
             </div>
             <div
-                v-for="field in PROVIDER_KEY_FIELDS"
+                v-for="field in SUBSCRIPTION_FIELDS"
                 :key="field.provider"
                 class="flex flex-col gap-1.5 border-t border-line pt-2 first:border-t-0 first:pt-0"
             >
                 <div class="flex items-center justify-between gap-2">
                     <span class="flex items-center gap-2 text-sm text-content">
-                        <Icon name="circle-fill" class="text-[0.5rem]" :class="providerKeyStatus[field.provider] ? 'text-success' : 'text-subtle'" />
+                        <Icon name="circle-fill" class="text-[0.5rem]" :class="translatorAccounts[field.provider] ? 'text-success' : 'text-subtle'" />
                         {{ field.label }}
-                        <span class="text-2xs text-subtle">{{ providerKeyStatus[field.provider] ? "key set" : "no key" }}</span>
+                        <span class="text-2xs text-subtle">{{ translatorAccounts[field.provider] ? "connected" : "not connected" }}</span>
                     </span>
                     <Button
-                        v-if="providerKeyStatus[field.provider]"
-                        label="Remove"
+                        v-if="translatorAccounts[field.provider]"
+                        label="Disconnect"
                         size="small"
                         severity="danger"
                         :text="true"
-                        :loading="keyBusy === field.provider"
-                        @click="removeProviderKey(field.provider)"
-                    />
-                </div>
-                <div class="flex gap-2">
-                    <input
-                        v-model="keyInputs[field.provider]"
-                        type="password"
-                        :name="`${field.provider}ApiKey`"
-                        :placeholder="field.hint"
-                        class="min-w-0 flex-1 rounded-md border border-line bg-card px-3 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                        @keydown.enter="saveProviderKey(field.provider)"
+                        :loading="connectBusy === field.provider"
+                        @click="disconnectSubscription(field.provider)"
                     />
                     <Button
-                        :label="providerKeyStatus[field.provider] ? `Replace` : `Save`"
+                        v-else-if="!(connectFlow && connectFlow.provider === field.provider)"
+                        label="Connect"
                         size="small"
-                        :disabled="keyInputs[field.provider].trim().length === 0"
-                        :loading="keyBusy === field.provider"
-                        @click="saveProviderKey(field.provider)"
-                    />
+                        :loading="connectBusy === field.provider"
+                        @click="connectSubscription(field.provider)"
+                    >
+                        <template #icon><Icon name="link" /></template>
+                    </Button>
+                </div>
+                <!-- Live device-login card: show the verification URL + one-time code; the translator connects on
+                     its own, and the poll flips the row to "connected". -->
+                <div v-if="connectFlow && connectFlow.provider === field.provider" class="flex flex-col gap-2 rounded-md border border-line bg-card p-2">
+                    <p class="text-2xs text-subtle">{{ field.hint }}</p>
+                    <div class="flex flex-col items-center gap-1">
+                        <span class="text-2xs text-subtle">Your one-time code</span>
+                        <span class="font-mono text-lg font-semibold tracking-[0.2em] text-content">{{ connectFlow.code }}</span>
+                        <CopyButton :text="connectFlow.code" label="Copy" />
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <Button as="a" label="Open sign-in" size="small" severity="secondary" :href="connectFlow.url" target="_blank" rel="noopener">
+                            <template #icon><Icon name="external-link" /></template>
+                        </Button>
+                        <span class="text-2xs text-subtle"><Icon name="spinner" class="mr-1" spin />Waiting for you to finish signing in…</span>
+                    </div>
                 </div>
             </div>
         </Card>

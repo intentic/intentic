@@ -61,9 +61,13 @@ const routes: RouteRecordRaw[] = [
         beforeEnter: [requireAuth, requireSetup],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
-            // Mobile lands on the agent chat — the primary on-the-go surface; desktop keeps the workspace.
-            { path: ``, redirect: () => (useDevice().mobile.value ? `/chat` : `/workspace`) },
-            { path: `chat`, name: `chat`, meta: { title: `Chat` }, beforeEnter: [mobileOnly], component: () => import(`../pages/Chat.vue`) },
+            // Mobile lands on the agent fleet — glance at every running agent, tap in to drive one; desktop
+            // keeps the workspace (its chat is docked).
+            { path: ``, redirect: () => (useDevice().mobile.value ? `/agents` : `/workspace`) },
+            { path: `agents`, name: `agents`, meta: { title: `Agents` }, component: () => import(`../pages/Agents.vue`) },
+            // Drill-in for one agent: full-screen chat + isolated diff review. The old mobile /chat tab folded
+            // in here (an agent's conversation IS the chat surface).
+            { path: `agents/:id`, name: `agent`, meta: { title: `Agent` }, component: () => import(`../agents/AgentDetail.vue`) },
             { path: `menu`, name: `menu`, meta: { title: `Menu` }, beforeEnter: [mobileOnly], component: () => import(`../pages/MobileMenu.vue`) },
             {
                 path: `terminal`,

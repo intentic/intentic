@@ -184,7 +184,7 @@ A single `.env` at the repo root drives the platform (only the api reads it; web
 ```sh
 cp .env.example .env      # set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (each var is documented in .env.example)
 pnpm db:up                # Postgres on :5440 (docker-compose.yml) + prisma migrate
-pnpm dev                  # turbo: api on https://localhost:6480, web on https://localhost:47145, the site, …
+pnpm dev                  # turbo: api on https://localhost:6480, web on https://localhost:47145
 ```
 
 Dev serves over HTTPS via the committed `@intentic-app/localhost-https` cert (Google FedCM One Tap refuses `http://localhost`).

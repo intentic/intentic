@@ -16,7 +16,7 @@
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "check": "pnpm build && pnpm lint && pnpm format:check",
-        "dev": "pnpm db:up && turbo run dev",
+        "dev": "pnpm db:up && turbo run dev --filter=@intentic-app/api --filter=@intentic-app/web",
         "e2e": "turbo run e2e --ui=stream",
         "e2e:hermetic": "turbo run e2e:hermetic --ui=stream",
         "db:up": "docker compose up -d --wait postgres && pnpm --filter @intentic-app/prisma migrate:deploy",

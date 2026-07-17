@@ -80,6 +80,21 @@ const main = async (): Promise<void> => {
         return false;
     });
 
+    // The fleet registry: load persisted conversations, drop entries whose worktree vanished, sweep orphaned
+    // worktree dirs + stale admin entries (`git worktree prune`). Awaited (cheap, and the /agents routes assume
+    // a loaded registry); a failure degrades to an empty fleet, never a dead daemon.
+    await services.agents
+        .init()
+        .then(async () => {
+            for (const id of services.agents.ids()) {
+                if (!(await services.agentWorktrees.exists(id))) {
+                    await services.agents.remove(id);
+                }
+            }
+            await services.agentWorktrees.prune(services.agents.ids());
+        })
+        .catch((error: unknown) => logger.warn({ err: error }, "agents registry not initialized — the fleet starts empty"));
+
     // Recompose the environment overlay from the manifest — converges fragment drift (a daemon update that
     // changes a capability's fragment flips the derived state to "pending rebuild"); no-op on fresh sandboxes.
     // Writes only under .intentic/ (in ROOT_EXCLUDES), so it never affects the baseline below.
@@ -132,9 +147,9 @@ const main = async (): Promise<void> => {
     // the boot path).
     void reconnectVpns(capabilityCtx(services));
     void startEnabledDocker(capabilityCtx(services));
-    // The Anthropic↔OpenAI translator (LiteLLM) backing "Codex/Grok under the Claude Code harness": starts when
-    // TRANSLATOR_URL is baked (no-op on a bare dev run), converged with the stored provider keys. Best-effort —
-    // a routed turn that finds it down surfaces its own error, and a native-harness turn never touches it.
+    // The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": starts when TRANSLATOR_URL
+    // is baked (no-op on a bare dev run) and serves those providers on their connected subscription OAuth.
+    // Best-effort — a routed turn that finds it down surfaces its own error, and a native-harness turn never touches it.
     startTranslator(services);
     // Installed extensions' declared autoStart processes come back the same way (manifests on /work).
     void startAllExtensionProcesses(services);

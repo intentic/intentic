@@ -132,15 +132,20 @@ RUN mkdir -p /root/.config/opencode \
 # (`codex exec`, agent/delegation.ts), authenticated via the CODEX_HOME injected per turn. Pin in lockstep
 # with @openai/codex-sdk in _apps/sandbox/package.json (the Codex primary adapter), same rationale as opencode.
 RUN npm install -g @openai/codex@0.142.5 && codex --version
-# The `litellm` proxy on PATH — the Anthropic↔OpenAI translator that lets the Claude Code harness drive OpenAI
-# (Codex) and xAI (Grok) models (agent/translator.ts spawns it, points a routed turn's ANTHROPIC_BASE_URL at it).
-# A Python tool in a Node image: install python3 + pip and the proxy extras, pinned like the npm CLIs above.
-# ponytail: bump the pin deliberately; a LiteLLM Anthropic-`/v1/messages` or model-routing change surfaces as a
-# translator-only failure (native-harness turns never touch it).
-RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip \
-    && pip3 install --no-cache-dir --break-system-packages 'litellm[proxy]==1.55.10' \
-    && litellm --version \
-    && rm -rf /var/lib/apt/lists/*
+# The `cli-proxy-api` binary on PATH — CLIProxyAPI, the Anthropic↔OpenAI/xAI translator that lets the Claude Code
+# harness drive Codex/Grok on the user's SUBSCRIPTION OAuth: agent/translator.ts spawns it as the server (a routed
+# turn's ANTHROPIC_BASE_URL points at it), and its device-code logins (--codex-device-login / the xAI Management
+# flow) connect the subscriptions. A prebuilt Go release, pinned like the npm CLIs above.
+# ponytail: bump the pin deliberately; a wire-API or Management-endpoint change surfaces as a translator-only
+# failure (native-harness turns never touch it).
+ARG CLIPROXY_VERSION=7.2.85
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && arch="$(dpkg --print-architecture)" \
+    && mkdir -p /tmp/cliproxy \
+    && curl -fsSL "https://github.com/router-for-me/CLIProxyAPI/releases/download/v${CLIPROXY_VERSION}/CLIProxyAPI_${CLIPROXY_VERSION}_linux_${arch}.tar.gz" | tar -xz -C /tmp/cliproxy \
+    && install -m 0755 "$(find /tmp/cliproxy -type f -name CLIProxyAPI | head -n1)" /usr/local/bin/cli-proxy-api \
+    && test -x /usr/local/bin/cli-proxy-api \
+    && rm -rf /tmp/cliproxy /var/lib/apt/lists/*
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
 # connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
 # runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as

@@ -1,6 +1,7 @@
 import { createActivityRoutes } from "./activity/activity.routes.js";
 import { createAgentRoutes } from "./agent/agent.routes.js";
-import { createProviderKeysRoutes } from "./agent/provider-keys.routes.js";
+import { createAgentsRoutes } from "./agents/agents.routes.js";
+import { createTranslatorRoutes } from "./agent/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
 import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
 import { createClaudeRoutes } from "./claude/claude.routes.js";
@@ -26,6 +27,7 @@ import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
 export const createRouter = (services: Services) => ({
     activity: createActivityRoutes(services),
     agent: createAgentRoutes(services),
+    agents: createAgentsRoutes(services),
     automations: createAutomationsRoutes(services),
     capabilities: createCapabilitiesRoutes(services),
     claude: createClaudeRoutes(services),
@@ -42,7 +44,7 @@ export const createRouter = (services: Services) => ({
     inventory: createInventoryRoutes(services),
     logs: createLogsRoutes(services),
     panels: createPanelsRoutes(services),
-    providerKeys: createProviderKeysRoutes(services),
+    translator: createTranslatorRoutes(services),
     secrets: createSecretsRoutes(services),
     system: createSystemRoutes(services),
 });

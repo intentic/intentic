@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentSummarySchema } from "./schemas.js";
 
 // The wire shapes streamed from the daemon's event-iterator procedures. This is their canonical home: the
 // daemon yields them and the browser client consumes them from the same schema, so the two can't drift (they
@@ -55,6 +56,9 @@ export type ContextUsage = z.infer<typeof ContextUsageSchema>;
 // tags frames produced inside a subagent (Task tool).
 export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("session"), sessionId: z.string() }),
+    // First frame of an isolated turn: the conversation's worktree identity — its branch (agent/<id>) and the
+    // ROOT repo's short base sha (the checkout moment). Emitted before any provider frames.
+    z.object({ kind: z.literal("worktree"), branch: z.string(), base: z.string() }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     z.object({ kind: z.literal("init"), model: z.string() }),
     z.object({ kind: z.literal("delta"), text: z.string(), parentToolUseId: z.string().optional() }),
@@ -98,7 +102,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("error"),
         message: z.string(),
-        code: z.enum(["session-not-found", "rate_limit", "codex-reauth", "grok-model-invalid", "codex-model-invalid", "api-key-required"]).optional(),
+        code: z
+            .enum(["session-not-found", "rate_limit", "codex-reauth", "grok-model-invalid", "codex-model-invalid", "subscription-required", "agent-busy"])
+            .optional(),
     }),
     z.object({ kind: z.literal("done") }),
 ]);
@@ -157,8 +163,13 @@ export type PresenceUser = z.infer<typeof PresenceUserSchema>;
 export const PresenceSchema = z.object({ kind: z.literal("presence"), users: z.array(PresenceUserSchema) });
 export type Presence = z.infer<typeof PresenceSchema>;
 
+// The FULL fleet roster, broadcast on every registry change — same snapshot-not-diff contract as presence:
+// a reconnecting browser is consistent from its first frame and last frame wins.
+export const AgentsSchema = z.object({ kind: z.literal("agents"), agents: z.array(AgentSummarySchema) });
+export type Agents = z.infer<typeof AgentsSchema>;
+
 // The /events stream union: the hello identity frame, then liveness heartbeats interleaved with
-// workspace-change batches and presence roster snapshots. oRPC validates every yielded frame against this, so
-// all kinds must live here.
-export const SystemEventSchema = z.discriminatedUnion("kind", [HelloSchema, HeartbeatSchema, WorkspaceChangedSchema, PresenceSchema]);
+// workspace-change batches and presence + fleet roster snapshots. oRPC validates every yielded frame against
+// this, so all kinds must live here.
+export const SystemEventSchema = z.discriminatedUnion("kind", [HelloSchema, HeartbeatSchema, WorkspaceChangedSchema, PresenceSchema, AgentsSchema]);
 export type SystemEvent = z.infer<typeof SystemEventSchema>;

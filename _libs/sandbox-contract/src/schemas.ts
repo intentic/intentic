@@ -50,6 +50,16 @@ export const AgentTurnSchema = z
         // Which connected account of that provider serves the turn; absent = the provider's first account.
         account: z.string().optional(),
         sessionId: z.string().optional(),
+        // The client-minted stable conversation identity (survives provider/account/harness switches, which
+        // retire sessions). Keys the fleet registry entry and the conversation's worktree. Constrained because
+        // it lands in branch names (agent/<id>) and filesystem paths — the regex is the injection guard.
+        conversationId: z
+            .string()
+            .regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/)
+            .optional(),
+        // When true, the turn runs in the conversation's isolated git worktree (created lazily on first use)
+        // instead of the shared /work tree — the parallel-agents mode. Requires conversationId.
+        isolated: z.boolean().optional(),
         // The client-held transcript of a conversation that just switched provider/account: seeds the FIRST
         // turn of the replacement session. The daemon folds it into the prompt as one role-attributed context
         // preamble for every runtime. Mutually exclusive with sessionId — a resumed session has its context.
@@ -67,23 +77,82 @@ export const AgentTurnSchema = z
     })
     .refine((turn) => turn.sessionId === undefined || turn.history === undefined, {
         message: "history and sessionId are mutually exclusive",
+    })
+    .refine((turn) => turn.isolated !== true || turn.conversationId !== undefined, {
+        message: "isolated requires conversationId",
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
 
-// ---- provider API keys ----
+// ---- agents: the parallel-conversation fleet ----
+// A "fleet agent" is a conversation with a registry entry — every isolated conversation, keyed by its
+// conversationId. Isolated ones own a git worktree (branch agent/<id> in every workspace repo); the fleet
+// surface shows all of them with live status/activity/cost so the user can drive N agents in parallel.
 
-// The providers whose model can run UNDER the Claude Code harness through the bundled translator, and which
-// therefore need a real API key (their subscription OAuth can't reach a gateway). The `claude` provider is
-// absent — native Anthropic OAuth serves it, no key. Env fallbacks: OPENAI_API_KEY (codex), XAI_API_KEY (grok).
+// idle/running/awaiting are the turn lifecycle (awaiting = paused on a plan approval or question); landed /
+// conflict are outcomes of the land flow; error is a terminal turn failure surfaced on the card.
+export const AgentStatusSchema = z.enum(["idle", "running", "awaiting", "landed", "conflict", "error"]);
+export type AgentStatus = z.infer<typeof AgentStatusSchema>;
+// The card's live activity snippet: the last tool the agent used (with its target) and the in-progress todo.
+export const AgentActivitySchema = z.object({
+    tool: z.string().optional(),
+    target: z.string().optional(),
+    todo: z.string().optional(),
+});
+export type AgentActivity = z.infer<typeof AgentActivitySchema>;
+// Which "needs you" flags are raised — the fleet badge aggregates these across all agents.
+export const AgentAttentionSchema = z.object({ plan: z.boolean(), question: z.boolean(), conflict: z.boolean() });
+export type AgentAttention = z.infer<typeof AgentAttentionSchema>;
+export const AgentSummarySchema = z.object({
+    // The conversationId.
+    id: z.string(),
+    sessionId: z.string().optional(),
+    // First prompt, sanitized to one bounded line.
+    title: z.string().optional(),
+    status: AgentStatusSchema,
+    provider: AgentProviderSchema,
+    harness: AgentHarnessSchema,
+    model: z.string().optional(),
+    account: z.string().optional(),
+    // The worktree branch (agent/<id>); absent for a non-isolated (main-tree) conversation.
+    branch: z.string().optional(),
+    // The ROOT repo's short base sha — the checkout moment's display identity. Per-repo bases stay
+    // daemon-internal (agents.diff already reports against them).
+    base: z.string().optional(),
+    costUsd: z.number().optional(),
+    inputTokens: z.number().optional(),
+    outputTokens: z.number().optional(),
+    contextTokens: z.number().optional(),
+    contextWindow: z.number().optional(),
+    activity: AgentActivitySchema.optional(),
+    // Present while a turn runs: its start, ms since epoch.
+    startedAt: z.number().optional(),
+    updatedAt: z.number(),
+    attention: AgentAttentionSchema,
+});
+export type AgentSummary = z.infer<typeof AgentSummarySchema>;
+export const AgentsListSchema = z.object({ agents: z.array(AgentSummarySchema) });
+export const AgentIdSchema = z.object({ id: z.string().min(1) });
+export const AgentFileDiffQuerySchema = z.object({ id: z.string().min(1), repo: z.string().min(1), path: z.string().min(1) });
+// land's outcome: per-repo conflicts (dirty-main overlaps or merge conflicts); landed only when every repo
+// with changes merged cleanly. Conflicted repos keep their worktree state — nothing is lost.
+export const LandResultSchema = z.object({
+    landed: z.boolean(),
+    conflicts: z.array(z.object({ repo: z.string(), paths: z.array(z.string()) })).optional(),
+});
+export type LandResult = z.infer<typeof LandResultSchema>;
+
+// ---- routed-provider subscriptions ----
+
+// The providers whose model can run UNDER the Claude Code harness through the bundled translator (CLIProxyAPI),
+// which holds their SUBSCRIPTION OAuth and re-serves it behind an Anthropic endpoint. The `claude` provider is
+// absent — native Anthropic OAuth serves it directly, without the translator.
 export const KeyedProviderSchema = z.enum(["codex", "grok"]);
 export type KeyedProvider = z.infer<typeof KeyedProviderSchema>;
 
-// hasKey per keyed provider — the stored secret is NEVER echoed, only whether one is present (from the store or
-// the container-env fallback). Drives the "API key set / add a key" state in Sandbox ▸ Agent.
-export const ProviderKeyStatusSchema = z.object({ codex: z.boolean(), grok: z.boolean() });
-export type ProviderKeyStatus = z.infer<typeof ProviderKeyStatusSchema>;
-
-export const SetProviderKeySchema = z.object({ provider: KeyedProviderSchema, key: z.string().min(1) });
+// Which routed-provider subscriptions are connected in the translator (per provider). Drives the
+// "connected / connect subscription" state in Sandbox ▸ Agent.
+export const TranslatorAccountsSchema = z.object({ codex: z.boolean(), grok: z.boolean() });
+export type TranslatorAccounts = z.infer<typeof TranslatorAccountsSchema>;
 
 // Side-channel bodies: the UI posts these to resolve a turn paused on a plan approval / question.
 export const DecisionSchema = z.object({ decisionId: z.string().min(1), approve: z.boolean(), feedback: z.string().optional() });
@@ -139,7 +208,9 @@ export const CodexPollResultSchema = z.object({ pending: z.boolean(), account: O
 // completion and the UI polls `/grok/accounts`.
 // ponytail: OpenCode holds one xAI auth per data dir, so Grok stays single-account — the list is 0 or 1. Per
 // account would need an OpenCode server per data dir; add when there's demand.
-export const GrokDeviceStartSchema = z.object({ url: z.string(), code: z.string() });
+// A device-code login start: the verification URL + the one-time code the user enters there. Shared by the
+// native Grok flow (via OpenCode) and the routed-provider subscription connect (codex/grok via CLIProxyAPI).
+export const DeviceStartSchema = z.object({ url: z.string(), code: z.string() });
 // A provider's model catalog, resolved daemon-side from live discovery with a persisted last-known-good list and
 // a seed floor (Grok via opencode.ts xaiModels, Codex via codex-models.ts, Claude via the Agent SDK's
 // supportedModels) — never empty, so the picker is never blank. `label` is the humanized display name; `default`

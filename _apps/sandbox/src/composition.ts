@@ -18,7 +18,7 @@ import {
 import type { Logger } from "pino";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/agent.js";
-import { type ProviderKeysStore, fileProviderKeysStore } from "./agent/provider-keys.js";
+import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
@@ -31,7 +31,10 @@ import { type CodexReauthNeeded, type CodexStore, fileCodexStore, probeCodexHeal
 import { locateCodexThread } from "./sessions/codex-sessions.js";
 import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import type { Config } from "./env.config.js";
-import { changedFiles, commitPaths, discardPaths, workingFileDiff } from "./git/changes.js";
+import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
+import { fileAgentsStore } from "./agents/agents-store.js";
+import { createAgentWorktrees, type AgentWorktrees } from "./agents/worktrees.js";
+import { changedFiles, changesAgainstBase, commitPaths, discardPaths, workingFileDiff } from "./git/changes.js";
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
@@ -114,10 +117,10 @@ export interface Services {
     // resolves its model here so it never sends the SDK's rejected gpt-5-codex default; /codex/models serves the
     // picker; a turn's self-heal `record`s the ids OpenAI proved valid.
     readonly codexModels: CodexCatalog;
-    // Provider API keys (.intentic/provider-keys.json) the Claude Code harness uses — via the bundled translator —
-    // to serve non-Claude providers (codex → OpenAI, grok → xAI); their subscription OAuth can't reach a gateway.
-    // /provider-keys edits it; streamAgent reads it (with the container-env key as fallback) to gate a routed turn.
-    readonly providerKeys: ProviderKeysStore;
+    // The bundled translator (CLIProxyAPI): connects/lists/disconnects the routed providers' SUBSCRIPTION OAuth
+    // (codex → ChatGPT, grok → SuperGrok) that the Claude Code harness runs non-Claude models on. /translator
+    // drives the device-login connect; streamAgent reads `accounts` to gate a routed turn.
+    readonly cliProxy: CliProxyClient;
     // Proactive Codex credential health: undefined ⇒ healthy/unknown, else the "needs reconnect" verdict. Cached
     // briefly so back-to-back account-list loads don't re-hit OpenAI's token endpoint on a revoked account.
     // /codex/accounts and the turn gate read it to surface a revoked sign-in before an opaque mid-turn failure.
@@ -154,8 +157,15 @@ export interface Services {
         readonly changedFiles: (dir: string) => Promise<{ branch?: string; changes: GitChange[] }>;
         readonly commitPaths: (dir: string, message: string, paths: readonly string[], author: { name: string; email: string }) => Promise<boolean>;
         readonly discardPaths: (dir: string, paths?: readonly string[]) => Promise<void>;
-        readonly fileDiff: (dir: string, path: string) => Promise<FileDiff>;
+        // `ref` is the before side: HEAD for the working-tree review, a conversation's base sha for the agents review.
+        readonly fileDiff: (dir: string, path: string, ref: string) => Promise<FileDiff>;
+        readonly changesAgainstBase: (dir: string, base: string) => Promise<GitChange[]>;
     };
+    // The fleet registry (persisted at historyRoot/agents.json + runtime turn state) — one entry per isolated
+    // conversation. streamAgent begins/observes/finishes turns; /agents lists, lands, and discards.
+    readonly agents: AgentsRegistry;
+    // The per-conversation worktree compositions on /history/worktrees (create/repair/remove/prune).
+    readonly agentWorktrees: AgentWorktrees;
     readonly files: {
         readonly read: (absPath: string) => Promise<string | undefined>;
         readonly write: (absPath: string, content: string | Uint8Array) => Promise<void>;
@@ -270,7 +280,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
         claudeModels: createClaudeCatalog(claudeStore, config, workspace.root),
         codexStore,
         codexModels: createCodexCatalog(codexStore, config, join(codexBase, "models.json")),
-        providerKeys: fileProviderKeysStore(join(workspace.root, ".intentic", "provider-keys.json")),
+        cliProxy: createCliProxyClient({
+            managementUrl: cliProxyManagementUrl(config),
+            token: config.translator.token,
+            configPath: cliProxyConfigPath(config),
+        }),
         codexHealth,
         locateCodexThread: async (threadId) =>
             locateCodexThread(
@@ -301,7 +315,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
             commitPaths,
             discardPaths,
             fileDiff: workingFileDiff,
+            changesAgainstBase,
         },
+        agents: createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json"))),
+        agentWorktrees: createAgentWorktrees({ workspace, worktreesRoot: join(config.historyRoot, "worktrees"), logger }),
         files: {
             read: readWorkspaceFile,
             write: writeWorkspaceFile,

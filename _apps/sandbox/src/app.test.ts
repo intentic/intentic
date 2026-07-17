@@ -11,6 +11,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
 import type { Hono } from "hono";
 import { expect, test, vi } from "vitest";
+import { createAgentsRegistry } from "./agents/agents-registry.js";
 import { createApp } from "./app.js";
 import { ForbiddenError } from "./auth/auth.js";
 import type { AutomationRecord, AutomationsStore } from "./automations/automations-store.js";
@@ -240,6 +241,20 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         commitPaths: async () => false,
         discardPaths: async () => {},
         fileDiff: async () => ({}),
+        changesAgainstBase: async () => [],
+    },
+    // A real registry over a memory store (cheap, and /events' roster subscription needs the real seam);
+    // worktree git mechanics are stubbed — the worktree suites cover them against real git.
+    agents: createAgentsRegistry({ load: async () => [], save: async () => {} }),
+    agentWorktrees: {
+        conversationDir: (id) => `/history/worktrees/${id}`,
+        worktreeDir: (id, repo) => (repo === "root" ? `/history/worktrees/${id}` : `/history/worktrees/${id}/repositories/${repo}`),
+        mainDir: (repo) => (repo === "root" ? "/work" : `/work/repositories/${repo}`),
+        exists: async () => false,
+        ensure: async (id) => ({ cwd: `/history/worktrees/${id}`, branch: `agent/${id}`, repos: [{ repo: "root", base: "a".repeat(40) }] }),
+        remove: async () => {},
+        prune: async () => {},
+        withRepoLock: (_repo, task) => task(),
     },
     files: fakeFiles(),
     workspaceTree: async () => ({ root: "/work", tree: [], truncated: false }),
@@ -1172,6 +1187,89 @@ test("agent.run rejects an attachment path escaping the workspace with an error 
     const client = clientFor(createApp(services()));
     const events = await collect(await client.agent.run({ prompt: "look", attachments: ["../escape.png"] }));
     expect(events).toEqual([{ kind: "error", message: "invalid attachment path: ../escape.png" }, { kind: "done" }]);
+});
+
+test("an isolated turn runs in the conversation worktree, leads with the worktree frame, skips the main-tree snapshots, and registers the agent", async () => {
+    let seen: { cwd?: string } | undefined;
+    let snapshots = 0;
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* (request) {
+                    seen = request;
+                    yield { kind: "session", sessionId: "sess-iso" };
+                    yield { kind: "usage", costUsd: 0.5, inputTokens: 10, outputTokens: 5 };
+                    yield { kind: "done" };
+                },
+                history: fakeHistory({
+                    snapshot: async () => {
+                        snapshots++;
+                        return undefined;
+                    },
+                }),
+            }),
+        ),
+    );
+    const events = await collect(await client.agent.run({ prompt: "fix it", conversationId: "conv1", isolated: true }));
+    // The worktree identity frame precedes every provider frame; the stub composition's root base is aaaa….
+    expect(events[0]).toEqual({ kind: "worktree", branch: "agent/conv1", base: "aaaaaaa" });
+    // The single binding point: the turn's cwd is the worktree, not /work.
+    expect(seen?.cwd).toBe("/history/worktrees/conv1");
+    // Both main-tree history snapshots (attribution fence + turn end) are skipped.
+    expect(snapshots).toBe(0);
+    // The fleet registry recorded the conversation: idle after finish, usage flushed, session captured.
+    const { agents } = await client.agents.list();
+    expect(agents).toHaveLength(1);
+    expect(agents[0]).toMatchObject({ id: "conv1", status: "idle", branch: "agent/conv1", costUsd: 0.5, sessionId: "sess-iso" });
+});
+
+test("a second concurrent isolated turn for the same conversation is refused with agent-busy", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    await gate;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    const first = collect(await client.agent.run({ prompt: "long task", conversationId: "conv1", isolated: true }));
+    // Poll until the first turn holds the mutex (its begin ran), then the second send must bounce.
+    await vi.waitFor(async () => {
+        const events = await collect(await client.agent.run({ prompt: "again", conversationId: "conv1", isolated: true }));
+        expect(events[0]).toMatchObject({ kind: "error", code: "agent-busy" });
+    });
+    release?.();
+    await first;
+    // The mutex released at finish — the next turn runs.
+    const events = await collect(await client.agent.run({ prompt: "after", conversationId: "conv1", isolated: true }));
+    expect(events[0]).toMatchObject({ kind: "worktree" });
+});
+
+test("an isolated turn that dies on a provider gate still releases the conversation mutex", async () => {
+    // No Claude account and no env fallback → the gate yields an error before the adapter ever runs.
+    const client = clientFor(
+        createApp(
+            services({
+                claudeStore: { read: async () => undefined, write: async () => {}, clear: async () => {}, list: async () => [] },
+            }),
+        ),
+    );
+    const first = await collect(await client.agent.run({ prompt: "hi", conversationId: "conv1", isolated: true }));
+    expect(first.some((event) => event.kind === "error" && event.message.includes("No Claude account"))).toBe(true);
+    // The gate exit must not leave the agent stuck "running" — the retry hits the same gate, NOT agent-busy.
+    const second = await collect(await client.agent.run({ prompt: "hi", conversationId: "conv1", isolated: true }));
+    expect(second.some((event) => event.kind === "error" && event.code === "agent-busy")).toBe(false);
+    const { agents } = await client.agents.list();
+    expect(agents[0]?.status).not.toBe("running");
+});
+
+test("isolated requires conversationId at the contract gate", async () => {
+    const client = clientFor(createApp(services()));
+    expect(await errorCode(client.agent.run({ prompt: "hi", isolated: true }))).toBe("BAD_REQUEST");
 });
 
 test("git.status resolves the repo dir, and rejects an unknown repo", async () => {

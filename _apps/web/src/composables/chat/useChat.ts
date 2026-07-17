@@ -54,6 +54,12 @@ const chatTabsKey = (sandboxId: string): string => `intentic.chatTabs.${sandboxI
 const PROVIDERS: readonly AgentProvider[] = AgentProviderSchema.options;
 
 interface StoredTab {
+    // The stable daemon-side conversation identity (fleet registry + worktree key); absent on a legacy
+    // snapshot ⇒ a fresh one is minted on restore.
+    readonly conversationId?: string;
+    // Whether the conversation runs in its isolated worktree. Absent (legacy snapshot): a tab WITH a session
+    // restores as main-tree (its session lives in /work's namespace); a fresh tab gets the isolated default.
+    readonly isolated?: boolean;
     // The tab's turn selection; the session's provider may differ while a switch is picked but not yet sent.
     readonly provider?: AgentProvider;
     // The tab's harness selection (native vs the Claude Code loop); absent ⇒ the current default on restore.
@@ -96,6 +102,8 @@ const readTabs = (sandboxId: string | undefined): { active: number; tabs: Stored
                 attachments: (Array.isArray(tab[`attachments`]) ? (tab[`attachments`] as Record<string, unknown>[]) : [])
                     .filter((entry) => typeof entry[`name`] === `string` && typeof entry[`path`] === `string`)
                     .map((entry) => ({ name: entry[`name`] as string, path: entry[`path`] as string })),
+                ...(typeof tab[`conversationId`] === `string` ? { conversationId: tab[`conversationId`] } : {}),
+                ...(typeof tab[`isolated`] === `boolean` ? { isolated: tab[`isolated`] } : {}),
                 ...(PROVIDERS.includes(tab[`provider`] as AgentProvider) ? { provider: tab[`provider`] as AgentProvider } : {}),
                 ...(tab[`harness`] === `claude-code` || tab[`harness`] === `native` ? { harness: tab[`harness`] as AgentHarness } : {}),
                 ...(validSession !== undefined ? { session: validSession } : {}),
@@ -120,7 +128,8 @@ const restoreTabs = (): Conversation[] => {
         return [conversation];
     }
     const restored = stored.tabs.map((tab) => {
-        const conversation = new Conversation(`c${convSeq++}`);
+        const conversation = new Conversation(`c${convSeq++}`, tab.conversationId);
+        conversation.isolated.value = tab.isolated ?? tab.session === undefined;
         conversation.draft.value = tab.draft;
         conversation.attachments.value = tab.attachments.map((file) => ({
             id: crypto.randomUUID(),
@@ -170,6 +179,8 @@ watch(
             active: conversations.value.findIndex((conversation) => conversation.id === activeId.value),
             tabs: conversations.value.map((conversation) => ({
                 // JSON.stringify drops undefined keys, matching StoredTab's optional fields.
+                conversationId: conversation.conversationId,
+                isolated: conversation.isolated.value,
                 provider: conversation.provider.value,
                 harness: conversation.harness.value,
                 session: conversation.session.value && { id: conversation.session.value.id, provider: conversation.session.value.provider },
@@ -708,6 +719,42 @@ const loadRemoteTranscript = async (conversation: Conversation, id: string, titl
     } catch {
         conversation.error.value = `Could not open that conversation.`;
     }
+};
+
+// Open (or focus) the tab bound to a fleet agent's conversationId, seeding identity from its registry
+// summary. An isolated conversation's transcript lives in its WORKTREE session namespace, which /sessions
+// (main-tree-keyed) can't read — so a freshly-opened tab arms the session for server-side resume and starts
+// visually empty, the same accepted restore shape codex/grok tabs have. Exported for useAgents.open.
+export const openAgentConversation = (agent: {
+    id: string;
+    sessionId?: string;
+    title?: string;
+    provider: AgentProvider;
+    harness: AgentHarness;
+    account?: string;
+}): Conversation => {
+    const existing = conversations.value.find((conversation) => conversation.conversationId === agent.id);
+    if (existing !== undefined) {
+        activeId.value = existing.id;
+        return existing;
+    }
+    const conversation = new Conversation(`c${convSeq++}`, agent.id);
+    conversation.provider.value = agent.provider;
+    conversation.harness.value = agent.harness;
+    conversation.account.value = agent.account ?? rememberedAccountFor(agent.provider);
+    conversation.model.value = rememberedModelFor(agent.provider, agent.harness);
+    conversation.title.value = agent.title ?? null;
+    if (agent.sessionId !== undefined) {
+        conversation.session.value = {
+            id: agent.sessionId,
+            provider: agent.provider,
+            account: conversation.account.value,
+            harness: agent.harness,
+        };
+    }
+    conversations.value = [...conversations.value, conversation];
+    activeId.value = conversation.id;
+    return conversation;
 };
 
 // Open a past conversation: focus its tab if already open, else load its transcript into a new tab.

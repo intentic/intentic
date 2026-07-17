@@ -14,7 +14,7 @@
   // src/environments/environment.local.ts
   window.env = {
     ...defaultEnv,
-    api: { url: `https://localhost:6480` },
+    api: { url: "https://localhost:6480" },
     // Public web client id (authorize the dev origin, http://localhost:47145, as a JS origin on this client).
     auth: { googleClientId: `481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com` }
   };

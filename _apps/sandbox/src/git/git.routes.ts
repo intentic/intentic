@@ -90,7 +90,7 @@ export const createGitRoutes = (services: Services) => {
             if (resolveWithin(dir, input.path) === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
             }
-            return services.git.fileDiff(dir, input.path);
+            return services.git.fileDiff(dir, input.path, "HEAD");
         }),
         status: i.status.handler(async ({ input }) => services.git.status(await repoDir(input.repo))),
         commit: i.commit.handler(async ({ input }) => {

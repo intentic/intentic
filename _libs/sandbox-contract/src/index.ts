@@ -1,5 +1,6 @@
 import { activityContract } from "./contracts/activity.contract.js";
 import { agentContract } from "./contracts/agent.contract.js";
+import { agentsContract } from "./contracts/agents.contract.js";
 import { automationsContract } from "./contracts/automations.contract.js";
 import { capabilitiesContract } from "./contracts/capabilities.contract.js";
 import { claudeContract } from "./contracts/claude.contract.js";
@@ -13,15 +14,16 @@ import { intenticContract } from "./contracts/intentic.contract.js";
 import { inventoryContract } from "./contracts/inventory.contract.js";
 import { logsContract } from "./contracts/logs.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
-import { providerKeysContract } from "./contracts/provider-keys.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
 import { systemContract } from "./contracts/system.contract.js";
+import { translatorContract } from "./contracts/translator.contract.js";
 import { workspaceContract } from "./contracts/workspace.contract.js";
 
 export { activityContract } from "./contracts/activity.contract.js";
 export { agentContract } from "./contracts/agent.contract.js";
+export { agentsContract } from "./contracts/agents.contract.js";
 export { automationsContract } from "./contracts/automations.contract.js";
 export { capabilitiesContract } from "./contracts/capabilities.contract.js";
 export { claudeContract } from "./contracts/claude.contract.js";
@@ -35,11 +37,11 @@ export { intenticContract } from "./contracts/intentic.contract.js";
 export { inventoryContract } from "./contracts/inventory.contract.js";
 export { logsContract } from "./contracts/logs.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
-export { providerKeysContract } from "./contracts/provider-keys.contract.js";
 export { secretsContract } from "./contracts/secrets.contract.js";
 export { sessionsContract } from "./contracts/sessions.contract.js";
 export { settingsContract } from "./contracts/settings.contract.js";
 export { systemContract } from "./contracts/system.contract.js";
+export { translatorContract } from "./contracts/translator.contract.js";
 export { workspaceContract } from "./contracts/workspace.contract.js";
 export * from "./effects.js";
 export * from "./events.js";
@@ -55,6 +57,7 @@ export * from "./terminal-protocol.js";
 export const sandboxContract = {
     activity: activityContract,
     agent: agentContract,
+    agents: agentsContract,
     automations: automationsContract,
     capabilities: capabilitiesContract,
     claude: claudeContract,
@@ -71,7 +74,7 @@ export const sandboxContract = {
     inventory: inventoryContract,
     logs: logsContract,
     panels: panelsContract,
-    providerKeys: providerKeysContract,
     secrets: secretsContract,
     system: systemContract,
+    translator: translatorContract,
 };

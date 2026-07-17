@@ -54,6 +54,44 @@ export const changedFiles = async (dir: string, git: GitRunner = defaultGit): Pr
     return { ...(branch !== "" ? { branch } : {}), changes };
 };
 
+// A repo's cumulative delta vs a fixed base sha — committed work since the base PLUS staged and unstaged
+// edits (one diff covers all three) — merged with untracked files. The agents review reads a conversation
+// worktree with this: `base` is the sha the worktree branched from, so the result is exactly what landing
+// would bring to the main tree, in the same GitChange shape the Changes panel renders.
+export const changesAgainstBase = async (dir: string, base: string, git: GitRunner = defaultGit): Promise<GitChange[]> => {
+    const { stdout } = await git(dir, ["diff", "--name-status", "-z", base]);
+    // NUL-separated records: `STATUS\0path\0`, except renames/copies which span three fields
+    // (`R<score>\0old\0new\0`). A cursor walk, not a fixed stride.
+    const parts = stdout.split("\0");
+    const changes = new Map<string, GitChange>();
+    let cursor = 0;
+    while (cursor + 1 < parts.length) {
+        const status = parts[cursor] ?? "";
+        const path = parts[cursor + 1] ?? "";
+        if (status === "" || path === "") {
+            break;
+        }
+        if (status.startsWith("R") || status.startsWith("C")) {
+            const to = parts[cursor + 2] ?? "";
+            cursor += 3;
+            if (to === "") {
+                break;
+            }
+            changes.set(to, status.startsWith("R") ? { path: to, status: "renamed", from: path } : { path: to, status: "added" });
+            continue;
+        }
+        cursor += 2;
+        changes.set(path, { path, status: STATUS_OF[status[0] ?? ""] ?? "modified" });
+    }
+    const untracked = (await git(dir, ["ls-files", "--others", "--exclude-standard", "-z"])).stdout.split("\0");
+    for (const path of untracked) {
+        if (path !== "" && !changes.has(path)) {
+            changes.set(path, { path, status: "added" });
+        }
+    }
+    return [...changes.values()];
+};
+
 // Commit exactly `paths` — adds, edits AND deletions — leaving everything else uncommitted. The daemon owns
 // the index: reset first so agent-staged leftovers can't ride along. False ⇒ the paths hold nothing to commit.
 export const commitPaths = async (
@@ -124,19 +162,20 @@ export const discardPaths = async (dir: string, paths: readonly string[] | undef
     }
 };
 
-// Both sides of one uncommitted file — HEAD blob vs working tree — with the same size/NUL guards as the
-// history diff. The route has already validated that `path` stays inside `dir` (resolveWithin).
-export const workingFileDiff = async (dir: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> => {
+// Both sides of one changed file — the `ref` blob (HEAD for the working-tree review, a conversation's base
+// sha for the agents review) vs the working tree — with the same size/NUL guards as the history diff. The
+// route has already validated that `path` stays inside `dir` (resolveWithin).
+export const workingFileDiff = async (dir: string, path: string, ref: string, git: GitRunner = defaultGit): Promise<FileDiff> => {
     let before: string | undefined;
     let after: string | undefined;
     let binary = false;
     let truncated = false;
     try {
-        const size = Number((await git(dir, ["cat-file", "-s", `HEAD:${path}`])).stdout.trim());
+        const size = Number((await git(dir, ["cat-file", "-s", `${ref}:${path}`])).stdout.trim());
         if (size > MAX_FILE_DIFF_BYTES) {
             truncated = true;
         } else {
-            const content = (await git(dir, ["cat-file", "-p", `HEAD:${path}`])).stdout;
+            const content = (await git(dir, ["cat-file", "-p", `${ref}:${path}`])).stdout;
             if (content.includes("\0")) {
                 binary = true;
             } else {
@@ -144,7 +183,7 @@ export const workingFileDiff = async (dir: string, path: string, git: GitRunner 
             }
         }
     } catch {
-        // Absent in HEAD (an added file) or an unborn HEAD — no before side.
+        // Absent at `ref` (an added file) or an unborn ref — no before side.
     }
     const abs = join(dir, path);
     const size = await statWorkspaceFileSize(abs);

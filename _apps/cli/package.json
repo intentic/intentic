@@ -35,7 +35,6 @@
     },
     "scripts": {
         "build": "tsc",
-        "dev": "tsc --build --watch",
         "watch": "tsc --build --watch",
         "test": "vitest run",
         "test:watch": "vitest",
