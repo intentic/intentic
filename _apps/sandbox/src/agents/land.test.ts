@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,7 +31,7 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     const workspace = workspacePaths(work);
     await mkdir(work, { recursive: true });
     await ensureRootRepo(workspace, historyRoot);
-    await writeFile(join(work, "app.ts"), "v1\n");
+    await writeFile(join(work, "app.ts"), "line one\nline two\nline three\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "baseline");
     const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), logger });
@@ -38,13 +39,13 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     return { work, worktrees, conversation };
 };
 
-const entryFor = (conversation: ConversationWorktree): PersistedAgent => ({
+const entryFor = (repos: PersistedAgent["repos"]): PersistedAgent => ({
     id: "c1",
     branch: "agent/c1",
     title: "fix the thing",
     provider: "claude",
     harness: "native",
-    repos: [...conversation.repos],
+    repos: [...repos],
     status: "idle",
     costUsd: 0,
     inputTokens: 0,
@@ -53,63 +54,97 @@ const entryFor = (conversation: ConversationWorktree): PersistedAgent => ({
     updatedAt: 0,
 });
 
-test("land commits worktree WIP and fast-forwards the main tree", async () => {
-    const { work, worktrees, conversation } = await setup();
-    await writeFile(join(conversation.cwd, "app.ts"), "agent v2\n");
-    await writeFile(join(conversation.cwd, "added.ts"), "new file\n");
-
-    const result = await landAgent(worktrees, entryFor(conversation));
-    expect(result).toEqual({ landed: true });
-    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("agent v2\n");
-    expect(await readFile(join(work, "added.ts"), "utf8")).toBe("new file\n");
-    expect(await sh(work, "log", "-1", "--format=%s %an")).toBe("Agent: fix the thing intentic");
-    // The worktree survives — the conversation can keep working and land incrementally.
-    await writeFile(join(conversation.cwd, "app.ts"), "agent v3\n");
-    expect(await landAgent(worktrees, entryFor(conversation))).toEqual({ landed: true });
-    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("agent v3\n");
-});
-
-test("land with nothing changed is a clean no-op", async () => {
+test("land applies the delta as UNCOMMITTED main-tree changes — HEAD never moves", async () => {
     const { work, worktrees, conversation } = await setup();
     const head = await sh(work, "rev-parse", "HEAD");
-    expect(await landAgent(worktrees, entryFor(conversation))).toEqual({ landed: true });
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await writeFile(join(conversation.cwd, "added.ts"), "new file\n");
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos));
+    expect(result.landed).toBe(true);
+    expect(result.changed).toBe(true);
+    // The work arrived, but as plain uncommitted changes — the Changes panel is the review.
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one EDITED\nline two\nline three\n");
+    expect(await readFile(join(work, "added.ts"), "utf8")).toBe("new file\n");
     expect(await sh(work, "rev-parse", "HEAD")).toBe(head);
+    expect(await sh(work, "status", "--porcelain")).not.toBe("");
+    // landedTip advanced to the worktree branch's tip.
+    const root = result.repos.find((repo) => repo.repo === "root");
+    expect(root?.landedTip).toBe(await sh(conversation.cwd, "rev-parse", "HEAD"));
 });
 
-test("overlapping dirty main paths are reported, not merged; disjoint dirty paths survive a land", async () => {
-    const { work, worktrees, conversation } = await setup();
-    await writeFile(join(conversation.cwd, "app.ts"), "agent version\n");
-    await writeFile(join(work, "app.ts"), "user uncommitted\n"); // overlap
-    await writeFile(join(work, "notes.md"), "user notes\n"); // disjoint
-
-    const first = await landAgent(worktrees, entryFor(conversation));
-    expect(first.landed).toBe(false);
-    expect(first.conflicts).toEqual([{ repo: "root", paths: ["app.ts"] }]);
-    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("user uncommitted\n");
-
-    // User resolves their edit (reverts it); the disjoint dirty file must ride through the merge untouched.
-    await sh(work, "checkout", "--", "app.ts");
-    const second = await landAgent(worktrees, entryFor(conversation));
-    expect(second).toEqual({ landed: true });
-    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("agent version\n");
-    expect(await readFile(join(work, "notes.md"), "utf8")).toBe("user notes\n");
+test("nothing to land reads as changed:false (no frame, no status flip)", async () => {
+    const { worktrees, conversation } = await setup();
+    const result = await landAgent(worktrees, entryFor(conversation.repos));
+    expect(result).toMatchObject({ landed: true, changed: false });
 });
 
-test("a real merge conflict aborts cleanly and reports the unmerged paths", async () => {
+test("incremental: a re-touched file lands its second delta onto the previously-landed copy", async () => {
     const { work, worktrees, conversation } = await setup();
-    await writeFile(join(conversation.cwd, "app.ts"), "agent line\n");
-    // Main advances with a COMMITTED conflicting change — a genuine divergence, not just dirt.
-    await writeFile(join(work, "app.ts"), "main line\n");
-    await sh(work, "add", "-A");
-    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "main advance");
-    const mainHead = await sh(work, "rev-parse", "HEAD");
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    const first = await landAgent(worktrees, entryFor(conversation.repos));
+    expect(first.landed).toBe(true);
 
-    const result = await landAgent(worktrees, entryFor(conversation));
+    // Turn 2 edits the SAME file again. Main still holds the landed (uncommitted) copy — the patch context
+    // matches it, so the second delta applies; a path-overlap test would have false-flagged this.
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three EDITED TOO\n");
+    const second = await landAgent(worktrees, entryFor(first.repos));
+    expect(second.landed).toBe(true);
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one EDITED\nline two\nline three EDITED TOO\n");
+});
+
+test("a user edit on the same lines conflicts: nothing applies, main is untouched, the path is named", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await writeFile(join(work, "app.ts"), "line one USER\nline two\nline three\n");
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos));
     expect(result.landed).toBe(false);
+    expect(result.changed).toBe(true);
     expect(result.conflicts).toEqual([{ repo: "root", paths: ["app.ts"] }]);
-    // merge --abort left main exactly where it was, mid-merge state gone.
-    expect(await sh(work, "rev-parse", "HEAD")).toBe(mainHead);
-    expect(await sh(work, "status", "--porcelain")).toBe("");
-    // The agent's work is intact on its branch.
-    expect(await readFile(join(conversation.cwd, "app.ts"), "utf8")).toBe("agent line\n");
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one USER\nline two\nline three\n");
+    // The agent's work is intact in the worktree for Land-now recovery.
+    expect(await readFile(join(conversation.cwd, "app.ts"), "utf8")).toBe("line one AGENT\nline two\nline three\n");
+});
+
+test("a user edit ELSEWHERE in the same file still lands (patch context, not path sets)", async () => {
+    const { work, worktrees, conversation } = await setup();
+    // Far enough apart that the hunks' ±3 context lines never overlap (a 3-line file would make any
+    // same-file edit a context collision — that's the conflict test, not this one).
+    const lines = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`);
+    const body = (edits: Record<number, string>): string => `${lines.map((line, index) => edits[index + 1] ?? line).join("\n")}\n`;
+    await writeFile(join(work, "app.ts"), body({}));
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "long file");
+    const grown = await worktrees.ensure("c2", []);
+    await writeFile(join(grown.cwd, "app.ts"), body({ 1: "line 1 AGENT" }));
+    await writeFile(join(work, "app.ts"), body({ 12: "line 12 USER" }));
+
+    const result = await landAgent(worktrees, { ...entryFor(grown.repos), id: "c2", branch: "agent/c2" });
+    expect(result.landed).toBe(true);
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe(body({ 1: "line 1 AGENT", 12: "line 12 USER" }));
+});
+
+test("deletes and renames land; a conflicted land keeps landedTip so recovery applies the same delta", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await sh(conversation.cwd, "mv", "app.ts", "renamed.ts");
+    await sh(conversation.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "rename");
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos));
+    expect(result.landed).toBe(true);
+    expect(existsSync(join(work, "app.ts"))).toBe(false);
+    expect(await readFile(join(work, "renamed.ts"), "utf8")).toBe("line one\nline two\nline three\n");
+
+    // Conflict a follow-up: agent edits renamed.ts, user edits the main copy on the same line.
+    await writeFile(join(conversation.cwd, "renamed.ts"), "line one AGENT\nline two\nline three\n");
+    await writeFile(join(work, "renamed.ts"), "line one USER\nline two\nline three\n");
+    const conflicted = await landAgent(worktrees, entryFor(result.repos));
+    expect(conflicted.landed).toBe(false);
+    // landedTip did NOT advance for the conflicted repo — Land now retries the exact same delta.
+    expect(conflicted.repos.find((repo) => repo.repo === "root")?.landedTip).toBe(result.repos.find((repo) => repo.repo === "root")?.landedTip);
+    // User resolves (reverts their edit) → recovery lands the pending delta.
+    await writeFile(join(work, "renamed.ts"), "line one\nline two\nline three\n");
+    const recovered = await landAgent(worktrees, entryFor(conflicted.repos));
+    expect(recovered.landed).toBe(true);
+    expect(await readFile(join(work, "renamed.ts"), "utf8")).toBe("line one AGENT\nline two\nline three\n");
 });

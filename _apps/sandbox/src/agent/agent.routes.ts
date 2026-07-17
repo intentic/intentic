@@ -14,6 +14,7 @@ import { createHashlineServer } from "../hashline/hashline-tools.js";
 import { createSessionSearchServer } from "../sessions/session-search-tool.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
+import { landAgent } from "../agents/land.js";
 import type { AgentRequest } from "./agent.js";
 import { resolvePlanDecision, resolveQuestionAnswer } from "./agent-requests.js";
 import { delegationNote } from "./delegation.js";
@@ -86,6 +87,7 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         yield { kind: "done" };
         return;
     }
+    let outcome: "landed" | "conflict" | undefined;
     try {
         // Lazily create (first turn) or repair the conversation's worktree composition, then announce it.
         const entry = services.agents.entry(conversationId);
@@ -95,9 +97,35 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         }
         const base = (worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0])?.base.slice(0, 7) ?? "";
         yield { kind: "worktree", branch: worktree.branch, base };
-        yield* runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd });
+        // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
+        let failed = false;
+        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd })) {
+            if (event.kind === "error") {
+                failed = true;
+            }
+            yield event;
+        }
+        // Auto-land at clean turn completion — the Claude Code review model: the delta arrives in the main
+        // tree as UNCOMMITTED changes and the user's ordinary Changes-panel commit is the review. Aborted or
+        // errored turns accumulate in the worktree; the next clean turn lands the cumulative delta.
+        const finished = services.agents.entry(conversationId);
+        if (!failed && signal?.aborted !== true && finished !== undefined) {
+            const landed = await landAgent(services.agentWorktrees, finished);
+            if (landed.changed) {
+                await services.agents.recordLanded(conversationId, landed.repos);
+                outcome = landed.landed ? "landed" : "conflict";
+                yield { kind: "landed", landed: landed.landed, ...(landed.conflicts !== undefined ? { conflicts: landed.conflicts } : {}) };
+                if (landed.landed) {
+                    // The main tree just changed — give the History timeline its turn checkpoint, labeled with
+                    // the prompt, exactly like a non-isolated turn's snapshot.
+                    services.history
+                        .snapshot("turn", input.prompt)
+                        .catch((error: unknown) => services.logger.warn({ err: error }, "history: landed snapshot failed"));
+                }
+            }
+        }
     } finally {
-        await services.agents.finish(conversationId, Date.now());
+        await services.agents.finish(conversationId, Date.now(), outcome);
     }
 }
 

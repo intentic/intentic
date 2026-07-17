@@ -33,12 +33,14 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
+        // The review shows the NOT-YET-LANDED remainder (`landedTip ?? base` → worktree) — empty in steady
+        // state, since clean turn completions auto-land; non-empty only after a conflict or an aborted turn.
         diff: i.diff.handler(async ({ input }) => {
             const entry = entryOf(input.id);
             const repos: RepoChanges[] = [];
-            for (const { repo, base } of entry.repos) {
+            for (const { repo, base, landedTip } of entry.repos) {
                 try {
-                    const changes = await services.git.changesAgainstBase(services.agentWorktrees.worktreeDir(entry.id, repo), base);
+                    const changes = await services.git.changesAgainstBase(services.agentWorktrees.worktreeDir(entry.id, repo), landedTip ?? base);
                     if (changes.length > 0) {
                         repos.push({ repo, branch: entry.branch, changes });
                     }
@@ -59,18 +61,20 @@ export const createAgentsRoutes = (services: Services) => {
             if (resolveWithin(dir, input.path) === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
             }
-            return services.git.fileDiff(dir, input.path, composed.base);
+            return services.git.fileDiff(dir, input.path, composed.landedTip ?? composed.base);
         }),
+        // Manual land — the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input }) => {
             const entry = entryOf(input.id);
             notRunning(input.id);
             const result = await landAgent(services.agentWorktrees, entry);
-            await services.agents.setLandOutcome(input.id, result.landed ? "landed" : "conflict", Date.now());
-            if (result.landed) {
+            await services.agents.recordLanded(input.id, result.repos);
+            await services.agents.finish(input.id, Date.now(), result.landed ? "landed" : "conflict");
+            if (result.landed && result.changed) {
                 // The main tree changed under the user — same attribution convention as git.discard.
                 services.history.notifyUserWrite();
             }
-            return result;
+            return { landed: result.landed, ...(result.conflicts !== undefined ? { conflicts: result.conflicts } : {}) };
         }),
         discard: i.discard.handler(async ({ input }) => {
             const entry = entryOf(input.id);

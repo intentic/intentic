@@ -81,20 +81,35 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.status).toBe("error");
     });
 
-    it("session and worktree composition persist; land outcome raises conflict attention", async () => {
+    it("session and worktree composition persist; a finish outcome sets the land status", async () => {
         const store = memoryStore();
         const registry = createAgentsRegistry(store);
         await registry.init();
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "session", sessionId: "s9" });
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
-        await registry.finish("c1", 2_000);
+        await registry.finish("c1", 2_000, "landed");
         expect(registry.get("c1")?.sessionId).toBe("s9");
         expect(registry.get("c1")?.base).toBe("aaaaaaa");
-        await registry.setLandOutcome("c1", "conflict", 3_000);
+        expect(registry.get("c1")?.status).toBe("landed");
+        // The manual-land path finishes with an outcome OUTSIDE any turn (no runtime state) — still persists.
+        await registry.finish("c1", 3_000, "conflict");
         expect(registry.get("c1")?.status).toBe("conflict");
         expect(registry.get("c1")?.attention.conflict).toBe(true);
         expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("conflict");
+    });
+
+    it("recordLanded persists advanced landedTips", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store);
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
+        await registry.recordLanded("c1", [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }]);
+        await registry.finish("c1", 2_000, "landed");
+        expect(store.saved().find((entry) => entry.id === "c1")?.repos).toEqual([
+            { repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) },
+        ]);
     });
 
     it("activity tracks the last tool and current todo", async () => {

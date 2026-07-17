@@ -8,10 +8,11 @@ import { useChat } from "../composables/chat/useChat";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { STATUS_CLASS, STATUS_LETTER } from "../pages/workspace/workspaceTabs";
 
-/* One agent's isolated review: the worktree's cumulative delta vs its bases, grouped by repo — read-only rows
- * (no per-file selection: an agent's work lands or is discarded whole; cherry-picking is the MAIN review's
- * job after a land) — plus the Land / Discard action bar and the conflict report. Diffs open through the
- * workspace tab machinery, same as the Changes panel. */
+/* One agent's NOT-YET-LANDED work: clean turn completions auto-land the delta into the main tree as
+ * uncommitted changes (the Changes panel is the review), so this list is empty in steady state — it fills
+ * only after a land conflict or an aborted/errored turn. Read-only rows (an agent's remainder lands or is
+ * discarded whole; per-file review happens in the main Changes panel after landing), plus the "Land now"
+ * recovery action, Discard, and the conflict report. Diffs open through the workspace tab machinery. */
 
 const props = defineProps<{ agentId: string }>();
 const router = useRouter();
@@ -57,7 +58,7 @@ const pendingDiscard = ref(false);
         <!-- Land / Discard bar -->
         <div class="flex shrink-0 flex-col gap-1.5 border-b border-line p-2">
             <div class="flex items-center gap-2">
-                <span class="text-2xs text-muted">{{ changes.count.value }} change{{ changes.count.value === 1 ? "" : "s" }} vs base</span>
+                <span class="text-2xs text-muted">{{ changes.count.value }} change{{ changes.count.value === 1 ? "" : "s" }} not yet landed</span>
                 <Icon name="spinner" v-if="changes.actionBusy.value" class="text-xs text-muted" spin />
                 <span class="flex-1"></span>
                 <button
@@ -74,9 +75,9 @@ const pendingDiscard = ref(false);
                     class="inline-flex items-center whitespace-nowrap rounded-md bg-success px-2.5 py-1 text-2xs font-medium text-white transition-colors hover:bg-success/85 disabled:opacity-40"
                     :disabled="changes.actionBusy.value || streaming || changes.count.value === 0"
                     @click="changes.land()"
-                    v-tooltip.top="streaming ? 'Wait for the agent turn to finish' : 'Merge this agent\'s work into your workspace'"
+                    v-tooltip.top="streaming ? 'Wait for the agent turn to finish' : 'Apply the remaining changes to your workspace'"
                 >
-                    <Icon name="check" class="mr-1 text-2xs" />Land
+                    <Icon name="check" class="mr-1 text-2xs" />Land now
                 </button>
             </div>
             <div v-if="pendingDiscard" class="flex items-center gap-2">
@@ -106,7 +107,8 @@ const pendingDiscard = ref(false);
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
             <p v-if="changes.loading.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">Loading the agent's diff…</p>
             <p v-else-if="changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">
-                No changes vs base yet — the agent hasn't edited anything (or its work was already landed).
+                Everything this agent produced has landed in your workspace — review it in the Changes panel. Work lands automatically when a
+                turn completes; anything that conflicts with your own edits waits here for Land now.
             </p>
             <div v-for="group in changes.repos.value" :key="group.repo" class="border-b border-line/50">
                 <div class="flex items-center gap-2 px-3 py-1.5">

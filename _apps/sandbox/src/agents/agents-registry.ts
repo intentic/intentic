@@ -71,12 +71,15 @@ export interface AgentsRegistry {
     // is already running for that conversation (the caller surfaces the coded busy error).
     readonly begin: (turn: AgentTurnIdentity, now: number) => Promise<boolean>;
     // Record the worktree composition on first creation (per-repo full base shas).
-    readonly recordWorktree: (id: string, repos: readonly { repo: string; base: string }[]) => Promise<void>;
+    readonly recordWorktree: (id: string, repos: readonly PersistedAgent["repos"][number][]) => Promise<void>;
+    // Persist a land's advanced per-repo landedTips (partial lands included — conflicted repos keep theirs).
+    readonly recordLanded: (id: string, repos: readonly PersistedAgent["repos"][number][]) => Promise<void>;
     // Fold one turn frame into runtime state; broadcasts only on card-visible changes.
     readonly observe: (id: string, event: AgentEvent) => void;
     // End of turn (aborted included): flush pending usage/session into the entry, release the mutex.
-    readonly finish: (id: string, now: number) => Promise<void>;
-    readonly setLandOutcome: (id: string, outcome: "landed" | "conflict", now: number) => Promise<void>;
+    // `outcome` carries the auto-land verdict of a clean turn — it wins over the default idle status
+    // (an observed error frame still wins over everything).
+    readonly finish: (id: string, now: number, outcome?: "landed" | "conflict") => Promise<void>;
     readonly remove: (id: string) => Promise<void>;
     // Immediate snapshot on subscribe, so a fresh /events connection paints the fleet without waiting.
     readonly subscribe: (listener: (agents: AgentSummary[]) => void) => () => void;
@@ -248,7 +251,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             }
             broadcast();
         },
-        finish: async (id, now) => {
+        finish: async (id, now, outcome) => {
             const entry = entryOf(id);
             const state = runtime.get(id);
             if (state !== undefined) {
@@ -258,31 +261,37 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 state.question = false;
                 state.startedAt = undefined;
             }
-            if (entry !== undefined && state !== undefined) {
+            // Tolerates a missing runtime state: the manual land route finishes with an outcome outside any
+            // turn (possibly right after a daemon restart), and must still write the status through.
+            if (entry !== undefined) {
+                const sessionId = state?.pendingSessionId ?? entry.sessionId;
                 replace({
                     ...entry,
-                    status: state.errored ? "error" : "idle",
-                    costUsd: entry.costUsd + state.pendingCostUsd,
-                    inputTokens: entry.inputTokens + state.pendingInputTokens,
-                    outputTokens: entry.outputTokens + state.pendingOutputTokens,
+                    // An observed error frame outranks everything; else the land verdict; else idle.
+                    status: state?.errored === true ? "error" : (outcome ?? "idle"),
+                    costUsd: entry.costUsd + (state?.pendingCostUsd ?? 0),
+                    inputTokens: entry.inputTokens + (state?.pendingInputTokens ?? 0),
+                    outputTokens: entry.outputTokens + (state?.pendingOutputTokens ?? 0),
                     updatedAt: now,
-                    ...(state.pendingSessionId !== undefined ? { sessionId: state.pendingSessionId } : entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}),
+                    ...(sessionId !== undefined ? { sessionId } : {}),
                 });
-                state.pendingCostUsd = 0;
-                state.pendingInputTokens = 0;
-                state.pendingOutputTokens = 0;
-                state.pendingSessionId = undefined;
-                state.errored = false;
+                if (state !== undefined) {
+                    state.pendingCostUsd = 0;
+                    state.pendingInputTokens = 0;
+                    state.pendingOutputTokens = 0;
+                    state.pendingSessionId = undefined;
+                    state.errored = false;
+                }
                 await persist();
             }
             broadcast();
         },
-        setLandOutcome: async (id, outcome, now) => {
+        recordLanded: async (id, repos) => {
             const entry = entryOf(id);
             if (entry === undefined) {
                 return;
             }
-            replace({ ...entry, status: outcome, updatedAt: now });
+            replace({ ...entry, repos: [...repos] });
             await persist();
             broadcast();
         },

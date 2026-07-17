@@ -1,4 +1,5 @@
-import { access } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LandResult } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
@@ -7,14 +8,15 @@ import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import type { PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
-// Land a conversation's work into the main tree, per repo of its composition: commit the worktree's dirty
-// state onto agent/<id> (an agent-authored WIP commit — nothing is ever lost), guard against overlapping
-// dirty paths in the main checkout, then `git merge` the branch (ff when main hasn't moved — the common
-// case). A merge conflict aborts cleanly and reports its paths; the worktree keeps everything, so the user
-// can discard, keep working, or land again. Deliberately NON-transactional across repos: repos that merged
-// stay merged, conflicted ones are reported — `landed` is true only when nothing conflicted. The worktree
-// survives a land, so follow-up turns commit further onto the branch and the next land merges the delta.
-// Rebase-before-land rejected for v1: `merge --abort` is crash-safe; mid-rebase recovery is not.
+// Land a conversation's work into the main tree as UNCOMMITTED changes — the Claude Code review model: the
+// agent's finished delta appears in the user's normal Changes panel and their own commit is the review
+// boundary. Per repo of the composition: preserve the worktree's dirty state as an agent-authored commit on
+// agent/<id> (provenance — nothing is ever lost), take the delta `landedTip ?? base → tip` as a binary
+// rename-aware patch, `git apply --check` it against the main tree, and apply working-tree-only. Main's HEAD
+// never moves; landedTip advances so the next land applies only the new delta. A patch that can't apply
+// (the user edited the same lines, or an overlapping dirty/untracked path) lands NOTHING for that repo and
+// reports it — the worktree keeps everything and "Land now" recovers once the user resolves. Called
+// automatically at clean turn completion (streamAgent) and manually from the /agents land route.
 
 const exists = async (path: string): Promise<boolean> => {
     try {
@@ -27,56 +29,79 @@ const exists = async (path: string): Promise<boolean> => {
 
 const withAgentAuthor = ["-c", `user.name=${AGENT_GIT_AUTHOR.name}`, "-c", `user.email=${AGENT_GIT_AUTHOR.email}`];
 
-export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent, git: GitRunner = defaultGit): Promise<LandResult> => {
+// The wire LandResult plus what the registry persists: `changed` distinguishes "nothing to land" (no frame,
+// no status change) from a real outcome, and `repos` carries the advanced landedTips.
+export interface LandOutcome extends LandResult {
+    readonly changed: boolean;
+    readonly repos: PersistedAgent["repos"];
+}
+
+export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent, git: GitRunner = defaultGit): Promise<LandOutcome> => {
     const conflicts: { repo: string; paths: string[] }[] = [];
-    for (const { repo, base } of entry.repos) {
-        await worktrees.withRepoLock(repo, async () => {
-            const worktree = worktrees.worktreeDir(entry.id, repo);
-            if (!(await exists(worktree))) {
-                return;
-            }
-            const main = worktrees.mainDir(repo);
-            if (!(await exists(join(main, ".git")))) {
-                // The main checkout vanished — nothing to merge into; surfaced, not silently skipped.
-                conflicts.push({ repo, paths: [] });
-                return;
-            }
-            // 1. Preserve the worktree's uncommitted state as an agent-authored commit on its branch.
-            if ((await changedFiles(worktree, git)).changes.length > 0) {
-                await git(worktree, ["add", "-A"]);
-                await git(worktree, [...withAgentAuthor, "commit", "-q", "-m", `Agent: ${entry.title ?? entry.id}`]);
-            }
-            const tip = (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim();
-            if (tip === base) {
-                return; // Nothing to land for this repo.
-            }
-            // 2. Dirty-main guard: a merge would clobber uncommitted main-tree edits on the same paths (git's
-            // own untracked/modified-overwrite aborts included) — report them instead of attempting. Disjoint
-            // dirty paths are fine; the merge leaves them alone.
-            const changedSinceBase = (await git(main, ["diff", "--name-only", "-z", base, tip])).stdout.split("\0").filter((path) => path !== "");
-            const mainDirty = new Set<string>();
-            for (const change of (await changedFiles(main, git)).changes) {
-                mainDirty.add(change.path);
-                if (change.from !== undefined) {
-                    mainDirty.add(change.from);
+    const repos: PersistedAgent["repos"] = [];
+    let changed = false;
+    // One temp dir for the run's patch files, removed whole in the finally.
+    const patchDir = await mkdtemp(join(tmpdir(), "intentic-land-"));
+    try {
+        for (const composed of entry.repos) {
+            const { repo, base } = composed;
+            let next: PersistedAgent["repos"][number] = composed;
+            await worktrees.withRepoLock(repo, async () => {
+                const worktree = worktrees.worktreeDir(entry.id, repo);
+                if (!(await exists(worktree))) {
+                    return;
                 }
-            }
-            const overlap = changedSinceBase.filter((path) => mainDirty.has(path));
-            if (overlap.length > 0) {
-                conflicts.push({ repo, paths: overlap });
-                return;
-            }
-            // 3. Merge; a conflict aborts back to a clean main tree and reports the unmerged paths.
-            try {
-                await git(main, [...withAgentAuthor, "merge", "--no-edit", entry.branch]);
-            } catch {
-                const unmerged = (await git(main, ["diff", "--name-only", "--diff-filter=U", "-z"])).stdout
-                    .split("\0")
-                    .filter((path) => path !== "");
-                await git(main, ["merge", "--abort"]).catch(() => undefined);
-                conflicts.push({ repo, paths: unmerged });
-            }
-        });
+                const main = worktrees.mainDir(repo);
+                if (!(await exists(join(main, ".git")))) {
+                    // The main checkout vanished — nothing to apply into; surfaced, not silently skipped.
+                    conflicts.push({ repo, paths: [] });
+                    changed = true;
+                    return;
+                }
+                // 1. Preserve the worktree's uncommitted state as an agent-authored commit on its branch.
+                if ((await changedFiles(worktree, git)).changes.length > 0) {
+                    await git(worktree, ["add", "-A"]);
+                    await git(worktree, [...withAgentAuthor, "commit", "-q", "-m", `Agent: ${entry.title ?? entry.id}`]);
+                }
+                const tip = (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim();
+                const from = composed.landedTip ?? base;
+                if (tip === from) {
+                    return; // Everything already landed for this repo.
+                }
+                changed = true;
+                // 2. Patch-apply the delta onto the main WORKING TREE only — no index, no commit: the result
+                // is plain unstaged changes, exactly what the Changes panel reviews. `apply --check` is the
+                // conflict gate, and it is CONTEXT-based, which is what makes incremental landing work: a
+                // main file still holding the previously-landed (`from`) content matches the patch context and
+                // applies cleanly, while a user edit on the same lines mismatches and applies NOTHING. A
+                // path-set overlap test can't make that distinction (it would flag every re-touched file).
+                const deltaPaths = (await git(main, ["diff", "--name-only", "-z", from, tip])).stdout.split("\0").filter((path) => path !== "");
+                const patch = (await git(main, ["diff", "--binary", "-M", from, tip])).stdout;
+                const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
+                await writeFile(patchPath, patch);
+                try {
+                    await git(main, ["apply", "--check", patchPath]);
+                } catch {
+                    // Best-effort conflict hint: the delta paths the user's uncommitted work also touches
+                    // (rename `from` legs included); when that intersection is empty, name the whole delta.
+                    const mainDirty = new Set<string>();
+                    for (const change of (await changedFiles(main, git)).changes) {
+                        mainDirty.add(change.path);
+                        if (change.from !== undefined) {
+                            mainDirty.add(change.from);
+                        }
+                    }
+                    const overlap = deltaPaths.filter((path) => mainDirty.has(path));
+                    conflicts.push({ repo, paths: overlap.length > 0 ? overlap : deltaPaths });
+                    return;
+                }
+                await git(main, ["apply", patchPath]);
+                next = { repo, base, landedTip: tip };
+            });
+            repos.push(next);
+        }
+    } finally {
+        await rm(patchDir, { recursive: true, force: true });
     }
-    return { landed: conflicts.length === 0, ...(conflicts.length > 0 ? { conflicts } : {}) };
+    return { landed: conflicts.length === 0, changed, repos, ...(conflicts.length > 0 ? { conflicts } : {}) };
 };

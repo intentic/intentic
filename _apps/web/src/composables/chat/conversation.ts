@@ -858,6 +858,17 @@ export class Conversation {
                 // First frame of an isolated turn: which branch/base this conversation works on.
                 this.worktree.value = { branch: event.branch, base: event.base };
                 return;
+            case `landed`:
+                // End of a clean isolated turn: the delta auto-landed into the main tree as uncommitted
+                // changes (review = the Changes panel), or conflicted and stayed safely in the worktree.
+                this.appendNotice(
+                    event.landed
+                        ? `Changes landed in your workspace — review them in the Changes panel.`
+                        : `Some changes couldn't land automatically — your own edits overlap in ${(event.conflicts ?? [])
+                              .map((conflict) => conflict.repo)
+                              .join(`, `)}. Resolve them, then use Land now in the agent's review.`,
+                );
+                return;
             case `terminal`: {
                 // The agent started running Bash in its live `agent-<id>` tmux terminal — surface it as a tab in
                 // the global panel (relist so it appears; no auto-open, no focus steal). Lazily imported so the
