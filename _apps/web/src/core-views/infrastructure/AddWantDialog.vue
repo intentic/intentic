@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp } from "@intentic-app/ui";
+import { cmp, type IconName } from "@intentic-app/ui";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/capability-catalog";
 import { AppsListSchema } from "@intentic-app/api-contract";
 import Button from "primevue/button";
@@ -188,13 +188,13 @@ const submit = async (): Promise<void> => {
                 <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-canvas">
                     <template v-if="selected.kind === `service`">
                         <img
-                            v-if="!logoFailed.has(selected.service.service)"
+                            v-if="selected.service.logo !== undefined && !logoFailed.has(selected.service.service)"
                             :src="logoUrl(selected.service)"
                             :alt="selected.service.label"
                             class="h-5 w-5 object-contain"
                             @error="logoFailed.add(selected.service.service)"
                         />
-                        <Icon name="server" v-else class="text-sm text-link" />
+                        <Icon :name="(selected.service.icon as IconName) ?? `server`" v-else class="text-sm text-link" />
                     </template>
                     <Icon name="code" v-else class="text-sm text-link" />
                 </span>
@@ -300,13 +300,13 @@ const submit = async (): Promise<void> => {
                 >
                     <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-canvas">
                         <img
-                            v-if="!logoFailed.has(service.service)"
+                            v-if="service.logo !== undefined && !logoFailed.has(service.service)"
                             :src="logoUrl(service)"
                             :alt="service.label"
                             class="h-5 w-5 object-contain"
                             @error="logoFailed.add(service.service)"
                         />
-                        <Icon name="server" v-else class="text-sm text-link" />
+                        <Icon :name="(service.icon as IconName) ?? `server`" v-else class="text-sm text-link" />
                     </span>
                     <div class="min-w-0">
                         <div class="font-medium text-content">{{ service.label }}</div>

@@ -32,7 +32,9 @@ export const INVENTORY_PROVIDERS: readonly InventoryProviderDescriptor[] = [
 export interface InventoryServiceDescriptor {
     readonly service: ServiceKind;
     readonly label: string;
-    readonly logo: string;
+    readonly logo?: string | undefined;
+    // An @intentic-app/ui IconName fallback glyph, rendered when no simple-icons `logo` fits the brand.
+    readonly icon?: string | undefined;
     readonly description: string;
     readonly fields: readonly InventoryFieldDescriptor[];
 }
@@ -40,7 +42,7 @@ export const INVENTORY_SERVICES: readonly InventoryServiceDescriptor[] = [
     {
         service: "signoz",
         label: "SigNoz",
-        logo: "signoz",
+        icon: "wave-pulse",
         description: "Observability — traces, logs and metrics.",
         fields: [{ key: "domain", label: "Domain", kind: "text" }],
     },
@@ -73,10 +75,10 @@ export const INVENTORY_SERVICES: readonly InventoryServiceDescriptor[] = [
         fields: [{ key: "domain", label: "Domain", kind: "text" }],
     },
     {
-        // No infisical slug in simple-icons yet — the dialog falls back to the per-kind icon on load error.
+        // No infisical slug in simple-icons — render the semantic lock glyph instead.
         service: "infisical",
         label: "Infisical",
-        logo: "infisical",
+        icon: "lock",
         description: "Secrets management for apps and teams.",
         fields: [{ key: "domain", label: "Domain", kind: "text" }],
     },
@@ -152,9 +154,12 @@ export interface CapabilityCatalogEntry {
     readonly name: string;
     readonly kind: CapabilityKind;
     readonly category: CapabilityCategory;
-    // A simple-icons slug (https://cdn.simpleicons.org/<logo>); undefined → a generic per-kind icon. A "/<hex>"
-    // suffix forces a color for icons invisible on the dark canvas (e.g. github's near-black).
+    // A simple-icons slug (https://cdn.simpleicons.org/<logo>). A "/<hex>" suffix forces a color for icons
+    // invisible on the dark canvas (e.g. github's near-black). Undefined → the `icon` glyph, else per-kind.
     readonly logo?: string | undefined;
+    // An @intentic-app/ui IconName rendered when no simple-icons `logo` fits the brand (before the per-kind
+    // fallback). undefined → the generic per-kind icon.
+    readonly icon?: string | undefined;
     readonly description: string;
     readonly requires?: readonly CapabilityKind[] | undefined;
     readonly fields: readonly CapabilityField[];
@@ -197,7 +202,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "SSH",
         kind: "ssh",
         category: "servers",
-        logo: "openssh",
+        icon: "server",
         description: "Give the agent a remote machine to operate over SSH.",
         fields: [
             { key: "host", label: "Host", placeholder: "1.2.3.4 or box.example.com" },
@@ -441,6 +446,7 @@ export const connectorCard = (connector: ConnectorContribution): CapabilityCatal
     kind: "cli",
     category: isCapabilityCategory(connector.catalog.category) ? connector.catalog.category : "extend",
     logo: connector.catalog.logo,
+    icon: connector.catalog.icon,
     description: connector.catalog.description,
     fields: [{ key: "provider", label: "", value: connector.provider }, ...connector.fields],
     hint: connector.catalog.hint,

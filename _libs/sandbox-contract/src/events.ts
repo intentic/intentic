@@ -90,6 +90,14 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // First frame of an isolated turn: the conversation's worktree identity — its branch (agent/<id>) and the
     // ROOT repo's short base sha (the checkout moment). Emitted before any provider frames.
     z.object({ kind: z.literal("worktree"), branch: z.string(), base: z.string() }),
+    // Emitted after a clean isolated turn whose delta auto-landed (or failed to): landed ⇒ the work is now
+    // UNCOMMITTED changes in the main tree (the Changes panel is the review); conflicts ⇒ it stayed safely in
+    // the worktree — the named paths collide with the user's own edits, "Land now" recovers after they resolve.
+    z.object({
+        kind: z.literal("landed"),
+        landed: z.boolean(),
+        conflicts: z.array(z.object({ repo: z.string(), paths: z.array(z.string()) })).optional(),
+    }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     z.object({ kind: z.literal("init"), model: z.string() }),
     z.object({ kind: z.literal("delta"), text: z.string(), parentToolUseId: z.string().optional() }),

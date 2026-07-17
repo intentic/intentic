@@ -160,6 +160,9 @@ const touchAll = (): void => {
 
 const logoUrl = (entry: CapabilityCatalogEntry): string | undefined =>
     entry.logo !== undefined ? `https://cdn.simpleicons.org/${entry.logo}` : undefined;
+// The glyph shown when a card has no simple-icons logo (or it failed to load): the card's explicit `icon`,
+// else the generic per-kind fallback.
+const entryIcon = (entry: CapabilityCatalogEntry): IconName => (entry.icon as IconName | undefined) ?? kindIcon(entry.kind);
 const kindIcon = (kind: string): IconName =>
     kind === `devops`
         ? `server`
@@ -467,7 +470,7 @@ const submitLabel = computed(() =>
                         class="h-5 w-5 object-contain"
                         @error="logoFailed.add(selected.id)"
                     />
-                    <Icon v-else :name="kindIcon(selected.kind)" class="text-sm text-link" />
+                    <Icon v-else :name="entryIcon(selected)" class="text-sm text-link" />
                 </span>
                 <div class="min-w-0">
                     <div class="font-medium text-content">{{ selected.name }}</div>
@@ -679,7 +682,7 @@ const submitLabel = computed(() =>
                                         class="h-5 w-5 object-contain"
                                         @error="logoFailed.add(entry.id)"
                                     />
-                                    <Icon v-else :name="kindIcon(entry.kind)" class="text-sm text-link" />
+                                    <Icon v-else :name="entryIcon(entry)" class="text-sm text-link" />
                                 </span>
                                 <div class="min-w-0">
                                     <div class="flex items-center gap-1.5">

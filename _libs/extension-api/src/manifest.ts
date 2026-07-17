@@ -125,6 +125,8 @@ export const ConnectorContributionSchema = z.object({
     catalog: z.object({
         name: z.string().min(1),
         logo: z.string().optional(),
+        // An @intentic-app/ui IconName fallback glyph, rendered when no simple-icons `logo` fits the brand.
+        icon: z.string().optional(),
         description: z.string().min(1),
         category: z.string().min(1),
         hint: z.string().optional(),

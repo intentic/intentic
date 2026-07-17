@@ -195,7 +195,7 @@
                 "kind": "cli",
                 "catalog": {
                     "name": "SigNoz",
-                    "logo": "signoz",
+                    "icon": "wave-pulse",
                     "description": "Query traces, logs and metrics from a SigNoz instance.",
                     "category": "observability",
                     "hint": "The agent queries observability with curl.",

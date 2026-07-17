@@ -8,6 +8,9 @@ describe(`resourceIcon`, () => {
         expect(resourceIcon(`host`)).toBe(`server`);
         expect(resourceIcon(`komodo`)).toBe(`cog`);
         expect(resourceIcon(`garage-bucket`)).toBe(`folder`);
+        // Brands absent from simple-icons fall back to a semantic glyph instead of a 404-ing logo.
+        expect(resourceIcon(`signoz`)).toBe(`wave-pulse`);
+        expect(resourceIcon(`infisical`)).toBe(`lock`);
         expect(resourceIcon(`not-a-real-kind`)).toBe(`box`);
     });
 });
@@ -23,7 +26,7 @@ describe(`resourceLogoUrl`, () => {
         expect(resourceLogoUrl(`gh-ci`)).toBe(`https://cdn.simpleicons.org/github/f5f5f5`);
     });
 
-    it(`has no logo for infra-native / generic / sub-resource kinds → semantic glyph`, () => {
+    it(`has no logo for infra-native / generic / sub-resource kinds, or brands absent from simple-icons → semantic glyph`, () => {
         for (const kind of [
             `host`,
             `tunnel`,
@@ -37,6 +40,9 @@ describe(`resourceLogoUrl`, () => {
             `workspace`,
             `garage-bucket`,
             `postgres-database`,
+            // Not in simple-icons (would 404) → the resourceIcon glyph carries them.
+            `signoz`,
+            `infisical`,
         ]) {
             expect(resourceLogoUrl(kind)).toBeUndefined();
         }
