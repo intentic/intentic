@@ -30,6 +30,6 @@
         "vue-tsc": "catalog:"
     },
     "peerDependencies": {
-        "vue": "^3.5.0"
+        "vue": "3"
     }
 }

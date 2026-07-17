@@ -38,7 +38,7 @@
     "dependencies": {
         "@intentic/engine": "workspace:*",
         "@intentic/graph": "workspace:*",
-        "bcryptjs": "^3.0.2",
+        "bcryptjs": "catalog:",
         "ssh2": "catalog:",
         "tslib": "catalog:",
         "zod": "catalog:"

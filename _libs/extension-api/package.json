@@ -38,7 +38,7 @@
         "zod": "catalog:"
     },
     "peerDependencies": {
-        "vue": "^3.5.0"
+        "vue": "3"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
