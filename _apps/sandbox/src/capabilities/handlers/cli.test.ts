@@ -7,7 +7,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { setListenerStatus } from "../../extensions/listener-status.js";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
-import { createTerminalRunner, terminalExec } from "../../system/terminal-run.js";
+import { createTerminalRunner, terminalExec } from "../../terminal/terminal-run.js";
 import { makeWorkspaceDir, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
 import { echoConfig } from "../capability.js";

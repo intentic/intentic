@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { cmp } from "@intentic-app/ui";
-import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/catalog";
+import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/capability-catalog";
 import { AppsListSchema } from "@intentic-app/api-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import Select from "primevue/select";
 import { computed, reactive, ref, watch } from "vue";
-import { sandboxJson } from "../../composables/sandboxClient";
+import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { usePanels } from "../../composables/extensions/usePanels";
 import CloudflareConnect from "./CloudflareConnect.vue";

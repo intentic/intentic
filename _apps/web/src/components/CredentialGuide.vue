@@ -3,7 +3,7 @@
      from the card's `guide` metadata (CAPABILITY_CATALOG). Mirrors the CloudflareConnect connect step, generalized
      to every card. Renders nothing for cards without a guide (devops/monorepo/stripe and the browser-login ones). -->
 <script setup lang="ts">
-import type { CapabilityCatalogEntry } from "@intentic-app/catalog";
+import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
 import { InfoHint } from "@intentic-app/ui";
 import { computed } from "vue";
 

@@ -1,8 +1,8 @@
 import { PanelsListSchema, type PanelSummary } from "@intentic-app/api-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxJson } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxJson } from "../sandbox/sandboxClient";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 
 /* The workspace's repositories: runtime status (running/healthy/previewUrl) + the content facts the extension
  * registry detects on, read via the daemon's /panels routes. Discovery is convention-only — no manifest — so

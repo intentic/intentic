@@ -10,7 +10,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AskQuestion, TodoItem } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { type AgentTool, mcpServersOf } from "../workspace/tools.js";
+import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createPlanRequest, createQuestionRequest, type QuestionResponse } from "./agent-requests.js";
 import { agentSessionName, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
 

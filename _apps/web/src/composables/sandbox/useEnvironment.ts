@@ -2,8 +2,8 @@ import { EnvironmentSchema } from "@intentic-app/api-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { bashCommand } from "../../environments/scriptCommand";
-import { sandboxJson } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxJson } from "./sandboxClient";
+import { sandboxKey, useSandbox } from "./useSandbox";
 
 /* The sandbox's composed environment overlay (.intentic/environment.approved.Dockerfile), read via the daemon's
  * /environment route. Shared by the Environment card, the shell's rebuild banner, and the capabilities page so
@@ -40,9 +40,7 @@ export function useEnvironment() {
     const serverManaged = computed(() => state.value?.container === `intentic-sandbox-workspace`);
     const rebuildCommand = computed(() => {
         const slug = state.value?.container?.replace(/^intentic-sandbox-/, ``);
-        return slug !== undefined && pending.value !== undefined
-            ? bashCommand(`rebuild`, ``, `${slug} ${pending.value.hash}`)
-            : ``;
+        return slug !== undefined && pending.value !== undefined ? bashCommand(`rebuild`, ``, `${slug} ${pending.value.hash}`) : ``;
     });
 
     return { state, query, proposal, pending, applied, serverManaged, rebuildCommand };

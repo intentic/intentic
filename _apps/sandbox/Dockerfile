@@ -191,7 +191,7 @@ RUN chmod +x /opt/sandbox/dist/logs/pane-log-clean.js \
 # environment skill teaches the agent to extend this very image via an approved overlay Dockerfile.
 COPY _apps/sandbox/skills /root/.claude/skills
 # The tmux command runner — the agent's PreToolUse hook (src/agent/agent-terminals.ts) wraps every Bash tool
-# command through it, and the daemon's terminal runner (src/system/terminal-run.ts) executes user-triggered
+# command through it, and the daemon's terminal runner (src/terminal/terminal-run.ts) executes user-triggered
 # flows through it, so commands run live-visible in tmux sessions — and the agent's output filter, which
 # strips noise from what the model sees.
 COPY --chmod=755 _apps/sandbox/bin/tmux-run /usr/local/bin/tmux-run

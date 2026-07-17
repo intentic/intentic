@@ -3,9 +3,9 @@ import { computed, ref } from "vue";
 import { type PlanOrphan, type PlanStep, readPlanSteps } from "../../composables/extensions/reconcileStatus";
 import { useSecretKeys } from "../../composables/extensions/useSecrets";
 import { readIntenticLines } from "../../composables/intenticStream";
-import { sandboxRequest } from "../../composables/sandboxClient";
+import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
-import { sandboxKey } from "../../composables/useSandbox";
+import { sandboxKey } from "../../composables/sandbox/useSandbox";
 import { describeProvisionError } from "./provisionError";
 
 /* The pre-apply change preview: run `intentic resolve` then `intentic plan` in the sandbox (read + diff, nothing

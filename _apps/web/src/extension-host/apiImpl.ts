@@ -5,11 +5,11 @@ import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { registerCommand, executeCommand } from "../composables/commands/useCommands";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
-import { sandboxJson, sandboxRequest } from "../composables/sandboxClient";
+import { sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
-import { sandboxKey, useSandbox } from "../composables/useSandbox";
-import { registerView } from "../extensions/registry";
-import { registerViewer } from "../extensions/viewerRegistry";
+import { sandboxKey, useSandbox } from "../composables/sandbox/useSandbox";
+import { registerView } from "../core-views/registry";
+import { registerViewer } from "../core-views/viewerRegistry";
 import { router } from "../router";
 
 /* The host's fulfillment of IntenticApi, one instance per activated extension. Every registration is gated on

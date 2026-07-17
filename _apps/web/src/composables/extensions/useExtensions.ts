@@ -2,8 +2,8 @@ import type { ConnectorContribution } from "@intentic/extension-api";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxJson } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxJson } from "../sandbox/sandboxClient";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 
 /* The installed extensions (extension-kind capabilities resolved to their manifests) for the UI — the Sandbox
  * hub's Extensions tab. The extension host's boot does its own one-shot fetch of the same route (loader.ts);

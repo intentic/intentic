@@ -2,9 +2,9 @@ import type { WorkspaceSearchResult, WorkspaceSearchMode } from "@intentic-app/a
 import { keepPreviousData, useQuery } from "@tanstack/vue-query";
 import type { Ref } from "vue";
 import { computed, ref, watch } from "vue";
-import { sandboxJson } from "../sandboxClient";
+import { sandboxJson } from "../sandbox/sandboxClient";
 import { useLayout } from "../useLayout";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 
 // Search over /work, read directly from the sandbox daemon (GET /workspace/search — results come
 // relevance-ranked and grouped). `mode` picks the search verb: the default fused content search when

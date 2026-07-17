@@ -14,11 +14,11 @@ import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute
 import { useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
-import DiffView from "./DiffView.vue";
+import DiffView from "./viewers/DiffView.vue";
 import type { DiffTabPayload } from "./workspaceTabs";
 import { filesToEntries } from "./dropEntries";
 import { iconForEntry } from "@intentic-app/ui";
-import FileViewer from "./FileViewer.vue";
+import FileViewer from "./viewers/FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import UploadProgress from "./UploadProgress.vue";

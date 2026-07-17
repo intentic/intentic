@@ -7,7 +7,7 @@ import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
 import { useRunning } from "../../composables/sandbox/useRunning";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
-import { useSandbox } from "../../composables/useSandbox";
+import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { presenceOthers } from "../../composables/usePresence";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
 

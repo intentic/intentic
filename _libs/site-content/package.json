@@ -1,5 +1,5 @@
 {
-    "name": "@intentic-dev/content",
+    "name": "@intentic-dev/site-content",
     "version": "0.0.0",
     "private": true,
     "type": "module",

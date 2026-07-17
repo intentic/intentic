@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Segmented } from "@intentic-app/ui";
 import { computed, ref, watch } from "vue";
-import { renderMarkdown } from "../../composables/renderMarkdown";
+import { renderMarkdown } from "../../../composables/renderMarkdown";
 import CodeView from "./CodeView.vue";
 
 /* Markdown preview for the file viewer: renders to prose by default, with a Source toggle that shows the raw

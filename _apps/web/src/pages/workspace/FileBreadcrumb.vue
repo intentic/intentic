@@ -2,7 +2,7 @@
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { computed } from "vue";
 import { viewersOfPath } from "../../composables/usePresence";
-import PresenceAvatars from "../../layout/PresenceAvatars.vue";
+import PresenceAvatars from "../../presence/PresenceAvatars.vue";
 import { formatBytes } from "@intentic-app/ui";
 
 /* The context bar above the open file: the root-relative path as breadcrumb segments, with the file size in a

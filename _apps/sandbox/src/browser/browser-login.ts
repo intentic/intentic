@@ -1,10 +1,10 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import type { BrowserPlatform } from "@intentic/sandbox-contract";
 import type { BrowserContext, CDPSession, Page } from "playwright";
-import { ensureXvfb } from "../browser/display.js";
-import { browserProviders } from "../browser/providers.js";
-import { acquireLoginLock, markConnected, releaseLoginLock, sessionDir } from "../browser/session-store.js";
-import { STEALTH_INIT } from "../browser/stealth.js";
+import { ensureXvfb } from "./display.js";
+import { browserProviders } from "./providers.js";
+import { acquireLoginLock, markConnected, releaseLoginLock, sessionDir } from "./session-store.js";
+import { STEALTH_INIT } from "./stealth.js";
 import type { Services } from "../composition.js";
 
 // Fixed screencast viewport — the web canvas scales to it. Modest to bound frame size over the tunnel.

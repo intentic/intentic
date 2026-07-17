@@ -1,9 +1,9 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { readIntenticLines } from "../../composables/intenticStream";
-import { sandboxJson, sandboxRequest } from "../../composables/sandboxClient";
+import { sandboxJson, sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { globalTerminalSource, useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
-import { sandboxKey } from "../../composables/useSandbox";
+import { sandboxKey } from "../../composables/sandbox/useSandbox";
 import { type ApplyProgressState, initialApplyState, reduceApplyLine } from "./applyProgress";
 import { describeProvisionError } from "./provisionError";
 

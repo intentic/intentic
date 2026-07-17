@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { shellQuote, TMUX_RUN_BIN } from "../system/terminal-run.js";
-import { AGENT_SESSION_PREFIX } from "../system/terminal-session.js";
+import { shellQuote, TMUX_RUN_BIN } from "../terminal/terminal-run.js";
+import { AGENT_SESSION_PREFIX } from "../terminal/terminal-session.js";
 
 // Rewrites every Bash tool command through bin/tmux-run (baked into the image), so the agent's shell
 // commands run live-visible in `agent-<sdk session>` tmux sessions the terminal panel can attach to — the

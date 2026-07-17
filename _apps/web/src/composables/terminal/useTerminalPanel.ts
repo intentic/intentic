@@ -1,8 +1,8 @@
 import { TerminalsListSchema } from "@intentic-app/api-contract";
 import { ref, watch } from "vue";
-import { sandboxJson } from "../sandboxClient";
+import { sandboxJson } from "../sandbox/sandboxClient";
 import { useLayout } from "../useLayout";
-import { useSandbox } from "../useSandbox";
+import { useSandbox } from "../sandbox/useSandbox";
 import { disposeAllSessions, type TerminalTabsSource } from "./useTerminal";
 
 /* The ONE global terminal panel's controls + session source. Terminals are sandbox-global facts (tmux sessions
@@ -13,14 +13,16 @@ import { disposeAllSessions, type TerminalTabsSource } from "./useTerminal";
 
 export const globalTerminalSource: TerminalTabsSource = {
     list: async () =>
-        TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)).sessions.map(({ name, label, kind, running, extensionId, processName }) => ({
-            name,
-            kind,
-            running,
-            ...(label !== undefined ? { label } : {}),
-            ...(extensionId !== undefined ? { extensionId } : {}),
-            ...(processName !== undefined ? { processName } : {}),
-        })),
+        TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)).sessions.map(
+            ({ name, label, kind, running, extensionId, processName }) => ({
+                name,
+                kind,
+                running,
+                ...(label !== undefined ? { label } : {}),
+                ...(extensionId !== undefined ? { extensionId } : {}),
+                ...(processName !== undefined ? { processName } : {}),
+            }),
+        ),
     create: () => `web-${crypto.randomUUID().slice(0, 8)}`,
     kill: (name) => {
         void sandboxJson(`/system/terminals/${encodeURIComponent(name)}`, { method: `DELETE` });

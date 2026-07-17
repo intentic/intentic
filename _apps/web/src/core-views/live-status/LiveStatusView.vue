@@ -7,10 +7,10 @@ import PlanStepRow from "../../components/PlanStepRow.vue";
 import { convergedBadge, type PlanOrphan, type PlanStep, readPlanSteps, statusDot, statusLabel } from "../../composables/extensions/reconcileStatus";
 import { groupAccent } from "../../composables/extensions/resourceVisual";
 import { reveal } from "../../composables/extensions/useSecrets";
-import { sandboxRequest } from "../../composables/sandboxClient";
+import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { useDeployments } from "../../composables/extensions/useDeployments";
 import { useWorkspaceState } from "../../composables/extensions/useWorkspaceState";
-import { useSandbox } from "../../composables/useSandbox";
+import { useSandbox } from "../../composables/sandbox/useSandbox";
 import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
 

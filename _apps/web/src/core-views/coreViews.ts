@@ -12,7 +12,7 @@ import type { ViewRegistration } from "@intentic/extension-api";
  * activated through the public IntenticApi via extension-host/builtins.ts. These three consume privileged app
  * internals directly, by design. */
 
-export const builtins: readonly ViewRegistration[] = [
+export const coreViews: readonly ViewRegistration[] = [
     {
         id: `infrastructure`,
         label: `Infrastructure`,

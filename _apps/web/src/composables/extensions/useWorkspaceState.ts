@@ -1,8 +1,8 @@
 import type { WorkspaceState } from "@intentic-app/api-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxRequest } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxRequest } from "../sandbox/sandboxClient";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { projectWorkspaceState } from "./workspaceStateProjection";
 
 /* The infrastructure read-model: the sandbox's desired-state graph joined with the last reconcile result,

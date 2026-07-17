@@ -3,7 +3,7 @@ import Button from "primevue/button";
 import { computed } from "vue";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* Shown in the workspace outlet when the daemon is UP but rejects the signed-in Google account with 403 —
  * the account is neither the sandbox's owner nor a granted member (see useSandboxLiveness). Distinct from

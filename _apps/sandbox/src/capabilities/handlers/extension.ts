@@ -3,7 +3,7 @@ import { ExtensionManifestSchema } from "@intentic/extension-api";
 import type { ExtensionConfig } from "@intentic/sandbox-contract";
 import { invalidExtensionFragment } from "../../environment/fragment-sources.js";
 import { extensionProcessKey } from "../../extensions/extension-processes.js";
-import { capabilityJobSession } from "../../system/terminal-session.js";
+import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
 import { extensionDir, extensionRootOf, extensionsRoot, readExtensionManifest } from "../extension-dirs.js";
 import { checkoutInto } from "../git-checkout.js";

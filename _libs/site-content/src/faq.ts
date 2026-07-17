@@ -5,7 +5,7 @@ export interface FaqItem {
     answer: string[];
 }
 
-// The objection bank from docs/messaging.md — answers verified against intentic-app and the engine repo.
+// The objection bank from docs/marketing/messaging.md — answers verified against intentic-app and the engine repo.
 export const faqItems: FaqItem[] = [
     {
         id: "where-does-my-code-live",

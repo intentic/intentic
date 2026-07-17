@@ -4,7 +4,7 @@
      the text is always readable. -->
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { useHighlighter } from "../vue/useHighlighter.js";
+import { useHighlighter } from "../composables/useHighlighter.js";
 import CopyButton from "./CopyButton.vue";
 
 const {

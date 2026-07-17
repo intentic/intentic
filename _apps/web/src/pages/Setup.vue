@@ -12,7 +12,7 @@ import { apiClient, isPaymentRequired } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import { syncFolder } from "../composables/sandbox/syncFolder";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 import { environment } from "../environments/environment";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
 

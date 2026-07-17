@@ -5,7 +5,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { repoGitDir } from "../history/history.js";
-import { isValidRepoName, listRepos } from "../workspace/repos.js";
+import { isValidRepoName, listRepos } from "../workspace/extra-repos.js";
 import { REPO_ROLES, type RepoRole } from "../workspace/workspace.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { AGENT_GIT_AUTHOR } from "./git.js";

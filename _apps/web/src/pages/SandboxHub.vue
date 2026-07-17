@@ -3,7 +3,7 @@ import { Page, Segmented } from "@intentic-app/ui";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRunning } from "../composables/sandbox/useRunning";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 import SandboxAccess from "./sandbox/SandboxAccess.vue";
 import SandboxAgent from "./sandbox/SandboxAgent.vue";
 import SandboxEnvironment from "./sandbox/SandboxEnvironment.vue";

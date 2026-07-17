@@ -124,7 +124,7 @@ images:
         - _apps/sandbox/**/*
         - _apps/cli/**/*
         - _libs/**/*
-        - test/host/**/*
+        - fixtures/dind-host/**/*
         - scripts/publish-images.sh
         - pnpm-lock.yaml
   script:

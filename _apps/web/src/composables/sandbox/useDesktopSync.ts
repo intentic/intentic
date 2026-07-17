@@ -1,8 +1,8 @@
 import { computed, ref, watch } from "vue";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
-import { sandboxRequest } from "../sandboxClient";
+import { sandboxRequest } from "./sandboxClient";
 import { syncFolder } from "./syncFolder";
-import { useSandbox } from "../useSandbox";
+import { useSandbox } from "./useSandbox";
 
 /* Drives the Desktop sync card. "Enable" mints a short-lived, single-use pairing token from the daemon (the
  * browser is already the owner); the copy-paste one-liner carries it, and the agent redeems it once to enroll
@@ -45,12 +45,19 @@ export function useDesktopSync() {
     const linuxCommand = computed(() =>
         url.value === `` || pairToken.value === undefined
             ? ``
-            : bashCommand(`desktopSh`, `env SANDBOX_URL='${url.value}' PAIR_TOKEN='${pairToken.value}' SYNC_DIR="${toShellPath(folder.value)}"${takeover.value ? ` TAKEOVER='1'` : ``} `, ``),
+            : bashCommand(
+                  `desktopSh`,
+                  `env SANDBOX_URL='${url.value}' PAIR_TOKEN='${pairToken.value}' SYNC_DIR="${toShellPath(folder.value)}"${takeover.value ? ` TAKEOVER='1'` : ``} `,
+                  ``,
+              ),
     );
     const windowsCommand = computed(() =>
         url.value === `` || pairToken.value === undefined
             ? ``
-            : psCommand(`desktopPs1`, `$env:SANDBOX_URL='${url.value}'; $env:PAIR_TOKEN='${pairToken.value}'; $env:SYNC_DIR="${toWindowsPath(folder.value)}";${takeover.value ? ` $env:TAKEOVER='1';` : ``} `),
+            : psCommand(
+                  `desktopPs1`,
+                  `$env:SANDBOX_URL='${url.value}'; $env:PAIR_TOKEN='${pairToken.value}'; $env:SYNC_DIR="${toWindowsPath(folder.value)}";${takeover.value ? ` $env:TAKEOVER='1';` : ``} `,
+              ),
     );
 
     // Mint (or re-mint) a pairing token so the card can reveal the one-liner. Authorized by the browser's Google

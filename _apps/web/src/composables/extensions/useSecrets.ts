@@ -2,8 +2,8 @@ import { type SecretInventoryEntry, SecretInventorySchema, SecretKeysSchema, Sec
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../devFill";
-import { sandboxJson } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxJson } from "../sandbox/sandboxClient";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 
 /* User-supplied env-var secrets (Cloudflare token, GitHub PAT, another-host SSH key), written straight to the
  * sandbox daemon's /secrets routes (never through the platform). Split by consumer so a surface only observes

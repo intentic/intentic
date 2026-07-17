@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { useChanges } from "../composables/workspace/useChanges";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* The mobile shell's bottom navigation: four fixed thumb-size tabs. Chat is the primary on-the-go surface;
  * Review carries the things-to-act-on badge (agent drafts + uncommitted changes); everything the desktop rail

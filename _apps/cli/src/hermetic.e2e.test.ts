@@ -26,7 +26,7 @@ const enabled = process.env["INTENTIC_E2E_HERMETIC"] === "1" || process.env["INT
 const exec = promisify(execFile);
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
-const hostContext = join(repoRoot, "test", "host");
+const hostContext = join(repoRoot, "fixtures", "dind-host");
 
 // An RFC 2606 reserved TLD: resolvable by no one, so a hermetic run that accidentally reaches for the
 // public domain fails loudly instead of leaking traffic.
@@ -97,7 +97,7 @@ describe.skipIf(!enabled)("intentic CLI hermetic end-to-end (DinD, no external s
                 .withStartupTimeout(180_000);
 
         // CI provides the published dind-host image; anything else (missing var, private registry, local
-        // run) falls back to building test/host locally.
+        // run) falls back to building fixtures/dind-host locally.
         const image = process.env["INTENTIC_HOST_IMAGE"];
         if (image !== undefined && image !== "") {
             try {

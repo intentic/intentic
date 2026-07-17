@@ -1,10 +1,10 @@
-import { type AddCapabilityInput } from "@intentic-app/catalog";
+import { type AddCapabilityInput } from "@intentic-app/capability-catalog";
 import { CapabilitiesListSchema, type CapabilitySummary, type Marketplace, MarketplaceSchema } from "@intentic-app/api-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { readIntenticLines } from "../intenticStream";
-import { sandboxJson, sandboxRequest } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 
 /* The sandbox's unified capability manifest (.intentic/capabilities.json), read/written via the daemon's
  * /capabilities routes. `add` STREAMS its apply (devops scaffolding, service provisioning) as ndjson, like the

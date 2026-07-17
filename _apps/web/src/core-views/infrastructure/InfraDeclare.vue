@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { INVENTORY_PROVIDERS, INVENTORY_SERVICES, type InventoryProviderDescriptor } from "@intentic-app/catalog";
+import { INVENTORY_PROVIDERS, INVENTORY_SERVICES, type InventoryProviderDescriptor } from "@intentic-app/capability-catalog";
 import { type InventoryEntry, type InventoryProvider } from "@intentic-app/api-contract";
 import { Card, cmp, InfoHint, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";

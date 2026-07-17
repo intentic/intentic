@@ -5,20 +5,20 @@ import { RouterView, useRoute } from "vue-router";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
-import { detectActivations } from "../extensions/registry";
+import { detectActivations } from "../core-views/registry";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useLayout } from "../composables/useLayout";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useQuickOpen } from "../composables/useQuickOpen";
 import { useChanges } from "../composables/workspace/useChanges";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 import AccountPanel from "./AccountPanel.vue";
-import ChatPanel from "./ChatPanel.vue";
-import PresenceStack from "./PresenceStack.vue";
+import ChatPanel from "../chat/ChatPanel.vue";
+import PresenceStack from "../presence/PresenceStack.vue";
 import QuickOpen from "./QuickOpen.vue";
-import SandboxGate from "./SandboxGate.vue";
-import SandboxSwitcher from "./SandboxSwitcher.vue";
+import SandboxGate from "../sandbox-gates/SandboxGate.vue";
+import SandboxSwitcher from "../sandbox-gates/SandboxSwitcher.vue";
 
 interface AreaTile {
     // The route the tile links to (e.g. /workspace, /panel/app).
@@ -74,7 +74,9 @@ const tiles = computed<readonly AreaTile[]>(() => {
                 const to = `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
                 // Activation.icon is an open string in the public extension API; the rail trusts it names one
                 // of the app's icons (an unknown name renders the icon set's fallback).
-                return activation.icon === undefined ? { to, label: activation.title } : { to, label: activation.title, icon: activation.icon as IconName };
+                return activation.icon === undefined
+                    ? { to, label: activation.title }
+                    : { to, label: activation.title, icon: activation.icon as IconName };
             }),
     ];
 });

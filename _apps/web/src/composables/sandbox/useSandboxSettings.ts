@@ -1,8 +1,8 @@
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic-app/api-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxJson } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxJson } from "./sandboxClient";
+import { sandboxKey, useSandbox } from "./useSandbox";
 
 /* The active sandbox's agent settings (.intentic/settings.json), read/written via the daemon's /settings routes.
  * Currently just `searchPastChats` — whether the agent may search this sandbox's earlier conversations. `save`

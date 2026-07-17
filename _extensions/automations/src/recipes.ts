@@ -1,7 +1,7 @@
 /* "Start from" suggestions in the new-automation dialog, shown only when the matching capability provider is
  * enabled. Pure prefill — the daemon knows nothing about recipes. Discord listens live over the daemon's own
  * gateway connection (a `listener` trigger); services that can't push webhooks or be listened to (IMAP) get
- * scheduled-poll recipes that lean on the agent's CLI capability instead. Moved here from @intentic-app/catalog:
+ * scheduled-poll recipes that lean on the agent's CLI capability instead. Moved here from @intentic-app/capability-catalog:
  * recipes are automation-UI data, so they live with the automations extension, not the platform catalog. */
 
 export interface AutomationRecipe {

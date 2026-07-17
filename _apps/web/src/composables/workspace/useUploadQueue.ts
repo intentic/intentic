@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { computed, markRaw, reactive, ref } from "vue";
 import { collectDroppedFiles, type DroppedFile } from "../../pages/workspace/dropEntries";
 import { packTar } from "../../pages/workspace/tarStream";
-import { sandboxJson, sandboxUpload } from "../sandboxClient";
+import { sandboxJson, sandboxUpload } from "../sandbox/sandboxClient";
 import { chunkItems, dedupeByPath } from "./uploadChunking";
 
 // The workspace upload queue: drops (and file-input picks) funnel through here instead of a one-shot spinner, so a

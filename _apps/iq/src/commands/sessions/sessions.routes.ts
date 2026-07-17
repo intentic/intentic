@@ -1,6 +1,6 @@
 import { buildCommand, buildRouteMap, numberParser, type CommandContext } from "@stricli/core";
 import { createRecall, parseLine, readLines, type Recall, type SessionMatch, typedPromptOf } from "@intentic/iq-recall";
-import { loadConfig } from "../env.config.js";
+import { loadConfig } from "../../env.config.js";
 
 const recallFor = (root: string): Recall => {
     const config = loadConfig();
@@ -21,7 +21,9 @@ const ingestCommand = buildCommand({
         const recall = recallFor(rootFromEnv());
         try {
             const stats = await recall.ingest();
-            this.process.stdout.write(`iq sessions: ${stats.sessions} sessions · ${stats.turns} turns · ${stats.files} files across ${stats.transcripts} transcripts\n`);
+            this.process.stdout.write(
+                `iq sessions: ${stats.sessions} sessions · ${stats.turns} turns · ${stats.files} files across ${stats.transcripts} transcripts\n`,
+            );
         } finally {
             recall.close();
         }
@@ -40,7 +42,9 @@ const list = buildCommand({
             await recall.ingest();
             const sessions = recall.sessions({ days: flags.days, ...(query !== undefined ? { query } : {}) });
             for (const session of sessions) {
-                this.process.stdout.write(`${session.sessionId}  ${dateOf(session.lastTs)}  ${session.promptCount} prompts  ${session.title ?? "(untitled)"}\n`);
+                this.process.stdout.write(
+                    `${session.sessionId}  ${dateOf(session.lastTs)}  ${session.promptCount} prompts  ${session.title ?? "(untitled)"}\n`,
+                );
             }
             (this.process as { exitCode?: number | string | null }).exitCode = sessions.length > 0 ? 0 : 1;
         } finally {
@@ -68,7 +72,9 @@ const files = buildCommand({
                 this.process.stdout.write(`${JSON.stringify(hits, undefined, 4)}\n`);
             } else {
                 for (const hit of hits) {
-                    this.process.stdout.write(`${hit.path}  (${hit.sessions} session${hit.sessions === 1 ? "" : "s"}, last ${dateOf(hit.lastTouched)})${hit.sampleTitle === undefined ? "" : `  — ${hit.sampleTitle}`}\n`);
+                    this.process.stdout.write(
+                        `${hit.path}  (${hit.sessions} session${hit.sessions === 1 ? "" : "s"}, last ${dateOf(hit.lastTouched)})${hit.sampleTitle === undefined ? "" : `  — ${hit.sampleTitle}`}\n`,
+                    );
                 }
             }
             (this.process as { exitCode?: number | string | null }).exitCode = hits.length > 0 ? 0 : 1;
@@ -158,7 +164,10 @@ const match = buildCommand({
             json: { kind: "boolean", default: false, brief: "One JSON array" },
             hook: { kind: "boolean", default: false, brief: "Read the UserPromptSubmit payload from stdin; emit hook JSON" },
         },
-        positional: { kind: "tuple", parameters: [{ parse: String, brief: "The new session's first prompt", placeholder: "prompt", optional: true }] },
+        positional: {
+            kind: "tuple",
+            parameters: [{ parse: String, brief: "The new session's first prompt", placeholder: "prompt", optional: true }],
+        },
     },
     async func(this: CommandContext, flags: { days: number; json: boolean; hook: boolean }, prompt?: string) {
         if (flags.hook) {
@@ -176,7 +185,9 @@ const match = buildCommand({
                 this.process.stdout.write(`${JSON.stringify(matches, undefined, 4)}\n`);
             } else {
                 for (const hit of matches) {
-                    this.process.stdout.write(`${hit.score.toFixed(2)}${hit.strong ? " strong" : "       "}  ${hit.sessionId}  ${dateOf(hit.lastTs)}  ${hit.title ?? "(untitled)"}\n`);
+                    this.process.stdout.write(
+                        `${hit.score.toFixed(2)}${hit.strong ? " strong" : "       "}  ${hit.sessionId}  ${dateOf(hit.lastTs)}  ${hit.title ?? "(untitled)"}\n`,
+                    );
                 }
                 const top = matches[0];
                 if (top?.strong === true) {
@@ -204,9 +215,13 @@ const fork = buildCommand({
         try {
             await recall.ingest();
             const result = await recall.fork(sessionId, { ...(flags.at !== undefined ? { at: flags.at } : {}), dryRun: flags.dryRun });
-            this.process.stdout.write(`${flags.dryRun ? "would fork" : "forked"} ${result.keptLines} lines (${result.droppedLines} dropped) → ${result.sessionId}\n`);
+            this.process.stdout.write(
+                `${flags.dryRun ? "would fork" : "forked"} ${result.keptLines} lines (${result.droppedLines} dropped) → ${result.sessionId}\n`,
+            );
             if (result.staleFiles.length > 0) {
-                this.process.stdout.write(`stale since then — re-read before trusting:\n${result.staleFiles.map((file) => `    ${file}`).join("\n")}\n`);
+                this.process.stdout.write(
+                    `stale since then — re-read before trusting:\n${result.staleFiles.map((file) => `    ${file}`).join("\n")}\n`,
+                );
             }
             if (!flags.dryRun) {
                 this.process.stdout.write(`resume with: claude --resume ${result.sessionId}\n`);

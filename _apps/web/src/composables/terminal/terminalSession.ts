@@ -3,7 +3,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
 import { useGoogleIdentity } from "../useGoogleIdentity";
-import { useSandbox } from "../useSandbox";
+import { useSandbox } from "../sandbox/useSandbox";
 import "@xterm/xterm/css/xterm.css";
 
 /* One xterm ↔ one tmux session over the daemon's /system/terminal WebSocket — the shared core under the

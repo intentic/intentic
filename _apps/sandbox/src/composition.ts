@@ -47,10 +47,10 @@ import {
     workspaceSessionExists,
 } from "./sessions/sessions.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
-import { postToPlatform, type PlatformResponse } from "./system/platform-client.js";
-import { createTerminalRunner, type TerminalRunner } from "./system/terminal-run.js";
+import { postToPlatform, type PlatformResponse } from "./platform/platform-client.js";
+import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
 import { version } from "./version.js";
-import { type AgentTool, internalTools } from "./workspace/tools.js";
+import { type AgentTool, internalTools } from "./agent/agent-tools.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace/workspace.js";
 import {
     copyWorkspacePath,

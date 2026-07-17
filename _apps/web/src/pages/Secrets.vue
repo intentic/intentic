@@ -8,7 +8,7 @@ import SecretEntryRow from "../components/SecretEntryRow.vue";
 import SecretField from "../components/SecretField.vue";
 import SecretGroup from "../components/SecretGroup.vue";
 import { readIntenticLines } from "../composables/intenticStream";
-import { sandboxRequest } from "../composables/sandboxClient";
+import { sandboxRequest } from "../composables/sandbox/sandboxClient";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useSecretInventory } from "../composables/extensions/useSecrets";
 

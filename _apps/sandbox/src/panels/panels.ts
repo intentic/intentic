@@ -1,6 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { listRepos } from "../workspace/repos.js";
+import { listRepos } from "../workspace/extra-repos.js";
 import { REPO_ROLES, type WorkspacePaths } from "../workspace/workspace.js";
 
 // Per-repository operator panels. Every git repo under /work/repositories is one sidebar entry; a repo exposes

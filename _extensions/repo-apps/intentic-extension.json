@@ -1,6 +1,6 @@
 {
     "publisher": "intentic",
-    "name": "apps",
+    "name": "repo-apps",
     "version": "1.0.0",
     "engines": { "intentic": "^0.2.0" },
     "permissions": {

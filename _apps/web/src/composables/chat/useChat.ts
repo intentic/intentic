@@ -19,8 +19,8 @@ import {
     turnDefaults,
 } from "./conversation";
 import { track } from "../analytics";
-import { sandboxRequest } from "../sandboxClient";
-import { useSandbox } from "../useSandbox";
+import { sandboxRequest } from "../sandbox/sandboxClient";
+import { useSandbox } from "../sandbox/useSandbox";
 import { useWorkspaceTabs } from "../workspace/useWorkspaceTabs";
 
 // One past conversation in the sandbox's SDK session store, for the history menu.
@@ -422,7 +422,11 @@ export const loadProviderModels = async (provider: AgentProvider): Promise<void>
     }
     providerModels.value = {
         ...providerModels.value,
-        [provider]: body.models.map((entry) => ({ label: entry.label, value: entry.id, ...(entry.efforts !== undefined ? { efforts: entry.efforts } : {}) })),
+        [provider]: body.models.map((entry) => ({
+            label: entry.label,
+            value: entry.id,
+            ...(entry.efforts !== undefined ? { efforts: entry.efforts } : {}),
+        })),
     };
     providerDefaultModel.value = { ...providerDefaultModel.value, [provider]: body.default };
     // Every native selection should carry a concrete offered id. Repoint anything empty OR no-longer-offered

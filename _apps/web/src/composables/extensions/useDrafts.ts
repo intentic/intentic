@@ -1,8 +1,8 @@
 import { type DraftsList, DraftsListSchema, type DraftSummary } from "@intentic-app/api-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxJson } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxJson } from "../sandbox/sandboxClient";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 
 /* The sandbox's post-drafts queue (.intentic/drafts/, one file per draft), read/written via the daemon's
  * /drafts routes. The AGENT creates drafts with its file tools; this is the OWNER's side — `save` upserts by id

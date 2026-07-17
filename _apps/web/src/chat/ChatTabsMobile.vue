@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { relativeTime, statusIcon } from "../composables/chat/catalog";
 import { useChat } from "../composables/chat/useChat";
 import { viewersOfSession } from "../composables/usePresence";
-import PresenceAvatars from "./PresenceAvatars.vue";
+import PresenceAvatars from "../presence/PresenceAvatars.vue";
 
 /* The mobile counterpart of ChatTabs: a compact header naming the active conversation, with the open-tab
  * strip and the searchable history folded into one bottom sheet. Same emit contract as ChatTabs — the panel

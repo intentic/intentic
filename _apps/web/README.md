@@ -13,16 +13,19 @@ The **Vue 3 SPA** (Vite + PrimeVue) — the platform's workspace UI. A user sign
 - **[src/composables/](src/composables)** — module-level singletons + vue-query wrappers:
   - `useAuth.ts` — Better Auth session, Google sign-in/out, Stripe plan/upgrade. Guards live in the router.
   - `useApi.ts` — the oRPC `ContractRouterClient` singleton; the platform surface is just `setup.*` (+ `me`).
-  - `useSandbox.ts` — the browser's sandbox state: `daemonUrl` (from `setup.binding`) + `reachable` (the live SSE probe in `useSandboxLiveness.ts`); the browser alone judges liveness.
+  - `sandbox/useSandbox.ts` — the browser's sandbox state: `daemonUrl` (from `setup.binding`) + `reachable` (the live SSE probe in `useSandboxLiveness.ts`); the browser alone judges liveness.
   - `useGoogleIdentity.ts` — Google Identity Services: mints/caches the ID token the daemon verifies.
-  - `sandboxClient.ts` — the browser→daemon-direct client (`sandboxRequest`/`sandboxJson`/`sandboxBlob`): calls `${daemonUrl}${path}` with `Authorization: Bearer <Google ID token>`.
+  - `sandbox/sandboxClient.ts` — the browser→daemon-direct client (`sandboxRequest`/`sandboxJson`/`sandboxBlob`): calls `${daemonUrl}${path}` with `Authorization: Bearer <Google ID token>`.
   - `useChat.ts` + `conversation.ts` — the Claude agent, daemon-direct (`/agent`, `/agent/decision`, `/agent/answer`, `/sessions`, `/claude/*`).
   - `useDeployments.ts` / `useWorkspaceState.ts` (+ `workspaceStateProjection.ts`) / `useInventory.ts` / `useWorkspaceTree.ts` — the read-model + inventory as **vue-query** queries/mutations against the daemon; `intenticStream.ts` is the shared `/intentic` ndjson reader; `renderMarkdown.ts` sanitizes marked output (DOMPurify) for `v-html`.
   - `useLayout.ts` — chat panel + explorer sidebar width/side.
   - `extensions/` — the extension/capability data layer: `useExtensions.ts` (installed manifests from `GET /extensions`, `connectorOf(provider)` for connector specs, `settled` for load-gated decisions) and `useCapabilities.ts` (capability list + the streamed add + remove/secret mutations).
 - **[src/extension-host/](src/extension-host)** — the real extension host: fetches `GET /extensions`, engine-checks and `import()`s git-installed bundles, activates the compiled-in first-party UI extensions (`builtins.ts`) — everything through the manifest-gated `createExtensionApi` (`apiImpl.ts`).
-- **[src/extensions/](src/extensions)** — the reactive runtime view registry the shell renders from, plus the three privileged *core* view contributions (`infrastructure`, `live-status`, `directory-ui`) that are extension-shaped but deliberately in-app.
-- **[src/layout/](src/layout)** — the persistent shell: `WorkspaceShell.vue` (rail | workspace | chat grid), `ChatPanel.vue`, `AccountPanel.vue`, `GoogleSigninGate.vue`.
+- **[src/core-views/](src/core-views)** — the reactive runtime view registry the shell renders from, plus the three privileged *core* view contributions (`infrastructure`, `live-status`, `directory-ui`) that are extension-shaped but deliberately in-app.
+- **[src/shell/](src/shell)** — the persistent shell: `WorkspaceShell.vue` (rail | workspace | chat grid), `ShellDesktop`/`ShellMobile`, `AccountPanel.vue`, `GoogleSigninGate.vue`, `QuickOpen.vue`.
+- **[src/chat/](src/chat)** — the chat panel: `ChatPanel.vue` + its message view, tabs, and mode/provider menus.
+- **[src/sandbox-gates/](src/sandbox-gates)** — the sandbox connect/authorize gates and switcher wrapping the workspace surface.
+- **[src/presence/](src/presence)** — collaborator presence avatars/stack.
 - **[src/pages/](src/pages)** — lazy-loaded areas: `Login`, `Setup`, `Sandbox`, `Infra` (topology + config/provision), `workspace/` (VSCode-like explorer + file viewer), `Capabilities.vue` (the rail's "+": static core cards merged with cli cards derived from installed extensions' connectors, a config form with a live "This will add to your sandbox" effects panel), `Secrets.vue` (the capability-secret inventory), and the `*Dialog.vue` overlays.
 - **[src/router/index.ts](src/router/index.ts)** — `/login` + `/setup` → guarded shell (`/`) with child areas; `beforeEnter` guards (`requireAuth`, `requireSetup`) replace the old route guards.
 
@@ -58,6 +61,6 @@ the whole point of the lean-core split — see the extension system in [ARCHITEC
 **Reserved for core** (edit the shell directly only for these): the editor surfaces themselves
 (`WorkspaceTree`, `CodeView`, `FileViewer`, chat), the router/shell scaffolding in `router/index.ts` /
 `WorkspaceShell.vue`, and the three privileged core view contributions in
-[src/extensions/builtins.ts](src/extensions/builtins.ts) (`infrastructure`, `live-status`, `directory-ui`)
+[src/core-views/coreViews.ts](src/core-views/coreViews.ts) (`infrastructure`, `live-status`, `directory-ui`)
 that are coupled to platform/onboarding internals a clean extension must not reach. New client state for a
 core surface: a composable exposing a module-level `ref`.

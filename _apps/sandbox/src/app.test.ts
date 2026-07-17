@@ -20,9 +20,9 @@ import type { Config } from "./env.config.js";
 import { environmentHash } from "./environment/environment.js";
 import { createLogger } from "./logger.js";
 import type { ManagedProcesses, ProcessSpec } from "./processes/managed-processes.js";
-import { mintPairing } from "./system/sync.js";
-import { createTerminalRunner } from "./system/terminal-run.js";
-import type { AgentTool } from "./workspace/tools.js";
+import { mintPairing } from "./platform/sync.js";
+import { createTerminalRunner } from "./terminal/terminal-run.js";
+import type { AgentTool } from "./agent/agent-tools.js";
 import { workspacePaths } from "./workspace/workspace.js";
 import { MAX_RAW_BYTES, UploadTooLargeError } from "./workspace/workspace-files.js";
 

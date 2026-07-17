@@ -1,9 +1,9 @@
 import { watch } from "vue";
-import { loadAccountStatus, resetChat } from "./chat/useChat";
-import { resetEditBuffers } from "./workspace/useEditBuffers";
-import { resetPresence } from "./usePresence";
+import { loadAccountStatus, resetChat } from "../chat/useChat";
+import { resetEditBuffers } from "../workspace/useEditBuffers";
+import { resetPresence } from "../usePresence";
 import { useSandbox } from "./useSandbox";
-import { resetWorkspaceTreeState } from "./workspace/useWorkspaceTree";
+import { resetWorkspaceTreeState } from "../workspace/useWorkspaceTree";
 
 /* One central place that re-scopes the browser's client-side state to the active sandbox. vue-query server
  * state is already scoped by sandboxKey (its keys carry the active id), but the module-level singletons —

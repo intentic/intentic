@@ -2,10 +2,10 @@ import type { SandboxSummary } from "@intentic-app/api-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-vi.mock("./useApi", () => ({ apiClient: { sandbox: { list: vi.fn(), delete: vi.fn(), leave: vi.fn() } } }));
-const { apiClient } = await import("./useApi");
+vi.mock("../useApi", () => ({ apiClient: { sandbox: { list: vi.fn(), delete: vi.fn(), leave: vi.fn() } } }));
+const { apiClient } = await import("../useApi");
 const listMock = vi.mocked(apiClient.sandbox.list);
-const { queryClient } = await import("./queryPersistence");
+const { queryClient } = await import("../queryPersistence");
 const { useSandbox } = await import("./useSandbox");
 
 const summary = (id: string): SandboxSummary => ({

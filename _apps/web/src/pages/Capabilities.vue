@@ -6,7 +6,7 @@ import {
     type CapabilityCatalogEntry,
     type CapabilityField,
     connectorCard,
-} from "@intentic-app/catalog";
+} from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace, type MarketplacePlugin } from "@intentic-app/api-contract";
 import { cmp, type IconName, Page, Segmented } from "@intentic-app/ui";
 import { type CapabilityEffect, capabilityEffects } from "@intentic/sandbox-contract";

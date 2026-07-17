@@ -6,11 +6,11 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
-import { sandboxJson, sandboxRequest } from "../../composables/sandboxClient";
+import { sandboxJson, sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { useCleanerSavings } from "../../composables/sandbox/useCleanerSavings";
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
-import { useSandbox } from "../../composables/useSandbox";
+import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 
 /* The Sandbox hub's "Agent" tab — the home for everything about the AI the sandbox runs. The AI provider
@@ -475,11 +475,7 @@ const importMemory = async (): Promise<void> => {
             >
                 <div class="flex items-center justify-between gap-2">
                     <span class="flex items-center gap-2 text-sm text-content">
-                        <Icon
-                            name="circle-fill"
-                            class="text-[0.5rem]"
-                            :class="providerKeyStatus[field.provider] ? 'text-success' : 'text-subtle'"
-                        />
+                        <Icon name="circle-fill" class="text-[0.5rem]" :class="providerKeyStatus[field.provider] ? 'text-success' : 'text-subtle'" />
                         {{ field.label }}
                         <span class="text-2xs text-subtle">{{ providerKeyStatus[field.provider] ? "key set" : "no key" }}</span>
                     </span>
@@ -544,11 +540,7 @@ const importMemory = async (): Promise<void> => {
                         </p>
                     </div>
                 </div>
-                <ToggleSwitch
-                    :model-value="cleaningOn"
-                    :disabled="sandboxSettings === undefined"
-                    @update:model-value="toggleOutputCleaning"
-                />
+                <ToggleSwitch :model-value="cleaningOn" :disabled="sandboxSettings === undefined" @update:model-value="toggleOutputCleaning" />
             </div>
 
             <!-- Per-cleaner switches (the spec, as a checklist) — only meaningful while cleaning is on. -->
@@ -625,7 +617,9 @@ const importMemory = async (): Promise<void> => {
                     <p class="text-xs text-muted">
                         {{ savings.commands }} commands · ~{{ shortTokens(savings.rawTokens) }} → ~{{ shortTokens(savings.emittedTokens) }} tokens ·
                         <span class="font-medium text-success">{{ savings.savedPct }}% saved</span>
-                        <span v-if="savings.holdout.measuredSavedPct !== undefined"> · {{ savings.holdout.measuredSavedPct }}% measured (holdout)</span>
+                        <span v-if="savings.holdout.measuredSavedPct !== undefined">
+                            · {{ savings.holdout.measuredSavedPct }}% measured (holdout)</span
+                        >
                     </p>
                 </div>
             </div>

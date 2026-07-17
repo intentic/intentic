@@ -10,7 +10,7 @@ import { expect, test } from "vitest";
 import type { Services } from "../../composition.js";
 import { extensionAgentDirsOf } from "../../extensions/installed-extensions.js";
 import { extensionDir, extensionsRoot } from "../extension-dirs.js";
-import { createTerminalRunner } from "../../system/terminal-run.js";
+import { createTerminalRunner } from "../../terminal/terminal-run.js";
 import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
 import { echoConfig } from "../capability.js";

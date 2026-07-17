@@ -9,8 +9,8 @@ export type { HostKeyStore, SshExecutor, SshResult, SshSession, SshTarget } from
 export { connectWithRetry, createSshExecutor, inMemoryHostKeyStore, sshExecutor, verifyHostKey } from "./core/ssh.js";
 export { readinessDiagnostics } from "./core/ssh-diagnostics.js";
 export { createSshProbe, hostTarget } from "./core/ssh-probe.js";
-export { createGarageProvider } from "./data/garage.js";
-export { createGarageBucketProvider } from "./data/garage-bucket.js";
+export { createGarageProvider } from "./backings/garage.js";
+export { createGarageBucketProvider } from "./backings/garage-bucket.js";
 export { createCiProvider } from "./forgejo/ci.js";
 export { createForgejoProvider } from "./forgejo/forgejo.js";
 export { fakeForgejoApi } from "./forgejo/forgejo-api.fake.js";

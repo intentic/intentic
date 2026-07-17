@@ -1,22 +1,22 @@
 import { buildApplication, buildRouteMap, text_en } from "@stricli/core";
-import { ask } from "./ask/ask.command.js";
-import { ast } from "./ast/ast.command.js";
-import { context } from "./context/context.command.js";
-import { def } from "./def/def.command.js";
+import { ask } from "./commands/ask.command.js";
+import { ast } from "./commands/ast.command.js";
+import { context } from "./commands/context.command.js";
+import { def } from "./commands/def.command.js";
 import { loadConfig } from "./env.config.js";
-import { files } from "./files/files.command.js";
-import { find } from "./find/find.command.js";
-import { indexCommand } from "./index-cmd/index-cmd.routes.js";
+import { files } from "./commands/files.command.js";
+import { find } from "./commands/find.command.js";
+import { indexCommand } from "./commands/index-cmd/index-cmd.routes.js";
 import { version } from "./lib/version.js";
-import { log } from "./log/log.command.js";
-import { multi } from "./multi/multi.command.js";
-import { outline } from "./outline/outline.command.js";
-import { q } from "./q/q.command.js";
-import { recent } from "./recent/recent.command.js";
-import { refs } from "./refs/refs.command.js";
-import { sessionsCommand } from "./sessions/sessions.routes.js";
-import { sym } from "./sym/sym.command.js";
-import { who } from "./who/who.command.js";
+import { log } from "./commands/log.command.js";
+import { multi } from "./commands/multi.command.js";
+import { outline } from "./commands/outline.command.js";
+import { q } from "./commands/q.command.js";
+import { recent } from "./commands/recent.command.js";
+import { refs } from "./commands/refs.command.js";
+import { sessionsCommand } from "./commands/sessions/sessions.routes.js";
+import { sym } from "./commands/sym.command.js";
+import { who } from "./commands/who.command.js";
 
 // Agents read errors as one line, not a stack. IQ_DEBUG keeps the stack for humans chasing a bug.
 const formatException = (exc: unknown): string => {

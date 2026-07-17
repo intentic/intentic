@@ -2,7 +2,7 @@
 import Button from "primevue/button";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* Shown in the workspace outlet whenever the active sandbox's daemon isn't reachable (see WorkspaceShell).
  * The daemon is an external container the user runs via connect.sh, so "not reachable" means it was either

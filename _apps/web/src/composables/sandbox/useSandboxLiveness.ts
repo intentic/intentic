@@ -3,9 +3,9 @@ import { watch } from "vue";
 import { useChat } from "../chat/useChat";
 import { readIntenticLines } from "../intenticStream";
 import { queryClient } from "../queryPersistence";
-import { sandboxRequest } from "../sandboxClient";
+import { sandboxRequest } from "./sandboxClient";
 import { presenceStreamOpened, resetPresence, setPresenceUsers } from "../usePresence";
-import { useSandbox } from "../useSandbox";
+import { useSandbox } from "./useSandbox";
 import { markWorkspaceChanged } from "../workspace/useWorkspaceLive";
 
 // No heartbeat for this long means the connection silently half-opened (origin gone without a TCP FIN) — trip

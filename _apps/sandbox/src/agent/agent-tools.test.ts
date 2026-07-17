@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { internalTools, mcpServersOf } from "./tools.js";
+import { internalTools, mcpServersOf } from "./agent-tools.js";
 
 const encode = (tools: unknown): string => Buffer.from(JSON.stringify(tools)).toString("base64");
 

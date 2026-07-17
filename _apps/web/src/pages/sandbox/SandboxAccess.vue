@@ -3,10 +3,10 @@ import type { InviteRecord } from "@intentic-app/api-contract";
 import { Card, cmp } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
-import { sandboxJson } from "../../composables/sandboxClient";
+import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { apiClient, isPaymentRequired } from "../../composables/useApi";
 import { useAuth } from "../../composables/useAuth";
-import { useSandbox } from "../../composables/useSandbox";
+import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { presenceActivity, presenceHue, presenceInitials, presenceOthers } from "../../composables/usePresence";
 
 /* The Sandbox hub's "Access" tab. Owner-only invites for the ACTIVE sandbox: inviting is two writes — the

@@ -2,9 +2,9 @@ import type { PresenceUser } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 
-vi.mock("./sandboxClient", () => ({ sandboxRequest: vi.fn(async () => new Response()) }));
+vi.mock("./sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn(async () => new Response()) }));
 vi.mock("./useAuth", () => ({ useAuth: () => ({ user: ref({ id: `u`, email: `Me@x.com`, name: `Me`, image: null }) }) }));
-const { sandboxRequest } = await import("./sandboxClient");
+const { sandboxRequest } = await import("./sandbox/sandboxClient");
 const requestMock = vi.mocked(sandboxRequest);
 const { presenceOthers, presenceStreamOpened, reportOpenPath, reportView, resetPresence, setPresenceUsers, viewersOfPath, viewersOfSession } =
     await import("./usePresence");

@@ -2,7 +2,7 @@
 import { useDevice } from "@intentic-app/ui";
 import { RouterView } from "vue-router";
 import MobileTabBar from "./MobileTabBar.vue";
-import SandboxGate from "./SandboxGate.vue";
+import SandboxGate from "../sandbox-gates/SandboxGate.vue";
 
 /* The mobile chrome: full-screen views over a bottom tab bar. h-dvh (not h-screen) tracks the browser UI
  * chrome; the tab bar yields to the on-screen keyboard so composers keep the room. The desktop grid's rail,

@@ -3,8 +3,8 @@ import { Segmented } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
-import { detectActivations } from "../../extensions/registry";
-import ExtensionView from "../../extensions/ExtensionView.vue";
+import { detectActivations } from "../../core-views/registry";
+import ExtensionView from "../../core-views/ExtensionView.vue";
 
 /* The in-tree management surface for one repository directory: renders the directory-surface extension views the
  * repo activates (Apps, its own UI, the dev-server preview). With more than one, a segmented switch — the same

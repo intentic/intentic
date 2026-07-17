@@ -94,7 +94,7 @@ survive reconnects. Its subsystems:
 - **Agent backends** — Claude (agent SDK, spawned per turn), Codex, and Grok/opencode
   ([agent/](_apps/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE
   ([webchat/](_apps/sandbox/src/webchat/)).
-- **Terminals** — interactive PTYs over WebSocket ([system/terminal.ts](_apps/sandbox/src/system/terminal.ts)).
+- **Terminals** — interactive PTYs over WebSocket ([terminal/terminal.ts](_apps/sandbox/src/terminal/terminal.ts)).
 - **Panels & previews** — per-repo dev servers behind `preview-<panel>-<id>.<zone>` hostnames
   ([panels/](_apps/sandbox/src/panels/)).
 - **Automations** — cron schedules, webhooks (`/automations/:id/fire`), and event listeners
@@ -293,7 +293,7 @@ core never depends back on the app.
 | [`@intentic/sandbox-contract`](_libs/sandbox-contract) | **The keystone wire contract** — the oRPC route + schema surface shared by the daemon, the web client, and every UI extension (~15 dependents). It is deliberately *the* first-party data contract: because everything that consumes it is in-repo and compiled together, a wire change is caught by the compiler and fixed atomically, so there is no separate "stable API" shim to maintain. |
 | [`@intentic-app/api-contract`](_libs/api-contract) | The platform (web↔api) oRPC contract. |
 | [`@intentic-app/ui`](_libs/ui) | The app design system (PrimeVue + Tailwind primitives). |
-| [`@intentic-app/catalog`](_libs/catalog) | Capability/connector catalog data rendered by the web. |
+| [`@intentic-app/capability-catalog`](_libs/capability-catalog) | Capability/connector catalog data rendered by the web. |
 
 ### Extension system
 
@@ -317,7 +317,7 @@ line in the app:
   **both through the same manifest-gated `createExtensionApi`** ([apiImpl.ts](_apps/web/src/extension-host/apiImpl.ts)).
   A builtin extension can touch only the public `IntenticApi`, never app internals — that is the dogfooding
   boundary that keeps the first-party extensions honest.
-- **`_apps/web/src/extensions/builtins.ts`** — three *core* view contributions (`infrastructure`,
+- **`_apps/web/src/core-views/coreViews.ts`** — three *core* view contributions (`infrastructure`,
   `live-status`, `directory-ui`) that are extension-*shaped* but stay in the app because each is genuinely
   coupled to platform/onboarding or the file-open iframe bridge. They register through the same runtime
   registry but consume privileged internals **by design**, and the file documents exactly why each one
@@ -392,7 +392,7 @@ machinery is uniform:
 **Cards are derived, not duplicated.** The web's `/capabilities` grid
 ([Capabilities.vue](_apps/web/src/pages/Capabilities.vue)) merges the static core cards
 (`CAPABILITY_CATALOG`) with cli cards **derived** from the installed extensions' `contributes.connectors`
-(`connectorCard()`, both in [catalog](_libs/catalog/src/index.ts)): a cli card exists **iff** its capability
+(`connectorCard()`, both in [capability-catalog](_libs/capability-catalog/src/index.ts)): a cli card exists **iff** its capability
 is actually addable, third-party connectors surface automatically, and the connector manifest is the single
 source of a card's name/logo/fields/credential guide — nothing to drift.
 
@@ -525,7 +525,7 @@ passing nothing uses the real SSH/Cloudflare/Forgejo/Komodo implementations.
 
 [cli.e2e.test.ts](_apps/cli/src/cli.e2e.test.ts) is a **manual, real** run that drives the actual CLI
 exactly as an operator would. It boots a Docker-in-Docker "host"
-([test/host/Dockerfile](test/host/Dockerfile)) via `testcontainers`, scaffolds with `init`, authors a
+([fixtures/dind-host/Dockerfile](fixtures/dind-host/Dockerfile)) via `testcontainers`, scaffolds with `init`, authors a
 `deploy.config.ts` pointed at the host's mapped SSH port (with a per-run generated key), fills
 `desired-state/.env`, then runs `resolve` + `apply`. Phase 1 stands up the platform (Forgejo + its Actions
 runner + Komodo + the workspace sandbox) and exposes `git.<zone>`/`deploy.<zone>` through a **real
@@ -569,7 +569,7 @@ docker state, the node's logs, listeners, addresses, one verbose probe) before t
 
 Run it locally with `pnpm e2e:hermetic` (privileged local Docker, Linux/WSL2). In GitLab CI it runs on
 every merge request as a **non-blocking** sidecar (`e2e:hermetic` job, `allow_failure: true`), pulling
-the published `dind-host:latest` image (falling back to building [test/host](test/host)) and uploading
+the published `dind-host:latest` image (falling back to building [fixtures/dind-host](fixtures/dind-host)) and uploading
 the CLI run logs as artifacts on failure. `adopt --baseUrl` is also the field escape hatch for adopting
 before public DNS is live.
 

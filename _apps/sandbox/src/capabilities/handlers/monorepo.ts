@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { capabilityJobSession } from "../../system/terminal-session.js";
-import { isValidRepoName } from "../../workspace/repos.js";
+import { capabilityJobSession } from "../../terminal/terminal-session.js";
+import { isValidRepoName } from "../../workspace/extra-repos.js";
 import type { CapabilityHandler } from "../capability.js";
 
 // Monorepo: scaffold an empty pnpm+turbo monorepo as its own repo at repositories/<id> (the `id` is the repo

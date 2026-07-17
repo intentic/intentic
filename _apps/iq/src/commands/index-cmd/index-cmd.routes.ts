@@ -1,5 +1,5 @@
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
-import { engineFromEnv } from "../lib/run.js";
+import { engineFromEnv } from "../../lib/run.js";
 import type { IndexStatus } from "@intentic/iq-engine";
 
 const write = (context: CommandContext, status: IndexStatus): void => {

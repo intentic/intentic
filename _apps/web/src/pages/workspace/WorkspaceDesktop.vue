@@ -8,7 +8,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
-import { detectActivations } from "../../extensions/registry";
+import { detectActivations } from "../../core-views/registry";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useMonaco } from "../../composables/workspace/useMonaco";
 import { useChat } from "../../composables/chat/useChat";
@@ -21,14 +21,14 @@ import { useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSear
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { filesToEntries } from "./dropEntries";
-import DiffView from "./DiffView.vue";
+import DiffView from "./viewers/DiffView.vue";
 import DirectoryOperator from "./DirectoryOperator.vue";
 import DirectoryUiHost from "./DirectoryUiHost.vue";
 import FileBreadcrumb from "./FileBreadcrumb.vue";
 import FileTabs from "./FileTabs.vue";
-import FileViewer from "./FileViewer.vue";
+import FileViewer from "./viewers/FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
-import MarkdownViewer from "./MarkdownViewer.vue";
+import MarkdownViewer from "./viewers/MarkdownViewer.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import UploadProgress from "./UploadProgress.vue";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
@@ -308,8 +308,8 @@ const endResize = (event: PointerEvent): void => {
             <Icon name="check-square" />
             <button type="button" class="flex min-w-0 flex-1 items-center gap-3 text-left hover:underline" @click="openReview">
                 <span class="min-w-0 flex-1">
-                    <span class="font-medium">{{ changes.count.value }}</span> uncommitted
-                    {{ changes.count.value === 1 ? "change" : "changes" }} — review before you continue.
+                    <span class="font-medium">{{ changes.count.value }}</span> uncommitted {{ changes.count.value === 1 ? "change" : "changes" }} —
+                    review before you continue.
                 </span>
                 <span class="shrink-0 font-medium underline underline-offset-2">Review →</span>
             </button>

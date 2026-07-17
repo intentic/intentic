@@ -4,10 +4,10 @@ import { computed, onMounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { detectActivations } from "../extensions/registry";
+import { detectActivations } from "../core-views/registry";
 import { usePanels } from "../composables/extensions/usePanels";
 import { presenceActivity, presenceHue, presenceInitials, presenceOthers } from "../composables/usePresence";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* The mobile Menu tab: everything the desktop rail and its popovers hold, as one thumb-friendly page —
  * sandbox switching, the live presence roster, the area list (rail tiles), and the account actions. State
@@ -41,7 +41,9 @@ const areas = computed<readonly AreaRow[]>(() => [
         .map(({ extension, activation }): AreaRow => {
             const to = `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
             // Activation.icon is an open string in the public extension API; trusted to name one of the app's icons.
-            return activation.icon === undefined ? { to, label: activation.title } : { to, label: activation.title, icon: activation.icon as IconName };
+            return activation.icon === undefined
+                ? { to, label: activation.title }
+                : { to, label: activation.title, icon: activation.icon as IconName };
         }),
     { to: `/capabilities`, label: `Add a capability`, icon: `plus` },
     { to: `/terminal`, label: `Terminal`, icon: `code` },
@@ -190,6 +192,5 @@ const logout = async (): Promise<void> => {
                 Sign out
             </button>
         </section>
-
     </div>
 </template>

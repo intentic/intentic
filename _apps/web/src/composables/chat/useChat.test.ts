@@ -1,13 +1,13 @@
 import { nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../sandboxClient", () => ({ sandboxRequest: vi.fn() }));
+vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
 // The real router pulls the auth/environment chain, which needs window.env; the plan-preview watch only pushes.
 vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 // Same window.env chain via analytics; send() only fires a milestone event through track.
 vi.mock("../analytics", () => ({ track: vi.fn() }));
 // Same window.env chain via useApi; the tab persistence only reads activeSandboxId + reachable.
-vi.mock("../useSandbox", async () => {
+vi.mock("../sandbox/useSandbox", async () => {
     const { ref } = await import("vue");
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
@@ -26,7 +26,7 @@ Object.defineProperty(globalThis, `localStorage`, {
     },
 });
 
-const { sandboxRequest } = await import("../sandboxClient");
+const { sandboxRequest } = await import("../sandbox/sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 const { loadAccountStatus, resetChat, useChat } = await import("./useChat");
 

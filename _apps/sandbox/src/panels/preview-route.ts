@@ -1,7 +1,7 @@
 import type { Logger } from "pino";
 import type { Services } from "../composition.js";
 import type { Config } from "../env.config.js";
-import { postToPlatform } from "../system/platform-client.js";
+import { postToPlatform } from "../platform/platform-client.js";
 import { discoverPanels } from "./panels.js";
 
 // Asks the platform to mint a panel's preview route (proxied CNAME + tunnel ingress → the preview proxy) on

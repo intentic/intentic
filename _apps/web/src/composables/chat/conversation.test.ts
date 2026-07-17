@@ -2,8 +2,8 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ChatMessage, Conversation, transcriptOf, turnDefaults } from "./conversation";
 
-vi.mock("../sandboxClient", () => ({ sandboxRequest: vi.fn() }));
-const { sandboxRequest } = await import("../sandboxClient");
+vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
+const { sandboxRequest } = await import("../sandbox/sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 
 // A model-invalid error dynamically imports useChat to reload the provider's live catalog; stub it (and spy) so
@@ -344,7 +344,10 @@ describe(`Conversation`, () => {
         // The daemon self-heals a stale model in-turn (re-prompting with one xAI named), so this code now reaches
         // the client only when that failed — xAI rejected the model AND named no alternative: a genuine error.
         sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `grok-model-invalid`, message: `xAI returned no available models for your account.` }, { kind: `done` }]),
+            sseResponse([
+                { kind: `error`, code: `grok-model-invalid`, message: `xAI returned no available models for your account.` },
+                { kind: `done` },
+            ]),
         );
         await conversation.send(`hi`, { ...settings, agent: `grok`, model: `grok-code-fast-1` });
         // The catalog reload is a fire-and-forget dynamic import; let its microtasks drain before asserting it.
@@ -366,7 +369,11 @@ describe(`Conversation`, () => {
         // reload repoints the picker — and this conversation's dead pinned id — to the daemon's live default.
         sandboxRequestMock.mockImplementation(
             sseResponse([
-                { kind: `error`, code: `codex-model-invalid`, message: `The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account.` },
+                {
+                    kind: `error`,
+                    code: `codex-model-invalid`,
+                    message: `The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account.`,
+                },
                 { kind: `done` },
             ]),
         );

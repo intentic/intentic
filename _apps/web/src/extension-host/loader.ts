@@ -3,7 +3,7 @@ import { extensionApiVersion, extensionIdOf } from "@intentic/extension-api";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
-import { sandboxError, sandboxJson, sandboxRequest } from "../composables/sandboxClient";
+import { sandboxError, sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
 import { createExtensionApi, type HostBindings } from "./apiImpl";
 import { satisfiesEngines } from "./engines";
 

@@ -22,11 +22,11 @@ import {
     mintPairing,
     syncingFrom,
     syncSshHostname,
-} from "./system/sync.js";
+} from "./platform/sync.js";
 import { approveEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
-import { createBrowserLoginRoute } from "./system/browser-login.js";
-import { createTerminalRoute } from "./system/terminal.js";
+import { createBrowserLoginRoute } from "./browser/browser-login.js";
+import { createTerminalRoute } from "./terminal/terminal.js";
 import { createWebchatRoute } from "./webchat/webchat.routes.js";
 import { extractTarToWorkspace, PathEscapeError } from "./workspace/workspace-archive.js";
 import { computeUploadSkip, type UploadManifestEntry } from "./workspace/workspace-diff.js";

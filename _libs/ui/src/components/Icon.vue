@@ -6,7 +6,7 @@
 import { Icon as IconifyIcon } from "@iconify/vue";
 import { computed } from "vue";
 import { ICON_SETS, type IconName } from "../icons/iconSets.js";
-import { useIconSet } from "../vue/useIconSet.js";
+import { useIconSet } from "../composables/useIconSet.js";
 
 const { name, spin = false } = defineProps<{ name: IconName; spin?: boolean }>();
 

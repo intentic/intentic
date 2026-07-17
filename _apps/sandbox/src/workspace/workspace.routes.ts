@@ -9,13 +9,13 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { repoGitDir } from "../history/history.js";
 import { probePort } from "../processes/managed-processes.js";
-import { shellQuote } from "../system/terminal-run.js";
+import { shellQuote } from "../terminal/terminal-run.js";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 import { classifyWorkspace } from "./classify.js";
 import { readPackageGraph } from "./package-graph.js";
-import { isValidRepoName, listRepos } from "./repos.js";
+import { isValidRepoName, listRepos } from "./extra-repos.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
-import { listTemplates, loadManifest, readTemplatesConfig } from "./templates-config.js";
+import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
 import { resolveWithin } from "./workspace-files.js";
 
 const exec = promisify(execFile);

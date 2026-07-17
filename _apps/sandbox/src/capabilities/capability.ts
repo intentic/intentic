@@ -4,8 +4,8 @@ import { applyEventsPath, isTerminalExit, tailIntenticEvents } from "../intentic
 import { INFRA_APPLY_KEY, startInfraApplyJob } from "../intentic/infra-apply.js";
 import { type ConfigStore, createConfigStore } from "../inventory/config-store.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
-import { ensureIntentInstallable } from "../workspace/ensure-intent.js";
-import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../workspace/scaffold-ledger.js";
+import { ensureIntentInstallable } from "../scaffold/ensure-intent.js";
+import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../scaffold/scaffold-repos.js";
 import { connectorSecretField, type ResolvedConnector } from "./cli/connector-registry.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 
@@ -142,7 +142,10 @@ export const echoConfig = (capability: Capability, connectors: Map<string, Resol
                     echo[key] = value;
                 }
             }
-            return { ...echo, hasSecret: secretKey !== undefined && capability.config[secretKey] !== undefined && capability.config[secretKey] !== "" };
+            return {
+                ...echo,
+                hasSecret: secretKey !== undefined && capability.config[secretKey] !== undefined && capability.config[secretKey] !== "",
+            };
         }
         case "ssh":
             return { host: capability.config.host, port: capability.config.port, user: capability.config.user, auth: capability.config.auth };

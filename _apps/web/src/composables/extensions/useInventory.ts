@@ -1,8 +1,8 @@
 import { type AddInventoryInput, type InventoryEntry, InventoryEntrySchema } from "@intentic-app/api-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxError, sandboxRequest } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxError, sandboxRequest } from "../sandbox/sandboxClient";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 
 /* The sandbox's inventory — the i.have.* / i.want.service entries in its intent repo deploy.config.ts. Read +
  * rewritten DIRECTLY in the sandbox via the daemon's /inventory routes (the daemon owns the file + commits the

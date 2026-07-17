@@ -1,7 +1,7 @@
 import type { SettingValue } from "@intentic/extension-api";
 import { ExtensionSettingsSchema } from "@intentic/sandbox-contract";
 import { type ShallowRef, shallowRef } from "vue";
-import { sandboxJson } from "../sandboxClient";
+import { sandboxJson } from "../sandbox/sandboxClient";
 
 /* One shared per-extension settings store (keyed by the capability entry id), so the Sandbox hub's Extensions
  * tab and a running extension's api.settings read and write THE SAME reactive record — an edit in either place

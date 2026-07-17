@@ -1,6 +1,6 @@
 import type { PresenceUser } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
-import { sandboxRequest } from "./sandboxClient";
+import { sandboxRequest } from "./sandbox/sandboxClient";
 import { useAuth } from "./useAuth";
 
 /* Live presence: who else is connected to the active sandbox and what they're looking at. Module-level

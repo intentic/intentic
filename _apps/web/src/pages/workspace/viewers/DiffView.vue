@@ -2,8 +2,8 @@
 import { useDevice } from "@intentic-app/ui";
 import type * as Monaco from "monaco-editor-core";
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { useMonaco } from "../../composables/workspace/useMonaco";
-import { resolveFile } from "./fileType";
+import { useMonaco } from "../../../composables/workspace/useMonaco";
+import { resolveFile } from "../fileType";
 
 /* Diff of one file across a snapshot (before = parent, after = the snapshot) on Monaco's diff editor — the
  * same engine VSCode uses, so it brings its own minimap, change overview ruler, and diff computation. Side-by-side

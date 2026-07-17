@@ -1,5 +1,5 @@
 import type { PluginConfig } from "@intentic/sandbox-contract";
-import { capabilityJobSession } from "../../system/terminal-session.js";
+import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
 import { checkoutInto } from "../git-checkout.js";
 import { pluginDir, pluginsRoot } from "../plugin-dirs.js";

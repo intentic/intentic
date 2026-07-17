@@ -129,8 +129,8 @@ const up = async (): Promise<void> => {
     let forgejoPassword = "";
     let komodoPassword = "";
 
-    log(`▶ building the demo host image (${CONTAINER}) from test/host …`);
-    await run("docker", ["build", "-t", CONTAINER, join(repoRoot, "test/host")]);
+    log(`▶ building the demo host image (${CONTAINER}) from fixtures/dind-host …`);
+    await run("docker", ["build", "-t", CONTAINER, join(repoRoot, "fixtures/dind-host")]);
 
     log("▶ starting the persistent Docker-in-Docker host …");
     await quiet("docker", ["rm", "-f", CONTAINER]);

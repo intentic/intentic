@@ -4,8 +4,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { VpnConfig } from "@intentic/sandbox-contract";
-import { shellQuote } from "../../system/terminal-run.js";
-import { capabilityJobSession } from "../../system/terminal-session.js";
+import { shellQuote } from "../../terminal/terminal-run.js";
+import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 
 // A VPN capability: route the agent's traffic through a WireGuard tunnel. One capability = one tunnel; the id

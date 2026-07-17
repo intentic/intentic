@@ -28,10 +28,10 @@ import { killStaleManagedSessions, panelSession } from "./processes/managed-proc
 import { createPreviewProxy } from "./panels/preview-proxy.js";
 import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
 import { linkClaudeProjects } from "./sessions/session-store.js";
-import { createAnnouncer } from "./system/announce.js";
-import { seedPairing } from "./system/sync.js";
-import { reapIdleWebSessions } from "./system/terminal-session.js";
-import { startVersionCheck } from "./system/version-check.js";
+import { createAnnouncer } from "./platform/announce.js";
+import { seedPairing } from "./platform/sync.js";
+import { reapIdleWebSessions } from "./terminal/terminal-session.js";
+import { startVersionCheck } from "./platform/version-check.js";
 import { startWorkspaceWatch } from "./workspace/workspace-watch.js";
 
 // The sandbox container's entrypoint. Config comes from env set at `docker run` — by connect.sh (your PC) or
@@ -206,7 +206,9 @@ const main = async (): Promise<void> => {
     // stall the /events heartbeat past the browser's watchdog, flashing the UI to "connecting" mid-session — which
     // unmounts the account page and aborts the in-flight Grok connect. At boot that spike hides behind the initial
     // connect screen. Best-effort: ensure() is idempotent, so the first interactive call reuses this warm client.
-    void services.openCode.client().catch((error: unknown) => logger.warn({ err: error }, "opencode warmup failed — first grok connect boots it lazily"));
+    void services.openCode
+        .client()
+        .catch((error: unknown) => logger.warn({ err: error }, "opencode warmup failed — first grok connect boots it lazily"));
 
     const shutdown = (): void => {
         logger.info("shutting down intentic sandbox daemon…");

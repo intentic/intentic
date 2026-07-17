@@ -1,6 +1,6 @@
-import { useGoogleIdentity } from "./useGoogleIdentity";
+import { useGoogleIdentity } from "../useGoogleIdentity";
 import { useSandbox } from "./useSandbox";
-import { CHUNK_BYTES } from "./workspace/uploadChunking";
+import { CHUNK_BYTES } from "../workspace/uploadChunking";
 
 // Calls the ACTIVE sandbox's daemon DIRECTLY (browser → https://sandbox-<id>.<zone>), authenticated by a Google
 // ID token (Bearer, no cookies) — the platform is out of this path. The daemon base URL + connection token come

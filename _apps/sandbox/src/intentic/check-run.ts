@@ -3,8 +3,8 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { IntenticLine } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { shellQuote } from "../system/terminal-run.js";
-import { INFRA_CHECK_SESSION } from "../system/terminal-session.js";
+import { shellQuote } from "../terminal/terminal-run.js";
+import { INFRA_CHECK_SESSION } from "../terminal/terminal-session.js";
 import { resetEventsFile, tailIntenticEvents } from "./apply-events.js";
 
 // The check flow's substrate: run one `intentic resolve` / `intentic plan` VISIBLY in the job-infra-check tmux

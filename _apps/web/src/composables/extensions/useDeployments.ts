@@ -2,8 +2,8 @@ import { type Deployment, DeploymentSchema } from "@intentic-app/api-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { readIntenticLines } from "../intenticStream";
-import { sandboxRequest } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxRequest } from "../sandbox/sandboxClient";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 
 /* The live Komodo deployments surfaced by the in-sandbox `intentic deployments` subcommand, read DIRECTLY
  * from the daemon (the sandbox already merges desired-state with live Komodo). Shared by the infrastructure +

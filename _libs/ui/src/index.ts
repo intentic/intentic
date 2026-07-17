@@ -14,9 +14,9 @@ export { default as Segmented } from "./components/Segmented.vue";
 export { default as StatusBadge, type StatusVariant } from "./components/StatusBadge.vue";
 export { default as StepSection } from "./components/StepSection.vue";
 export { Theme } from "./styles/theme.js";
-export { installUi } from "./vue/plugin.js";
-export { vTw } from "./vue/tw.js";
-export { useHighlighter } from "./vue/useHighlighter.js";
+export { installUi } from "./plugin.js";
+export { vTw } from "./composables/tw.js";
+export { useHighlighter } from "./composables/useHighlighter.js";
 export { formatBytes, timeAgo } from "./format.js";
 export { type IconName, type IconSet, iconSets } from "./icons/iconSets.js";
 export { type ExplorerStyle, explorerStyles } from "./icons/explorerStyle.js";
@@ -28,8 +28,8 @@ export {
     type FileCategory,
     iconForEntry,
 } from "./icons/fileIcon.js";
-export { useExplorerStyle } from "./vue/useExplorerStyle.js";
-export { type CommandOs, useOsPreference } from "./vue/useOsPreference.js";
-export { type Device, useDevice } from "./vue/useDevice.js";
-export { useIconSet } from "./vue/useIconSet.js";
-export { type ColorScheme, useTheme } from "./vue/useTheme.js";
+export { useExplorerStyle } from "./composables/useExplorerStyle.js";
+export { type CommandOs, useOsPreference } from "./composables/useOsPreference.js";
+export { type Device, useDevice } from "./composables/useDevice.js";
+export { useIconSet } from "./composables/useIconSet.js";
+export { type ColorScheme, useTheme } from "./composables/useTheme.js";

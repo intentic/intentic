@@ -8,7 +8,7 @@ const viewStates = new Map<string, Monaco.editor.ICodeEditorViewState>();
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { useMonaco } from "../../composables/workspace/useMonaco";
+import { useMonaco } from "../../../composables/workspace/useMonaco";
 
 /* The workspace code surface — a single Monaco editor for BOTH the read-only preview and (with `editable`) the
  * editor, so the two are the same rendering with a VSCode minimap. `lang === undefined` (unknown extension or a

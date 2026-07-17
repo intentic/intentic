@@ -6,7 +6,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiClient } from "../composables/useApi";
 import { useAuth } from "../composables/useAuth";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* Public accept-invite landing for the emailed link (/invite/:token). It previews the token (no session needed),
  * resolves the current session, then routes the invitee: sign in as the invited address → accept → into the

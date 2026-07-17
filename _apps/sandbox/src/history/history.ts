@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
-import { isValidRepoName } from "../workspace/repos.js";
+import { isValidRepoName } from "../workspace/extra-repos.js";
 import { REPO_ROLES, type WorkspacePaths } from "../workspace/workspace.js";
 
 // Daemon-owned workspace history: every scope (the /work root plus each repo under /work/repositories) gets a
@@ -325,8 +325,7 @@ export const createWorkspaceHistory = (
     };
 
     // The checkpoint timeline — what list/diff/restore expose; interval captures never surface here.
-    const visibleGroups = async (): Promise<SnapshotGroup[]> =>
-        (await historyIndex()).groups.filter((group) => VISIBLE_TRIGGERS.has(group.trigger));
+    const visibleGroups = async (): Promise<SnapshotGroup[]> => (await historyIndex()).groups.filter((group) => VISIBLE_TRIGGERS.has(group.trigger));
 
     const findGroup = async (id: string): Promise<SnapshotGroup | undefined> => (await visibleGroups()).find((group) => group.id === id);
 
@@ -476,9 +475,7 @@ export const createWorkspaceHistory = (
             userWriteTimer.unref();
         },
         list: async () =>
-            (await visibleGroups()).map(({ id, at, trigger, label }) =>
-                label !== undefined ? { id, at, trigger, label } : { id, at, trigger },
-            ),
+            (await visibleGroups()).map(({ id, at, trigger, label }) => (label !== undefined ? { id, at, trigger, label } : { id, at, trigger })),
         // A checkpoint's diff spans everything since the previous visible checkpoint — hidden interval captures
         // in between are the point of the base choice, not an accident.
         diff: async (id) => {

@@ -4,7 +4,7 @@
 // NOTE: drafted from the code-verified data flows; review by a lawyer before/shortly after go-live.
 
 import { LEGAL_CONTACT_EMAIL, LEGAL_VERSION } from "@intentic/constants";
-// Re-exported so this package's existing consumers keep importing them from @intentic-dev/content.
+// Re-exported so this package's existing consumers keep importing them from @intentic-dev/site-content.
 export { LEGAL_CONTACT_EMAIL, LEGAL_VERSION };
 
 export interface LegalSection {

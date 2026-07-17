@@ -11,7 +11,7 @@ import {
     type TodoItem,
 } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
-import { sandboxRequest } from "../sandboxClient";
+import { sandboxRequest } from "../sandbox/sandboxClient";
 import { sseData, sseFrames } from "../sse";
 import { formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus";
 

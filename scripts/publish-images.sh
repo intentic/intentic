@@ -19,7 +19,7 @@ REGISTRY="registry.gitlab.com/radarsu/intentic"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Build + push one image under every requested tag. The Dockerfile + build context differ per image: the
-# sandbox builds from the monorepo root; the dind-host from its self-contained test/host dir.
+# sandbox builds from the monorepo root; the dind-host from its self-contained fixtures/dind-host dir.
 publish() {
     local image="$1" dockerfile="$2" context="$3"
     local tag_args=()
@@ -30,4 +30,4 @@ publish() {
 }
 
 publish sandbox "$root/_apps/sandbox/Dockerfile" "$root"
-publish dind-host "$root/test/host/Dockerfile" "$root/test/host"
+publish dind-host "$root/fixtures/dind-host/Dockerfile" "$root/fixtures/dind-host"

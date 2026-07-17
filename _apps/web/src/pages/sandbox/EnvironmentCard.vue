@@ -4,10 +4,10 @@ import { Card, Code, StatusBadge } from "@intentic-app/ui";
 import { useQueryClient } from "@tanstack/vue-query";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
-import { sandboxJson } from "../../composables/sandboxClient";
+import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../composables/sandbox/useEnvironment";
-import { useSandbox } from "../../composables/useSandbox";
-import DiffView from "../workspace/DiffView.vue";
+import { useSandbox } from "../../composables/sandbox/useSandbox";
+import DiffView from "../workspace/viewers/DiffView.vue";
 
 /* The sandbox's environment (its composed overlay Dockerfile, on the /sandbox hub). The daemon composes it
  * from the enabled capabilities' fragments plus the custom section the agent proposes; the OWNER reviews the

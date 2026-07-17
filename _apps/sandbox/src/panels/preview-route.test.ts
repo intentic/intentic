@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspacePaths } from "../workspace/workspace.js";
 
 const postMock = vi.fn<(config: unknown, path: string, body: unknown) => Promise<{ status: number; json: unknown }>>();
-vi.mock("../system/platform-client.js", () => ({ postToPlatform: (...args: unknown[]) => postMock(...(args as Parameters<typeof postMock>)) }));
+vi.mock("../platform/platform-client.js", () => ({ postToPlatform: (...args: unknown[]) => postMock(...(args as Parameters<typeof postMock>)) }));
 
 const { createPreviewRouteEnsurer, ensureAllPreviewRoutes } = await import("./preview-route.js");
 

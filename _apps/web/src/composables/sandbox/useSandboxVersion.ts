@@ -2,8 +2,8 @@ import { InfoSchema } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { bashCommand } from "../../environments/scriptCommand";
-import { sandboxJson } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxJson } from "./sandboxClient";
+import { sandboxKey, useSandbox } from "./useSandbox";
 import { useEnvironment } from "./useEnvironment";
 
 /* The sandbox daemon's self-report (/info): its running `version` and — once the daemon has checked GitHub —
@@ -54,9 +54,7 @@ export function useSandboxVersion() {
     // The host-run update one-liner: slug only (no hash, no token). The container name comes from /environment
     // (the daemon returns it even without an overlay). Empty until both the container and an update are known.
     const slug = computed(() => envState.value?.container?.replace(/^intentic-sandbox-/, ``));
-    const updateCommand = computed(() =>
-        slug.value !== undefined && updateAvailable.value ? bashCommand(`update`, ``, slug.value) : ``,
-    );
+    const updateCommand = computed(() => (slug.value !== undefined && updateAvailable.value ? bashCommand(`update`, ``, slug.value) : ``));
 
     // The banner is shown only when an update is available AND the user hasn't dismissed THIS version.
     const bannerVisible = computed(() => updateAvailable.value && dismissedVersion.value !== latest.value);

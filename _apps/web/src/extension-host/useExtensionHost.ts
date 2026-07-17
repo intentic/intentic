@@ -1,7 +1,7 @@
 import { watch } from "vue";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { usePanels } from "../composables/extensions/usePanels";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 import { loadBuiltins } from "./builtins";
 import { loadExtensions } from "./loader";
 

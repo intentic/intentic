@@ -1,5 +1,5 @@
 {
-    "name": "@intentic-app/catalog",
+    "name": "@intentic-app/capability-catalog",
     "version": "0.0.0",
     "private": true,
     "type": "module",

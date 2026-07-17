@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { run, type StricliProcess } from "@stricli/core";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { makeRecallFixture } from "@intentic/iq-recall/testing";
-import { app } from "../app.js";
+import { app } from "../../app.js";
 import { runHookMatch } from "./sessions.routes.js";
 
 const SESSION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -79,7 +79,15 @@ test("sessions match surfaces the strong match with a fork suggestion", async ()
 test("hook mode emits additionalContext JSON only on a strong first-prompt match", async () => {
     let out = "";
     const write = (chunk: string): void => void (out += chunk);
-    await runHookMatch(JSON.stringify({ session_id: "fresh", transcript_path: "/nonexistent.jsonl", cwd: root, prompt: "fix the JWT refresh token rotation in the auth service" }), write);
+    await runHookMatch(
+        JSON.stringify({
+            session_id: "fresh",
+            transcript_path: "/nonexistent.jsonl",
+            cwd: root,
+            prompt: "fix the JWT refresh token rotation in the auth service",
+        }),
+        write,
+    );
     const output = JSON.parse(out) as { hookSpecificOutput: { hookEventName: string; additionalContext: string } };
     expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
     expect(output.hookSpecificOutput.additionalContext).toContain(`iq sessions fork ${SESSION_A}`);
@@ -89,8 +97,19 @@ test("hook mode stays silent on non-first prompts, weak matches, and garbage inp
     let out = "";
     const write = (chunk: string): void => void (out += chunk);
     // The fixture transcript has two typed prompts — not a session start.
-    await runHookMatch(JSON.stringify({ session_id: "x", transcript_path: `${projectsDir}/${SESSION_A}.jsonl`, cwd: root, prompt: "fix the JWT refresh token rotation" }), write);
-    await runHookMatch(JSON.stringify({ session_id: "x", transcript_path: "/nonexistent.jsonl", cwd: root, prompt: "provision the kubernetes payments cluster" }), write);
+    await runHookMatch(
+        JSON.stringify({
+            session_id: "x",
+            transcript_path: `${projectsDir}/${SESSION_A}.jsonl`,
+            cwd: root,
+            prompt: "fix the JWT refresh token rotation",
+        }),
+        write,
+    );
+    await runHookMatch(
+        JSON.stringify({ session_id: "x", transcript_path: "/nonexistent.jsonl", cwd: root, prompt: "provision the kubernetes payments cluster" }),
+        write,
+    );
     await runHookMatch("not json at all", write);
     expect(out).toBe("");
 });
@@ -98,7 +117,12 @@ test("hook mode stays silent on non-first prompts, weak matches, and garbage inp
 test("the matched session never suggests forking itself", async () => {
     let out = "";
     await runHookMatch(
-        JSON.stringify({ session_id: SESSION_A, transcript_path: "/nonexistent.jsonl", cwd: root, prompt: "fix the JWT refresh token rotation in the auth service" }),
+        JSON.stringify({
+            session_id: SESSION_A,
+            transcript_path: "/nonexistent.jsonl",
+            cwd: root,
+            prompt: "fix the JWT refresh token rotation in the auth service",
+        }),
         (chunk) => void (out += chunk),
     );
     expect(out).not.toContain(SESSION_A);

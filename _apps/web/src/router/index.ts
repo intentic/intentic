@@ -2,7 +2,7 @@ import { useDevice } from "@intentic-app/ui";
 import { createRouter, createWebHistory, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
 import { restorePersistedQueries } from "../composables/queryPersistence";
 import { useAuth } from "../composables/useAuth";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -58,7 +58,7 @@ const routes: RouteRecordRaw[] = [
         // completes).
         path: `/`,
         beforeEnter: [requireAuth, requireSetup],
-        component: () => import(`../layout/WorkspaceShell.vue`),
+        component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
             // Mobile lands on the agent chat — the primary on-the-go surface; desktop keeps the workspace.
             { path: ``, redirect: () => (useDevice().mobile.value ? `/chat` : `/workspace`) },

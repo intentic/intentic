@@ -760,9 +760,9 @@ importers:
       '@intentic-dev/astro-integrations':
         specifier: workspace:*
         version: link:../../_libs/astro-integrations
-      '@intentic-dev/content':
+      '@intentic-dev/site-content':
         specifier: workspace:*
-        version: link:../../_libs/content
+        version: link:../../_libs/site-content
       '@resvg/resvg-js':
         specifier: 'catalog:'
         version: 2.6.2
@@ -819,9 +819,9 @@ importers:
       '@intentic-app/api-contract':
         specifier: workspace:*
         version: link:../../_libs/api-contract
-      '@intentic-app/catalog':
+      '@intentic-app/capability-catalog':
         specifier: workspace:*
-        version: link:../../_libs/catalog
+        version: link:../../_libs/capability-catalog
       '@intentic-app/localhost-https':
         specifier: workspace:*
         version: link:../../_tools/localhost-https
@@ -831,9 +831,6 @@ importers:
       '@intentic/ext-agent-activity':
         specifier: workspace:*
         version: file:_extensions/agent-activity(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.39(typescript@5.9.3))
-      '@intentic/ext-apps':
-        specifier: workspace:*
-        version: link:../../_extensions/apps
       '@intentic/ext-automations':
         specifier: workspace:*
         version: link:../../_extensions/automations
@@ -843,6 +840,9 @@ importers:
       '@intentic/ext-preview':
         specifier: workspace:*
         version: file:_extensions/preview(@opentelemetry/api@1.9.1)(typescript@5.9.3)(vue@3.5.39(typescript@5.9.3))
+      '@intentic/ext-repo-apps':
+        specifier: workspace:*
+        version: link:../../_extensions/repo-apps
       '@intentic/ext-viewers':
         specifier: workspace:*
         version: link:../../_extensions/viewers
@@ -987,37 +987,6 @@ importers:
         specifier: 'catalog:'
         version: 3.3.6(typescript@5.9.3)
 
-  _extensions/apps:
-    dependencies:
-      '@intentic/extension-api':
-        specifier: workspace:*
-        version: link:../../_libs/extension-api
-      '@intentic/extension-ui':
-        specifier: workspace:*
-        version: link:../../_libs/extension-ui
-      '@intentic/sandbox-contract':
-        specifier: workspace:*
-        version: link:../../_libs/sandbox-contract
-      '@tanstack/vue-query':
-        specifier: 'catalog:'
-        version: 5.101.2(vue@3.5.39(typescript@5.9.3))
-    devDependencies:
-      '@intentic/tsconfig':
-        specifier: workspace:*
-        version: link:../../_tools/tsconfig
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
-      vue:
-        specifier: 'catalog:'
-        version: 3.5.39(typescript@5.9.3)
-      vue-tsc:
-        specifier: 'catalog:'
-        version: 3.3.6(typescript@5.9.3)
-
   _extensions/automations:
     dependencies:
       '@intentic/extension-api':
@@ -1138,6 +1107,37 @@ importers:
         specifier: 'catalog:'
         version: 3.3.6(typescript@5.9.3)
 
+  _extensions/repo-apps:
+    dependencies:
+      '@intentic/extension-api':
+        specifier: workspace:*
+        version: link:../../_libs/extension-api
+      '@intentic/extension-ui':
+        specifier: workspace:*
+        version: link:../../_libs/extension-ui
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_libs/sandbox-contract
+      '@tanstack/vue-query':
+        specifier: 'catalog:'
+        version: 5.101.2(vue@3.5.39(typescript@5.9.3))
+    devDependencies:
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+      vue:
+        specifier: 'catalog:'
+        version: 3.5.39(typescript@5.9.3)
+      vue-tsc:
+        specifier: 'catalog:'
+        version: 3.3.6(typescript@5.9.3)
+
   _extensions/rtk: {}
 
   _extensions/viewers:
@@ -1208,7 +1208,7 @@ importers:
         specifier: 'catalog:'
         version: 0.26.0
 
-  _libs/catalog:
+  _libs/capability-catalog:
     dependencies:
       '@intentic/extension-api':
         specifier: workspace:*
@@ -1229,19 +1229,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
-
-  _libs/content:
-    dependencies:
-      '@intentic/constants':
-        specifier: workspace:*
-        version: link:../../_tools/constants
-    devDependencies:
-      '@intentic/tsconfig':
-        specifier: workspace:*
-        version: link:../../_tools/tsconfig
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
 
   _libs/engine:
     dependencies:
@@ -1567,6 +1554,19 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+
+  _libs/site-content:
+    dependencies:
+      '@intentic/constants':
+        specifier: workspace:*
+        version: link:../../_tools/constants
+    devDependencies:
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
 
   _libs/state-resolver:
     dependencies:

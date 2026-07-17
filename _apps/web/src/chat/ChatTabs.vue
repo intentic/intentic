@@ -5,7 +5,7 @@ import { relativeTime, statusTabClass } from "../composables/chat/catalog";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { viewersOfSession } from "../composables/usePresence";
-import PresenceAvatars from "./PresenceAvatars.vue";
+import PresenceAvatars from "../presence/PresenceAvatars.vue";
 
 /* The tab strip + history menu. Reads the conversation list from the useChat singleton; the panel owns the
  * side effects of switching (scroll pinning, composer focus), so tab actions are emitted rather than applied. */

@@ -22,7 +22,7 @@ Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/*
 | Extension | Kind | What it contributes |
 | --- | --- | --- |
 | `agent-activity` | UI view | The agent activity feed. |
-| `apps` | UI view | Per-repo apps: preview URLs, add/start/stop, vitest. |
+| `repo-apps` | UI view | Per-repo apps: preview URLs, add/start/stop, vitest. |
 | `automations` | UI view | Cron / webhook / listener automations. |
 | `logs` | UI view | Workspace log tail. |
 | `preview` | UI view | Per-repo dev-server preview panels. |
@@ -37,7 +37,7 @@ Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/*
   through the manifest-gated host in
   [_apps/web/src/extension-host/builtins.ts](../_apps/web/src/extension-host/builtins.ts). Adding a new
   first-party UI extension = a new package here + one line there. (Note the three *core* view contributions
-  in `_apps/web/src/extensions/builtins.ts` are **not** extensions — they're privileged in-app views coupled
+  in `_apps/web/src/core-views/coreViews.ts` are **not** extensions — they're privileged in-app views coupled
   to platform internals; see that file and ARCHITECTURE.md.)
 - **Baked into the sandbox image** (`connectors`, `discord`): copied to `/opt/extensions` by the sandbox
   [Dockerfile](../_apps/sandbox/Dockerfile) and enumerated via `EXTENSIONS_DIR` by

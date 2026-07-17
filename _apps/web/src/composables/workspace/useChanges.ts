@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
-import { sandboxJson } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxJson } from "../sandbox/sandboxClient";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { resetEditBuffers } from "./useEditBuffers";
 
 /* The Changes review — VSCode's SCM model over the workspace's real repos: the set is plain `git status`

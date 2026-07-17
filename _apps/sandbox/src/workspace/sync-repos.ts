@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { GitSyncResult } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
-import { listRepos } from "./repos.js";
+import { listRepos } from "./extra-repos.js";
 
 // A repo's sync outcome for one turn: the git result, plus the two turn-orchestration outcomes that aren't the
 // git op itself — "skipped" (throttled, or a concurrent turn is already syncing this repo) and "error" (the

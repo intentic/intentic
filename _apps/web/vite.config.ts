@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
-import { shikiLangDeps } from "../../_libs/ui/src/vue/shikiLangs.js";
+import { shikiLangDeps } from "../../_libs/ui/src/composables/shikiLangs.js";
 import { sourceAliases } from "./source-aliases";
 
 // Resolve a path relative to this config file (which lives at the app root, _apps/web/).

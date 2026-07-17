@@ -1,8 +1,8 @@
 import type { WorkspaceChildrenResponse, WorkspaceFileResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic-app/api-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
-import { sandboxBlob, sandboxJson } from "../sandboxClient";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxBlob, sandboxJson } from "../sandbox/sandboxClient";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { resetUploadQueue } from "./useUploadQueue";
 
 // Shared, module-level feedback for user file actions (rename, delete, save, move…) so the explorer, the tree

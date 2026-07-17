@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { capabilityJobSession } from "../../system/terminal-session.js";
+import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityHandler } from "../capability.js";
 
 // DevOps: scaffold the intent + desired-state repos and make them provisionable. This is the capability that

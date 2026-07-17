@@ -1,9 +1,9 @@
 import type { FileDiffResponse, SnapshotDiffResponse, SnapshotsResponse } from "@intentic-app/api-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
-import { sandboxJson } from "../sandboxClient";
+import { sandboxJson } from "../sandbox/sandboxClient";
 import { resetEditBuffers } from "./useEditBuffers";
-import { sandboxKey, useSandbox } from "../useSandbox";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 
 /* Workspace history: the daemon's checkpoints of /work (agent turns labeled with the prompt, user changes,
  * restore markers — hidden interval captures never listed), read DIRECTLY from the sandbox like the workspace

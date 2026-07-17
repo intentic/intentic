@@ -1,8 +1,8 @@
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { hashKey } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
-import { queryClient } from "./queryPersistence";
-import { apiClient } from "./useApi";
+import { queryClient } from "../queryPersistence";
+import { apiClient } from "../useApi";
 
 /* The browser's view of the user's sandboxes, as a module-level singleton. A user can own several sandboxes and
  * be a member of others; the platform is the registry — each daemon announces its own URL + lastSeenAt, and the

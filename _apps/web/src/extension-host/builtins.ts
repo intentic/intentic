@@ -1,7 +1,7 @@
 import type { ExtensionManifest, ExtensionModule } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-api";
 import * as agentActivity from "@intentic/ext-agent-activity";
-import * as apps from "@intentic/ext-apps";
+import * as apps from "@intentic/ext-repo-apps";
 import * as automations from "@intentic/ext-automations";
 import * as logs from "@intentic/ext-logs";
 import * as preview from "@intentic/ext-preview";

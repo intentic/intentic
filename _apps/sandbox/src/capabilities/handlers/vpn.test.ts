@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { createTerminalRunner } from "../../system/terminal-run.js";
+import { createTerminalRunner } from "../../terminal/terminal-run.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
 import { vpnHandler } from "./vpn.js";

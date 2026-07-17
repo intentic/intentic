@@ -10,9 +10,9 @@ import { formatReset, usageStatusFor, usageWindowLabel } from "../composables/ch
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSpeechInput } from "../composables/chat/useSpeechInput";
-import { sandboxJson, sandboxUpload } from "../composables/sandboxClient";
+import { sandboxJson, sandboxUpload } from "../composables/sandbox/sandboxClient";
 import { useLayout } from "../composables/useLayout";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 import { collectDroppedFiles } from "../pages/workspace/dropEntries";
 import ChatAccountPanel from "./ChatAccountPanel.vue";
 import ChatMessageView from "./ChatMessageView.vue";

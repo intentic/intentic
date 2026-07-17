@@ -1,8 +1,8 @@
 import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewRegistration } from "@intentic/extension-api";
 import { shallowRef } from "vue";
-import { builtins } from "./builtins";
+import { coreViews } from "./coreViews";
 
-/* The runtime extension registry: builtins seed it at module load; dynamically loaded third-party bundles join
+/* The runtime extension registry: core views seed it at module load; dynamically loaded third-party bundles join
  * through api.views.register. A module-level singleton ref (the app's no-Pinia convention), so every host —
  * rail, mobile menu, ExtensionHost, DirectoryOperator — recomputes off the same reactive list. */
 
@@ -12,7 +12,7 @@ interface RegisteredView {
     readonly registration: ViewRegistration;
 }
 
-const views = shallowRef<readonly RegisteredView[]>(builtins.map((registration) => ({ owner: `builtin`, registration })));
+const views = shallowRef<readonly RegisteredView[]>(coreViews.map((registration) => ({ owner: `builtin`, registration })));
 
 export const registerView = (owner: string, registration: ViewRegistration): Disposable => {
     views.value = [...views.value, { owner, registration }];

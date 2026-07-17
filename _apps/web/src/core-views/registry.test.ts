@@ -1,16 +1,16 @@
 import type { IntenticApi, ViewRegistration } from "@intentic/extension-api";
-import * as apps from "@intentic/ext-apps";
+import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic-app/api-contract";
 import { describe, expect, it } from "vitest";
 import { detectActivations, registerView } from "./registry";
 
 // apps + preview are packaged extensions the app activates via loadBuiltins; the registry seeds only the still-
-// static builtins (infrastructure/live-status/directory-ui). Register the two packaged detects here so the
+// static core views (infrastructure/live-status/directory-ui). Register the two packaged detects here so the
 // cross-extension rules — apps claims a monorepo, preview is the dropped-when-claimed fallback — are exercised
 // against the same registry the shell composes.
 const registerApi = { views: { register: (view: ViewRegistration) => registerView(`test`, view) } } as unknown as IntenticApi;
-apps.activate(registerApi, { extensionId: `intentic.apps`, subscriptions: [] });
+apps.activate(registerApi, { extensionId: `intentic.repo-apps`, subscriptions: [] });
 preview.activate(registerApi, { extensionId: `intentic.preview`, subscriptions: [] });
 
 // A PanelSummary with everything false — override only the facts a case exercises.

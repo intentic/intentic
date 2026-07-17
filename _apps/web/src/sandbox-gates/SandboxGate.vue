@@ -5,7 +5,7 @@ import { useAuth } from "../composables/useAuth";
 import { useEnvironment } from "../composables/sandbox/useEnvironment";
 import { useSandboxVersion } from "../composables/sandbox/useSandboxVersion";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../composables/workspace/useWorkspaceTree";
 import SandboxConnecting from "./SandboxConnecting.vue";
 import SandboxUnauthorized from "./SandboxUnauthorized.vue";

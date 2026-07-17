@@ -2,7 +2,7 @@ import type { CliConfig } from "@intentic/sandbox-contract";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ExecInTerminal } from "../../system/terminal-run.js";
+import type { ExecInTerminal } from "../../terminal/terminal-run.js";
 import { hostConfPath, hostKeyPath, hostsDir, removeSshHost, writeSshHost } from "../ssh-hosts.js";
 
 // A connected git provider (github/gitlab) with git access on gets more than the curl-API skill: real git creds so

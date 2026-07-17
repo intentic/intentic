@@ -1,6 +1,6 @@
 import { computed, type ComputedRef } from "vue";
 import { useExtensions } from "../extensions/useExtensions";
-import { sandboxJson } from "../sandboxClient";
+import { sandboxJson } from "../sandbox/sandboxClient";
 import type { TerminalTabs } from "./useTerminal";
 
 /* The rows behind the terminal panel's background-processes popover: the installed extensions' declared

@@ -4,7 +4,7 @@ import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
-import { useSandbox } from "../composables/useSandbox";
+import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* Guided browser login for a `browser`-kind capability. Opens the daemon's /system/browser-login WebSocket: the
  * daemon drives a real (headless) Chromium at the platform's sign-in page and screencasts it here as JPEG frames;

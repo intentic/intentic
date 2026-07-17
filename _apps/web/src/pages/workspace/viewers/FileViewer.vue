@@ -2,17 +2,17 @@
 import type { WorkspaceFileResponse, WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { CopyButton, useDevice } from "@intentic-app/ui";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
-import { viewerForExtension } from "../../extensions/viewerRegistry";
-import { sandboxBlob, SandboxHttpError, sandboxJson } from "../../composables/sandboxClient";
-import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
-import { useLayout } from "../../composables/useLayout";
-import { useMonaco } from "../../composables/workspace/useMonaco";
-import { changeEpochOf } from "../../composables/workspace/useWorkspaceLive";
-import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
+import { viewerForExtension } from "../../../core-views/viewerRegistry";
+import { sandboxBlob, SandboxHttpError, sandboxJson } from "../../../composables/sandbox/sandboxClient";
+import { useEditBuffers } from "../../../composables/workspace/useEditBuffers";
+import { useLayout } from "../../../composables/useLayout";
+import { useMonaco } from "../../../composables/workspace/useMonaco";
+import { changeEpochOf } from "../../../composables/workspace/useWorkspaceLive";
+import { useWorkspaceTree } from "../../../composables/workspace/useWorkspaceTree";
 import CodeView from "./CodeView.vue";
-import FileBreadcrumb from "./FileBreadcrumb.vue";
+import FileBreadcrumb from "../FileBreadcrumb.vue";
 import FileUnsupported from "./FileUnsupported.vue";
-import { resolveFile, type ViewMode } from "./fileType";
+import { resolveFile, type ViewMode } from "../fileType";
 import MarkdownViewer from "./MarkdownViewer.vue";
 import SvgViewer from "./SvgViewer.vue";
 
