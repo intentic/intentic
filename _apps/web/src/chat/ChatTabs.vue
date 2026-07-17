@@ -63,9 +63,12 @@ const openHistory = (event: Event): void => {
                 class="chat-tab group flex min-w-0 max-w-40 shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-2xs"
                 :class="{ 'chat-tab-on': activeId === c.id }"
                 @click="emit('select', c.id)"
-                v-tooltip.bottom="c.title.value ?? 'New chat'"
+                v-tooltip.bottom="c.title.value ?? (c.isolated.value ? 'New agent' : 'New chat')"
             >
-                <span class="min-w-0 flex-1 truncate text-left" :class="statusTabClass(c.status.value)">{{ c.title.value ?? "New chat" }}</span>
+                <!-- One noun with the fleet: an untitled isolated conversation IS a draft agent card there. -->
+                <span class="min-w-0 flex-1 truncate text-left" :class="statusTabClass(c.status.value)">{{
+                    c.title.value ?? (c.isolated.value ? "New agent" : "New chat")
+                }}</span>
                 <!-- Members with this same conversation active right now. -->
                 <PresenceAvatars v-if="c.session.value !== undefined" :viewers="viewersOfSession(c.session.value.id)" label="in this chat" />
                 <Icon
@@ -76,7 +79,7 @@ const openHistory = (event: Event): void => {
                 />
             </button>
         </div>
-        <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="emit('new')" v-tooltip.bottom="'New chat'" aria-label="New chat">
+        <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="emit('new')" v-tooltip.bottom="'New agent'" aria-label="New agent">
             <Icon name="plus" class="text-sm" />
         </button>
         <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="openHistory" v-tooltip.bottom="'History'" aria-label="Chat history">

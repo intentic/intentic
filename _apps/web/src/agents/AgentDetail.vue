@@ -7,9 +7,12 @@ import { useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 
-/* Drill-in for one agent (/agents/:id): Chat = the conversation full-screen (the shared ChatPanel, focused on
- * this agent's tab); Changes = the isolated diff + Land/Discard. On mobile this IS the chat surface (the old
- * /chat tab folded in here); on desktop the chat is docked in the shell, so the view defaults to Changes. */
+/* Drill-in for one agent (/agents/:id) — one canonical chat surface per form factor (the fleet-UX rule that
+ * kills the duplicated-conversation problem):
+ * - MOBILE: this IS the chat surface (no dock exists) — Chat | Changes segmented, chat default.
+ * - DESKTOP: the conversation lives ONLY in the docked ChatPanel (focused by the binding below); this view is
+ *   review-only — the isolated diff + Land/Discard, the one job the dock can't host. A draft/unknown id has
+ *   nothing to review → back to the board. */
 
 const route = useRoute();
 const router = useRouter();
@@ -18,22 +21,28 @@ const { fleet, open, markSeen } = useAgents();
 const { conversations, setActive } = useChat();
 
 const agentId = computed(() => (typeof route.params[`id`] === `string` ? route.params[`id`] : ``));
-const registryAgent = computed(() => fleet.value.find((agent) => agent.id === agentId.value));
+const fleetAgent = computed(() => fleet.value.find((agent) => agent.id === agentId.value));
+// Registered = has run a turn (a worktree + diff exist). Drafts are fleet-only client cards.
+const registered = computed(() => fleetAgent.value !== undefined && fleetAgent.value.status !== `draft`);
 const conversation = computed(() => conversations.value.find((candidate) => candidate.conversationId === agentId.value));
 
-// Bind the shared chat singleton to this agent's tab: open/create from the registry entry, else focus the
-// already-open conversation (a brand-new agent that hasn't run a turn has no registry entry yet). Neither ⇒
-// nothing to show; bounce back to the fleet. Keyed on the id + the roster SIZE, not the registryAgent
-// computed — its per-recompute object identity (and markSeen's write into the fleet source) would refire
-// this watch forever.
+// Bind the shared chat singleton to this agent's tab: open/create from the fleet entry, else focus the
+// already-open conversation. Desktop additionally requires a REGISTERED agent (there must be a diff to
+// review); a draft or unknown id bounces back to the board. Keyed on the id + the roster SIZE, not the
+// fleetAgent computed — its per-recompute object identity (and markSeen's write into the fleet source)
+// would refire this watch forever.
 watch(
     [agentId, () => fleet.value.length],
     ([id], [previousId] = [undefined, 0]) => {
-        if (id === `` || (id === previousId && conversation.value !== undefined)) {
+        if (id === `` || (id === previousId && conversation.value !== undefined && (mobile.value || registered.value))) {
             return;
         }
-        if (registryAgent.value !== undefined) {
-            open(registryAgent.value);
+        if (!mobile.value && !registered.value) {
+            void router.replace(`/agents`);
+            return;
+        }
+        if (fleetAgent.value !== undefined) {
+            open(fleetAgent.value);
             return;
         }
         if (conversation.value !== undefined) {
@@ -46,13 +55,14 @@ watch(
     { immediate: true },
 );
 
+// Mobile-only mode switch; desktop always renders the review.
 const view = ref<`chat` | `changes`>(mobile.value ? `chat` : `changes`);
 const viewOptions: { label: string; value: `chat` | `changes` }[] = [
     { label: `Chat`, value: `chat` },
     { label: `Changes`, value: `changes` },
 ];
 
-const title = computed(() => registryAgent.value?.title ?? conversation.value?.title.value ?? `Agent`);
+const title = computed(() => fleetAgent.value?.title ?? conversation.value?.title.value ?? `Agent`);
 </script>
 
 <template>
@@ -67,10 +77,11 @@ const title = computed(() => registryAgent.value?.title ?? conversation.value?.t
                 <Icon name="arrow-left" class="text-sm" />
             </button>
             <span class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
-            <span v-if="registryAgent?.branch !== undefined" class="truncate font-mono text-2xs text-subtle">{{ registryAgent.branch }}</span>
-            <Segmented v-model="view" :options="viewOptions" />
+            <span v-if="fleetAgent?.branch !== undefined" class="truncate font-mono text-2xs text-subtle">{{ fleetAgent.branch }}</span>
+            <Segmented v-if="mobile" v-model="view" :options="viewOptions" />
+            <span v-else class="text-2xs uppercase tracking-wide text-subtle">Review</span>
         </div>
-        <ChatPanel v-if="view === 'chat'" class="min-h-0 flex-1" />
+        <ChatPanel v-if="mobile && view === 'chat'" class="min-h-0 flex-1" />
         <AgentReviewPanel v-else-if="agentId !== ''" :agent-id="agentId" class="min-h-0 flex-1" />
     </div>
 </template>

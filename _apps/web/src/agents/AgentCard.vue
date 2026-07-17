@@ -27,7 +27,9 @@ const needsYou = computed(() => props.agent.attention.plan || props.agent.attent
     >
         <div class="flex items-center gap-2">
             <Icon :name="meta.icon" :spin="meta.spin" class="shrink-0 text-xs" :class="meta.class" />
-            <span class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ agent.title ?? `Untitled agent` }}</span>
+            <span class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{
+                agent.title ?? (agent.status === "draft" ? "New agent" : "Untitled agent")
+            }}</span>
             <span
                 v-if="needsYou || agent.unread"
                 class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link"

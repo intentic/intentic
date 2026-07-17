@@ -2,10 +2,14 @@ import type { IconName } from "@intentic-app/ui";
 import type { AgentStatus } from "@intentic/sandbox-contract";
 
 /* Presentational metadata for fleet-agent statuses + the card's number formatters. Extends the conversation
- * status idiom (catalog.ts statusIcon) with the registry-only outcomes (landed / conflict); kept separate
- * because the fleet renders AgentStatus (the wire enum), not ConversationStatus (the live-stream union). */
+ * status idiom (catalog.ts statusIcon) with the registry-only outcomes (landed / conflict) and the
+ * client-only `draft` (an open isolated conversation that hasn't run its first turn); kept separate because
+ * the fleet renders the widened FleetAgent status, not ConversationStatus (the live-stream union). */
 
-export const agentStatusMeta = (status: AgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } => {
+export const agentStatusMeta = (status: AgentStatus | "draft"): { icon: IconName; spin?: boolean; label: string; class: string } => {
+    if (status === `draft`) {
+        return { icon: `pencil`, label: `Draft`, class: `text-subtle` };
+    }
     if (status === `running`) {
         return { icon: `spinner`, spin: true, label: `Running`, class: `text-link` };
     }

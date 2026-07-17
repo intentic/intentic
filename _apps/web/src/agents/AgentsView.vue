@@ -2,8 +2,7 @@
 import { useDevice } from "@intentic-app/ui";
 import { onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import type { AgentSummary } from "@intentic/sandbox-contract";
-import { useAgents } from "../composables/agents/useAgents";
+import { type FleetAgent, useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
 import AgentCard from "./AgentCard.vue";
 
@@ -25,13 +24,20 @@ onMounted(() => {
 });
 onUnmounted(() => clearInterval(ticker));
 
-const openAgent = (agent: AgentSummary): void => {
+// Card click: focus the conversation in the docked chat (the ONE desktop chat surface) and — when there is
+// something to review — open the review detail. A draft has no worktree/diff yet, so on desktop its click
+// only focuses the dock; on mobile the detail IS the chat, so every card navigates.
+const openAgent = (agent: FleetAgent): void => {
     open(agent);
+    if (!mobile.value && agent.status === `draft`) {
+        return;
+    }
     void router.push(`/agents/${encodeURIComponent(agent.id)}`);
 };
 
-// "Start an agent": a fresh isolated conversation — on mobile straight into its full-screen chat, on desktop
-// the docked chat composer is focused and ready.
+// "New agent": a fresh isolated conversation. On desktop the board stays put — the draft card appears right
+// here and the docked composer focuses (newChat activates the tab); on mobile there is no dock, so go
+// straight into the full-screen chat.
 const startAgent = (): void => {
     newChat();
     if (mobile.value) {

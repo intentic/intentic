@@ -42,9 +42,12 @@ const markSeen = (id: string): void => {
     }
 };
 
-// One fleet entry: the registry summary, joined (when this browser has the conversation open) with its live
-// Conversation for drill-in and local streaming state.
-export interface FleetAgent extends AgentSummary {
+// One fleet entry. Two sources merged by conversationId: the registry (authoritative once a turn has run) and
+// the open tabs — an open ISOLATED conversation with no registry entry yet is a DRAFT card, so "New agent" has
+// a visible result on the board the instant it's pressed. `status` widens the wire enum with that
+// client-only draft state; the registry wins the merge the moment the first turn registers the conversation.
+export interface FleetAgent extends Omit<AgentSummary, "status"> {
+    readonly status: AgentSummary["status"] | "draft";
     readonly open: boolean;
     readonly unread: boolean;
 }
@@ -52,22 +55,40 @@ export interface FleetAgent extends AgentSummary {
 const fleet = computed<FleetAgent[]>(() => {
     const { conversations } = useChat();
     const openIds = new Set(conversations.value.map((conversation) => conversation.conversationId));
-    return registry.value
-        .map((agent) => ({
+    const registered = new Set(registry.value.map((agent) => agent.id));
+    const drafts = conversations.value
+        .filter((conversation) => conversation.isolated.value && !registered.has(conversation.conversationId))
+        .map(
+            (conversation): FleetAgent => ({
+                id: conversation.conversationId,
+                // A draft racing its first turn (begin → roster frame) already reads as running.
+                status: conversation.streaming.value ? `running` : `draft`,
+                provider: conversation.provider.value,
+                harness: conversation.harness.value,
+                updatedAt: 0,
+                attention: { plan: false, question: false, conflict: false },
+                open: true,
+                unread: false,
+                ...(conversation.title.value !== null ? { title: conversation.title.value } : {}),
+            }),
+        );
+    return [
+        ...registry.value.map((agent) => ({
             ...agent,
             open: openIds.has(agent.id),
             unread: agent.status !== `running` && agent.updatedAt > (seen.value[agent.id] ?? 0),
-        }))
-        .toSorted((a, b) => {
-            // Attention first, then running, then most recently active.
-            const weight = (entry: FleetAgent): number =>
-                entry.attention.plan || entry.attention.question || entry.attention.conflict || entry.status === `error`
-                    ? 0
-                    : entry.status === `running` || entry.status === `awaiting`
-                      ? 1
-                      : 2;
-            return weight(a) - weight(b) || b.updatedAt - a.updatedAt;
-        });
+        })),
+        ...drafts,
+    ].toSorted((a, b) => {
+        // Attention first, then running + fresh drafts, then most recently active.
+        const weight = (entry: FleetAgent): number =>
+            entry.attention.plan || entry.attention.question || entry.attention.conflict || entry.status === `error`
+                ? 0
+                : entry.status === `running` || entry.status === `awaiting` || entry.status === `draft`
+                  ? 1
+                  : 2;
+        return weight(a) - weight(b) || b.updatedAt - a.updatedAt;
+    });
 });
 
 // The single "agents need you" aggregate the rail tile and mobile tab badge render: one count per agent that
@@ -89,8 +110,9 @@ const refresh = async (): Promise<void> => {
     }
 };
 
-// Open (or focus) an agent's conversation tab and mark it seen.
-const open = (agent: AgentSummary): void => {
+// Open (or focus) an agent's conversation tab and mark it seen. Takes just the identity fields so registry
+// cards and client-only draft cards both route through it.
+const open = (agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId" | "title" | "account">): void => {
     openAgentConversation({
         id: agent.id,
         provider: agent.provider,

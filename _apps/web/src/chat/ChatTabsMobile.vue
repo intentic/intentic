@@ -54,7 +54,9 @@ const openFromHistory = (id: string): void => {
         <!-- The whole title area opens the conversation sheet — the biggest possible touch target. -->
         <button type="button" class="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left active:bg-overlay" @click="openSheet">
             <Icon v-if="active" v-bind="statusIcon(active.status.value)" />
-            <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">{{ active?.title.value ?? "New chat" }}</span>
+            <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">{{
+                active?.title.value ?? (active?.isolated.value ? "New agent" : "New chat")
+            }}</span>
             <PresenceAvatars
                 v-if="active && active.session.value !== undefined"
                 :viewers="viewersOfSession(active.session.value.id)"
@@ -62,7 +64,7 @@ const openFromHistory = (id: string): void => {
             />
             <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
         </button>
-        <button type="button" class="composer-ghost h-10 w-10 shrink-0" @click="emit('new')" aria-label="New chat">
+        <button type="button" class="composer-ghost h-10 w-10 shrink-0" @click="emit('new')" aria-label="New agent">
             <Icon name="plus" class="text-base" />
         </button>
 
@@ -78,7 +80,7 @@ const openFromHistory = (id: string): void => {
                 >
                     <Icon v-bind="statusIcon(c.status.value)" />
                     <span class="min-w-0 flex-1 truncate text-sm" :class="activeId === c.id ? 'text-link' : 'text-content'">{{
-                        c.title.value ?? "New chat"
+                        c.title.value ?? (c.isolated.value ? "New agent" : "New chat")
                     }}</span>
                     <PresenceAvatars v-if="c.session.value !== undefined" :viewers="viewersOfSession(c.session.value.id)" label="in this chat" />
                     <!-- span, not button — a real button can't nest inside the row button. -->

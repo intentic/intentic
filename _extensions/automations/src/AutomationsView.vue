@@ -71,6 +71,21 @@ const { automations, pending, error: listError, save, remove, approve, reject } 
 // Capability facts from the host — reactive because reading them inside a computed tracks the underlying store.
 const capabilities = computed(() => host().workspace.capabilities());
 
+const form = reactive({
+    kind: `schedule` as `schedule` | `event` | `listener`,
+    id: ``,
+    guard: ``,
+    prompt: ``,
+    agent: `claude` as AgentProvider,
+    harness: `native` as AgentHarness,
+    model: ``,
+    requireApproval: false,
+    provider: `discord` as keyof typeof LISTENER_SOURCES,
+    channelId: ``,
+    eventType: undefined as `message` | `voice_transcript` | undefined,
+    mentioned: false,
+});
+
 // Whether the picked provider+harness reads the live daemon catalog (/{provider}/models — the same source chat
 // uses): every native turn does, and claude on either harness (both are its own loop). A non-Claude provider
 // under the Claude Code harness pins the translator's static mapping instead.
@@ -104,20 +119,6 @@ const setHarness = (harness: AgentHarness): void => {
 const createOpen = ref(false);
 // Guard/agent/approval fold away by default — revealed on demand or when a recipe prefills a guard.
 const advancedOpen = ref(false);
-const form = reactive({
-    kind: `schedule` as `schedule` | `event` | `listener`,
-    id: ``,
-    guard: ``,
-    prompt: ``,
-    agent: `claude` as AgentProvider,
-    harness: `native` as AgentHarness,
-    model: ``,
-    requireApproval: false,
-    provider: `discord` as keyof typeof LISTENER_SOURCES,
-    channelId: ``,
-    eventType: undefined as `message` | `voice_transcript` | undefined,
-    mentioned: false,
-});
 const schedule = reactive(defaultSchedule());
 const actionError = ref<string | null>(null);
 const pickedRecipe = ref<AutomationRecipe | undefined>(undefined);
