@@ -1100,12 +1100,13 @@ export const ActivityQuerySchema = z.object({
 export type ActivityQuery = z.infer<typeof ActivityQuerySchema>;
 export const ActivityListSchema = z.object({ events: z.array(ActivityEventSchema) });
 
-// Live connection health, probed per provider capability (not stored): gateway state from the client pool,
-// lastError from the newest system-error event in the recent log.
+// Live connection health, probed per provider capability (not stored): gateway state from the client pool
+// (idle = the gateway is up but has no enabled listener automation to connect for — distinct from a
+// connection that should be up but isn't), lastError from the newest system-error event in the recent log.
 export const ActivityConnectionSchema = z.object({
     capabilityId: z.string(),
     provider: z.string(),
-    gateway: z.enum(["ready", "connecting", "disconnected"]),
+    gateway: z.enum(["ready", "connecting", "disconnected", "idle"]),
     lastError: z.string().optional(),
 });
 export const ActivityStatusSchema = z.object({

@@ -22,8 +22,10 @@ const toggle = (id: string): void => {
     expanded.value = new Set(expanded.value.has(id) ? [...expanded.value].filter((entry) => entry !== id) : [...expanded.value, id]);
 };
 
-const gatewayVariant = (gateway: string): StatusVariant => (gateway === `ready` ? `success` : gateway === `connecting` ? `warning` : `neutral`);
-const gatewayLabel = (gateway: string): string => (gateway === `ready` ? `Connected` : gateway === `connecting` ? `Connecting` : `Not listening`);
+const gatewayVariant = (gateway: string): StatusVariant =>
+    gateway === `ready` ? `success` : gateway === `connecting` ? `warning` : gateway === `disconnected` ? `warning` : `neutral`;
+const gatewayLabel = (gateway: string): string =>
+    gateway === `ready` ? `Connected` : gateway === `connecting` ? `Connecting` : gateway === `disconnected` ? `Not listening` : `Idle`;
 
 const directionIcon = (event: ActivityEvent): { name: IconName; class: string } =>
     event.direction === `in`
@@ -84,7 +86,10 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
                                 <span class="truncate font-mono text-2xs text-subtle">{{ connection.capabilityId }}</span>
                                 <StatusBadge :variant="gatewayVariant(connection.gateway)" :label="gatewayLabel(connection.gateway)" size="xs" dot />
                             </div>
-                            <p v-if="connection.lastError" class="text-xs text-danger">{{ connection.lastError }}</p>
+                            <p v-if="connection.gateway === `idle`" class="text-xs text-muted">
+                                No enabled Discord listener automation yet — add one to start listening.
+                            </p>
+                            <p v-else-if="connection.lastError" class="text-xs text-danger">{{ connection.lastError }}</p>
                         </Card>
                         <p v-if="(status?.connections ?? []).length === 0 && !isLoading" class="py-4 text-center text-sm text-muted">
                             No monitored provider capabilities connected.
