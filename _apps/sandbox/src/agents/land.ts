@@ -30,15 +30,22 @@ const exists = async (path: string): Promise<boolean> => {
 const withAgentAuthor = ["-c", `user.name=${AGENT_GIT_AUTHOR.name}`, "-c", `user.email=${AGENT_GIT_AUTHOR.email}`];
 
 // The wire LandResult plus what the registry persists: `changed` distinguishes "nothing to land" (no frame,
-// no status change) from a real outcome, and `repos` carries the advanced landedTips.
+// no status change) from a real outcome, `repos` carries the advanced landedTips, and `diff` is the agent's
+// CUMULATIVE base→tip output across the composition (refreshed here because land already holds the shas) —
+// independent of how much of it has landed.
 export interface LandOutcome extends LandResult {
     readonly changed: boolean;
     readonly repos: PersistedAgent["repos"];
+    readonly diff: { files: number; insertions: number; deletions: number };
 }
+
+// `git diff --shortstat` line: " 3 files changed, 10 insertions(+), 2 deletions(-)" — every term optional.
+const SHORTSTAT = /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/;
 
 export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent, git: GitRunner = defaultGit): Promise<LandOutcome> => {
     const conflicts: { repo: string; paths: string[] }[] = [];
     const repos: PersistedAgent["repos"] = [];
+    const diff = { files: 0, insertions: 0, deletions: 0 };
     let changed = false;
     // One temp dir for the run's patch files, removed whole in the finally.
     const patchDir = await mkdtemp(join(tmpdir(), "intentic-land-"));
@@ -64,6 +71,15 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
                     await git(worktree, [...withAgentAuthor, "commit", "-q", "-m", `Agent: ${entry.title ?? entry.id}`]);
                 }
                 const tip = (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim();
+                // Cumulative diffstat vs the BASE (not landedTip) — the agent's total output for the card.
+                if (tip !== base) {
+                    const stat = SHORTSTAT.exec((await git(worktree, ["diff", "--shortstat", base, tip])).stdout);
+                    if (stat !== null) {
+                        diff.files += Number(stat[1]);
+                        diff.insertions += Number(stat[2] ?? 0);
+                        diff.deletions += Number(stat[3] ?? 0);
+                    }
+                }
                 const from = composed.landedTip ?? base;
                 if (tip === from) {
                     return; // Everything already landed for this repo.
@@ -103,5 +119,5 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
     } finally {
         await rm(patchDir, { recursive: true, force: true });
     }
-    return { landed: conflicts.length === 0, changed, repos, ...(conflicts.length > 0 ? { conflicts } : {}) };
+    return { landed: conflicts.length === 0, changed, repos, diff, ...(conflicts.length > 0 ? { conflicts } : {}) };
 };

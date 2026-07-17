@@ -100,6 +100,35 @@ const attention = computed(
         ).length,
 );
 
+// The kanban lanes — pure projections of the status machine, so "finished" needs no explicit action or
+// timer: the auto-land flow flips a cleanly-completed turn to landed/idle within ms of it ending, and any
+// follow-up message animates the card straight back to active. Unread stays a card badge, not a promotion.
+export type FleetLane = "attention" | "active" | "finished";
+export const laneOf = (agent: Pick<FleetAgent, "status" | "attention">): FleetLane => {
+    if (agent.attention.plan || agent.attention.question || agent.attention.conflict) {
+        return `attention`;
+    }
+    if (agent.status === `awaiting` || agent.status === `conflict` || agent.status === `error`) {
+        return `attention`;
+    }
+    if (agent.status === `running` || agent.status === `draft`) {
+        return `active`;
+    }
+    return `finished`; // landed | idle — the work is in the workspace (or there was none).
+};
+
+const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
+    const grouped: Record<FleetLane, FleetAgent[]> = { attention: [], active: [], finished: [] };
+    for (const agent of fleet.value) {
+        grouped[laneOf(agent)].push(agent);
+    }
+    // Fresh drafts lead the active lane (they're what the user just created); everything else newest-first.
+    grouped.active.sort((a, b) => Number(b.status === `draft`) - Number(a.status === `draft`) || b.updatedAt - a.updatedAt);
+    grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt);
+    grouped.finished.sort((a, b) => b.updatedAt - a.updatedAt);
+    return grouped;
+});
+
 // Explicit registry pull — the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
 const refresh = async (): Promise<void> => {
     try {
@@ -125,5 +154,5 @@ const open = (agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId
 };
 
 export function useAgents() {
-    return { fleet, attention, refresh, open, markSeen };
+    return { fleet, lanes, attention, refresh, open, markSeen };
 }

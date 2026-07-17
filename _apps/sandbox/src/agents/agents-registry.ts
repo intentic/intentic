@@ -33,6 +33,7 @@ interface RuntimeState {
     pendingCostUsd: number;
     pendingInputTokens: number;
     pendingOutputTokens: number;
+    pendingToolUses: number;
 }
 
 const freshRuntime = (): RuntimeState => ({
@@ -50,6 +51,7 @@ const freshRuntime = (): RuntimeState => ({
     pendingCostUsd: 0,
     pendingInputTokens: 0,
     pendingOutputTokens: 0,
+    pendingToolUses: 0,
 });
 
 // The registry input of an isolated turn — the fields begin() records onto the entry.
@@ -72,8 +74,13 @@ export interface AgentsRegistry {
     readonly begin: (turn: AgentTurnIdentity, now: number) => Promise<boolean>;
     // Record the worktree composition on first creation (per-repo full base shas).
     readonly recordWorktree: (id: string, repos: readonly PersistedAgent["repos"][number][]) => Promise<void>;
-    // Persist a land's advanced per-repo landedTips (partial lands included — conflicted repos keep theirs).
-    readonly recordLanded: (id: string, repos: readonly PersistedAgent["repos"][number][]) => Promise<void>;
+    // Persist a land's advanced per-repo landedTips (partial lands included — conflicted repos keep theirs)
+    // and the refreshed cumulative diffstat.
+    readonly recordLanded: (
+        id: string,
+        repos: readonly PersistedAgent["repos"][number][],
+        diff?: { files: number; insertions: number; deletions: number },
+    ) => Promise<void>;
     // Fold one turn frame into runtime state; broadcasts only on card-visible changes.
     readonly observe: (id: string, event: AgentEvent) => void;
     // End of turn (aborted included): flush pending usage/session into the entry, release the mutex.
@@ -128,6 +135,14 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             ...(state?.contextWindow !== undefined ? { contextWindow: state.contextWindow } : {}),
             ...(state?.activity !== undefined ? { activity: state.activity } : {}),
             ...(state?.running === true && state.startedAt !== undefined ? { startedAt: state.startedAt } : {}),
+            ...(entry.turns !== undefined ? { turns: entry.turns } : {}),
+            // Live count: the running turn's tool calls show on the card as they happen.
+            ...((entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) > 0
+                ? { toolUses: (entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) }
+                : {}),
+            ...(entry.diffFiles !== undefined
+                ? { diff: { files: entry.diffFiles, insertions: entry.diffInsertions ?? 0, deletions: entry.diffDeletions ?? 0 } }
+                : {}),
         };
     };
 
@@ -184,6 +199,12 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 ...(model !== undefined ? { model } : {}),
                 ...(account !== undefined ? { account } : {}),
                 ...(existing?.sessionId !== undefined ? { sessionId: existing.sessionId } : {}),
+                // Lifetime counters + diffstat survive the per-turn entry rebuild.
+                ...(existing?.turns !== undefined ? { turns: existing.turns } : {}),
+                ...(existing?.toolUses !== undefined ? { toolUses: existing.toolUses } : {}),
+                ...(existing?.diffFiles !== undefined ? { diffFiles: existing.diffFiles } : {}),
+                ...(existing?.diffInsertions !== undefined ? { diffInsertions: existing.diffInsertions } : {}),
+                ...(existing?.diffDeletions !== undefined ? { diffDeletions: existing.diffDeletions } : {}),
             });
             const state = freshRuntime();
             state.running = true;
@@ -234,6 +255,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                     state.question = true;
                     break;
                 case "tool_call":
+                    state.pendingToolUses += 1;
                     state.activity = { tool: event.name, ...(event.target !== undefined ? { target: event.target } : {}), ...(state.activity?.todo !== undefined ? { todo: state.activity.todo } : {}) };
                     break;
                 case "todos": {
@@ -254,6 +276,9 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
         finish: async (id, now, outcome) => {
             const entry = entryOf(id);
             const state = runtime.get(id);
+            // Captured BEFORE the reset: only a finish that ends a LIVE turn counts toward `turns` — the
+            // manual land route finishes with an outcome outside any turn and must not inflate the counter.
+            const ranTurn = state?.running === true;
             if (state !== undefined) {
                 state.running = false;
                 state.awaiting = false;
@@ -272,6 +297,8 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                     costUsd: entry.costUsd + (state?.pendingCostUsd ?? 0),
                     inputTokens: entry.inputTokens + (state?.pendingInputTokens ?? 0),
                     outputTokens: entry.outputTokens + (state?.pendingOutputTokens ?? 0),
+                    turns: (entry.turns ?? 0) + (ranTurn ? 1 : 0),
+                    toolUses: (entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0),
                     updatedAt: now,
                     ...(sessionId !== undefined ? { sessionId } : {}),
                 });
@@ -279,6 +306,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                     state.pendingCostUsd = 0;
                     state.pendingInputTokens = 0;
                     state.pendingOutputTokens = 0;
+                    state.pendingToolUses = 0;
                     state.pendingSessionId = undefined;
                     state.errored = false;
                 }
@@ -286,12 +314,16 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             }
             broadcast();
         },
-        recordLanded: async (id, repos) => {
+        recordLanded: async (id, repos, diff) => {
             const entry = entryOf(id);
             if (entry === undefined) {
                 return;
             }
-            replace({ ...entry, repos: [...repos] });
+            replace({
+                ...entry,
+                repos: [...repos],
+                ...(diff !== undefined ? { diffFiles: diff.files, diffInsertions: diff.insertions, diffDeletions: diff.deletions } : {}),
+            });
             await persist();
             broadcast();
         },

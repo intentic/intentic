@@ -99,17 +99,43 @@ describe("agents registry", () => {
         expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("conflict");
     });
 
-    it("recordLanded persists advanced landedTips", async () => {
+    it("recordLanded persists advanced landedTips and the cumulative diffstat", async () => {
         const store = memoryStore();
         const registry = createAgentsRegistry(store);
         await registry.init();
         await registry.begin(turn(), 1_000);
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
-        await registry.recordLanded("c1", [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }]);
+        await registry.recordLanded("c1", [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }], {
+            files: 12,
+            insertions: 412,
+            deletions: 96,
+        });
         await registry.finish("c1", 2_000, "landed");
         expect(store.saved().find((entry) => entry.id === "c1")?.repos).toEqual([
             { repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) },
         ]);
+        expect(registry.get("c1")?.diff).toEqual({ files: 12, insertions: 412, deletions: 96 });
+    });
+
+    it("counts turns and tool uses — live during the turn, folded at finish, never inflated by manual lands", async () => {
+        const registry = createAgentsRegistry(memoryStore());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "tool_call", id: "t1", name: "Edit", category: "edit", status: "in_progress" });
+        registry.observe("c1", { kind: "tool_call", id: "t2", name: "Bash", category: "execute", status: "in_progress" });
+        // Live: the running turn's tool calls already show on the card.
+        expect(registry.get("c1")?.toolUses).toBe(2);
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.turns).toBe(1);
+        expect(registry.get("c1")?.toolUses).toBe(2);
+        // A manual land finishes OUTSIDE any turn — must not count as a turn.
+        await registry.finish("c1", 3_000, "landed");
+        expect(registry.get("c1")?.turns).toBe(1);
+        await registry.begin(turn({ prompt: "again" }), 4_000);
+        registry.observe("c1", { kind: "tool_call", id: "t3", name: "Read", category: "read", status: "in_progress" });
+        await registry.finish("c1", 5_000);
+        expect(registry.get("c1")?.turns).toBe(2);
+        expect(registry.get("c1")?.toolUses).toBe(3);
     });
 
     it("activity tracks the last tool and current todo", async () => {

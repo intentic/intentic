@@ -68,7 +68,7 @@ export const createAgentsRoutes = (services: Services) => {
             const entry = entryOf(input.id);
             notRunning(input.id);
             const result = await landAgent(services.agentWorktrees, entry);
-            await services.agents.recordLanded(input.id, result.repos);
+            await services.agents.recordLanded(input.id, result.repos, result.diff);
             await services.agents.finish(input.id, Date.now(), result.landed ? "landed" : "conflict");
             if (result.landed && result.changed) {
                 // The main tree changed under the user — same attribution convention as git.discard.

@@ -133,6 +133,12 @@ export const AgentSummarySchema = z.object({
     startedAt: z.number().optional(),
     updatedAt: z.number(),
     attention: AgentAttentionSchema,
+    // Completed turns and lifetime tool calls — the card's msgs/tools counters.
+    turns: z.number().optional(),
+    toolUses: z.number().optional(),
+    // The agent's cumulative output (base → branch tip across every repo), refreshed on each land —
+    // the card's "12 files · +412 −96" readout. Independent of what has landed.
+    diff: z.object({ files: z.number(), insertions: z.number(), deletions: z.number() }).optional(),
 });
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
 export const AgentsListSchema = z.object({ agents: z.array(AgentSummarySchema) });

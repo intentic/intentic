@@ -77,6 +77,22 @@ test("nothing to land reads as changed:false (no frame, no status flip)", async 
     const { worktrees, conversation } = await setup();
     const result = await landAgent(worktrees, entryFor(conversation.repos));
     expect(result).toMatchObject({ landed: true, changed: false });
+    expect(result.diff).toEqual({ files: 0, insertions: 0, deletions: 0 });
+});
+
+test("land reports the agent's cumulative diffstat (files, +insertions, −deletions)", async () => {
+    const { worktrees, conversation } = await setup();
+    // app.ts: one line replaced (1 insertion + 1 deletion); added.ts: 2 new lines.
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await writeFile(join(conversation.cwd, "added.ts"), "new file\nsecond line\n");
+
+    const first = await landAgent(worktrees, entryFor(conversation.repos));
+    expect(first.diff).toEqual({ files: 2, insertions: 3, deletions: 1 });
+
+    // Cumulative, not per-land: a second turn's edit re-reports the WHOLE base→tip output.
+    await writeFile(join(conversation.cwd, "added.ts"), "new file\nsecond line\nthird line\n");
+    const second = await landAgent(worktrees, entryFor(first.repos));
+    expect(second.diff).toEqual({ files: 2, insertions: 4, deletions: 1 });
 });
 
 test("incremental: a re-touched file lands its second delta onto the previously-landed copy", async () => {

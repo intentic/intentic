@@ -112,7 +112,7 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         if (!failed && signal?.aborted !== true && finished !== undefined) {
             const landed = await landAgent(services.agentWorktrees, finished);
             if (landed.changed) {
-                await services.agents.recordLanded(conversationId, landed.repos);
+                await services.agents.recordLanded(conversationId, landed.repos, landed.diff);
                 outcome = landed.landed ? "landed" : "conflict";
                 yield { kind: "landed", landed: landed.landed, ...(landed.conflicts !== undefined ? { conflicts: landed.conflicts } : {}) };
                 if (landed.landed) {

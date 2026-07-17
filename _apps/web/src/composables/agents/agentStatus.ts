@@ -47,3 +47,43 @@ export const formatElapsed = (startedAt: number, now: number): string => {
 // Context-window fill percentage (0–100), clamped; undefined when either side is unknown.
 export const contextPct = (tokens: number | undefined, window: number | undefined): number | undefined =>
     tokens === undefined || window === undefined || window === 0 ? undefined : Math.min(100, Math.round((tokens / window) * 100));
+
+// The one-line "why this card is in the Attention lane" label — shared by the card chip and any future toast.
+export const attentionReason = (agent: {
+    readonly status: AgentStatus | "draft";
+    readonly attention: { plan: boolean; question: boolean; conflict: boolean };
+}): string | undefined => {
+    if (agent.attention.plan) {
+        return `Approval needed`;
+    }
+    if (agent.attention.question) {
+        return `Question for you`;
+    }
+    if (agent.attention.conflict || agent.status === `conflict`) {
+        return `Land conflict`;
+    }
+    if (agent.status === `error`) {
+        return `Error`;
+    }
+    return undefined;
+};
+
+// The activity line's icon by tool family — a glanceable "what is it doing" glyph, mock-style.
+export const activityIcon = (tool: string | undefined): IconName => {
+    if (tool === undefined) {
+        return `list-check`; // a todo line without a tool
+    }
+    if (tool === `Edit` || tool === `Write` || tool.startsWith(`mcp__hashline`)) {
+        return `pencil`;
+    }
+    if (tool === `Bash` || tool === `BashOutput`) {
+        return `code`;
+    }
+    if (tool === `Read`) {
+        return `file`;
+    }
+    if (tool === `Grep` || tool === `Glob` || tool.includes(`search`)) {
+        return `search`;
+    }
+    return `sparkles`;
+};

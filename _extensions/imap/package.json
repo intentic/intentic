@@ -1,0 +1,23 @@
+{
+    "name": "@intentic/ext-imap",
+    "version": "1.0.0",
+    "description": "IMAP — an email inbox as an agent tool, plus the mailbox-watching gateway as a baked extension process",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tsc",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "imapflow": "catalog:",
+        "mailparser": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/tsconfig": "workspace:*",
+        "@types/mailparser": "catalog:",
+        "@types/node": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:"
+    }
+}

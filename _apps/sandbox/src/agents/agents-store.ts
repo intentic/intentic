@@ -32,6 +32,13 @@ export const PersistedAgentSchema = z.object({
     costUsd: z.number(),
     inputTokens: z.number(),
     outputTokens: z.number(),
+    // Completed turns + lifetime tool calls (optional: entries predating the counters read as absent).
+    turns: z.number().optional(),
+    toolUses: z.number().optional(),
+    // Cumulative base→tip output across the composition, refreshed on each land — the card's diffstat.
+    diffFiles: z.number().optional(),
+    diffInsertions: z.number().optional(),
+    diffDeletions: z.number().optional(),
     createdAt: z.number(),
     updatedAt: z.number(),
 });
