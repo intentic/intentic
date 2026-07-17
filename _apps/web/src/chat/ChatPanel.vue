@@ -509,7 +509,7 @@ watch(keyboardInset, () => {
         <ChatTabsMobile v-if="mobile" @select="selectTab" @close="closeTab" @new="newChat" @open="openFromHistory" />
         <ChatTabs v-else @select="selectTab" @close="closeTab" @new="newChat" @open="openFromHistory" />
 
-        <div ref="scroller" class="scrollbar-thin flex flex-1 flex-col gap-4 overflow-auto p-4" @scroll="onScroll">
+        <div ref="scroller" class="scrollbar-thin flex flex-1 flex-col gap-1 overflow-auto p-4" @scroll="onScroll">
             <template v-if="messages.length > 0">
                 <ChatMessageView v-for="message in messages" :key="message.id" :message="message" :streaming="isStreaming(message)" />
             </template>

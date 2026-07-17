@@ -267,7 +267,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </button>
                 <div
                     v-if="message.text"
-                    class="chat-surface whitespace-pre-wrap rounded-lg px-3.5 py-2.5 text-[0.8125rem] leading-[1.6] text-content/90"
+                    class="chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-[0.8125rem] leading-[1.6] text-content/90"
                 >
                     {{ message.text }}
                 </div>
@@ -322,7 +322,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
 
             <div
                 v-if="message.text"
-                class="chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5 text-content/85"
+                class="chat-markdown chat-surface-assistant w-full rounded-lg px-3 py-2 text-content/85"
                 v-html="render(message.text)"
             ></div>
 

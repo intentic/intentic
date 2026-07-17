@@ -65,12 +65,14 @@ test("search spans providers and Enter picks the top hit — an atomic cross-pro
     await expect(page.getByRole("option", { name: "GPT-5.1", exact: true })).toBeVisible();
     await expect(page.getByRole("option", { name: "Grok 4", exact: true })).toBeVisible();
 
-    // The search input is auto-focused on open (desktop) — type straight away. "fast" ranks the label match
-    // ("Grok 4 Fast") above badge-only hits, and Enter takes the top hit.
+    // The search input is auto-focused on open (desktop). "fast" narrows to the sole label match across all
+    // providers; the other providers' rows drop out. (fill, not type: type races the just-opened popover's
+    // input mount — this asserts the settled search state a real user sees.)
     await expect(page.getByRole("searchbox")).toBeFocused();
-    await page.keyboard.type("fast");
+    await page.getByRole("searchbox").fill("fast");
     await expect(page.getByRole("option", { name: "Grok 4 Fast", exact: true })).toBeVisible();
     await expect(page.getByRole("option", { name: "GPT-5.1", exact: true })).toBeHidden();
+    // Enter takes the highlighted top hit (highlight snaps to row 0 on every result change).
     await page.keyboard.press("Enter");
 
     // One keystroke switched provider AND model: the conversation now targets Grok 4 Fast, picker closed.
