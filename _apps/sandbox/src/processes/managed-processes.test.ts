@@ -1,14 +1,14 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { createPanelProcesses, type PanelRunner, type PanelSpec } from "./panel-processes.js";
+import { createManagedProcesses, type ProcessRunner, type ProcessSpec } from "./managed-processes.js";
 
 // A runner that records launches (with the manager-assigned port) and lets the test drive each session's pane
 // foreground command, mirroring what tmux would report. An absent entry models a destroyed session; a launch
 // starts at the job command ("node") — tests drive it back to "zsh" (the prompt) to simulate completion.
 const fakeRunner = () => {
-    const launches: { session: string; spec: PanelSpec & { port: number } }[] = [];
+    const launches: { session: string; spec: ProcessSpec & { port: number } }[] = [];
     const killed: string[] = [];
     const cmd = new Map<string, string>();
-    const runner: PanelRunner = {
+    const runner: ProcessRunner = {
         launch: async (session, spec) => {
             launches.push({ session, spec });
             cmd.set(session, "node");
@@ -22,7 +22,7 @@ const fakeRunner = () => {
     return { runner, launches, killed, cmd };
 };
 
-const SPEC: PanelSpec = { command: "pnpm dev", cwd: "/work/repositories/app/operator" };
+const SPEC: ProcessSpec = { command: "pnpm dev", cwd: "/work/repositories/app/operator" };
 
 afterEach(() => {
     vi.useRealTimers();
@@ -30,7 +30,7 @@ afterEach(() => {
 
 test("start launches tmux session panel-<key> with the assigned port, exposed via portOf", async () => {
     const { runner, launches } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
     expect(launches[0]?.session).toBe("panel-app");
     expect(launches[0]?.spec.command).toBe("pnpm dev");
@@ -47,7 +47,7 @@ test("start launches tmux session panel-<key> with the assigned port, exposed vi
 
 test("a second start of the same key is ignored while it is running", async () => {
     const { runner, launches } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
     await panels.start("app", SPEC);
     expect(launches).toHaveLength(1);
@@ -56,7 +56,7 @@ test("a second start of the same key is ignored while it is running", async () =
 
 test("two panels run concurrently with separate ports and separate sessions", async () => {
     const { runner, launches } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
     await panels.start("site--web", { command: "pnpm dev", cwd: "/work/repositories/site" });
     expect(launches.map((launch) => launch.session)).toEqual(["panel-app", "panel-site--web"]);
@@ -66,7 +66,7 @@ test("two panels run concurrently with separate ports and separate sessions", as
 
 test("stop kills only the targeted panel's session", async () => {
     const { runner, killed } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
     await panels.start("site", { command: "pnpm dev", cwd: "/work/repositories/site/operator" });
     panels.stop("app");
@@ -79,7 +79,7 @@ test("stop kills only the targeted panel's session", async () => {
 
 test("stopAll kills everything", async () => {
     const { runner, killed } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
     await panels.start("site", { command: "pnpm dev", cwd: "/work/repositories/site/operator" });
     panels.stopAll();
@@ -91,7 +91,7 @@ test("stopAll kills everything", async () => {
 test("a session killed externally (vanished from tmux) drops out of running", async () => {
     vi.useFakeTimers();
     const { runner, cmd } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
     cmd.delete("panel-app");
     await vi.advanceTimersByTimeAsync(2100);
@@ -101,7 +101,7 @@ test("a session killed externally (vanished from tmux) drops out of running", as
 test("a dev panel sitting at its shell prompt (Ctrl+C'd server) stays running", async () => {
     vi.useFakeTimers();
     const { runner, cmd } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
     cmd.set("panel-app", "zsh");
     await vi.advanceTimersByTimeAsync(60_000);
@@ -112,7 +112,7 @@ test("a dev panel sitting at its shell prompt (Ctrl+C'd server) stays running", 
 test("a oneShot job stays running while its command is in the foreground, even past the grace", async () => {
     vi.useFakeTimers();
     const { runner } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("job", { ...SPEC, oneShot: true });
     await vi.advanceTimersByTimeAsync(60_000);
     expect(panels.running("job")).toBe(true);
@@ -122,7 +122,7 @@ test("a oneShot job stays running while its command is in the foreground, even p
 test("a oneShot job completes after two consecutive prompt sightings — the session lingers unkilled", async () => {
     vi.useFakeTimers();
     const { runner, cmd, killed } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("job", { ...SPEC, oneShot: true });
     await vi.advanceTimersByTimeAsync(2100);
     cmd.set("panel-job", "zsh");
@@ -138,7 +138,7 @@ test("a oneShot job completes after two consecutive prompt sightings — the ses
 test("a single prompt sighting between chained commands does not complete a oneShot job", async () => {
     vi.useFakeTimers();
     const { runner, cmd } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("job", { ...SPEC, oneShot: true });
     await vi.advanceTimersByTimeAsync(2100);
     cmd.set("panel-job", "zsh");
@@ -156,7 +156,7 @@ test("a single prompt sighting between chained commands does not complete a oneS
 test("a oneShot job never observed running (instant failure) completes only after the boot grace", async () => {
     vi.useFakeTimers();
     const { runner, cmd } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("job", { ...SPEC, oneShot: true });
     // The command failed before the first sweep — the pane shows only the booted shell at its prompt.
     cmd.set("panel-job", "zsh");
@@ -169,7 +169,7 @@ test("a oneShot job never observed running (instant failure) completes only afte
 test("a start after a crash relaunches into a fresh session", async () => {
     vi.useFakeTimers();
     const { runner, cmd, launches } = fakeRunner();
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
     cmd.delete("panel-app");
     await vi.advanceTimersByTimeAsync(2100);
@@ -180,14 +180,14 @@ test("a start after a crash relaunches into a fresh session", async () => {
 });
 
 test("a launch failure propagates to the caller and leaves nothing tracked", async () => {
-    const runner: PanelRunner = {
+    const runner: ProcessRunner = {
         launch: async () => {
             throw new Error("tmux failed");
         },
         kill: () => {},
         states: async () => new Map(),
     };
-    const panels = createPanelProcesses(runner);
+    const panels = createManagedProcesses(runner);
     await expect(panels.start("app", SPEC)).rejects.toThrow("tmux failed");
     expect(panels.running("app")).toBe(false);
 });

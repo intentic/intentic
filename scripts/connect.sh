@@ -299,9 +299,19 @@ run_host_ssh_connector() {
     fi
 }
 
+# True if the image reference carries an explicit registry host — the part before the first `/` that looks
+# like a hostname (contains a `.` or `:port`, or is `localhost`). A bare name like `intentic-sandbox:dev`
+# has none (its `:` is the tag separator, not a port), so docker resolves it against Docker Hub.
+image_has_registry() {
+    case "$1" in
+        */*) case "${1%%/*}" in *.*|*:*|localhost) return 0 ;; esac ;;
+    esac
+    return 1
+}
+
 # Pull a published image. intentic's sandbox image is PUBLIC, so no login is needed. But if this host
 # has a stale/expired `docker login registry.gitlab.com` (commonly left by Docker Desktop's credential store), docker
-# presents that token instead of pulling anonymously and GHCR rejects the pull with "denied". On any pull
+# presents that token instead of pulling anonymously and the registry rejects the pull with "denied". On any pull
 # failure, clear the registry.gitlab.com login and retry once so the pull falls back to anonymous.
 pull_image() {
     image="$1"
@@ -312,6 +322,12 @@ pull_image() {
     if docker image inspect "$image" >/dev/null 2>&1; then
         echo "intentic: pull failed but the image exists locally — using the local copy." >&2
         return 0
+    fi
+    # A bare tag has no registry to pull from and isn't present locally: it's a dev image that was never built.
+    # The stale-login retry below can't help — Docker Hub is the only place a registry-less name can resolve to.
+    if ! image_has_registry "$image"; then
+        echo "intentic: '${image}' is a local dev tag that isn't built — run 'pnpm build:sandbox' first, or unset SANDBOX_IMAGE to use the published image." >&2
+        return 1
     fi
     echo "intentic: pull failed — clearing a stale registry.gitlab.com login and retrying anonymously…" >&2
     docker logout registry.gitlab.com >/dev/null 2>&1 || true

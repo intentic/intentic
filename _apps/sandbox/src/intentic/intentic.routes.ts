@@ -43,7 +43,7 @@ export const createIntenticRoutes = (services: Services) => {
             yield* tailIntenticEvents(
                 applyEventsPath(services.config.historyRoot),
                 isTerminalExit,
-                () => services.panelProcesses.running(INFRA_APPLY_KEY),
+                () => services.processes.running(INFRA_APPLY_KEY),
                 signal,
             );
         }),

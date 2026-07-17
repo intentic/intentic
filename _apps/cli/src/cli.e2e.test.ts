@@ -232,7 +232,7 @@ describe.skipIf(!enabled)("intentic CLI end-to-end (manual, real Cloudflare + Di
 
         // 3. Resolve + apply: brings up Forgejo + its Actions runner + Komodo + the workspace sandbox + the
         // tunnel/routes, and wires the app's CI/CD. The workspace provider PULLS the published sandbox image
-        // (registry.gitlab.com/radarsu/intentic/sandbox) from GHCR — it must be published under that nested name + public.
+        // (registry.gitlab.com/radarsu/intentic/sandbox) from the GitLab Container Registry — it must be published under that nested name + public.
         await intentic("resolve", "--config", configPath, "--out", artifactPath);
         await intentic("apply", "--yes", "--artifact", artifactPath, "--maxIterations", "8");
 

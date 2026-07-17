@@ -12,7 +12,7 @@ import { promisify } from "node:util";
 // Each run is one window of the session via bin/tmux-run (the same wrapper the agent's Bash hook uses):
 // tee-captured output, status-file completion, the command's real exit code. Finished windows linger for
 // scrollback until the session's next run prunes them; sessions linger attachable until the boot sweep
-// (panel-processes.ts killStaleManagedSessions) or the user × them.
+// (managed-processes.ts killStaleManagedSessions) or the user × them.
 
 const execFileAsync = promisify(execFile);
 

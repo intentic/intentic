@@ -418,7 +418,7 @@ export class Conversation {
     }
 
     // Switch the provider this conversation's next turn runs on and re-scope its provider-specific settings:
-    // Codex's ChatGPT-account auth picks the model itself (empty = the account default) and its effort scale
+    // the model repoints to the new provider's remembered/live-default pick, and a non-Claude effort scale
     // tops out at xhigh. Writes the pick back to the module default so the next new chat inherits it. Mid-chat,
     // the switch takes effect at the next send — the current session is retired then and the new provider's
     // fresh session is seeded with the transcript so far (see send); browsing the picker never destroys it.
@@ -573,8 +573,8 @@ export class Conversation {
                     sessionId: resume?.id,
                     // The transcript seed for a fresh-after-switch session; mutually exclusive with sessionId.
                     ...(history.length > 0 ? { history } : {}),
-                    // Codex's ChatGPT-account auth rejects an explicitly-named model, so an empty selection is
-                    // dropped from the wire and the account resolves its default. Claude always sends a model.
+                    // An empty selection (a catalog not yet loaded) is dropped from the wire; the daemon then
+                    // resolves the provider's live catalog default server-side.
                     model: settings.model || undefined,
                     effort: settings.effort,
                     thinking: settings.thinking,

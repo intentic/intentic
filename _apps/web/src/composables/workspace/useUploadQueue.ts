@@ -3,7 +3,7 @@ import { computed, markRaw, reactive, ref } from "vue";
 import { collectDroppedFiles, type DroppedFile } from "../../pages/workspace/dropEntries";
 import { packTar } from "../../pages/workspace/tarStream";
 import { sandboxJson, sandboxUpload } from "../sandboxClient";
-import { chunkItems } from "./uploadChunking";
+import { chunkItems, dedupeByPath } from "./uploadChunking";
 
 // The workspace upload queue: drops (and file-input picks) funnel through here instead of a one-shot spinner, so a
 // second drop while an upload runs just APPENDS to the queue rather than clobbering shared state (the old bug) —
@@ -365,10 +365,14 @@ export function useUploadQueue() {
         // Skip files already identical on the sandbox (size + mtime) so a re-upload only sends what changed. Capture
         // the signal first — a cancel during the round-trip must abort the enqueue.
         const signal = controller.signal;
-        const surviving = await filterUnchanged(targetDir, entries);
+        const unchanged = await filterUnchanged(targetDir, entries);
         if (signal.aborted) {
             return;
         }
+        // Two entries in one drop can target the same destination; the parallel pool would interleave their offset
+        // writes into one file. Keep only the last (dedupeByPath) and surface the drops so the panel never silently
+        // does less than the file count.
+        const surviving = dedupeByPath(unchanged, (entry) => entry.path);
         skippedUnchanged.value += entries.length - surviving.length;
         if (surviving.length === 0) {
             // The whole drop is already up to date — surface it (via skippedUnchanged) instead of a silent no-op.

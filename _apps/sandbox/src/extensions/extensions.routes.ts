@@ -97,11 +97,11 @@ export const createExtensionsRoutes = (services: Services) => {
         processStatus: i.processStatus.handler(async ({ input }) => {
             const { process } = await processOf(input.id, input.name);
             const key = extensionProcessKey(input.id, input.name);
-            const port = services.panelProcesses.portOf(key);
+            const port = services.processes.portOf(key);
             const url = process.preview === true ? previewUrl(key, zone, sandboxId) : undefined;
             return {
                 name: input.name,
-                running: services.panelProcesses.running(key),
+                running: services.processes.running(key),
                 ...(port !== undefined ? { port } : {}),
                 ...(url !== undefined ? { previewUrl: url } : {}),
             };
@@ -113,7 +113,7 @@ export const createExtensionsRoutes = (services: Services) => {
         }),
         processStop: i.processStop.handler(async ({ input }) => {
             await processOf(input.id, input.name);
-            services.panelProcesses.stop(extensionProcessKey(input.id, input.name));
+            services.processes.stop(extensionProcessKey(input.id, input.name));
             return { ok: true } as const;
         }),
     };

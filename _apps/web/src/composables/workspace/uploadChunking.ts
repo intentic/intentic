@@ -8,6 +8,24 @@
 export const CHUNK_FILES = 200;
 export const CHUNK_BYTES = 32 * 1024 * 1024;
 
+// One drop can yield two entries destined for the SAME path (same-named files dragged from different folders).
+// Uploading both through the parallel pool would interleave their offset writes into one destination file — so
+// only the LAST occurrence survives (later write wins, matching overwrite intent); survivor order is preserved.
+export const dedupeByPath = <T>(items: readonly T[], pathOf: (item: T) => string): T[] => {
+    const seen = new Set<string>();
+    const kept: T[] = [];
+    for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i] as T;
+        const path = pathOf(item);
+        if (seen.has(path)) {
+            continue;
+        }
+        seen.add(path);
+        kept.push(item);
+    }
+    return kept.reverse();
+};
+
 // Greedily fill chunks up to BOTH caps. A single item larger than the byte cap forms its own chunk (it can't fit
 // anywhere smaller, and it still streams — never buffered), so one big binary never blocks the rest of the drop.
 export const chunkItems = <T extends { readonly size: number }>(items: readonly T[]): T[][] => {

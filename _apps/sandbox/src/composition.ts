@@ -36,7 +36,7 @@ import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
-import { type PanelProcesses, createPanelProcesses } from "./panels/panel-processes.js";
+import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
 import { createPreviewRouteEnsurer } from "./panels/preview-route.js";
 import {
     listWorkspaceSessions,
@@ -76,7 +76,7 @@ export interface Services {
     readonly workspace: WorkspacePaths;
     // Per-repository operator panels: the in-memory process manager the /panels routes and the preview proxy
     // drive (discovery of which repo has a panel is convention-only — see panels/panels.ts).
-    readonly panelProcesses: PanelProcesses;
+    readonly processes: ManagedProcesses;
     // Runs user-triggered shell commands inside visible job-* tmux sessions (window per command) — the
     // surfacing substrate for capability adds and the infra check (see terminal-run.ts for the principle).
     readonly terminalRun: TerminalRunner;
@@ -255,7 +255,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         config,
         logger,
         workspace,
-        panelProcesses: createPanelProcesses(),
+        processes: createManagedProcesses(),
         terminalRun: createTerminalRunner(),
         panelToken: randomBytes(32).toString("hex"),
         info,

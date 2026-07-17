@@ -643,6 +643,15 @@ watch(
                             <CopyButton :text="selectedCommand" label="Copy" />
                         </div>
                         <Code :code="selectedCommand" :lang="selectedCommandLang" :wrap="true" :copyable="false" />
+                        <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev, which connect.sh
+                             can only run if it's already built — surface the build step before the "not built" error. -->
+                        <p v-if="platformUrlOverride" class="flex items-center gap-2 text-xs text-warning">
+                            <Icon name="box" class="shrink-0" />
+                            <span
+                                >Local dev: run <code>pnpm build:sandbox</code> first — this command runs your locally-built
+                                <code>{{ DEV_SANDBOX_IMAGE }}</code> image.</span
+                            >
+                        </p>
                     </div>
                 </template>
             </StepSection>

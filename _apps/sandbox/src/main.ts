@@ -24,7 +24,7 @@ import { applyTmuxLogHooks, logsRoot, pruneLogFiles, terminalLogsDir } from "./l
 import { applyEventsPath, applyRunLive } from "./intentic/apply-events.js";
 import { checkEventsDir } from "./intentic/check-run.js";
 import { INFRA_APPLY_KEY } from "./intentic/infra-apply.js";
-import { killStaleManagedSessions, panelSession } from "./panels/panel-processes.js";
+import { killStaleManagedSessions, panelSession } from "./processes/managed-processes.js";
 import { createPreviewProxy } from "./panels/preview-proxy.js";
 import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
 import { linkClaudeProjects } from "./sessions/session-store.js";
@@ -118,8 +118,8 @@ const main = async (): Promise<void> => {
     // AWAITED so the capability restores below can't race a kill of the session they just started.
     const applyLive =
         (await applyRunLive(applyEventsPath(config.historyRoot)).catch(() => false)) &&
-        (await services.panelProcesses.adopt(INFRA_APPLY_KEY, { oneShot: true }).catch(() => false));
-    const dockerAlive = await services.panelProcesses.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
+        (await services.processes.adopt(INFRA_APPLY_KEY, { oneShot: true }).catch(() => false));
+    const dockerAlive = await services.processes.adopt(DOCKER_PANEL_KEY, {}).catch(() => false);
     await killStaleManagedSessions([
         ...(applyLive ? [panelSession(INFRA_APPLY_KEY)] : []),
         ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
@@ -162,7 +162,7 @@ const main = async (): Promise<void> => {
     // The preview proxy: preview-<panel>-<id>.<zone> lands here (the tunnel's fixed origin) and the Host
     // header's first label routes to the matching panel's running port. Always listening — with no panel up it
     // answers 502 ("start it"), not connection-refused. Every preview is public — no owner-gating.
-    const previewProxy = createPreviewProxy(services.panelProcesses.portOf, sandboxIdFromToken(config.connectToken));
+    const previewProxy = createPreviewProxy(services.processes.portOf, sandboxIdFromToken(config.connectToken));
     previewProxy.listen(config.preview.port, config.sandbox.host);
 
     // Scheduled agent wake-ups: poll the automations manifest and fire whatever comes due.
@@ -218,7 +218,7 @@ const main = async (): Promise<void> => {
         services.history.stop();
         // Stops the extension gateway processes too (tmux kill-session ⇒ SIGHUP) — each flushes its own
         // in-flight voice transcript on the way down.
-        services.panelProcesses.stopAll();
+        services.processes.stopAll();
         previewProxy.close();
         server.close();
         process.exit(0);

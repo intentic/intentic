@@ -8,7 +8,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { REPO_ROLES, type RepoRole } from "../workspace/workspace.js";
 import { discoverPanels, panelRunDir } from "./panels.js";
-import { probePort } from "./panel-processes.js";
+import { probePort } from "../processes/managed-processes.js";
 
 // The per-repository panel routes. `list` enumerates every repo with its runtime status + the content FACTS
 // the web app's extensions detect on (role, marker files — evidence, not identity); `start`/`stop` drive the
@@ -29,7 +29,7 @@ export const createPanelsRoutes = (services: Services) => {
             const discovered = await discoverPanels(services.workspace);
             const panels = await Promise.all(
                 discovered.map(async ({ repo, hasPanel }) => {
-                    const port = services.panelProcesses.portOf(repo);
+                    const port = services.processes.portOf(repo);
                     const url = previewUrl(repo, zone, sandboxId);
                     const dir = join(services.workspace.repositories, repo);
                     // Content facts, computed in one pass so the browser never N+1-scans /work: each extension
@@ -65,7 +65,7 @@ export const createPanelsRoutes = (services: Services) => {
             }
             // Mint the preview route before the panel is observable as running (see preview-route.ts).
             await services.ensurePreviewRoute(input.repo);
-            await services.panelProcesses.start(input.repo, {
+            await services.processes.start(input.repo, {
                 // Install deps on first start (async — the terminal + "starting" badge cover it), then run the dev
                 // server; skipped once installed. No --ignore-workspace: an app repo IS its own pnpm monorepo (its
                 // dev runs turbo across _apps/*) so the whole workspace must install; the flat operator/ panels
@@ -74,7 +74,7 @@ export const createPanelsRoutes = (services: Services) => {
                 // image ever pins it, inject NODE_ENV=development into the panel env below.
                 // `&&` (left-assoc: `(test || install) && dev`) so a failed install stops with ITS error above
                 // the prompt instead of burying it under the dev command's cascading failure. No `exec` — the
-                // chain runs inside the pane's interactive shell (see panel-processes launch), which must
+                // chain runs inside the pane's interactive shell (see managed-processes launch), which must
                 // survive the command so Ctrl+C lands at a prompt and ↑ re-runs it.
                 command: "test -d node_modules || pnpm install && pnpm dev",
                 cwd: runDir,
@@ -91,7 +91,7 @@ export const createPanelsRoutes = (services: Services) => {
             if (!(await discoverPanels(services.workspace)).some((entry) => entry.repo === input.repo)) {
                 throw new ORPCError("NOT_FOUND", { message: "no repository with that name" });
             }
-            services.panelProcesses.stop(input.repo);
+            services.processes.stop(input.repo);
             return { ok: true } as const;
         }),
     };

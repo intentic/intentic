@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import type { DockerConfig } from "@intentic/sandbox-contract";
-import { panelSession } from "../../panels/panel-processes.js";
+import { panelSession } from "../../processes/managed-processes.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 
 // A Docker capability: an in-sandbox Docker Engine + Compose so a full-stack app's `pnpm db:up` runs a dev

@@ -6,11 +6,11 @@ vi.mock("../sandboxClient", () => ({ sandboxRequest: vi.fn() }));
 const { sandboxRequest } = await import("../sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 
-// A grok-model-invalid error dynamically imports useChat to reload the live catalog; stub it (and spy) so the
-// test doesn't pull in the whole useChat module (router/sandbox side effects). vi.hoisted so the spy exists when
-// the hoisted vi.mock factory runs.
-const { loadGrokModelsMock } = vi.hoisted(() => ({ loadGrokModelsMock: vi.fn(async () => {}) }));
-vi.mock("./useChat", () => ({ loadGrokModels: loadGrokModelsMock }));
+// A model-invalid error dynamically imports useChat to reload the provider's live catalog; stub it (and spy) so
+// the test doesn't pull in the whole useChat module (router/sandbox side effects). vi.hoisted so the spy exists
+// when the hoisted vi.mock factory runs.
+const { loadProviderModelsMock } = vi.hoisted(() => ({ loadProviderModelsMock: vi.fn(async () => {}) }));
+vi.mock("./useChat", () => ({ loadProviderModels: loadProviderModelsMock }));
 
 // The typewriter drains via requestAnimationFrame; run frames synchronously so deltas land immediately.
 beforeEach(() => {
@@ -337,7 +337,7 @@ describe(`Conversation`, () => {
     });
 
     it(`surfaces an unrecoverable grok-model-invalid error and reloads the catalog`, async () => {
-        loadGrokModelsMock.mockClear();
+        loadProviderModelsMock.mockClear();
         const conversation = new Conversation(`c1`);
         conversation.provider.value = `grok`;
         conversation.model.value = `grok-code-fast-1`;
@@ -354,7 +354,27 @@ describe(`Conversation`, () => {
         // the picker reflects whatever the daemon last recorded.
         expect(conversation.error.value).toBe(`xAI returned no available models for your account.`);
         expect(conversation.messages.value.at(-1)!.role).not.toBe(`notice`);
-        expect(loadGrokModelsMock).toHaveBeenCalled();
+        expect(loadProviderModelsMock).toHaveBeenCalledWith(`grok`);
+    });
+
+    it(`surfaces a codex-model-invalid error and reloads the Codex catalog`, async () => {
+        loadProviderModelsMock.mockClear();
+        const conversation = new Conversation(`c1`);
+        conversation.provider.value = `codex`;
+        conversation.model.value = `gpt-5-codex`;
+        // Codex has no in-turn self-heal (OpenAI names no alternative), so the rejection always lands here; the
+        // reload repoints the picker — and this conversation's dead pinned id — to the daemon's live default.
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `error`, code: `codex-model-invalid`, message: `The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account.` },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`hi`, { ...settings, agent: `codex`, model: `gpt-5-codex` });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(conversation.error.value).toContain(`not supported`);
+        expect(loadProviderModelsMock).toHaveBeenCalledWith(`codex`);
     });
 
     it(`renders a rate_limit error as a muted notice, not the red error ref`, async () => {

@@ -6,7 +6,7 @@ import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "../system/terminal-ses
 
 const execFileAsync = promisify(execFile);
 
-export interface PanelSpec {
+export interface ProcessSpec {
     // Run inside a detached tmux session in `cwd` with PORT (assigned by the manager) + `env` in the
     // environment. `port` is filled in by the manager before the runner sees it.
     readonly command: string;
@@ -21,8 +21,10 @@ export interface PanelSpec {
     readonly oneShot?: true;
 }
 
-// Every panel/app dev server runs inside tmux session `panel-<key>` so the owner can attach the existing
-// /system/terminal WebSocket to it — live output with full scrollback replaces the old captured-tail logs.
+// Every managed process (panel/app dev server, extension gateway, docker daemon, infra-apply job) runs inside
+// tmux session `panel-<key>` so the owner can attach the existing /system/terminal WebSocket to it — live output
+// with full scrollback replaces the old captured-tail logs. The `panel-` prefix predates the generic manager and
+// is wire data (session names reach the browser and are string-built in web/_extensions) — do not rename.
 export const PANEL_SESSION_PREFIX = "panel-";
 export const panelSession = (key: string): string => `${PANEL_SESSION_PREFIX}${key}`;
 
@@ -32,8 +34,8 @@ export const SHELL = "zsh";
 
 // The tmux side of the manager, injectable so tests need no tmux binary. `states` reports every panel pane's
 // foreground command (session name → pane_current_command) in one call; an absent session is a dead one.
-export interface PanelRunner {
-    readonly launch: (session: string, spec: PanelSpec & { port: number }) => Promise<void>;
+export interface ProcessRunner {
+    readonly launch: (session: string, spec: ProcessSpec & { port: number }) => Promise<void>;
     readonly kill: (session: string) => void;
     readonly states: () => Promise<Map<string, string>>;
 }
@@ -56,7 +58,7 @@ const freePort = (): Promise<number> =>
         });
     });
 
-const defaultRunner: PanelRunner = {
+const defaultRunner: ProcessRunner = {
     launch: async (session, spec) => {
         // A bare `sh -c` does NOT add node_modules/.bin to PATH (only pnpm/npm/npx do), so a workspace-local bin
         // like `turbo`/`vite`/`astro` would fail with "not found" (exit 127). Prepend the run dir's bin so any dev
@@ -155,13 +157,13 @@ export const killStaleManagedSessions = async (exempt: readonly string[] = []): 
     }
 };
 
-export interface PanelProcesses {
+export interface ManagedProcesses {
     // Assigns a free PORT and starts the panel's dev server in tmux session `panel-<key>`. No-op when already
     // running; a previous run's lingering session is replaced.
-    readonly start: (repo: string, spec: PanelSpec) => Promise<void>;
+    readonly start: (repo: string, spec: ProcessSpec) => Promise<void>;
     // Re-track a session that outlived a daemon restart (a live one-shot job the boot sweep must not kill):
     // registers it so `running` reports it and the sweep watches it to completion. False when no such session.
-    readonly adopt: (repo: string, spec: Pick<PanelSpec, "oneShot">) => Promise<boolean>;
+    readonly adopt: (repo: string, spec: Pick<ProcessSpec, "oneShot">) => Promise<boolean>;
     // Kills the session (including a finished oneShot's lingering shell).
     readonly stop: (repo: string) => void;
     readonly running: (repo: string) => boolean;
@@ -171,12 +173,13 @@ export interface PanelProcesses {
     readonly stopAll: () => void;
 }
 
-// Manages the workspace's per-repo operator-panel (and per-app) tmux sessions, keyed by panel key. A session
+// Manages the sandbox's long-running tmux sessions (operator panels, app dev servers, extension gateway
+// processes, dockerd, one-shot infra jobs), keyed by process key. A session
 // that ends (its shell exited or was ×-killed) drops out of `running` on the next liveness sweep — `running`
 // means "session alive", not "dev process alive": a Ctrl+C'd dev server sits at a usable prompt and stays
 // running. A oneShot job additionally completes when its shell is back at the prompt; the session lingers
 // attachable, output in scrollback above a live prompt.
-export const createPanelProcesses = (runner: PanelRunner = defaultRunner): PanelProcesses => {
+export const createManagedProcesses = (runner: ProcessRunner = defaultRunner): ManagedProcesses => {
     const current = new Map<string, { port: number; oneShot: true | undefined; startedAt: number; sawJob: boolean; promptStreak: number }>();
     let timer: NodeJS.Timeout | undefined;
 

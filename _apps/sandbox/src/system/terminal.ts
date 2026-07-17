@@ -5,7 +5,7 @@ import type { WSContext } from "hono/ws";
 import { type IPty, spawn } from "node-pty";
 import type { WebSocket } from "ws";
 import type { Services } from "../composition.js";
-import { PANEL_SESSION_PREFIX } from "../panels/panel-processes.js";
+import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { AGENT_SESSION_PREFIX, isValidSessionName, JOB_SESSION_PREFIX } from "./terminal-session.js";
 
@@ -38,7 +38,7 @@ let active = 0;
 // working dir on CREATION only (a re-attach keeps the session's own cwd — a reattached tab shouldn't jump). `cwd`
 // is a workspace-relative path from the ?cwd= query; it must resolve inside /work (resolveWithin returns undefined
 // on escape) and exist, else we fall back to the root. The session name is validated by the caller (onOpen).
-// Panel sessions (`panel-<key>`, owned by panels/panel-processes.ts), agent sessions (`agent-<id>`, owned
+// Panel sessions (`panel-<key>`, owned by processes/managed-processes.ts), agent sessions (`agent-<id>`, owned
 // by the agent's tmux runner) and job sessions (`job-<key>`, owned by system/terminal-run.ts) are ATTACH-ONLY:
 // create-on-attach would spawn a bare zsh masquerading as the dev server / agent terminal / job when it isn't
 // running — instead tmux prints "no such session" and exits, which the pty's exit frame relays honestly. `=`

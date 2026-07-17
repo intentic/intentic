@@ -19,7 +19,7 @@ import type { Services } from "./composition.js";
 import type { Config } from "./env.config.js";
 import { environmentHash } from "./environment/environment.js";
 import { createLogger } from "./logger.js";
-import type { PanelProcesses, PanelSpec } from "./panels/panel-processes.js";
+import type { ManagedProcesses, ProcessSpec } from "./processes/managed-processes.js";
 import { mintPairing } from "./system/sync.js";
 import { createTerminalRunner } from "./system/terminal-run.js";
 import type { AgentTool } from "./workspace/tools.js";
@@ -71,7 +71,7 @@ const memoryAutomationsStore = (initial: AutomationRecord[] = []): AutomationsSt
 
 // Records starts/stops; `portOf` returns the seeded port so a repo reads as running (the list route derives
 // running/healthy from portOf, not running()).
-const fakePanelProcesses = (ports: Record<string, number> = {}): PanelProcesses & { started: { repo: string; cwd: string }[]; stopped: string[] } => {
+const fakeProcesses = (ports: Record<string, number> = {}): ManagedProcesses & { started: { repo: string; cwd: string }[]; stopped: string[] } => {
     const started: { repo: string; cwd: string }[] = [];
     const stopped: string[] = [];
     return {
@@ -167,7 +167,7 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     config: baseConfig,
     logger: createLogger(baseConfig),
     workspace: workspacePaths("/work"),
-    panelProcesses: fakePanelProcesses(),
+    processes: fakeProcesses(),
     terminalRun: createTerminalRunner(),
     panelToken: "panel-secret",
     info: undefined,
@@ -208,6 +208,9 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     },
     codexHealth: async () => undefined,
     locateCodexThread: async () => undefined,
+    // Never-empty catalog fakes matching the daemon's contract, so a native turn always resolves a model.
+    claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
+    codexModels: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }), record: async () => {} },
     history: fakeHistory(),
     agent: async function* () {
         yield { kind: "done" };
@@ -302,7 +305,7 @@ test("panels.list enumerates every repo with its operator panel + runtime status
                 // (sha256("token")[0:12] = 3c469e9d6c58) — both are needed for a previewUrl to be advertised.
                 config: { ...baseConfig, connectToken: "token", sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
                 // "app" is running on a dead port (probe fails ⇒ healthy false); "desired-state" isn't running.
-                panelProcesses: fakePanelProcesses({ app: 1 }),
+                processes: fakeProcesses({ app: 1 }),
             }),
         ),
     );
@@ -386,13 +389,13 @@ test("panels.list advertises no previewUrl without a connect token (loopback —
 
 test("panels.start runs the repo's operator dir, rejects unknown repos + repos with no panel; stop is idempotent", async () => {
     const workspace = tempWorkspace([{ name: "app", panel: true }, { name: "desired-state" }]);
-    const processes = fakePanelProcesses();
+    const processes = fakeProcesses();
     const ensured: string[] = [];
     const client = clientFor(
         createApp(
             services({
                 workspace,
-                panelProcesses: processes,
+                processes: processes,
                 ensurePreviewRoute: async (panel) => {
                     ensured.push(panel);
                 },
@@ -418,8 +421,8 @@ test("system.terminals lists every attachable web-*/panel-* tmux session (none i
 });
 
 test("system.killTerminal routes a panel-* session through the process manager, so `running` unmaps immediately", async () => {
-    const processes = fakePanelProcesses();
-    const client = clientFor(createApp(services({ panelProcesses: processes })));
+    const processes = fakeProcesses();
+    const client = clientFor(createApp(services({ processes: processes })));
     expect(await client.system.killTerminal({ name: "panel-app" })).toEqual({ ok: true });
     expect(processes.stopped).toEqual(["app"]);
 });
@@ -1568,9 +1571,9 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
 test("workspace.addApps launches `intentic add-app` as a one-shot tmux job and mints each app's preview route up front", async () => {
     const workspace = tempWorkspace([{ name: "shop" }]);
     const repoDir = join(workspace.repositories, "shop");
-    const jobs: { key: string; spec: PanelSpec }[] = [];
+    const jobs: { key: string; spec: ProcessSpec }[] = [];
     const ensured: string[] = [];
-    const panelProcesses: PanelProcesses = {
+    const processes: ManagedProcesses = {
         start: async (key, spec) => {
             jobs.push({ key, spec });
         },
@@ -1583,7 +1586,7 @@ test("workspace.addApps launches `intentic add-app` as a one-shot tmux job and m
         createApp(
             services({
                 workspace,
-                panelProcesses,
+                processes,
                 ensurePreviewRoute: async (panel) => {
                     ensured.push(panel);
                 },

@@ -8,7 +8,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { repoGitDir } from "../history/history.js";
-import { probePort } from "../panels/panel-processes.js";
+import { probePort } from "../processes/managed-processes.js";
 import { shellQuote } from "../system/terminal-run.js";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 import { classifyWorkspace } from "./classify.js";
@@ -160,7 +160,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             for (const app of input.apps) {
                 void services.ensurePreviewRoute(appPanelKey(repo, app.name));
             }
-            await services.panelProcesses.start(`${repo}--add_apps`, { command, cwd: repoDir, oneShot: true });
+            await services.processes.start(`${repo}--add_apps`, { command, cwd: repoDir, oneShot: true });
             return { ok: true } as const;
         }),
         // The app instances present in this monorepo, each with its own preview URL + live status — drives
@@ -171,7 +171,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             const manifest = await loadManifest(services);
             const apps = await Promise.all(
                 discoverApps(repoDir, manifest).map(async ({ app, template }) => {
-                    const port = services.panelProcesses.portOf(appPanelKey(repo, app));
+                    const port = services.processes.portOf(appPanelKey(repo, app));
                     const healthy = port !== undefined && (await probePort(port));
                     const url = previewUrl(appPanelKey(repo, app), zone, sandboxId);
                     const summary = { app, template, running: port !== undefined, healthy };
@@ -193,7 +193,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             }
             // Mint the preview route before the app is observable as running (see panels/preview-route.ts).
             await services.ensurePreviewRoute(appPanelKey(repo, input.app));
-            await services.panelProcesses.start(
+            await services.processes.start(
                 appPanelKey(repo, input.app),
                 buildAppSpec({ repo, repoDir, pkg: found.pkg, app: input.app, preview: found.preview, zone, sandboxId }),
             );
@@ -201,7 +201,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         stopApp: i.stopApp.handler(async ({ input }) => {
             const repo = monorepoOf(input.repo);
-            services.panelProcesses.stop(appPanelKey(repo, input.app));
+            services.processes.stop(appPanelKey(repo, input.app));
             return { ok: true } as const;
         }),
         // Run vitest for the given repo-relative project dirs in a one-shot tmux panel session
@@ -224,7 +224,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                     return `(cd ${shellQuote(abs)} && pnpm vitest run)`;
                 })
                 .join("; ");
-            await services.panelProcesses.start(`${repo}--${input.session}`, { command, cwd: repoDir, oneShot: true });
+            await services.processes.start(`${repo}--${input.session}`, { command, cwd: repoDir, oneShot: true });
             return { ok: true } as const;
         }),
     };

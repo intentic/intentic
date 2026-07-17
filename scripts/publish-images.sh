@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build + push the first-party intentic images to the repo's GHCR (registry.gitlab.com/radarsu/intentic/*):
+# Build + push the first-party intentic images to the repo's GitLab Container Registry (registry.gitlab.com/radarsu/intentic/*):
 #   sandbox    the AI-agent workspace daemon + CLI
 #   dind-host  a Docker-in-Docker + sshd deploy-target "host" — connect.ps1 stands one up on Windows so a
 #              server-less user can deploy locally (the e2e harness + intentic-local.sh use the same recipe)
@@ -8,7 +8,7 @@
 #   docker login registry.gitlab.com && TAGS=0.1.0 pnpm publish:images
 # TAGS is a space-separated tag list; every listed tag is pushed. On release the moving `stable` tag is pushed
 # onto the new version; _libs/state-resolver/src/lib/images.ts and the connect scripts reference `sandbox:stable`
-# (unpinned — always the latest release, no digest to maintain). The GHCR packages must be made public once so
+# (unpinned — always the latest release, no digest to maintain). The GitLab Container Registry packages must be made public once so
 # tenant hosts can pull them unauthenticated.
 set -euo pipefail
 

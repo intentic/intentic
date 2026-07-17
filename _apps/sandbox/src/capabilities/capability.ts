@@ -3,7 +3,7 @@ import type { Services } from "../composition.js";
 import { applyEventsPath, isTerminalExit, tailIntenticEvents } from "../intentic/apply-events.js";
 import { INFRA_APPLY_KEY, startInfraApplyJob } from "../intentic/infra-apply.js";
 import { type ConfigStore, createConfigStore } from "../inventory/config-store.js";
-import type { PanelProcesses } from "../panels/panel-processes.js";
+import type { ManagedProcesses } from "../processes/managed-processes.js";
 import { ensureIntentInstallable } from "../workspace/ensure-intent.js";
 import { scaffoldAppMonorepo, scaffoldNeutralLedger } from "../workspace/scaffold-ledger.js";
 import { connectorSecretField, type ResolvedConnector } from "./cli/connector-registry.js";
@@ -22,7 +22,7 @@ export interface CapabilityCtx {
     readonly files: Services["files"];
     readonly terminalRun: Services["terminalRun"];
     // The docker capability's persistent dockerd session (panel-docker) — start/stop via the panel manager.
-    readonly panels: PanelProcesses;
+    readonly panels: ManagedProcesses;
     readonly infraApply: {
         // Launch `intentic resolve && intentic apply --yes && intentic adopt` (resolveFirst) as the shared
         // one-shot tmux job; false when one is already running (the caller must not tail a foreign run).
@@ -65,15 +65,15 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         git: services.git,
         files: services.files,
         terminalRun: services.terminalRun,
-        panels: services.panelProcesses,
+        panels: services.processes,
         infraApply: {
             start: (options) => startInfraApplyJob(services, options),
-            running: () => services.panelProcesses.running(INFRA_APPLY_KEY),
+            running: () => services.processes.running(INFRA_APPLY_KEY),
             events: () =>
                 tailIntenticEvents(
                     applyEventsPath(services.config.historyRoot),
                     isTerminalExit,
-                    () => services.panelProcesses.running(INFRA_APPLY_KEY),
+                    () => services.processes.running(INFRA_APPLY_KEY),
                     undefined,
                 ),
         },

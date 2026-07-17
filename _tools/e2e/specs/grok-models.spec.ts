@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 // The Grok MODEL picker must list xAI's live catalog, and it must self-heal a catalog that loaded empty before
-// the account connected. Grok's list is daemon-owned (fetched from /grok/models into a shared ref), unlike the
-// static Claude/Codex lists — so it stays [] until loadGrokModels() runs. The regression this guards: after a
-// Grok account connects, selecting Grok showed NO models because nothing re-fetched the catalog on that gesture.
-// The daemon is fully mocked here (no real xAI account); we drive the real Vue app + real picker wiring.
+// the account connected. Every provider's list is daemon-owned (fetched from /{provider}/models into a shared
+// record by loadProviderModels; Claude falls back to its static tier aliases until then) — Grok's stays [] until
+// a fetch succeeds. The regression this guards: after a Grok account connects, selecting Grok showed NO models
+// because nothing re-fetched the catalog on that gesture. The daemon is fully mocked here (no real xAI account);
+// we drive the real Vue app + real picker wiring. /claude/models and /codex/models are left unmocked — their
+// failed fetches must degrade to the static floor (Claude's aliases) without breaking the page.
 
 // The Grok "swirl" mark's path starts with this; the old placeholder was a diagonal bar "M6 3h4l8 18h-4z".
 const GROK_LOGO_PREFIX = "M9.27 15.29";

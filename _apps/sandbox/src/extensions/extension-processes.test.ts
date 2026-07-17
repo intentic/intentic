@@ -47,7 +47,7 @@ const fakeServices = (extensionsDir: string, automations: AutomationRecord[], ca
         capabilities: { list: async () => capabilities },
         config: { extensionsDir, sandbox: { port: 8787 } },
         panelToken: "panel-token",
-        panelProcesses: {
+        processes: {
             start: async (key: string) => {
                 started.push(key);
                 running.add(key);

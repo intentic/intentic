@@ -18,7 +18,7 @@ export const startExtensionProcess = async (services: Services, extension: Insta
         // Mint the tunneled preview hostname BEFORE the process binds (the panels-start pattern); never rejects.
         await services.ensurePreviewRoute(key);
     }
-    await services.panelProcesses.start(key, {
+    await services.processes.start(key, {
         command: process.command,
         cwd: process.cwd === undefined ? extension.dir : join(extension.dir, process.cwd),
         // A declared process reaches the daemon's own routes (a listener gateway posting to /listeners/<provider>)
@@ -76,8 +76,8 @@ export const reconcileListenerProcesses = async (services: Services): Promise<vo
                     await startExtensionProcess(services, extension, process);
                 } else {
                     const key = extensionProcessKey(extension.id, process.name);
-                    if (services.panelProcesses.running(key)) {
-                        services.panelProcesses.stop(key);
+                    if (services.processes.running(key)) {
+                        services.processes.stop(key);
                     }
                 }
             }

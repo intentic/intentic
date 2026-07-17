@@ -2,7 +2,7 @@ import type { InventoryEntry, ServiceConfig } from "@intentic/sandbox-contract";
 import { isTerminalExit } from "../../intentic/apply-events.js";
 import { INFRA_APPLY_KEY } from "../../intentic/infra-apply.js";
 import { hasManagedEntry, removeManagedEntry, upsertManagedEntry } from "../../inventory/managed-region.js";
-import { panelSession } from "../../panels/panel-processes.js";
+import { panelSession } from "../../processes/managed-processes.js";
 import type { CapabilityHandler } from "../capability.js";
 
 // A self-hosted service (e.g. SigNoz): declare it as i.want.service in deploy.config.ts, then provision it via

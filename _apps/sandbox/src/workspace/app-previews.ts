@@ -122,7 +122,7 @@ export const buildAppSpec = (opts: {
     }
     // `&&` (left-assoc: `(test || install) && dev`) so a failed install stops with ITS error above the prompt
     // instead of burying it under the dev command's cascading failure. No `exec` — the chain runs inside the
-    // pane's interactive shell (see panel-processes launch), which must survive the command so Ctrl+C lands at
+    // pane's interactive shell (see managed-processes launch), which must survive the command so Ctrl+C lands at
     // a prompt and ↑ re-runs it.
     return { command: `test -d node_modules || pnpm install && ${fill(opts.preview.dev)}`, cwd: opts.repoDir, env, portEnv };
 };

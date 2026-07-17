@@ -11,17 +11,17 @@ export const INFRA_APPLY_KEY = "infra-apply";
 // resolved into the artifact first). False when a job is already running: the live run (and its events file)
 // is left untouched — resetting would truncate a file being tailed.
 export const startInfraApplyJob = async (
-    services: Pick<Services, "panelProcesses" | "config" | "workspace">,
+    services: Pick<Services, "processes" | "config" | "workspace">,
     options?: { readonly resolveFirst?: true },
 ): Promise<boolean> => {
-    if (services.panelProcesses.running(INFRA_APPLY_KEY)) {
+    if (services.processes.running(INFRA_APPLY_KEY)) {
         return false;
     }
     const eventsPath = applyEventsPath(services.config.historyRoot);
     // Truncate + write {kind:"start"} before launching so a tail opened right after the caller returns sees a
     // fresh file, never the previous run's events.
     await resetEventsFile(eventsPath);
-    await services.panelProcesses.start(INFRA_APPLY_KEY, {
+    await services.processes.start(INFRA_APPLY_KEY, {
         command: options?.resolveFirst === true ? "intentic resolve && intentic apply --yes && intentic adopt" : "intentic apply && intentic adopt",
         cwd: services.workspace.repositories,
         // Every command in the chain mirrors its events (and its {kind:"exit"}) to the same durable file —
