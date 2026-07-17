@@ -11,12 +11,16 @@
 # you PICK which to remove — it never wipes everything unless you ask. Removing a sandbox DELETES its data (/work +
 # /history), so every removal is confirmed unless you pass -y.
 #
+# The shared dev agent-auth volume (connect.sh's INTENTIC_AGENT_AUTH_VOLUME — the AI-provider OAuth logins for ALL
+# dev sandboxes) survives cleanup by default: pass --agent-auth to remove it too, or answer the interactive question
+# offered once the last sandbox is gone. -y alone never removes it.
+#
 # Usage:
 #   curl -fsSL https://intentic.dev/cleanup | sh                 # pick which sandbox(es) to remove (interactive)
 #   curl -fsSL https://intentic.dev/cleanup | sh -s -- SLUG      # remove one sandbox by slug
 #   curl -fsSL https://intentic.dev/cleanup | sh -s -- --all     # remove EVERY sandbox
 #   curl -fsSL https://intentic.dev/cleanup | sh -s -- --all -y  # …skip the confirm (scripts/CI)
-#   ./scripts/cleanup.sh [SLUG...] [--all] [-y]
+#   ./scripts/cleanup.sh [SLUG...] [--all] [-y] [--agent-auth]
 #
 # Non-interactive runs (no terminal, e.g. a bare pipe with no controlling tty) NEVER auto-remove: they print the
 # list and exit. Pass a SLUG or --all to act.
@@ -41,6 +45,7 @@ usage() {
     echo "  SLUG...       remove the named sandbox(es)"
     echo "  -a, --all     remove EVERY sandbox on this machine"
     echo "  -y, --yes     skip confirmation prompts (scripts/CI); alias --force"
+    echo "  --agent-auth  also remove the shared dev agent-auth volume (AI logins for ALL dev sandboxes)"
     echo "  -h, --help    show this help"
 }
 
@@ -128,14 +133,43 @@ remove_sync_state() {
     $sync_user rm -rf "$sync_home/.intentic/sync" "$sync_home/.local/bin/intentic-sync" 2>/dev/null || true
 }
 
+# The shared dev agent-auth volume (connect.sh's INTENTIC_AGENT_AUTH_VOLUME): the AI-provider OAuth stores for
+# ALL dev sandboxes on this machine. It survives cleanup on purpose and is removed only on explicit --agent-auth
+# or an interactive yes — NEVER implied by -y, which callers rely on to keep their AI logins across resets (so
+# this cannot use confirm(), whose FORCE path auto-answers yes).
+AUTH_VOLUME="${INTENTIC_AGENT_AUTH_VOLUME:-intentic-dev-agent-auth}"
+
+remove_agent_auth() {
+    echo "intentic: removing shared dev agent-auth volume '$AUTH_VOLUME' (AI logins)…"
+    docker volume rm "$AUTH_VOLUME" >/dev/null 2>&1 \
+        || echo "intentic: could not remove '$AUTH_VOLUME' — still referenced by a container." >&2
+}
+
+maybe_remove_agent_auth() {
+    case "$AUTH_VOLUME" in /*) return 0 ;; esac # an absolute host path (connect.sh option) — no docker volume to remove
+    docker volume inspect "$AUTH_VOLUME" >/dev/null 2>&1 || return 0
+    if [ "$AUTH" = 1 ]; then
+        remove_agent_auth
+        return 0
+    fi
+    if [ "$FORCE" = 1 ] || ! have_tty; then
+        echo "intentic: kept shared dev agent-auth volume '$AUTH_VOLUME' (AI logins) — pass --agent-auth to remove."
+        return 0
+    fi
+    ask "Also remove the shared dev agent-auth volume '$AUTH_VOLUME'? Logs AI accounts out of ALL dev sandboxes. [y/N] " || return 0
+    case "$REPLY" in [Yy]*) remove_agent_auth ;; esac
+}
+
 # ── args ──────────────────────────────────────────────────────────────────────────────────────────────────────
 FORCE=0
 ALL=0
+AUTH=0
 SLUGS=""
 while [ $# -gt 0 ]; do
     case "$1" in
         -a | --all) ALL=1 ;;
         -y | --yes | --force) FORCE=1 ;;
+        --agent-auth) AUTH=1 ;;
         -h | --help) usage; exit 0 ;;
         --) shift; break ;;
         -*) echo "error: unknown flag '$1'." >&2; usage >&2; exit 2 ;;
@@ -148,13 +182,14 @@ for a in "$@"; do SLUGS="$SLUGS $a"; done  # positionals after --
 # ── resolve which slugs to remove ─────────────────────────────────────────────────────────────────────────────
 if [ "$ALL" = 1 ]; then
     all="$(list_sandboxes)"
-    [ -n "$all" ] || { echo "intentic: no sandboxes found on this machine — nothing to clean up."; exit 0; }
+    [ -n "$all" ] || { echo "intentic: no sandboxes found on this machine."; maybe_remove_agent_auth; exit 0; }
     echo "intentic: about to PERMANENTLY DELETE ALL sandboxes on this machine and their data (/work + /history):"
     for s in $all; do echo "    $s"; done
     echo "This cannot be undone."
     confirm "Remove all of them?" || { echo "intentic: cancelled — nothing removed."; exit 0; }
     remove_all
     remove_sync_state
+    maybe_remove_agent_auth
     echo "intentic: all sandboxes removed. Re-run connect to start fresh."
     exit 0
 fi
@@ -162,7 +197,7 @@ fi
 if [ -z "$SLUGS" ]; then
     # No slug given and not --all: pick interactively, or (no tty) list and stop without touching anything.
     slugs="$(list_sandboxes)"
-    [ -n "$slugs" ] || { echo "intentic: no sandboxes found on this machine — nothing to clean up."; exit 0; }
+    [ -n "$slugs" ] || { echo "intentic: no sandboxes found on this machine."; maybe_remove_agent_auth; exit 0; }
 
     echo "intentic: sandboxes on this machine:"
     i=0
@@ -213,7 +248,15 @@ for s in "$@"; do
     remove_slug "$s"
 done
 
-# Desktop sync is host/desktop-wide: tear it down only once every sandbox is gone.
-[ -n "$(list_sandboxes)" ] || remove_sync_state
+# Desktop sync and the agent-auth volume are host-wide, not per-slug (and the volume stays docker-locked while any
+# sandbox container references it): tear them down only once every sandbox is gone.
+if [ -n "$(list_sandboxes)" ]; then
+    if [ "$AUTH" = 1 ]; then
+        echo "intentic: kept shared dev agent-auth volume '$AUTH_VOLUME' — other sandboxes still reference it." >&2
+    fi
+else
+    remove_sync_state
+    maybe_remove_agent_auth
+fi
 
 echo "intentic: done. Remaining sandboxes: $(list_sandboxes | tr '\n' ' ' | sed 's/ *$//' || true)"

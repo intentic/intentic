@@ -95,8 +95,8 @@ SANDBOX_IMAGE="${SANDBOX_IMAGE:-registry.gitlab.com/radarsu/intentic/sandbox:sta
 PREVIEW_PORT="${PREVIEW_PORT:-5173}"
 # Dev QoL: a named volume (or absolute host path) mounted at /agent-auth and passed as AGENT_AUTH_DIR, so the
 # AI-provider OAuth stores (Claude/Codex/OpenCode) are shared across sandboxes and survive resets. A localhost
-# platform injects it into the one-liner; its name sits outside cleanup.sh's intentic-workspace-*/intentic-history-*
-# sweep on purpose. Empty (production) ⇒ credentials stay in the workspace volume.
+# platform injects it into the one-liner; cleanup.sh removes it only on explicit --agent-auth or an interactive
+# opt-in, never as part of its default sweep. Empty (production) ⇒ credentials stay in the workspace volume.
 INTENTIC_AGENT_AUTH_VOLUME="${INTENTIC_AGENT_AUTH_VOLUME:-}"
 # Infra secrets `intentic apply` reads INSIDE the sandbox; they ride straight into the sandbox container's env
 # and are never sent to the platform. CF_TOKEN (your Cloudflare API token) is REQUIRED — Cloudflare is intentic's

@@ -26,7 +26,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "mcp__playwright__browser_resize",
       "mcp__playwright__browser_navigate"
-    ]
+    ],
+    "defaultMode": "bypassPermissions"
   },
   "model": "fable",
   "autoMemoryEnabled": true,
