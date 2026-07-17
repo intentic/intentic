@@ -65,6 +65,33 @@ const buildMap = (nodes: readonly WorkspaceTreeEntry[]): Map<string, WorkspaceTr
     return map;
 };
 
+const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
+const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
+const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
+// A folder can't move into itself, its own parent (a no-op), or one of its own descendants.
+const canMoveInto = (source: string, targetDir: string): boolean =>
+    !(targetDir === parentDir(source) || targetDir === source || targetDir.startsWith(`${source}/`));
+
+const jsonPost = (path: string, data: unknown): Promise<{ ok: true }> =>
+    sandboxJson<{ ok: true }>(path, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(data) });
+
+// Raw single-path daemon calls (no invalidate) — the shared core for the single + batch mutations below.
+const moveRaw = (from: string, to: string): Promise<{ ok: true }> => jsonPost(`/workspace/move`, { from, to });
+const copyRaw = (from: string, to: string): Promise<{ ok: true }> => jsonPost(`/workspace/copy`, { from, to });
+// oRPC's OpenAPI handler reads non-GET input from the request BODY (only GET reads the query), so a DELETE
+// must carry {path} as a JSON body — a query param deserializes to undefined ("expected object").
+const removeRaw = (path: string): Promise<unknown> =>
+    sandboxJson(`/workspace/entry`, { method: `DELETE`, headers: { "content-type": `application/json` }, body: JSON.stringify({ path }) });
+
+// The file's contents, or throws with a user-facing message (e.g. the daemon's denylist 404).
+const readFile = async (path: string): Promise<string> => {
+    const body = await sandboxJson<WorkspaceFileResponse>(`/workspace/file?path=${encodeURIComponent(path)}`);
+    return body.content;
+};
+
+// Raw bytes for binary preview (images / PDF), where the text route's utf8 decode would corrupt the file.
+const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?path=${encodeURIComponent(path)}`);
+
 export function useWorkspaceTree() {
     const { reachable } = useSandbox();
     const queryClient = useQueryClient();
@@ -84,9 +111,6 @@ export function useWorkspaceTree() {
     // tree and file routes speak. RAW prefix, not sandboxKey(): the sandbox id is APPENDED to query keys, so
     // ["workspace","tree"] prefix-matches every ["workspace","tree","all"|"filtered", id] (see useSandbox).
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
-    const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
-    const jsonPost = (path: string, data: unknown): Promise<{ ok: true }> =>
-        sandboxJson<{ ok: true }>(path, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(data) });
     // The editor's text save persists verbatim through the same upload route drag-drop uses (bulk drag-drop
     // uploads go through useUploadQueue). An emptied buffer writes an empty file.
     const saveText = async (path: string, text: string): Promise<void> => {
@@ -97,20 +121,6 @@ export function useWorkspaceTree() {
         await jsonPost(`/workspace/dir`, { path });
         await invalidate();
     };
-    const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
-    const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
-    // A folder can't move into itself, its own parent (a no-op), or one of its own descendants.
-    const canMoveInto = (source: string, targetDir: string): boolean =>
-        !(targetDir === parentDir(source) || targetDir === source || targetDir.startsWith(`${source}/`));
-
-    // Raw single-path daemon calls (no invalidate) — the shared core for the single + batch mutations below.
-    const moveRaw = (from: string, to: string): Promise<{ ok: true }> => jsonPost(`/workspace/move`, { from, to });
-    const copyRaw = (from: string, to: string): Promise<{ ok: true }> => jsonPost(`/workspace/copy`, { from, to });
-    // oRPC's OpenAPI handler reads non-GET input from the request BODY (only GET reads the query), so a DELETE
-    // must carry {path} as a JSON body — a query param deserializes to undefined ("expected object").
-    const removeRaw = (path: string): Promise<unknown> =>
-        sandboxJson(`/workspace/entry`, { method: `DELETE`, headers: { "content-type": `application/json` }, body: JSON.stringify({ path }) });
-
     // Rename is the only genuinely single move (same parent, new name); every other delete/move/copy goes through a
     // batch variant so a multi-select mass action is one loop + a single trailing invalidate.
     const moveEntry = async (from: string, to: string): Promise<void> => {
@@ -159,15 +169,6 @@ export function useWorkspaceTree() {
     // The tree entry for a root-relative path (size/type), or undefined when not in the loaded tree.
     const entry = (path: string | undefined): WorkspaceTreeEntry | undefined => (path === undefined ? undefined : entriesByPath.value.get(path));
 
-    // The file's contents, or throws with a user-facing message (e.g. the daemon's denylist 404).
-    const readFile = async (path: string): Promise<string> => {
-        const body = await sandboxJson<WorkspaceFileResponse>(`/workspace/file?path=${encodeURIComponent(path)}`);
-        return body.content;
-    };
-
-    // Raw bytes for binary preview (images / PDF), where the text route's utf8 decode would corrupt the file.
-    const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?path=${encodeURIComponent(path)}`);
-
     // Lazy-load an ignored dir's children on first expand (no-op once loaded or already in flight). Errors surface
     // on the shared actionError line, like the file mutations above.
     const loadChildren = async (path: string): Promise<void> => {
@@ -181,8 +182,8 @@ export function useWorkspaceTree() {
             if (body.truncated) {
                 lazyTruncated.value.add(path);
             }
-        } catch (error) {
-            actionError.value = error instanceof Error ? error.message : `Failed to load ${path}.`;
+        } catch (loadError) {
+            actionError.value = loadError instanceof Error ? loadError.message : `Failed to load ${path}.`;
         } finally {
             lazyLoading.value.delete(path);
         }

@@ -33,5 +33,5 @@ export const registerViewer = (viewer: RegisteredViewer): Disposable => {
 // later-loaded extension can override a builtin viewer for the same type.
 export const viewerForExtension = (ext: string): RegisteredViewer | undefined => {
     const lower = ext.toLowerCase();
-    return [...viewers.value].reverse().find((entry) => entry.extensions.includes(lower));
+    return viewers.value.toReversed().find((entry) => entry.extensions.includes(lower));
 };

@@ -1,4 +1,4 @@
-import pg from "pg";
+import { Client } from "pg";
 import type { Config } from "./config.js";
 
 // Cross-replica exclusivity for background jobs: a per-run Postgres advisory lock on a fresh,
@@ -16,7 +16,7 @@ export const JOB_RETENTION = 1;
 export const JOB_SANDBOX_POOL = 2;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
-    const client = new pg.Client({ connectionString: config.database.url });
+    const client = new Client({ connectionString: config.database.url });
     await client.connect();
     try {
         const { rows } = await client.query<{ locked: boolean }>(`SELECT pg_try_advisory_lock($1) AS locked`, [key]);

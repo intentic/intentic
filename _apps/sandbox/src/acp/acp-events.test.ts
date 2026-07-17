@@ -57,7 +57,7 @@ test("a tool_call without kind categorizes from its title; without status defaul
     });
 });
 
-test("tool_call_update maps status and text content; terminal content entries are dropped", () => {
+test("tool_call_update maps status and text content; terminal content entries become panel notes", () => {
     expect(
         sessionUpdateEvent(
             {
@@ -71,7 +71,36 @@ test("tool_call_update maps status and text content; terminal content entries ar
             },
             CWD,
         ),
-    ).toEqual({ kind: "tool_call_update", id: "t1", status: "completed", content: [{ type: "text", text: "ok" }] });
+    ).toEqual({
+        kind: "tool_call_update",
+        id: "t1",
+        status: "completed",
+        content: [
+            { type: "text", text: "ok" },
+            { type: "text", text: "[running in the live terminal panel]" },
+        ],
+    });
+});
+
+test("available_commands_update maps to the commands frame", () => {
+    expect(
+        sessionUpdateEvent(
+            {
+                sessionUpdate: "available_commands_update",
+                availableCommands: [
+                    { name: "web", description: "Search the web", input: { hint: "query" } },
+                    { name: "plan", description: "Plan first" },
+                ],
+            },
+            CWD,
+        ),
+    ).toEqual({
+        kind: "commands",
+        items: [
+            { name: "web", description: "Search the web", hint: "query" },
+            { name: "plan", description: "Plan first" },
+        ],
+    });
 });
 
 test("ACP plan is a progress checklist — it maps to todos, never intentic's approval plan frame", () => {

@@ -171,6 +171,13 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     processes: fakeProcesses(),
     terminalRun: createTerminalRunner(),
     panelToken: "panel-secret",
+    // In-memory bridge-token fake: one fixed valid token, so middleware tests need no store file.
+    bridgeTokens: {
+        mint: async (label) => ({ id: "bt-1", token: `ibt_minted-${label}` }),
+        verify: async (presented) => presented === "ibt_valid",
+        list: async () => [{ id: "bt-1", label: "test", createdAt: 0 }],
+        revoke: async () => true,
+    },
     info: undefined,
     tools: [],
     capabilities: memoryCapabilitiesStore(),
@@ -448,6 +455,56 @@ test("the panel token is accepted in place of a Google bearer (server-side panel
     expect((await app.request("/panels", { headers: { "x-intentic-panel": "panel-secret" } })).status).toBe(200);
     expect((await app.request("/panels", { headers: { "x-intentic-panel": "wrong" } })).status).toBe(401);
     expect((await app.request("/panels")).status).toBe(401);
+});
+
+test("a bridge token reaches the agent-conversation surface and NOTHING else", async () => {
+    // Auth rejects every bearer, so any 2xx below proves the x-intentic-bridge path admitted the call.
+    const app = createApp(
+        services({
+            auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
+            sessions: { list: async () => [], read: async () => [], search: async () => [], exists: async () => true },
+        }),
+    );
+    const bridge = { "x-intentic-bridge": "ibt_valid" };
+    expect((await app.request("/sessions", { headers: bridge })).status).toBe(200);
+    // In scope, bad token → 401; out of scope, even a VALID token → an explicit 403 (clear DX, not a
+    // baffling missing-bearer 401).
+    expect((await app.request("/sessions", { headers: { "x-intentic-bridge": "ibt_wrong" } })).status).toBe(401);
+    expect((await app.request("/capabilities", { headers: bridge })).status).toBe(403);
+    expect((await app.request("/history/restore", { method: "POST", headers: bridge })).status).toBe(403);
+    expect((await app.request("/panels", { headers: bridge })).status).toBe(403);
+});
+
+test("bridge-token mint/list/revoke are owner-gated plain routes; mint returns the raw token once", async () => {
+    const minted: string[] = [];
+    const app = createApp(
+        services({
+            auth: { authorize: async () => ({ email: "o@x.com" }), authorizeOwner: async () => {} },
+            bridgeTokens: {
+                mint: async (label) => {
+                    minted.push(label);
+                    return { id: "bt-9", token: "ibt_raw-once" };
+                },
+                verify: async () => false,
+                list: async () => [{ id: "bt-9", label: "zed", createdAt: 1 }],
+                revoke: async (id) => id === "bt-9",
+            },
+        }),
+    );
+    const mint = await app.request("/system/bridge/tokens", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ label: "zed" }),
+    });
+    expect(mint.status).toBe(200);
+    expect(await mint.json()).toEqual({ id: "bt-9", token: "ibt_raw-once" });
+    expect(minted).toEqual(["zed"]);
+    expect(await (await app.request("/system/bridge/tokens")).json()).toEqual({ tokens: [{ id: "bt-9", label: "zed", createdAt: 1 }] });
+    expect((await app.request("/system/bridge/tokens/bt-9", { method: "DELETE" })).status).toBe(200);
+    expect((await app.request("/system/bridge/tokens/nope", { method: "DELETE" })).status).toBe(404);
+    // Not the owner → the gate closes the whole surface.
+    const denied = createApp(services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
+    expect((await denied.request("/system/bridge/tokens", { method: "POST" })).status).toBe(401);
 });
 
 test("sessions.list returns the full list, and routes to search when a query is given", async () => {

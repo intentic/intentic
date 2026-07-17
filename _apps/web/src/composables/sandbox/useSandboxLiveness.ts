@@ -162,7 +162,11 @@ const stream = async (): Promise<void> => {
 };
 
 const loop = async (): Promise<void> => {
-    while (running) {
+    // `running` is flipped by stop() outside this function, so the exit check lives in the body.
+    for (;;) {
+        if (!running) {
+            return;
+        }
         // Need the daemon's address to open the stream — reload the sandbox list if we don't have it yet.
         // A rejected platform call must not escape the loop (it would kill liveness for good, with `running`
         // still true so start() never restarts it) — swallow and let the backoff below retry.

@@ -108,11 +108,11 @@ const recomputeBytesDone = (): void => {
 // On ANY error, returns them ALL: the dedup is an optimization and must never block or silently drop an upload.
 const filterUnchanged = async (targetDir: string, entries: readonly DroppedFile[]): Promise<readonly DroppedFile[]> => {
     try {
-        const files = entries.map((entry) => ({ path: joinPath(targetDir, entry.path), size: entry.file.size, mtime: entry.file.lastModified }));
+        const stats = entries.map((entry) => ({ path: joinPath(targetDir, entry.path), size: entry.file.size, mtime: entry.file.lastModified }));
         const { skip } = await sandboxJson<{ skip: string[] }>(`/workspace/upload-diff`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
-            body: JSON.stringify({ files }),
+            body: JSON.stringify({ files: stats }),
         });
         if (skip.length === 0) {
             return entries;

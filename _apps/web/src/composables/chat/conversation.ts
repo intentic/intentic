@@ -16,6 +16,7 @@ import {
     type ToolCallLocation,
     type ToolCallStatus,
     type ToolKind,
+    usesLiveCatalog,
 } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
@@ -60,7 +61,7 @@ export const providerModelsState = ref<Record<AgentProvider, CatalogLoadState>>(
 // live daemon default; before the first catalog load Claude falls back to its stable `opus` alias (always
 // valid) and codex/grok send empty (the daemon then resolves its own catalog default).
 export const defaultModelFor = (provider: AgentProvider, harness: AgentHarness): string => {
-    if (harness === `claude-code` && provider !== `claude`) {
+    if (!usesLiveCatalog(provider, harness)) {
         return modelsFor(provider, harness)[0]?.value ?? ``;
     }
     // An unseeded provider key (an ACP agent) has no catalog — the agent owns its own model, so empty rides.
@@ -76,7 +77,7 @@ export const defaultModelFor = (provider: AgentProvider, harness: AgentHarness):
 // harness, where a non-Claude provider's list is the translator's static mapping. Shared by the composer pill
 // and the menu bodies so their list + label logic can't drift.
 export const modelOptionsFor = (provider: AgentProvider, harness: AgentHarness): CatalogOption[] => {
-    if (harness === `claude-code` && provider !== `claude`) {
+    if (!usesLiveCatalog(provider, harness)) {
         return modelsFor(provider, harness);
     }
     const live = providerModels.value[provider] ?? [];
@@ -225,7 +226,7 @@ export interface TurnSettings {
 // boolean for thinking) so a stale or hand-edited entry degrades to the defaults; model/effort stay plain
 // strings — the Conversation constructor does the semantic clamping (codex model/effort scoping).
 const TURN_DEFAULTS_KEY = `intentic.turnDefaults`;
-const MODES: readonly ChatMode[] = [`plan`, `acceptEdits`, `default`, `bypassPermissions`];
+const MODES: ReadonlySet<ChatMode> = new Set([`plan`, `acceptEdits`, `default`, `bypassPermissions`]);
 
 interface TurnDefaults {
     readonly provider: AgentProvider;
@@ -267,7 +268,7 @@ const readTurnDefaults = (): TurnDefaults => {
             models: readModels(stored[`models`]),
             effort: typeof stored[`effort`] === `string` ? stored[`effort`] : fallback.effort,
             thinking: typeof stored[`thinking`] === `boolean` ? stored[`thinking`] : fallback.thinking,
-            mode: MODES.includes(stored[`mode`] as ChatMode) ? (stored[`mode`] as ChatMode) : fallback.mode,
+            mode: MODES.has(stored[`mode`] as ChatMode) ? (stored[`mode`] as ChatMode) : fallback.mode,
         };
     } catch {
         return fallback;
@@ -304,9 +305,9 @@ watch(
 // (persisted), else the provider's default. The single source every model-reset site routes through, so a
 // per-provider pick survives switching provider/harness away and back.
 export const rememberedModelFor = (provider: AgentProvider, harness: AgentHarness): string =>
-    harness === `claude-code` && provider !== `claude`
-        ? defaultModelFor(provider, harness)
-        : turnDefaults.models.value[provider] || defaultModelFor(provider, harness);
+    usesLiveCatalog(provider, harness)
+        ? turnDefaults.models.value[provider] || defaultModelFor(provider, harness)
+        : defaultModelFor(provider, harness);
 
 // Connected provider accounts and the per-provider selection for new turns. In-memory (NOT persisted like
 // turnDefaults): account ids are daemon-minted per sandbox, so they'd be meaningless across a sandbox switch —

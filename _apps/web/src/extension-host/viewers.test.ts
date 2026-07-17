@@ -1,4 +1,4 @@
-import type { ExtensionContext, IntenticApi, ViewerRegistration } from "@intentic/extension-api";
+import type { IntenticApi, ViewerRegistration } from "@intentic/extension-api";
 import * as viewers from "@intentic/ext-viewers";
 import { describe, expect, it } from "vitest";
 
@@ -19,7 +19,7 @@ describe(`ext-viewers`, () => {
     it(`registers the docx and xlsx viewers`, () => {
         const ids = activateAndCaptureViewers()
             .map((viewer) => viewer.id)
-            .sort();
+            .toSorted();
         expect(ids).toEqual([`docx`, `xlsx`]);
     });
 

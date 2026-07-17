@@ -116,16 +116,16 @@ const checkDrift = async (label, file, expectedSize, expectedPrefix, expectedByt
     let counted = 0;
     const buf = await drain(packTar([{ path: "drift.bin", file }, sentinel], { onBytes: (n) => (counted += n) }));
     assert.equal(buf.length % 512, 0, `${label}: archive must stay 512-aligned`);
-    const parsed = parseTar(buf);
+    const driftParsed = parseTar(buf);
     assert.deepEqual(
-        parsed.map((e) => e.path),
+        driftParsed.map((e) => e.path),
         ["drift.bin", "sentinel.txt"],
         `${label}: both entries must parse`,
     );
-    assert.equal(parsed[0].size, expectedSize, `${label}: header must declare the scan-time size`);
-    assert.equal(parsed[0].content.slice(0, expectedPrefix.length), expectedPrefix, `${label}: real bytes preserved`);
-    assert.equal(parsed[0].content.length, expectedSize, `${label}: body length must equal declared size`);
-    assert.equal(parsed[1].content, "SENTINEL", `${label}: trailing entry must be intact (framing not desynced)`);
+    assert.equal(driftParsed[0].size, expectedSize, `${label}: header must declare the scan-time size`);
+    assert.equal(driftParsed[0].content.slice(0, expectedPrefix.length), expectedPrefix, `${label}: real bytes preserved`);
+    assert.equal(driftParsed[0].content.length, expectedSize, `${label}: body length must equal declared size`);
+    assert.equal(driftParsed[1].content, "SENTINEL", `${label}: trailing entry must be intact (framing not desynced)`);
     // onBytes runs across both packed entries, so the total is the drift entry's emitted bytes plus the sentinel's.
     assert.equal(counted, expectedBytes + "SENTINEL".length, `${label}: onBytes must count only emitted content bytes`);
 };

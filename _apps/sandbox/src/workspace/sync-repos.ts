@@ -52,10 +52,11 @@ export const syncWorkspaceRepos = async (services: Services, throttleMs: number)
     );
 };
 
+const commits = (n: number): string => `${n} ${n === 1 ? "commit" : "commits"}`;
+
 // A note prepended to the turn's prompt so the agent knows what moved and — critically — which repos it could
 // NOT advance (its context there may be stale). Clean/current/no-remote/skipped repos add nothing.
 export const syncAdvisory = (results: readonly RepoSync[]): string | undefined => {
-    const commits = (n: number): string => `${n} ${n === 1 ? "commit" : "commits"}`;
     const notes = results.flatMap(({ repo, outcome }) => {
         switch (outcome.status) {
             case "updated":

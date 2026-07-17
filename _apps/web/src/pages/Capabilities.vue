@@ -18,6 +18,7 @@ import BrowserLoginDialog from "../components/BrowserLoginDialog.vue";
 import CapabilityEffects from "../components/CapabilityEffects.vue";
 import CredentialGuide from "../components/CredentialGuide.vue";
 import { devFillGet, devFillSet } from "../composables/devFill";
+import { sandboxJson } from "../composables/sandbox/sandboxClient";
 import { browseMarketplace, useCapabilities } from "../composables/extensions/useCapabilities";
 import { useExtensions } from "../composables/extensions/useExtensions";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
@@ -53,6 +54,14 @@ const allCards = computed<CapabilityCatalogEntry[]>(() => {
 
 const route = useRoute();
 const router = useRouter();
+
+// The picked card is URL-driven (/capabilities/<id>); an absent or unknown slug → undefined → the catalog grid.
+const selected = computed<CapabilityCatalogEntry | undefined>(() => allCards.value.find((entry) => entry.id === route.params[`card`]));
+const name = ref(``);
+// Whether the user (or a marketplace pick) chose the name. Until then the field holds a suggestion, and the
+// suggestion must track the LIVE list: pick() may run against a stale-hydrated or still-fetching list, and a
+// frozen snapshot then collides ("already exists") — or worse, mints a stale-bumped id — once fresh data lands.
+const nameEdited = ref(false);
 
 // Cards that share a `kind` are told apart by a discriminator field the card fixes — `provider` for the cli cards,
 // `platform` for the browser cards (both map straight to the capability's config). The value is a single fixed
@@ -101,13 +110,6 @@ const groupedCatalog = computed(() =>
     })).filter((group) => group.entries.length > 0),
 );
 
-// The picked card is URL-driven (/capabilities/<id>); an absent or unknown slug → undefined → the catalog grid.
-const selected = computed<CapabilityCatalogEntry | undefined>(() => allCards.value.find((entry) => entry.id === route.params[`card`]));
-const name = ref(``);
-// Whether the user (or a marketplace pick) chose the name. Until then the field holds a suggestion, and the
-// suggestion must track the LIVE list: pick() may run against a stale-hydrated or still-fetching list, and a
-// frozen snapshot then collides ("already exists") — or worse, mints a stale-bumped id — once fresh data lands.
-const nameEdited = ref(false);
 watch(capabilities, () => {
     if (selected.value !== undefined && !nameEdited.value) {
         name.value = suggestName(selected.value);
@@ -149,20 +151,8 @@ const fieldError = (field: CapabilityField): string | undefined => {
     return undefined;
 };
 
-const touchAll = (): void => {
-    touched.add(`name`);
-    if (selected.value) {
-        for (const field of visibleFields(selected.value)) {
-            touched.add(field.key);
-        }
-    }
-};
-
 const logoUrl = (entry: CapabilityCatalogEntry): string | undefined =>
     entry.logo !== undefined ? `https://cdn.simpleicons.org/${entry.logo}` : undefined;
-// The glyph shown when a card has no simple-icons logo (or it failed to load): the card's explicit `icon`,
-// else the generic per-kind fallback.
-const entryIcon = (entry: CapabilityCatalogEntry): IconName => (entry.icon as IconName | undefined) ?? kindIcon(entry.kind);
 const kindIcon = (kind: string): IconName =>
     kind === `devops`
         ? `server`
@@ -179,12 +169,26 @@ const kindIcon = (kind: string): IconName =>
                   : kind === `agent`
                     ? `sparkles`
                     : `bolt`;
+// The glyph shown when a card has no simple-icons logo (or it failed to load): the card's explicit `icon`,
+// else the generic per-kind fallback.
+const entryIcon = (entry: CapabilityCatalogEntry): IconName => (entry.icon as IconName | undefined) ?? kindIcon(entry.kind);
 
 // Guided browser-login dialog state (browser-kind capabilities: the session is a real logged-in browser, not a
 // pasted token, so it's connected out-of-band over the /system/browser-login WebSocket).
 const loginVisible = ref(false);
 const loginPlatform = ref(``);
 const loginLabel = ref(``);
+// An ACP agent's interactive sign-in: the daemon starts its loginCommand in the capability's job session and
+// the terminal panel opens focused on it (user-clicked action → openFocused, the add-stream precedent).
+const startAgentLogin = async (id: string): Promise<void> => {
+    try {
+        const { session } = await sandboxJson<{ session: string }>(`/capabilities/${encodeURIComponent(id)}/login`, { method: `POST` });
+        useTerminalPanel().openFocused(session);
+    } catch (caught) {
+        error.value = caught instanceof Error ? caught.message : `Sign-in could not start.`;
+    }
+};
+
 const openLogin = (platform: string, label: string): void => {
     loginPlatform.value = platform;
     loginLabel.value = label;
@@ -201,6 +205,15 @@ const whenMet = (field: CapabilityField): boolean => field.when === undefined ||
 // while their condition holds).
 const visibleFields = (entry: CapabilityCatalogEntry): CapabilityCatalogEntry["fields"] =>
     entry.fields.filter((field) => field.value === undefined && whenMet(field));
+
+const touchAll = (): void => {
+    touched.add(`name`);
+    if (selected.value) {
+        for (const field of visibleFields(selected.value)) {
+            touched.add(field.key);
+        }
+    }
+};
 const requiresMet = computed(() => (selected.value ? (selected.value.requires ?? []).every((kind) => hasCapability(kind)) : false));
 
 // --- effect derivation (the "This will add to your sandbox" disclosure) ---
@@ -502,6 +515,17 @@ const submitLabel = computed(() =>
                                         size="small"
                                         :text="true"
                                         @click="openLogin(String(instance.config[`platform`]), selected.name)"
+                                    >
+                                        <template #icon><Icon name="sign-in" /></template>
+                                    </Button>
+                                    <!-- An ACP agent with a declared loginCommand signs in interactively: the daemon
+                                         starts it in the capability's job session and the terminal panel opens on it. -->
+                                    <Button
+                                        v-if="selected.kind === 'agent' && instance.config[`loginCommand`] !== undefined"
+                                        label="Sign in"
+                                        size="small"
+                                        :text="true"
+                                        @click="startAgentLogin(instance.id)"
                                     >
                                         <template #icon><Icon name="sign-in" /></template>
                                     </Button>

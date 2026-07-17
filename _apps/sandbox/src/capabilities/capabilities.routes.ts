@@ -1,8 +1,11 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { capabilitiesContract, CapabilitySchema } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { bearerFrom } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { capabilityJobSession } from "../terminal/terminal-session.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { capabilityFragments } from "../environment/fragment-sources.js";
 import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensions/extension-processes.js";
@@ -140,5 +143,33 @@ export const createCapabilitiesRoutes = (services: Services) => {
             return registry[capability.kind].status(ctx, capability.id, capability.config);
         }),
         marketplace: i.marketplace.handler(async ({ input }) => browseMarketplace(ctx, input.url, input.token)),
+        // An agent capability's interactive sign-in: run its loginCommand in a live window of the capability's
+        // job session, typed via send-keys (the managed-processes pattern) so the USER completes the flow in
+        // the attached terminal panel — device codes, browser links, pasted tokens all work. Deliberately not
+        // terminalRun (a run-to-completion capture): the route returns immediately and the pane IS the UI.
+        // The capability's env block is NOT injected — inline exports would print secrets into the persisted
+        // pane logs; login flows establish the agent's own stored credential interactively instead.
+        login: i.login.handler(async ({ input }) => {
+            const capability = await services.capabilities.get(input.id);
+            if (capability === undefined || capability.kind !== "agent") {
+                throw new ORPCError("NOT_FOUND", { message: "no agent capability with that id" });
+            }
+            const loginCommand = capability.config.loginCommand;
+            if (loginCommand === undefined) {
+                throw new ORPCError("CONFLICT", { message: "this agent declares no login command" });
+            }
+            if (!services.terminalRun.visible) {
+                throw new ORPCError("CONFLICT", { message: "no visible terminal in this environment — run the login command manually" });
+            }
+            const session = capabilityJobSession(input.id);
+            const run = promisify(execFile);
+            // Attach-or-create keeps any prior job windows' scrollback; the trailing ":" targets the window's
+            // active pane (a bare exact-match `=name` never resolves as a pane target — see managed-processes).
+            await run("tmux", ["new-session", "-A", "-d", "-s", session, "-c", services.workspace.root]);
+            await run("tmux", ["new-window", "-t", `=${session}:`, "-n", "login", "-c", services.workspace.root]);
+            await run("tmux", ["send-keys", "-t", `=${session}:`, "-l", loginCommand]);
+            await run("tmux", ["send-keys", "-t", `=${session}:`, "Enter"]);
+            return { session };
+        }),
     };
 };

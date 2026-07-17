@@ -51,15 +51,6 @@ const error = ref<string | undefined>(undefined);
 const saving = ref(false);
 const canSave = computed(() => !props.disabled && value.value.trim().length > 0);
 
-// In collect mode Enter falls through to the surrounding form's submit; standalone, it saves directly.
-const onEnter = (event: KeyboardEvent): void => {
-    if (props.collect) {
-        return;
-    }
-    event.preventDefault();
-    void save();
-};
-
 const save = async (): Promise<void> => {
     if (!canSave.value || saving.value || props.collect) {
         return;
@@ -79,6 +70,15 @@ const save = async (): Promise<void> => {
     } finally {
         saving.value = false;
     }
+};
+
+// In collect mode Enter falls through to the surrounding form's submit; standalone, it saves directly.
+const onEnter = (event: KeyboardEvent): void => {
+    if (props.collect) {
+        return;
+    }
+    event.preventDefault();
+    void save();
 };
 </script>
 

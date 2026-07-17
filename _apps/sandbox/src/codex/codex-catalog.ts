@@ -25,6 +25,11 @@ export interface CodexCatalog {
 
 const MODELS_TTL_MS = 60_000;
 
+const toCatalog = (ids: string[]): { models: { id: string; label: string }[]; default: string } => ({
+    models: ids.map((id) => ({ id, label: humanizeModelId(id) })),
+    default: ids[0]!,
+});
+
 export const createCodexCatalog = (codexStore: CodexStore, config: Config, persistPath: string, fetchImpl: typeof fetch = fetch): CodexCatalog => {
     let cache: { value: { models: { id: string; label: string }[]; default: string }; expiresAt: number } | undefined;
 
@@ -40,11 +45,6 @@ export const createCodexCatalog = (codexStore: CodexStore, config: Config, persi
         await mkdir(dirname(persistPath), { recursive: true });
         await writeFile(persistPath, JSON.stringify(ids));
     };
-
-    const toCatalog = (ids: string[]): { models: { id: string; label: string }[]; default: string } => ({
-        models: ids.map((id) => ({ id, label: humanizeModelId(id) })),
-        default: ids[0]!,
-    });
 
     // The token OpenAI discovery uses: the selected/first account's OAuth access token, else the container OpenAI
     // API key fallback. undefined ⇒ no account discovery is possible (the translator path may still work).

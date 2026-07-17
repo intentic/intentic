@@ -1,4 +1,4 @@
-import { type AgentHarness, type AgentProvider, NATIVE_PROVIDERS, type OauthAccount, type UsageAccount } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, NATIVE_PROVIDERS, type OauthAccount, type UsageAccount, usesLiveCatalog } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
 import {
@@ -319,7 +319,7 @@ const account = computed<string | undefined>(() => active.value.account.value);
 const selectAccount = (id: string): void => active.value.selectAccount(id);
 // Providers are an open string vocabulary — an unseeded key (an ACP agent, which owns its own credentials)
 // simply has no daemon account list.
-const accountsOf = (provider: AgentProvider): readonly OauthAccount[] => providerAccounts.value[provider] ?? [];
+const accountsOf = (target: AgentProvider): readonly OauthAccount[] => providerAccounts.value[target] ?? [];
 const accounts = computed<readonly OauthAccount[]>(() => accountsOf(active.value.provider.value));
 const managedAccounts = computed<readonly OauthAccount[]>(() => accountsOf(managedProvider.value));
 
@@ -383,7 +383,7 @@ const setManagedProvider = (target: AgentProvider): void => {
 // per-turn chat errors live on each Conversation. `connected` = the ACTIVE conversation's provider has an
 // account; `claudeConnected` = Claude specifically (the Sandbox page's card).
 const error = ref<string | null>(null);
-const hasAccount = (provider: AgentProvider): boolean => accountsOf(provider).length > 0;
+const hasAccount = (target: AgentProvider): boolean => accountsOf(target).length > 0;
 // An ACP provider is its own credential store — installed means chat-ready, so it never gates the composer.
 const connected = computed(() => hasAccount(provider.value) || acpProviders.value.some((agent) => agent.id === provider.value));
 const claudeConnected = computed(() => hasAccount(`claude`));
@@ -425,23 +425,23 @@ const userCode = ref<string | null>(null);
 const connectLabel = ref(``);
 
 // Add a freshly-connected account to its provider's list and make it the selected one.
-const addAccount = (provider: AgentProvider, account: OauthAccount): void => {
-    const existing = accountsOf(provider).filter((a) => a.id !== account.id);
-    providerAccounts.value = { ...providerAccounts.value, [provider]: [...existing, account] };
-    selectedAccountId.value = { ...selectedAccountId.value, [provider]: account.id };
+const addAccount = (target: AgentProvider, added: OauthAccount): void => {
+    const existing = accountsOf(target).filter((a) => a.id !== added.id);
+    providerAccounts.value = { ...providerAccounts.value, [target]: [...existing, added] };
+    selectedAccountId.value = { ...selectedAccountId.value, [target]: added.id };
 };
 
 // Pull a provider's account list from its daemon and keep the selection valid (first account when the current
 // pick is gone). The single reader of the `/accounts` routes.
-const refreshAccounts = async (provider: AgentProvider): Promise<OauthAccount[]> => {
-    const response = await sandboxRequest(`${providerBase(provider)}/accounts`);
+const refreshAccounts = async (target: AgentProvider): Promise<OauthAccount[]> => {
+    const response = await sandboxRequest(`${providerBase(target)}/accounts`);
     if (!response.ok) {
-        return [...accountsOf(provider)];
+        return [...accountsOf(target)];
     }
     const list = ((await response.json()) as { accounts?: OauthAccount[] }).accounts ?? [];
-    providerAccounts.value = { ...providerAccounts.value, [provider]: list };
-    if (!list.some((account) => account.id === selectedAccountId.value[provider])) {
-        selectedAccountId.value = { ...selectedAccountId.value, [provider]: list[0]?.id };
+    providerAccounts.value = { ...providerAccounts.value, [target]: list };
+    if (!list.some((entry) => entry.id === selectedAccountId.value[target])) {
+        selectedAccountId.value = { ...selectedAccountId.value, [target]: list[0]?.id };
     }
     return list;
 };
@@ -451,51 +451,51 @@ const refreshAccounts = async (provider: AgentProvider): Promise<OauthAccount[]>
 // model is no longer offered — and the persisted per-provider default — back to the live default (the same
 // selection-fix refreshAccounts does for accounts). Claude-Code-harness selections are translator-mapped ids,
 // not catalog ids, so they're left alone (claude itself is its own loop on either harness).
-export const loadProviderModels = async (provider: AgentProvider): Promise<void> => {
-    providerModelsState.value = { ...providerModelsState.value, [provider]: `loading` };
+export const loadProviderModels = async (target: AgentProvider): Promise<void> => {
+    providerModelsState.value = { ...providerModelsState.value, [target]: `loading` };
     let body: { models: { id: string; label: string; efforts?: string[] }[]; default: string };
     try {
-        const response = await sandboxRequest(`${providerBase(provider)}/models`);
+        const response = await sandboxRequest(`${providerBase(target)}/models`);
         if (!response.ok) {
-            providerModelsState.value = { ...providerModelsState.value, [provider]: `error` };
+            providerModelsState.value = { ...providerModelsState.value, [target]: `error` };
             return;
         }
         body = (await response.json()) as { models: { id: string; label: string; efforts?: string[] }[]; default: string };
         if (!Array.isArray(body.models)) {
-            providerModelsState.value = { ...providerModelsState.value, [provider]: `error` };
+            providerModelsState.value = { ...providerModelsState.value, [target]: `error` };
             return;
         }
     } catch {
         // The daemon is unreachable/mid-restart; the picker shows the error row with a Retry.
-        providerModelsState.value = { ...providerModelsState.value, [provider]: `error` };
+        providerModelsState.value = { ...providerModelsState.value, [target]: `error` };
         return;
     }
-    providerModelsState.value = { ...providerModelsState.value, [provider]: `loaded` };
+    providerModelsState.value = { ...providerModelsState.value, [target]: `loaded` };
     // The daemon's catalog is never empty; the guard keeps us from ever pinning a selection to nothing.
     if (body.models.length === 0) {
         return;
     }
     providerModels.value = {
         ...providerModels.value,
-        [provider]: body.models.map((entry) => ({
+        [target]: body.models.map((entry) => ({
             label: entry.label,
             value: entry.id,
             ...(entry.efforts !== undefined ? { efforts: entry.efforts } : {}),
         })),
     };
-    providerDefaultModel.value = { ...providerDefaultModel.value, [provider]: body.default };
+    providerDefaultModel.value = { ...providerDefaultModel.value, [target]: body.default };
     // Every native selection should carry a concrete offered id. Repoint anything empty OR no-longer-offered
     // (a since-renamed/retired id like `grok-code-fast-1`, or a tier alias once the real ids load) to the
     // default, so the picker highlights a selection and the chip always shows a name, never the bare icon.
     const valid = new Set(body.models.map((entry) => entry.id));
     for (const conversation of conversations.value) {
-        const routed = conversation.harness.value === `claude-code` && conversation.provider.value !== `claude`;
-        if (conversation.provider.value === provider && !routed && !valid.has(conversation.model.value)) {
+        const routed = !usesLiveCatalog(conversation.provider.value, conversation.harness.value);
+        if (conversation.provider.value === target && !routed && !valid.has(conversation.model.value)) {
             conversation.model.value = body.default;
         }
     }
-    if (!valid.has(turnDefaults.models.value[provider] ?? ``)) {
-        turnDefaults.models.value = { ...turnDefaults.models.value, [provider]: body.default };
+    if (!valid.has(turnDefaults.models.value[target] ?? ``)) {
+        turnDefaults.models.value = { ...turnDefaults.models.value, [target]: body.default };
     }
 };
 
@@ -655,7 +655,7 @@ const closeTab = (id: string): void => {
 };
 
 // --- Active-conversation actions (forwarded) --------------------------------------------------
-const send = (prompt: string, attachments?: readonly ChatAttachment[]): Promise<void> => {
+const send = (prompt: string, staged?: readonly ChatAttachment[]): Promise<void> => {
     // Core funnel milestone (autocapture misses Enter-key sends); PostHog derives "first message" per person.
     track(`message_sent`, { agent: active.value.provider.value });
     return active.value.send(
@@ -668,7 +668,7 @@ const send = (prompt: string, attachments?: readonly ChatAttachment[]): Promise<
             effort: active.value.effort.value,
             thinking: active.value.thinking.value,
         },
-        attachments,
+        staged,
     );
 };
 
@@ -944,7 +944,7 @@ const disconnect = async (id: string): Promise<void> => {
         headers: { "content-type": `application/json` },
         body: JSON.stringify({ id }),
     }).catch(() => undefined);
-    const remaining = accountsOf(target).filter((account) => account.id !== id);
+    const remaining = accountsOf(target).filter((entry) => entry.id !== id);
     providerAccounts.value = { ...providerAccounts.value, [target]: remaining };
     if (selectedAccountId.value[target] === id) {
         selectedAccountId.value = { ...selectedAccountId.value, [target]: remaining[0]?.id };

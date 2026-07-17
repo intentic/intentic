@@ -124,7 +124,7 @@ test("a user edit on the same lines conflicts: nothing applies, main is untouche
 });
 
 test("a user edit ELSEWHERE in the same file still lands (patch context, not path sets)", async () => {
-    const { work, worktrees, conversation } = await setup();
+    const { work, worktrees } = await setup();
     // Far enough apart that the hunks' ±3 context lines never overlap (a 3-line file would make any
     // same-file edit a context collision — that's the conflict test, not this one).
     const lines = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`);

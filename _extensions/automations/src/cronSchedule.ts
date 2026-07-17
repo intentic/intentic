@@ -144,6 +144,9 @@ const ordinal = (day: number): string => {
     return `${day}th`;
 };
 
+// Locale timestamp for run/next-run readouts (the list rows and the dialog's cron preview).
+export const formatAt = (at: number): string => new Date(at).toLocaleString();
+
 // Human badge for a stored cron; unrecognized shapes pass the raw string through.
 export const scheduleLabel = (cron: string): string => {
     const schedule = parseCron(cron);

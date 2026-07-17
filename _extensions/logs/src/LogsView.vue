@@ -51,7 +51,7 @@ const queryFiltered = computed(() => {
 });
 const groupTabs = computed(() => [
     { label: `All`, value: `all`, badge: queryFiltered.value.length },
-    ...[...new Set(files.value.map(groupOf))].sort().map((name) => ({
+    ...[...new Set(files.value.map(groupOf))].toSorted().map((name) => ({
         label: name,
         value: name,
         badge: queryFiltered.value.filter((file) => groupOf(file) === name).length,

@@ -5,6 +5,7 @@ import { ORPCError } from "@orpc/server";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { bearerFrom, ForbiddenError, tokenEquals } from "./auth/auth.js";
+import { bridgeScoped } from "./auth/bridge-tokens.js";
 import { fireAutomation, PAYLOAD_MAX } from "./automations/scheduler.js";
 import { extensionDir, extensionRootOf, readExtensionManifest } from "./capabilities/extension-dirs.js";
 import type { Services } from "./composition.js";
@@ -113,6 +114,20 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             // panel token instead of a Google bearer — the token never leaves the container (it's injected into
             // panel processes as INTENTIC_PANEL_TOKEN), so it's server-side only and not a browser-exposed path.
             if (tokenEquals(c.req.header("x-intentic-panel") ?? "", services.panelToken)) {
+                return next();
+            }
+            // The ACP editor bridge (Zed/JetBrains spawn it on the user's machine) presents an owner-minted
+            // bridge token instead of a Google bearer. Scope check FIRST and explicit — a bridge hitting an
+            // out-of-scope route gets a clear 403, not a baffling missing-bearer 401. Identity stays unset
+            // (documented-legal, the panel-token precedent): the bridge acts as the owner's tool, not a member.
+            const bridge = c.req.header("x-intentic-bridge");
+            if (bridge !== undefined && bridge !== "") {
+                if (!bridgeScoped(c.req.method, c.req.path)) {
+                    return c.json({ error: "bridge token not valid for this route" }, 403);
+                }
+                if (!(await services.bridgeTokens.verify(bridge))) {
+                    return c.json({ error: "unauthorized" }, 401);
+                }
                 return next();
             }
             try {
@@ -437,6 +452,31 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return denied;
         }
         return c.json(mintPairing());
+    });
+    // Bridge tokens for the ACP editor bridge — owner-minted (the sync-pair trust model, made durable +
+    // revocable), raw value returned exactly once. Plain routes before the oRPC catch-all, like the pair block.
+    app.post("/system/bridge/tokens", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const body = (await c.req.json().catch(() => undefined)) as { label?: unknown } | undefined;
+        const label = typeof body?.label === "string" && body.label.trim() !== "" ? body.label.trim().slice(0, 60) : "editor bridge";
+        return c.json(await services.bridgeTokens.mint(label));
+    });
+    app.get("/system/bridge/tokens", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        return c.json({ tokens: await services.bridgeTokens.list() });
+    });
+    app.delete("/system/bridge/tokens/:id", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        return (await services.bridgeTokens.revoke(c.req.param("id"))) ? c.json({ ok: true }) : c.json({ error: "no such token" }, 404);
     });
     app.post("/system/authorized-key", async (c) => {
         // Authorized either by a valid pairing token (the agent's path) or the owner's Google token (fallback).

@@ -26,11 +26,11 @@ const CATCH_ALL: IngressRule = { service: "http_status:404" };
 // ports — and unlike the host's LAN ip, loopback works even where a container netns cannot reach that ip
 // (e.g. WSL2 published-port hairpin). cloudflared matches rules top-down, first-match-wins, so wildcard
 // hostnames (the preview `*.<zone>`, which overlaps every explicit host on the zone) must sink to the end,
-// after all explicit rules and before the catch-all 404. Array.sort is stable, so order within each group
+// after all explicit rules and before the catch-all 404. toSorted is stable, so order within each group
 // is preserved.
 const desiredRules = (parsed: TunnelInputs): IngressRule[] => [
-    ...[...parsed.ingress]
-        .sort((a, b) => Number(a.hostname.startsWith("*")) - Number(b.hostname.startsWith("*")))
+    ...parsed.ingress
+        .toSorted((a, b) => Number(a.hostname.startsWith("*")) - Number(b.hostname.startsWith("*")))
         .map((rule) => ({ hostname: rule.hostname, service: `http://127.0.0.1:${rule.port}` })),
     CATCH_ALL,
 ];

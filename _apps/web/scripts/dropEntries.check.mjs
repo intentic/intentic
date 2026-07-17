@@ -69,7 +69,7 @@ const withJunk = dirEntry("proj", [
 const scanned = [];
 const junk = await collectDroppedFiles(dt([withJunk]), (path) => scanned.push(path));
 assert.deepEqual(paths(junk), ["proj/.git/config", "proj/index.ts"]);
-assert.deepEqual(scanned.sort(), ["proj/.git/config", "proj/index.ts"]);
+assert.deepEqual(scanned.toSorted(), ["proj/.git/config", "proj/index.ts"]);
 
 // An already-aborted signal stops the walk immediately (cancel) — no files captured.
 const canceled = await collectDroppedFiles(

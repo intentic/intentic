@@ -27,6 +27,9 @@ export interface BackgroundProcessRow {
 // (pane_current_command is still the shell) — one delayed relist settles the row.
 const SETTLE_MS = 1500;
 
+const processRoute = (row: BackgroundProcessRow, action: string): string =>
+    `/extensions/${encodeURIComponent(row.extensionId ?? ``)}/processes/${encodeURIComponent(row.processName ?? ``)}/${action}`;
+
 export function useBackgroundProcesses(tabs: TerminalTabs): {
     rows: ComputedRef<BackgroundProcessRow[]>;
     start: (row: BackgroundProcessRow) => Promise<void>;
@@ -61,9 +64,6 @@ export function useBackgroundProcesses(tabs: TerminalTabs): {
         await tabs.refresh();
         window.setTimeout(() => void tabs.refresh(), SETTLE_MS);
     };
-
-    const processRoute = (row: BackgroundProcessRow, action: string): string =>
-        `/extensions/${encodeURIComponent(row.extensionId ?? ``)}/processes/${encodeURIComponent(row.processName ?? ``)}/${action}`;
 
     // Always stop→start (both idempotent): a crashed process leaves its session alive at a shell prompt, which
     // the panel manager still tracks — a bare start would no-op against it. Stop first covers fresh, crashed,

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import BridgeTokensCard from "./BridgeTokensCard.vue";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
 
 /* The Sandbox hub's "Sync" tab. Arriving from the Workspace "Open in local editor" shortcut
@@ -19,5 +20,8 @@ onMounted(() => {
 </script>
 
 <template>
-    <DesktopSyncCard :highlight="highlight" />
+    <div class="flex flex-col gap-4">
+        <DesktopSyncCard :highlight="highlight" />
+        <BridgeTokensCard />
+    </div>
 </template>

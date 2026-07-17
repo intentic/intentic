@@ -134,7 +134,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         // On-demand refresh: force-fetch (no throttle) + guarded fast-forward every repo with a remote, returning
         // per-repo outcomes. A fast-forward changes tracked files, so ping history to snapshot it as a user write.
         sync: i.sync.handler(async () => {
-            const repos = (await syncWorkspaceRepos(services, 0)).map(({ repo, outcome }) => ({ repo, ...outcome }));
+            const repos = (await syncWorkspaceRepos(services, 0)).map(({ repo, outcome }) => Object.assign({ repo }, outcome));
             services.history.notifyUserWrite();
             return { repos };
         }),

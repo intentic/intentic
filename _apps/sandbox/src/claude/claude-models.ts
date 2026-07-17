@@ -9,9 +9,15 @@ import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
  * (offline / dev / no account) — the aliases already resolve to the newest version of each tier, so the fallback
  * is never wrong for a version bump, only missing a brand-new tier until the CLI is reachable. */
 
+export interface ClaudeModel {
+    id: string;
+    label: string;
+    efforts?: string[];
+}
+
 // The stable-alias fallback catalog. Aliases track the latest version of each tier, so the picker stays current
 // for version bumps even without a live supportedModels() call.
-export const CLAUDE_ALIAS_MODELS: readonly { id: string; label: string }[] = [
+export const CLAUDE_ALIAS_MODELS: readonly ClaudeModel[] = [
     { id: "opus", label: "Opus" },
     { id: "sonnet", label: "Sonnet" },
     { id: "haiku", label: "Haiku" },
@@ -28,11 +34,13 @@ async function* pendingInput(signal: AbortSignal): AsyncGenerator<SDKUserMessage
         }
         signal.addEventListener("abort", () => resolve(), { once: true });
     });
+    // Nothing is ever sent — the empty delegation states that while satisfying the generator contract.
+    yield* [];
 }
 
 // Ask the CLI for its available models over a throwaway streaming-input session, then dispose it. Throws when the
 // CLI can't start / auth fails — the caller falls back to the aliases.
-export const discoverClaudeModels = async (oauthToken: string | undefined, cwd: string): Promise<{ id: string; label: string; efforts?: string[] }[]> => {
+export const discoverClaudeModels = async (oauthToken: string | undefined, cwd: string): Promise<ClaudeModel[]> => {
     const abort = new AbortController();
     const options: Options = {
         cwd,
@@ -47,11 +55,13 @@ export const discoverClaudeModels = async (oauthToken: string | undefined, cwd: 
     };
     const session = query({ prompt: pendingInput(abort.signal), options });
     try {
-        return (await session.supportedModels()).map((model) => ({
-            id: model.value,
-            label: model.displayName,
-            ...(model.supportedEffortLevels !== undefined ? { efforts: model.supportedEffortLevels } : {}),
-        }));
+        return (await session.supportedModels()).map((model) => {
+            const entry: ClaudeModel = { id: model.value, label: model.displayName };
+            if (model.supportedEffortLevels !== undefined) {
+                entry.efforts = model.supportedEffortLevels;
+            }
+            return entry;
+        });
     } finally {
         abort.abort();
         await session.return(undefined).catch(() => {});
@@ -61,20 +71,20 @@ export const discoverClaudeModels = async (oauthToken: string | undefined, cwd: 
 export interface ClaudeCatalog {
     // Claude's models (+ default id), never empty. accountId picks whose credential authenticates the CLI;
     // omitted ⇒ the first connected account (else the container CLAUDE_CODE_OAUTH_TOKEN fallback).
-    readonly models: (accountId?: string) => Promise<{ models: { id: string; label: string; efforts?: string[] }[]; default: string }>;
+    readonly models: (accountId?: string) => Promise<{ models: ClaudeModel[]; default: string }>;
 }
 
 // Models change rarely and the discovery spawns the CLI, so cache for the daemon's lifetime (a restart re-probes).
 const MODELS_TTL_MS = 60 * 60_000;
 
-export const createClaudeCatalog = (claudeStore: ClaudeStore, config: Config, cwd: string): ClaudeCatalog => {
-    let cache: { value: { models: { id: string; label: string; efforts?: string[] }[]; default: string }; expiresAt: number } | undefined;
+// Prefer the Opus tier as the default (the product default), else the first offered model.
+const withDefault = (models: ClaudeModel[]): { models: ClaudeModel[]; default: string } => ({
+    models,
+    default: (models.find((model) => /opus/i.test(model.id) || /opus/i.test(model.label)) ?? models[0]!).id,
+});
 
-    // Prefer the Opus tier as the default (the product default), else the first offered model.
-    const withDefault = (models: { id: string; label: string; efforts?: string[] }[]): { models: typeof models; default: string } => ({
-        models,
-        default: (models.find((model) => /opus/i.test(model.id) || /opus/i.test(model.label)) ?? models[0]!).id,
-    });
+export const createClaudeCatalog = (claudeStore: ClaudeStore, config: Config, cwd: string): ClaudeCatalog => {
+    let cache: { value: { models: ClaudeModel[]; default: string }; expiresAt: number } | undefined;
 
     const oauthToken = async (accountId?: string): Promise<string | undefined> => {
         const id = accountId ?? (await claudeStore.list())[0]?.id;

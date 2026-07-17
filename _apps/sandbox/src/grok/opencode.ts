@@ -35,6 +35,12 @@ export interface OpenCodeService {
     readonly disconnect: (providerID: string) => Promise<void>;
 }
 
+// ids → the wire shape ({ models, default }); ids must be non-empty so default is always defined.
+const toCatalog = (ids: string[]): { models: { id: string; label: string }[]; default: string } => ({
+    models: ids.map((id) => ({ id, label: humanizeModelId(id) })),
+    default: ids[0]!,
+});
+
 export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fetch = fetch): OpenCodeService => {
     let client: OpencodeClient | undefined;
     // xAI's catalog rarely changes, so cache it briefly: a grok turn AND every Claude turn's delegation note read
@@ -116,12 +122,6 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
         await mkdir(opencodeDir, { recursive: true });
         await writeFile(modelsPath, JSON.stringify(ids));
     };
-
-    // ids → the wire shape ({ models, default }); ids must be non-empty so default is always defined.
-    const toCatalog = (ids: string[]): { models: { id: string; label: string }[]; default: string } => ({
-        models: ids.map((id) => ({ id, label: humanizeModelId(id) })),
-        default: ids[0]!,
-    });
 
     return {
         client: ensure,

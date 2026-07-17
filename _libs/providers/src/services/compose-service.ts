@@ -58,6 +58,11 @@ export const SERVICE_LOGGING = `    logging: { driver: json-file, options: { max
 
 const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
+const running = async (session: SshSession, id: string): Promise<boolean> => {
+    const result = await session.exec(`docker ps --filter "label=intentic.id=${id}" --format '{{.Names}}'`);
+    return result.stdout.trim() !== "";
+};
+
 export const createComposeServiceProvider = <S extends typeof serviceSchema>(spec: ComposeServiceSpec<S>, executor: SshExecutor): Provider => {
     const stateDir = `/opt/intentic/${spec.kind}`;
     const readyTimeoutMs = spec.readyTimeoutMs ?? 300_000;
@@ -67,11 +72,6 @@ export const createComposeServiceProvider = <S extends typeof serviceSchema>(spe
         url: `https://${parsed.domain}`,
         internalUrl: internalUrl(parsed),
     });
-
-    const running = async (session: SshSession, id: string): Promise<boolean> => {
-        const result = await session.exec(`docker ps --filter "label=intentic.id=${id}" --format '{{.Names}}'`);
-        return result.stdout.trim() !== "";
-    };
 
     const runningImages = async (session: SshSession): Promise<Record<string, string>> => {
         const result = await session.exec(

@@ -3,6 +3,7 @@ import { IntenticLineSchema } from "../events.js";
 import {
     CapabilitiesListSchema,
     CapabilityIdParamSchema,
+    CapabilityLoginSchema,
     CapabilitySchema,
     CapabilitySecretInputSchema,
     CapabilityStatusSchema,
@@ -24,4 +25,7 @@ export const capabilitiesContract = {
     setSecret: oc.route({ method: "POST", path: "/capabilities/{id}/secret" }).input(CapabilitySecretInputSchema).output(OkSchema),
     status: oc.route({ method: "GET", path: "/capabilities/{id}/status" }).input(CapabilityIdParamSchema).output(CapabilityStatusSchema),
     marketplace: oc.route({ method: "POST", path: "/capabilities/marketplace" }).input(MarketplaceRequestSchema).output(MarketplaceSchema),
+    // Start an agent-kind capability's interactive login (its declared loginCommand) in a visible terminal
+    // session the user types into — device-code sign-in flows. Returns the session the panel attaches to.
+    login: oc.route({ method: "POST", path: "/capabilities/{id}/login" }).input(CapabilityIdParamSchema).output(CapabilityLoginSchema),
 };

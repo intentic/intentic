@@ -818,6 +818,9 @@ export const CapabilityIdParamSchema = z.object({ id: z.string() });
 // POST /capabilities/{id}/secret body: replace just the capability's secret field (its key is per-kind, see the
 // sandbox's secretField) and re-run its idempotent apply — the /secrets page's edit path.
 export const CapabilitySecretInputSchema = z.object({ id: z.string(), value: z.string().min(1) });
+// POST /capabilities/{id}/login response: the interactive tmux session running the agent's loginCommand,
+// which the web surfaces in the terminal panel for the user to complete the sign-in.
+export const CapabilityLoginSchema = z.object({ session: z.string() });
 
 // Browse a Claude Code plugin marketplace (a git repo with .claude-plugin/marketplace.json). POST so the
 // optional token for a private marketplace never rides a URL or an access log.

@@ -23,7 +23,7 @@ export const dedupeByPath = <T>(items: readonly T[], pathOf: (item: T) => string
         seen.add(path);
         kept.push(item);
     }
-    return kept.reverse();
+    return kept.toReversed();
 };
 
 // Greedily fill chunks up to BOTH caps. A single item larger than the byte cap forms its own chunk (it can't fit

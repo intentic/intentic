@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 
 # Full public dependency-closure, in topological order (deps first).
 PUB=(_tools/constants _apps/sync _libs/graph _libs/resources _libs/engine _libs/need-resolver _libs/providers \
-     _libs/extension-api _libs/sandbox-contract _libs/scaffold _libs/state-resolver _apps/cli \
+     _libs/extension-api _libs/sandbox-contract _apps/acp-bridge _libs/scaffold _libs/state-resolver _apps/cli \
      _libs/workspace-ignore _libs/iq-engine _libs/iq-recall _apps/iq _libs/sdk)
 
 for d in "${PUB[@]}"; do

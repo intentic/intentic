@@ -18,6 +18,7 @@ import {
 import type { Logger } from "pino";
 import { createAcpAgent } from "./acp/acp-agent.js";
 import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.js";
+import { type BridgeTokens, fileBridgeTokens } from "./auth/bridge-tokens.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/agent.js";
 import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
@@ -88,6 +89,9 @@ export interface Services {
     // A per-boot secret injected into every panel process (INTENTIC_PANEL_TOKEN) so a panel's own backend can
     // call the daemon from inside the sandbox without the browser's Google token. Never leaves the container.
     readonly panelToken: string;
+    // Owner-minted, hashed, revocable tokens for the ACP editor bridge (x-intentic-bridge header) — scoped to
+    // the agent-conversation routes by bridgeScoped. Persisted in /work/.intentic like owner/members.
+    readonly bridgeTokens: BridgeTokens;
     // This sandbox's identity for the platform's Connections card; undefined ⇒ /info returns {} (loopback/test).
     readonly info: { readonly name: string; readonly image: string; readonly version: string } | undefined;
     // Intent-declared internal MCP tools (constant for the sandbox), merged with mcp-kind capabilities each turn.
@@ -282,6 +286,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         info,
         tools: internalTools(config.intenticAgentTools),
         capabilities: fileCapabilitiesStore(join(workspace.root, ".intentic", "capabilities.json")),
+        bridgeTokens: fileBridgeTokens(join(workspace.root, ".intentic", "bridge-tokens.json")),
         automations: fileAutomationsStore(join(workspace.root, ".intentic", "automations.json")),
         approvals: fileApprovalsStore(join(workspace.root, ".intentic", "approvals")),
         drafts: fileDraftsStore(join(workspace.root, ".intentic", "drafts")),

@@ -24,6 +24,8 @@ type ShikiCore = Awaited<ReturnType<ReturnType<typeof useHighlighter>[`ensureCor
 
 const shikiTheme = (): string => (useTheme().scheme.value === `dark` ? `dark-plus` : `light-plus`);
 
+const channel = (n: number): string => n.toString(16).padStart(2, `0`);
+
 // Monaco theme colors must be concrete #rrggbb strings — they can't reference the app's oklch() vars, and
 // browsers now serialize a computed color back as oklch()/color() rather than rgb(). Resolve --color-canvas
 // through a color-property probe (a custom property would serialize back unresolved), then rasterize that
@@ -39,7 +41,6 @@ const resolveEditorBg = (): string => {
     ctx.fillStyle = color;
     ctx.fillRect(0, 0, 1, 1);
     const [r = 0, g = 0, b = 0] = ctx.getImageData(0, 0, 1, 1).data;
-    const channel = (n: number): string => n.toString(16).padStart(2, `0`);
     return `#${channel(r)}${channel(g)}${channel(b)}`;
 };
 

@@ -76,7 +76,7 @@ export const collectSecretInventory = async (dir: string): Promise<SecretInvento
     const declaredKeys = new Set(usage.map((u) => u.key));
     const undeclared = Object.keys(envValues)
         .filter((key) => !declaredKeys.has(key))
-        .sort()
+        .toSorted()
         .map((key) => entry(key, "env", []));
     return [...declared, ...undeclared];
 };

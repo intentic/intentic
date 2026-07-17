@@ -217,12 +217,6 @@ const activate = (entry: WorkspaceTreeEntry, revealManagedDir: boolean): void =>
     emit(`openFile`, entry.path);
 };
 
-// The cog affordance on a managed dir row: open its operator tab (and select the row so the highlight tracks it).
-const onCogClick = (entry: WorkspaceTreeEntry): void => {
-    selectSingle(entry.path);
-    emit(`openDirectory`, entry.path);
-};
-
 // ---- focus (roving tabindex) ----
 const setRowEl = (path: string, el: unknown): void => {
     if (el) {
@@ -260,6 +254,12 @@ const toggleAt = (path: string): void => {
     lead.value = path;
 };
 const clipPaths = (): string[] => (selection.value.size > 0 ? [...selection.value] : lead.value !== null ? [lead.value] : []);
+
+// The cog affordance on a managed dir row: open its operator tab (and select the row so the highlight tracks it).
+const onCogClick = (entry: WorkspaceTreeEntry): void => {
+    selectSingle(entry.path);
+    emit(`openDirectory`, entry.path);
+};
 
 const onRowClick = (event: MouseEvent, row: Row): void => {
     const path = row.entry.path;

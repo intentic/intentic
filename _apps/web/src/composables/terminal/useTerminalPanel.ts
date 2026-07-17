@@ -12,17 +12,7 @@ import { disposeAllSessions, type TerminalTabsSource } from "./useTerminal";
  * (labeled, started via Start) — every tab ×-closable, untracked sessions dimmed. */
 
 export const globalTerminalSource: TerminalTabsSource = {
-    list: async () =>
-        TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)).sessions.map(
-            ({ name, label, kind, running, extensionId, processName }) => ({
-                name,
-                kind,
-                running,
-                ...(label !== undefined ? { label } : {}),
-                ...(extensionId !== undefined ? { extensionId } : {}),
-                ...(processName !== undefined ? { processName } : {}),
-            }),
-        ),
+    list: async () => TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)).sessions,
     create: () => `web-${crypto.randomUUID().slice(0, 8)}`,
     kill: (name) => {
         void sandboxJson(`/system/terminals/${encodeURIComponent(name)}`, { method: `DELETE` });

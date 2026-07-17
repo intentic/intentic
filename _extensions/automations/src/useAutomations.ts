@@ -15,6 +15,16 @@ import { host } from "./host";
  * owner's approval queue: a `requireApproval` automation holds each fire there instead of waking; `approve`
  * runs the held wake, `reject` drops it. All daemon access goes through the host api. */
 
+// The event automation's webhook URL (with its daemon-minted token) for pasting into GitHub/Sentry/monitor
+// settings — rendered by both the list rows and the create dialog's done screen.
+export const webhookUrl = (automation: AutomationSummary): string | undefined => {
+    const base = host().sandbox.origin();
+    if (automation.trigger.kind !== `event` || base === undefined) {
+        return undefined;
+    }
+    return `${base}/automations/${encodeURIComponent(automation.id)}/fire?token=${automation.trigger.token ?? ``}`;
+};
+
 export function useAutomations() {
     const api = host();
     const queryClient = useQueryClient();

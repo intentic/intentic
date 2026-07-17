@@ -39,15 +39,6 @@ const {
     disconnect,
 } = useChat();
 
-onMounted(() => {
-    openAccountManage();
-    void loadTranslatorAccounts();
-});
-onUnmounted(() => {
-    closeAccountManage();
-    stopAccountsPoll();
-});
-
 // --- Routed-provider subscriptions (Codex/Grok UNDER the Claude Code harness) -------------------------------
 // Running Codex or Grok on the Claude Code harness routes their model through the sandbox's translator
 // (CLIProxyAPI), which serves them on the user's SUBSCRIPTION OAuth — connect it here with a device-code login
@@ -72,6 +63,15 @@ const stopAccountsPoll = (): void => {
         accountsPoll = undefined;
     }
 };
+
+onMounted(() => {
+    openAccountManage();
+    void loadTranslatorAccounts();
+});
+onUnmounted(() => {
+    closeAccountManage();
+    stopAccountsPoll();
+});
 
 const pollUntilConnected = (provider: KeyedProvider): void => {
     stopAccountsPoll();

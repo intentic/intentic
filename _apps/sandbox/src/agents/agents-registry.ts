@@ -260,7 +260,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                     break;
                 case "todos": {
                     const current = event.items.find((item) => item.status === "in_progress")?.content;
-                    state.activity = { ...(state.activity ?? {}), ...(current !== undefined ? { todo: current } : {}) };
+                    state.activity = { ...state.activity, ...(current !== undefined ? { todo: current } : {}) };
                     break;
                 }
                 case "error":

@@ -136,6 +136,14 @@ const sanitizeLabel = (label: string): string | undefined => {
     return clean === "" ? undefined : clean;
 };
 
+// The env every worktree-touching command runs with. The private index keeps the agent's repos untouched
+// and makes repeat scans stat-only; cwd must be the worktree (git treats cwd as worktree top otherwise).
+const scopeEnv = (scope: Scope): Record<string, string> => ({
+    GIT_DIR: scope.gitDir,
+    GIT_WORK_TREE: scope.worktree,
+    GIT_INDEX_FILE: join(scope.gitDir, "snapshot.index"),
+});
+
 export const createWorkspaceHistory = (
     options: { readonly workspace: WorkspacePaths; readonly historyRoot: string; readonly logger: Logger },
     git: HistoryGitRunner = defaultRunner,
@@ -151,13 +159,6 @@ export const createWorkspaceHistory = (
         return { name, gitDir: join(scopesRoot, `repositories__${repo}.git`), worktree: join(workspace.repositories, repo) };
     };
 
-    // The env every worktree-touching command runs with. The private index keeps the agent's repos untouched
-    // and makes repeat scans stat-only; cwd must be the worktree (git treats cwd as worktree top otherwise).
-    const scopeEnv = (scope: Scope): Record<string, string> => ({
-        GIT_DIR: scope.gitDir,
-        GIT_WORK_TREE: scope.worktree,
-        GIT_INDEX_FILE: join(scope.gitDir, "snapshot.index"),
-    });
     // Tree-to-tree ops (log/diff-tree/cat-file) need no worktree — they must work after a repo is deleted.
     const bare = (scope: Scope): { cwd: string; env: Record<string, string> } => ({ cwd: historyRoot, env: { GIT_DIR: scope.gitDir } });
 

@@ -1,5 +1,5 @@
 import type { Provider } from "@intentic/engine";
-import bcrypt from "bcryptjs";
+import { hashSync } from "bcryptjs";
 import { z } from "zod";
 import type { SshExecutor } from "../core/ssh.js";
 import { sshExecutor } from "../core/ssh.js";
@@ -117,7 +117,7 @@ const dexConfigYaml = (parsed: OutlineInputs): string =>
         `  - email: ${parsed.adminUser}`,
         // YAML double-quotes do no interpolation and the config rides a quoted heredoc, so the $-laden
         // bcrypt hash lands literally — no compose ${…} round-trip to mangle it.
-        `    hash: "${bcrypt.hashSync(parsed.adminPassword, 10)}"`,
+        `    hash: "${hashSync(parsed.adminPassword, 10)}"`,
         "    username: intentic",
         "    userID: intentic-admin",
         "",

@@ -41,9 +41,16 @@ const toMatchRow = (path: string, hit: WorkspaceSearchHit): ResultRow => {
     };
 };
 
-const rows = computed<ResultRow[]>(() =>
-    groups.flatMap((group): ResultRow[] => [{ key: group.path, kind: `file`, group }, ...group.hits.map((hit) => toMatchRow(group.path, hit))]),
-);
+const rows = computed<ResultRow[]>(() => {
+    const list: ResultRow[] = [];
+    for (const group of groups) {
+        list.push({ key: group.path, kind: `file`, group });
+        for (const hit of group.hits) {
+            list.push(toMatchRow(group.path, hit));
+        }
+    }
+    return list;
+});
 
 const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);

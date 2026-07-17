@@ -31,6 +31,12 @@ export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
     { label: "Claude Code", value: "claude-code" },
 ];
 
+// Whether a provider+harness pair reads the LIVE daemon model catalog (/{provider}/models): every native turn
+// does, and claude under either harness (both are its own Claude Code loop). The one exception — a non-Claude
+// provider UNDER the Claude Code harness — routes through the translator and pins its static mapping from
+// modelsFor instead. The single spelling of this decision; callers negate it rather than re-deriving the inverse.
+export const usesLiveCatalog = (provider: AgentProvider, harness: AgentHarness): boolean => harness === "native" || provider === "claude";
+
 // The STATIC floor of the model catalog; every native provider's real list is the daemon's live catalog
 // (/claude/models · /codex/models · /grok/models — discovery with a persisted/seed floor, never empty), which
 // consumers layer on top. Native codex/grok are empty here (nothing sensible to offer before the live load);

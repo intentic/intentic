@@ -52,14 +52,22 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly unread: boolean;
 }
 
+// Attention first, then running + fresh drafts, then most recently active.
+const weight = (entry: FleetAgent): number =>
+    entry.attention.plan || entry.attention.question || entry.attention.conflict || entry.status === `error`
+        ? 0
+        : entry.status === `running` || entry.status === `awaiting` || entry.status === `draft`
+          ? 1
+          : 2;
+
 const fleet = computed<FleetAgent[]>(() => {
     const { conversations } = useChat();
     const openIds = new Set(conversations.value.map((conversation) => conversation.conversationId));
     const registered = new Set(registry.value.map((agent) => agent.id));
     const drafts = conversations.value
         .filter((conversation) => conversation.isolated.value && !registered.has(conversation.conversationId))
-        .map(
-            (conversation): FleetAgent => ({
+        .map((conversation): FleetAgent => {
+            const draft: FleetAgent = {
                 id: conversation.conversationId,
                 // A draft racing its first turn (begin → roster frame) already reads as running.
                 status: conversation.streaming.value ? `running` : `draft`,
@@ -69,9 +77,12 @@ const fleet = computed<FleetAgent[]>(() => {
                 attention: { plan: false, question: false, conflict: false },
                 open: true,
                 unread: false,
-                ...(conversation.title.value !== null ? { title: conversation.title.value } : {}),
-            }),
-        );
+            };
+            if (conversation.title.value !== null) {
+                draft.title = conversation.title.value;
+            }
+            return draft;
+        });
     return [
         ...registry.value.map((agent) => ({
             ...agent,
@@ -79,16 +90,7 @@ const fleet = computed<FleetAgent[]>(() => {
             unread: agent.status !== `running` && agent.updatedAt > (seen.value[agent.id] ?? 0),
         })),
         ...drafts,
-    ].toSorted((a, b) => {
-        // Attention first, then running + fresh drafts, then most recently active.
-        const weight = (entry: FleetAgent): number =>
-            entry.attention.plan || entry.attention.question || entry.attention.conflict || entry.status === `error`
-                ? 0
-                : entry.status === `running` || entry.status === `awaiting` || entry.status === `draft`
-                  ? 1
-                  : 2;
-        return weight(a) - weight(b) || b.updatedAt - a.updatedAt;
-    });
+    ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);
 });
 
 // The single "agents need you" aggregate the rail tile and mobile tab badge render: one count per agent that

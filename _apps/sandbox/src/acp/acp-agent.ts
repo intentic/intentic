@@ -78,6 +78,9 @@ interface TurnOutcome {
     readonly errored: boolean;
 }
 
+// The turn loop's idle wake latch — swapped for the wait race's resolver while a wait is in flight.
+const noopWake = (): void => {};
+
 // One prompt turn on one session: resolve/create/load the session, bind the turn's routing, prompt, and
 // stream mapped updates until the PromptResponse settles (or a watchdog fires). Does NOT emit the terminal
 // `done` — callers do once the whole turn (incl. plan phases) settles.
@@ -116,7 +119,7 @@ async function* runAcpTurn(
 
     const queue: AgentEvent[] = [];
     let text = "";
-    let wake: () => void = () => {};
+    let wake: () => void = noopWake;
     const onUpdate = (notification: SessionNotification): void => {
         const update = notification.update;
         if (captureText && update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
@@ -206,7 +209,7 @@ async function* runAcpTurn(
                 }),
             ]);
             clearTimeout(timer);
-            wake = () => {};
+            wake = noopWake;
         }
         await promptPromise;
         if (failure !== undefined) {
