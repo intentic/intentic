@@ -45,6 +45,7 @@ export { translatorContract } from "./contracts/translator.contract.js";
 export { workspaceContract } from "./contracts/workspace.contract.js";
 export * from "./effects.js";
 export * from "./events.js";
+export * from "./sse.js";
 export * from "./agent-catalog.js";
 export * from "./hostnames.js";
 export * from "./model-metadata.js";

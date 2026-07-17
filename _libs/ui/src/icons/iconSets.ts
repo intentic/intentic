@@ -43,6 +43,7 @@ export type IconName =
     | "database"
     | "desktop"
     | "download"
+    | "envelope"
     | "exclamation-circle"
     | "exclamation-triangle"
     | "external-link"
@@ -141,6 +142,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         database: "ph:database",
         desktop: "ph:monitor",
         download: "ph:download-simple",
+        envelope: "ph:envelope",
         "exclamation-circle": "ph:warning-circle",
         "exclamation-triangle": "ph:warning",
         "external-link": "ph:arrow-square-out",
@@ -234,6 +236,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         database: "solar:database-linear",
         desktop: "solar:monitor-linear",
         download: "solar:download-linear",
+        envelope: "solar:letter-linear",
         "exclamation-circle": "solar:danger-circle-linear",
         "exclamation-triangle": "solar:danger-triangle-linear",
         "external-link": "solar:arrow-right-up-linear",
@@ -327,6 +330,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         database: "ri:database-2-line",
         desktop: "ri:computer-line",
         download: "ri:download-line",
+        envelope: "ri:mail-line",
         "exclamation-circle": "ri:error-warning-line",
         "exclamation-triangle": "ri:alert-line",
         "external-link": "ri:external-link-line",
@@ -420,6 +424,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         database: "hugeicons:database-01",
         desktop: "hugeicons:computer",
         download: "hugeicons:download-01",
+        envelope: "hugeicons:mail-01",
         "exclamation-circle": "hugeicons:alert-circle",
         "exclamation-triangle": "hugeicons:alert-02",
         "external-link": "hugeicons:square-arrow-up-right",
@@ -513,6 +518,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         database: "prime:database",
         desktop: "prime:desktop",
         download: "prime:download",
+        envelope: "prime:envelope",
         "exclamation-circle": "prime:exclamation-circle",
         "exclamation-triangle": "prime:exclamation-triangle",
         "external-link": "prime:external-link",

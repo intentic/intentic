@@ -1,0 +1,54 @@
+<script setup lang="ts">
+import { useListNavigation } from "@intentic-app/ui";
+import type { AgentCommand } from "@intentic/sandbox-contract";
+import { computed } from "vue";
+
+/* The composer's `/` command picker: the provider's own slash commands (ACP agents advertise them via
+ * available_commands; native providers never populate the list, so this only appears on ACP conversations).
+ * Same shell as the mention popover — the parent owns the keyboard flow and calls move/pickActive. */
+
+const props = defineProps<{ query: string; commands: readonly AgentCommand[] }>();
+const emit = defineEmits<{ pick: [name: string] }>();
+
+const MAX_ROWS = 8;
+const matches = computed<readonly AgentCommand[]>(() => {
+    const needle = props.query.toLowerCase();
+    return props.commands.filter((command) => command.name.toLowerCase().includes(needle)).slice(0, MAX_ROWS);
+});
+
+const { activeIndex, activeRow, move, setRowEl } = useListNavigation(matches, (command) => command.name);
+
+const pickActive = (): boolean => {
+    const command = activeRow.value;
+    if (command === undefined) {
+        return false;
+    }
+    emit(`pick`, command.name);
+    return true;
+};
+
+defineExpose({ move, pickActive });
+</script>
+
+<template>
+    <div class="absolute bottom-full left-0 right-0 z-20 mb-1 overflow-hidden rounded-xl border border-line-strong bg-card shadow-lg">
+        <p class="flex items-center gap-1.5 border-b border-line px-3 py-1.5 text-2xs uppercase tracking-wide text-subtle">
+            <Icon name="bolt" class="text-2xs" />
+            Agent commands
+        </p>
+        <p v-if="matches.length === 0" class="px-3 py-2 text-xs text-subtle">No command matches "/{{ query }}".</p>
+        <button
+            v-for="(command, index) in matches"
+            :key="command.name"
+            :ref="(el) => setRowEl(command.name, el)"
+            type="button"
+            class="mp-row flex w-full items-baseline gap-2 px-3 py-1.5 text-left"
+            :class="{ 'bg-overlay': index === activeIndex }"
+            @mousedown.prevent="emit('pick', command.name)"
+        >
+            <span class="shrink-0 font-mono text-sm text-content">/{{ command.name }}</span>
+            <span v-if="command.hint" class="shrink-0 font-mono text-2xs text-subtle">{{ command.hint }}</span>
+            <span class="truncate text-2xs text-subtle">{{ command.description }}</span>
+        </button>
+    </div>
+</template>

@@ -3,6 +3,7 @@ import { extname } from "node:path";
 import { type ContentBlock, type McpServer, methods, type PromptResponse, type SessionNotification } from "@agentclientprotocol/sdk";
 import type { AcpAgentConfig, AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../agent/agent.js";
+import { agentSessionName } from "../agent/agent-terminals.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
@@ -130,9 +131,28 @@ async function* runAcpTurn(
         }
         wake();
     };
+    // Terminal context: the agent's terminal/create commands run in the conversation's agent-<id> tmux
+    // session; the first create surfaces it in the panel — the exact Claude-Bash UX.
+    const tmuxSession = agentSessionName(sid);
+    let terminalSurfaced = false;
     const unbind = connection.bindTurn(sid, {
         onUpdate,
         permission: (permissionRequest) => decidePermission(permissionRequest, phase, request.signal.aborted),
+        ...(tmuxSession !== undefined
+            ? {
+                  terminal: {
+                      session: tmuxSession,
+                      cwd: request.cwd,
+                      onCreate: () => {
+                          if (!terminalSurfaced) {
+                              terminalSurfaced = true;
+                              queue.push({ kind: "terminal", session: tmuxSession });
+                              wake();
+                          }
+                      },
+                  },
+              }
+            : {}),
     });
 
     const session = sid;

@@ -35,10 +35,67 @@ export const desiredAccounts = (state: DaemonState): { id: string; config: ImapC
 // can't help until the owner fixes the config, and providers lock accounts on repeated failed logins.
 export class FatalConnectionError extends Error {}
 
+// The client slice one catch-up pass reads — a seam so the pass is testable without a live ImapFlow.
+export interface SyncSource {
+    readonly search: (range: string) => Promise<number[] | false>;
+    readonly fetch: (uid: number) => Promise<FetchMessageObject | false>;
+}
+
+export interface SyncOptions {
+    readonly capabilityId: string;
+    readonly payloadOf: (msg: FetchMessageObject) => Promise<Record<string, unknown>>;
+    readonly dispatch: (payload: Record<string, unknown>) => Promise<void>;
+    readonly save: (lastUid: number) => Promise<void>;
+    readonly warn: (fields: object, msg: string) => void;
+}
+
+// One catch-up pass: everything above the watermark, oldest first, advancing (and persisting) the mark only
+// after each successful dispatch — a failure mid-pass aborts and the next event or reconnect retries from the
+// exact message that failed.
+export const syncNewMail = async (source: SyncSource, mark: { lastUid: number }, opts: SyncOptions): Promise<void> => {
+    const found = await source.search(`${mark.lastUid + 1}:*`);
+    if (found === false) {
+        return;
+    }
+    // `N:*` always matches the highest-UID message even when N exceeds it (RFC 3501) — drop seen uids.
+    let pending = found.filter((uid) => uid > mark.lastUid).toSorted((a, b) => a - b);
+    if (pending.length > CATCH_UP_MAX) {
+        opts.warn({ capabilityId: opts.capabilityId, skipped: pending.length - CATCH_UP_MAX }, "imap catch-up capped to the newest messages");
+        pending = pending.slice(-CATCH_UP_MAX);
+    }
+    for (const uid of pending) {
+        const msg = await source.fetch(uid);
+        if (msg === false) {
+            // Expunged between search and fetch — nothing to deliver; later uids still advance the mark.
+            continue;
+        }
+        await opts.dispatch(await opts.payloadOf(msg));
+        mark.lastUid = Math.max(mark.lastUid, msg.uid);
+        await opts.save(mark.lastUid);
+    }
+};
+
 export interface ImapConnection {
     readonly usable: () => boolean;
     readonly stop: () => Promise<void>;
 }
+
+// Best-effort text of the (size-capped) raw MIME: mailparser's plain text, then stripped html, then nothing —
+// truncated MIME can fail to parse, and an unreadable body must degrade to envelope-only content, not fail.
+const textOf = async (source: Buffer | undefined): Promise<string | undefined> => {
+    if (source === undefined) {
+        return undefined;
+    }
+    try {
+        const parsed = await simpleParser(source);
+        if (parsed.text !== undefined && parsed.text !== "") {
+            return parsed.text;
+        }
+        return typeof parsed.html === "string" && parsed.html !== "" ? htmlText(parsed.html) : undefined;
+    } catch {
+        return undefined;
+    }
+};
 
 export const openImapConnection = async (
     ctx: GatewayCtx,
@@ -47,11 +104,13 @@ export const openImapConnection = async (
     hooks: { readonly onClose: () => void },
 ): Promise<ImapConnection> => {
     const mailbox = mailboxOf(config);
+    const port = Number(config.port) || 993;
     const client = new ImapFlow({
         host: config.host,
-        port: Number(config.port) || 993,
-        // Implicit TLS everywhere except the plaintext/STARTTLS port.
-        secure: config.port !== "143",
+        port,
+        // Implicit TLS is universally the 993 convention; any other port starts plain and imapflow upgrades
+        // over STARTTLS when the server offers it — which also lets dev/test servers on odd ports connect.
+        secure: port === 993,
         auth: { user: config.username, pass: config.password },
         logger: false,
         // Break + re-issue IDLE every 5 min: well under the RFC 29-minute cap, and doubles as a dead-NAT
@@ -92,62 +151,39 @@ export const openImapConnection = async (
         await writeWatermark(path, { mailbox, uidValidity, lastUid: mark.lastUid });
     }
 
-    const textOf = async (msg: FetchMessageObject): Promise<string | undefined> => {
-        if (msg.source === undefined) {
-            return undefined;
-        }
-        try {
-            const parsed = await simpleParser(msg.source);
-            if (parsed.text !== undefined && parsed.text !== "") {
-                return parsed.text;
-            }
-            return typeof parsed.html === "string" && parsed.html !== "" ? htmlText(parsed.html) : undefined;
-        } catch {
-            // The source is size-capped, and truncated MIME can fail to parse — degrade to envelope-only.
-            return undefined;
-        }
-    };
-
-    const dispatchNew = async (): Promise<void> => {
-        const found = await client.search({ uid: `${mark.lastUid + 1}:*` }, { uid: true });
-        if (found === false) {
-            return;
-        }
-        // `N:*` always matches the highest-UID message even when N exceeds it (RFC 3501) — drop seen uids.
-        let pending = found.filter((uid) => uid > mark.lastUid).sort((a, b) => a - b);
-        if (pending.length > CATCH_UP_MAX) {
-            ctx.log.warn({ capabilityId, skipped: pending.length - CATCH_UP_MAX }, "imap catch-up capped to the newest messages");
-            pending = pending.slice(-CATCH_UP_MAX);
-        }
-        for (const uid of pending) {
-            const msg = await client.fetchOne(
-                uid,
-                { uid: true, envelope: true, internalDate: true, bodyStructure: true, source: { maxLength: SOURCE_MAX } },
-                { uid: true },
-            );
-            if (msg === false) {
-                // Expunged between search and fetch — nothing to deliver; later uids still advance the mark.
-                continue;
-            }
-            await ctx.daemon.dispatch(
-                mailMessage({
-                    capabilityId,
-                    username: config.username,
-                    mailbox,
-                    uidValidity,
-                    uid: msg.uid,
-                    envelope: msg.envelope,
-                    internalDate: msg.internalDate instanceof Date ? msg.internalDate : undefined,
-                    bodyStructure: msg.bodyStructure,
-                    text: await textOf(msg),
-                }),
-            );
-            mark.lastUid = Math.max(mark.lastUid, msg.uid);
-            // Persist per message, not per batch: a crash mid-catch-up re-delivers at most the in-flight
-            // message (ids are stable, so a prompt can even dedupe that).
-            await writeWatermark(path, { mailbox, uidValidity, lastUid: mark.lastUid });
-        }
-    };
+    const dispatchNew = (): Promise<void> =>
+        syncNewMail(
+            {
+                search: (range) => client.search({ uid: range }, { uid: true }),
+                fetch: (uid) =>
+                    client.fetchOne(
+                        uid,
+                        { uid: true, envelope: true, internalDate: true, bodyStructure: true, source: { maxLength: SOURCE_MAX } },
+                        { uid: true },
+                    ),
+            },
+            mark,
+            {
+                capabilityId,
+                payloadOf: async (msg) =>
+                    mailMessage({
+                        capabilityId,
+                        username: config.username,
+                        mailbox,
+                        uidValidity,
+                        uid: msg.uid,
+                        envelope: msg.envelope,
+                        internalDate: msg.internalDate instanceof Date ? msg.internalDate : undefined,
+                        bodyStructure: msg.bodyStructure,
+                        text: await textOf(msg.source),
+                    }),
+                dispatch: ctx.daemon.dispatch,
+                // Persist per message, not per batch: a crash mid-catch-up re-delivers at most the in-flight
+                // message (ids are stable, so a prompt can even dedupe that).
+                save: (lastUid) => writeWatermark(path, { mailbox, uidValidity, lastUid }),
+                warn: ctx.log.warn,
+            },
+        );
 
     // Catch-up runs are serialized: an `exists` burst during a pass queues exactly one rerun, and a failed
     // pass (network, daemon down) leaves the watermark where it was — the next event or reconnect retries.
@@ -175,12 +211,32 @@ export const openImapConnection = async (
     client.on("exists", () => runSync());
     client.on("flags", (event) => {
         void ctx.daemon
-            .dispatch(flagsMessage({ capabilityId, username: config.username, mailbox, uidValidity, seq: event.seq, uid: event.uid, flags: [...event.flags] }))
+            .dispatch(
+                flagsMessage({
+                    capabilityId,
+                    username: config.username,
+                    mailbox,
+                    uidValidity,
+                    seq: event.seq,
+                    uid: event.uid,
+                    flags: [...event.flags],
+                }),
+            )
             .catch((error: unknown) => ctx.log.warn({ err: error, capabilityId }, "imap flags dispatch failed"));
     });
     client.on("expunge", (event) => {
         void ctx.daemon
-            .dispatch(expungeMessage({ capabilityId, username: config.username, mailbox, uidValidity, seq: event.seq, uid: event.uid, vanished: event.vanished }))
+            .dispatch(
+                expungeMessage({
+                    capabilityId,
+                    username: config.username,
+                    mailbox,
+                    uidValidity,
+                    seq: event.seq,
+                    uid: event.uid,
+                    vanished: event.vanished,
+                }),
+            )
             .catch((error: unknown) => ctx.log.warn({ err: error, capabilityId }, "imap expunge dispatch failed"));
     });
     client.on("close", () => {

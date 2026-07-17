@@ -1,5 +1,5 @@
 import type { FileDiffResponse, SnapshotDiffResponse, SnapshotsResponse } from "@intentic-app/api-contract";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { resetEditBuffers } from "./useEditBuffers";
@@ -19,6 +19,29 @@ const fileDiff = (id: string, scope: string, path: string): Promise<FileDiffResp
         `/history/file-diff?id=${encodeURIComponent(id)}&scope=${encodeURIComponent(scope)}&path=${encodeURIComponent(path)}`,
     );
 
+// The restore action, standalone so surfaces without their own useHistory() (the chat bubble's per-message
+// restore) can share it — the caller supplies the setup-scoped queryClient.
+export const restoreSnapshot = async (queryClient: QueryClient, id: string): Promise<void> => {
+    actionError.value = undefined;
+    busy.value = true;
+    try {
+        await sandboxJson(`/history/restore`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify({ id }) });
+        // /work changed underneath the UI: stale buffers would silently resurrect post-restore files on save.
+        resetEditBuffers();
+        // RAW prefix for the tree — its keys carry an "all"/"filtered" discriminator before the appended sandbox
+        // id, so sandboxKey("workspace","tree") would NOT prefix-match them (see useSandbox). Snapshots have no
+        // such discriminator, so the exact sandboxKey match is fine there.
+        await queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
+        await queryClient.invalidateQueries({ queryKey: sandboxKey(`history`, `snapshots`) });
+        // A restore never moves the repos' HEADs, so the restored-vs-HEAD delta IS the new review set.
+        await queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) });
+    } catch (caught) {
+        actionError.value = caught instanceof Error ? caught.message : `Restore failed.`;
+    } finally {
+        busy.value = false;
+    }
+};
+
 export function useHistory() {
     const { reachable } = useSandbox();
     const queryClient = useQueryClient();
@@ -32,26 +55,7 @@ export function useHistory() {
     const snapshots = computed(() => query.data.value?.snapshots ?? []);
     const error = computed(() => (query.error.value ? query.error.value.message : undefined));
 
-    const restore = async (id: string): Promise<void> => {
-        actionError.value = undefined;
-        busy.value = true;
-        try {
-            await sandboxJson(`/history/restore`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify({ id }) });
-            // /work changed underneath the UI: stale buffers would silently resurrect post-restore files on save.
-            resetEditBuffers();
-            // RAW prefix for the tree — its keys carry an "all"/"filtered" discriminator before the appended sandbox
-            // id, so sandboxKey("workspace","tree") would NOT prefix-match them (see useSandbox). Snapshots have no
-            // such discriminator, so the exact sandboxKey match is fine there.
-            await queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
-            await queryClient.invalidateQueries({ queryKey: sandboxKey(`history`, `snapshots`) });
-            // A restore never moves the repos' HEADs, so the restored-vs-HEAD delta IS the new review set.
-            await queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) });
-        } catch (caught) {
-            actionError.value = caught instanceof Error ? caught.message : `Restore failed.`;
-        } finally {
-            busy.value = false;
-        }
-    };
+    const restore = (id: string): Promise<void> => restoreSnapshot(queryClient, id);
 
     return { snapshots, error, isLoading: query.isLoading, refetch: query.refetch, diff, fileDiff, restore, busy, actionError };
 }

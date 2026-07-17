@@ -267,14 +267,17 @@ export const createServices = (config: Config, logger: Logger): Services => {
         return verdict;
     };
 
-    const acpConnections = createAcpConnections(logger);
+    // Hoisted (not inline in the literal below): the ACP connection pool implements ACP terminal/* over the
+    // same runner, so both must share one instance (and its `visible` gate).
+    const terminalRun = createTerminalRunner();
+    const acpConnections = createAcpConnections(logger, terminalRun);
 
     return {
         config,
         logger,
         workspace,
         processes: createManagedProcesses(),
-        terminalRun: createTerminalRunner(),
+        terminalRun,
         panelToken: randomBytes(32).toString("hex"),
         info,
         tools: internalTools(config.intenticAgentTools),

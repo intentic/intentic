@@ -1,8 +1,9 @@
 /* "Start from" suggestions in the new-automation dialog, shown only when the matching capability provider is
- * enabled. Pure prefill — the daemon knows nothing about recipes. Discord listens live over the daemon's own
- * gateway connection (a `listener` trigger); services that can't push webhooks or be listened to (IMAP) get
- * scheduled-poll recipes that lean on the agent's CLI capability instead. Moved here from @intentic-app/capability-catalog:
- * recipes are automation-UI data, so they live with the automations extension, not the platform catalog. */
+ * enabled. Pure prefill — the daemon knows nothing about recipes. Discord and IMAP listen live over their
+ * gateway extensions' connections (a `listener` trigger); services that can't push webhooks or be listened to
+ * get scheduled-poll recipes that lean on the agent's CLI capability instead. Moved here from
+ * @intentic-app/capability-catalog: recipes are automation-UI data, so they live with the automations
+ * extension, not the platform catalog. */
 
 export interface AutomationRecipe {
     // Matches a capability's config.provider — the recipe shows only when that capability is enabled. Absent ⇒
@@ -15,7 +16,7 @@ export interface AutomationRecipe {
     readonly trigger:
         | { readonly kind: "event" }
         | { readonly kind: "schedule"; readonly cron: string }
-        | { readonly kind: "listener"; readonly provider: "discord" };
+        | { readonly kind: "listener"; readonly provider: "discord" | "imap"; readonly eventType?: "message" };
     // Prefills the guard command (a shell one-liner; non-zero exit skips the wake).
     readonly guard?: string;
     readonly prompt: string;
@@ -64,9 +65,11 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
         provider: "imap",
         title: "New email",
         id: "new-email",
-        trigger: { kind: "schedule", cron: "*/5 * * * *" },
-        prompt: "Check the inbox over IMAP for mail that arrived since the last run. Summarize anything urgent.",
-        note: "checks every 5 min",
+        trigger: { kind: "listener", provider: "imap", eventType: "message" },
+        prompt:
+            "New email just arrived — each payload line is one JSON event with the sender, subject and a text excerpt. Summarize anything urgent; " +
+            "fetch the full message over IMAP (curl imaps://, by extra.uid) when you need more than the excerpt.",
+        note: "instant",
     },
     {
         // No provider — posting uses whatever platform skills the sandbox has (X/Reddit/YouTube browser, Discord

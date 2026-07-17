@@ -164,33 +164,6 @@
                 "skill": "skills/outline/SKILL.md"
             },
             {
-                "provider": "imap",
-                "kind": "cli",
-                "catalog": {
-                    "name": "IMAP",
-                    "description": "Connect an email inbox over IMAP for the agent to read.",
-                    "category": "communication",
-                    "guide": {
-                        "url": "https://myaccount.google.com/apppasswords",
-                        "linkLabel": "Create a Gmail app password",
-                        "steps": [
-                            "Gmail: turn on 2-Step Verification, then create an App Password (link above) and use it as the password.",
-                            "Outlook/Microsoft: account.microsoft.com → Security → Advanced security options → App passwords.",
-                            "Other hosts: your normal IMAP password works.",
-                            "Host/port — Gmail imap.gmail.com:993, Outlook outlook.office365.com:993."
-                        ]
-                    }
-                },
-                "fields": [
-                    { "key": "host", "label": "IMAP host", "placeholder": "imap.gmail.com" },
-                    { "key": "port", "label": "Port", "default": "993" },
-                    { "key": "username", "label": "Username", "placeholder": "you@example.com" },
-                    { "key": "password", "label": "Password", "secret": true }
-                ],
-                "env": { "IMAP_HOST": "${host}", "IMAP_PORT": "${port}", "IMAP_USERNAME": "${username}", "IMAP_PASSWORD": "${password}" },
-                "skill": "skills/imap/SKILL.md"
-            },
-            {
                 "provider": "signoz",
                 "kind": "cli",
                 "catalog": {

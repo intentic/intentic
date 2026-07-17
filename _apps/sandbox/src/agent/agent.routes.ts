@@ -467,9 +467,19 @@ async function* runTurn(
     // snapshots: history captures the MAIN tree, which an isolated turn never touches — the worktree branch's
     // diff-vs-base is that conversation's review and rollback surface.
     if (conversation === undefined) {
-        await services.history
+        // The turn-start state's checkpoint id: the fence capture when it recorded something, else the newest
+        // visible checkpoint (a clean tree at turn start IS that checkpoint's state — the common case). The
+        // client hangs "restore to before this message" on the frame; no id (fresh workspace) ⇒ no button.
+        const checkpointId = await services.history
             .snapshot("user")
-            .catch((error: unknown) => services.logger.warn({ err: error }, "history: turn-start snapshot failed"));
+            .then(async (id) => id ?? (await services.history.list())[0]?.id)
+            .catch((error: unknown) => {
+                services.logger.warn({ err: error }, "history: turn-start snapshot failed");
+                return undefined;
+            });
+        if (checkpointId !== undefined) {
+            yield { kind: "checkpoint", id: checkpointId };
+        }
     }
     // Tee every frame past the activity sniffer — outbound provider calls (discord curl) are only visible
     // here, and every turn origin (chat, automation wake, voice wake) flows through this generator.

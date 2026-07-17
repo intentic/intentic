@@ -2,8 +2,10 @@
 import { type IconName, useDevice } from "@intentic-app/ui";
 import type { AskQuestion, TodoItem } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
+import { useQueryClient } from "@tanstack/vue-query";
 import { type ChatMessage, planParts, type PlanRequest } from "../composables/chat/conversation";
 import { renderMarkdown } from "../composables/renderMarkdown";
+import { restoreSnapshot } from "../composables/workspace/useHistory";
 import { useChat } from "../composables/chat/useChat";
 import ChatToolCard from "./ChatToolCard.vue";
 
@@ -136,6 +138,37 @@ const submitAnswers = (): void => {
 
 const answerSummary = (question: AskQuestion): string => (props.message.question?.answers?.[question.question] ?? []).join(`, `);
 
+// --- Per-message workspace restore (hover history icon on user bubbles) -----------------------
+// Restores /work to the checkpoint captured before this turn ran (the daemon's checkpoint frame). Gated on
+// the conversation-level stream like canEdit — no rewind may land while a turn is in flight.
+const queryClient = useQueryClient();
+const restoring = ref(false);
+const confirmRestore = ref(false);
+let confirmTimer: ReturnType<typeof setTimeout> | undefined;
+const canRestore = computed(
+    () => props.message.role === `user` && props.message.checkpointId !== undefined && !conversationStreaming.value,
+);
+const restoreToCheckpoint = async (): Promise<void> => {
+    const checkpointId = props.message.checkpointId;
+    if (checkpointId === undefined || restoring.value) {
+        return;
+    }
+    if (!confirmRestore.value) {
+        confirmRestore.value = true;
+        clearTimeout(confirmTimer);
+        confirmTimer = setTimeout(() => (confirmRestore.value = false), 4000);
+        return;
+    }
+    clearTimeout(confirmTimer);
+    confirmRestore.value = false;
+    restoring.value = true;
+    try {
+        await restoreSnapshot(queryClient, checkpointId);
+    } finally {
+        restoring.value = false;
+    }
+};
+
 // --- Inline edit of a past user message (hover pencil → textarea → re-run from here) ----------
 const editing = ref(false);
 const editText = ref(``);
@@ -247,6 +280,22 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
             </template>
             <div v-else class="flex items-center gap-1">
+                <!-- Restore the workspace to the checkpoint captured before this turn ran. Two-step: the first
+                     click arms (red), the second restores; arming decays after 4s. -->
+                <button
+                    v-if="canRestore"
+                    type="button"
+                    class="composer-ghost h-6 w-6 shrink-0 transition-opacity"
+                    :class="[
+                        mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
+                        { 'text-danger opacity-100': confirmRestore },
+                    ]"
+                    v-tooltip.left="confirmRestore ? 'Click again to restore the workspace to before this message' : 'Restore workspace to before this message'"
+                    aria-label="Restore workspace to before this message"
+                    @click="restoreToCheckpoint"
+                >
+                    <Icon :name="restoring ? 'spinner' : 'history'" :spin="restoring" class="text-2xs" />
+                </button>
                 <!-- Edit & re-run from here: hover-revealed on desktop, always dimly visible on touch. -->
                 <button
                     v-if="canEdit"

@@ -10,7 +10,9 @@ import {
 } from "@agentclientprotocol/sdk";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+import type { TerminalRunner } from "../terminal/terminal-run.js";
 import { decidePermission } from "./acp-permissions.js";
+import { createAcpTerminals } from "./acp-terminal.js";
 import { parseEnvBlock, spawnAcpProcess } from "./acp-spawn.js";
 
 /* Pooled ACP connections, one warm subprocess per agent capability: spawned + initialized on first use, kept
@@ -41,6 +43,14 @@ export const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T
 export interface TurnHooks {
     readonly onUpdate: (notification: SessionNotification) => void;
     readonly permission: (request: RequestPermissionRequest) => RequestPermissionResponse;
+    // The turn's terminal context: which tmux session its terminal/create commands run in (the conversation's
+    // agent-<id> session — the panel UX Claude's Bash gets), the cwd fallback, and the first-create signal
+    // (the adapter emits its {kind:"terminal", session} frame there). Absent ⇒ terminal requests are refused.
+    readonly terminal?: {
+        readonly session: string;
+        readonly cwd: string;
+        readonly onCreate: () => void;
+    };
 }
 
 export interface AcpConnection {
@@ -68,19 +78,21 @@ interface Pooled {
     readonly connection: AcpConnection;
 }
 
-export const createAcpConnections = (logger: Services["logger"]): AcpConnections => {
+export const createAcpConnections = (logger: Services["logger"], terminalRun: TerminalRunner): AcpConnections => {
     const pool = new Map<string, Pooled>();
 
     const connect = async (id: string, config: AcpAgentConfig, cwd: string): Promise<AcpConnection> => {
         const proc = spawnAcpProcess(config.command, parseEnvBlock(config.env), cwd);
         const turns = new Map<string, TurnHooks>();
         const sessions = new Set<string>();
+        const terminals = createAcpTerminals(terminalRun);
         let dead = false;
         let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
         const kill = (): void => {
             dead = true;
             clearTimeout(idleTimer);
+            terminals.disposeAll();
             proc.child.kill();
             if (pool.get(id)?.connection === connection) {
                 pool.delete(id);
@@ -106,6 +118,15 @@ export const createAcpConnections = (logger: Services["logger"]): AcpConnections
             logger.info({ agent: id, code }, "acp: agent process exited");
         });
 
+        // Terminal requests resolve their turn's context (tmux session + cwd) by ACP session id; a request
+        // outside any bound turn is refused — terminals only exist inside a running turn.
+        const terminalContext = (sessionId: string): NonNullable<TurnHooks["terminal"]> => {
+            const context = turns.get(sessionId)?.terminal;
+            if (context === undefined) {
+                throw new Error("no terminal is available for this session");
+            }
+            return context;
+        };
         const app = client({ name: "intentic" })
             .onRequest(methods.client.session.requestPermission, ({ params }) => {
                 const hooks = turns.get(params.sessionId);
@@ -114,6 +135,35 @@ export const createAcpConnections = (logger: Services["logger"]): AcpConnections
             })
             .onNotification(methods.client.session.update, ({ params }) => {
                 turns.get(params.sessionId)?.onUpdate(params);
+            })
+            .onRequest(methods.client.terminal.create, ({ params }) => {
+                const context = terminalContext(params.sessionId);
+                context.onCreate();
+                return { terminalId: terminals.create(context.session, context.cwd, params) };
+            })
+            .onRequest(methods.client.terminal.output, ({ params }) => {
+                const response = terminals.output(params.terminalId);
+                if (response === undefined) {
+                    throw new Error(`unknown terminal ${params.terminalId}`);
+                }
+                return response;
+            })
+            .onRequest(methods.client.terminal.waitForExit, ({ params }) => {
+                const exit = terminals.waitForExit(params.terminalId);
+                if (exit === undefined) {
+                    throw new Error(`unknown terminal ${params.terminalId}`);
+                }
+                return exit;
+            })
+            .onRequest(methods.client.terminal.kill, ({ params }) => {
+                if (!terminals.kill(params.terminalId)) {
+                    throw new Error(`unknown terminal ${params.terminalId}`);
+                }
+                return {};
+            })
+            .onRequest(methods.client.terminal.release, ({ params }) => {
+                terminals.release(params.terminalId);
+                return {};
             });
         const conn = app.connect(proc.stream);
 
@@ -122,10 +172,11 @@ export const createAcpConnections = (logger: Services["logger"]): AcpConnections
         const init = await withTimeout(
             conn.agent.request(methods.agent.initialize, {
                 protocolVersion: PROTOCOL_VERSION,
-                // fs is declined: the daemon has no unsaved editor buffers (disk is the source of truth),
-                // so agents fall back to their own direct file access inside the container. terminal is
-                // declined in phase 1 (the tmux panel mapping is the later upgrade).
-                clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+                // fs is declined: the daemon has no unsaved editor buffers (disk is the source of truth), so
+                // agents fall back to their own direct file access inside the container. terminal rides the
+                // tmux substrate (acp-terminal.ts) — advertised only where the wrapper exists, so a dev/CI
+                // daemon without tmux never invites calls it would run invisibly.
+                clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: terminalRun.visible },
             }),
             INIT_TIMEOUT_MS,
         ).catch((error: unknown) => {

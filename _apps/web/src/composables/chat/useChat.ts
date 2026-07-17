@@ -211,6 +211,8 @@ const sessions = ref<ChatSession[]>([]);
 // message/composer template stays put as the user switches tabs.
 const messages = computed(() => active.value.messages.value);
 const streaming = computed(() => active.value.streaming.value);
+// The active provider's own slash commands (ACP agents advertise them; native providers never do).
+const availableCommands = computed(() => active.value.availableCommands.value);
 const awaitingDecision = computed(() => active.value.awaitingDecision.value);
 const pendingPlanMessage = computed(() => active.value.pendingPlanMessage.value);
 
@@ -957,6 +959,7 @@ export function useChat() {
         sessions,
         messages,
         streaming,
+        availableCommands,
         awaitingDecision,
         pendingPlanMessage,
         activeModel,

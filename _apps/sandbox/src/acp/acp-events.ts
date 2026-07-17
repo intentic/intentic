@@ -33,8 +33,11 @@ const mapContent = (entries: AcpToolCallContent[] | null | undefined, cwd: strin
             // The wire diff keeps a workspace-escaping path as-is for display; only locations enforce the
             // route space (the tool-calls.ts convention).
             mapped.push(diffContent(workspacePath(entry.path, cwd) ?? entry.path, entry.oldText ?? undefined, entry.newText));
+        } else {
+            // A terminal-embed entry: the live view is the surfaced tmux session in the terminal panel (the
+            // adapter emits its terminal frame on the first terminal/create) — the card notes where to look.
+            mapped.push({ type: "text", text: "[running in the live terminal panel]" });
         }
-        // terminal entries are dropped: a foreign agent's terminal ids have no tmux-panel mapping (phase 2).
     }
     return mapped.length > 0 ? mapped : undefined;
 };
@@ -95,8 +98,19 @@ export const sessionUpdateEvent = (update: SessionUpdate, cwd: string): AgentEve
             return { kind: "todos", items: update.entries.map((entry) => ({ content: entry.content, status: entry.status })) };
         case "usage_update":
             return update.size > 0 ? { kind: "context_usage", tokens: update.used, contextWindow: update.size } : undefined;
-        // user_message_chunk (prompt echo), available_commands/current_mode/config_option/session_info updates,
-        // and the experimental plan_update/plan_removed have no UI mapping — dropped.
+        case "available_commands_update":
+            // The agent's own slash commands — the composer's `/` popover lists them; invoking one is plain
+            // "/name …" prompt text (the ACP convention), so no invocation channel is needed.
+            return {
+                kind: "commands",
+                items: update.availableCommands.map((command) => ({
+                    name: command.name,
+                    description: command.description,
+                    ...(command.input?.hint !== undefined ? { hint: command.input.hint } : {}),
+                })),
+            };
+        // user_message_chunk (prompt echo), current_mode/config_option/session_info updates, and the
+        // experimental plan_update/plan_removed have no UI mapping — dropped.
         default:
             return undefined;
     }

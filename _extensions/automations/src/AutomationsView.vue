@@ -10,7 +10,19 @@ import {
     modelsFor,
     PROVIDERS,
 } from "@intentic/sandbox-contract";
-import { Button, Card, cmp, CopyButton, Dialog, Icon, Page, StatusBadge, type StatusVariant, ToggleSwitch } from "@intentic/extension-ui";
+import {
+    Button,
+    Card,
+    cmp,
+    CopyButton,
+    Dialog,
+    Icon,
+    type IconName,
+    Page,
+    StatusBadge,
+    type StatusVariant,
+    ToggleSwitch,
+} from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { Cron } from "croner";
 import { computed, nextTick, reactive, ref } from "vue";
@@ -50,9 +62,22 @@ const DAY_OPTIONS = [
     { value: 6, label: `Sat` },
     { value: 0, label: `Sun` },
 ] as const;
-// Live sources the daemon can hold a realtime connection to, the event kinds each emits, and a starter prompt.
-// Grows alongside the trigger's provider/eventType enums and a daemon ListenerSource.
-const LISTENER_SOURCES = {
+// Live sources the daemon can hold a realtime connection to, the event kinds each emits, per-source wording
+// for the shared filter fields, and a starter prompt. Grows alongside each gateway extension's
+// contributes.listener declaration.
+type ListenerEventType = `message` | `voice_transcript` | `flags` | `expunge`;
+interface ListenerSource {
+    readonly label: string;
+    // A simple-icons brand slug, or an app Icon fallback when no brand glyph fits (email has no brand).
+    readonly logo?: string;
+    readonly icon?: IconName;
+    readonly events: readonly { value: ListenerEventType; label: string }[];
+    // The `mentioned` filter's meaning in this source's vocabulary (shown only for `message` events).
+    readonly mentionLabel: string;
+    readonly channel: { label: string; placeholder: string };
+    readonly starterPrompt: string;
+}
+const LISTENER_SOURCES: Record<`discord` | `imap`, ListenerSource> = {
     discord: {
         label: `Discord`,
         logo: `discord`,
@@ -60,12 +85,23 @@ const LISTENER_SOURCES = {
             { value: `message`, label: `Messages` },
             { value: `voice_transcript`, label: `Voice transcripts` },
         ],
+        mentionLabel: `Only when the bot is mentioned (@mention or reply)`,
+        channel: { label: `Channel ID (optional)`, placeholder: `all channels the bot can read` },
         starterPrompt: `Discord events just arrived — each line of the event payload is one JSON event: type \`message\` (a new message: author, channelId, content; \`mentioned: true\` when the bot was tagged or replied to) or \`voice_transcript\` (a finished voice session — read the transcript at its \`extra.path\`). Handle messages that need attention with your Discord capability; turn transcripts into notes and action items in the workspace.`,
     },
-} satisfies Record<
-    string,
-    { label: string; logo: string; events: readonly { value: `message` | `voice_transcript`; label: string }[]; starterPrompt: string }
->;
+    imap: {
+        label: `Email (IMAP)`,
+        icon: `envelope`,
+        events: [
+            { value: `message`, label: `New mail` },
+            { value: `flags`, label: `Flag changes` },
+            { value: `expunge`, label: `Deletions` },
+        ],
+        mentionLabel: `Only mail addressed directly to you (your address in To)`,
+        channel: { label: `Mailbox (optional)`, placeholder: `the watched mailbox, e.g. INBOX` },
+        starterPrompt: `Email events just arrived — each line of the payload is one JSON event: type \`message\` (new mail: the author is the sender, content holds the subject and a text excerpt, extra carries uid/messageId/attachments), \`flags\` (a message's flags changed) or \`expunge\` (a message was deleted). Triage the new mail and summarize anything urgent; fetch a full message over IMAP (curl imaps://, by its extra.uid) when the excerpt isn't enough.`,
+    },
+};
 
 const { automations, pending, error: listError, save, remove, approve, reject } = useAutomations();
 // Capability facts from the host — reactive because reading them inside a computed tracks the underlying store.
@@ -82,7 +118,7 @@ const form = reactive({
     requireApproval: false,
     provider: `discord` as keyof typeof LISTENER_SOURCES,
     channelId: ``,
-    eventType: undefined as `message` | `voice_transcript` | undefined,
+    eventType: undefined as ListenerEventType | undefined,
     mentioned: false,
 });
 
@@ -140,7 +176,7 @@ const liveSources = computed(() => {
     const connected = new Set(capabilities.value.map((capability) => capability.config[`provider`]));
     return (Object.keys(LISTENER_SOURCES) as (keyof typeof LISTENER_SOURCES)[])
         .filter((provider) => connected.has(provider))
-        .map((provider) => ({ provider, label: LISTENER_SOURCES[provider].label, logo: LISTENER_SOURCES[provider].logo }));
+        .map((provider) => Object.assign({ provider }, LISTENER_SOURCES[provider]));
 });
 
 const effectiveCron = computed(() => cronOf(schedule));
@@ -215,6 +251,10 @@ const pickRecipe = (recipe: AutomationRecipe): void => {
     advancedOpen.value = recipe.guard !== undefined;
     if (recipe.trigger.kind === `schedule`) {
         Object.assign(schedule, parseCron(recipe.trigger.cron));
+    }
+    if (recipe.trigger.kind === `listener`) {
+        form.provider = recipe.trigger.provider;
+        form.eventType = recipe.trigger.eventType;
     }
 };
 
@@ -637,7 +677,8 @@ const outcomeVariant = (outcome: string): StatusVariant => (outcome === `complet
                                     form.eventType = undefined;
                                 "
                             >
-                                <img :src="`https://cdn.simpleicons.org/${source.logo}`" class="h-4 w-4" alt="" />
+                                <img v-if="source.logo" :src="`https://cdn.simpleicons.org/${source.logo}`" class="h-4 w-4" alt="" />
+                                <Icon v-else :name="source.icon ?? 'bolt'" class="text-2xs" />
                                 {{ source.label }}
                                 <Icon name="check-circle" v-if="form.provider === source.provider" class="ml-auto" />
                             </button>
@@ -666,13 +707,18 @@ const outcomeVariant = (outcome: string): StatusVariant => (outcome === `complet
                             </button>
                         </div>
                         <label v-if="form.eventType === 'message'" class="flex items-center gap-2 text-xs text-muted">
-                            <ToggleSwitch v-model="form.mentioned" aria-label="Only when the bot is mentioned" />
-                            Only when the bot is mentioned (@mention or reply)
+                            <ToggleSwitch v-model="form.mentioned" :aria-label="LISTENER_SOURCES[form.provider].mentionLabel" />
+                            {{ LISTENER_SOURCES[form.provider].mentionLabel }}
                         </label>
                     </div>
                     <label class="ui-field">
-                        <span class="ui-field-label">Channel ID (optional)</span>
-                        <input v-model="form.channelId" placeholder="all channels the bot can read" class="font-mono" :class="cmp.input()" />
+                        <span class="ui-field-label">{{ LISTENER_SOURCES[form.provider].channel.label }}</span>
+                        <input
+                            v-model="form.channelId"
+                            :placeholder="LISTENER_SOURCES[form.provider].channel.placeholder"
+                            class="font-mono"
+                            :class="cmp.input()"
+                        />
                     </label>
                 </template>
                 <div v-if="form.kind === 'schedule'" class="ui-field">

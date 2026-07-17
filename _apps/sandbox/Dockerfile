@@ -26,8 +26,8 @@ RUN pnpm --version \
 # turbo builds each package after its workspace deps (^build), so the CLI's libs are built before it.
 # Scope to the core deploy targets (+ their deps via ^build) so the image build never pulls the platform/site
 # toolchains — the monorepo now holds them too, but the sandbox image needs only @intentic/*.
-# ext-discord builds here too: .dockerignore excludes **/dist, so its gateway bundle must be built in-image.
-RUN pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli --filter=@intentic/iq --filter=@intentic/lsp --filter=@intentic/ext-discord
+# ext-discord/ext-imap build here too: .dockerignore excludes **/dist, so their gateway bundles must be built in-image.
+RUN pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli --filter=@intentic/iq --filter=@intentic/lsp --filter=@intentic/ext-discord --filter=@intentic/ext-imap
 # Prune each package to a standalone, production-only tree (workspace deps bundled into node_modules).
 RUN pnpm --filter @intentic/sandbox deploy --prod /out/sandbox
 RUN pnpm --filter @intentic/cli deploy --prod /out/cli
@@ -36,6 +36,8 @@ RUN pnpm --filter @intentic/lsp deploy --prod /out/lsp
 # ext-discord runs a real gateway process (node dist/gateway.js) — deploy it standalone so discord.js and the
 # compiled @discordjs/opus land in its own node_modules, ready to bake below.
 RUN pnpm --filter @intentic/ext-discord deploy --prod /out/extensions/discord
+# ext-imap likewise: its gateway ships imapflow + mailparser in its own node_modules.
+RUN pnpm --filter @intentic/ext-imap deploy --prod /out/extensions/imap
 # Bake the iq models so `iq ask` works fully offline from first boot: bge-small embedder (~34MB) + ms-marco
 # cross-encoder reranker (~23MB), both int8. The script downloads over HF's Xet protocol (@huggingface/hub) —
 # the CAS bridge 403s anonymous plain-HTTP fetches — then validates the layout offline with Transformers.js.
@@ -180,12 +182,13 @@ COPY --from=build /out/sandbox /opt/sandbox
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors is data-only (manifest + connector skills + client image fragments) so it copies straight
-# from context; discord ships the deployed gateway tree from the build stage (~tens of MB of node_modules).
+# from context; discord and imap ship their deployed gateway trees from the build stage (node_modules included).
 # The web-builtin UI extensions (automations, logs, …) are NOT baked — they compile into the web bundle and
 # contribute nothing daemon-side; rtk stays a git-install (its environment fragment only composes for
 # extension-kind capability entries, so baking it would be inert).
 COPY _extensions/connectors /opt/extensions/connectors
 COPY --from=build /out/extensions/discord /opt/extensions/discord
+COPY --from=build /out/extensions/imap /opt/extensions/imap
 # pane-log-clean on PATH — the tmux pipe-pane hooks (above / logs/log-files.ts) replay each pane's byte
 # stream through it (a headless VT emulator using @xterm/headless from the daemon's node_modules) to keep
 # the terminal logs readable. Symlinked like intentic/iq: node resolves @xterm/headless from the target's

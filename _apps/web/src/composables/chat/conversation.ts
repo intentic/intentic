@@ -1,4 +1,5 @@
 import {
+    type AgentCommand,
     type AgentEvent,
     type AgentHarness,
     type AgentProvider,
@@ -8,6 +9,8 @@ import {
     modelsFor,
     type OauthAccount,
     providerLabel,
+    sseData,
+    sseFrames,
     type TodoItem,
     type ToolCallContent,
     type ToolCallLocation,
@@ -16,7 +19,8 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
-import { sseData, sseFrames } from "../sse";
+import { mentionPaths } from "./useMentions";
+
 import { formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus";
 
 // 'notice' is a small muted system line in the transcript (dismissed / kept planning / approved /
@@ -184,6 +188,9 @@ export interface ChatMessage {
     readonly text: string;
     // Files the user attached to this turn (user bubbles only), for the chip/thumbnail row.
     readonly attachments?: readonly ChatAttachment[];
+    // The workspace checkpoint capturing the state BEFORE this turn ran (user bubbles only, main-tree turns
+    // only) — powers the hover "restore to before this message" affordance.
+    readonly checkpointId?: string;
     // Accumulated extended-thinking text for assistant turns (empty when none / thinking off).
     readonly thinking?: string;
     // Set when this assistant turn proposed a plan; carries the approval state for the card UI.
@@ -344,6 +351,8 @@ export interface SessionRef {
 // the turn — the attribution captured onto the session the stream mints.
 interface TurnContext {
     id: number | null;
+    // The turn's user bubble — the checkpoint frame anchors its restore affordance here.
+    readonly userMessageId: number;
     readonly provider: AgentProvider;
     readonly account: string | undefined;
     readonly harness: AgentHarness;
@@ -357,6 +366,9 @@ export class Conversation {
     readonly messages = ref<ChatMessage[]>([]);
     readonly streaming = ref(false);
     readonly error = ref<string | null>(null);
+    // The provider's own slash commands (ACP agents advertise them mid-session; native providers never do) —
+    // replaced whole per `commands` frame, listed by the composer's `/` popover.
+    readonly availableCommands = ref<readonly AgentCommand[]>([]);
 
     // True while a turn is paused on a card awaiting the user's input (a pending plan or question). The
     // /agent fetch stays open during this, so `streaming` is still true — but the agent isn't generating, so
@@ -594,18 +606,26 @@ export class Conversation {
         if (this.title.value === null) {
             this.title.value = this.deriveTitle(text.length > 0 ? text : attachments.map((file) => file.name).join(`, `));
         }
-        this.append({ id: this.nextId++, role: `user`, text, ...(attachments.length > 0 ? { attachments } : {}) });
+        const userMessageId = this.nextId++;
+        this.append({ id: userMessageId, role: `user`, text, ...(attachments.length > 0 ? { attachments } : {}) });
         // Streaming context for the turn: the current text bubble — a fresh empty assistant message (so the
         // typing indicator shows immediately; a plan card clears it so the post-decision continuation streams
         // into a new bubble below the card) — plus the provider/account attribution for the session frame.
         const assistantId = this.nextId++;
         this.append({ id: assistantId, role: `assistant`, text: ``, thinking: `` });
-        const turn: TurnContext = { id: assistantId, provider: agent, account, harness };
+        const turn: TurnContext = { id: assistantId, userMessageId, provider: agent, account, harness };
         this.streaming.value = true;
         this.turnStartedAt.value = Date.now();
         const controller = new AbortController();
         this.inflight = controller;
 
+        // Uploaded attachments plus @-mentioned workspace paths — one wire field, the daemon resolves both the
+        // same way (workspace-relative → absolute, folded into the prompt as a Read-tool note). Mentions never
+        // render as chips: they're already visible inline in the text.
+        const attachmentPaths = [
+            ...attachments.map((file) => file.path),
+            ...mentionPaths(text).filter((path) => !attachments.some((file) => file.path === path)),
+        ];
         try {
             const response = await sandboxRequest(`/agent`, {
                 method: `POST`,
@@ -613,7 +633,7 @@ export class Conversation {
                 signal: controller.signal,
                 body: JSON.stringify({
                     prompt: text,
-                    ...(attachments.length > 0 ? { attachments: attachments.map((file) => file.path) } : {}),
+                    ...(attachmentPaths.length > 0 ? { attachments: attachmentPaths } : {}),
                     agent,
                     // The stable conversation identity + the worktree opt-in: an isolated turn runs in this
                     // conversation's own git worktree (branch agent/<conversationId>) instead of /work.
@@ -815,6 +835,16 @@ export class Conversation {
                 return;
             case `todos`:
                 this.setTodos(this.currentTextId(turn), event.items);
+                return;
+            case `checkpoint`:
+                // The pre-turn workspace state's id — anchor the restore affordance on the turn's user bubble.
+                this.messages.value = this.messages.value.map((message) =>
+                    message.id === turn.userMessageId ? { ...message, checkpointId: event.id } : message,
+                );
+                return;
+            case `commands`:
+                // The provider's slash commands (ACP agents), replaced whole — the composer's `/` popover.
+                this.availableCommands.value = event.items;
                 return;
             case `usage`:
                 this.setUsage(event);

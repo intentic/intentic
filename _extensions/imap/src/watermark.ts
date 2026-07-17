@@ -27,7 +27,9 @@ export const readWatermark = async (path: string): Promise<Watermark | undefined
     }
     try {
         const parsed = JSON.parse(raw) as Record<string, unknown>;
-        const { mailbox, uidValidity, lastUid } = { mailbox: parsed["mailbox"], uidValidity: parsed["uidValidity"], lastUid: parsed["lastUid"] };
+        const mailbox = parsed["mailbox"];
+        const uidValidity = parsed["uidValidity"];
+        const lastUid = parsed["lastUid"];
         if (typeof mailbox !== "string" || typeof uidValidity !== "string" || typeof lastUid !== "number") {
             return undefined;
         }

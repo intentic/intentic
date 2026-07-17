@@ -22,6 +22,15 @@ export const AskQuestionSchema = z.object({
 });
 export type AskQuestion = z.infer<typeof AskQuestionSchema>;
 
+// One provider-advertised slash command (an ACP agent's available_commands entry). `hint` is the argument
+// placeholder the popover shows after the name.
+export const AgentCommandSchema = z.object({
+    name: z.string(),
+    description: z.string(),
+    hint: z.string().optional(),
+});
+export type AgentCommand = z.infer<typeof AgentCommandSchema>;
+
 // One TodoWrite/Task checklist item, surfaced live so the UI shows the agent's plan-of-work (Claude Code style).
 export const TodoItemSchema = z.object({
     content: z.string(),
@@ -100,6 +109,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     z.object({ kind: z.literal("init"), model: z.string() }),
+    // The pre-turn workspace snapshot's id (the attribution-fence "user" capture), emitted once before the
+    // provider stream so the client can offer "restore to before this message" on the turn's user bubble.
+    // Absent on isolated turns (they snapshot nothing) and when the tree was already clean at turn start.
+    z.object({ kind: z.literal("checkpoint"), id: z.string() }),
     z.object({ kind: z.literal("delta"), text: z.string(), parentToolUseId: z.string().optional() }),
     z.object({ kind: z.literal("thinking"), text: z.string(), parentToolUseId: z.string().optional() }),
     // A tool call starting (or, for backends that only report completions, arriving whole). `content` carries
@@ -128,6 +141,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // terminal in the global panel. One per turn (the session is reused across a turn's commands, incl. subagents').
     z.object({ kind: z.literal("terminal"), session: z.string() }),
     z.object({ kind: z.literal("todos"), items: z.array(TodoItemSchema) }),
+    // The provider's own slash commands (ACP available_commands_update), replaced whole each time — the
+    // composer's `/` popover lists them; invoking one is plain `/name …` prompt text (the ACP convention).
+    z.object({ kind: z.literal("commands"), items: z.array(AgentCommandSchema) }),
     z.object({
         kind: z.literal("usage"),
         // The account that served this turn — the client attributes the totals to it (tagged by streamAgent).

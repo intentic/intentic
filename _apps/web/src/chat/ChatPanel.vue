@@ -15,7 +15,10 @@ import { useFollowAlong } from "../composables/workspace/useFollowAlong";
 import { useLayout } from "../composables/useLayout";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { collectDroppedFiles } from "../pages/workspace/dropEntries";
+import { insertMention, mentionQueryAt } from "../composables/chat/useMentions";
 import ChatAccountPanel from "./ChatAccountPanel.vue";
+import ChatCommandPopover from "./ChatCommandPopover.vue";
+import ChatMentionPopover from "./ChatMentionPopover.vue";
 import ChatMessageView from "./ChatMessageView.vue";
 import ChatModelPicker from "./ChatModelPicker.vue";
 import ChatModeMenu from "./ChatModeMenu.vue";
@@ -56,6 +59,7 @@ const {
     openConversation,
     newChat: newChatAction,
     closeTab: closeTabAction,
+    availableCommands,
 } = useChat();
 const router = useRouter();
 const layout = useLayout();
@@ -359,10 +363,88 @@ const submit = (): void => {
     });
 };
 
+// --- @-mention + /-command popovers -----------------------------------------------------------
+// The caret drives which popover is live: an @-token at the caret opens the file picker; a leading `/` with
+// the caret still inside the first token opens the provider's command list (ACP agents only — native
+// providers advertise none). Escape dismisses until the token changes.
+const caret = ref(0);
+const syncCaret = (): void => {
+    caret.value = input.value?.selectionStart ?? draft.value.length;
+};
+const onInput = (): void => {
+    grow();
+    syncCaret();
+};
+const popoverDismissed = ref(false);
+const activeMention = computed(() => mentionQueryAt(draft.value, caret.value));
+const slashQuery = computed<string | undefined>(() => {
+    if (availableCommands.value.length === 0 || !draft.value.startsWith(`/`)) {
+        return undefined;
+    }
+    const upto = draft.value.slice(1, caret.value);
+    return caret.value >= 1 && !/\s/.test(upto) ? upto : undefined;
+});
+watch([() => activeMention.value?.query, slashQuery], () => {
+    popoverDismissed.value = false;
+});
+const mentionPopover = ref<InstanceType<typeof ChatMentionPopover>>();
+const commandPopover = ref<InstanceType<typeof ChatCommandPopover>>();
+const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value);
+const commandOpen = computed(() => !mentionOpen.value && slashQuery.value !== undefined && !popoverDismissed.value);
+
+// Put the picked text into the draft and land the caret after it, keeping the textarea focused.
+const applyDraftEdit = (text: string, nextCaret: number): void => {
+    draft.value = text;
+    void nextTick(() => {
+        const el = input.value;
+        if (el) {
+            el.focus();
+            el.setSelectionRange(nextCaret, nextCaret);
+        }
+        caret.value = nextCaret;
+        grow();
+    });
+};
+
+const pickMention = (path: string): void => {
+    const mention = activeMention.value;
+    if (mention === undefined) {
+        return;
+    }
+    const result = insertMention(draft.value, mention, caret.value, path);
+    applyDraftEdit(result.text, result.caret);
+};
+
+const pickCommand = (name: string): void => {
+    const rest = draft.value.slice(caret.value);
+    const inserted = `/${name} `;
+    applyDraftEdit(`${inserted}${rest.startsWith(` `) ? rest.slice(1) : rest}`, inserted.length);
+};
+
 const onKeydown = (event: KeyboardEvent): void => {
     // Never submit mid-IME-composition (CJK candidates confirm with Enter).
     if (event.isComposing) {
         return;
+    }
+    // An open popover owns the list keys; Enter/Tab pick, Escape dismisses, arrows move.
+    const popover = mentionOpen.value ? mentionPopover.value : commandOpen.value ? commandPopover.value : undefined;
+    if (popover !== undefined) {
+        if (event.key === `ArrowDown` || event.key === `ArrowUp`) {
+            event.preventDefault();
+            popover.move(event.key === `ArrowDown` ? 1 : -1);
+            return;
+        }
+        if (event.key === `Escape`) {
+            event.preventDefault();
+            popoverDismissed.value = true;
+            return;
+        }
+        if ((event.key === `Enter` && !event.shiftKey) || event.key === `Tab`) {
+            if (popover.pickActive()) {
+                event.preventDefault();
+                return;
+            }
+        }
     }
     if (event.key !== `Enter`) {
         return;
@@ -550,9 +632,17 @@ watch(keyboardInset, () => {
                 </button>
                 <template v-if="connected">
                     <form
-                        class="flex flex-col rounded-2xl border border-line-strong bg-overlay shadow-lg transition-colors focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/25"
+                        class="relative flex flex-col rounded-2xl border border-line-strong bg-overlay shadow-lg transition-colors focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/25"
                         @submit.prevent="submit"
                     >
+                        <ChatMentionPopover v-if="mentionOpen" ref="mentionPopover" :query="activeMention?.query ?? ''" @pick="pickMention" />
+                        <ChatCommandPopover
+                            v-if="commandOpen"
+                            ref="commandPopover"
+                            :query="slashQuery ?? ''"
+                            :commands="availableCommands"
+                            @pick="pickCommand"
+                        />
                         <div v-if="attachments.length > 0" class="flex flex-wrap gap-2 px-3 pt-3">
                             <div
                                 v-for="a in attachments"
@@ -587,8 +677,10 @@ watch(keyboardInset, () => {
                             name="draft"
                             :placeholder="composerPlaceholder"
                             class="scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 py-3 text-base leading-6 text-content placeholder:text-subtle focus:outline-none md:text-sm"
-                            @input="grow"
+                            @input="onInput"
                             @keydown="onKeydown"
+                            @keyup="syncCaret"
+                            @click="syncCaret"
                             @paste="onPaste"
                         ></textarea>
 

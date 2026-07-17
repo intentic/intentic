@@ -8,7 +8,8 @@
     },
     "rules": {
         "typescript/no-extraneous-class": ["error", { "allowWithDecorator": true }],
-        "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
+        "import/no-unassigned-import": ["error", { "allow": ["**/*.css", "**/composables/sandbox/sandboxScope", "**/extension-host/hostModules"] }],
+        "no-underscore-dangle": ["error", { "allow": ["__API_URL__", "__intentic"] }],
         "no-await-in-loop": "off"
     },
     "env": {
@@ -32,6 +33,18 @@
         "_apps/sandbox/operator-templates"
     ],
     "overrides": [
+        {
+            "files": ["**/*.vue"],
+            "rules": {
+                "no-use-before-define": "error"
+            }
+        },
+        {
+            "files": ["**/*.test.ts"],
+            "rules": {
+                "unicorn/consistent-function-scoping": "off"
+            }
+        },
         {
             "files": ["_extensions/**"],
             "rules": {

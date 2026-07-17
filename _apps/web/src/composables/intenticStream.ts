@@ -1,4 +1,4 @@
-import { sseData, sseFrames } from "./sse";
+import { sseData, sseFrames } from "@intentic/sandbox-contract";
 
 // Reads a daemon `/intentic` SSE stream as parsed ndjson objects: the daemon emits one `data: <JSON>` frame
 // per line. Shared by the live-plan and the deployments reads (both consume `intentic` ndjson over the

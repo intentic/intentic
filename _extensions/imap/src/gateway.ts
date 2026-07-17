@@ -97,7 +97,13 @@ const main = async (): Promise<void> => {
             provider: "imap",
             // idle = the gateway is up but has no enabled imap listener automation to connect for; a
             // connection is held only while one exists (the discord gateway's hold predicate).
-            gateway: !listening ? "idle" : (slots.get(id)?.connection.usable() ?? false) ? "ready" : connecting.has(id) ? "connecting" : "disconnected",
+            gateway: !listening
+                ? "idle"
+                : (slots.get(id)?.connection.usable() ?? false)
+                  ? "ready"
+                  : connecting.has(id)
+                    ? "connecting"
+                    : "disconnected",
         }));
         await daemon.status({ connections });
     };
