@@ -16,8 +16,8 @@ import { useSandbox } from "../composables/sandbox/useSandbox";
 import { collectDroppedFiles } from "../pages/workspace/dropEntries";
 import ChatAccountPanel from "./ChatAccountPanel.vue";
 import ChatMessageView from "./ChatMessageView.vue";
+import ChatModelPicker from "./ChatModelPicker.vue";
 import ChatModeMenu from "./ChatModeMenu.vue";
-import ChatProviderMenu from "./ChatProviderMenu.vue";
 import ChatTabs from "./ChatTabs.vue";
 import ChatTabsMobile from "./ChatTabsMobile.vue";
 import { ProgressRing } from "@intentic-app/ui";
@@ -687,17 +687,19 @@ watch(keyboardInset, () => {
 
         <!-- The pickers: anchored popovers on desktop, bottom sheets on mobile — same menu bodies. -->
         <template v-if="mobile">
-            <BottomSheet v-model="modelSheetOpen" header="Provider & model">
-                <ChatProviderMenu />
+            <BottomSheet v-model="modelSheetOpen" header="Model">
+                <ChatModelPicker @selected="modelSheetOpen = false" />
             </BottomSheet>
             <BottomSheet v-model="modeSheetOpen" header="Agent mode">
                 <ChatModeMenu @selected="modeSheetOpen = false" />
             </BottomSheet>
         </template>
         <template v-else>
-            <Popover ref="providerModel" :append-to="overlayTarget" :pt="{ content: { class: 'composer-pop-content' } }">
-                <div class="w-56">
-                    <ChatProviderMenu />
+            <!-- Flush content (no composer-pop-content padding): the picker's search bar and rail sit
+                 edge-to-edge against the popover chrome. -->
+            <Popover ref="providerModel" :append-to="overlayTarget" :pt="{ content: { class: '!p-0' } }">
+                <div class="w-[26rem]">
+                    <ChatModelPicker @selected="providerModel?.hide()" />
                 </div>
             </Popover>
             <Popover ref="modeMenu" :append-to="overlayTarget" :pt="{ content: { class: 'composer-pop-content' } }">

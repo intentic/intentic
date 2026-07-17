@@ -74,12 +74,15 @@ const rankFor = (entry: PickerEntry, tokens: readonly string[]): number => {
 // while searching). Descriptions are deliberately not matched — copy produces baffling hits.
 export const filterEntries = (entries: readonly PickerEntry[], query: string, rail: AgentProvider | undefined): readonly PickerEntry[] => {
     const scoped = rail === undefined ? entries : entries.filter((entry) => entry.provider === rail);
-    const tokens = query.split(/\s+/).map(normalize).filter((token) => token.length > 0);
+    const tokens = query
+        .split(/\s+/)
+        .map(normalize)
+        .filter((token) => token.length > 0);
     if (tokens.length === 0) {
         return scoped;
     }
     const matched = scoped.filter((entry) => tokens.every((token) => haystackFor(entry).includes(token)));
-    return [...matched].sort((a, b) => rankFor(a, tokens) - rankFor(b, tokens));
+    return matched.toSorted((a, b) => rankFor(a, tokens) - rankFor(b, tokens));
 };
 
 // Browse-mode grouping: one section per provider (respecting the rail filter), the active provider hoisted

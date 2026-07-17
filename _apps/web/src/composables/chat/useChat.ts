@@ -250,10 +250,9 @@ const selectProvider = (p: AgentProvider): void => {
     // — refetch on landing so the model picker is populated on arrival (the daemon caches, so this is cheap).
     void loadProviderModels(p);
 };
-// The active conversation's harness (native runtime vs the Claude Code loop) + its picker. Only meaningful for
-// codex/grok; the composer surfaces it there. A switch retires the session at the next send (like a provider switch).
+// The active conversation's harness (native runtime vs the Claude Code loop). Only meaningful for codex/grok;
+// picked through selectModel's "via Claude Code" rows. A switch retires the session at the next send.
 const harness = computed<AgentHarness>(() => active.value.harness.value);
-const selectHarness = (h: AgentHarness): void => active.value.selectHarness(h);
 const model = computed<string>({
     get: () => active.value.model.value,
     set: (value) => {
@@ -445,6 +444,10 @@ export const loadProviderModels = async (provider: AgentProvider): Promise<void>
             return;
         }
         body = (await response.json()) as { models: { id: string; label: string; efforts?: string[] }[]; default: string };
+        if (!Array.isArray(body.models)) {
+            providerModelsState.value = { ...providerModelsState.value, [provider]: `error` };
+            return;
+        }
     } catch {
         // The daemon is unreachable/mid-restart; the picker shows the error row with a Retry.
         providerModelsState.value = { ...providerModelsState.value, [provider]: `error` };
@@ -894,7 +897,6 @@ export function useChat() {
         provider,
         selectProvider,
         harness,
-        selectHarness,
         account,
         selectAccount,
         accounts,

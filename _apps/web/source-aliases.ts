@@ -17,11 +17,11 @@ const here = (path: string): string => fileURLToPath(new URL(path, import.meta.u
 const extensionAliases = Object.fromEntries(
     readdirSync(here(`../../_extensions`), { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
+        .filter((entry) => existsSync(here(`../../_extensions/${entry.name}/src/index.ts`)))
         .map((entry): [string, string] => [
             JSON.parse(readFileSync(here(`../../_extensions/${entry.name}/package.json`), `utf8`)).name,
             here(`../../_extensions/${entry.name}/src/index.ts`),
-        ])
-        .filter(([, source]) => existsSync(source)),
+        ]),
 );
 
 export const sourceAliases = (): Record<string, string> => ({
