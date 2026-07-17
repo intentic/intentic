@@ -118,7 +118,7 @@ test("cliEnvOf expands each connector's env template; two instances of one provi
     const imap: Capability = {
         id: "imap",
         kind: "cli",
-        config: { provider: "imap", host: "imap.example.com", port: "993", username: "u@e.com", password: "pw" },
+        config: { provider: "imap", host: "imap.example.com", port: "993", username: "u@e.com", password: "p#ss@word: &$100%!" },
     };
     const primary: Capability = {
         id: "analytics",
@@ -132,11 +132,13 @@ test("cliEnvOf expands each connector's env template; two instances of one provi
     };
     expect(await cliEnvOf(hostFor([github]))).toEqual({ GITHUB_TOKEN_GITHUB: "gh" });
     expect(await cliEnvOf(hostFor([gitlab]))).toEqual({ GITLAB_TOKEN_GITLAB: "gl", GITLAB_URL_GITLAB: "https://gitlab.example.com" });
+    // The password passes through byte-exact — no encoding on the env path (curl --user sends it verbatim);
+    // only ${field:uri} templates (postgres below) percent-encode.
     expect(await cliEnvOf(hostFor([imap]))).toEqual({
         IMAP_HOST_IMAP: "imap.example.com",
         IMAP_PORT_IMAP: "993",
         IMAP_USERNAME_IMAP: "u@e.com",
-        IMAP_PASSWORD_IMAP: "pw",
+        IMAP_PASSWORD_IMAP: "p#ss@word: &$100%!",
     });
     // The postgres URL template percent-encodes user/password/database (${field:uri}).
     expect(await cliEnvOf(hostFor([primary, secondary]))).toEqual({

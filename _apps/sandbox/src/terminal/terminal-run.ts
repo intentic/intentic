@@ -6,8 +6,9 @@ import { promisify } from "node:util";
 // tmux session surfaced in the app's terminals panel — no invisible child_process for user actions. Reads,
 // probes and boot plumbing are exempt. A new flow picks a `job-*` session (terminal-session.ts), emits
 // {kind:"terminal", session} as its stream's first frame (gated on `visible`), and runs every command through
-// this runner. Secrets ride the `env` option — forwarded as tmux `-e` pairs, never the command string: pane
-// text is persisted to the pane logs (logs/log-files.ts), so anything printed is written to disk.
+// this runner. Secrets ride the `env` option — forwarded as name-only tmux `-e` flags the wrapper resolves
+// from its own environment, never the command string or any argv: pane text is persisted to the pane logs
+// (logs/log-files.ts), so anything printed is written to disk.
 //
 // Each run is one window of the session via bin/tmux-run (the same wrapper the agent's Bash hook uses):
 // tee-captured output, status-file completion, the command's real exit code. Finished windows linger for
@@ -33,8 +34,8 @@ export interface TerminalRunOptions {
     readonly cwd: string;
     // tmux window name (a safe slug); defaults to "run".
     readonly window?: string;
-    // Extra env for the command — tmux `-e` pairs on the window (never pane text) AND the wrapper's own env,
-    // which is what the no-tmux fallback path sees.
+    // Extra env for the command — set on the wrapper's own env (what the no-tmux fallback sees) and forwarded
+    // onto the tmux window by NAME (`-e KEY`), so values never appear in any argv or pane text.
     readonly env?: Readonly<Record<string, string>>;
     // Abort SIGTERMs the wrapper; its trap kills the tmux window, so the command dies with the caller.
     readonly signal?: AbortSignal;
@@ -95,7 +96,7 @@ export const createTerminalRunner = (): TerminalRunner => {
                 ? await execFileAsync(
                       TMUX_RUN_BIN,
                       [
-                          ...Object.entries(options.env ?? {}).flatMap(([key, value]) => ["-e", `${key}=${value}`]),
+                          ...Object.keys(options.env ?? {}).flatMap((key) => ["-e", key]),
                           session,
                           command,
                           options.window ?? "run",

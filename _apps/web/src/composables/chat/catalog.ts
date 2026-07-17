@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic-app/ui";
-import type { AgentProvider, CatalogOption } from "@intentic/sandbox-contract";
+import type { AgentProvider, CatalogOption, ModelBadge } from "@intentic/sandbox-contract";
 import { type ChatMode, type ConversationStatus, providerModels } from "./conversation";
 
 /* Chat UI metadata shared by the desktop panel, the mobile header, and the menu bodies: the effort catalog,
@@ -25,6 +25,15 @@ export const effortsFor = (provider: AgentProvider, modelId?: string): CatalogOp
         { label: `X-High`, value: `xhigh` },
         ...(provider === `claude` ? [{ label: `Max`, value: `max` }] : []),
     ];
+};
+
+// How a curated capability badge renders in the model picker: icon-only chips, the label carried by the
+// tooltip (three text chips per row would starve the description's space).
+export const BADGE_META: Record<ModelBadge, { label: string; icon: IconName }> = {
+    reasoning: { label: `Reasoning`, icon: `sparkles` },
+    vision: { label: `Vision`, icon: `eye` },
+    fast: { label: `Fast`, icon: `bolt` },
+    agentic: { label: `Agentic coding`, icon: `code` },
 };
 
 // Permission modes for the composer's mode selector; value mirrors the SDK permissionMode. 'plan' is default.

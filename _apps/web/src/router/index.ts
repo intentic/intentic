@@ -10,12 +10,13 @@ declare module "vue-router" {
     }
 }
 
-// Resolve the session once (Better Auth cookie) and redirect to /login if none. With a user in hand,
+// Resolve the session once (Better Auth cookie) and redirect to /login if none — an unreachable API counts
+// as signed-out (a rejected guard would abort navigation and leave a blank screen). With a user in hand,
 // hydrate the query cache from IndexedDB (per-user buster) before any route mounts — a reload paints the
 // last-known workspace instead of blocking on the daemon.
 const requireAuth = async (): Promise<boolean | RouteLocationRaw> => {
     const { user, refresh } = useAuth();
-    const current = user.value ?? (await refresh());
+    const current = user.value ?? (await refresh().catch(() => null));
     if (!current) {
         return `/login`;
     }

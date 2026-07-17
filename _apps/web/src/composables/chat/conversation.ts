@@ -42,6 +42,10 @@ export interface ModelOption extends CatalogOption {
 export const providerModels = ref<Record<AgentProvider, ModelOption[]>>({ claude: [], codex: [], grok: [] });
 // Each provider's daemon-resolved default model id; empty only until the first load.
 export const providerDefaultModel = ref<Record<AgentProvider, string>>({ claude: ``, codex: ``, grok: `` });
+// Per-provider catalog fetch state, so the picker can show a spinner/retry per provider group instead of a
+// silently-empty list (codex/grok have no static floor to fall back on before their first load).
+export type CatalogLoadState = "idle" | "loading" | "loaded" | "error";
+export const providerModelsState = ref<Record<AgentProvider, CatalogLoadState>>({ claude: `idle`, codex: `idle`, grok: `idle` });
 
 // The model a fresh conversation seeds for a provider+harness. Under the Claude Code harness a non-Claude
 // provider sends the translator's mapped id (the static catalog's entry). Natively every provider names its

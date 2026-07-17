@@ -45,6 +45,7 @@ export * from "./effects.js";
 export * from "./events.js";
 export * from "./agent-catalog.js";
 export * from "./hostnames.js";
+export * from "./model-metadata.js";
 export * from "./schemas.js";
 export * from "./terminal-protocol.js";
 

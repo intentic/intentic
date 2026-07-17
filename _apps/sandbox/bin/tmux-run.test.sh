@@ -21,9 +21,17 @@ bash "$W" "$S" 'exit 7' run >/dev/null; [ $? = 7 ] || { echo "FAIL: exit-code no
 out="$(bash "$W" "$S" 'echo hi; exit 3' run)"; rc=$?
 [ "$out" = hi ] && [ "$rc" = 3 ] || { echo "FAIL: got out='$out' rc=$rc (want hi/3)"; exit 1; }
 
-# -e pairs land in the window's environment (never on the command line): the command reads the var.
-out="$(bash "$W" -e FOO=bar "$S" 'echo "$FOO"' run)"; rc=$?
-[ "$out" = bar ] && [ "$rc" = 0 ] || { echo "FAIL: -e env got out='$out' rc=$rc (want bar/0)"; exit 1; }
+# -e NAME resolves from the wrapper's own env onto the window (name-only; the value never rides an argv).
+out="$(FOO=bar bash "$W" -e FOO "$S" 'echo "$FOO"' run)"; rc=$?
+[ "$out" = bar ] && [ "$rc" = 0 ] || { echo "FAIL: -e name got out='$out' rc=$rc (want bar/0)"; exit 1; }
+
+# Fresh per window: the server (started above without FOO) must not mask the caller's CURRENT value.
+out="$(FOO=second bash "$W" -e FOO "$S" 'echo "$FOO"' run)"; rc=$?
+[ "$out" = second ] && [ "$rc" = 0 ] || { echo "FAIL: stale window env got out='$out' rc=$rc (want second/0)"; exit 1; }
+
+# Unset and invalid names are skipped, never fatal (set -u + indirect-expansion guard).
+out="$(bash "$W" -e NOPE_UNSET -e 'no good' "$S" 'echo "ok-${NOPE_UNSET:-unset}"' run)"; rc=$?
+[ "$out" = ok-unset ] && [ "$rc" = 0 ] || { echo "FAIL: unset/invalid -e got out='$out' rc=$rc (want ok-unset/0)"; exit 1; }
 
 # Output cap: only the tail of the capture ships over stdout (the pane keeps the full output).
 out="$(INTENTIC_RUN_FILTER=0 INTENTIC_RUN_OUTPUT_BYTES=3 bash "$W" "$S" 'printf abcdef' run)"; rc=$?

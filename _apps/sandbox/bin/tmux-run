@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tmux-run [-e KEY=VALUE]... <session> <command-string> [window-name]
+# tmux-run [-e NAME]... <session> <command-string> [window-name]
 #
 # Runs <command-string> inside a new window of tmux session <session> so the web terminal panel can watch
 # it live (and type into it — the command's stdin is the pane tty), while this wrapper streams the combined
@@ -7,9 +7,12 @@
 # hook (src/agent/agent-terminals.ts) rewrites every Bash tool command through it, and the daemon's terminal
 # runner (src/system/terminal-run.ts) executes user-triggered flows (capabilities, infra check) through it.
 #
-# -e KEY=VALUE sets the var on the new window only (tmux new-window -e), so values — including secrets —
-# reach the command without appearing in pane text or the persisted pane logs. The daemon also puts the
-# pairs in this wrapper's own environment, which is what the no-tmux fallback path sees.
+# -e NAME forwards NAME from this wrapper's OWN environment onto the new window (tmux new-window -e). The
+# pane's shell otherwise inherits the tmux SERVER's env snapshot from whenever the server first started, so
+# per-turn values (capability credentials, extension PATH) would be missing or stale there. Name-only flags
+# keep values — including secrets — out of every argv, pane text, and the persisted pane logs; both callers
+# already have the values in this wrapper's environment, which is also what the no-tmux fallback path sees.
+# Invalid or unset names are skipped (fail open).
 #
 # Capture is a plain file fed by `tee` inside the pane, NOT pipe-pane: a pane supports only one pipe-pane
 # and the global per-pane log hooks (src/logs/log-files.ts) already own it — creating the window triggers
@@ -19,7 +22,9 @@ set -u
 envflags=()
 while getopts e: opt; do
     case "$opt" in
-        e) envflags+=(-e "$OPTARG") ;;
+        # Regex first: [[ ]] short-circuits, so an invalid name never reaches the (fatal under bash) indirect
+        # expansion. Indirection, not printenv: command substitution would strip trailing newlines.
+        e) [[ "$OPTARG" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n "${!OPTARG+x}" ]] && envflags+=(-e "$OPTARG=${!OPTARG}") ;;
         *) exit 2 ;;
     esac
 done

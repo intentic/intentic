@@ -31,5 +31,6 @@ export {
 export { useExplorerStyle } from "./composables/useExplorerStyle.js";
 export { type CommandOs, useOsPreference } from "./composables/useOsPreference.js";
 export { type Device, useDevice } from "./composables/useDevice.js";
+export { useListNavigation } from "./composables/useListNavigation.js";
 export { useIconSet } from "./composables/useIconSet.js";
 export { type ColorScheme, useTheme } from "./composables/useTheme.js";

@@ -382,7 +382,9 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
     env: {
         ...process.env,
         // cli-kind capability credentials (e.g. DISCORD_BOT_TOKEN) the agent's shell reads. Rebuilt every turn,
-        // so a newly-added CLI capability is picked up on the next message with no restart.
+        // so a newly-added CLI capability is picked up on the next message with no restart. The Bash hook below
+        // forwards the KEY NAMES per command, so the values also reach the tmux panes commands actually run in
+        // (pane env is the tmux server's snapshot, not this subprocess env).
         ...request.cliEnv,
         // We run with --dangerously-skip-permissions (bypassPermissions) because the container IS the
         // isolation boundary. Claude Code refuses that flag under root (the sandbox runs as root) unless
@@ -403,7 +405,7 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
     // Run every Bash command inside an `agent-*` tmux session (bin/tmux-run) so the terminal panel can
     // watch the agent work live. Hooks fire even under bypassPermissions, and for subagents too. The rtk
     // backend rewrites the command to `rtk <cmd>` inside the same wrapper.
-    ...(tmuxEnabled ? { hooks: bashTmuxHooks(request.filterBackend) } : {}),
+    ...(tmuxEnabled ? { hooks: bashTmuxHooks(request.filterBackend, Object.keys(request.cliEnv ?? {})) } : {}),
     ...(request.model !== undefined ? { model: request.model } : {}),
     ...(request.sessionId !== undefined ? { resume: request.sessionId } : {}),
     ...(request.plugins !== undefined ? { plugins: request.plugins.map((path) => ({ type: "local" as const, path })) } : {}),

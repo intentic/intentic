@@ -13,6 +13,7 @@ import {
     providerAccounts,
     providerDefaultModel,
     providerModels,
+    providerModelsState,
     rememberedAccountFor,
     rememberedModelFor,
     selectedAccountId,
@@ -262,6 +263,30 @@ const model = computed<string>({
         turnDefaults.models.value = { ...turnDefaults.models.value, [active.value.provider.value]: value };
     },
 });
+// One picker row = one atomic selection: provider, harness, and model land together (the unified picker's
+// rows span providers, and a codex/grok "via Claude Code" row is a harness choice too). The provider/harness
+// selectors no-op when unchanged and carry the session-switch bookkeeping; claude ignores harness entirely
+// (it is always its own loop), so its rows never touch it — a leftover claude-code harness on a claude
+// conversation stays put and its session keeps resuming.
+const selectModel = (pick: { provider: AgentProvider; harness: AgentHarness; value: string }): void => {
+    const sameScope = pick.provider === provider.value && (pick.provider === `claude` || pick.harness === harness.value);
+    if (streaming.value && !sameScope) {
+        return;
+    }
+    if (pick.provider !== provider.value) {
+        selectProvider(pick.provider);
+    }
+    if (pick.provider !== `claude`) {
+        active.value.selectHarness(pick.harness);
+    }
+    active.value.model.value = pick.value;
+    // Per-provider memory covers native picks only — claude-code translator ids are deterministic and derived
+    // (rememberedModelFor), never persisted.
+    if (pick.provider === `claude` || pick.harness === `native`) {
+        turnDefaults.models.value = { ...turnDefaults.models.value, [pick.provider]: pick.value };
+    }
+};
+
 const effort = computed<string>({
     get: () => active.value.effort.value,
     set: (value) => {
@@ -411,11 +436,21 @@ const refreshAccounts = async (provider: AgentProvider): Promise<OauthAccount[]>
 // selection-fix refreshAccounts does for accounts). Claude-Code-harness selections are translator-mapped ids,
 // not catalog ids, so they're left alone (claude itself is its own loop on either harness).
 export const loadProviderModels = async (provider: AgentProvider): Promise<void> => {
-    const response = await sandboxRequest(`${providerBase(provider)}/models`);
-    if (!response.ok) {
+    providerModelsState.value = { ...providerModelsState.value, [provider]: `loading` };
+    let body: { models: { id: string; label: string; efforts?: string[] }[]; default: string };
+    try {
+        const response = await sandboxRequest(`${providerBase(provider)}/models`);
+        if (!response.ok) {
+            providerModelsState.value = { ...providerModelsState.value, [provider]: `error` };
+            return;
+        }
+        body = (await response.json()) as { models: { id: string; label: string; efforts?: string[] }[]; default: string };
+    } catch {
+        // The daemon is unreachable/mid-restart; the picker shows the error row with a Retry.
+        providerModelsState.value = { ...providerModelsState.value, [provider]: `error` };
         return;
     }
-    const body = (await response.json()) as { models: { id: string; label: string; efforts?: string[] }[]; default: string };
+    providerModelsState.value = { ...providerModelsState.value, [provider]: `loaded` };
     // The daemon's catalog is never empty; the guard keeps us from ever pinning a selection to nothing.
     if (body.models.length === 0) {
         return;
@@ -442,6 +477,12 @@ export const loadProviderModels = async (provider: AgentProvider): Promise<void>
     if (!valid.has(turnDefaults.models.value[provider])) {
         turnDefaults.models.value = { ...turnDefaults.models.value, [provider]: body.default };
     }
+};
+
+// Refresh every provider's catalog (skipping ones already in flight) — the reachable seam and the picker's
+// on-open refresh both use this, so searching across providers always has all lists warm.
+export const loadAllProviderModels = async (): Promise<void> => {
+    await Promise.all(PROVIDERS.filter((target) => providerModelsState.value[target] !== `loading`).map((target) => loadProviderModels(target)));
 };
 
 // Device-code sign-in expires after 15 minutes; stop polling past it.
@@ -556,6 +597,7 @@ export const resetChat = (): void => {
     selectedAccountId.value = { claude: undefined, codex: undefined, grok: undefined };
     providerModels.value = { claude: [], codex: [], grok: [] };
     providerDefaultModel.value = { claude: ``, codex: ``, grok: `` };
+    providerModelsState.value = { claude: `idle`, codex: `idle`, grok: `idle` };
     managedProvider.value = turnDefaults.provider.value;
     cancelConnect();
     error.value = null;
@@ -785,7 +827,7 @@ export const loadAccountStatus = async (): Promise<void> => {
             }
         }),
         // Model lists are daemon-owned too — load them on the same reachable seam so the pickers are ready.
-        ...PROVIDERS.map((target) => loadProviderModels(target).catch(() => undefined)),
+        loadAllProviderModels(),
     ]);
 };
 
@@ -859,6 +901,7 @@ export function useChat() {
         managedAccounts,
         accountUsage,
         model,
+        selectModel,
         effort,
         thinking,
         draft,

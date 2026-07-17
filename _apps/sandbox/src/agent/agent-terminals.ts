@@ -34,39 +34,58 @@ const windowSlug = (description: unknown): string => {
     return slug === "" ? "run" : slug;
 };
 
+// Env var NAMES forwarded onto each command's tmux window (`-e NAME` — tmux-run resolves the value from its
+// own environment, which the SDK subprocess passes down fresh each turn). The pane's shell otherwise inherits
+// the tmux SERVER's env snapshot, so per-turn capability credentials would be missing or stale there; the
+// value itself never appears in the rewritten command text, transcript, or pane logs. Only valid identifiers
+// survive: these land unquoted in the shell line every Bash command flows through. A capability REMOVED after
+// the server captured its var stays in the server env — forwarding only overrides per-window.
+const envKeyFlags = (envKeys: readonly string[]): string =>
+    [...envKeys]
+        .filter((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
+        .toSorted()
+        .map((key) => `-e ${key} `)
+        .join("");
+
 // When filterBackend is "rtk", the command is prefixed with `rtk ` before it's wrapped (rtk's own Claude Code
 // hook convention: it recognizes and compresses the leading command, and passes through what it doesn't). The
 // native output filter is turned off for this backend (cleanerEnv sets INTENTIC_RUN_FILTER=0), so rtk owns the
 // compression and tmux-run just tees rtk's already-compact output. "native"/undefined keeps today's path.
-export const bashTmuxHooks = (filterBackend?: "native" | "rtk"): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
-    PreToolUse: [
-        {
-            matcher: "Bash",
-            hooks: [
-                async (input) => {
-                    if (input.hook_event_name !== "PreToolUse") {
-                        return {};
-                    }
-                    const tool = input.tool_input as { command?: unknown; description?: unknown };
-                    if (typeof tool.command !== "string" || tool.command.startsWith(TMUX_RUN_BIN)) {
-                        return {};
-                    }
-                    const session = agentSessionName(input.session_id);
-                    if (session === undefined) {
-                        return {};
-                    }
-                    const inner = filterBackend === "rtk" ? `rtk ${tool.command}` : tool.command;
-                    return {
-                        hookSpecificOutput: {
-                            hookEventName: "PreToolUse",
-                            updatedInput: {
-                                ...(tool as Record<string, unknown>),
-                                command: `${TMUX_RUN_BIN} ${session} ${shellQuote(inner)} ${windowSlug(tool.description)}`,
+export const bashTmuxHooks = (
+    filterBackend?: "native" | "rtk",
+    envKeys: readonly string[] = [],
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
+    const envFlags = envKeyFlags(envKeys);
+    return {
+        PreToolUse: [
+            {
+                matcher: "Bash",
+                hooks: [
+                    async (input) => {
+                        if (input.hook_event_name !== "PreToolUse") {
+                            return {};
+                        }
+                        const tool = input.tool_input as { command?: unknown; description?: unknown };
+                        if (typeof tool.command !== "string" || tool.command.startsWith(TMUX_RUN_BIN)) {
+                            return {};
+                        }
+                        const session = agentSessionName(input.session_id);
+                        if (session === undefined) {
+                            return {};
+                        }
+                        const inner = filterBackend === "rtk" ? `rtk ${tool.command}` : tool.command;
+                        return {
+                            hookSpecificOutput: {
+                                hookEventName: "PreToolUse",
+                                updatedInput: {
+                                    ...(tool as Record<string, unknown>),
+                                    command: `${TMUX_RUN_BIN} ${envFlags}${session} ${shellQuote(inner)} ${windowSlug(tool.description)}`,
+                                },
                             },
-                        },
-                    };
-                },
-            ],
-        },
-    ],
-});
+                        };
+                    },
+                ],
+            },
+        ],
+    };
+};
