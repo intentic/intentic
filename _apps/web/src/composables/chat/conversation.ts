@@ -29,31 +29,46 @@ export type ChatMode = "plan" | "acceptEdits" | "default" | "bypassPermissions";
 // runtime that minted it, so a switched turn retires the session and starts a fresh one seeded with the
 // transcript so far (see Conversation.send).
 
-// Grok (xAI via OpenCode) needs an explicitly-named model. Its catalog is daemon-owned (/grok/models → xAI
-// discovery with a persisted/seed floor, never empty) and loaded into these refs, so the picker tracks xAI's
-// renames without a static list. useChat.loadGrokModels fills them when a daemon is reachable; resetChat clears.
-export const grokModels = ref<CatalogOption[]>([]);
-// The daemon's default xAI model id; empty only until the first load, then always a concrete id.
-export const grokDefaultModel = ref<string>(``);
+// A live-catalog model option: the picker entry plus the reasoning-effort tiers the model accepts (reported
+// per model by /claude/models; absent ⇒ the provider's default scale — see catalog.ts effortsFor).
+export interface ModelOption extends CatalogOption {
+    readonly efforts?: readonly string[];
+}
 
-// The model a fresh conversation seeds for a provider+harness: Claude names Opus. Under the Claude Code harness a
-// non-Claude provider sends the translator's mapped id (gpt-5-codex / grok-4). Natively, Grok names its live
-// default (empty only before the first catalog load) and Codex sends empty (the account default).
-export const defaultModelFor = (provider: AgentProvider, harness: AgentHarness): string =>
-    provider === `claude`
-        ? `opus`
-        : harness === `claude-code`
-          ? provider === `codex`
-              ? `gpt-5-codex`
-              : `grok-4`
-          : provider === `grok`
-            ? grokDefaultModel.value
-            : ``;
+// Every provider's model catalog is daemon-owned (/claude/models · /codex/models · /grok/models — live
+// discovery with a persisted/seed floor, never empty) and loaded into these records, so the pickers track
+// provider renames and new releases without a static list. useChat.loadProviderModels fills them when a daemon
+// is reachable; resetChat clears. Empty only until the first load.
+export const providerModels = ref<Record<AgentProvider, ModelOption[]>>({ claude: [], codex: [], grok: [] });
+// Each provider's daemon-resolved default model id; empty only until the first load.
+export const providerDefaultModel = ref<Record<AgentProvider, string>>({ claude: ``, codex: ``, grok: `` });
 
-// The model options for a provider+harness picker/chip: native Grok's live daemon catalog, else the static
-// (harness-aware) catalog. Shared by the composer pill and the menu bodies so their list + label logic can't drift.
-export const modelOptionsFor = (provider: AgentProvider, harness: AgentHarness): CatalogOption[] =>
-    provider === `grok` && harness === `native` ? grokModels.value : modelsFor(provider, harness);
+// The model a fresh conversation seeds for a provider+harness. Under the Claude Code harness a non-Claude
+// provider sends the translator's mapped id (the static catalog's entry). Natively every provider names its
+// live daemon default; before the first catalog load Claude falls back to its stable `opus` alias (always
+// valid) and codex/grok send empty (the daemon then resolves its own catalog default).
+export const defaultModelFor = (provider: AgentProvider, harness: AgentHarness): string => {
+    if (harness === `claude-code` && provider !== `claude`) {
+        return modelsFor(provider, harness)[0]?.value ?? ``;
+    }
+    const live = providerDefaultModel.value[provider];
+    if (live !== ``) {
+        return live;
+    }
+    return provider === `claude` ? `opus` : ``;
+};
+
+// The model options for a provider+harness picker/chip: the provider's live daemon catalog, with the static
+// catalog as the pre-load floor (Claude's tier aliases; codex/grok empty) — except under the Claude Code
+// harness, where a non-Claude provider's list is the translator's static mapping. Shared by the composer pill
+// and the menu bodies so their list + label logic can't drift.
+export const modelOptionsFor = (provider: AgentProvider, harness: AgentHarness): CatalogOption[] => {
+    if (harness === `claude-code` && provider !== `claude`) {
+        return modelsFor(provider, harness);
+    }
+    const live = providerModels.value[provider];
+    return live.length > 0 ? live : modelsFor(provider, `native`);
+};
 // The display label for a selected model id — the option's label, else the provider name so the chip is never
 // blank (Grok's catalog can be briefly empty on first load; other providers always resolve their option).
 export const modelLabelFor = (provider: AgentProvider, harness: AgentHarness, modelId: string): string =>
@@ -208,7 +223,7 @@ const readTurnDefaults = (): TurnDefaults => {
     const fallback: TurnDefaults = {
         provider: `claude`,
         harness: `native`,
-        models: { claude: `opus`, codex: ``, grok: defaultModelFor(`grok`, `native`) },
+        models: readModels(undefined),
         effort: `xhigh`,
         thinking: true,
         mode: `plan`,
@@ -820,13 +835,15 @@ export class Conversation {
                     this.error.value = message;
                     return;
                 }
-                if (event.code === `grok-model-invalid`) {
-                    // The daemon self-heals a stale model mid-turn (re-prompting with a model xAI named), so this
-                    // now reaches us only when that failed — xAI rejected the model AND named no alternative, a
-                    // genuine error. Surface it (red), and reload the catalog so the picker reflects whatever the
-                    // daemon last recorded. Dynamic import breaks the static cycle (useChat imports this module),
-                    // mirroring the terminal-panel import above.
-                    void import(`./useChat`).then((chat) => chat.loadGrokModels());
+                if (event.code === `grok-model-invalid` || event.code === `codex-model-invalid`) {
+                    // The daemon rejected the pinned model. Grok self-heals mid-turn (re-prompting with a model
+                    // xAI named), so its code reaches us only when that failed; Codex can't (OpenAI names no
+                    // alternative), so its code always lands here. Either way: surface it (red) and reload the
+                    // provider's live catalog so the picker — and any conversation still pinning the dead id —
+                    // repoints to what the daemon actually serves. Dynamic import breaks the static cycle
+                    // (useChat imports this module), mirroring the terminal-panel import above.
+                    const provider = this.provider.value;
+                    void import(`./useChat`).then((chat) => chat.loadProviderModels(provider));
                     this.error.value = event.message;
                     return;
                 }

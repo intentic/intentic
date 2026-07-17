@@ -4,6 +4,7 @@ import {
     CodexDevicePollSchema,
     CodexDeviceStartSchema,
     CodexPollResultSchema,
+    ModelsSchema,
     OauthAccountListSchema,
     OkSchema,
 } from "../schemas.js";
@@ -15,6 +16,8 @@ import {
 export const codexContract = {
     start: oc.route({ method: "POST", path: "/codex/oauth/start" }).output(CodexDeviceStartSchema),
     poll: oc.route({ method: "POST", path: "/codex/oauth/poll" }).input(CodexDevicePollSchema).output(CodexPollResultSchema),
+    // OpenAI/Codex's live models for the model picker — the source of valid ids (see codex-models.ts).
+    models: oc.route({ method: "GET", path: "/codex/models" }).output(ModelsSchema),
     accounts: oc.route({ method: "GET", path: "/codex/accounts" }).output(OauthAccountListSchema),
     disconnect: oc.route({ method: "POST", path: "/codex/account/disconnect" }).input(AccountIdSchema).output(OkSchema),
 };

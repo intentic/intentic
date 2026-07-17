@@ -23,8 +23,10 @@ import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
 import { createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStore, type MembersStore, type VerifiedIdentity } from "./auth/auth.js";
+import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
 import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
 import { createCodexAgent } from "./codex/codex-agent.js";
+import { type CodexCatalog, createCodexCatalog } from "./codex/codex-catalog.js";
 import { type CodexReauthNeeded, type CodexStore, fileCodexStore, probeCodexHealth } from "./codex/codex-credentials.js";
 import { locateCodexThread } from "./sessions/codex-sessions.js";
 import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
@@ -103,8 +105,15 @@ export interface Services {
     readonly sandboxSettings: SandboxSettingsStore;
     // Claude subscription accounts (one <id>.json per account under .intentic/claude), several per sandbox.
     readonly claudeStore: ClaudeStore;
+    // Claude's live model catalog from the Agent SDK's supportedModels() (alias fallback, never empty). Serves
+    // /claude/models for the picker so new tiers + effort levels need no code change.
+    readonly claudeModels: ClaudeCatalog;
     // ChatGPT (Codex) accounts, each in Codex's native auth.json under its own CODEX_HOME (.intentic/codex/<id>).
     readonly codexStore: CodexStore;
+    // OpenAI/Codex's live model catalog (discovery → persisted → seed floor, never empty). A native Codex turn
+    // resolves its model here so it never sends the SDK's rejected gpt-5-codex default; /codex/models serves the
+    // picker; a turn's self-heal `record`s the ids OpenAI proved valid.
+    readonly codexModels: CodexCatalog;
     // Provider API keys (.intentic/provider-keys.json) the Claude Code harness uses — via the bundled translator —
     // to serve non-Claude providers (codex → OpenAI, grok → xAI); their subscription OAuth can't reach a gateway.
     // /provider-keys edits it; streamAgent reads it (with the container-env key as fallback) to gate a routed turn.
@@ -226,6 +235,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         : undefined;
 
     const codexStore = fileCodexStore(codexBase);
+    const claudeStore = fileClaudeStore(join(authRoot, "claude"));
     // Short-lived verdict cache: the offline gate already makes healthy probes network-free, so this only spares
     // OpenAI's token endpoint from repeated failing refreshes on a revoked account across back-to-back /accounts
     // loads. A fresh probe on daemon restart is fine (cheap, offline-gated).
@@ -256,8 +266,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         drafts: fileDraftsStore(join(workspace.root, ".intentic", "drafts")),
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(join(workspace.root, ".intentic", "settings.json")),
-        claudeStore: fileClaudeStore(join(authRoot, "claude")),
+        claudeStore,
+        claudeModels: createClaudeCatalog(claudeStore, config, workspace.root),
         codexStore,
+        codexModels: createCodexCatalog(codexStore, config, join(codexBase, "models.json")),
         providerKeys: fileProviderKeysStore(join(workspace.root, ".intentic", "provider-keys.json")),
         codexHealth,
         locateCodexThread: async (threadId) =>

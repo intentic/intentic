@@ -13,9 +13,14 @@ import { disposeAllSessions, type TerminalTabsSource } from "./useTerminal";
 
 export const globalTerminalSource: TerminalTabsSource = {
     list: async () =>
-        TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)).sessions.map(({ name, label, kind, running }) =>
-            label === undefined ? { name, running, kind } : { name, label, running, kind },
-        ),
+        TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)).sessions.map(({ name, label, kind, running, extensionId, processName }) => ({
+            name,
+            kind,
+            running,
+            ...(label !== undefined ? { label } : {}),
+            ...(extensionId !== undefined ? { extensionId } : {}),
+            ...(processName !== undefined ? { processName } : {}),
+        })),
     create: () => `web-${crypto.randomUUID().slice(0, 8)}`,
     kill: (name) => {
         void sandboxJson(`/system/terminals/${encodeURIComponent(name)}`, { method: `DELETE` });

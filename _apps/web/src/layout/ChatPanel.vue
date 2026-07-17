@@ -71,7 +71,7 @@ const providerName = computed(() => providerLabel(provider.value));
 // The chip's model name: shared with the picker menu so they can't drift; falls back to the provider name (never
 // blank) while Grok's daemon catalog is still loading.
 const modelLabelText = computed(() => modelLabelFor(provider.value, harness.value, model.value));
-const efforts = computed(() => effortsFor(provider.value));
+const efforts = computed(() => effortsFor(provider.value, model.value));
 
 // The mobile pickers: pill taps open bottom sheets instead of anchored popovers.
 const modelSheetOpen = ref(false);

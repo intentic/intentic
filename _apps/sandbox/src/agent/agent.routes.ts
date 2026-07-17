@@ -160,10 +160,16 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         }
         run = services.codexAgent;
         resolvedAccount = servedByFallback ? undefined : accountId;
+        // Resolve a concrete model so the turn never falls back to @openai/codex-sdk's built-in default
+        // (gpt-5-codex), which a ChatGPT account can reject ("model not supported when using Codex with a ChatGPT
+        // account"). An explicit selection rides through (a stale one self-heals via codex-model-invalid); an empty
+        // one resolves the catalog default (discovery → persisted → seed floor, never empty — see codex-catalog).
+        const model = input.model !== undefined && input.model !== "" ? input.model : (await services.codexModels.models(accountId)).default;
+        const withModel = { ...base, model };
         // Pin CODEX_HOME to the resolved home; absent ⇒ the adapter's OPENAI_API_KEY fallback home. Codex takes
         // attachments structurally: images ride as native local_image inputs, the rest as a file list in the
         // prompt (split in the adapter).
-        const withHome = codexHome !== undefined ? { ...base, codexHome } : base;
+        const withHome = codexHome !== undefined ? { ...withModel, codexHome } : withModel;
         request = attachmentPaths.length > 0 ? { ...withHome, attachments: attachmentPaths } : withHome;
     } else if (input.agent === "grok" && harness === "native") {
         // Grok rides OpenCode with xAI subscription OAuth (OpenCode owns the credential). Gate on OpenCode's own

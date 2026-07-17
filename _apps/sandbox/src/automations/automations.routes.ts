@@ -5,6 +5,7 @@ import { Cron } from "croner";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
 import { listenerProvidersOf } from "../extensions/installed-extensions.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { fireAutomation } from "./scheduler.js";
@@ -64,12 +65,16 @@ export const createAutomationsRoutes = (services: Services) => {
                     ? { ...input, trigger: { ...input.trigger, token: randomBytes(24).toString("base64url") } }
                     : input;
             await services.automations.upsert(automation);
+            // The first enabled listener automation is what materializes its provider's gateway process (and the
+            // last one's removal below stops it) — detached, the gateway's own poll handles the rest.
+            void reconcileListenerProcesses(services);
             return { ok: true } as const;
         }),
         remove: i.remove.handler(async ({ input }) => {
             if (!(await services.automations.remove(input.id))) {
                 throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });
             }
+            void reconcileListenerProcesses(services);
             return { ok: true } as const;
         }),
         pendingList: i.pendingList.handler(async () => ({ approvals: await services.approvals.list() })),

@@ -5,8 +5,8 @@ import {
     type AutomationRun,
     type AutomationSummary,
     type CatalogOption,
-    GrokModelsSchema,
     HARNESSES,
+    ModelsSchema,
     modelsFor,
     PROVIDERS,
 } from "@intentic/sandbox-contract";
@@ -71,20 +71,23 @@ const { automations, pending, error: listError, save, remove, approve, reject } 
 // Capability facts from the host — reactive because reading them inside a computed tracks the underlying store.
 const capabilities = computed(() => host().workspace.capabilities());
 
-// Native Grok's model list is the live daemon catalog (same source chat uses) — fetched lazily, only while the
-// form actually has native Grok picked. Every other provider+harness reads the static shared catalog.
-const grokModels = useQuery({
-    queryKey: host().sandbox.key(`grok-models`),
+// Whether the picked provider+harness reads the live daemon catalog (/{provider}/models — the same source chat
+// uses): every native turn does, and claude on either harness (both are its own loop). A non-Claude provider
+// under the Claude Code harness pins the translator's static mapping instead.
+const liveCatalog = computed(() => form.harness === `native` || form.agent === `claude`);
+
+// The picked provider's live model list — fetched lazily per provider, only while the form reads it.
+const liveModels = useQuery({
+    queryKey: computed(() => host().sandbox.key(`agent-models`, form.agent)),
     queryFn: async (): Promise<CatalogOption[]> =>
-        GrokModelsSchema.parse(await host().sandbox.json(`/grok/models`)).models.map((model) => ({ value: model.id, label: model.label })),
-    enabled: computed(() => host().sandbox.reachable() && form.agent === `grok` && form.harness === `native`),
+        ModelsSchema.parse(await host().sandbox.json(`/${form.agent}/models`)).models.map((model) => ({ value: model.id, label: model.label })),
+    enabled: computed(() => host().sandbox.reachable() && liveCatalog.value),
 });
 
 // The wake's model chips: "Default" (empty — the daemon resolves the provider's own default) plus the pinnable
-// ids for the picked provider+harness. Native codex's only catalog entry IS the empty account default, so it
-// dedupes away and Default stands alone.
+// ids for the picked provider+harness.
 const modelOptions = computed<CatalogOption[]>(() => {
-    const catalog = form.agent === `grok` && form.harness === `native` ? (grokModels.data.value ?? []) : modelsFor(form.agent, form.harness);
+    const catalog = liveCatalog.value ? (liveModels.data.value ?? []) : modelsFor(form.agent, form.harness);
     return [{ value: ``, label: `Default` }, ...catalog.filter((option) => option.value !== ``)];
 });
 

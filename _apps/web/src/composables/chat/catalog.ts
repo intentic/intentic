@@ -1,20 +1,31 @@
 import type { IconName } from "@intentic-app/ui";
 import type { AgentProvider, CatalogOption } from "@intentic/sandbox-contract";
-import type { ChatMode, ConversationStatus } from "./conversation";
+import { type ChatMode, type ConversationStatus, providerModels } from "./conversation";
 
 /* Chat UI metadata shared by the desktop panel, the mobile header, and the menu bodies: the effort catalog,
  * the permission modes, and the small presentational helpers (tab status icon, relative time). The provider/
  * harness/model catalog lives in @intentic/sandbox-contract (agent-catalog.ts) — shared with the automations
- * dialog. Pure data + pure functions — all live state stays in the useChat singleton. */
+ * dialog; the live per-provider model state lives in conversation.ts. */
 
-// Reasoning effort levels (SDK EffortLevel); 'xhigh' is the default in useChat. Codex's scale ends at xhigh.
-export const effortsFor = (provider: AgentProvider): CatalogOption[] => [
-    { label: `Low`, value: `low` },
-    { label: `Medium`, value: `medium` },
-    { label: `High`, value: `high` },
-    { label: `X-High`, value: `xhigh` },
-    ...(provider === `claude` ? [{ label: `Max`, value: `max` }] : []),
-];
+const EFFORT_LABELS: Record<string, string> = { minimal: `Minimal`, low: `Low`, medium: `Medium`, high: `High`, xhigh: `X-High`, max: `Max` };
+
+// Reasoning effort levels for a provider+model: the live catalog's per-model tiers when the daemon reported
+// them (/claude/models carries each model's supported levels), else the provider's static scale — 'xhigh' is
+// the default in useChat; Codex's scale ends at xhigh. Model-aware so a release with a different scale adjusts
+// the picker with no code change.
+export const effortsFor = (provider: AgentProvider, modelId?: string): CatalogOption[] => {
+    const efforts = providerModels.value[provider].find((option) => option.value === modelId)?.efforts;
+    if (efforts !== undefined && efforts.length > 0) {
+        return efforts.map((value) => ({ label: EFFORT_LABELS[value] ?? value, value }));
+    }
+    return [
+        { label: `Low`, value: `low` },
+        { label: `Medium`, value: `medium` },
+        { label: `High`, value: `high` },
+        { label: `X-High`, value: `xhigh` },
+        ...(provider === `claude` ? [{ label: `Max`, value: `max` }] : []),
+    ];
+};
 
 // Permission modes for the composer's mode selector; value mirrors the SDK permissionMode. 'plan' is default.
 export const MODES: readonly { value: ChatMode; label: string; icon: IconName; description: string }[] = [

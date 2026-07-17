@@ -30,6 +30,7 @@ export const createCodexRoutes = (services: Services) => {
         }),
         // Attach each account's proactive health so the UI can badge a revoked sign-in before the user chats.
         accounts: i.accounts.handler(async () => ({ accounts: await Promise.all((await services.codexStore.list()).map(withHealth)) })),
+        models: i.models.handler(() => services.codexModels.models()),
         disconnect: i.disconnect.handler(async ({ input }) => {
             await services.codexStore.clear(input.id);
             return { ok: true } as const;

@@ -182,8 +182,10 @@ const main = async (): Promise<void> => {
     }
 
     // Realtime agent wake-ups are provider gateways now: a listener extension (ext-discord) runs an autoStart
-    // process that holds the connection and drives the daemon's /listeners/<provider> routes (started via
-    // startAllExtensionProcesses below) — the daemon holds no gateway of its own.
+    // process that holds the connection and drives the daemon's /listeners/<provider> routes — the daemon holds
+    // no gateway of its own. The process exists only while its provider is wanted (a connector or an enabled
+    // listener automation): startAllExtensionProcesses gates the boot start, reconcileListenerProcesses
+    // converges on every automations/capabilities mutation.
 
     // Workspace history: an immediate snapshot plus the interval sweep (turn snapshots ride on streamAgent).
     services.history.start();
@@ -214,8 +216,8 @@ const main = async (): Promise<void> => {
         versionCheck.stop();
         announcer.stop();
         services.history.stop();
-        // Stops the extension gateway processes too (tmux SIGTERM) — each flushes its own in-flight voice
-        // transcript on the way down.
+        // Stops the extension gateway processes too (tmux kill-session ⇒ SIGHUP) — each flushes its own
+        // in-flight voice transcript on the way down.
         services.panelProcesses.stopAll();
         previewProxy.close();
         server.close();

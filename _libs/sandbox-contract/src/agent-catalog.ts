@@ -27,14 +27,15 @@ export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
     { label: "Claude Code", value: "claude-code" },
 ];
 
-// Available models per provider+harness; Opus is the Claude default. NATIVE Codex has no public model list and its
-// ChatGPT-account auth rejects an explicitly-named model, so it uses the account default (empty value the turn
-// omits). Native Grok is NOT here (its list loads live from the daemon's /grok/models catalog — consumers layer it
-// on top). UNDER the Claude Code harness a non-Claude provider routes through the translator, which needs a
-// concrete id, so codex/grok return one.
+// The STATIC floor of the model catalog; every native provider's real list is the daemon's live catalog
+// (/claude/models · /codex/models · /grok/models — discovery with a persisted/seed floor, never empty), which
+// consumers layer on top. Native codex/grok are empty here (nothing sensible to offer before the live load);
+// Claude's stable tier aliases always resolve to the newest version of each tier, so they double as the
+// pre-load fallback. UNDER the Claude Code harness a non-Claude provider routes through the translator, which
+// needs a concrete id, so codex/grok return one.
 export const modelsFor = (provider: AgentProvider, harness: AgentHarness): CatalogOption[] => {
     if (provider === "codex") {
-        return harness === "claude-code" ? [{ label: "GPT-5 Codex", value: "gpt-5-codex" }] : [{ label: "GPT-5 Codex", value: "" }];
+        return harness === "claude-code" ? [{ label: "GPT-5 Codex", value: "gpt-5-codex" }] : [];
     }
     if (provider === "grok") {
         return harness === "claude-code" ? [{ label: "Grok 4", value: "grok-4" }] : [];

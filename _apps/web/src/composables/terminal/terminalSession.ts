@@ -186,7 +186,9 @@ export const persistScrollback = (s: TerminalSession): void => {
 };
 
 // Build one session's xterm + host + socket. The host stays out of the DOM until mountTerminalSession.
-export const createTerminalSession = (name: string, onExit: (name: string) => void): TerminalSession => {
+// `readOnly` makes it a log view (a background process's tab): stdin is disabled and keystrokes never reach
+// the PTY — resize/ping still flow, tmux needs the grid to redraw.
+export const createTerminalSession = (name: string, onExit: (name: string) => void, readOnly = false): TerminalSession => {
     const host = document.createElement(`div`);
     host.className = `h-full w-full`;
     // tmux runs with `mouse on` (so the wheel scrolls its scrollback), which means a drag is reported to tmux —
@@ -205,7 +207,8 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         true,
     );
     const term = new Terminal({
-        cursorBlink: true,
+        cursorBlink: !readOnly,
+        disableStdin: readOnly,
         fontFamily: `'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace`,
         fontSize: 13,
         // Snapshotted at creation; fine while --color-terminal is constant across themes/modes.
@@ -258,8 +261,11 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     observer.observe(host);
     const s: TerminalSession = { name, term, fit, serialize, host, observer, onExit, retryDelay: RETRY_MS, closing: false, down: false };
     // Keystrokes → pty; xterm's resize (from FitAddon) → pty resize. Wired once — send() targets the current
-    // socket, so these survive reconnects.
-    term.onData((data) => send(s, { type: `input`, data }));
+    // socket, so these survive reconnects. A read-only session wires no input path at all (disableStdin already
+    // drops keystrokes; this also covers programmatic term.input, e.g. the touch extra-keys row).
+    if (!readOnly) {
+        term.onData((data) => send(s, { type: `input`, data }));
+    }
     term.onResize(({ cols, rows }) => send(s, { type: `resize`, cols, rows }));
     // Restore the pre-reload scrollback first (xterm buffers writes made before open()); tmux's attach redraw
     // then paints the live screen below it.

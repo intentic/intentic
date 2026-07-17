@@ -11,6 +11,7 @@ import {
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../agent/agent.js";
 import { createPlanRequest } from "../agent/agent-requests.js";
+import { CODEX_MODEL_INVALID } from "./codex-models.js";
 
 /* The Codex provider adapter: same seam as agent.ts's runAgent — AgentRequest in, AgentEvent frames out — but
  * backed by the Codex CLI (`codex exec` via @openai/codex-sdk) instead of the Claude Agent SDK. Provider
@@ -317,12 +318,18 @@ export const createCodexAgent = (codexHome: string, runner: CodexRunner = defaul
             for await (const event of turn) {
                 if (event.kind === "error") {
                     surfacedError = true;
+                    // Tag a rejected/unusable model so the client reloads the live catalog and drops the bad pinned
+                    // model, mirroring Grok's grok-model-invalid (OpenAI names no alternatives, so there's nothing
+                    // to re-prompt with here — the reloaded default serves the next turn).
+                    yield CODEX_MODEL_INVALID.test(event.message) ? { ...event, code: "codex-model-invalid" as const } : event;
+                    continue;
                 }
                 yield event;
             }
         } catch (error) {
             if (!surfacedError) {
-                yield { kind: "error", message: error instanceof Error ? error.message : "codex agent failed" };
+                const message = error instanceof Error ? error.message : "codex agent failed";
+                yield { kind: "error", message, ...(CODEX_MODEL_INVALID.test(message) ? { code: "codex-model-invalid" as const } : {}) };
             }
         }
         yield { kind: "done" };

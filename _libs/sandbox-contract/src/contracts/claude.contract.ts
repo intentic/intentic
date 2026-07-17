@@ -1,5 +1,13 @@
 import { oc } from "@orpc/contract";
-import { AccountIdSchema, AuthorizeChallengeSchema, OauthAccountListSchema, OauthAccountSchema, OauthExchangeSchema, OkSchema } from "../schemas.js";
+import {
+    AccountIdSchema,
+    AuthorizeChallengeSchema,
+    ModelsSchema,
+    OauthAccountListSchema,
+    OauthAccountSchema,
+    OauthExchangeSchema,
+    OkSchema,
+} from "../schemas.js";
 
 // Claude subscription OAuth — the sandbox owns the credential. `start` hands the browser the authorize URL +
 // PKCE material; `exchange` stores the resulting tokens as a new account and returns it; `accounts` lists the
@@ -7,6 +15,8 @@ import { AccountIdSchema, AuthorizeChallengeSchema, OauthAccountListSchema, Oaut
 export const claudeContract = {
     start: oc.route({ method: "POST", path: "/claude/oauth/start" }).output(AuthorizeChallengeSchema),
     exchange: oc.route({ method: "POST", path: "/claude/oauth/exchange" }).input(OauthExchangeSchema).output(OauthAccountSchema),
+    // Claude's available models for the picker, from the Agent SDK's supportedModels() (see claude-models.ts).
+    models: oc.route({ method: "GET", path: "/claude/models" }).output(ModelsSchema),
     accounts: oc.route({ method: "GET", path: "/claude/accounts" }).output(OauthAccountListSchema),
     disconnect: oc.route({ method: "POST", path: "/claude/account/disconnect" }).input(AccountIdSchema).output(OkSchema),
 };

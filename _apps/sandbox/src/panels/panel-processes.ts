@@ -27,8 +27,8 @@ export const PANEL_SESSION_PREFIX = "panel-";
 export const panelSession = (key: string): string => `${PANEL_SESSION_PREFIX}${key}`;
 
 // The image's default-command shell (Dockerfile) — pane_current_command reads this at an idle prompt, which is
-// how the sweep sees a oneShot job finish.
-const SHELL = "zsh";
+// how the sweep sees a oneShot job finish (and how the terminals list sees a background process crash).
+export const SHELL = "zsh";
 
 // The tmux side of the manager, injectable so tests need no tmux binary. `states` reports every panel pane's
 // foreground command (session name → pane_current_command) in one call; an absent session is a dead one.

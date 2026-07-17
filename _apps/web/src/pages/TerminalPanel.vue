@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { useDevice } from "@intentic-app/ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import BackgroundProcesses from "../components/BackgroundProcesses.vue";
 import { createTerminalTabs, type TerminalTabsSource } from "../composables/terminal/useTerminal";
 
 /* THE terminal panel — mounted once in the shell, below every view. Each tab is a tmux-backed session in the
  * shared cache (composables/useTerminal): mounting re-appends the active tab's persistent host element,
  * unmounting only detaches it, so scrollback and running processes survive collapse, navigation, and reload.
  * Every tab gets the hover-×; restart is shell-only (a dev-server tab is re-run via Start, or ↑ at its
- * prompt). `initial` is an object so re-requesting the same session still refocuses. Height and collapse
- * persist per storageKey; `resizable: false` pins the panel to its container. */
+ * prompt). Managed background processes (extension gateways, dockerd) never tab by themselves — they live in
+ * the toolbar's processes popover, and their × only hides the read-only log view. `initial` is an object so
+ * re-requesting the same session still refocuses. Height and collapse persist per storageKey;
+ * `resizable: false` pins the panel to its container. */
 
 const {
     source,
@@ -219,12 +222,20 @@ const endResize = (event: PointerEvent): void => {
                     class="tterm group flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded-md pl-2 pr-1.5 text-2xs"
                     :class="{ 'tterm-on': tab.name === activeName, 'opacity-60': tab.running === false }"
                     v-tooltip.top="
-                        tab.kind === 'agent' ? 'AI terminal' : tab.kind === 'job' ? 'Job terminal' : tab.running === false ? 'finished' : undefined
+                        tab.kind === 'agent'
+                            ? 'AI terminal'
+                            : tab.kind === 'job'
+                              ? 'Job terminal'
+                              : tab.kind === 'process'
+                                ? 'Background process — read-only logs'
+                                : tab.running === false
+                                  ? 'finished'
+                                  : undefined
                     "
                     @click="switchTab(tab.name)"
                 >
                     <Icon
-                        :name="tab.kind === 'agent' ? 'sparkles' : tab.kind === 'job' ? 'bolt' : 'desktop'"
+                        :name="tab.kind === 'agent' ? 'sparkles' : tab.kind === 'job' ? 'bolt' : tab.kind === 'process' ? 'cog' : 'desktop'"
                         class="text-2xs"
                         :class="tab.kind === 'agent' ? 'text-link' : 'text-muted'"
                     />
@@ -253,6 +264,7 @@ const endResize = (event: PointerEvent): void => {
                 </button>
             </div>
             <span class="flex-1"></span>
+            <BackgroundProcesses :tabs="tabs" />
             <button
                 v-if="restart !== undefined && activeShell"
                 type="button"

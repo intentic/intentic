@@ -160,6 +160,8 @@ const main = async (): Promise<void> => {
     };
     process.on("SIGTERM", shutdown);
     process.on("SIGINT", shutdown);
+    // A managed stop is `tmux kill-session`, which delivers SIGHUP (the pty vanishing), not SIGTERM.
+    process.on("SIGHUP", shutdown);
 
     await reconcile();
     setInterval(() => void reconcile(), RECONCILE_MS);

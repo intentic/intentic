@@ -22,6 +22,7 @@ export const createClaudeRoutes = (services: Services) => {
             };
         }),
         accounts: i.accounts.handler(async () => ({ accounts: await services.claudeStore.list() })),
+        models: i.models.handler(() => services.claudeModels.models()),
         disconnect: i.disconnect.handler(async ({ input }) => {
             await services.claudeStore.clear(input.id);
             return { ok: true } as const;

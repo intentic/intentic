@@ -5,7 +5,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { capabilityFragments } from "../environment/fragment-sources.js";
-import { startAutoStartProcesses } from "../extensions/extension-processes.js";
+import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensions/extension-processes.js";
 import { installedExtensions } from "../extensions/installed-extensions.js";
 import { capabilityCtx, echoConfig, secretField } from "./capability.js";
 import { connectorRegistry } from "./cli/connector-registry.js";
@@ -67,6 +67,9 @@ export const createCapabilitiesRoutes = (services: Services) => {
                         await startAutoStartProcesses(services, installed);
                     }
                 }
+                // A connector add/remove flips whether its provider's gateway process is wanted (a cli discord
+                // entry is what makes ext-discord run) — converge listener extensions on the new manifest.
+                void reconcileListenerProcesses(services);
                 // Fold this entry's image fragment(s) into the composed overlay (upsert first, so compose sees it).
                 const composedHash = await composeEnvironment(services);
                 if (
@@ -106,6 +109,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                 void line;
             }
             await services.capabilities.upsert(updated);
+            void reconcileListenerProcesses(services);
             return { ok: true } as const;
         }),
         remove: i.remove.handler(async ({ input }) => {
@@ -120,6 +124,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             await handler.remove(ctx, capability.id, capability.config);
             await services.capabilities.remove(input.id);
             await composeEnvironment(services);
+            void reconcileListenerProcesses(services);
             return { ok: true } as const;
         }),
         status: i.status.handler(async ({ input }) => {

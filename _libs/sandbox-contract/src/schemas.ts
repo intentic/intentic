@@ -140,11 +140,14 @@ export const CodexPollResultSchema = z.object({ pending: z.boolean(), account: O
 // ponytail: OpenCode holds one xAI auth per data dir, so Grok stays single-account — the list is 0 or 1. Per
 // account would need an OpenCode server per data dir; add when there's demand.
 export const GrokDeviceStartSchema = z.object({ url: z.string(), code: z.string() });
-// xAI's model catalog, resolved daemon-side from live xAI discovery with a persisted last-known-good list and a
-// seed floor (see opencode.ts xaiModels) — never empty, so the picker is never blank. `label` is the humanized
-// display name; `default` is the model a fresh Grok chat seeds (always present).
-export const GrokModelSchema = z.object({ id: z.string(), label: z.string() });
-export const GrokModelsSchema = z.object({ models: z.array(GrokModelSchema), default: z.string() });
+// A provider's model catalog, resolved daemon-side from live discovery with a persisted last-known-good list and
+// a seed floor (Grok via opencode.ts xaiModels, Codex via codex-models.ts, Claude via the Agent SDK's
+// supportedModels) — never empty, so the picker is never blank. `label` is the humanized display name; `default`
+// is the model a fresh chat on that provider seeds (always present). Shared by /grok/models, /codex/models,
+// /claude/models. `efforts` is the reasoning-effort tiers the model accepts (Claude reports them per model);
+// empty ⇒ the client's default tiers.
+export const ModelSchema = z.object({ id: z.string(), label: z.string(), efforts: z.array(z.string()).optional() });
+export const ModelsSchema = z.object({ models: z.array(ModelSchema), default: z.string() });
 
 // ---- sessions ----
 
@@ -954,14 +957,20 @@ export const PanelRepoParamSchema = z.object({ repo: z.string() });
 // `panel` = a panel-* dev-server session (labeled by its panel key, started via Start; running:false =
 // untracked, e.g. a finished one-shot job's lingering shell), `agent` = an agent-* session the Claude agent's
 // Bash commands run in (live-watchable, AI-marked in the UI), `job` = a job-* session the daemon's terminal
-// runner executes user-triggered flows in (capability adds, infra check). The `{name}` kill-route param is a
-// bare string validated in the handler (a bad name is a BAD_REQUEST) since the same charset gates a
-// `tmux kill-session -t` shell-out.
+// runner executes user-triggered flows in (capability adds, infra check), `process` = a managed background
+// process riding a panel session (an extension's declared processes, dockerd) — surfaced in the panel's
+// background-processes popover with read-only log views, never as a killable tab; running is the actual
+// process (a lingering shell after a crash reads false). A process row that maps to an installed extension's
+// declared process carries extensionId+processName, the address for its /extensions start/stop routes. The
+// `{name}` kill-route param is a bare string validated in the handler (a bad name is a BAD_REQUEST) since the
+// same charset gates a `tmux kill-session -t` shell-out.
 export const TerminalSessionSchema = z.object({
     name: z.string(),
     label: z.string().optional(),
-    kind: z.enum(["shell", "panel", "agent", "job"]),
+    kind: z.enum(["shell", "panel", "agent", "job", "process"]),
     running: z.boolean(),
+    extensionId: z.string().optional(),
+    processName: z.string().optional(),
 });
 export const TerminalsListSchema = z.object({ sessions: z.array(TerminalSessionSchema) });
 export type TerminalsList = z.infer<typeof TerminalsListSchema>;

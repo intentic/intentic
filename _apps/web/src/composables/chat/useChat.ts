@@ -7,12 +7,12 @@ import {
     type ChatMode,
     type ChatRole,
     Conversation,
-    grokDefaultModel,
-    grokModels,
     type PendingAttachment,
     planParts,
     type PlanRequest,
     providerAccounts,
+    providerDefaultModel,
+    providerModels,
     rememberedAccountFor,
     rememberedModelFor,
     selectedAccountId,
@@ -245,11 +245,9 @@ const mode = computed<ChatMode>({
 const provider = computed<AgentProvider>(() => active.value.provider.value);
 const selectProvider = (p: AgentProvider): void => {
     active.value.selectProvider(p);
-    // Grok's catalog is daemon-owned and can be stale (loaded empty before the account connected, or an empty
-    // transient) — refetch on landing on Grok so the model picker is always populated on arrival.
-    if (p === `grok`) {
-        void loadGrokModels();
-    }
+    // The catalog is daemon-owned and can be stale (loaded before the account connected, or an empty transient)
+    // — refetch on landing so the model picker is populated on arrival (the daemon caches, so this is cheap).
+    void loadProviderModels(p);
 };
 // The active conversation's harness (native runtime vs the Claude Code loop) + its picker. Only meaningful for
 // codex/grok; the composer surfaces it there. A switch retires the session at the next send (like a provider switch).
@@ -407,32 +405,38 @@ const refreshAccounts = async (provider: AgentProvider): Promise<OauthAccount[]>
     return list;
 };
 
-// Load xAI's live model catalog from the daemon into the shared refs (grokModels/grokDefaultModel), then keep
-// selections valid: point any Grok conversation whose model is no longer offered — and the persisted per-
-// provider default — back to the live default (the same selection-fix refreshAccounts does for accounts).
-export const loadGrokModels = async (): Promise<void> => {
-    const response = await sandboxRequest(`/grok/models`);
+// Load a provider's live model catalog from the daemon into the shared records (providerModels/
+// providerDefaultModel), then keep selections valid: point any native conversation on that provider whose
+// model is no longer offered — and the persisted per-provider default — back to the live default (the same
+// selection-fix refreshAccounts does for accounts). Claude-Code-harness selections are translator-mapped ids,
+// not catalog ids, so they're left alone (claude itself is its own loop on either harness).
+export const loadProviderModels = async (provider: AgentProvider): Promise<void> => {
+    const response = await sandboxRequest(`${providerBase(provider)}/models`);
     if (!response.ok) {
         return;
     }
-    const body = (await response.json()) as { models: { id: string; label: string }[]; default: string };
-    grokModels.value = body.models.map((entry) => ({ label: entry.label, value: entry.id }));
-    grokDefaultModel.value = body.default;
-    // The daemon's catalog is never empty, so every Grok selection should carry a concrete offered id — like
-    // Claude always carrying "opus". Repoint anything empty OR no-longer-offered (a since-renamed/retired id like
-    // `grok-code-fast-1`) to the default, so the picker highlights a selection and the chip always shows a name,
-    // never the bare icon. The length guard keeps us from ever pinning a selection to nothing.
-    if (grokModels.value.length === 0) {
+    const body = (await response.json()) as { models: { id: string; label: string; efforts?: string[] }[]; default: string };
+    // The daemon's catalog is never empty; the guard keeps us from ever pinning a selection to nothing.
+    if (body.models.length === 0) {
         return;
     }
-    const valid = new Set(grokModels.value.map((option) => option.value));
+    providerModels.value = {
+        ...providerModels.value,
+        [provider]: body.models.map((entry) => ({ label: entry.label, value: entry.id, ...(entry.efforts !== undefined ? { efforts: entry.efforts } : {}) })),
+    };
+    providerDefaultModel.value = { ...providerDefaultModel.value, [provider]: body.default };
+    // Every native selection should carry a concrete offered id. Repoint anything empty OR no-longer-offered
+    // (a since-renamed/retired id like `grok-code-fast-1`, or a tier alias once the real ids load) to the
+    // default, so the picker highlights a selection and the chip always shows a name, never the bare icon.
+    const valid = new Set(body.models.map((entry) => entry.id));
     for (const conversation of conversations.value) {
-        if (conversation.provider.value === `grok` && !valid.has(conversation.model.value)) {
-            conversation.model.value = grokDefaultModel.value;
+        const routed = conversation.harness.value === `claude-code` && conversation.provider.value !== `claude`;
+        if (conversation.provider.value === provider && !routed && !valid.has(conversation.model.value)) {
+            conversation.model.value = body.default;
         }
     }
-    if (!valid.has(turnDefaults.models.value.grok)) {
-        turnDefaults.models.value = { ...turnDefaults.models.value, grok: grokDefaultModel.value };
+    if (!valid.has(turnDefaults.models.value[provider])) {
+        turnDefaults.models.value = { ...turnDefaults.models.value, [provider]: body.default };
     }
 };
 
@@ -481,7 +485,7 @@ const pollGrokOnce = async (deadline: number): Promise<void> => {
             accountManageOpen.value = false;
             // The account just connected — load its model catalog now so the picker is populated immediately,
             // not only after the next reselect or reload.
-            void loadGrokModels();
+            void loadProviderModels(`grok`);
             return;
         }
     } catch {
@@ -521,6 +525,8 @@ const pollCodexOnce = async (deadline: number): Promise<void> => {
             cancelConnect();
             error.value = null;
             accountManageOpen.value = false;
+            // The account just connected — its OAuth token may unlock model discovery, so refresh the catalog.
+            void loadProviderModels(`codex`);
             return;
         }
     } catch {
@@ -544,8 +550,8 @@ export const resetChat = (): void => {
     sessions.value = [];
     providerAccounts.value = { claude: [], codex: [], grok: [] };
     selectedAccountId.value = { claude: undefined, codex: undefined, grok: undefined };
-    grokModels.value = [];
-    grokDefaultModel.value = ``;
+    providerModels.value = { claude: [], codex: [], grok: [] };
+    providerDefaultModel.value = { claude: ``, codex: ``, grok: `` };
     managedProvider.value = turnDefaults.provider.value;
     cancelConnect();
     error.value = null;
@@ -774,8 +780,8 @@ export const loadAccountStatus = async (): Promise<void> => {
                 // Leave the lists as-is; the composer hint covers the account-less case.
             }
         }),
-        // Grok's model list is daemon-owned too — load it on the same reachable seam so the picker is ready.
-        loadGrokModels().catch(() => undefined),
+        // Model lists are daemon-owned too — load them on the same reachable seam so the pickers are ready.
+        ...PROVIDERS.map((target) => loadProviderModels(target).catch(() => undefined)),
     ]);
 };
 
@@ -805,6 +811,9 @@ const completeConnect = async (code: string): Promise<boolean> => {
     addAccount(`claude`, (await response.json()) as OauthAccount);
     cancelConnect();
     error.value = null;
+    // The account just connected — supportedModels() needs a Claude credential, so the catalog may only now
+    // be discoverable.
+    void loadProviderModels(`claude`);
     return true;
 };
 
@@ -844,7 +853,6 @@ export function useChat() {
         selectAccount,
         accounts,
         managedAccounts,
-        grokModels,
         accountUsage,
         model,
         effort,

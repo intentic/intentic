@@ -6,6 +6,7 @@ import { DEBOUNCE_MS, dispatchListenerMessage, ListenerMessageSchema, reportList
 import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../context.js";
+import { listenerState } from "./listener-state.js";
 import { ListenerStatusSchema, setListenerStatus } from "./listener-status.js";
 
 // The control surface for an extension's realtime-listener gateway process (e.g. ext-discord). The daemon holds
@@ -18,17 +19,7 @@ export const createListenerRoutes = (services: Services, wake: WakeFn = streamAg
     // The reconcile feed: the enabled listener automations for this provider + its connector capabilities WITH
     // full config (secret bot tokens included — the gateway needs them to connect). The gateway polls this on
     // its interval and connects/disconnects to match.
-    state: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
-        const provider = c.req.param("provider");
-        const [automations, capabilities] = await Promise.all([services.automations.list(), services.capabilities.list()]);
-        const enabled = automations.filter(
-            (automation) => automation.enabled && automation.trigger.kind === "listener" && automation.trigger.provider === provider,
-        );
-        const connectors = capabilities.flatMap((capability) =>
-            capability.kind === "cli" && capability.config.provider === provider ? [{ id: capability.id, config: capability.config }] : [],
-        );
-        return c.json({ automations: enabled, connectors });
-    },
+    state: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => c.json(await listenerState(services, c.req.param("provider"))),
 
     // One inbound event → the matching listener automations. Plain (voice events, or a source painting its own
     // reply): fire-and-return. `?stream=1`: hold an ndjson response, one frame stream per matched automation
