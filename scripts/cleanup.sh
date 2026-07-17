@@ -40,7 +40,7 @@ fi
 
 usage() {
     echo "intentic cleanup — remove sandbox(es) on this machine (containers + named /work volumes + networks)."
-    echo "Usage: cleanup.sh [SLUG...] [--all] [-y]"
+    echo "Usage: cleanup.sh [SLUG...] [--all] [-y] [--agent-auth]"
     echo "  (no arg)      pick which sandbox(es) to remove (interactive); non-interactive runs list and stop"
     echo "  SLUG...       remove the named sandbox(es)"
     echo "  -a, --all     remove EVERY sandbox on this machine"
