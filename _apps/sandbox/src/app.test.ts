@@ -1329,6 +1329,25 @@ test("isolated requires conversationId at the contract gate", async () => {
     expect(await errorCode(client.agent.run({ prompt: "hi", isolated: true }))).toBe("BAD_REQUEST");
 });
 
+test("a turn's title seeds a fresh entry and agents.rename overwrites it", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    // A renamed draft's first turn carries the user-chosen title — it wins over the prompt derivation.
+    await collect(await client.agent.run({ prompt: "fix the login bug", title: "My agent", conversationId: "conv1", isolated: true }));
+    expect((await client.agents.list()).agents[0]?.title).toBe("My agent");
+    const renamed = await client.agents.rename({ id: "conv1", title: "  Login fix  " });
+    expect(renamed.title).toBe("Login fix");
+    expect((await client.agents.list()).agents[0]?.title).toBe("Login fix");
+    expect(await errorCode(client.agents.rename({ id: "nope", title: "x" }))).toBe("NOT_FOUND");
+});
+
 test("git.status resolves the repo dir, and rejects an unknown repo", async () => {
     const seen: string[] = [];
     const client = clientFor(

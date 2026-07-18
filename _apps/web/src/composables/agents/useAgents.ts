@@ -141,6 +141,49 @@ const refresh = async (): Promise<void> => {
     }
 };
 
+// Rename an agent: sync the open conversation's title ref first (docked tab, detail header, and the
+// localStorage tab snapshot all follow it), then write the registry through the daemon. A card with no
+// registry entry is a draft — its title lives client-side and rides the next turn body — but the POST still
+// fires best-effort to cover the send→first-roster-frame window where the entry exists but hasn't painted.
+// Registered agents update optimistically; on failure both sides revert (re-resolved against the CURRENT
+// roster — an SSE frame may have replaced it mid-flight) and the error propagates to the caller's inline UI.
+const rename = async (id: string, title: string): Promise<void> => {
+    const trimmed = title.trim();
+    const { conversations } = useChat();
+    const conversation = conversations.value.find((candidate) => candidate.conversationId === id);
+    const previousTitle = conversation?.title.value ?? null;
+    if (conversation !== undefined) {
+        conversation.title.value = trimmed;
+    }
+    const post = (): Promise<AgentSummary> =>
+        sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/rename`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ title: trimmed }),
+        });
+    const previous = registry.value.find((agent) => agent.id === id);
+    if (previous === undefined) {
+        void post().catch(() => undefined);
+        return;
+    }
+    const revertTitle = previous.title;
+    previous.title = trimmed; // registry is a deep ref — the in-place write repaints the fleet
+    try {
+        const summary = await post();
+        registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
+    } catch (error) {
+        // Revert on whatever the roster holds NOW — an SSE frame may have replaced the array (and `previous`).
+        const target = registry.value.find((agent) => agent.id === id);
+        if (target !== undefined) {
+            target.title = revertTitle;
+        }
+        if (conversation !== undefined) {
+            conversation.title.value = previousTitle;
+        }
+        throw error;
+    }
+};
+
 // Open (or focus) an agent's conversation tab and mark it seen. Takes just the identity fields so registry
 // cards and client-only draft cards both route through it.
 const open = (agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId" | "title" | "account">): void => {
@@ -156,5 +199,5 @@ const open = (agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId
 };
 
 export function useAgents() {
-    return { fleet, lanes, attention, refresh, open, markSeen };
+    return { fleet, lanes, attention, refresh, open, markSeen, rename };
 }

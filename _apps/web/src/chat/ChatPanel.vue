@@ -33,7 +33,11 @@ import ProviderLogo from "./ProviderLogo.vue";
  * resize) and cross-cutting UI state (scroll pinning); the draft and attachments live per-tab on the active
  * conversation. Message rendering, the tab strip, and the account area are their own components. On mobile
  * (the full-screen /chat tab) the tab strip becomes a compact header, the pickers become bottom sheets, the
- * resize handle disappears, and the composer pads itself above the on-screen keyboard. */
+ * resize handle disappears, and the composer pads itself above the on-screen keyboard.
+ *
+ * The panel root is a @container: composer/status label density keys off the panel's own width (it can be
+ * 288px while the viewport is desktop-wide — docked column or PiP popout), while touch-target sizing keys
+ * off the max-md: device class. Two intentional axes — don't unify them. */
 
 const {
     active,
@@ -572,7 +576,7 @@ watch(keyboardInset, () => {
 
 <template>
     <div
-        class="chat-panel relative flex h-full min-h-0 flex-col overflow-hidden bg-card"
+        class="chat-panel @container relative flex h-full min-h-0 flex-col overflow-hidden bg-card"
         :class="{ 'is-resizing': resizing }"
         @dragenter="onDragEnter"
         @dragover.prevent
@@ -688,17 +692,17 @@ watch(keyboardInset, () => {
                         <div class="flex items-center gap-1 px-2.5 pb-2.5">
                             <button
                                 type="button"
-                                class="composer-ghost h-8 gap-1.5 px-2.5 text-xs font-medium max-md:h-11"
+                                class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-xs font-medium max-md:h-11"
                                 @click="mobile ? (modelSheetOpen = true) : providerModel?.toggle($event)"
                                 v-tooltip.top="activeModel ?? `${providerName} · ${modelLabelText}`"
                                 aria-label="Provider and model"
                             >
-                                <ProviderLogo :provider="provider" class="text-2xs text-link" />
-                                <span>{{ modelLabelText }}</span>
-                                <Icon name="chevron-down" class="text-2xs text-subtle" />
+                                <ProviderLogo :provider="provider" class="shrink-0 text-2xs text-link" />
+                                <span class="truncate @max-xs:hidden">{{ modelLabelText }}</span>
+                                <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
                             </button>
 
-                            <div v-if="efforts.length > 0" class="flex items-center gap-1.5" role="group" aria-label="Reasoning effort">
+                            <div v-if="efforts.length > 0" class="flex shrink-0 items-center gap-1.5" role="group" aria-label="Reasoning effort">
                                 <div class="flex items-center gap-0.5">
                                     <button
                                         v-for="(e, i) in efforts"
@@ -711,24 +715,24 @@ watch(keyboardInset, () => {
                                         :aria-pressed="effort === e.value"
                                     ></button>
                                 </div>
-                                <span class="text-2xs text-subtle">{{ effortLabel }}</span>
+                                <span class="text-2xs text-subtle @max-sm:hidden">{{ effortLabel }}</span>
                             </div>
 
                             <button
                                 type="button"
-                                class="composer-ghost ml-auto h-8 gap-1.5 px-2.5 text-xs font-medium max-md:h-11"
+                                class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-xs font-medium max-md:h-11"
                                 @click="mobile ? (modeSheetOpen = true) : modeMenu?.toggle($event)"
                                 v-tooltip.top="modeDescription"
                                 aria-label="Agent mode"
                             >
                                 <Icon :name="modeIcon" class="text-2xs text-link" />
-                                <span>{{ modeLabel }}</span>
+                                <span class="@max-md:hidden">{{ modeLabel }}</span>
                                 <Icon name="chevron-down" class="text-2xs text-subtle" />
                             </button>
 
                             <button
                                 type="button"
-                                class="composer-ghost h-8 w-8 max-md:h-11 max-md:w-11"
+                                class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
                                 :class="{ 'composer-active': followAlong.enabled.value }"
                                 @click="followAlong.setEnabled(!followAlong.enabled.value)"
                                 v-tooltip.top="followAlong.enabled.value ? 'Stop following agent edits' : 'Follow agent edits live'"
@@ -741,7 +745,7 @@ watch(keyboardInset, () => {
                             <button
                                 v-if="speechSupported"
                                 type="button"
-                                class="composer-ghost h-8 w-8 max-md:h-11 max-md:w-11"
+                                class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
                                 :class="{ 'composer-active': listening }"
                                 @click="toggleSpeech"
                                 v-tooltip.top="listening ? 'Stop dictation' : 'Dictate'"
@@ -754,14 +758,14 @@ watch(keyboardInset, () => {
                             <button
                                 v-if="streaming && !awaitingDecision"
                                 type="button"
-                                class="composer-send composer-stop"
+                                class="composer-send composer-stop shrink-0"
                                 @click="stop"
                                 v-tooltip.top="'Stop generating'"
                                 aria-label="Stop generating"
                             >
                                 <Icon name="stop" class="text-sm" />
                             </button>
-                            <button v-else type="submit" class="composer-send" :disabled="!canSend" v-tooltip.top="sendHint" aria-label="Send">
+                            <button v-else type="submit" class="composer-send shrink-0" :disabled="!canSend" v-tooltip.top="sendHint" aria-label="Send">
                                 <Icon name="send" class="text-sm" />
                             </button>
                         </div>
@@ -770,16 +774,17 @@ watch(keyboardInset, () => {
                     <p v-if="speechErrorMessage" class="px-1 text-2xs text-danger">{{ speechErrorMessage }}</p>
 
                     <div class="flex items-center gap-2 px-1 text-2xs text-subtle">
-                        <!-- Keyboard hint is meaningless on a virtual keyboard (Enter is a newline there). -->
-                        <span class="hidden md:inline">Shift+Enter for new line</span>
+                        <!-- Keyboard hint is meaningless on a virtual keyboard (Enter is a newline there),
+                             and doesn't earn its width in a narrow panel. -->
+                        <span v-if="!mobile" class="@max-md:hidden">Shift+Enter for new line</span>
                         <div class="ml-auto flex items-center gap-3">
                             <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
-                                <span>{{ contextRing.label }}</span>
+                                <span class="@max-xs:hidden">{{ contextRing.label }}</span>
                             </span>
                             <span v-if="usageRing" class="inline-flex items-center gap-1" v-tooltip.top="usageRing.tooltip">
                                 <ProgressRing :value="usageRing.value" :class="usageRing.warn ? 'text-warning' : 'text-primary-500'" />
-                                <span>{{ usageRing.label }}</span>
+                                <span class="@max-xs:hidden">{{ usageRing.label }}</span>
                             </span>
                             <button
                                 type="button"
@@ -1094,7 +1099,8 @@ watch(keyboardInset, () => {
 
 /* Mobile touch sizing: 44px send/stop and plan-decision targets, chunkier effort segments. The utility
    classes handle the Vue-templated buttons; these cover the fixed-size CSS components (send button, the
-   v-html plan buttons rendered by ChatMessageView). */
+   v-html plan buttons rendered by ChatMessageView). Deliberately viewport-based (device class), unlike the
+   @container variants in the template that thin out labels by panel width — don't unify the two. */
 @media (max-width: 767.98px) {
     .composer-send {
         height: 2.75rem;

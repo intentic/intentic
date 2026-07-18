@@ -33,6 +33,16 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
+        // Legal mid-turn (no notRunning): a title touches no worktree state, and the registry re-reads the
+        // entry at begin/finish, so the rename survives a running turn.
+        rename: i.rename.handler(async ({ input }) => {
+            entryOf(input.id);
+            const summary = await services.agents.setTitle(input.id, input.title);
+            if (summary === undefined) {
+                throw new ORPCError("BAD_REQUEST", { message: "title is empty" });
+            }
+            return summary;
+        }),
         // The review shows the NOT-YET-LANDED remainder (`landedTip ?? base` → worktree) — empty in steady
         // state, since clean turn completions auto-land; non-empty only after a conflict or an aborted turn.
         diff: i.diff.handler(async ({ input }) => {

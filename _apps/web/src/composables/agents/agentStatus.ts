@@ -7,8 +7,9 @@ import type { AgentStatus } from "@intentic/sandbox-contract";
  * the fleet renders the widened FleetAgent status, not ConversationStatus (the live-stream union). */
 
 export const agentStatusMeta = (status: AgentStatus | "draft"): { icon: IconName; spin?: boolean; label: string; class: string } => {
+    // Not `pencil` — that's the card's rename affordance; the draft glyph is a not-yet-started marker.
     if (status === `draft`) {
-        return { icon: `pencil`, label: `Draft`, class: `text-subtle` };
+        return { icon: `circle`, label: `Draft`, class: `text-subtle` };
     }
     if (status === `running`) {
         return { icon: `spinner`, spin: true, label: `Running`, class: `text-link` };

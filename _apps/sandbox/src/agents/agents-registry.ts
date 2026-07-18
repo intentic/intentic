@@ -55,7 +55,7 @@ const freshRuntime = (): RuntimeState => ({
 });
 
 // The registry input of an isolated turn — the fields begin() records onto the entry.
-export type AgentTurnIdentity = Pick<AgentTurn, "prompt" | "model" | "account"> & {
+export type AgentTurnIdentity = Pick<AgentTurn, "prompt" | "title" | "model" | "account"> & {
     readonly conversationId: string;
     readonly provider: NonNullable<AgentTurn["agent"]>;
     readonly harness: NonNullable<AgentTurn["harness"]>;
@@ -74,6 +74,10 @@ export interface AgentsRegistry {
     readonly begin: (turn: AgentTurnIdentity, now: number) => Promise<boolean>;
     // Record the worktree composition on first creation (per-repo full base shas).
     readonly recordWorktree: (id: string, repos: readonly PersistedAgent["repos"][number][]) => Promise<void>;
+    // Set the user-chosen display title. Deliberately does NOT bump updatedAt (a rename must not fake-unread
+    // other browsers or reorder lanes) and takes no running guard — begin()/finish() re-read the entry, so a
+    // mid-turn rename survives. Undefined ⇒ unknown id or a title that sanitizes to nothing.
+    readonly setTitle: (id: string, title: string) => Promise<AgentSummary | undefined>;
     // Persist a land's advanced per-repo landedTips (partial lands included — conflicted repos keep theirs)
     // and the refreshed cumulative diffstat.
     readonly recordLanded: (
@@ -137,9 +141,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             ...(state?.running === true && state.startedAt !== undefined ? { startedAt: state.startedAt } : {}),
             ...(entry.turns !== undefined ? { turns: entry.turns } : {}),
             // Live count: the running turn's tool calls show on the card as they happen.
-            ...((entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) > 0
-                ? { toolUses: (entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) }
-                : {}),
+            ...((entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) > 0 ? { toolUses: (entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) } : {}),
             ...(entry.diffFiles !== undefined
                 ? { diff: { files: entry.diffFiles, insertions: entry.diffInsertions ?? 0, deletions: entry.diffDeletions ?? 0 } }
                 : {}),
@@ -180,7 +182,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 return false;
             }
             const existing = entryOf(turn.conversationId);
-            const title = existing?.title ?? sanitizeTitle(turn.prompt);
+            const title = existing?.title ?? (turn.title !== undefined ? sanitizeTitle(turn.title) : undefined) ?? sanitizeTitle(turn.prompt);
             const model = turn.model ?? existing?.model;
             const account = turn.account ?? existing?.account;
             replace({
@@ -223,6 +225,18 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             replace({ ...entry, repos: [...repos] });
             await persist();
         },
+        setTitle: async (id, title) => {
+            const entry = entryOf(id);
+            const clean = sanitizeTitle(title);
+            if (entry === undefined || clean === undefined) {
+                return undefined;
+            }
+            const next = { ...entry, title: clean };
+            replace(next);
+            await persist();
+            broadcast();
+            return summaryOf(next);
+        },
         observe: (id, event) => {
             const state = runtimeOf(id);
             state.lastAt = Date.now();
@@ -256,7 +270,11 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                     break;
                 case "tool_call":
                     state.pendingToolUses += 1;
-                    state.activity = { tool: event.name, ...(event.target !== undefined ? { target: event.target } : {}), ...(state.activity?.todo !== undefined ? { todo: state.activity.todo } : {}) };
+                    state.activity = {
+                        tool: event.name,
+                        ...(event.target !== undefined ? { target: event.target } : {}),
+                        ...(state.activity?.todo !== undefined ? { todo: state.activity.todo } : {}),
+                    };
                     break;
                 case "todos": {
                     const current = event.items.find((item) => item.status === "in_progress")?.content;

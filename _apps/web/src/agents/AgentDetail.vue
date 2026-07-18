@@ -3,6 +3,7 @@ import { Segmented, useDevice } from "@intentic-app/ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ChatPanel from "../chat/ChatPanel.vue";
+import { createTitleEdit } from "../composables/agents/titleEdit";
 import { useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
@@ -63,6 +64,11 @@ const viewOptions: { label: string; value: `chat` | `changes` }[] = [
 ];
 
 const title = computed(() => fleetAgent.value?.title ?? conversation.value?.title.value ?? `Agent`);
+
+const edit = createTitleEdit(
+    () => agentId.value,
+    () => fleetAgent.value?.title ?? conversation.value?.title.value ?? undefined,
+);
 </script>
 
 <template>
@@ -76,11 +82,35 @@ const title = computed(() => fleetAgent.value?.title ?? conversation.value?.titl
             >
                 <Icon name="arrow-left" class="text-sm" />
             </button>
-            <span class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
+            <input
+                v-if="edit.editing"
+                v-model="edit.draft"
+                type="text"
+                maxlength="80"
+                aria-label="Agent title"
+                class="min-w-0 flex-1 rounded bg-overlay px-1 text-xs font-medium text-content outline-none ring-1 ring-primary-500/50"
+                @keydown.enter.prevent="edit.commit()"
+                @keydown.esc.prevent="edit.cancel()"
+                @blur="edit.blurCommit()"
+                @vue:mounted="edit.focusInput"
+            />
+            <template v-else>
+                <span class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
+                <button
+                    type="button"
+                    aria-label="Rename agent"
+                    v-tooltip.bottom="'Rename'"
+                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    @click="edit.begin()"
+                >
+                    <Icon name="pencil" class="text-xs" />
+                </button>
+            </template>
             <span v-if="fleetAgent?.branch !== undefined" class="truncate font-mono text-2xs text-subtle">{{ fleetAgent.branch }}</span>
             <Segmented v-if="mobile" v-model="view" :options="viewOptions" />
             <span v-else class="text-2xs uppercase tracking-wide text-subtle">Review</span>
         </div>
+        <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
         <ChatPanel v-if="mobile && view === 'chat'" class="min-h-0 flex-1" />
         <AgentReviewPanel v-else-if="agentId !== ''" :agent-id="agentId" class="min-h-0 flex-1" />
     </div>

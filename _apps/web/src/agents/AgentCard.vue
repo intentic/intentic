@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ProgressRing } from "@intentic-app/ui";
+import { ProgressRing, useDevice } from "@intentic-app/ui";
 import { computed } from "vue";
 import ProviderLogo from "../chat/ProviderLogo.vue";
 import {
@@ -11,6 +11,7 @@ import {
     formatElapsed,
     formatTokens,
 } from "../composables/agents/agentStatus";
+import { createTitleEdit } from "../composables/agents/titleEdit";
 import { laneOf, type FleetAgent } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/conversation";
@@ -18,11 +19,13 @@ import { modelLabelFor } from "../composables/chat/conversation";
 /* One fleet agent, mock-level hierarchy: provider mark + title + status/attention chip; model · branch meta;
  * a self-hiding stats row (tokens ↑in/out · cost · files · +ins −dels · msgs · context ring); the live
  * activity line while running; time-ago / Completed footer. `now` ticks from AgentsView so every card's
- * elapsed readout advances together without per-card timers. */
+ * elapsed readout advances together without per-card timers. The title renames in place (hover pencil →
+ * inline input); the root is a div-button, not a <button>, so the nested pencil/input stay valid HTML. */
 
 const props = defineProps<{ agent: FleetAgent; now: number }>();
-defineEmits<{ open: [] }>();
+const emit = defineEmits<{ open: [] }>();
 
+const { mobile } = useDevice();
 const meta = computed(() => agentStatusMeta(props.agent.status));
 const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
@@ -30,28 +33,67 @@ const context = computed(() => contextPct(props.agent.contextTokens, props.agent
 const model = computed(() =>
     props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.harness, props.agent.model) : undefined,
 );
+const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
+
+const edit = createTitleEdit(
+    () => props.agent.id,
+    () => props.agent.title,
+);
+// A blur-commit's click on the card body must commit the rename, not also open the agent.
+const openCard = (): void => {
+    if (edit.editing || edit.consumeSuppressedOpen()) {
+        return;
+    }
+    emit(`open`);
+};
 </script>
 
 <template>
-    <button
-        type="button"
-        class="flex w-full flex-col gap-1.5 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-overlay"
+    <div
+        role="button"
+        tabindex="0"
+        :aria-label="`Open agent: ${displayTitle}`"
+        class="group flex w-full cursor-pointer flex-col gap-1.5 rounded-lg border bg-card p-3 text-left outline-none transition-colors hover:bg-overlay focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="lane === 'attention' ? 'border-warning/50 hover:border-warning/80' : 'border-line hover:border-line-strong'"
-        @click="$emit('open')"
+        @click="openCard"
+        @keydown.enter.self.prevent="openCard"
+        @keydown.space.self.prevent="openCard"
     >
         <div class="flex items-center gap-2">
             <ProviderLogo :provider="agent.provider" class="shrink-0 text-sm text-muted" />
-            <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{
-                agent.title ?? (agent.status === "draft" ? "New agent" : "Untitled agent")
+            <input
+                v-if="edit.editing"
+                v-model="edit.draft"
+                type="text"
+                maxlength="80"
+                aria-label="Agent title"
+                class="min-w-0 flex-1 rounded bg-overlay px-1 text-xs font-semibold text-content outline-none ring-1 ring-primary-500/50"
+                @click.stop
+                @keydown.enter.stop.prevent="edit.commit()"
+                @keydown.esc.stop.prevent="edit.cancel()"
+                @blur="edit.blurCommit()"
+                @vue:mounted="edit.focusInput"
+            />
+            <template v-else>
+                <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{ displayTitle }}</span>
+                <button
+                    type="button"
+                    aria-label="Rename agent"
+                    v-tooltip.top="'Rename'"
+                    class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-opacity hover:bg-overlay hover:text-content"
+                    :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
+                    @click.stop="edit.begin()"
+                >
+                    <Icon name="pencil" class="text-2xs" />
+                </button>
+            </template>
+            <span v-if="reason !== undefined" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">{{
+                reason
             }}</span>
-            <span
-                v-if="reason !== undefined"
-                class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning"
-                >{{ reason }}</span
-            >
             <span v-else-if="agent.unread" class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link">New</span>
             <Icon v-else :name="meta.icon" :spin="meta.spin" class="shrink-0 text-xs" :class="meta.class" />
         </div>
+        <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
 
         <div class="flex min-w-0 items-center gap-1.5 text-2xs text-subtle">
             <span v-if="model !== undefined" class="truncate">{{ model }}</span>
@@ -100,5 +142,5 @@ const model = computed(() =>
             <span v-if="agent.startedAt !== undefined" class="text-link">{{ formatElapsed(agent.startedAt, now) }}</span>
             <span v-else-if="agent.updatedAt > 0">{{ relativeTime(agent.updatedAt) }}</span>
         </div>
-    </button>
+    </div>
 </template>

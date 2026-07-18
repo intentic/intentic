@@ -635,6 +635,9 @@ export class Conversation {
                 signal: controller.signal,
                 body: JSON.stringify({
                     prompt: text,
+                    // The display title (derived above or user-chosen) seeds a fresh registry entry, so a
+                    // renamed draft keeps its title through its first turn; existing entries keep theirs.
+                    ...(this.title.value !== null ? { title: this.title.value } : {}),
                     ...(attachmentPaths.length > 0 ? { attachments: attachmentPaths } : {}),
                     agent,
                     // The stable conversation identity + the worktree opt-in: an isolated turn runs in this

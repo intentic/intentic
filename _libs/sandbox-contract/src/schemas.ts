@@ -39,6 +39,9 @@ export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
 export const AgentTurnSchema = z
     .object({
         prompt: z.string(),
+        // The client's display title for the conversation — seeds a FRESH registry entry (so a renamed draft's
+        // first turn keeps its user-chosen title); an existing entry's title always wins.
+        title: z.string().max(80).optional(),
         // Workspace-relative paths of files the user attached, already uploaded via /workspace/upload
         // (the browser puts them under .intentic/attachments/<uuid>/<name>). The daemon hands them to the
         // provider: Claude reads them from disk via its Read tool; Codex gets images as native inputs.
@@ -144,6 +147,8 @@ export const AgentSummarySchema = z.object({
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
 export const AgentsListSchema = z.object({ agents: z.array(AgentSummarySchema) });
 export const AgentIdSchema = z.object({ id: z.string().min(1) });
+// rename's input: the user-chosen display title (bounded like sanitizeTitle's cap).
+export const AgentRenameSchema = z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(80) });
 export const AgentFileDiffQuerySchema = z.object({ id: z.string().min(1), repo: z.string().min(1), path: z.string().min(1) });
 // land's outcome: per-repo conflicts (dirty-main overlaps or merge conflicts); landed only when every repo
 // with changes merged cleanly. Conflicted repos keep their worktree state — nothing is lost.

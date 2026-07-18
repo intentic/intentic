@@ -77,6 +77,7 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
             prompt: input.prompt,
             provider: input.agent ?? "claude",
             harness: input.harness ?? "native",
+            ...(input.title !== undefined ? { title: input.title } : {}),
             ...(input.model !== undefined ? { model: input.model } : {}),
             ...(input.account !== undefined ? { account: input.account } : {}),
         },
@@ -322,7 +323,11 @@ async function* runTurn(
                 yield { kind: "done" };
                 return;
             }
-            endpoint = { baseUrl: services.config.translator.url, authToken: services.config.translator.token, model: routedModel(input.agent, input.model) };
+            endpoint = {
+                baseUrl: services.config.translator.url,
+                authToken: services.config.translator.token,
+                model: routedModel(input.agent, input.model),
+            };
         } else {
             const accountId = input.account ?? (await services.claudeStore.list())[0]?.id;
             if (accountId !== undefined) {
@@ -432,7 +437,9 @@ async function* runTurn(
             ...(endpoint !== undefined
                 ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken, model: endpoint.model }
                 : {
-                      ...(input.model === undefined && services.config.intenticAgentModel !== "" ? { model: services.config.intenticAgentModel } : {}),
+                      ...(input.model === undefined && services.config.intenticAgentModel !== ""
+                          ? { model: services.config.intenticAgentModel }
+                          : {}),
                       ...(oauthToken !== undefined ? { oauthToken } : {}),
                   }),
             ...(plugins.length > 0 ? { plugins } : {}),
