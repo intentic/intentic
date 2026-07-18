@@ -31,7 +31,7 @@
         ".env.local": ".env.local.template",
 
         // * Node.js
-        "package.json": ".editorconfig, .gitignore, .npmrc, .oxlintrc.json, .prettierrc.json, .prettierignore, pnpm-workspace.yaml, pnpm-lock.yaml, *.md, tsconfig.json, tsconfig.*.json, turbo.json, LICENSE, vitest.config.ts, .releaserc.json",
+        "package.json": ".editorconfig, .gitignore, .npmrc, .oxlintrc.json, .prettierrc.json, .prettierignore, pnpm-workspace.yaml, pnpm-lock.yaml, *.md, tsconfig.json, tsconfig.*.json, turbo.json, LICENSE, vitest.config.ts, .releaserc.json, .dockerignore, .env.example, .gitlab-ci.yml, commitlint.config.ts, docker-compose.yml, knip.json, renovate.json5, .env",
 
         // * TypeScript
         "*.js": "$(capture).d.ts, $(capture).js.map, $(capture).d.ts.map"
@@ -78,9 +78,6 @@
         "titleBar.inactiveBackground": "#000000"
     },
     "workbench.tree.enableStickyScroll": false,
-
-    // Code spell checking.
-    "cSpell.diagnosticLevel": "Hint",
 
     // Type-specific.
     "[dotenv]": {

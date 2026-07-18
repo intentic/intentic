@@ -47,7 +47,10 @@ const server = Bun.serve({
     ...(tls && { tls }),
 });
 
-logger.info({ url: `${tls ? `https` : `http`}://127.0.0.1:${server.port}` }, `api started (auth at /api/auth, oRPC at /rpc)`);
+// Bound to the loopback IP but advertised as localhost: that is the name the dev cert covers, the origin the
+// SPA calls, and the one Better Auth/CORS trust. Printing the IP invites a click that lands on an untrusted
+// origin, which the API then rejects with a bare preflight 204 the browser reports as an opaque CORS error.
+logger.info({ url: `${tls ? `https` : `http`}://localhost:${server.port}` }, `api started (auth at /api/auth, oRPC at /rpc)`);
 
 const shutdown = async () => {
     logger.info(`shutting down`);

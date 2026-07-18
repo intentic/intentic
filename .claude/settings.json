@@ -27,8 +27,7 @@
       "mcp__playwright__browser_resize",
       "mcp__playwright__browser_navigate",
       "WebFetch(domain:help.router-for.me)"
-    ],
-    "defaultMode": "bypassPermissions"
+    ]
   },
   "model": "fable",
   "autoMemoryEnabled": true,

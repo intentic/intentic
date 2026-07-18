@@ -15,7 +15,9 @@
   window.env = {
     ...defaultEnv,
     api: { url: "https://localhost:6480" },
-    // Public web client id (authorize the dev origin, http://localhost:47145, as a JS origin on this client).
+    // Public web client id (authorize the dev origin, https://localhost:47145, as a JS origin on this client).
+    // Reach the SPA at exactly that host — https://127.0.0.1:47145 is a different origin to both Google and the
+    // API's CORS check, and the API answers its preflight 204 with no allow-origin header (sign-in then fails).
     auth: { googleClientId: `481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com` }
   };
 })();

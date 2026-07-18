@@ -67,8 +67,26 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         }
     });
 
-    // Same-origin in dev (the web dev-server proxies here), so CORS is mostly a safety net.
-    app.use(`*`, cors({ origin: config.webOrigin, credentials: true }));
+    // The SPA is served from webOrigin and calls this API cross-origin (there is no dev proxy), so CORS is
+    // load-bearing, not a safety net. A rejected origin is otherwise invisible: Hono still answers the preflight
+    // 204, just without Access-Control-Allow-Origin, so the browser blocks the real request before it is ever
+    // sent — the API logs the OPTIONS and nothing else, and devtools blames "CORS". Log the mismatch instead.
+    app.use(
+        `*`,
+        cors({
+            origin: (origin, c) => {
+                if (origin === config.webOrigin) {
+                    return origin;
+                }
+                // Same-origin/server-to-server calls send no Origin at all; only a real mismatch is worth a warning.
+                if (origin !== ``) {
+                    c.get(`logger`).warn({ origin, expected: config.webOrigin }, `cors origin rejected`);
+                }
+                return null;
+            },
+            credentials: true,
+        }),
+    );
     app.use(`*`, secureHeaders({ crossOriginEmbedderPolicy: false }));
 
     // Better Auth owns everything under /api/auth (sign-in, OAuth callback, session, sign-out).
