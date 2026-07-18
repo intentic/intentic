@@ -5,6 +5,7 @@ import { useChat } from "../chat/useChat";
 import { readIntenticLines } from "../intenticStream";
 import { queryClient } from "../queryPersistence";
 import { sandboxRequest } from "./sandboxClient";
+import { errorMessage } from "../useAsyncAction";
 import { presenceStreamOpened, resetPresence, setPresenceUsers } from "../usePresence";
 import { useSandbox } from "./useSandbox";
 import { markWorkspaceChanged } from "../workspace/useWorkspaceLive";
@@ -204,11 +205,7 @@ const loop = async (): Promise<void> => {
             // watchdog window — a cause worth naming, and the signal that flips the shell from cached paint to
             // the connecting gate (probeError !== undefined ⇔ a connect attempt actually failed).
             probeError.value =
-                error instanceof DOMException && error.name === `AbortError`
-                    ? `The sandbox stopped responding.`
-                    : error instanceof Error
-                      ? error.message
-                      : String(error);
+                error instanceof DOMException && error.name === `AbortError` ? `The sandbox stopped responding.` : errorMessage(error, String(error));
             // A restarted sandbox may have re-registered a fresh daemonUrl — pick it up before retrying.
             // Swallowed on failure for the same reason as the loop-top refresh: the retry handles it.
             await refresh().catch(() => undefined);

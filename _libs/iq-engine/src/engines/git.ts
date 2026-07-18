@@ -9,7 +9,7 @@ const exec = promisify(execFile);
 const DEFAULT_SINCE = "7d";
 
 // "2d" | "12h" | "1w" | "3m" → milliseconds.
-export const parseSince = (since: string): number => {
+const parseSince = (since: string): number => {
     const match = /^(\d+)([hdwm])$/.exec(since);
     if (match === null) {
         throw new Error(`iq: --since expects e.g. 12h, 2d, 1w, 3m — got: ${since}`);
@@ -18,7 +18,7 @@ export const parseSince = (since: string): number => {
     return n * { h: 3_600_000, d: 86_400_000, w: 604_800_000, m: 2_592_000_000 }[match[2] as "h" | "d" | "w" | "m"];
 };
 
-export const agoText = (ms: number): string => {
+const agoText = (ms: number): string => {
     if (ms < 60_000) {
         return "just now";
     }
@@ -31,9 +31,7 @@ export const agoText = (ms: number): string => {
     return `${Math.round(ms / 86_400_000)}d ago`;
 };
 
-export const reposOf = (entries: readonly FileEntry[]): string[] => [
-    ...new Set(entries.map((entry) => entry.repo).filter((repo) => repo !== undefined)),
-];
+const reposOf = (entries: readonly FileEntry[]): string[] => [...new Set(entries.map((entry) => entry.repo).filter((repo) => repo !== undefined))];
 
 const git = async (root: string, repo: string, args: string[]): Promise<string> => {
     const { stdout } = await exec("git", ["-C", join(root, repo), ...args], { maxBuffer: 16 * 1024 * 1024 }).catch(() => ({ stdout: "" }));

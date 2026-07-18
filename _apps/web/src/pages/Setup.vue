@@ -9,6 +9,7 @@ import { useRoute, useRouter } from "vue-router";
 import ToggleSwitch from "primevue/toggleswitch";
 import { track } from "../composables/analytics";
 import { apiClient, isPaymentRequired } from "../composables/useApi";
+import { errorMessage } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import { syncFolder } from "../composables/sandbox/syncFolder";
@@ -101,14 +102,16 @@ const target = computed<SetupCodeTarget | undefined>(() => {
     return undefined;
 });
 // Identity of the target, for mint dedupe + stale-response drops (a mint answers for the key it was fired for).
-// The sync choice is deliberately NOT part of this — it rides the command, not the code, so toggling it never
-// re-mints.
+// The sandbox id is part of the key — a code redeems ONE sandbox's token, so switching sandboxes mid-page
+// (resume → "create a new one instead") invalidates the previous mint instead of showing sandbox A's command
+// for sandbox B. The sync choice is deliberately NOT part of this — it rides the command, not the code, so
+// toggling it never re-mints.
 const targetKey = computed<string | undefined>(() => {
     const chosen = target.value;
-    if (chosen === undefined) {
+    if (chosen === undefined || created.value === null) {
         return undefined;
     }
-    return chosen.mode === `intentic` ? `intentic` : `own:${chosen.zone}:${chosen.subdomain}`;
+    return `${created.value.id}:${chosen.mode === `intentic` ? `intentic` : `own:${chosen.zone}:${chosen.subdomain}`}`;
 });
 
 // The command can be built only once the chosen target has a code minted for it.
@@ -149,14 +152,6 @@ const platformUrlOverride = computed<string | undefined>(() => {
     return api.origin;
 });
 
-const messageOf = (err: unknown, fallback: string): string => {
-    if (err && typeof err === `object` && `message` in err && typeof (err as { message: unknown }).message === `string`) {
-        const message = (err as { message: string }).message;
-        return message.length > 0 ? message : fallback;
-    }
-    return fallback;
-};
-
 // oRPC surfaces a disabled endpoint as NOT_FOUND (404) — the signal that the intentic-provided path is off.
 const isNotFound = (err: unknown): boolean => {
     if (err && typeof err === `object`) {
@@ -195,6 +190,8 @@ const check = async (): Promise<void> => {
     checking.value = true;
     try {
         await sandbox.refresh();
+        // A reachable platform clears any earlier "can't reach" warning — it must not outlive its cause.
+        status.value = undefined;
         const seen = sandbox.active.value?.lastSeenAt ?? null;
         if (seen !== null && seen !== baseline.value) {
             // Onboarding's make-or-break milestone: the pasted command produced a live daemon.
@@ -223,7 +220,7 @@ const createSandbox = async (): Promise<void> => {
         if (isPaymentRequired(err)) {
             upgradeOpen.value = true;
         }
-        error.value = messageOf(err, `Could not create your sandbox.`);
+        error.value = errorMessage(err, `Could not create your sandbox.`);
     } finally {
         creating.value = false;
     }
@@ -249,7 +246,7 @@ const mint = async (chosen: SetupCodeTarget, key: string): Promise<void> => {
             intenticAvailable.value = false;
             mode.value = `own`;
         } else if (key === targetKey.value) {
-            setupError.value = messageOf(err, `Couldn't prepare your install command — try again.`);
+            setupError.value = errorMessage(err, `Couldn't prepare your install command — try again.`);
         }
     }
 };
@@ -315,12 +312,19 @@ onMounted(async () => {
     resuming.value = true;
 });
 
-// Escape hatch from a resumed setup: forget the resumed sandbox and drop to a blank create form.
+// Escape hatch from a resumed setup: forget the resumed sandbox and drop to a blank create form. Everything
+// derived from the resumed sandbox resets too — its minted code, hostname, and token-derived subdomain must
+// not leak into the sandbox created next.
 const startFresh = (): void => {
     resuming.value = false;
     created.value = null;
     name.value = ``;
     error.value = null;
+    setup.value = null;
+    mintedFor.value = undefined;
+    setupError.value = undefined;
+    subdomain.value = ``;
+    derivedPrefix.value = ``;
     void router.replace({ path: `/setup` }); // drop ?sandbox= so a reload doesn't re-resume
 };
 
@@ -332,9 +336,10 @@ onUnmounted(() => {
 });
 
 // Mint the setup code whenever the chosen target is complete, debounced so subdomain/folder keystrokes don't
-// each mint a code. Re-minting overwrites the previous code server-side.
+// each mint a code. Re-minting overwrites the previous code server-side. targetKey already carries the
+// sandbox id, so a resume→create-new switch re-fires this on its own.
 watch(
-    [targetKey, () => created.value?.id],
+    targetKey,
     () => {
         clearTimeout(mintTimer);
         const chosen = target.value;

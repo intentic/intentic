@@ -84,9 +84,6 @@ export const discoverApps = (repoDir: string, manifest: TemplateManifest): AppPr
     return result;
 };
 
-// An app is present in a monorepo once its `_apps/<app>` package dir has been injected (by addAppsToMonorepo).
-export const isAppPresent = (repoDir: string, app: string): boolean => existsSync(join(repoDir, "_apps", app));
-
 // Resolve one app instance's preview into the panel-process spec fields: the dev command (`{pkg}` → the
 // scoped package name using the INSTANCE name) run from the repo root after a first-boot install guard, its
 // env (sibling `{previewUrl:*}` filled from the zone), and which env vars carry the assigned port (`{port}`

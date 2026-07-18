@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
 import { sandboxContract } from "@intentic/sandbox-contract";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
@@ -18,7 +19,6 @@ import type { AutomationRecord, AutomationsStore } from "./automations/automatio
 import type { CapabilitiesStore } from "./capabilities/capabilities-store.js";
 import type { Services } from "./composition.js";
 import type { Config } from "./env.config.js";
-import { environmentHash } from "./environment/environment.js";
 import { createLogger } from "./logger.js";
 import type { ManagedProcesses, ProcessSpec } from "./processes/managed-processes.js";
 import { mintPairing } from "./platform/sync.js";
@@ -1791,7 +1791,7 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     });
     // A proposal is custom-section content only (the daemon owns the FROM).
     const proposal = "RUN apt-get install -y cowsay\n";
-    const hash = environmentHash(proposal);
+    const hash = sha256Hex(proposal);
     disk.set("/work/.intentic/environment.Dockerfile", proposal);
 
     // A member (bearer passes, owner check refuses as Forbidden) sees the state but can't approve or reject —
@@ -1817,7 +1817,7 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     expect(state.custom).toEqual({ content: proposal, hash });
     expect(state.approved?.content).toContain("FROM registry.gitlab.com/radarsu/intentic/sandbox:stable");
     expect(state.approved?.content).toContain(proposal.trim());
-    expect(state.approved?.hash).toBe(environmentHash(state.approved?.content ?? ""));
+    expect(state.approved?.hash).toBe(sha256Hex(state.approved?.content ?? ""));
 
     // Reject deletes the proposal; approving with nothing proposed is a 404.
     expect((await postJson(ownerApp, "/environment/reject")).status).toBe(200);
@@ -1825,7 +1825,7 @@ test("environment: members read the state, approve/reject are owner-gated, appro
 
     // A proposal carrying its own FROM is invalid — the daemon owns the base image.
     disk.set("/work/.intentic/environment.Dockerfile", "FROM alpine:latest\n");
-    expect((await postJson(ownerApp, "/environment/approve", { hash: environmentHash("FROM alpine:latest\n") })).status).toBe(400);
+    expect((await postJson(ownerApp, "/environment/approve", { hash: sha256Hex("FROM alpine:latest\n") })).status).toBe(400);
 });
 
 test("capabilities.add composes the entry's image fragment into the overlay and nags for the rebuild; remove drops it", async () => {

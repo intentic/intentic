@@ -13,9 +13,6 @@ import { fireAutomation, PAYLOAD_MAX, type TurnStream, type WakeFn } from "./sch
 // every message, so bursts still coalesce; a lone mention just stops paying dead time before it fires.
 // ponytail: 750ms floor tuned for snappy single mentions; raise if real bursts start firing mid-typing.
 export const DEBOUNCE_MS = 750;
-// A fatal source failure (bad credential, missing portal intent) pauses reconnects this long. Not sticky
-// forever: a portal-side fix (e.g. enabling an intent) doesn't change the token, so it must heal unattended.
-export const FATAL_RETRY_MS = 300_000;
 
 // One normalized inbound event — serialized as a JSON line in the automation's payload, and the JSON body a
 // realtime source POSTs to /listeners/<provider>/dispatch. A zod schema (not a bare interface) because it's
@@ -34,7 +31,14 @@ export const ListenerMessageSchema = z.object({
     // Kept a top-level field (not in `extra`) so it reaches the model's payload but stays out of the activity
     // feed, which logs only content/extra.
     history: z
-        .array(z.object({ author: z.object({ id: z.string(), name: z.string() }), content: z.string(), timestamp: z.string(), self: z.boolean().optional() }))
+        .array(
+            z.object({
+                author: z.object({ id: z.string(), name: z.string() }),
+                content: z.string(),
+                timestamp: z.string(),
+                self: z.boolean().optional(),
+            }),
+        )
         .optional(),
     timestamp: z.string(),
     // Provider-specific fields (discord message: guildId, attachments; voice_utterance: path;

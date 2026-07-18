@@ -9,6 +9,7 @@ import SecretField from "../components/SecretField.vue";
 import SecretGroup from "../components/SecretGroup.vue";
 import { readIntenticLines } from "../composables/intenticStream";
 import { sandboxRequest } from "../composables/sandbox/sandboxClient";
+import { errorMessage } from "../composables/useAsyncAction";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useSecretInventory } from "../composables/extensions/useSecrets";
 
@@ -102,7 +103,7 @@ const pushToCi = async (): Promise<void> => {
         }
         refreshInventory();
     } catch (err) {
-        pushError.value = err instanceof Error ? err.message : `Could not push secrets to CI.`;
+        pushError.value = errorMessage(err, `Could not push secrets to CI.`);
     } finally {
         pushing.value = false;
     }

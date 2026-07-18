@@ -1,6 +1,7 @@
 import { computed, onUnmounted, ref } from "vue";
 import { devFillGet, devFillSet } from "../devFill";
 import { apiClient } from "../useApi";
+import { errorMessage } from "../useAsyncAction";
 
 /* Cloudflare API token + zone discovery, shared by the onboarding Setup screen and the in-app "Connect
  * Cloudflare" step. The token is sent to the platform only for a request-scoped zone listing
@@ -9,14 +10,6 @@ import { apiClient } from "../useApi";
 
 // Lenient format check (Cloudflare tokens are 40 chars of [A-Za-z0-9_-]); just catches copy/paste slips.
 const TOKEN_RE = /^[A-Za-z0-9_-]{30,}$/;
-
-const messageOf = (err: unknown, fallback: string): string => {
-    if (err && typeof err === `object` && `message` in err && typeof (err as { message: unknown }).message === `string`) {
-        const message = (err as { message: string }).message;
-        return message.length > 0 ? message : fallback;
-    }
-    return fallback;
-};
 
 export function useCloudflareZones() {
     const cfToken = ref(``);
@@ -45,7 +38,7 @@ export function useCloudflareZones() {
             }
             zones.value = [];
             selectedZone.value = undefined;
-            zonesError.value = messageOf(err, `Couldn't check this token's Cloudflare zones.`);
+            zonesError.value = errorMessage(err, `Couldn't check this token's Cloudflare zones.`);
         } finally {
             if (token === cfToken.value.trim()) {
                 zonesLoading.value = false;

@@ -14,7 +14,7 @@ export type Auth = ReturnType<typeof createAuth>;
 // The clickwrap version stamped on each account at sign-up (the login page's "By continuing you agree…"
 // notice), sourced from @intentic/constants — the SAME value intentic.dev renders its documents under, so the
 // two can't drift (bump it once in @intentic/constants).
-export const TERMS_VERSION = LEGAL_VERSION;
+const TERMS_VERSION = LEGAL_VERSION;
 
 // Billing for the platform's own SaaS. The plugin owns the checkout/customer-portal/webhook flow and mounts
 // its webhook at /api/auth/stripe/webhook (already covered by the /api/auth/** handler in app.ts, which passes

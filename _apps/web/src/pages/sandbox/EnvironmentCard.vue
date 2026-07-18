@@ -3,10 +3,11 @@ import { EnvironmentSchema } from "@intentic-app/api-contract";
 import { Card, Code, StatusBadge } from "@intentic-app/ui";
 import { useQueryClient } from "@tanstack/vue-query";
 import Button from "primevue/button";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { useAsyncAction } from "../../composables/useAsyncAction";
 import DiffView from "../workspace/viewers/DiffView.vue";
 
 /* The sandbox's environment (its composed overlay Dockerfile, on the /sandbox hub). The daemon composes it
@@ -17,8 +18,11 @@ import DiffView from "../workspace/viewers/DiffView.vue";
  * server-managed sandbox. Hidden until there is an overlay or a proposal. */
 
 const queryClient = useQueryClient();
-const actionError = ref<string | undefined>(undefined);
-const busy = ref(false);
+const { busy, error, run } = useAsyncAction();
+// The daemon's owner-gate message deserves friendlier phrasing; anything else surfaces verbatim.
+const actionError = computed(() =>
+    error.value === `not the sandbox owner` ? `Only the sandbox owner can decide on environment changes.` : error.value,
+);
 
 // Only the owner can decide on a proposal — the daemon is the real gate (it 403s a non-owner approve), but we
 // hide the buttons for members so a diff they can't act on isn't presented as actionable.
@@ -28,21 +32,13 @@ const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
 const { state, query, proposal, pending, applied, serverManaged, rebuildCommand } = useEnvironment();
 const load = (): void => void query.refetch();
 
-const decide = async (path: string, body?: object): Promise<void> => {
-    busy.value = true;
-    actionError.value = undefined;
-    try {
+const decide = (path: string, body?: object): Promise<void> =>
+    run(async () => {
         const next = EnvironmentSchema.parse(
             await sandboxJson(path, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body ?? {}) }),
         );
         queryClient.setQueryData(ENVIRONMENT_KEY, next);
-    } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        actionError.value = message === `not the sandbox owner` ? `Only the sandbox owner can decide on environment changes.` : message;
-    } finally {
-        busy.value = false;
-    }
-};
+    }, `Could not update the environment.`);
 const approve = (): Promise<void> => decide(`/environment/approve`, { hash: proposal.value?.hash });
 const reject = (): Promise<void> => decide(`/environment/reject`);
 </script>

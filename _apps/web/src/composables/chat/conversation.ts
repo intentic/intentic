@@ -20,6 +20,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
+import { errorMessage } from "../useAsyncAction";
 import { mentionPaths } from "./useMentions";
 
 import { formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus";
@@ -60,7 +61,7 @@ export const providerModelsState = ref<Record<AgentProvider, CatalogLoadState>>(
 // provider sends the translator's mapped id (the static catalog's entry). Natively every provider names its
 // live daemon default; before the first catalog load Claude falls back to its stable `opus` alias (always
 // valid) and codex/grok send empty (the daemon then resolves its own catalog default).
-export const defaultModelFor = (provider: AgentProvider, harness: AgentHarness): string => {
+const defaultModelFor = (provider: AgentProvider, harness: AgentHarness): string => {
     if (!usesLiveCatalog(provider, harness)) {
         return modelsFor(provider, harness)[0]?.value ?? ``;
     }
@@ -668,7 +669,7 @@ export class Conversation {
         } catch (err) {
             // A user-initiated Stop aborts the fetch; that's expected, not an error to surface.
             if (!(err instanceof DOMException && err.name === `AbortError`)) {
-                this.error.value = err instanceof Error ? err.message : `Chat failed.`;
+                this.error.value = errorMessage(err, `Chat failed.`);
             }
         } finally {
             this.flushType();

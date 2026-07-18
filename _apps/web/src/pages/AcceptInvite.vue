@@ -5,6 +5,7 @@ import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiClient } from "../composables/useApi";
+import { errorMessage } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
@@ -65,7 +66,7 @@ const accept = async (): Promise<void> => {
         sandbox.select(sandboxId);
         await router.push(`/`);
     } catch (err) {
-        error.value = err instanceof Error ? err.message : `Couldn't accept the invite.`;
+        error.value = errorMessage(err, `Couldn't accept the invite.`);
         busy.value = false;
     }
 };

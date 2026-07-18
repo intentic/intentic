@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { defaultGit } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
 import { ensureRootRepo } from "../git/root-repo.js";
 import { createLogger } from "../logger.js";
@@ -139,6 +140,68 @@ test("a user edit ELSEWHERE in the same file still lands (patch context, not pat
     const result = await landAgent(worktrees, { ...entryFor(grown.repos), id: "c2", branch: "agent/c2" });
     expect(result.landed).toBe(true);
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe(body({ 1: "line 1 AGENT", 12: "line 12 USER" }));
+});
+
+test("a discard fired during an in-flight land queues behind the repo lock — land finishes first", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+
+    // Freeze the land inside its critical section: the first `apply --check` blocks until released. A discard
+    // from a second browser passes the registry's notRunning guard (it only tracks streaming turns), so the
+    // per-repo lock is the ONLY thing keeping `worktree remove --force` out of a half-applied land.
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let paused: (() => void) | undefined;
+    const pausedAt = new Promise<void>((resolve) => {
+        paused = resolve;
+    });
+    const pausingGit: typeof defaultGit = async (dir, args) => {
+        if (args[0] === "apply" && args[1] === "--check") {
+            paused?.();
+            await gate;
+        }
+        return defaultGit(dir, args);
+    };
+
+    const landing = landAgent(worktrees, entryFor(conversation.repos), pausingGit);
+    await pausedAt;
+    let removed = false;
+    const removing = worktrees.remove("c1", conversation.repos).then(() => {
+        removed = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(removed).toBe(false); // serialized behind the land's lock, not interleaved into it
+
+    release();
+    const result = await landing;
+    await removing;
+    expect(result.landed).toBe(true);
+    // The land won the race: its delta is in main (uncommitted), and the discard then removed the worktree.
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one AGENT\nline two\nline three\n");
+    expect(existsSync(worktrees.worktreeDir("c1", "root"))).toBe(false);
+});
+
+test("a fully reverted delta lands as a no-op: landedTip advances, no phantom conflict", async () => {
+    const { work, worktrees, conversation } = await setup();
+    // Turn 1 edits and commits; turn 2 reverts to the exact base content. tip ≠ base, but the base→tip
+    // patch is EMPTY — `git apply` rejects an empty patch, so without the net-zero branch this range would
+    // re-report a conflict (with no paths to resolve) on every future land, forever.
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await sh(conversation.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "edit");
+    await writeFile(join(conversation.cwd, "app.ts"), "line one\nline two\nline three\n");
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos));
+    expect(result.landed).toBe(true);
+    expect(result.conflicts).toBeUndefined();
+    expect(await sh(work, "status", "--porcelain")).toBe("");
+    // landedTip advanced past the reverted range…
+    expect(result.repos.find((repo) => repo.repo === "root")?.landedTip).toBe(await sh(conversation.cwd, "rev-parse", "HEAD"));
+    // …so the next land is a clean no-op (no frame, no status flip), not a replay.
+    const again = await landAgent(worktrees, entryFor(result.repos));
+    expect(again).toMatchObject({ landed: true, changed: false });
 });
 
 test("deletes and renames land; a conflicted land keeps landedTip so recovery applies the same delta", async () => {

@@ -46,7 +46,7 @@ const {
     readBlob,
     moveEntry,
     removeEntries,
-    runAction,
+    run,
     busy,
     actionError,
     loadChildren,
@@ -169,13 +169,13 @@ const confirmRename = (): void => {
         return;
     }
     const parent = parentDir(target.path);
-    void runAction(() => moveEntry(target.path, parent === `` ? name : `${parent}/${name}`));
+    void run(() => moveEntry(target.path, parent === `` ? name : `${parent}/${name}`));
 };
 const confirmDelete = (): void => {
     const target = deleteTarget.value;
     deleteTarget.value = undefined;
     if (target !== undefined) {
-        void runAction(() => removeEntries([target.path]));
+        void run(() => removeEntries([target.path]));
     }
 };
 const copyPath = (target: WorkspaceTreeEntry): void => {
@@ -185,7 +185,7 @@ const copyPath = (target: WorkspaceTreeEntry): void => {
 };
 const download = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
-    void runAction(async () => {
+    void run(async () => {
         const blob = await readBlob(target.path);
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement(`a`);

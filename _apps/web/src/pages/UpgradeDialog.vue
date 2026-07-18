@@ -5,6 +5,7 @@ import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
 import { apiClient } from "../composables/useApi";
+import { errorMessage } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 
 interface Benefit {
@@ -70,7 +71,7 @@ const upgrade = async (): Promise<void> => {
         // Redirects the whole page to Stripe Checkout on success, so there is nothing to close here.
         await upgradeToPro();
     } catch (err) {
-        error.value = err instanceof Error ? err.message : `Could not start checkout. Please try again.`;
+        error.value = errorMessage(err, `Could not start checkout. Please try again.`);
     } finally {
         submitting.value = false;
     }

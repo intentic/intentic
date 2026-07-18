@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-export const RERANKER_ID = "Xenova/ms-marco-MiniLM-L-6-v2";
+const RERANKER_ID = "Xenova/ms-marco-MiniLM-L-6-v2";
 
 export interface Reranker {
     // Cross-encoder relevance of each passage to the query — higher is better (raw logits, order is what matters).

@@ -36,7 +36,7 @@ export const DAEMON_CONTAINER = `intentic-app-e2e-daemon`;
 
 // The public web client id — must match _apps/web/src/environments/environment.local.ts (it keys the cached
 // Google ID token's localStorage slot). Drift shows up as the sign-in gate in every spec's trace.
-export const GOOGLE_CLIENT_ID = `481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com`;
+const GOOGLE_CLIENT_ID = `481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com`;
 
 export const SEED = {
     userId: `e2e-user`,
@@ -46,7 +46,7 @@ export const SEED = {
     sandboxName: `E2E Sandbox`,
 };
 
-export const createPrisma = (): PrismaClient => new PrismaClient({ adapter: new PrismaPg({ connectionString: DATABASE_URL }) });
+const createPrisma = (): PrismaClient => new PrismaClient({ adapter: new PrismaPg({ connectionString: DATABASE_URL }) });
 
 // Better Auth's session cookie, minted the way the server does (better-call signCookieValue): the https API
 // origin turns on secure cookies, so the name carries the __Secure- prefix, and the value is the session token

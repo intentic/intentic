@@ -2,6 +2,7 @@ import type { BridgeCall } from "./directoryUiVerbs";
 import { resolveBridgeCall } from "./directoryUiVerbs";
 import { readIntenticLines } from "../intenticStream";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
+import { errorMessage } from "../useAsyncAction";
 
 /* Directory-defined UI: a workspace directory ships its own interaction surface as a single self-contained
  * `<dir>/.intentic/ui/index.html` (inline JS/CSS). The parent reads that file through the SAME authed daemon
@@ -66,7 +67,7 @@ export const createDirectoryUiBridge = (iframe: HTMLIFrameElement): (() => void)
             }
             reply({ done: true });
         } catch (error) {
-            reply({ ok: false, error: error instanceof Error ? error.message : `directory UI call failed` });
+            reply({ ok: false, error: errorMessage(error, `directory UI call failed`) });
         }
     };
     window.addEventListener(`message`, onMessage);

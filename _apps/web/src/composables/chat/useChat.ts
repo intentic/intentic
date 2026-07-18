@@ -1,4 +1,11 @@
-import { type AgentHarness, type AgentProvider, NATIVE_PROVIDERS, type OauthAccount, type UsageAccount, usesLiveCatalog } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    NATIVE_PROVIDERS,
+    type OauthAccount,
+    type UsageAccount,
+    usesLiveCatalog,
+} from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
 import {
@@ -23,6 +30,7 @@ import {
 import { track } from "../analytics";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { useSandbox } from "../sandbox/useSandbox";
+import { errorMessage } from "../useAsyncAction";
 import { useWorkspaceTabs } from "../workspace/useWorkspaceTabs";
 
 // One past conversation in the sandbox's SDK session store, for the history menu.
@@ -815,7 +823,7 @@ const startConnect = async (): Promise<void> => {
     try {
         response = await sandboxRequest(`${providerBase(target)}/oauth/start`, { method: `POST` });
     } catch (err) {
-        error.value = err instanceof Error ? err.message : `Could not start the ${providerLabel(target)} connection — is your sandbox online?`;
+        error.value = errorMessage(err, `Could not start the ${providerLabel(target)} connection — is your sandbox online?`);
         return;
     }
     if (!response.ok) {

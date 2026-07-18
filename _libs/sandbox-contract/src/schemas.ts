@@ -20,6 +20,7 @@ export const RepoParamSchema = z.object({ repo: z.string() });
 // ---- agent ----
 
 export const SessionTranscriptMessageSchema = z.object({ role: z.enum(["user", "assistant"]), text: z.string() });
+export type SessionTranscriptMessage = z.infer<typeof SessionTranscriptMessageSchema>;
 
 // The agent runtimes the daemon can serve — the vocabulary every surface that picks an agent shares (chat
 // turns, automations). The three NATIVE providers have dedicated adapters (and their ids are reserved); any

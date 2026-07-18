@@ -20,7 +20,7 @@ import type { Services } from "../composition.js";
 const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = { codex: "codex", grok: "xai" };
 
 // The subscription-token store (survives sandbox rebuilds alongside the other AI-provider credentials).
-export const cliProxyAuthDir = (authRoot: string): string => join(authRoot, "cliproxy");
+const cliProxyAuthDir = (authRoot: string): string => join(authRoot, "cliproxy");
 // The rendered server config (on /history, outside the agent's reach); the login subprocess shares it via --config.
 export const cliProxyConfigPath = (config: Config): string => join(config.historyRoot, "translator", "config.yaml");
 // The Management API base (localhost-only) on the same port that serves the Anthropic endpoint.

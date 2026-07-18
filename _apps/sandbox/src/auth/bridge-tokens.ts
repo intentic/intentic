@@ -1,6 +1,7 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "./auth.js";
 
@@ -32,8 +33,6 @@ export interface BridgeTokens {
     readonly revoke: (id: string) => Promise<boolean>;
 }
 
-const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex");
-
 export const fileBridgeTokens = (path: string): BridgeTokens => {
     const read = async (): Promise<StoredTokens> => {
         try {
@@ -52,14 +51,14 @@ export const fileBridgeTokens = (path: string): BridgeTokens => {
             const token = `ibt_${randomBytes(32).toString("base64url")}`;
             const id = randomUUID();
             const stored = await read();
-            await write({ tokens: [...stored.tokens, { id, label, hash: sha256(token), createdAt: Date.now() }] });
+            await write({ tokens: [...stored.tokens, { id, label, hash: sha256Hex(token), createdAt: Date.now() }] });
             return { id, token };
         },
         verify: async (presented) => {
             if (presented === "") {
                 return false;
             }
-            const hash = sha256(presented);
+            const hash = sha256Hex(presented);
             // Comparing fixed-length hex digests keeps the comparison timing-safe regardless of input length.
             return (await read()).tokens.some((entry) => tokenEquals(entry.hash, hash));
         },

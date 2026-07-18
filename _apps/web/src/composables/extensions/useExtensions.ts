@@ -1,9 +1,9 @@
 import type { ConnectorContribution } from "@intentic/extension-api";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
-import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { sandboxKey } from "../sandbox/useSandbox";
+import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The installed extensions (extension-kind capabilities resolved to their manifests) for the UI — the Sandbox
  * hub's Extensions tab. The extension host's boot does its own one-shot fetch of the same route (loader.ts);
@@ -12,11 +12,9 @@ import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 const QUERY_KEY = sandboxKey(`extensions`);
 
 export function useExtensions() {
-    const { reachable } = useSandbox();
-    const query = useQuery({
+    const { query, error } = useSandboxQuery({
         queryKey: QUERY_KEY,
         queryFn: async () => ExtensionsListSchema.parse(await sandboxJson(`/extensions`)).extensions,
-        enabled: reachable,
     });
     const extensions = computed<ExtensionSummary[]>(() => query.data.value ?? []);
     // A cli provider's connector spec from the installed extensions' contributes.connectors — the data
@@ -31,7 +29,7 @@ export function useExtensions() {
         // The list has actually arrived (or definitively failed) — gates decisions that must not fire against
         // the empty pre-fetch state, like bouncing an unknown /capabilities/<card> slug back to the grid.
         settled: computed(() => query.isFetched.value || query.isError.value),
-        error: computed(() => (query.error.value ? query.error.value.message : null)),
+        error,
         isLoading: query.isLoading,
         refetch: query.refetch,
     };

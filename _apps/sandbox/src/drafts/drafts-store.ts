@@ -72,7 +72,7 @@ export const fileDraftsStore = (dir: string): DraftsStore => ({
 // How the drafting agent learns the file format — the same auto-loaded .claude/skills mechanism every
 // capability connector uses. Triggered by description, so a user prompt like "prepare social media post
 // drafts" routes here without any automation change.
-export const DRAFTS_SKILL = `---
+const DRAFTS_SKILL = `---
 name: drafts
 description: Create post drafts for owner approval by writing JSON files into .intentic/drafts/. Use whenever asked to prepare, draft, propose, or schedule posts (X, Reddit, YouTube, Discord, …) instead of posting immediately.
 ---

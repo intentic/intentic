@@ -14,9 +14,9 @@ export interface FileResolution {
 // Matches the daemon's MAX_RAW_BYTES — a larger image/PDF would 413 on /workspace/raw, so pre-empt it.
 export const RAW_MAX_BYTES = 25 * 1024 * 1024;
 // Above this a text file is never fetched — show "too large" + a download instead of streaming megabytes of text.
-export const TEXT_MAX_BYTES = 2_000_000;
+const TEXT_MAX_BYTES = 2_000_000;
 // Above this fetch the text but SKIP Shiki (plain <pre>): the JS-regex engine janks on huge/minified input.
-export const HIGHLIGHT_MAX_BYTES = 512_000;
+const HIGHLIGHT_MAX_BYTES = 512_000;
 
 // File extension → Shiki language id. Keys must exist in useHighlighter LANGS.
 const EXT_LANG: Record<string, string> = {

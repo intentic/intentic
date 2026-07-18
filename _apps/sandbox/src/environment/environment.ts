@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Environment } from "@intentic/sandbox-contract";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
 import { capabilityFragments } from "./fragment-sources.js";
 
@@ -16,9 +16,7 @@ export const proposalPath = (services: Services): string => join(services.worksp
 export const approvedPath = (services: Services): string => join(services.workspace.root, ".intentic", "environment.approved.Dockerfile");
 export const customPath = (services: Services): string => join(services.workspace.root, ".intentic", "environment.custom.Dockerfile");
 
-export const BASE_IMAGE = "registry.gitlab.com/radarsu/intentic/sandbox:stable";
-
-export const environmentHash = (content: string): string => createHash("sha256").update(content).digest("hex");
+const BASE_IMAGE = "registry.gitlab.com/radarsu/intentic/sandbox:stable";
 
 // The composed overlay must extend the official sandbox image — the first instruction is pinned so an approved
 // overlay can't swap the base for an arbitrary image. Held by construction in composeEnvironment; rebuild.sh
@@ -61,17 +59,17 @@ export const composeEnvironment = async (services: Services): Promise<string | u
         // so the owner has a hash-pinned rebuild path back to stock.
         const bare = `${HEADER}\n\nFROM ${BASE_IMAGE}\n`;
         await services.files.write(approvedPath(services), bare);
-        return environmentHash(bare);
+        return sha256Hex(bare);
     }
     const sections = [HEADER, `FROM ${BASE_IMAGE}`, ...fragments, ...(custom === "" ? [] : [CUSTOM_MARKER, custom])];
     const content = `${sections.join("\n\n")}\n`;
     await services.files.write(approvedPath(services), content);
-    return environmentHash(content);
+    return sha256Hex(content);
 };
 
 const fileState = async (services: Services, path: string): Promise<{ content: string; hash: string } | undefined> => {
     const content = await services.files.read(path);
-    return content === undefined ? undefined : { content, hash: environmentHash(content) };
+    return content === undefined ? undefined : { content, hash: sha256Hex(content) };
 };
 
 export const readEnvironment = async (services: Services): Promise<Environment> => {

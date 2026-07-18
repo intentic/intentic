@@ -10,7 +10,7 @@ import { z } from "zod";
 
 // Persisted status excludes the transient running/awaiting — a daemon restart mid-turn must rehydrate to a
 // state the user can act on (the turn itself is gone).
-export const PersistedAgentStatusSchema = z.enum(["idle", "landed", "conflict", "error"]);
+const PersistedAgentStatusSchema = z.enum(["idle", "landed", "conflict", "error"]);
 
 export const PersistedAgentSchema = z.object({
     // The conversationId — also the worktree dir name and the agent/<id> branch suffix.

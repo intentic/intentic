@@ -12,7 +12,7 @@ export const GIT_TOKEN_SECRET = "INTENTIC_GIT_TOKEN";
 
 // The job env-var names the resolve pipeline binds those secrets to (and that the CLI reads): the resolve sync
 // authenticates its Forgejo secret PUTs with GIT_TOKEN (the admin password).
-export const GIT_USER_ENV = "GIT_USER";
+const GIT_USER_ENV = "GIT_USER";
 export const GIT_TOKEN_ENV = "GIT_TOKEN";
 
 // The package the pipelines install the CLI from. The intent/desired-state repos do not depend on the CLI

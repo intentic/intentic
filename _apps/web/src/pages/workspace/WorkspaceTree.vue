@@ -51,19 +51,8 @@ const {
 }>();
 const emit = defineEmits<{ openFile: [path: string]; openDirectory: [path: string] }>();
 
-const {
-    saveText,
-    createDir,
-    moveEntry,
-    removeEntries,
-    copyEntries,
-    moveIntoMany,
-    runAction,
-    loadChildren,
-    lazyChildren,
-    lazyTruncated,
-    lazyLoading,
-} = useWorkspaceTree();
+const { saveText, createDir, moveEntry, removeEntries, copyEntries, moveIntoMany, run, loadChildren, lazyChildren, lazyTruncated, lazyLoading } =
+    useWorkspaceTree();
 const layout = useLayout();
 const { enqueueFromDataTransfer } = useUploadQueue();
 
@@ -290,7 +279,7 @@ const commitRename = (): void => {
     if (name === `` || name === basename(path)) {
         return;
     }
-    void runAction(() => moveEntry(path, joinPath(parentDir(path), name)));
+    void run(() => moveEntry(path, joinPath(parentDir(path), name)));
 };
 const cancelRename = (): void => {
     renamingPath.value = undefined;
@@ -344,13 +333,13 @@ const commitCreate = async (): Promise<void> => {
     creating.value = undefined;
     const path = joinPath(spec.dir, name);
     if (spec.type === `dir`) {
-        await runAction(() => createDir(path));
+        await run(() => createDir(path));
         selectSingle(path);
         await focusLead();
         return;
     }
     // A new file: create it, open it, and drop straight into the editor so the user can type immediately.
-    await runAction(() => saveText(path, ``));
+    await run(() => saveText(path, ``));
     selectSingle(path);
     emit(`openFile`, path);
     layout.setEditMode(true);
@@ -382,7 +371,7 @@ const confirmDelete = (): void => {
     if (paths === undefined) {
         return;
     }
-    void runAction(() => removeEntries(paths));
+    void run(() => removeEntries(paths));
     selection.value = new Set();
     anchor.value = null;
 };
@@ -418,11 +407,11 @@ const doPaste = (dir: string): void => {
                   : `${basename(path)}-copy`;
             return { from: path, to: joinPath(dir, name) };
         });
-        void runAction(() => copyEntries(pairs));
+        void run(() => copyEntries(pairs));
         return;
     }
     clipboard.value = undefined;
-    void runAction(() => moveIntoMany(clip.paths, dir));
+    void run(() => moveIntoMany(clip.paths, dir));
 };
 
 // ---- keyboard (target = the lead row; order = visible rows) ----
@@ -570,7 +559,7 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
     const dataTransfer = event.dataTransfer;
     const internal = dataTransfer.getData(`application/x-intentic-path`);
     if (internal !== ``) {
-        void runAction(() => moveIntoMany(internal.split(`\n`), dir));
+        void run(() => moveIntoMany(internal.split(`\n`), dir));
         return;
     }
     // enqueueFromDataTransfer runs the capture synchronously (webkitGetAsEntry must fire while the items are alive)

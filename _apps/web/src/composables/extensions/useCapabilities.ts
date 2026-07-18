@@ -1,10 +1,11 @@
 import { type AddCapabilityInput } from "@intentic-app/capability-catalog";
 import { CapabilitiesListSchema, type CapabilitySummary, type Marketplace, MarketplaceSchema } from "@intentic-app/api-contract";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { readIntenticLines } from "../intenticStream";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { sandboxKey } from "../sandbox/useSandbox";
+import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The sandbox's unified capability manifest (.intentic/capabilities.json), read/written via the daemon's
  * /capabilities routes. `add` STREAMS its apply (devops scaffolding, service provisioning) as ndjson, like the
@@ -48,10 +49,9 @@ export function useCapabilitySecret() {
 }
 
 export function useCapabilities() {
-    const { reachable } = useSandbox();
     const queryClient = useQueryClient();
 
-    const query = useQuery({ queryKey: QUERY_KEY, queryFn: fetchCapabilities, enabled: reachable });
+    const { query, error } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchCapabilities });
     // Adding/removing a capability can recompose the environment overlay (image fragments) — refresh the
     // Environment card alongside the list so "Pending rebuild" shows up immediately. A platform capability
     // (devops/monorepo) also scaffolds repos that appear as rail panels, so refresh the panels list too.
@@ -92,7 +92,7 @@ export function useCapabilities() {
         capabilities,
         // Presence of a kind = the user activated it (status reports its live health separately).
         hasCapability: (kind: string): boolean => capabilities.value.some((capability) => capability.kind === kind),
-        error: computed(() => (query.error.value ? query.error.value.message : null)),
+        error,
         isLoading: query.isLoading,
         refetch: query.refetch,
         add,

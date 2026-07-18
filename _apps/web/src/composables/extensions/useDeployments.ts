@@ -1,9 +1,9 @@
 import { type Deployment, DeploymentSchema } from "@intentic-app/api-contract";
-import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { readIntenticLines } from "../intenticStream";
 import { sandboxRequest } from "../sandbox/sandboxClient";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { sandboxKey } from "../sandbox/useSandbox";
+import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The live Komodo deployments surfaced by the in-sandbox `intentic deployments` subcommand, read DIRECTLY
  * from the daemon (the sandbox already merges desired-state with live Komodo). Shared by the infrastructure +
@@ -35,18 +35,16 @@ const fetchDeployments = async (): Promise<{ deployments: Deployment[]; komodoRe
 };
 
 export function useDeployments() {
-    const { reachable } = useSandbox();
-    const query = useQuery({
+    const { query, error } = useSandboxQuery({
         queryKey: sandboxKey(`deployments`),
         queryFn: fetchDeployments,
-        enabled: reachable,
     });
 
     return {
         deployments: computed<Deployment[]>(() => query.data.value?.deployments ?? []),
         // undefined until the first read answers; false = the engine is down and `live` flags are meaningless.
         komodoReachable: computed(() => query.data.value?.komodoReachable),
-        error: computed(() => (query.error.value ? query.error.value.message : null)),
+        error,
         isLoading: query.isLoading,
         refetch: query.refetch,
     };

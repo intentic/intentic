@@ -6,6 +6,7 @@ import { readIntenticLines } from "../../composables/intenticStream";
 import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
 import { sandboxKey } from "../../composables/sandbox/useSandbox";
+import { errorMessage } from "../../composables/useAsyncAction";
 import { describeProvisionError } from "./provisionError";
 
 /* The pre-apply change preview: run `intentic resolve` then `intentic plan` in the sandbox (read + diff, nothing
@@ -148,7 +149,7 @@ export function usePlanPreview() {
                 error.value = `The preview stalled — last activity: ${activity.value ?? `starting`}. Cancel-and-retry, or check the sandbox.`;
                 return;
             }
-            error.value = describeProvisionError(err instanceof Error ? err.message : `Preview failed.`);
+            error.value = describeProvisionError(errorMessage(err, `Preview failed.`));
         } finally {
             clearTimeout(stall);
             controller = undefined;

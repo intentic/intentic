@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 
 export const MODEL_ID = "Xenova/bge-small-en-v1.5";
-export const EMBEDDING_DIM = 384;
+const EMBEDDING_DIM = 384;
 
 // BGE convention: the retrieval prefix goes on queries only, never on passages.
 const QUERY_PREFIX = "Represent this sentence for searching relevant passages: ";

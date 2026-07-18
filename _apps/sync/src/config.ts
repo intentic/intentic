@@ -6,7 +6,7 @@ import { join } from "node:path";
 // Mutagen authenticates with, and the ssh config/known_hosts Mutagen's ssh reads. No credentials: the agent
 // enrolls its key once with a browser-minted pairing token, then all auth is the SSH key (Mutagen).
 export const baseDir = join(homedir(), ".intentic", "sync");
-export const configPath = join(baseDir, "config.json");
+const configPath = join(baseDir, "config.json");
 export const sshKeyPath = join(baseDir, "id_ed25519");
 export const sshConfigPath = join(baseDir, "ssh_config");
 export const knownHostsPath = join(baseDir, "known_hosts");

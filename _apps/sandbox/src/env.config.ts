@@ -123,14 +123,11 @@ const configSchema = z.object({
 // have to be exported by hand. Absent in the container (nothing to read) ⇒ a no-op there.
 const rootEnv = resolve(import.meta.dirname, "../../../.env");
 
-// Export the raw definition (not loadConfig's result) so the purenv CLI + codegen can resolve it. Sources
-// (later wins): the local .env, then real env (what connect.{sh,ps1}/the provider set at `docker run`), then CLI.
+// Sources (later wins): the local .env, then real env (what connect.{sh,ps1}/the provider set at `docker run`), then CLI.
 const definition = {
     schema: configSchema,
     sources: [envFile(rootEnv), env(), cliArgs()],
 } satisfies ConfigDefinition<typeof configSchema>;
-
-export default definition;
 
 export type Config = z.infer<typeof configSchema>;
 

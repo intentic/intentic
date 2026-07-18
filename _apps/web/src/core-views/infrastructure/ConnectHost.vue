@@ -6,6 +6,7 @@ import { computed, onUnmounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { errorMessage } from "../../composables/useAsyncAction";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import { zoneFromUrl } from "@intentic/sandbox-contract";
 import { normalizeHostName } from "./hostName";
@@ -78,9 +79,7 @@ const mint = async (): Promise<void> => {
         mintError.value =
             err instanceof DOMException && err.name === `TimeoutError`
                 ? `Timed out preparing this host's tunnel — try again.`
-                : err instanceof Error && err.message.length > 0
-                  ? err.message
-                  : `Couldn't prepare this host's tunnel — try again.`;
+                : errorMessage(err, `Couldn't prepare this host's tunnel — try again.`);
     } finally {
         minting.value = false;
     }

@@ -11,6 +11,7 @@ import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { useDeployments } from "../../composables/extensions/useDeployments";
 import { useWorkspaceState } from "../../composables/extensions/useWorkspaceState";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { errorMessage } from "../../composables/useAsyncAction";
 import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
 
@@ -63,7 +64,7 @@ const runLiveCheck = async (): Promise<void> => {
         liveOrphans.value = orphans;
         liveRan.value = true;
     } catch (err) {
-        liveError.value = err instanceof Error ? err.message : `Live check failed.`;
+        liveError.value = errorMessage(err, `Live check failed.`);
     } finally {
         checking.value = false;
     }
@@ -93,7 +94,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
     try {
         revealedAccess.set(key, await reveal(key));
     } catch (err) {
-        accessError.value = err instanceof Error ? err.message : `Could not reveal the password.`;
+        accessError.value = errorMessage(err, `Could not reveal the password.`);
     }
 };
 </script>

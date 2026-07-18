@@ -1,10 +1,11 @@
 import type { FileDiffResponse, GitChangesResponse, RepoChanges } from "@intentic-app/api-contract";
-import { useQuery } from "@tanstack/vue-query";
-import { computed, ref, watch } from "vue";
+import { computed, watch } from "vue";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { sandboxKey } from "../sandbox/useSandbox";
+import { useSandboxQuery } from "../sandbox/useSandboxQuery";
+import { useAsyncAction } from "../useAsyncAction";
 import { resetEditBuffers } from "./useEditBuffers";
 
 /* The Changes review — VSCode's SCM model over the workspace's real repos: the set is plain `git status`
@@ -12,8 +13,6 @@ import { resetEditBuffers } from "./useEditBuffers";
  * aggregated by the daemon's /git/changes. Commit makes a real commit on the repo's own branch; discard
  * restores the worktree from HEAD. No client-side watermark: the reviewed line IS the commit boundary, so every
  * browser and device agrees. Module-level singletons so the badge (shell), the panel, and the workspace agree. */
-
-const { reachable } = useSandbox();
 
 // An agent turn ends when chat streaming falls — refresh the review set and the snapshot timeline so the badge
 // and panels surface the turn's work without a manual refresh. Module scope (like sandboxScope.ts), NOT inside
@@ -28,8 +27,8 @@ watch(streaming, (now, was) => {
     }
 });
 
-const actionBusy = ref(false);
-const actionError = ref<string | undefined>(undefined);
+// Batch mutations report through one shared busy span + error line, so N per-repo requests read as one action.
+const { busy: actionBusy, error: actionError, run } = useAsyncAction();
 
 const fileDiff = (repo: string, path: string): Promise<FileDiffResponse> =>
     sandboxJson<FileDiffResponse>(`/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}`);
@@ -41,19 +40,6 @@ export interface RepoPaths {
 }
 
 const invalidateChanges = (): Promise<void> => queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) });
-
-// Wrap a batch mutation with a single busy span + surfaced error, so N per-repo requests read as one action.
-const run = async (task: () => Promise<void>, failMessage: string): Promise<void> => {
-    actionError.value = undefined;
-    actionBusy.value = true;
-    try {
-        await task();
-    } catch (caught) {
-        actionError.value = caught instanceof Error ? caught.message : failMessage;
-    } finally {
-        actionBusy.value = false;
-    }
-};
 
 // Commit a selection: git can't span repos, so each group is its own real commit on that repo's branch, all
 // carrying the same message. A group with no `paths` commits the whole repo. One refresh for the whole batch.
@@ -89,16 +75,14 @@ const discardGroups = (groups: readonly RepoPaths[]): Promise<void> =>
     }, `Discard failed.`);
 
 export function useChanges() {
-    const query = useQuery({
+    const { query, error } = useSandboxQuery({
         queryKey: sandboxKey(`git`, `changes`),
         queryFn: () => sandboxJson<GitChangesResponse>(`/git/changes`),
-        enabled: reachable,
     });
 
     const repos = computed<readonly RepoChanges[]>(() => query.data.value?.repos ?? []);
     const count = computed(() => repos.value.reduce((total, repo) => total + repo.changes.length, 0));
     const hasChanges = computed(() => count.value > 0);
-    const error = computed(() => (query.error.value ? query.error.value.message : undefined));
 
     return {
         repos,

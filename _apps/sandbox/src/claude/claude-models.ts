@@ -17,7 +17,7 @@ export interface ClaudeModel {
 
 // The stable-alias fallback catalog. Aliases track the latest version of each tier, so the picker stays current
 // for version bumps even without a live supportedModels() call.
-export const CLAUDE_ALIAS_MODELS: readonly ClaudeModel[] = [
+const CLAUDE_ALIAS_MODELS: readonly ClaudeModel[] = [
     { id: "opus", label: "Opus" },
     { id: "sonnet", label: "Sonnet" },
     { id: "haiku", label: "Haiku" },
@@ -40,7 +40,7 @@ async function* pendingInput(signal: AbortSignal): AsyncGenerator<SDKUserMessage
 
 // Ask the CLI for its available models over a throwaway streaming-input session, then dispose it. Throws when the
 // CLI can't start / auth fails — the caller falls back to the aliases.
-export const discoverClaudeModels = async (oauthToken: string | undefined, cwd: string): Promise<ClaudeModel[]> => {
+const discoverClaudeModels = async (oauthToken: string | undefined, cwd: string): Promise<ClaudeModel[]> => {
     const abort = new AbortController();
     const options: Options = {
         cwd,

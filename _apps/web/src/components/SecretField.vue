@@ -5,6 +5,7 @@ import { computed, ref } from "vue";
 import { devFillGet } from "../composables/devFill";
 import { useCapabilitySecret } from "../composables/extensions/useCapabilities";
 import { useSecrets } from "../composables/extensions/useSecrets";
+import { useAsyncAction } from "../composables/useAsyncAction";
 
 /* The one way a secret value enters the app: a masked input with an eye toggle that writes KEY=value straight
  * to the sandbox daemon's .env (never the platform), plus the shared provenance line. Used by the Secrets page
@@ -47,17 +48,14 @@ if (value.value === ``) {
 const { set } = useSecrets();
 const setCapabilitySecret = useCapabilitySecret();
 const show = ref(false);
-const error = ref<string | undefined>(undefined);
-const saving = ref(false);
+const { busy: saving, error, run } = useAsyncAction();
 const canSave = computed(() => !props.disabled && value.value.trim().length > 0);
 
 const save = async (): Promise<void> => {
-    if (!canSave.value || saving.value || props.collect) {
+    if (!canSave.value || props.collect) {
         return;
     }
-    saving.value = true;
-    error.value = undefined;
-    try {
+    await run(async () => {
         if (props.capabilityId !== undefined) {
             await setCapabilitySecret.mutateAsync({ id: props.capabilityId, value: value.value.trim() });
         } else {
@@ -65,11 +63,7 @@ const save = async (): Promise<void> => {
         }
         value.value = ``;
         emit(`saved`);
-    } catch (err) {
-        error.value = err instanceof Error ? err.message : `Could not save the secret.`;
-    } finally {
-        saving.value = false;
-    }
+    }, `Could not save the secret.`);
 };
 
 // In collect mode Enter falls through to the surrounding form's submit; standalone, it saves directly.

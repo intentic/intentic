@@ -10,7 +10,8 @@ import { OpenAPILink } from "@orpc/openapi-client/fetch";
 import type { StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { daemonUrl, dockerBuild, dockerRmi, dockerRun, startSandboxContainer, until } from "./e2e-harness.js";
-import { environmentHash, hasValidBase } from "./environment/environment.js";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { hasValidBase } from "./environment/environment.js";
 
 // The Tier-3 real Discord + Whisper e2e: the ext-discord gateway process on a REAL bot token receives a REAL
 // message (sent by a second, harness-owned bot — the listener deliberately dispatches third-party bot posts, see
@@ -148,7 +149,7 @@ describe.skipIf(!enabled)("discord + whisper end-to-end (real gateway, real bina
         const approved = environment.approved as { content: string; hash: string };
         expect(hasValidBase(approved.content)).toBe(true);
         expect(approved.content).toContain("whisper-cli");
-        expect(approved.hash).toBe(environmentHash(approved.content));
+        expect(approved.hash).toBe(sha256Hex(approved.content));
 
         // The outside-executor role: build the overlay (compiles whisper.cpp v1.9.1 from source — docker layer
         // cache makes reruns cheap) and run the REAL binary on real speech, with the exact flags voice.ts uses.

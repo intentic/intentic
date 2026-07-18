@@ -5,6 +5,7 @@ import { Card, cmp, InfoHint, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import SecretField from "../../components/SecretField.vue";
+import { errorMessage } from "../../composables/useAsyncAction";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { useDeployments } from "../../composables/extensions/useDeployments";
 import { useInventory } from "../../composables/extensions/useInventory";
@@ -185,7 +186,7 @@ const submit = async (): Promise<void> => {
         await add.mutateAsync({ kind: `backend`, provider: provider.value, name: name.value.trim(), values: payload });
         cancelAdd();
     } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not add the backend.`;
+        actionError.value = errorMessage(err, `Could not add the backend.`);
     }
 };
 
@@ -198,7 +199,7 @@ const removeEntry = async (entryName: string): Promise<void> => {
             void preview.run();
         }
     } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not remove the entry.`;
+        actionError.value = errorMessage(err, `Could not remove the entry.`);
     }
 };
 
@@ -219,7 +220,7 @@ const submitGithub = async (): Promise<void> => {
         showGithub.value = false;
         ghToken.value = ``;
     } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not link GitHub.`;
+        actionError.value = errorMessage(err, `Could not link GitHub.`);
     } finally {
         ghSubmitting.value = false;
     }
@@ -245,7 +246,7 @@ const submitGitlab = async (): Promise<void> => {
         glToken.value = ``;
         glUrl.value = ``;
     } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not link GitLab.`;
+        actionError.value = errorMessage(err, `Could not link GitLab.`);
     } finally {
         glSubmitting.value = false;
     }
@@ -268,7 +269,7 @@ const submitStripe = async (): Promise<void> => {
         showStripe.value = false;
         stripeKey.value = ``;
     } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not connect Stripe.`;
+        actionError.value = errorMessage(err, `Could not connect Stripe.`);
     } finally {
         stripeSubmitting.value = false;
     }

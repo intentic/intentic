@@ -1,9 +1,9 @@
 import { InfoSchema } from "@intentic/sandbox-contract";
-import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { bashCommand } from "../../environments/scriptCommand";
 import { sandboxJson } from "./sandboxClient";
 import { sandboxKey, useSandbox } from "./useSandbox";
+import { useSandboxQuery } from "./useSandboxQuery";
 import { useEnvironment } from "./useEnvironment";
 
 /* The sandbox daemon's self-report (/info): its running `version` and — once the daemon has checked GitHub —
@@ -12,13 +12,13 @@ import { useEnvironment } from "./useEnvironment";
  * the host (the sandbox has no Docker socket) via a token-free one-liner — the same shape as the environment
  * rebuild command, minus the hash (the :stable base is trusted by its tag). */
 
-export const INFO_KEY = sandboxKey(`info`);
+const INFO_KEY = sandboxKey(`info`);
 
 // Per-sandbox "don't nudge me about this version again", keyed by the version dismissed — so a NEWER release
 // (latest !== dismissed) re-shows the banner on its own. Same `intentic.<key>` convention as useSandbox/useLayout.
 const dismissedStorageKey = (sandboxId: string): string => `intentic.dismissedSandboxVersion.${sandboxId}`;
 
-const { activeSandboxId, reachable } = useSandbox();
+const { activeSandboxId } = useSandbox();
 
 const readDismissed = (id: string | undefined): string | undefined => {
     if (id === undefined) {
@@ -41,10 +41,9 @@ watch(activeSandboxId, (id) => {
 export function useSandboxVersion() {
     const { serverManaged, state: envState } = useEnvironment();
 
-    const query = useQuery({
+    const { query } = useSandboxQuery({
         queryKey: INFO_KEY,
         queryFn: async () => InfoSchema.parse(await sandboxJson(`/info`)),
-        enabled: reachable,
     });
     const info = computed(() => query.data.value);
     const installed = computed(() => info.value?.version);

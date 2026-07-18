@@ -1,11 +1,11 @@
-import { createHash } from "node:crypto";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
 // Hash-anchored editing ("hashline"). A read tags each line with a short content hash and the whole file with an
 // anchor; an edit references those tags and echoes the anchor. Two payoffs over str_replace-style edits: the
 // model points at tags instead of retyping the lines it keeps (far fewer output tokens), and an edit whose anchor
 // no longer matches the file — i.e. the file changed since it was read — is rejected instead of corrupting it.
 
-const short = (input: string, length: number): string => createHash("sha256").update(input).digest("hex").slice(0, length);
+const short = (input: string, length: number): string => sha256Hex(input).slice(0, length);
 
 // Whole-file anchor: changes on any byte change, so a mismatch at edit time means the read is stale.
 export const fileAnchor = (content: string): string => short(content, 8);

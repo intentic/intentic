@@ -1,8 +1,9 @@
 import { PanelsListSchema, type PanelSummary } from "@intentic-app/api-contract";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { sandboxKey } from "../sandbox/useSandbox";
+import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The workspace's repositories: runtime status (running/healthy/previewUrl) + the content facts the extension
  * registry detects on, read via the daemon's /panels routes. Discovery is convention-only — no manifest — so
@@ -14,13 +15,11 @@ const QUERY_KEY = sandboxKey(`panels`);
 const POLL_MS = 4000;
 
 export function usePanels() {
-    const { reachable } = useSandbox();
     const queryClient = useQueryClient();
 
-    const query = useQuery({
+    const { query, error } = useSandboxQuery({
         queryKey: QUERY_KEY,
         queryFn: async () => PanelsListSchema.parse(await sandboxJson(`/panels`)),
-        enabled: reachable,
         refetchInterval: (state) => (state.state.data?.panels.some((panel) => panel.running) ? POLL_MS : false),
     });
 
@@ -38,7 +37,7 @@ export function usePanels() {
 
     return {
         panels: computed<PanelSummary[]>(() => query.data.value?.panels ?? []),
-        error: computed(() => (query.error.value ? query.error.value.message : null)),
+        error,
         isLoading: query.isLoading,
         start,
         stop,

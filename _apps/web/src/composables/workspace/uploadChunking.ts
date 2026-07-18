@@ -5,7 +5,7 @@
 
 // ponytail: 200 files / 32 MB per chunk keeps a request a few seconds even on a slow uplink — well under
 // Cloudflare's ~100s origin timeout — so a chunk never sits long enough to be reset. Tune if resets persist.
-export const CHUNK_FILES = 200;
+const CHUNK_FILES = 200;
 export const CHUNK_BYTES = 32 * 1024 * 1024;
 
 // One drop can yield two entries destined for the SAME path (same-named files dragged from different folders).

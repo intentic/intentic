@@ -7,6 +7,7 @@ import SecretField from "../../components/SecretField.vue";
 import { useCloudflareZones } from "../../composables/extensions/useCloudflareZones";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { useSecretKeys, useSecrets } from "../../composables/extensions/useSecrets";
+import { errorMessage } from "../../composables/useAsyncAction";
 
 /* The reusable "Connect Cloudflare" step. Collects a Cloudflare API token (unless the sandbox already has
  * one) plus the zone it manages, writes CLOUDFLARE_API_TOKEN to the sandbox .env and declares the
@@ -53,7 +54,7 @@ const connect = async (): Promise<void> => {
         });
         emit(`connected`);
     } catch (err) {
-        error.value = err instanceof Error ? err.message : `Could not connect Cloudflare.`;
+        error.value = errorMessage(err, `Could not connect Cloudflare.`);
     } finally {
         submitting.value = false;
     }

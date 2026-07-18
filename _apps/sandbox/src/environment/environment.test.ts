@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Capability } from "@intentic/sandbox-contract";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/workspace-files.js";
@@ -11,7 +12,6 @@ import {
     approveEnvironment,
     composeEnvironment,
     customPath,
-    environmentHash,
     hasValidBase,
     proposalPath,
     readEnvironment,
@@ -51,7 +51,7 @@ test("propose → approve stores the custom section and recomposes; applied deri
 
     // The agent's Write of the proposal file IS the proposal.
     await services.files.write(proposalPath(services), CUSTOM);
-    const hash = environmentHash(CUSTOM);
+    const hash = sha256Hex(CUSTOM);
     expect(await readEnvironment(services)).toEqual({ proposal: { content: CUSTOM, hash }, container: "intentic-sandbox-demo" });
 
     expect(await approveEnvironment(services, hash)).toBeUndefined();
@@ -76,15 +76,15 @@ test("approve refuses a missing proposal, a reviewed-content mismatch, a FROM li
 
     await services.files.write(proposalPath(services), CUSTOM);
     // The TOCTOU gate: the hash the owner reviewed no longer matches the file's content.
-    expect(await approveEnvironment(services, environmentHash("RUN evil\n"))).toBe("mismatch");
+    expect(await approveEnvironment(services, sha256Hex("RUN evil\n"))).toBe("mismatch");
 
     const withFrom = "FROM alpine:latest\nRUN true\n";
     await services.files.write(proposalPath(services), withFrom);
-    expect(await approveEnvironment(services, environmentHash(withFrom))).toBe("invalid");
+    expect(await approveEnvironment(services, sha256Hex(withFrom))).toBe("invalid");
 
     const withDirective = "RUN true\n# intentic:runtime --cap-add=SYS_ADMIN\n";
     await services.files.write(proposalPath(services), withDirective);
-    expect(await approveEnvironment(services, environmentHash(withDirective))).toBe("invalid");
+    expect(await approveEnvironment(services, sha256Hex(withDirective))).toBe("invalid");
 
     // No failure wrote the custom or approved files.
     const state = await readEnvironment(services);
@@ -95,13 +95,13 @@ test("approve refuses a missing proposal, a reviewed-content mismatch, a FROM li
 test("reject deletes the proposal and leaves the approved custom section untouched", async () => {
     const services = stubServices();
     await services.files.write(proposalPath(services), CUSTOM);
-    expect(await approveEnvironment(services, environmentHash(CUSTOM))).toBeUndefined();
+    expect(await approveEnvironment(services, sha256Hex(CUSTOM))).toBeUndefined();
 
     await services.files.write(proposalPath(services), `${CUSTOM}RUN echo next\n`);
     await rejectEnvironment(services);
     const state = await readEnvironment(services);
     expect(state.proposal).toBeUndefined();
-    expect(state.custom).toEqual({ content: CUSTOM, hash: environmentHash(CUSTOM) });
+    expect(state.custom).toEqual({ content: CUSTOM, hash: sha256Hex(CUSTOM) });
     expect(state.approved).toBeDefined();
 });
 
@@ -110,7 +110,7 @@ test("compose folds a capability's fragment (install + runtime directives) into 
     const hash = await composeEnvironment(services);
     const approved = await services.files.read(approvedPath(services));
     expect(approved).toBeDefined();
-    expect(hash).toBe(environmentHash(approved!));
+    expect(hash).toBe(sha256Hex(approved!));
     expect(hasValidBase(approved!)).toBe(true);
     expect(approved).toContain("wireguard-tools");
     expect(approved).toContain("# intentic:runtime --device=/dev/net/tun");
@@ -144,7 +144,7 @@ test("compose with nothing left removes the overlay on a stock container, keeps 
     const hash = await composeEnvironment(overlayBuilt);
     const bare = await overlayBuilt.files.read(approvedPath(overlayBuilt));
     expect(bare).toBeDefined();
-    expect(hash).toBe(environmentHash(bare!));
+    expect(hash).toBe(sha256Hex(bare!));
     expect(hasValidBase(bare!)).toBe(true);
     expect(bare).not.toContain("# ---- custom");
 });
@@ -152,9 +152,9 @@ test("compose with nothing left removes the overlay on a stock container, keeps 
 test("an empty approved proposal clears the custom section", async () => {
     const services = stubServices();
     await services.files.write(proposalPath(services), CUSTOM);
-    expect(await approveEnvironment(services, environmentHash(CUSTOM))).toBeUndefined();
+    expect(await approveEnvironment(services, sha256Hex(CUSTOM))).toBeUndefined();
     await services.files.write(proposalPath(services), "");
-    expect(await approveEnvironment(services, environmentHash(""))).toBeUndefined();
+    expect(await approveEnvironment(services, sha256Hex(""))).toBeUndefined();
     expect(await services.files.read(customPath(services))).toBe("");
     // Nothing left to compose on a stock container ⇒ the overlay is gone.
     expect(await services.files.read(approvedPath(services))).toBeUndefined();

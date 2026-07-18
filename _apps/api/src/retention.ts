@@ -10,7 +10,7 @@ import type { PrismaClient } from "@intentic-app/prisma";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const INVITE_MAX_AGE_MS = 90 * DAY_MS;
 
-export const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; verifications: number; invites: number }> => {
+const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; verifications: number; invites: number }> => {
     const now = new Date();
     const [sessions, verifications] = await Promise.all([
         prisma.session.deleteMany({ where: { expiresAt: { lt: now } } }),

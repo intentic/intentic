@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { provisionSandboxTunnel } from "./cloudflare.js";
 import type { Config } from "../config.js";
-import { encryptSecret, tokenDigest } from "../crypto.js";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { encryptSecret } from "../crypto.js";
 import { JOB_SANDBOX_POOL, runExclusive } from "../jobs-lock.js";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic-app/prisma";
@@ -48,7 +49,7 @@ export const topUp = async (prisma: PrismaClient, config: Config, logger: Logger
             await prisma.reservedSandbox.create({
                 data: {
                     token: encryptSecret(config, token),
-                    tokenDigest: tokenDigest(token),
+                    tokenDigest: sha256Hex(token),
                     tunnelToken: encryptSecret(config, tunnel.tunnelToken),
                     tunnelHostname: tunnel.hostname,
                 },

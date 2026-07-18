@@ -7,6 +7,7 @@ import { providerLabel } from "@intentic/sandbox-contract";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { type ChatAttachment, type ChatMessage, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
 import { formatReset, usageStatusFor, usageWindowLabel } from "../composables/chat/usageStatus";
+import { errorMessage } from "../composables/useAsyncAction";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSpeechInput } from "../composables/chat/useSpeechInput";
@@ -253,7 +254,7 @@ const attach = (file: File): void => {
         },
         (err: unknown) => {
             entry.status = `failed`;
-            entry.error = err instanceof Error ? err.message : `Upload failed.`;
+            entry.error = errorMessage(err, `Upload failed.`);
         },
     );
 };

@@ -32,7 +32,7 @@ const strip = (id, match, patterns) => ({
 
 // Command-scoped cleaners (id ↔ command regex ↔ transform). Composable: every enabled cleaner whose `match`
 // tests the command runs, in array order. Extend here as filter-stats.jsonl surfaces new noisy commands.
-export const COMMAND_CLEANERS = [
+const COMMAND_CLEANERS = [
     strip("npm", /\b(npm|npx)\b/, [/^npm (?:warn|notice)\b/i]),
     strip("pnpm", /\bpnpm\b/, [
         /^\s*Progress: /,
@@ -76,10 +76,7 @@ export const COMMAND_CLEANERS = [
     strip("gh", /\bgh\b/, [/^\s*Showing \d+ of \d+ /]),
     // Build tools: cargo/go emit a line per compiled crate + dependency download — high-volume progress noise on
     // a successful build. Strip the per-unit chatter; the final `Finished`/binary line survives.
-    strip("build", /\b(?:cargo|go|kubectl)\b/, [
-        /^\s*(?:Compiling|Downloading|Downloaded|Updating|Installing|Blocking) /,
-        /^\s*go: downloading /,
-    ]),
+    strip("build", /\b(?:cargo|go|kubectl)\b/, [/^\s*(?:Compiling|Downloading|Downloaded|Updating|Installing|Blocking) /, /^\s*go: downloading /]),
 ];
 
 // The full toggle vocabulary: every command cleaner id, plus the global stages. `dedup` and `redact` have no
@@ -145,10 +142,10 @@ export const parseCleaners = (spec) => {
 
 // Generic success cap (any command): outputs past MAX keep the first HEAD + last TAIL lines. Failures keep
 // everything up to FAIL_TAIL — errors usually live at the end.
-export const HEAD = 30;
-export const TAIL = 50;
-export const MAX = 100;
-export const FAIL_TAIL = 500;
+const HEAD = 30;
+const TAIL = 50;
+const MAX = 100;
+const FAIL_TAIL = 500;
 
 // The gated cleaning pipeline over already-split, ANSI/\r-cleaned lines. Exit-code-asymmetric: on success run the
 // matching command cleaners then the cap; on failure keep everything but a generous tail. `enabled` gates each id.

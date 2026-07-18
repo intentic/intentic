@@ -8,6 +8,7 @@ import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
 import { useRunning } from "../../composables/sandbox/useRunning";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { errorMessage } from "../../composables/useAsyncAction";
 import { presenceOthers } from "../../composables/usePresence";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
 
@@ -91,7 +92,7 @@ const save = async (): Promise<void> => {
         editing.value = false;
         stagedImage.value = undefined;
     } catch (err) {
-        error.value = err instanceof Error ? err.message : `Couldn't save sandbox settings.`;
+        error.value = errorMessage(err, `Couldn't save sandbox settings.`);
     } finally {
         busy.value = false;
     }

@@ -8,7 +8,7 @@ const DARK_ATTRIBUTE = `data-mode`;
 const THEME_STORAGE_KEY = `ui-theme`;
 const THEME_ATTRIBUTE = `data-theme`;
 
-export const themes: BrandTheme[] = [`ember`, `carbon`, `meadow`, `honey`];
+const themes: BrandTheme[] = [`ember`, `carbon`, `meadow`, `honey`];
 
 /* Owns the active color scheme and brand theme as module-level singletons. The scheme flips the
  * `data-mode` attribute on <html>, which is the selector both the PrimeVue dark preset and the role

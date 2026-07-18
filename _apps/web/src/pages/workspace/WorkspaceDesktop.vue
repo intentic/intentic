@@ -42,7 +42,7 @@ import { closeTabs } from "./workspaceTabs";
  * a collapsible terminal panel along the bottom. Read-only — editing happens via the agent in chat. */
 
 const layout = useLayout();
-const { tree, truncated, error, isLoading, refetch, entry, moveIntoMany, runAction, busy, actionError } = useWorkspaceTree();
+const { tree, truncated, error, isLoading, refetch, entry, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
 const { files: uploadFiles, scanning: uploadScanning, skippedNotice: uploadSkipped, enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
@@ -237,7 +237,7 @@ const onRootDrop = (event: DragEvent): void => {
     // otherwise OS files → upload to root.
     const internal = dataTransfer.getData(`application/x-intentic-path`);
     if (internal !== ``) {
-        void runAction(() => moveIntoMany(internal.split(`\n`), ``));
+        void run(() => moveIntoMany(internal.split(`\n`), ``));
         return;
     }
     // enqueueFromDataTransfer runs the capture synchronously (webkitGetAsEntry must fire while the drop's items are

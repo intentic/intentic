@@ -1,8 +1,9 @@
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic-app/api-contract";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxJson } from "./sandboxClient";
-import { sandboxKey, useSandbox } from "./useSandbox";
+import { sandboxKey } from "./useSandbox";
+import { useSandboxQuery } from "./useSandboxQuery";
 
 /* The active sandbox's agent settings (.intentic/settings.json), read/written via the daemon's /settings routes.
  * Currently just `searchPastChats` — whether the agent may search this sandbox's earlier conversations. `save`
@@ -11,13 +12,11 @@ import { sandboxKey, useSandbox } from "./useSandbox";
 const QUERY_KEY = sandboxKey(`settings`);
 
 export function useSandboxSettings() {
-    const { reachable } = useSandbox();
     const queryClient = useQueryClient();
 
-    const query = useQuery({
+    const { query } = useSandboxQuery({
         queryKey: QUERY_KEY,
         queryFn: async (): Promise<SandboxSettings> => SandboxSettingsSchema.parse(await sandboxJson(`/settings`)),
-        enabled: reachable,
     });
 
     const save = useMutation({

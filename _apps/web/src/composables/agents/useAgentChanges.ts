@@ -1,30 +1,27 @@
 import type { FileDiffResponse, GitChangesResponse, RepoChanges } from "@intentic-app/api-contract";
 import type { LandResult } from "@intentic/sandbox-contract";
-import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, type Ref } from "vue";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { sandboxKey } from "../sandbox/useSandbox";
+import { useSandboxQuery } from "../sandbox/useSandboxQuery";
+import { useAsyncAction } from "../useAsyncAction";
 
 /* Per-agent isolated review — useChanges' shape bound to one conversation's worktree: the diff is the
  * worktree's cumulative delta vs its recorded bases (GET /agents/{id}/diff, the same GitChanges wire shape),
  * and the actions are land (merge into the main tree) and discard (drop worktree + branch + registry entry)
  * instead of commit/discard. Parameterized by agent id — each review panel instance owns its own query. */
 
-const { reachable } = useSandbox();
-
 export function useAgentChanges(agentId: Ref<string>) {
-    const query = useQuery({
+    const { query, error } = useSandboxQuery({
         queryKey: computed(() => sandboxKey(`agents`, agentId.value, `diff`)),
         queryFn: () => sandboxJson<GitChangesResponse>(`/agents/${encodeURIComponent(agentId.value)}/diff`),
-        enabled: reachable,
     });
 
     const repos = computed<readonly RepoChanges[]>(() => query.data.value?.repos ?? []);
     const count = computed(() => repos.value.reduce((total, repo) => total + repo.changes.length, 0));
 
-    const actionBusy = ref(false);
-    const actionError = ref<string | undefined>(undefined);
+    const { busy: actionBusy, error: actionError, run } = useAsyncAction();
     // The conflicts of the last land attempt, for the conflict panel; cleared by a clean land or discard.
     const conflicts = ref<LandResult[`conflicts`]>(undefined);
 
@@ -32,18 +29,6 @@ export function useAgentChanges(agentId: Ref<string>) {
         sandboxJson<FileDiffResponse>(
             `/agents/${encodeURIComponent(agentId.value)}/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}`,
         );
-
-    const run = async (task: () => Promise<void>, failMessage: string): Promise<void> => {
-        actionError.value = undefined;
-        actionBusy.value = true;
-        try {
-            await task();
-        } catch (caught) {
-            actionError.value = caught instanceof Error ? caught.message : failMessage;
-        } finally {
-            actionBusy.value = false;
-        }
-    };
 
     // After a land or discard the agent's diff changed AND the landed work now shows in the MAIN review +
     // history — invalidate all three so every surface converges.
@@ -74,7 +59,7 @@ export function useAgentChanges(agentId: Ref<string>) {
         repos,
         count,
         loading: query.isFetching,
-        error: computed(() => (query.error.value ? query.error.value.message : undefined)),
+        error,
         refresh: query.refetch,
         fileDiff,
         land,

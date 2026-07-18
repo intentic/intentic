@@ -32,7 +32,7 @@ Notes: TypeScript/JavaScript only. Pass workspace paths.
 `;
 
 // skill name → SKILL.md body. The settings `skills` array selects which of these are written to disk.
-export const SKILLS: Record<string, string> = {
+const SKILLS: Record<string, string> = {
     lsp: LSP_SKILL,
 };
 

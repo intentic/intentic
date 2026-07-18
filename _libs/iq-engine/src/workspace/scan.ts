@@ -66,7 +66,7 @@ const matchesClass = (path: string, cls: FileClass): boolean => {
     return !CLASS_TESTS.test(path) && !CLASS_DOCS.test(path) && !CLASS_CONFIG.test(path);
 };
 
-export const EXT_LANG: Record<string, string> = {
+const EXT_LANG: Record<string, string> = {
     ts: "ts",
     tsx: "tsx",
     mts: "ts",

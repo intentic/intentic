@@ -9,7 +9,8 @@ import { type Auth, createAuth } from "./auth.js";
 import { CloudflareTokenError, ensurePreviewRoute, provisionHostSshTunnel } from "./sandbox/cloudflare.js";
 import type { Config } from "./config.js";
 import { buildOrpcContext, type OrpcContext } from "./context.js";
-import { decryptSecret, tokenDigest } from "./crypto.js";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { decryptSecret } from "./crypto.js";
 import type { Logger } from "pino";
 import { router } from "./router.js";
 import { createTracingHttpMiddleware } from "./tracing.js";
@@ -130,7 +131,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (typeof daemonUrl !== `string` || !isHttpsUrl(daemonUrl)) {
             return c.text(`error: daemonUrl must be an https URL`, 400);
         }
-        const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: tokenDigest(token) } });
+        const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
         if (!sandbox) {
             return c.text(`error: unknown sandbox`, 404);
         }
@@ -152,7 +153,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (typeof hostName !== `string` || hostName === ``) {
             return c.text(`error: hostName is required`, 400);
         }
-        const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: tokenDigest(token) } });
+        const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
         if (!sandbox) {
             return c.text(`error: unknown sandbox`, 404);
         }
@@ -188,7 +189,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (typeof panel !== `string` || !/^[a-z0-9][a-z0-9-]*$/.test(panel) || panel.length > 42) {
             return c.text(`error: panel must be a lowercase DNS-safe name of at most 42 characters`, 400);
         }
-        const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: tokenDigest(token) } });
+        const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
         if (!sandbox) {
             return c.text(`error: unknown sandbox`, 404);
         }

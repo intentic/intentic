@@ -4,6 +4,7 @@ import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-c
 import { shallowRef } from "vue";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
 import { sandboxError, sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";
+import { errorMessage } from "../composables/useAsyncAction";
 import { createExtensionApi, type HostBindings } from "./apiImpl";
 import { satisfiesEngines } from "./engines";
 
@@ -57,7 +58,7 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings): Promise<E
             URL.revokeObjectURL(url);
         }
     } catch (error) {
-        return { id: summary.id, extensionId, state: `error`, detail: error instanceof Error ? error.message : String(error) };
+        return { id: summary.id, extensionId, state: `error`, detail: errorMessage(error, String(error)) };
     }
 };
 

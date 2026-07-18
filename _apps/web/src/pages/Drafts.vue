@@ -2,7 +2,7 @@
 import type { DraftStatus, DraftSummary } from "@intentic-app/api-contract";
 import { Card, cmp, Page, StatusBadge, type StatusVariant } from "@intentic-app/ui";
 import Button from "primevue/button";
-import { ref } from "vue";
+import { useAsyncAction } from "../composables/useAsyncAction";
 import { useDrafts } from "../composables/extensions/useDrafts";
 
 /* Drafts: the approval inbox for posts the agent proposed during its scheduled work. The agent writes one JSON
@@ -12,7 +12,7 @@ import { useDrafts } from "../composables/extensions/useDrafts";
  * drafts originate with the agent, never the UI. */
 
 const { drafts, invalid, error: listError, save, remove } = useDrafts();
-const actionError = ref<string | null>(null);
+const { error: actionError, run } = useAsyncAction();
 
 const STATUS_VARIANT: Record<DraftStatus, StatusVariant> = {
     proposed: `warning`,
@@ -38,14 +38,10 @@ const formatAt = (ms: number): string => new Date(ms).toLocaleString();
 
 // Approve / retry / reschedule are all a re-post of the whole file with one field changed (the daemon upserts
 // by id). Errors surface in the top strip; the query refetch reconciles the row.
-const patch = async (draft: DraftSummary, changes: Partial<DraftSummary>): Promise<void> => {
-    actionError.value = null;
-    try {
+const patch = (draft: DraftSummary, changes: Partial<DraftSummary>): Promise<void> =>
+    run(async () => {
         await save.mutateAsync({ ...draft, ...changes });
-    } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not update the draft.`;
-    }
-};
+    }, `Could not update the draft.`);
 
 const reschedule = (draft: DraftSummary, value: string): void => {
     const ms = new Date(value).getTime();
@@ -54,14 +50,10 @@ const reschedule = (draft: DraftSummary, value: string): void => {
     }
 };
 
-const removeDraft = async (id: string): Promise<void> => {
-    actionError.value = null;
-    try {
+const removeDraft = (id: string): Promise<void> =>
+    run(async () => {
         await remove.mutateAsync(id);
-    } catch (err) {
-        actionError.value = err instanceof Error ? err.message : `Could not remove the draft.`;
-    }
-};
+    }, `Could not remove the draft.`);
 </script>
 
 <template>

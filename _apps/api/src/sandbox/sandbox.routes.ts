@@ -3,7 +3,8 @@ import { apiContract } from "@intentic-app/api-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { getPlan, PLAN_ENTITLEMENTS, paymentRequired } from "../billing/entitlements.js";
 import type { OrpcContext } from "../context.js";
-import { decryptSecret, encryptSecret, tokenDigest } from "../crypto.js";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { decryptSecret, encryptSecret } from "../crypto.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
 import {
     CloudflareApiError,
@@ -109,7 +110,7 @@ export const sandboxRoutes = {
         // Empty pool → mint inline as before; setupCode provisions the tunnel lazily.
         const token = randomBytes(16).toString(`base64url`);
         const sandbox = await context.prisma.sandbox.create({
-            data: { name: input.name, ownerId: user.id, token: encryptSecret(context.config, token), tokenDigest: tokenDigest(token) },
+            data: { name: input.name, ownerId: user.id, token: encryptSecret(context.config, token), tokenDigest: sha256Hex(token) },
         });
         return toSummary(sandbox, `owner`, context);
     }),

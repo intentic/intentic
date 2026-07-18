@@ -1,6 +1,7 @@
 {
     "$schema": "./node_modules/knip/schema.json",
-    "ignore": ["**/dist/**", "**/generated/**", "**/.astro/**", "**/*.d.ts"],
+    "ignore": ["**/dist/**", "**/generated/**", "**/.astro/**", "**/*.d.ts", "**/*.d.mts", "**/__fixtures__/**"],
+    "ignoreExportsUsedInFile": { "interface": true, "type": true },
     "ignoreDependencies": ["tslib"],
     "ignoreBinaries": ["docker", "docker compose", "ssh", "mutagen", "cloudflared", "rg", "tmux", "psql", "bun"],
     "workspaces": {
@@ -9,19 +10,28 @@
             "ignore": ["desired-state/**", "intent/**", "examples/**"]
         },
         "_apps/web": {
-            "entry": ["src/main.ts", "index.html", "vite.config.ts", "src/**/*.test.ts"]
+            "entry": [
+                "src/main.ts",
+                "index.html",
+                "vite.config.ts",
+                "src/**/*.test.ts",
+                "scripts/*.mjs",
+                "src/environments/environment.local.ts",
+                "src/environments/environment.deployment.ts"
+            ],
+            "ignore": ["public/**"]
         },
         "_apps/api": {
             "entry": ["src/main.ts", "src/**/*.test.ts"]
         },
         "_apps/sandbox": {
-            "entry": ["src/main.ts", "src/**/*.test.ts"]
+            "entry": ["src/main.ts", "src/**/*.test.ts", "bin/*.mjs", "bin/*.test.mjs"]
         },
         "_apps/iq": {
             "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.ts"]
         },
         "_apps/cli": {
-            "entry": ["src/cli.ts", "src/demo.ts", "src/**/*.test.ts"]
+            "entry": ["src/cli.ts", "src/demo.ts", "src/**/*.test.ts", "doh-lookup.mjs"]
         },
         "_apps/sync": {
             "entry": ["src/cli.ts", "src/**/*.test.ts"]
@@ -30,7 +40,14 @@
             "entry": ["src/cli.ts", "src/**/*.test.ts"]
         },
         "_apps/site": {
-            "entry": ["astro.config.mjs", "src/pages/**/*.{astro,ts}"]
+            "entry": ["astro.config.mjs", "src/pages/**/*.{astro,ts}", "worker.ts"],
+            "ignore": ["public/**"]
+        },
+        "_extensions/discord": {
+            "entry": ["src/index.ts", "src/gateway.ts", "src/**/*.test.ts"]
+        },
+        "_extensions/imap": {
+            "entry": ["src/index.ts", "src/gateway.ts", "src/**/*.test.ts"]
         },
         "_extensions/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]
@@ -45,7 +62,7 @@
             "entry": ["src/**/*.ts"]
         },
         "_tools/e2e": {
-            "entry": ["src/**/*.ts"]
+            "entry": ["playwright.config.ts", "specs/**/*.ts", "global-setup.ts", "global-teardown.ts"]
         }
     }
 }

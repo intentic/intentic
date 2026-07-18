@@ -3,6 +3,7 @@ import { Card, cmp } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, ref, watch } from "vue";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
+import { errorMessage } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
 
 /* Profile: display name + avatar, saved via Better Auth's update-user (useAuth.updateProfile). The picked file
@@ -57,7 +58,7 @@ const saveProfile = async (): Promise<void> => {
         stagedAvatar.value = undefined;
         avatarFailed.value = false;
     } catch (error) {
-        saveError.value = error instanceof Error ? error.message : `Profile update failed.`;
+        saveError.value = errorMessage(error, `Profile update failed.`);
     } finally {
         saving.value = false;
     }

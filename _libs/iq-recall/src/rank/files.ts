@@ -1,7 +1,7 @@
 import type { RecallDb } from "../store/db.js";
 
 // Matches iq-engine's RECENCY_HALF_LIFE_DAYS: a two-week-old association is worth half a fresh one.
-export const HALF_LIFE_DAYS = 14;
+const HALF_LIFE_DAYS = 14;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -120,7 +120,8 @@ export const rankFilesForTopic = (db: RecallDb, query: string, options: TopicOpt
         );
         for (const row of rows) {
             const turn = byTurnId.get(Number(row["turn_id"]))!;
-            const contribution = (turn.score + 0.5 * (titles.get(turn.sessionRowId) ?? 0)) * decayOf(turn.ts, now) * (Number(row["modified"]) === 1 ? 1.25 : 1);
+            const contribution =
+                (turn.score + 0.5 * (titles.get(turn.sessionRowId) ?? 0)) * decayOf(turn.ts, now) * (Number(row["modified"]) === 1 ? 1.25 : 1);
             const path = row["path"] as string;
             const accumulated = byPath.get(path) ?? { score: 0, sessions: new Set<number>(), lastTouched: 0, bestContribution: 0, bestSession: 0 };
             byPath.set(path, accumulated);
@@ -139,15 +140,13 @@ export const rankFilesForTopic = (db: RecallDb, query: string, options: TopicOpt
         return typeof title === "string" ? title : undefined;
     };
     return [...byPath.entries()]
-        .map(
-            ([path, accumulated]): TopicFile => ({
-                path,
-                score: accumulated.score * (idf.get(path) ?? 0),
-                sessions: accumulated.sessions.size,
-                lastTouched: accumulated.lastTouched,
-                sampleTitle: titleOf(accumulated.bestSession),
-            }),
-        )
+        .map(([path, accumulated]): TopicFile => ({
+            path,
+            score: accumulated.score * (idf.get(path) ?? 0),
+            sessions: accumulated.sessions.size,
+            lastTouched: accumulated.lastTouched,
+            sampleTitle: titleOf(accumulated.bestSession),
+        }))
         .filter((file) => file.score > 0)
         .toSorted((a, b) => b.score - a.score || a.path.localeCompare(b.path))
         .slice(0, options.limit ?? 20);

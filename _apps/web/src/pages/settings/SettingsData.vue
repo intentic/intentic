@@ -4,6 +4,7 @@ import Button from "primevue/button";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { apiClient } from "../../composables/useApi";
+import { errorMessage } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
 
 /* Data & privacy: GDPR self-service — export everything the platform stores about the account, or delete it. */
@@ -40,7 +41,7 @@ const confirmDelete = async (): Promise<void> => {
         await deleteAccount();
         await router.push(`/login`);
     } catch (error) {
-        deleteError.value = error instanceof Error ? error.message : `Account deletion failed.`;
+        deleteError.value = errorMessage(error, `Account deletion failed.`);
     } finally {
         deleting.value = false;
     }
@@ -71,14 +72,7 @@ const confirmDelete = async (): Promise<void> => {
                         </p>
                     </div>
                 </div>
-                <Button
-                    v-if="!confirmingDelete"
-                    label="Delete"
-                    severity="danger"
-                    :outlined="true"
-                    size="small"
-                    @click="confirmingDelete = true"
-                />
+                <Button v-if="!confirmingDelete" label="Delete" severity="danger" :outlined="true" size="small" @click="confirmingDelete = true" />
             </div>
             <div v-if="confirmingDelete" class="mt-3 flex items-center justify-end gap-2 border-t border-line pt-3">
                 <span class="mr-auto text-2xs text-subtle">Are you sure? This deletes everything immediately.</span>

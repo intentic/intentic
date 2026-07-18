@@ -9,7 +9,7 @@ const MAX_FILE_BYTES = 1024 * 1024;
 
 // Bumped when symbol-extraction/chunking logic changes: every file is reparsed on the next revalidation, but
 // unlike a schema bump the DB survives, so unchanged chunks keep their embeddings (hash reuse in replaceFile).
-export const PARSER_VERSION = "2";
+const PARSER_VERSION = "2";
 
 // Symbol/chunk production is injected: the structural (ast-grep) and semantic (chunker) stages plug in here,
 // and tests can run the indexer without either.

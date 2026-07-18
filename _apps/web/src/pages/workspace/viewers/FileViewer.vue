@@ -4,6 +4,7 @@ import { CopyButton, useDevice } from "@intentic-app/ui";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
 import { viewerForExtension } from "../../../core-views/viewerRegistry";
 import { sandboxBlob, SandboxHttpError, sandboxJson } from "../../../composables/sandbox/sandboxClient";
+import { errorMessage } from "../../../composables/useAsyncAction";
 import { useEditBuffers } from "../../../composables/workspace/useEditBuffers";
 import { useLayout } from "../../../composables/useLayout";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
@@ -102,7 +103,7 @@ const reconcileOpenFile = (currentPath: string): void => {
                 }
                 return;
             }
-            error.value = err instanceof Error ? err.message : `Could not load the file.`;
+            error.value = errorMessage(err, `Could not load the file.`);
         },
     );
 };
@@ -149,7 +150,7 @@ watch(
                 emit(`gone`, currentPath);
                 return;
             }
-            error.value = err instanceof Error ? err.message : `Could not load the file.`;
+            error.value = errorMessage(err, `Could not load the file.`);
         };
 
         if (resolution.mode === `code` || resolution.mode === `markdown`) {
@@ -236,7 +237,7 @@ const reloadFromDisk = (): void => {
             reloadNonce.value++;
         },
         (err) => {
-            error.value = err instanceof Error ? err.message : `Could not reload the file.`;
+            error.value = errorMessage(err, `Could not reload the file.`);
         },
     );
 };
@@ -253,7 +254,7 @@ const download = async (): Promise<void> => {
         anchor.click();
         URL.revokeObjectURL(url);
     } catch (err) {
-        error.value = err instanceof Error ? err.message : `Could not download the file.`;
+        error.value = errorMessage(err, `Could not download the file.`);
     }
 };
 
@@ -261,7 +262,7 @@ const download = async (): Promise<void> => {
  * the file's live buffer (edits survive tab switches via useEditBuffers) or its on-disk text. Ctrl+S / Save
  * persists through the daemon's upload route; the tree refetch then refreshes size + the read view. */
 const layout = useLayout();
-const { saveText, runAction } = useWorkspaceTree();
+const { saveText, run } = useWorkspaceTree();
 // Mobile is read-only: touch code editing is error-prone and the agent (chat) is the edit path there, so the
 // global edit mode is ignored and the Edit affordance hidden below 768px.
 const { mobile } = useDevice();
@@ -275,9 +276,9 @@ const editorLang = computed(() => (mode.value === `markdown` ? `markdown` : lang
 const editorSeed = computed(() => edit.bufferOf(path) ?? text.value ?? ``);
 
 const onEditorChange = (value: string): void => edit.setBuffer(path, value);
-// markSaved only runs if the write succeeded (runAction swallows the throw and shows the error instead).
+// markSaved only runs if the write succeeded (run swallows the throw and shows the error instead).
 const onEditorSave = (value: string): void =>
-    void runAction(async () => {
+    void run(async () => {
         await saveText(path, value);
         edit.markSaved(path, value);
     });

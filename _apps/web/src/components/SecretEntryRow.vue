@@ -3,6 +3,7 @@ import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { cmp, CopyButton } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import { reveal, useSecrets } from "../composables/extensions/useSecrets";
+import { errorMessage } from "../composables/useAsyncAction";
 import SecretField from "./SecretField.vue";
 
 /* One inventory row on the Secrets page, collapsed to a single line: a status dot, the key, and the
@@ -60,7 +61,7 @@ const toggleReveal = async (): Promise<void> => {
     try {
         revealedValue.value = await reveal(props.entry.key);
     } catch (err) {
-        error.value = err instanceof Error ? err.message : `Could not reveal the value.`;
+        error.value = errorMessage(err, `Could not reveal the value.`);
     }
 };
 
@@ -77,7 +78,7 @@ const removeKey = async (): Promise<void> => {
         await remove.mutateAsync(props.entry.key);
     } catch (err) {
         confirming.value = false;
-        error.value = err instanceof Error ? err.message : `Could not remove the secret.`;
+        error.value = errorMessage(err, `Could not remove the secret.`);
     }
 };
 </script>

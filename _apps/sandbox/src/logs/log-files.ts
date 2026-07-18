@@ -105,7 +105,7 @@ const pipeHook = (dir: string): string =>
 // from it so the output filter's footer can point the agent at the pane's raw log.
 export const terminalLogsDir = (historyRoot: string): string => join(logsRoot(historyRoot), "terminals");
 
-export const tmuxLogHooks = (historyRoot: string): string[][] => {
+const tmuxLogHooks = (historyRoot: string): string[][] => {
     const dir = terminalLogsDir(historyRoot);
     return ["session-created", "after-new-window", "after-split-window"].map((hook) => ["set-hook", "-g", hook, pipeHook(dir)]);
 };

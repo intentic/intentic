@@ -4,6 +4,7 @@ import { readIntenticLines } from "../../composables/intenticStream";
 import { sandboxJson, sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { globalTerminalSource, useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
 import { sandboxKey } from "../../composables/sandbox/useSandbox";
+import { errorMessage } from "../../composables/useAsyncAction";
 import { type ApplyProgressState, initialApplyState, reduceApplyLine } from "./applyProgress";
 import { describeProvisionError } from "./provisionError";
 
@@ -152,7 +153,7 @@ export function useApplyProgress() {
         try {
             await sandboxJson(`/intentic/apply`, { method: `POST` });
         } catch (err) {
-            startError.value = describeProvisionError(err instanceof Error ? err.message : `Apply failed to start.`);
+            startError.value = describeProvisionError(errorMessage(err, `Apply failed to start.`));
             applying.value = false;
             return;
         }

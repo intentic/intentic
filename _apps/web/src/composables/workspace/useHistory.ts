@@ -1,17 +1,18 @@
 import type { FileDiffResponse, SnapshotDiffResponse, SnapshotsResponse } from "@intentic-app/api-contract";
-import { type QueryClient, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { computed, ref } from "vue";
+import { type QueryClient, useQueryClient } from "@tanstack/vue-query";
+import { computed } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { useAsyncAction } from "../useAsyncAction";
 import { resetEditBuffers } from "./useEditBuffers";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { sandboxKey } from "../sandbox/useSandbox";
+import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* Workspace history: the daemon's checkpoints of /work (agent turns labeled with the prompt, user changes,
  * restore markers — hidden interval captures never listed), read DIRECTLY from the sandbox like the workspace
  * tree. The list is vue-query cached; diff/fileDiff stay imperative (the panel loads them on demand). Restore
  * rewrites /work on the daemon, so it refreshes the snapshots, the tree, and drops stale edit buffers. */
 
-const busy = ref(false);
-const actionError = ref<string | undefined>(undefined);
+const { busy, error: actionError, run } = useAsyncAction();
 
 const diff = (id: string): Promise<SnapshotDiffResponse> => sandboxJson<SnapshotDiffResponse>(`/history/diff?id=${encodeURIComponent(id)}`);
 const fileDiff = (id: string, scope: string, path: string): Promise<FileDiffResponse> =>
@@ -21,10 +22,8 @@ const fileDiff = (id: string, scope: string, path: string): Promise<FileDiffResp
 
 // The restore action, standalone so surfaces without their own useHistory() (the chat bubble's per-message
 // restore) can share it — the caller supplies the setup-scoped queryClient.
-export const restoreSnapshot = async (queryClient: QueryClient, id: string): Promise<void> => {
-    actionError.value = undefined;
-    busy.value = true;
-    try {
+export const restoreSnapshot = (queryClient: QueryClient, id: string): Promise<void> =>
+    run(async () => {
         await sandboxJson(`/history/restore`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify({ id }) });
         // /work changed underneath the UI: stale buffers would silently resurrect post-restore files on save.
         resetEditBuffers();
@@ -35,25 +34,17 @@ export const restoreSnapshot = async (queryClient: QueryClient, id: string): Pro
         await queryClient.invalidateQueries({ queryKey: sandboxKey(`history`, `snapshots`) });
         // A restore never moves the repos' HEADs, so the restored-vs-HEAD delta IS the new review set.
         await queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) });
-    } catch (caught) {
-        actionError.value = caught instanceof Error ? caught.message : `Restore failed.`;
-    } finally {
-        busy.value = false;
-    }
-};
+    }, `Restore failed.`);
 
 export function useHistory() {
-    const { reachable } = useSandbox();
     const queryClient = useQueryClient();
 
-    const query = useQuery({
+    const { query, error } = useSandboxQuery({
         queryKey: sandboxKey(`history`, `snapshots`),
         queryFn: () => sandboxJson<SnapshotsResponse>(`/history/snapshots`),
-        enabled: reachable,
     });
 
     const snapshots = computed(() => query.data.value?.snapshots ?? []);
-    const error = computed(() => (query.error.value ? query.error.value.message : undefined));
 
     const restore = (id: string): Promise<void> => restoreSnapshot(queryClient, id);
 

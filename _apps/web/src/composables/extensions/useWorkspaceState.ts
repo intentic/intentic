@@ -1,8 +1,8 @@
 import type { WorkspaceState } from "@intentic-app/api-contract";
-import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { sandboxKey } from "../sandbox/useSandbox";
+import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { projectWorkspaceState } from "./workspaceStateProjection";
 
 /* The infrastructure read-model: the sandbox's desired-state graph joined with the last reconcile result,
@@ -29,19 +29,17 @@ const readJson = async (path: string): Promise<unknown> => {
 };
 
 export function useWorkspaceState() {
-    const { reachable } = useSandbox();
-    const query = useQuery({
+    const { query, error } = useSandboxQuery({
         queryKey: sandboxKey(`workspace`, `state`),
         queryFn: async (): Promise<WorkspaceState> => {
             const [graph, status] = await Promise.all([readJson(`desired-state.json`), readJson(`status.json`)]);
             return projectWorkspaceState(graph, status);
         },
-        enabled: reachable,
     });
 
     return {
         state: computed(() => query.data.value),
-        error: computed(() => (query.error.value ? query.error.value.message : null)),
+        error,
         isLoading: query.isLoading,
         refetch: query.refetch,
     };

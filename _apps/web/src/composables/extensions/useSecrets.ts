@@ -1,9 +1,10 @@
 import { type SecretInventoryEntry, SecretInventorySchema, SecretKeysSchema, SecretRevealSchema } from "@intentic/sandbox-contract";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../devFill";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { sandboxKey } from "../sandbox/useSandbox";
+import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* User-supplied env-var secrets (Cloudflare token, GitHub PAT, another-host SSH key), written straight to the
  * sandbox daemon's /secrets routes (never through the platform). Split by consumer so a surface only observes
@@ -20,8 +21,7 @@ export const reveal = async (key: string): Promise<string> =>
     ).value;
 
 export function useSecretKeys() {
-    const { reachable } = useSandbox();
-    const query = useQuery({
+    const { query } = useSandboxQuery({
         queryKey: sandboxKey(`secrets`),
         // 412 until DevOps is active — treat as "no keys yet" rather than surfacing an error.
         queryFn: async (): Promise<string[]> => {
@@ -31,7 +31,6 @@ export function useSecretKeys() {
                 return [];
             }
         },
-        enabled: reachable,
     });
     return {
         keys: computed<string[]>(() => query.data.value ?? []),
@@ -40,13 +39,11 @@ export function useSecretKeys() {
 }
 
 export function useSecretInventory() {
-    const { reachable } = useSandbox();
     const queryClient = useQueryClient();
     const inventoryKey = sandboxKey(`secrets`, `inventory`);
-    const query = useQuery({
+    const { query } = useSandboxQuery({
         queryKey: inventoryKey,
         queryFn: async (): Promise<SecretInventoryEntry[]> => SecretInventorySchema.parse(await sandboxJson(`/secrets/inventory`)).entries,
-        enabled: reachable,
     });
     return {
         inventory: computed<SecretInventoryEntry[]>(() => query.data.value ?? []),

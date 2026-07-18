@@ -19,7 +19,7 @@ const INCLUDE = "Include intentic-hosts/*.conf";
 
 // Make ~/.ssh/config pull in the managed dir, once. Relative Includes in a user config resolve under ~/.ssh, so a
 // bare glob matches every alias file. Temp-file + rename so a crash mid-write can't truncate the user's config.
-export const ensureInclude = async (): Promise<void> => {
+const ensureInclude = async (): Promise<void> => {
     const sshDir = join(homedir(), ".ssh");
     const userConfig = join(sshDir, "config");
     const current = await readFile(userConfig, "utf8").catch(() => "");

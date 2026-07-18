@@ -5,6 +5,7 @@ import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { apiClient, isPaymentRequired } from "../../composables/useApi";
+import { errorMessage } from "../../composables/useAsyncAction";
 import { useAuth } from "../../composables/useAuth";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { presenceActivity, presenceHue, presenceInitials, presenceOthers } from "../../composables/usePresence";
@@ -34,7 +35,7 @@ const gateOrError = (err: unknown, fallback: string): void => {
         upgradeOpen.value = true;
         return;
     }
-    error.value = err instanceof Error ? err.message : fallback;
+    error.value = errorMessage(err, fallback);
 };
 
 const badge = (status: InviteRecord["status"]): { label: string; class: string } => {

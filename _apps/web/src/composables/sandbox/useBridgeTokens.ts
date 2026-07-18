@@ -1,4 +1,5 @@
 import { computed, ref, watch } from "vue";
+import { errorMessage, useAsyncAction } from "../useAsyncAction";
 import { sandboxJson } from "./sandboxClient";
 import { useSandbox } from "./useSandbox";
 
@@ -19,8 +20,7 @@ export function useBridgeTokens() {
     const tokens = ref<readonly BridgeToken[]>([]);
     // The last mint's RAW token — shown once, gone on navigation/sandbox switch, never refetchable.
     const minted = ref<{ readonly token: string; readonly label: string } | undefined>(undefined);
-    const minting = ref(false);
-    const error = ref<string | undefined>(undefined);
+    const { busy: minting, error, run } = useAsyncAction();
     const label = ref(``);
 
     const refresh = async (): Promise<void> => {
@@ -41,13 +41,8 @@ export function useBridgeTokens() {
         { immediate: true },
     );
 
-    const mint = async (): Promise<void> => {
-        if (minting.value) {
-            return;
-        }
-        minting.value = true;
-        error.value = undefined;
-        try {
+    const mint = (): Promise<void> =>
+        run(async () => {
             const trimmed = label.value.trim();
             const response = await sandboxJson<{ id: string; token: string }>(`/system/bridge/tokens`, {
                 method: `POST`,
@@ -57,18 +52,14 @@ export function useBridgeTokens() {
             minted.value = { token: response.token, label: trimmed === `` ? `editor bridge` : trimmed };
             label.value = ``;
             await refresh();
-        } catch (caught) {
-            error.value = caught instanceof Error ? caught.message : `Minting failed.`;
-        } finally {
-            minting.value = false;
-        }
-    };
+        }, `Minting failed.`);
 
+    // Deliberately not through `run` — revoking must not flash the mint button's busy state.
     const revoke = async (id: string): Promise<void> => {
         try {
             await sandboxJson(`/system/bridge/tokens/${encodeURIComponent(id)}`, { method: `DELETE` });
         } catch (caught) {
-            error.value = caught instanceof Error ? caught.message : `Revoking failed.`;
+            error.value = errorMessage(caught, `Revoking failed.`);
         }
         await refresh();
     };

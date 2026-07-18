@@ -91,8 +91,14 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
                 // main file still holding the previously-landed (`from`) content matches the patch context and
                 // applies cleanly, while a user edit on the same lines mismatches and applies NOTHING. A
                 // path-set overlap test can't make that distinction (it would flag every re-touched file).
-                const deltaPaths = (await git(main, ["diff", "--name-only", "-z", from, tip])).stdout.split("\0").filter((path) => path !== "");
                 const patch = (await git(main, ["diff", "--binary", "-M", from, tip])).stdout;
+                if (patch === "") {
+                    // A net-zero delta — the agent reverted everything it did since the last land. There is
+                    // nothing to apply (`git apply` rejects an empty patch), but the tip must still advance,
+                    // or every future land re-reports this range as a phantom conflict nothing can resolve.
+                    next = { repo, base, landedTip: tip };
+                    return;
+                }
                 const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
                 await writeFile(patchPath, patch);
                 try {
@@ -100,6 +106,7 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
                 } catch {
                     // Best-effort conflict hint: the delta paths the user's uncommitted work also touches
                     // (rename `from` legs included); when that intersection is empty, name the whole delta.
+                    const deltaPaths = (await git(main, ["diff", "--name-only", "-z", from, tip])).stdout.split("\0").filter((path) => path !== "");
                     const mainDirty = new Set<string>();
                     for (const change of (await changedFiles(main, git)).changes) {
                         mainDirty.add(change.path);

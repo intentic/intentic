@@ -23,11 +23,6 @@ export const encryptSecret = (config: Config, value: string): string => {
     return `${PREFIX}${iv.toString(`base64url`)}:${cipher.getAuthTag().toString(`base64url`)}:${data.toString(`base64url`)}`;
 };
 
-// The deterministic lookup key for a connect token: sha256 hex of the raw value. The encrypted token column
-// is random-IV ciphertext (unqueryable by value), so Sandbox.tokenDigest stores this and /sandbox/announce
-// recomputes it from the token the daemon presents.
-export const tokenDigest = (token: string): string => createHash(`sha256`).update(token).digest(`hex`);
-
 export const decryptSecret = (config: Config, value: string): string => {
     // Plaintext rows only exist when SECRETS_KEY is unset (dev) — fresh state, no migration path.
     if (!value.startsWith(PREFIX)) {

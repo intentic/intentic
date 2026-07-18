@@ -1,16 +1,17 @@
 import type { WorkspaceChildrenResponse, WorkspaceFileResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic-app/api-contract";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { sandboxBlob, sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { sandboxKey } from "../sandbox/useSandbox";
+import { useSandboxQuery } from "../sandbox/useSandboxQuery";
+import { errorMessage, useAsyncAction } from "../useAsyncAction";
 import { resetUploadQueue } from "./useUploadQueue";
 
 // Shared, module-level feedback for user file actions (rename, delete, save, move…) so the explorer, the tree
 // rows, and the editor all report through ONE busy spinner + error line. Errors are surfaced, not thrown — a
 // failed daemon call (denylist 404, escape 400, oversize 413) shouldn't blow up the DOM handler that fired it.
 // Drag-drop uploads are NOT routed here; they go through useUploadQueue so a slow upload never blocks this line.
-const busy = ref(false);
-const actionError = ref<string | undefined>(undefined);
+const { busy, error: actionError, run } = useAsyncAction();
 
 // Lazily-loaded children of ignored dirs (node_modules, .git, …) the tree walk didn't descend into, keyed by the
 // dir's root-relative path. Kept OUTSIDE the tree query so a tree refetch (the file watcher fires on any change)
@@ -30,18 +31,6 @@ export const resetWorkspaceTreeState = (): void => {
     lazyTruncated.value = new Set();
     lazyLoading.value = new Set();
     resetUploadQueue();
-};
-
-const runAction = async (fn: () => Promise<void>): Promise<void> => {
-    actionError.value = undefined;
-    busy.value = true;
-    try {
-        await fn();
-    } catch (error) {
-        actionError.value = error instanceof Error ? error.message : `Action failed.`;
-    } finally {
-        busy.value = false;
-    }
 };
 
 /* The read-only "what the LLM sees" tree: the full /work filesystem the agent operates on, read DIRECTLY from
@@ -93,13 +82,11 @@ const readFile = async (path: string): Promise<string> => {
 const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?path=${encodeURIComponent(path)}`);
 
 export function useWorkspaceTree() {
-    const { reachable } = useSandbox();
     const queryClient = useQueryClient();
 
-    const query = useQuery({
+    const { query, error } = useSandboxQuery({
         queryKey: computed(() => sandboxKey(`workspace`, `tree`)),
         queryFn: () => sandboxJson<WorkspaceTreeResponse>(`/workspace/tree`),
-        enabled: reachable,
         // Fallback only: live freshness is pushed (the daemon's file watcher → /events SSE → markWorkspaceChanged
         // invalidates this query), so this poll is a backstop for a broken push chain, not the freshness path — a
         // slow 2min cap keeps steady-state traffic low while still self-healing if any link ever breaks.
@@ -164,7 +151,6 @@ export function useWorkspaceTree() {
         }
         return map;
     });
-    const error = computed(() => (query.error.value ? query.error.value.message : null));
 
     // The tree entry for a root-relative path (size/type), or undefined when not in the loaded tree.
     const entry = (path: string | undefined): WorkspaceTreeEntry | undefined => (path === undefined ? undefined : entriesByPath.value.get(path));
@@ -183,7 +169,7 @@ export function useWorkspaceTree() {
                 lazyTruncated.value.add(path);
             }
         } catch (loadError) {
-            actionError.value = loadError instanceof Error ? loadError.message : `Failed to load ${path}.`;
+            actionError.value = errorMessage(loadError, `Failed to load ${path}.`);
         } finally {
             lazyLoading.value.delete(path);
         }
@@ -212,6 +198,6 @@ export function useWorkspaceTree() {
         moveIntoMany,
         busy,
         actionError,
-        runAction,
+        run,
     };
 }

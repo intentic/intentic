@@ -19,6 +19,7 @@ import CapabilityEffects from "../components/CapabilityEffects.vue";
 import CredentialGuide from "../components/CredentialGuide.vue";
 import { devFillGet, devFillSet } from "../composables/devFill";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
+import { errorMessage } from "../composables/useAsyncAction";
 import { browseMarketplace, useCapabilities } from "../composables/extensions/useCapabilities";
 import { useExtensions } from "../composables/extensions/useExtensions";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
@@ -185,7 +186,7 @@ const startAgentLogin = async (id: string): Promise<void> => {
         const { session } = await sandboxJson<{ session: string }>(`/capabilities/${encodeURIComponent(id)}/login`, { method: `POST` });
         useTerminalPanel().openFocused(session);
     } catch (caught) {
-        error.value = caught instanceof Error ? caught.message : `Sign-in could not start.`;
+        error.value = errorMessage(caught, `Sign-in could not start.`);
     }
 };
 
@@ -287,7 +288,7 @@ const browse = async (): Promise<void> => {
     try {
         market.value = await browseMarketplace(marketUrl.value.trim(), marketToken.value.trim() || undefined);
     } catch (err) {
-        error.value = err instanceof Error ? err.message : `Could not browse the marketplace.`;
+        error.value = errorMessage(err, `Could not browse the marketplace.`);
     } finally {
         browsing.value = false;
     }
@@ -431,7 +432,7 @@ const submit = async (): Promise<void> => {
         }
         back();
     } catch (err) {
-        error.value = err instanceof Error ? err.message : `Could not add the capability.`;
+        error.value = errorMessage(err, `Could not add the capability.`);
     } finally {
         submitting.value = false;
     }
@@ -442,7 +443,7 @@ const removeCapability = async (id: string): Promise<void> => {
     try {
         await remove.mutateAsync(id);
     } catch (err) {
-        error.value = err instanceof Error ? err.message : `Could not remove the capability.`;
+        error.value = errorMessage(err, `Could not remove the capability.`);
     }
 };
 

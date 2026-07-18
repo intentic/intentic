@@ -1,6 +1,6 @@
 // Local desktop-sync folder naming, kept free of environment/DOM deps so it's a plain unit-testable helper.
 
-export const slugify = (raw: string): string =>
+const slugify = (raw: string): string =>
     raw
         .replace(/[^a-zA-Z0-9]+/g, `-`)
         .replace(/^-+|-+$/g, ``)

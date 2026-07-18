@@ -7,6 +7,7 @@ import Dialog from "primevue/dialog";
 import Select from "primevue/select";
 import { computed, reactive, ref, watch } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
+import { errorMessage } from "../../composables/useAsyncAction";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { usePanels } from "../../composables/extensions/usePanels";
 import CloudflareConnect from "./CloudflareConnect.vue";
@@ -63,7 +64,7 @@ watch(visible, async (open) => {
         );
         workspaceApps.value = lists.flat();
     } catch (err) {
-        appsError.value = err instanceof Error ? err.message : `Could not list your apps.`;
+        appsError.value = errorMessage(err, `Could not list your apps.`);
     }
 });
 
@@ -161,7 +162,7 @@ const submit = async (): Promise<void> => {
         emit(`added`);
         close();
     } catch (err) {
-        error.value = err instanceof Error ? err.message : `Could not add it.`;
+        error.value = errorMessage(err, `Could not add it.`);
     } finally {
         submitting.value = false;
     }

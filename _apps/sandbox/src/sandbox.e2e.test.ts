@@ -8,7 +8,8 @@ import { pack } from "tar-stream";
 import type { StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { daemonUrl, dockerBuild, dockerRmi, startSandboxContainer, until } from "./e2e-harness.js";
-import { environmentHash, hasValidBase } from "./environment/environment.js";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { hasValidBase } from "./environment/environment.js";
 
 // The Tier-2 daemon e2e: boot the REAL sandbox image (built from this repo's Dockerfile, the same artifact CI
 // publishes) in loopback mode and drive its HTTP surface exactly as the browser does, asserting only what the
@@ -264,7 +265,7 @@ describe.skipIf(!enabled)("sandbox daemon end-to-end (real container, loopback)"
         expect(approved.content).toContain("wireguard-tools");
         expect(approved.content).toContain("# intentic:runtime --device=/dev/net/tun");
         expect(approved.content).toContain("# intentic:runtime --cap-add=NET_ADMIN");
-        expect(approved.hash).toBe(environmentHash(approved.content));
+        expect(approved.hash).toBe(sha256Hex(approved.content));
 
         // The outside-executor role: the overlay must actually build against the published :stable base.
         overlayBuilt = true;

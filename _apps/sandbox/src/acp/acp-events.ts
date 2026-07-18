@@ -5,7 +5,7 @@ import type {
     ToolCallLocation as AcpToolCallLocation,
     ToolKind as AcpToolKind,
 } from "@agentclientprotocol/sdk";
-import type { AgentEvent, ToolCallContent, ToolCallLocation, ToolKind } from "@intentic/sandbox-contract";
+import { type AgentEvent, type ToolCallContent, type ToolCallLocation, type ToolKind, ToolKindSchema } from "@intentic/sandbox-contract";
 import { diffContent, toolCategoryOf, toolTarget, workspacePath } from "../agent/tool-calls.js";
 
 /* Pure mapping of ACP session/update notifications onto AgentEvent frames — the ACP-native producer of the
@@ -15,7 +15,7 @@ import { diffContent, toolCategoryOf, toolTarget, workspacePath } from "../agent
 
 // Our ToolKind is ACP's vocabulary verbatim; anything newer (e.g. switch_mode) falls back through the shared
 // name→kind table over the title.
-const KINDS = new Set<string>(["read", "edit", "delete", "move", "search", "execute", "think", "fetch", "other"]);
+const KINDS = new Set<string>(ToolKindSchema.options);
 const categoryOf = (kind: AcpToolKind | null | undefined, title: string): ToolKind =>
     typeof kind === "string" && KINDS.has(kind) ? (kind as ToolKind) : toolCategoryOf(title);
 

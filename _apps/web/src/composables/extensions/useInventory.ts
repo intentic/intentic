@@ -1,8 +1,9 @@
 import { type AddInventoryInput, type InventoryEntry, InventoryEntrySchema } from "@intentic-app/api-contract";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxError, sandboxRequest } from "../sandbox/sandboxClient";
-import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
+import { sandboxKey } from "../sandbox/useSandbox";
+import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
 /* The sandbox's inventory — the i.have.* / i.want.service entries in its intent repo deploy.config.ts. Read +
  * rewritten DIRECTLY in the sandbox via the daemon's /inventory routes (the daemon owns the file + commits the
@@ -21,14 +22,12 @@ const fetchEntries = async (path: string, init?: RequestInit): Promise<Inventory
 };
 
 export function useInventory() {
-    const { reachable } = useSandbox();
     const queryClient = useQueryClient();
     const queryKey = sandboxKey(`inventory`);
 
-    const query = useQuery({
+    const { query, error } = useSandboxQuery({
         queryKey,
         queryFn: () => fetchEntries(`/inventory`),
-        enabled: reachable,
     });
 
     const add = useMutation({
@@ -48,7 +47,7 @@ export function useInventory() {
 
     return {
         entries: computed<InventoryEntry[]>(() => query.data.value ?? []),
-        error: computed(() => (query.error.value ? query.error.value.message : null)),
+        error,
         isLoading: query.isLoading,
         refetch: query.refetch,
         add,

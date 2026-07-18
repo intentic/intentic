@@ -8,6 +8,7 @@ import { providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
 import { sandboxJson, sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
+import { errorMessage } from "../../composables/useAsyncAction";
 import { useCleanerSavings } from "../../composables/sandbox/useCleanerSavings";
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
@@ -93,7 +94,10 @@ const connectSubscription = async (provider: KeyedProvider): Promise<void> => {
     }
     connectBusy.value = provider;
     try {
-        connectFlow.value = { provider, ...(await sandboxJson<{ url: string; code: string }>(`/translator/${provider}/connect`, { method: `POST` })) };
+        connectFlow.value = {
+            provider,
+            ...(await sandboxJson<{ url: string; code: string }>(`/translator/${provider}/connect`, { method: `POST` })),
+        };
         pollUntilConnected(provider);
     } finally {
         connectBusy.value = undefined;
@@ -323,7 +327,7 @@ const importMemory = async (): Promise<void> => {
         }
         importText.value = ``;
     } catch (caught) {
-        importError.value = caught instanceof Error ? caught.message : `Couldn't save memory.`;
+        importError.value = errorMessage(caught, `Couldn't save memory.`);
     } finally {
         importSaving.value = false;
     }
@@ -528,7 +532,10 @@ const importMemory = async (): Promise<void> => {
                 </div>
                 <!-- Live device-login card: show the verification URL + one-time code; the translator connects on
                      its own, and the poll flips the row to "connected". -->
-                <div v-if="connectFlow && connectFlow.provider === field.provider" class="flex flex-col gap-2 rounded-md border border-line bg-card p-2">
+                <div
+                    v-if="connectFlow && connectFlow.provider === field.provider"
+                    class="flex flex-col gap-2 rounded-md border border-line bg-card p-2"
+                >
                     <p class="text-2xs text-subtle">{{ field.hint }}</p>
                     <div class="flex flex-col items-center gap-1">
                         <span class="text-2xs text-subtle">Your one-time code</span>
