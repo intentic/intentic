@@ -93,7 +93,7 @@ export const IMAGES = Object.freeze({
     // mints a per-app bucket + access key via `docker exec … garage`. renovate: datasource=docker depName=dxflrs/garage
     garage: "dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690",
     // The first-party intentic image built from _apps/sandbox (the AI-agent workspace), published to the repo's
-    // GitLab Container Registry by scripts/publish-images.sh. Deliberately NOT digest-pinned like the entries above: it tracks the
+    // GitLab Container Registry by _tools/scripts/publish-images.sh. Deliberately NOT digest-pinned like the entries above: it tracks the
     // moving `stable` tag, which ONLY the release moves (semantic-release's successCmd pushes `<version> stable`),
     // so it always resolves to the newest RELEASE image — our own component, always current, with no pin to bump.
     // Never `:latest`: that tag is the continuous push-to-main build carrying internal version 0.0.0 (unpublished),

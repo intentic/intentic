@@ -2,7 +2,7 @@
 
 intentic normally deploys to a remote server. But because each host's Cloudflare Tunnel connects **outbound** (the host opens no inbound ports — see [README](README.md#L94)), the "server" can just as well be **your own laptop or desktop, behind NAT, not exposed to the internet**. Your apps stay reachable through your Cloudflare account exactly as they would from a VPS.
 
-[scripts/intentic-local.sh](scripts/intentic-local.sh) bootstraps this in one shot.
+[_tools/scripts/intentic-local.sh](_tools/scripts/intentic-local.sh) bootstraps this in one shot.
 
 ## How it works
 
@@ -31,7 +31,7 @@ i.have.host("host", { address: "127.0.0.1", user: "root", sshKey: env("HOST_SSH_
 export CLOUDFLARE_API_TOKEN=...     # token with the scopes above
 export INTENTIC_ZONE=example.com    # a domain you own in that account
 
-./scripts/intentic-local.sh up
+./_tools/scripts/intentic-local.sh up
 ```
 
 (Omit the env vars and the script prompts for them.) It will:
@@ -50,9 +50,9 @@ When it finishes you get:
 ## Lifecycle
 
 ```sh
-./scripts/intentic-local.sh up      # build + deploy (default)
-./scripts/intentic-local.sh down    # stop the host; tunnel, DNS, and data volume are kept (fast re-up)
-./scripts/intentic-local.sh clear   # also drop the host's data volume (full local teardown)
+./_tools/scripts/intentic-local.sh up      # build + deploy (default)
+./_tools/scripts/intentic-local.sh down    # stop the host; tunnel, DNS, and data volume are kept (fast re-up)
+./_tools/scripts/intentic-local.sh clear   # also drop the host's data volume (full local teardown)
 ```
 
 Edit `intentic-local/intent/deploy.config.ts` and re-run `up` to reconcile changes. `clear` leaves the Cloudflare tunnel (`intentic-host`) and DNS records in your account — remove them from the Cloudflare dashboard if you want them gone.
@@ -75,7 +75,7 @@ The scaffolded config is intentionally minimal (the workspace + one app). The ge
 > **Developing in this repo?** Run it against your local build instead of npm:
 > ```sh
 > pnpm build
-> INTENTIC_CMD="pnpm intentic" INTENTIC_LINK=1 ./scripts/intentic-local.sh up
+> INTENTIC_CMD="pnpm intentic" INTENTIC_LINK=1 ./_tools/scripts/intentic-local.sh up
 > ```
 
 ## Security note

@@ -309,25 +309,43 @@ image_has_registry() {
     return 1
 }
 
-# Pull a published image. intentic's sandbox image is PUBLIC, so no login is needed. But if this host
-# has a stale/expired `docker login registry.gitlab.com` (commonly left by Docker Desktop's credential store), docker
-# presents that token instead of pulling anonymously and the registry rejects the pull with "denied". On any pull
-# failure, clear the registry.gitlab.com login and retry once so the pull falls back to anonymous.
-pull_image() {
+# Make the sandbox image runnable, announcing which path it takes (the caller stays silent). A registry-less
+# reference (dev override, e.g. SANDBOX_IMAGE=intentic-sandbox:dev) can only resolve to Docker Hub, so it is
+# never pulled — that pull's "denied" output is pure noise. Use the local image, or build it from the checkout
+# this script was run from (the dev one-liner is `sh _apps/site/public/scripts/connect.sh` at the repo root;
+# the piped curl|sh form has no script path in $0, so it lands on the error instead).
+# Registry images are pulled even when cached so the moving `stable` tag always runs the newest release. The
+# image is PUBLIC, so no login is needed — but a stale/expired `docker login registry.gitlab.com` (commonly
+# left by Docker Desktop's credential store) makes docker present that token instead of pulling anonymously
+# and the registry rejects the pull with "denied": on any pull failure, clear that login and retry once.
+ensure_image() {
     image="$1"
+    if ! image_has_registry "$image"; then
+        if docker image inspect "$image" >/dev/null 2>&1; then
+            echo "intentic: using the locally-built sandbox image ${image}."
+            return 0
+        fi
+        # $0 carries a path only when the script was invoked by path (the dev flow); piped runs get no checkout.
+        repo_root=""
+        case "$0" in */*) repo_root="$(dirname "$0")/../../../.." ;; esac
+        if [ -z "$repo_root" ] || [ ! -f "$repo_root/_apps/sandbox/Dockerfile" ]; then
+            echo "intentic: '${image}' is a local dev tag that isn't built, and no intentic checkout was found to build it from — run 'pnpm build:sandbox' in the repo, or unset SANDBOX_IMAGE to use the published image." >&2
+            return 1
+        fi
+        echo "intentic: building the local sandbox image ${image} (first build can take a few minutes)…"
+        if ! docker build -f "$repo_root/_apps/sandbox/Dockerfile" -t "$image" "$repo_root"; then
+            echo "intentic: building ${image} failed (see the docker output above) — fix the build, or unset SANDBOX_IMAGE to use the published image." >&2
+            return 1
+        fi
+        return 0
+    fi
+    echo "intentic: pulling sandbox image ${image} (first run can take a minute)…"
     if docker pull "$image"; then
         return 0
     fi
-    # A locally-built image (dev override via SANDBOX_IMAGE) has no registry to pull from — use it as-is.
     if docker image inspect "$image" >/dev/null 2>&1; then
         echo "intentic: pull failed but the image exists locally — using the local copy." >&2
         return 0
-    fi
-    # A bare tag has no registry to pull from and isn't present locally: it's a dev image that was never built.
-    # The stale-login retry below can't help — Docker Hub is the only place a registry-less name can resolve to.
-    if ! image_has_registry "$image"; then
-        echo "intentic: '${image}' is a local dev tag that isn't built — run 'pnpm build:sandbox' first, or unset SANDBOX_IMAGE to use the published image." >&2
-        return 1
     fi
     echo "intentic: pull failed — clearing a stale registry.gitlab.com login and retrying anonymously…" >&2
     docker logout registry.gitlab.com >/dev/null 2>&1 || true
@@ -688,12 +706,11 @@ if [ -n "$SELF_HOST" ]; then
     setup_self_host
 fi
 
-# Pull the sandbox image up front (with visible progress) so a slow first-time pull doesn't look like a
-# hang, a private/missing image surfaces as a clear error — and the tunnel step below, which runs this
-# same image via `--entrypoint intentic`, never executes a stale locally-cached tag (docker run reuses a
+# Resolve the sandbox image up front (ensure_image prints its own progress) so a slow first pull/build
+# doesn't look like a hang, a missing image surfaces as a clear error — and the tunnel step below, which runs
+# this same image via `--entrypoint intentic`, never executes a stale locally-cached tag (docker run reuses a
 # cached tag without re-pulling, so a republished image would otherwise be missed).
-echo "intentic: pulling sandbox image ${SANDBOX_IMAGE} (first run can take a minute)…"
-pull_image "$SANDBOX_IMAGE"
+ensure_image "$SANDBOX_IMAGE"
 
 # Point at the sandbox tunnel that exposes the daemon at sandbox-<id>.<zone> (:8787), plus the *.<zone> wildcard →
 # the daemon's preview proxy (:$PREVIEW_PORT) on the own-Cloudflare path (the platform path instead mints a

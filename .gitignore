@@ -27,9 +27,6 @@
 Thumbs.db
 .idea/
 
-# site: connect scripts bundled from scripts at build (served by worker.ts)
-_apps/site/public/scripts
-
 # intentic dogfood / demo (local only)
 /intent
 /desired-state

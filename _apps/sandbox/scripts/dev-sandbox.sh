@@ -1,9 +1,9 @@
 #!/bin/sh
 # intentic dev-sandbox recreate — swap the running sandbox container over to a freshly built
 # `intentic-sandbox:dev` image, WITHOUT re-running connect.sh's tunnel/auth wizard. Called by the
-# watch loop (scripts/dev-sandbox.mjs) after each `pnpm build:sandbox`, but also usable by hand.
+# watch loop (the sibling dev-sandbox.mjs) after each `pnpm build:sandbox`, but also usable by hand.
 #
-# This is the recreate half of scripts/rebuild.sh with the overlay hashing/verification stripped out:
+# This is the recreate half of _apps/site/public/scripts/rebuild.sh with the overlay hashing/verification stripped out:
 # the dev image is local and trusted, so there is no owner-approval step. It targets the SAME
 # container/network/volumes connect.sh created and replays the running container's env, so the
 # already-established Cloudflare tunnel + Google auth keep working across the swap (the tunnel sidecar
@@ -34,7 +34,7 @@ fi
 matches="$(docker ps --filter 'name=^intentic-sandbox-' --format '{{.Names}}' | grep -v -- '-tunnel-' || true)"
 count="$(printf '%s\n' "$matches" | grep -c . || true)"
 if [ "$count" -eq 0 ]; then
-    echo "error: no running sandbox container found — run 'SANDBOX_IMAGE=${TAG} bash scripts/connect.sh' first." >&2
+    echo "error: no running sandbox container found — run 'SANDBOX_IMAGE=${TAG} bash _apps/site/public/scripts/connect.sh' first." >&2
     exit 1
 fi
 if [ "$count" -gt 1 ]; then

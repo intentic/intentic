@@ -1,8 +1,8 @@
 // Vanity install-script URLs: https://intentic.dev/connect etc. The monorepo has no public git mirror to
-// redirect to, so the site build bundles the connect scripts from the in-repo intentic/scripts/ into
-// /scripts/<file> (see this package's `build` script) and the worker serves them as text/plain so
-// `curl … | sh` gets the raw script. With an assets binding, requests matching a built asset are served
-// directly and never reach this worker; everything else lands here and falls through to the 404-page via ASSETS.
+// redirect to, so the connect scripts live in this package's public/scripts/ (tracked site assets) and the
+// worker serves them as text/plain so `curl … | sh` gets the raw script. With an assets binding, requests
+// matching a built asset are served directly and never reach this worker; everything else lands here and
+// falls through to the 404-page via ASSETS.
 const SCRIPTS: Record<string, string> = {
     "/connect": "connect.sh",
     "/connect.ps1": "connect.ps1",

@@ -125,10 +125,10 @@ images:
         - _apps/cli/**/*
         - _libs/**/*
         - fixtures/dind-host/**/*
-        - scripts/publish-images.sh
+        - _tools/scripts/publish-images.sh
         - pnpm-lock.yaml
   script:
-    - TAGS="latest sha-${CI_COMMIT_SHORT_SHA}" bash scripts/publish-images.sh
+    - TAGS="latest sha-${CI_COMMIT_SHORT_SHA}" bash _tools/scripts/publish-images.sh
 
 # Release: build + test, then semantic-release (npm publish via OIDC, GitLab Release with the cross-compiled
 # intentic-sync binaries, and the sandbox/dind-host image at the release version + moving `stable` tag).

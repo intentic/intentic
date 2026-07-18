@@ -14,9 +14,9 @@ set -euo pipefail
 
 TAGS="${TAGS:?set TAGS (space-separated, e.g. "0.1.0" or "latest sha-abc1234")}"
 REGISTRY="registry.gitlab.com/radarsu/intentic"
-# Monorepo root (scripts -> up one). The sandbox image's build context is the whole monorepo so
+# Monorepo root (_tools/scripts -> up two). The sandbox image's build context is the whole monorepo so
 # `pnpm install --frozen-lockfile` resolves the root lockfile; `pnpm deploy` prunes the final image to core.
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
 
 # Build + push one image under every requested tag. The Dockerfile + build context differ per image: the
 # sandbox builds from the monorepo root; the dind-host from its self-contained fixtures/dind-host dir.

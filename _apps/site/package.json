@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "astro dev",
-        "build": "mkdir -p public/scripts && cp ../../scripts/*.sh ../../scripts/*.ps1 public/scripts/ && astro build",
+        "build": "astro build",
         "preview": "astro preview",
         "check": "astro check",
         "astro": "astro"

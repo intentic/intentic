@@ -20,7 +20,7 @@
 #   curl -fsSL https://intentic.dev/cleanup | sh -s -- SLUG      # remove one sandbox by slug
 #   curl -fsSL https://intentic.dev/cleanup | sh -s -- --all     # remove EVERY sandbox
 #   curl -fsSL https://intentic.dev/cleanup | sh -s -- --all -y  # …skip the confirm (scripts/CI)
-#   ./scripts/cleanup.sh [SLUG...] [--all] [-y] [--agent-auth]
+#   ./_apps/site/public/scripts/cleanup.sh [SLUG...] [--all] [-y] [--agent-auth]
 #
 # Non-interactive runs (no terminal, e.g. a bare pipe with no controlling tty) NEVER auto-remove: they print the
 # list and exit. Pass a SLUG or --all to act.

@@ -2,12 +2,11 @@
 // intentic dev-sandbox watch loop — the automated inner loop for testing sandbox changes in docker.
 //
 // One-time setup (done by hand):
-//   1. pnpm build:sandbox
-//   2. SANDBOX_IMAGE=intentic-sandbox:dev bash scripts/connect.sh   (establishes tunnel + auth once)
-//   3. pnpm dev:sandbox                                             (this script — leave it running)
+//   1. SANDBOX_IMAGE=intentic-sandbox:dev bash _apps/site/public/scripts/connect.sh   (builds the dev image if missing; establishes tunnel + auth once)
+//   2. pnpm dev:sandbox                                                               (this script — leave it running)
 //
 // Then every edit under the watched paths rebuilds intentic-sandbox:dev and recreates the running
-// sandbox container against its existing tunnel/auth/volumes (scripts/dev-sandbox.sh). The daemon is
+// sandbox container against its existing tunnel/auth/volumes (the sibling dev-sandbox.sh). The daemon is
 // baked into the image (Dockerfile COPY --from=build /out/sandbox), so a rebuild is the only way a
 // running container reflects a source change — there is no bind-mount of dist to hot-reload.
 //
@@ -23,7 +22,8 @@ import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { watch } from "chokidar";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(SCRIPT_DIR, "../../..");
 const DEBOUNCE_MS = 500;
 
 const WATCH_PATHS = [
@@ -54,7 +54,7 @@ const cycle = async () => {
     console.log("\nintentic: change detected — pnpm build:sandbox…");
     const buildCode = await run("pnpm", ["build:sandbox"]);
     if (buildCode === 0) {
-        await run("bash", [join(REPO_ROOT, "scripts/dev-sandbox.sh")]);
+        await run("bash", [join(SCRIPT_DIR, "dev-sandbox.sh")]);
     } else {
         console.error("intentic: build failed — the running sandbox is untouched. Fix the error and save again.");
     }

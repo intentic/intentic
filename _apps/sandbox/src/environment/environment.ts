@@ -8,8 +8,8 @@ import { capabilityFragments } from "./fragment-sources.js";
 // the pinned FROM, the enabled capabilities' code-versioned fragments (see CapabilityHandler.fragment), and the
 // owner-approved custom section. The agent writes the proposal (custom-section content only — no FROM, no
 // runtime directives) with its normal file tools; the owner-gated approve route stores it as the custom file
-// and recomposes. The container can't rebuild itself (no docker socket) — an outside executor (scripts/
-// rebuild.sh or the workspace provider) verifies the approved content against the hash pinned in the rebuild
+// and recomposes. The container can't rebuild itself (no docker socket) — an outside executor (rebuild.sh
+// served at intentic.dev/rebuild, or the workspace provider) verifies the approved content against the hash pinned in the rebuild
 // command, builds, and recreates with SANDBOX_ENVIRONMENT_HASH stamped. Status is derived, never stored.
 
 export const proposalPath = (services: Services): string => join(services.workspace.root, ".intentic", "environment.Dockerfile");

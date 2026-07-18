@@ -269,7 +269,7 @@ graph ──► resources ──► engine ──► providers
 
 The libs + the CLI publish to npm; **`sandbox` ships as a Docker image** to the GitLab Container
 Registry (`registry.gitlab.com/radarsu/intentic/sandbox`) — published by
-[scripts/publish-images.sh](scripts/publish-images.sh) (which also publishes the `dind-host` test-host
+[_tools/scripts/publish-images.sh](_tools/scripts/publish-images.sh) (which also publishes the `dind-host` test-host
 image): `latest` + commit SHA on push to main, `<version>` + the moving `stable` tag on release.
 [`images.ts`](_libs/state-resolver/src/lib/images.ts) records it at `:stable` — the deliberate unpinned
 exception among the otherwise digest-pinned deployed images (never `:latest`), so released sandboxes
@@ -505,8 +505,11 @@ single-graph form used when a single deterministic graph is wanted directly.
 - **Test naming:** `*.test.ts` = unit; `*.engine.test.ts` = integration driven through the real engine;
   `*.e2e.test.ts` = gated real run (`INTENTIC_E2E=1` for the Cloudflare-backed nightly,
   `INTENTIC_E2E_HERMETIC=1` for the secret-free MR sidecar; both self-skip in `pnpm test`).
-- **Tiers:** `_libs/` = libraries, `_apps/` = runnable products, `_tools/` = shared config. The
-  pnpm-workspace glob is `_*/*`.
+- **Tiers:** `_libs/` = libraries, `_apps/` = runnable products, `_tools/` = shared config + repo-wide
+  maintainer scripts (`_tools/scripts/`). The pnpm-workspace glob is `_*/*`. App-specific scripts live in
+  that app's `scripts/` dir (e.g. `_apps/sandbox/scripts/`); the user-facing connect/sync/cleanup scripts
+  are tracked site assets in `_apps/site/public/scripts/`, served at intentic.dev vanity URLs by
+  [worker.ts](_apps/site/worker.ts).
 - **Imports:** import from the true source (no re-exports/aliases). The `@intentic/src` package export
   condition resolves workspace imports straight to `src/`, so agents can edit across packages without
   building.

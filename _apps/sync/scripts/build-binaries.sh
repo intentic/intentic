@@ -1,8 +1,9 @@
 #!/bin/sh
-# Cross-compile the intentic-sync agent into standalone binaries (release assets for scripts/sync.sh).
-# Runs after `pnpm turbo run build`; expects _apps/sync/dist/cli.js to exist and `bun` on PATH.
+# Cross-compile the intentic-sync agent into standalone binaries (release assets for
+# _apps/site/public/scripts/sync.sh). Runs after `pnpm turbo run build`; expects
+# _apps/sync/dist/cli.js to exist and `bun` on PATH.
 set -eu
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../.."
 
 out="_apps/sync/dist-bin"
 mkdir -p "$out"

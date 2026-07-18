@@ -201,7 +201,7 @@ Dev serves over HTTPS via the committed `@intentic-app/localhost-https` cert (Go
 No VPS? Because each host's Cloudflare Tunnel connects *outbound* (the host opens no inbound ports), the "host" can be your own laptop or desktop behind NAT. One command bootstraps a Docker-in-Docker host on your machine, points intentic at it over SSH like any server, and stands up the whole stack — apps reachable through your Cloudflare account, zero inbound ports on your PC:
 
 ```sh
-CLOUDFLARE_API_TOKEN=… INTENTIC_ZONE=example.com ./scripts/intentic-local.sh up
+CLOUDFLARE_API_TOKEN=… INTENTIC_ZONE=example.com ./_tools/scripts/intentic-local.sh up
 ```
 
 See [LOCAL.md](LOCAL.md) for prerequisites and details.

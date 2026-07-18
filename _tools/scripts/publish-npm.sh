@@ -3,10 +3,10 @@
 # This makes the release safe to re-run, and safe when packages were published from a developer's
 # authenticated PC (npm can't create packages from CI without a per-package trusted publisher). In that
 # case CI simply skips them here and continues to images + tag + GitLab release.
-#   bash scripts/publish-npm.sh 1.15.1
+#   bash _tools/scripts/publish-npm.sh 1.15.1
 set -euo pipefail
 VERSION="${1:?usage: publish-npm.sh <version>}"
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 # Full public dependency-closure, in topological order (deps first).
 PUB=(_tools/constants _apps/sync _libs/graph _libs/resources _libs/engine _libs/need-resolver _libs/providers \

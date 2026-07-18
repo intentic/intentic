@@ -251,10 +251,10 @@ const mint = async (chosen: SetupCodeTarget, key: string): Promise<void> => {
     }
 };
 
-// The locally-built sandbox image a dev sandbox runs (built by `pnpm build:sandbox`). Without it, connect.sh
-// pulls the published sandbox:stable, whose daemon predates any unreleased routes the dev web app calls — every
-// new daemon endpoint would answer 404 until the next release. connect.sh's pull_image falls back to the local
-// tag when the pull fails, and fails loudly when the image was never built.
+// The locally-built sandbox image a dev sandbox runs. Without it, connect.sh pulls the published
+// sandbox:stable, whose daemon predates any unreleased routes the dev web app calls — every new daemon
+// endpoint would answer 404 until the next release. connect.sh's ensure_image never pulls a registry-less
+// tag: it uses the local image, or builds it from the checkout the dev command runs the script from.
 const DEV_SANDBOX_IMAGE = `intentic-sandbox:dev`;
 
 // The shared env suffix each command carries: the local-dev PLATFORM_URL override (plus the shared dev
@@ -648,13 +648,14 @@ watch(
                             <CopyButton :text="selectedCommand" label="Copy" />
                         </div>
                         <Code :code="selectedCommand" :lang="selectedCommandLang" :wrap="true" :copyable="false" />
-                        <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev, which connect.sh
-                             can only run if it's already built — surface the build step before the "not built" error. -->
+                        <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
+                             builds it from this checkout when it's missing, so the pasted command is self-sufficient. -->
                         <p v-if="platformUrlOverride" class="flex items-center gap-2 text-xs text-warning">
                             <Icon name="box" class="shrink-0" />
                             <span
-                                >Local dev: run <code>pnpm build:sandbox</code> first — this command runs your locally-built
-                                <code>{{ DEV_SANDBOX_IMAGE }}</code> image.</span
+                                >Local dev: this command runs your locally-built <code>{{ DEV_SANDBOX_IMAGE }}</code> image,
+                                building it automatically when missing (first build takes a few minutes). Rebuilds after
+                                sandbox edits come from <code>pnpm dev:sandbox</code>.</span
                             >
                         </p>
                     </div>

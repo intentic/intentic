@@ -272,18 +272,48 @@ if (-not $Yes) {
     }
 }
 
-# Pull the sandbox image up front so the moving `stable` tag always runs the newest release (docker run reuses a
-# cached tag without re-pulling). The image is PUBLIC; if a stale Docker Desktop `docker login registry.gitlab.com` makes the
-# pull "denied", clear it and retry anonymously (mirrors connect.sh's pull_image).
-Write-Host "intentic: pulling sandbox image $SandboxImage (first run can take a minute)..."
-docker pull $SandboxImage
-if ($LASTEXITCODE -ne 0) {
-    Write-Host 'intentic: pull failed - clearing a stale registry.gitlab.com login and retrying anonymously...'
-    docker logout registry.gitlab.com *> $null
+# Make the sandbox image runnable (mirrors connect.sh's ensure_image). A registry-less tag (local dev:
+# intentic-sandbox:dev) can only resolve to Docker Hub, so it is never pulled - use the local image, or build it
+# from the checkout this script lives in ($PSScriptRoot is empty on the irm|iex path - no checkout there).
+# Registry images are pulled even when cached so the moving `stable` tag always runs the newest release. The
+# image is PUBLIC; if a stale Docker Desktop `docker login registry.gitlab.com` makes the pull "denied", clear
+# it and retry anonymously.
+$FirstSegment = ($SandboxImage -split '/', 2)[0]
+$HasRegistry = $SandboxImage.Contains('/') -and ($FirstSegment -match '[.:]' -or $FirstSegment -eq 'localhost')
+if (-not $HasRegistry) {
+    docker image inspect $SandboxImage *> $null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "intentic: using the locally-built sandbox image $SandboxImage."
+    } else {
+        $RepoRoot = if ($PSScriptRoot) { Resolve-Path (Join-Path $PSScriptRoot '../../../..') } else { $null }
+        $Dockerfile = if ($RepoRoot) { Join-Path $RepoRoot '_apps/sandbox/Dockerfile' } else { $null }
+        if (-not $Dockerfile -or -not (Test-Path $Dockerfile)) {
+            Write-Error "'$SandboxImage' is a local dev tag that isn't built, and no intentic checkout was found to build it from - run 'pnpm build:sandbox' in the repo, or remove SANDBOX_IMAGE to use the published image."
+            exit 1
+        }
+        Write-Host "intentic: building the local sandbox image $SandboxImage (first build can take a few minutes)..."
+        docker build -f $Dockerfile -t $SandboxImage $RepoRoot
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error 'building the sandbox image failed (see the docker output above).'
+            exit 1
+        }
+    }
+} else {
+    Write-Host "intentic: pulling sandbox image $SandboxImage (first run can take a minute)..."
     docker pull $SandboxImage
     if ($LASTEXITCODE -ne 0) {
-        Write-Error 'failed to pull the sandbox image (see the docker output above).'
-        exit 1
+        docker image inspect $SandboxImage *> $null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host 'intentic: pull failed but the image exists locally - using the local copy.'
+        } else {
+            Write-Host 'intentic: pull failed - clearing a stale registry.gitlab.com login and retrying anonymously...'
+            docker logout registry.gitlab.com *> $null
+            docker pull $SandboxImage
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error 'failed to pull the sandbox image (see the docker output above).'
+                exit 1
+            }
+        }
     }
 }
 
@@ -319,7 +349,7 @@ docker rm -f $Container *> $null
 # unprivileged container outside its (privileged) targets, can drive several of them, and outlives any one being
 # rebuilt; it reaches this one over SSH exactly like a remote host. Stand it up on the shared network so the
 # sandbox resolves it by name; the key is generated INSIDE the target (no Windows ssh-keygen needed, and it stays
-# root-owned), and its private half rides into the sandbox as HOST_SSH_KEY. Mirrors scripts/intentic-local.sh.
+# root-owned), and its private half rides into the sandbox as HOST_SSH_KEY. Mirrors _tools/scripts/intentic-local.sh.
 if ($SelfHost) {
     Write-Host 'intentic: starting the Docker-in-Docker deploy target...'
     docker rm -f $DindContainer *> $null

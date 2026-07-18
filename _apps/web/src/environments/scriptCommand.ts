@@ -2,8 +2,8 @@ import { environment } from "./environment";
 
 /* The connect/sync/host install scripts the copy-paste one-liners run. Two deliveries, chosen by build:
  *   • deploy (production): fetch the public intentic.dev vanity URL — the site worker (see _apps/site) serves
- *     the scripts bundled from the repo's scripts/ and redirects each vanity path to the `stable` release's
- *     script. The private repo has no anonymous raw URL, so we never fetch from GitLab.
+ *     the scripts tracked in _apps/site/public/scripts/ and redirects each vanity path to the `stable`
+ *     release's script. The private repo has no anonymous raw URL, so we never fetch from GitLab.
  *   • local dev: the platform runs on the same machine as the checked-out repo, so run the script BY PATH
  *     (relative to the repo root) — no network fetch, and the command exercises the working-tree scripts. */
 const SCRIPT_URLS = {
@@ -19,15 +19,15 @@ const SCRIPT_URLS = {
 } as const;
 
 const SCRIPT_PATHS = {
-    sh: `scripts/connect.sh`,
-    ps1: `scripts/connect.ps1`,
-    hostSh: `scripts/connect-host.sh`,
-    hostPs1: `scripts/connect-host.ps1`,
-    desktopSh: `scripts/sync.sh`,
-    desktopPs1: `scripts/sync.ps1`,
-    rebuild: `scripts/rebuild.sh`,
-    update: `scripts/update.sh`,
-    cleanup: `scripts/cleanup.sh`,
+    sh: `_apps/site/public/scripts/connect.sh`,
+    ps1: `_apps/site/public/scripts/connect.ps1`,
+    hostSh: `_apps/site/public/scripts/connect-host.sh`,
+    hostPs1: `_apps/site/public/scripts/connect-host.ps1`,
+    desktopSh: `_apps/site/public/scripts/sync.sh`,
+    desktopPs1: `_apps/site/public/scripts/sync.ps1`,
+    rebuild: `_apps/site/public/scripts/rebuild.sh`,
+    update: `_apps/site/public/scripts/update.sh`,
+    cleanup: `_apps/site/public/scripts/cleanup.sh`,
 } as const;
 
 type ScriptKey = keyof typeof SCRIPT_URLS;
@@ -44,7 +44,7 @@ export const bashCommand = (key: ScriptKey, prefix: string, args: string): strin
 
 // A PowerShell one-liner. `env` is the `$env:X='..'; …; ` prefix (trailing space); inputs ride env, so there
 // are no positional args. Deploy does `irm <url> | iex`; dev calls the local script with `&`. Caveat: running
-// `& ./scripts/*.ps1` can trip PowerShell's ExecutionPolicy on Windows dev boxes (the `irm | iex` form bypassed
-// it) — a local-dev-only wrinkle; loosen the policy or drive the .sh variant under WSL.
+// `& ./_apps/site/public/scripts/*.ps1` can trip PowerShell's ExecutionPolicy on Windows dev boxes (the
+// `irm | iex` form bypassed it) — a local-dev-only wrinkle; loosen the policy or drive the .sh variant under WSL.
 export const psCommand = (key: ScriptKey, env: string): string =>
     environment.production ? `${env}irm ${SCRIPT_URLS[key]} | iex` : `${env}& ./${SCRIPT_PATHS[key]}`;

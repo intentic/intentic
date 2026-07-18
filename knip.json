@@ -6,7 +6,7 @@
     "ignoreBinaries": ["docker", "docker compose", "ssh", "mutagen", "cloudflared", "rg", "tmux", "psql", "bun"],
     "workspaces": {
         ".": {
-            "entry": ["scripts/*.{sh,mjs,ts}", "test/**/*.ts"],
+            "entry": ["_tools/scripts/*.sh", "test/**/*.ts"],
             "ignore": ["desired-state/**", "intent/**", "examples/**"]
         },
         "_apps/web": {
@@ -25,7 +25,7 @@
             "entry": ["src/main.ts", "src/**/*.test.ts"]
         },
         "_apps/sandbox": {
-            "entry": ["src/main.ts", "src/**/*.test.ts", "bin/*.mjs", "bin/*.test.mjs"]
+            "entry": ["src/main.ts", "src/**/*.test.ts", "bin/*.mjs", "bin/*.test.mjs", "scripts/*.{sh,mjs}"]
         },
         "_apps/iq": {
             "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.ts"]
@@ -34,7 +34,7 @@
             "entry": ["src/cli.ts", "src/demo.ts", "src/**/*.test.ts", "doh-lookup.mjs"]
         },
         "_apps/sync": {
-            "entry": ["src/cli.ts", "src/**/*.test.ts"]
+            "entry": ["src/cli.ts", "src/**/*.test.ts", "scripts/*.sh"]
         },
         "_apps/lsp": {
             "entry": ["src/cli.ts", "src/**/*.test.ts"]
