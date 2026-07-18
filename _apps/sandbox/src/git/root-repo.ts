@@ -1,7 +1,8 @@
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultGit, gitInit, type GitRunner } from "@intentic/scaffold";
-import { repoGitDir, ROOT_EXCLUDES } from "../history/history.js";
+import { repoGitDir, syncRootExcludes } from "../history/history.js";
+import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { AGENT_GIT_AUTHOR } from "./git.js";
 
@@ -31,9 +32,10 @@ export const ensureRootRepo = async (workspace: WorkspacePaths, historyRoot: str
         await writeFile(join(workspace.root, ".git"), `gitdir: ${gitDir}\n`);
     }
     // The same list as the shadow history's root scope, in $GIT_DIR/info/exclude — outside /work, so the
-    // agent can't edit the rules. Rewritten every boot (a daemon update may change the list) and BEFORE the
-    // baseline commit, so it can never capture repositories/, credentials, or junk.
-    await writeFile(join(gitDir, "info", "exclude"), `${ROOT_EXCLUDES.join("\n")}\n`);
+    // agent can't edit the rules. Derived from the discovered repo set and re-converged every boot (a daemon
+    // update may change the list) and BEFORE the baseline commit, so it can never capture a repo's files,
+    // credentials, or junk. History's snapshotAll keeps it current as repos appear/disappear at runtime.
+    await syncRootExcludes(historyRoot, await discoverRepos(workspace.root));
     if (fresh) {
         // Repeat status scans over /work stay stat-cheap.
         await git(workspace.root, ["config", "core.untrackedCache", "true"]);

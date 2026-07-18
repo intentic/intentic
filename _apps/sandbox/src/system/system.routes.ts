@@ -8,6 +8,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { EXTENSION_PROCESS_PREFIX, extensionProcessIndex } from "../extensions/extension-processes.js";
 import { PANEL_SESSION_PREFIX, SHELL } from "../processes/managed-processes.js";
+import { subscribeRepoChanges } from "../workspace/repo-watch.js";
 import { subscribeWorkspaceChanges } from "../workspace/workspace-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
 import { AGENT_SESSION_PREFIX, isValidSessionName, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "../terminal/terminal-session.js";
@@ -63,6 +64,12 @@ async function* systemEvents(
         queue.push({ kind: "workspaceChanged", paths });
         onWake();
     });
+    // Repo-set snapshots: a clone/scaffold/delete anywhere under /work re-frames the discovered repo list
+    // (the .git-blind watcher can't surface this — see repo-watch.ts).
+    const unsubscribeRepos = subscribeRepoChanges((repos) => {
+        queue.push({ kind: "reposChanged", repos });
+        onWake();
+    });
     abort.addEventListener("abort", onWake);
     try {
         while (!abort.aborted) {
@@ -89,6 +96,7 @@ async function* systemEvents(
     } finally {
         abort.removeEventListener("abort", onWake);
         unsubscribe();
+        unsubscribeRepos();
         unsubscribeAgents();
         unsubscribePresence();
         unregisterPresence?.();

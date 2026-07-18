@@ -7,9 +7,9 @@ import type { Services } from "../composition.js";
 import { syncAdvisory, syncWorkspaceRepos } from "./sync-repos.js";
 import { workspacePaths } from "./workspace.js";
 
-// Minimal Services for the sync path: it only touches workspace.{repositories,repos} and git.sync. The fake
-// git.sync mirrors real git — `git -C <missing> remote` throws — so a regressed (unfiltered) sync would turn a
-// never-scaffolded repo into an "error" outcome, exactly the bug this guards.
+// Minimal Services for the sync path: it only touches workspace.root and git.sync. The fake git.sync mirrors
+// real git — `git -C <missing> remote` throws — so a regressed (unfiltered) sync would turn a never-scaffolded
+// repo into an "error" outcome, exactly the bug this guards.
 const makeServices = (root: string): Services =>
     ({
         workspace: workspacePaths(root),
@@ -40,10 +40,10 @@ test("a neutral sandbox (no role repos on disk) reports no sync failures", async
     });
 });
 
-test("syncs only the role repos that exist, skipping the never-scaffolded ones", async () => {
+test("syncs only the repos that exist (own a .git), skipping the never-scaffolded ones", async () => {
     await withWorkspace(async (root) => {
         const paths = workspacePaths(root);
-        await mkdir(paths.repos.app, { recursive: true }); // app built; intent + desired-state absent (no DevOps)
+        await mkdir(join(paths.repos.app, ".git"), { recursive: true }); // app built; intent + desired-state absent (no DevOps)
         const results = await syncWorkspaceRepos(makeServices(root), 0);
         expect(results.map(({ repo }) => repo)).toEqual(["app"]);
         expect(results.some(({ outcome }) => outcome.status === "error")).toBe(false);

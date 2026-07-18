@@ -134,6 +134,13 @@ const stream = async (): Promise<void> => {
             }
             continue;
         }
+        // The discovered repo set changed (a clone, a scaffold, a deleted repo — anywhere under /work). The
+        // daemon detects this itself: the watcher never sees .git paths, so no workspaceChanged path pattern
+        // could. The rail's panel list is derived from the repo set — refetch it.
+        if (frame[`kind`] === `reposChanged`) {
+            void queryClient.invalidateQueries({ queryKey: [`panels`] });
+            continue;
+        }
         const paths = frame[`paths`];
         if (frame[`kind`] === `workspaceChanged` && Array.isArray(paths)) {
             const changed = paths.filter((path): path is string => typeof path === `string`);
@@ -145,12 +152,6 @@ const stream = async (): Promise<void> => {
                 for (const key of [`capabilities`, `environment`, `panels`, `automations`, `automation-approvals`, `settings`]) {
                     void queryClient.invalidateQueries({ queryKey: [key] });
                 }
-            }
-            // A repo folder added/removed/renamed under repositories/ changes the rail's panel list. Chokidar emits
-            // it as the bare dir path (repositories/monorepo); match direct children only so deep file edits inside a
-            // repo — constant during agent work — don't needlessly refetch panels.
-            if (changed.some((path) => /^repositories\/[^/]+$/.test(path))) {
-                void queryClient.invalidateQueries({ queryKey: [`panels`] });
             }
             // Any worktree write surfaces in the Changes review — but not during a streaming turn, whose constant
             // writes would hammer `git status`; the stream-end invalidation (useChanges) covers that batch.

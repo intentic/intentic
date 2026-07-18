@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
-import { ROOT_EXCLUDES } from "../history/history.js";
+import { rootExcludes } from "../history/history.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { changedFiles } from "./changes.js";
 import { commitRootBaseline, ensureRootRepo } from "./root-repo.js";
@@ -29,18 +29,19 @@ afterEach(async () => {
 test("provision inits /work with a separate git dir, a baseline commit, and the history exclude list", async () => {
     const { work, historyRoot } = await tempBase();
     await writeFile(join(work, "notes.md"), "hello\n");
-    await mkdir(join(work, "repositories", "intent"), { recursive: true });
-    await writeFile(join(work, "repositories", "intent", "deploy.config.ts"), "v1\n");
+    await mkdir(join(work, "intent", ".git"), { recursive: true });
+    await writeFile(join(work, "intent", "deploy.config.ts"), "v1\n");
     await mkdir(join(work, ".intentic"), { recursive: true });
     await writeFile(join(work, ".intentic", "owner.json"), "{}\n");
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(true);
     await commitRootBaseline(workspacePaths(work));
 
-    // Pointer file in the worktree, real git dir on the history volume, excludes converged.
+    // Pointer file in the worktree, real git dir on the history volume, excludes converged from the
+    // discovered repo set.
     expect(await readFile(join(work, ".git"), "utf8")).toBe(`gitdir: ${join(historyRoot, "gits", "root")}\n`);
-    expect(await readFile(join(historyRoot, "gits", "root", "info", "exclude"), "utf8")).toBe(`${ROOT_EXCLUDES.join("\n")}\n`);
-    // The baseline commit captured the loose file but neither repositories/ nor .intentic/.
+    expect(await readFile(join(historyRoot, "gits", "root", "info", "exclude"), "utf8")).toBe(`${rootExcludes(["intent"]).join("\n")}\n`);
+    // The baseline commit captured the loose file but neither the repo dir nor .intentic/.
     expect(await sh(work, "ls-files")).toBe("notes.md");
     expect((await changedFiles(work)).changes).toEqual([]);
 });

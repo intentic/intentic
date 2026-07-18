@@ -1,7 +1,7 @@
 import { oc } from "@orpc/contract";
 import { OkSchema, SecretInventorySchema, SecretKeyParamSchema, SecretKeysSchema, SecretRevealSchema, SecretSetSchema } from "../schemas.js";
 
-// User-supplied env-var secrets, written to the sandbox's gitignored repositories/desired-state/.env (which
+// User-supplied env-var secrets, written to the sandbox's gitignored desired-state/.env (which
 // `apply` reloads each run — no restart). `set` upserts one KEY=value, `remove` deletes it; `list` returns the
 // keys present. `inventory` aggregates every secret store into one view (keys + status + provenance, never
 // values). `reveal` is the single value-returning route — owner-only, POST so the key never sits in a URL.

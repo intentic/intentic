@@ -16,8 +16,8 @@ import {
     RepoParamSchema,
 } from "../schemas.js";
 
-// Per-repo git ops over the workspace repos: "root" (the /work repo) plus every directory under
-// /work/repositories (intent / desired-state / app + extra clones). An unknown {repo} is a handler-thrown
+// Per-repo git ops over the workspace repos: "root" (the /work repo) plus every discovered repo under /work
+// ({repo} is the repo's root-relative dir, URL-encoded). An unknown {repo} is a handler-thrown
 // NOT_FOUND; a path that escapes the repo is a BAD_REQUEST. `changes` is the workspace-wide review set the
 // Changes panel renders; commit/discard take optional `paths` for per-file actions.
 export const gitContract = {

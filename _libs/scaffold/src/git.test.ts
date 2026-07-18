@@ -44,7 +44,7 @@ test("gitClone forwards the auth header, branch, and separate git dir flags, and
     const separateGitDir = join(historyRoot, "gits", "extra");
     const { git, calls } = recordingGit({});
     await gitClone(
-        "/work/repositories",
+        "/work",
         "extra",
         "https://example.com/extra.git",
         { branch: "main", authHeader: "Authorization: Basic abc", separateGitDir },
@@ -52,7 +52,7 @@ test("gitClone forwards the auth header, branch, and separate git dir flags, and
     );
     expect(calls).toEqual([
         [
-            "/work/repositories",
+            "/work",
             "-c",
             "http.extraheader=Authorization: Basic abc",
             "clone",
@@ -69,8 +69,8 @@ test("gitClone forwards the auth header, branch, and separate git dir flags, and
 
 test("gitClone with no options is a bare clone", async () => {
     const { git, calls } = recordingGit({});
-    await gitClone("/work/repositories", "extra", "https://example.com/extra.git", undefined, git);
-    expect(calls).toEqual([["/work/repositories", "clone", "https://example.com/extra.git", "extra"]]);
+    await gitClone("/work", "extra", "https://example.com/extra.git", undefined, git);
+    expect(calls).toEqual([["/work", "clone", "https://example.com/extra.git", "extra"]]);
 });
 
 test("gitStatus reports branch, dirtiness, and porcelain files", async () => {

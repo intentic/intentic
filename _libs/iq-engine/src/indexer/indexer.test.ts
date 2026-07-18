@@ -27,7 +27,7 @@ afterAll(async () => {
 test("revalidate: initial build, touch-only skip, content change, delete", async () => {
     const first = await revalidate(db, await sweep(root, false));
     expect(first.changed).toBeGreaterThan(0);
-    expect(listFiles(db).has("repositories/alpha/src/widget.ts")).toBe(true);
+    expect(listFiles(db).has("alpha/src/widget.ts")).toBe(true);
 
     // No changes → same generation.
     const second = await revalidate(db, await sweep(root, false));
@@ -35,17 +35,17 @@ test("revalidate: initial build, touch-only skip, content change, delete", async
     expect(second.generation).toBe(first.generation);
 
     // Touch (mtime bump, same content) → hash confirms, no generation bump.
-    const widget = join(root, "repositories/alpha/src/widget.ts");
+    const widget = join(root, "alpha/src/widget.ts");
     await utimes(widget, new Date(), new Date(Date.now() + 5000));
     const touched = await revalidate(db, await sweep(root, false));
     expect(touched.generation).toBe(first.generation);
 
     // Content change → generation bumps, hash updates.
-    const before = listFiles(db).get("repositories/alpha/src/widget.ts")!.hash;
+    const before = listFiles(db).get("alpha/src/widget.ts")!.hash;
     await writeFile(widget, "export const createWidget = (name: string): { name: string } => ({ name });\n");
     const changed = await revalidate(db, await sweep(root, false));
     expect(changed.generation).toBeGreaterThan(first.generation);
-    expect(listFiles(db).get("repositories/alpha/src/widget.ts")!.hash).not.toBe(before);
+    expect(listFiles(db).get("alpha/src/widget.ts")!.hash).not.toBe(before);
 
     // Delete → row cascades away.
     await rm(join(root, "notes.md"));

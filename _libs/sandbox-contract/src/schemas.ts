@@ -11,10 +11,10 @@ import { z } from "zod";
 // a plan/question that no longer exists, or a missing repo/path, is an ORPCError thrown by the handler instead.
 export const OkSchema = z.object({ ok: z.literal(true) });
 
-// Which repo a git route targets: "root" (the /work workspace repo) or a directory name under
-// /work/repositories (the three roles + extra clones). Kept as a bare string on the wire (not an enum) so an
-// unknown repo is a handler-thrown NOT_FOUND — matching the daemon's prior 404 — rather than an
-// input-validation rejection.
+// Which repo a git route targets: "root" (the /work workspace repo) or a repo id — the repo's root-relative
+// dir, which may be nested ("clients/foo"; URL-encoded in the path param). Kept as a bare string on the wire
+// (not an enum) so an unknown repo is a handler-thrown NOT_FOUND — matching the daemon's prior 404 — rather
+// than an input-validation rejection.
 export const RepoParamSchema = z.object({ repo: z.string() });
 
 // ---- agent ----
@@ -334,14 +334,14 @@ export const GitChangeSchema = z.object({
 });
 export type GitChange = z.infer<typeof GitChangeSchema>;
 export const RepoChangesSchema = z.object({
-    // The {repo} param the per-repo git routes accept: "root" or a directory name under repositories/.
+    // The {repo} param the per-repo git routes accept: "root" or a repo id (its root-relative dir).
     repo: z.string(),
     // Absent on an unborn HEAD (a repo initialized but never committed).
     branch: z.string().optional(),
     changes: z.array(GitChangeSchema),
 });
 export type RepoChanges = z.infer<typeof RepoChangesSchema>;
-// The aggregated review set across every repo (root + repositories/*); only repos with changes appear.
+// The aggregated review set across every repo (root + every discovered repo); only repos with changes appear.
 export const GitChangesSchema = z.object({ repos: z.array(RepoChangesSchema) });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
 
@@ -497,6 +497,7 @@ export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
 
 // ---- workspace repos ----
 
+// Every discovered repo's id (root-relative dir under /work), sorted — roles included.
 export const ReposListSchema = z.object({ repos: z.array(z.string()) });
 export const CloneRepoSchema = z.object({ name: z.string().min(1), cloneUrl: z.string().min(1), branch: z.string().optional() });
 export const CloneResultSchema = z.object({ name: z.string(), path: z.string() });
@@ -1023,13 +1024,13 @@ export const DraftsListSchema = z.object({ drafts: z.array(DraftSummarySchema), 
 export const DraftIdParamSchema = z.object({ id: entryId });
 
 // ---- panels: per-repository dev servers + the content facts extensions detect on ----
-// Every git repo under /work/repositories is one list row: its runnable-panel runtime status (a `dev` script at
+// Every discovered git repo under /work is one list row: its runnable-panel runtime status (a `dev` script at
 // operator/ or the repo root; the daemon runs it, auto-assigns a free port, and the preview proxy routes
-// preview-<repo>-<sandboxId>.<zone> to it) PLUS content facts — evidence the web app's extensions run their
+// preview-<panelKey>-<sandboxId>.<zone> to it) PLUS content facts — evidence the web app's extensions run their
 // detect() over, computed daemon-side in one pass so the browser never scans /work file-by-file.
 
 export const PanelSummarySchema = z.object({
-    // The repository directory name under /work/repositories (also the preview subdomain label).
+    // The repo id: its root-relative dir under /work (slashes become `--` in the preview subdomain label).
     repo: z.string(),
     // Whether the repo ships a runnable dev server (a package.json `dev` script at operator/ or the root).
     hasPanel: z.boolean(),
@@ -1105,7 +1106,7 @@ export const EnvironmentSchema = z.object({
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export const EnvironmentApproveSchema = z.object({ hash: z.string().min(1) });
 
-// ---- secrets: user-supplied env-var secrets the daemon writes to repositories/desired-state/.env ----
+// ---- secrets: user-supplied env-var secrets the daemon writes to desired-state/.env ----
 // The web posts a Cloudflare token / GitHub PAT / another-host SSH key straight to the sandbox daemon (never
 // through the platform); `apply` reloads .env each run so a new secret is picked up with NO restart. `list`
 // returns KEYS ONLY — the values never leave the sandbox; `reveal` is the one deliberate, owner-only exception.

@@ -1,11 +1,11 @@
 ---
 name: panels
-description: Give a repository an operator panel — a small web UI (dev server) the user opens from the sidebar to run and preview that repo. Every repo under /work/repositories is a sidebar entry; a repo gets a panel by adding an `operator/` directory that is a runnable web app. Use whenever you scaffold or work in a repo the user should be able to open, preview, or operate from the sidebar.
+description: Give a repository an operator panel — a small web UI (dev server) the user opens from the sidebar to run and preview that repo. Every git repo under /work is a sidebar entry; a repo gets a panel by adding an `operator/` directory that is a runnable web app. Use whenever you scaffold or work in a repo the user should be able to open, preview, or operate from the sidebar.
 ---
 
 # Operator panels (per-repository)
 
-The user's workspace sidebar lists every git repository under `/work/repositories`. Clicking one opens that
+The user's workspace sidebar lists every git repository under `/work`. Clicking one opens that
 repo's **operator panel** — a live web UI served from inside the sandbox and previewed in an iframe at
 `https://preview-<repo>-<sandboxId>.<zone>`, with hot reload. There is **no manifest file** (no apps.json /
 scripts.json): a repo has a panel purely by convention.
@@ -14,7 +14,7 @@ scripts.json): a repo has a panel purely by convention.
 
 A repository exposes a panel when it has an **`operator/` directory at its root** that is a runnable web app:
 
-- `repositories/<repo>/operator/package.json` with a **`dev` script**.
+- `<repo>/operator/package.json` with a **`dev` script**.
 - The dev server MUST honor the **`PORT`** environment variable — the daemon assigns a free port at start and
   injects it. Do not hardcode a port.
 - Bind `0.0.0.0` only if the framework defaults to localhost-only; the proxy connects over 127.0.0.1.

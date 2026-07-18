@@ -47,7 +47,7 @@ image (VPN, Discord voice) composes its own fragment automatically — never pro
 just point the owner at the same rebuild.
 
 For a SERVER-managed sandbox, also wire the approved overlay into the intent so `intentic apply` builds it:
-in `repositories/intent/deploy.config.ts`, pass
+in `intent/deploy.config.ts`, pass
 `dockerfile: readFileSync("/work/.intentic/environment.approved.Dockerfile", "utf8")` to the
 `i.want.workspace(…)` input — the content lands in the git-reviewed desired-state, which is the approval
 gate on that path.

@@ -9,7 +9,7 @@ import { useAsyncAction } from "../useAsyncAction";
 import { resetEditBuffers } from "./useEditBuffers";
 
 /* The Changes review — VSCode's SCM model over the workspace's real repos: the set is plain `git status`
- * (uncommitted work vs HEAD) per repo — "root" (the /work repo itself) plus every repo under repositories/ —
+ * (uncommitted work vs HEAD) per repo — "root" (the /work repo itself) plus every discovered repo under it —
  * aggregated by the daemon's /git/changes. Commit makes a real commit on the repo's own branch; discard
  * restores the worktree from HEAD. No client-side watermark: the reviewed line IS the commit boundary, so every
  * browser and device agrees. Module-level singletons so the badge (shell), the panel, and the workspace agree. */

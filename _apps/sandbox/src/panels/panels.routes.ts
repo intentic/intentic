@@ -4,10 +4,10 @@ import { ARTIFACT_FILE, CONFIG_FILE } from "@intentic/scaffold";
 import { panelsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
+import { REPO_ROLES, type RepoRole } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { REPO_ROLES, type RepoRole } from "../workspace/workspace.js";
-import { discoverPanels, panelRunDir } from "./panels.js";
+import { discoverPanels, panelKey, panelRunDir } from "./panels.js";
 import { probePort } from "../processes/managed-processes.js";
 
 // The per-repository panel routes. `list` enumerates every repo with its runtime status + the content FACTS
@@ -29,9 +29,10 @@ export const createPanelsRoutes = (services: Services) => {
             const discovered = await discoverPanels(services.workspace);
             const panels = await Promise.all(
                 discovered.map(async ({ repo, hasPanel }) => {
-                    const port = services.processes.portOf(repo);
-                    const url = previewUrl(repo, zone, sandboxId);
-                    const dir = join(services.workspace.repositories, repo);
+                    const key = panelKey(repo);
+                    const port = key !== undefined ? services.processes.portOf(key) : undefined;
+                    const url = key !== undefined ? previewUrl(key, zone, sandboxId) : undefined;
+                    const dir = join(services.workspace.root, repo);
                     // Content facts, computed in one pass so the browser never N+1-scans /work: each extension
                     // decides its own presence from this evidence (see the web app's extensions/extension.ts).
                     const summary = {
@@ -59,13 +60,17 @@ export const createPanelsRoutes = (services: Services) => {
             if (!(await discoverPanels(services.workspace)).some((entry) => entry.repo === input.repo)) {
                 throw new ORPCError("NOT_FOUND", { message: "no repository with that name" });
             }
+            const key = panelKey(input.repo);
+            if (key === undefined) {
+                throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no preview-safe name — only letters, digits, hyphens and / work` });
+            }
             const runDir = await panelRunDir(services.workspace, input.repo);
             if (runDir === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no runnable panel — add an operator/ dev server or a dev script` });
             }
             // Mint the preview route before the panel is observable as running (see preview-route.ts).
-            await services.ensurePreviewRoute(input.repo);
-            await services.processes.start(input.repo, {
+            await services.ensurePreviewRoute(key);
+            await services.processes.start(key, {
                 // Install deps on first start (async — the terminal + "starting" badge cover it), then run the dev
                 // server; skipped once installed. No --ignore-workspace: an app repo IS its own pnpm monorepo (its
                 // dev runs turbo across _apps/*) so the whole workspace must install; the flat operator/ panels
@@ -91,7 +96,10 @@ export const createPanelsRoutes = (services: Services) => {
             if (!(await discoverPanels(services.workspace)).some((entry) => entry.repo === input.repo)) {
                 throw new ORPCError("NOT_FOUND", { message: "no repository with that name" });
             }
-            services.processes.stop(input.repo);
+            const key = panelKey(input.repo);
+            if (key !== undefined) {
+                services.processes.stop(key);
+            }
             return { ok: true } as const;
         }),
     };

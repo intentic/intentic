@@ -46,7 +46,7 @@ export const removeEnv = (content: string, key: string): string => {
 // The KEYS present in a .env's text (for the UI's "✓ set" badges) — never the values.
 export const envKeys = (content: string): string[] => Object.keys(parseEnv(content));
 
-// User-supplied secrets → repositories/desired-state/.env (gitignored, on the file denylist, mode 0600). Written
+// User-supplied secrets → desired-state/.env (gitignored, on the file denylist, mode 0600). Written
 // straight from the browser to the daemon (never the platform); `apply` reloads .env each run so a freshly set
 // secret is picked up with no restart. set/remove/list/reveal refuse until DevOps has scaffolded the
 // desired-state repo; `inventory` always answers (capability/provider entries exist pre-scaffold).
@@ -83,7 +83,7 @@ export const createSecretsRoutes = (services: Services) => {
     };
     const pushToCi = (): void => {
         void (async () => {
-            for await (const line of services.intentic({ args: ["secrets", "push"], cwd: services.workspace.repositories })) {
+            for await (const line of services.intentic({ args: ["secrets", "push"], cwd: services.workspace.root })) {
                 void line;
             }
         })().catch((error: unknown) => services.logger.warn({ err: error }, "secrets push after set failed"));

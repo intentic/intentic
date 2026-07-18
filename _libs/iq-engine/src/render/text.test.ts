@@ -5,10 +5,10 @@ import { renderText } from "./text.js";
 
 const groups = (files: number, hitsPerFile: number): RankedGroup[] =>
     Array.from({ length: files }, (unusedFile, f) => ({
-        path: `repositories/alpha/src/file-${f}.ts`,
+        path: `alpha/src/file-${f}.ts`,
         score: files - f,
         hits: Array.from({ length: hitsPerFile }, (unusedHit, h) => ({
-            path: `repositories/alpha/src/file-${f}.ts`,
+            path: `alpha/src/file-${f}.ts`,
             line: h + 1,
             text: `const value${h} = computeSomething(${h}); // representative code line for budget tests`,
             tags: [{ kind: "text" as const }],

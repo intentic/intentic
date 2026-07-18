@@ -25,10 +25,10 @@ test("find: literal/regex content search with ranked, grouped, anchored output",
     const outcome = await engine.run(request({ verb: "find", query: "createWidget" }));
     expect(outcome.exitCode).toBe(0);
     expect(outcome.result.total).toBeGreaterThanOrEqual(3);
-    expect(outcome.text).toContain("repositories/alpha/src/widget.ts");
-    expect(outcome.text).toMatch(/════ repositories\/alpha\/src\/[a-z.]+ \(\d+\) ════/);
+    expect(outcome.text).toContain("alpha/src/widget.ts");
+    expect(outcome.text).toMatch(/════ alpha\/src\/[a-z.]+ \(\d+\) ════/);
     // Anchors are line-exact.
-    const widgetGroup = outcome.result.groups.find((group) => group.path === "repositories/alpha/src/widget.ts");
+    const widgetGroup = outcome.result.groups.find((group) => group.path === "alpha/src/widget.ts");
     expect(widgetGroup?.hits.some((hit) => hit.text.includes("export const createWidget"))).toBe(true);
 });
 
@@ -41,14 +41,14 @@ test("find: zero hits exit 1", async () => {
 test("files: fuzzy filename search, ranked", async () => {
     const outcome = await engine.run(request({ verb: "files", query: "widget" }));
     expect(outcome.exitCode).toBe(0);
-    expect(outcome.result.groups[0]?.path).toBe("repositories/alpha/src/widget.ts");
+    expect(outcome.result.groups[0]?.path).toBe("alpha/src/widget.ts");
     expect(outcome.text).toContain("[fuzzy");
 });
 
 test("q auto-mode: identifier query fuses word search; natural query keyword-expands", async () => {
     const identifier = await engine.run(request({ verb: "q", query: "createWidget" }));
     expect(identifier.exitCode).toBe(0);
-    expect(identifier.result.groups.some((group) => group.path.startsWith("repositories/alpha/src/"))).toBe(true);
+    expect(identifier.result.groups.some((group) => group.path.startsWith("alpha/src/"))).toBe(true);
 
     const natural = await engine.run(request({ verb: "q", query: "how are widgets built for the registry?" }));
     expect(natural.exitCode).toBe(0);
@@ -77,7 +77,7 @@ test("the index dir never surfaces; former-secret/.git paths follow the ignore m
 
 test("--ignored lifts .gitignore but keeps ranking honest", async () => {
     const withIgnored = await engine.run(request({ verb: "find", query: "IGNORED_BUILD_ARTIFACT", scope: { ignored: true } }));
-    expect(withIgnored.result.groups.map((group) => group.path)).toEqual(["repositories/alpha/dist/decoy.js"]);
+    expect(withIgnored.result.groups.map((group) => group.path)).toEqual(["alpha/dist/decoy.js"]);
     const without = await engine.run(request({ verb: "find", query: "IGNORED_BUILD_ARTIFACT" }));
     expect(without.result.total).toBe(0);
 });

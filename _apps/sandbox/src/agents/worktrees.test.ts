@@ -31,17 +31,19 @@ const setup = async (): Promise<{ work: string; historyRoot: string; worktrees: 
     const work = join(base, "work");
     const historyRoot = join(base, "history");
     const workspace = workspacePaths(work);
-    // The production root repo: --separate-git-dir on /history plus the exclude list (/repositories/ etc).
+    // The nested repo exists BEFORE the root repo is ensured (production boot order), so the root's derived
+    // exclude list covers /intent/ and the baseline can't capture it.
     await mkdir(work, { recursive: true });
-    await ensureRootRepo(workspace, historyRoot);
-    await writeFile(join(work, "CLAUDE.md"), "workspace notes\n");
-    await sh(work, "add", "-A");
-    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "baseline");
-    const intent = join(workspace.repositories, "intent");
+    const intent = join(workspace.root, "intent");
     await gitInit(intent, repoGitDir(historyRoot, "intent"));
     await writeFile(join(intent, "deploy.config.ts"), "v1\n");
     await sh(intent, "add", "-A");
     await sh(intent, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "intent v1");
+    // The production root repo: --separate-git-dir on /history plus the derived exclude list.
+    await ensureRootRepo(workspace, historyRoot);
+    await writeFile(join(work, "CLAUDE.md"), "workspace notes\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "baseline");
     const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), logger });
     return { work, historyRoot, worktrees };
 };
@@ -54,7 +56,7 @@ test("ensure creates the mirrored composition with agent branches and recorded b
     expect(conversation.repos.map((repo) => repo.repo).toSorted()).toEqual(["intent", "root"]);
     // The checkout mirrors /work: the root worktree holds the workspace files, the nested repo mounts inside.
     expect(await readFile(join(conversation.cwd, "CLAUDE.md"), "utf8")).toBe("workspace notes\n");
-    expect(await readFile(join(conversation.cwd, "repositories", "intent", "deploy.config.ts"), "utf8")).toBe("v1\n");
+    expect(await readFile(join(conversation.cwd, "intent", "deploy.config.ts"), "utf8")).toBe("v1\n");
     expect(await sh(conversation.cwd, "branch", "--show-current")).toBe("agent/c1");
     // Bases are the mains' HEAD shas at creation.
     const rootBase = conversation.repos.find((repo) => repo.repo === "root")?.base;
@@ -64,13 +66,13 @@ test("ensure creates the mirrored composition with agent branches and recorded b
 test("worktree edits stay isolated from the main tree", async () => {
     const { work, worktrees } = await setup();
     const conversation = await worktrees.ensure("c1", []);
-    await writeFile(join(conversation.cwd, "repositories", "intent", "deploy.config.ts"), "agent edit\n");
+    await writeFile(join(conversation.cwd, "intent", "deploy.config.ts"), "agent edit\n");
     await writeFile(join(conversation.cwd, "new-file.md"), "agent file\n");
 
     expect(await sh(work, "status", "--porcelain")).toBe("");
-    expect(await sh(join(work, "repositories", "intent"), "status", "--porcelain")).toBe("");
+    expect(await sh(join(work, "intent"), "status", "--porcelain")).toBe("");
     expect(existsSync(join(work, "new-file.md"))).toBe(false);
-    expect(await readFile(join(work, "repositories", "intent", "deploy.config.ts"), "utf8")).toBe("v1\n");
+    expect(await readFile(join(work, "intent", "deploy.config.ts"), "utf8")).toBe("v1\n");
 });
 
 test("ensure with a recorded composition repairs a deleted .git pointer", async () => {
@@ -99,10 +101,10 @@ test("remove tears down worktrees and branches; prune sweeps orphan dirs", async
 
 test("an unborn-HEAD repo is excluded from the composition", async () => {
     const { work, historyRoot, worktrees } = await setup();
-    const empty = join(work, "repositories", "empty-repo");
+    const empty = join(work, "empty-repo");
     await gitInit(empty, repoGitDir(historyRoot, "empty-repo"));
 
     const conversation = await worktrees.ensure("c1", []);
     expect(conversation.repos.map((repo) => repo.repo)).not.toContain("empty-repo");
-    expect(existsSync(join(conversation.cwd, "repositories", "empty-repo"))).toBe(false);
+    expect(existsSync(join(conversation.cwd, "empty-repo"))).toBe(false);
 });

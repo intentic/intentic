@@ -20,7 +20,7 @@ export function reset(): void {}
 `;
 
 test("TS extraction: interfaces, arrow consts, plain consts, classes, methods, functions", () => {
-    const symbols = extractSymbols("repositories/alpha/src/widget.ts", "ts", TS);
+    const symbols = extractSymbols("alpha/src/widget.ts", "ts", TS);
     const byName = new Map(symbols.map((symbol) => [symbol.name, symbol]));
     expect(byName.get("Widget")?.kind).toBe("type");
     expect(byName.get("createWidget")?.kind).toBe("fn");
@@ -35,7 +35,7 @@ test("TS extraction: interfaces, arrow consts, plain consts, classes, methods, f
 });
 
 test("test files map fn/const to test kind", () => {
-    const symbols = extractSymbols("repositories/alpha/src/widget.spec.ts", "ts", "export const specSmoke = () => true;");
+    const symbols = extractSymbols("alpha/src/widget.spec.ts", "ts", "export const specSmoke = () => true;");
     expect(symbols[0]?.kind).toBe("test");
 });
 
@@ -51,7 +51,7 @@ def _private():
 `;
 
 test("Python extraction: classes, methods vs functions, underscore privacy", () => {
-    const symbols = extractSymbols("repositories/beta/app.py", "python", PY);
+    const symbols = extractSymbols("beta/app.py", "python", PY);
     const byName = new Map(symbols.map((symbol) => [symbol.name, symbol]));
     expect(byName.get("Foo")?.kind).toBe("class");
     expect(byName.get("method")?.kind).toBe("method");

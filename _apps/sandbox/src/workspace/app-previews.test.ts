@@ -34,7 +34,7 @@ describe("app-previews", () => {
         // `pkg` is the real package.json name — scoped to the monorepo's OWN scope, not the template's @app_/.
         const spec = buildAppSpec({
             repo: "shop",
-            repoDir: "/work/repositories/shop",
+            repoDir: "/work/shop",
             pkg: "@shop/api",
             app: "api",
             preview: apiPreview,
@@ -42,7 +42,7 @@ describe("app-previews", () => {
             sandboxId: "abc123def456",
         });
 
-        expect(spec.cwd).toBe("/work/repositories/shop");
+        expect(spec.cwd).toBe("/work/shop");
         expect(spec.command).toContain("pnpm --filter @shop/api dev");
         // The Hono API reads API_PORT, not PORT, so {port} becomes a portEnv the manager fills with the assigned port.
         expect(spec.portEnv).toEqual(["API_PORT"]);
@@ -56,7 +56,7 @@ describe("app-previews", () => {
         // A renamed instance "admin-api" whose package name the inject engine set to @shop/admin-api.
         const spec = buildAppSpec({
             repo: "shop",
-            repoDir: "/work/repositories/shop",
+            repoDir: "/work/shop",
             pkg: "@shop/admin-api",
             app: "admin-api",
             preview: apiPreview,

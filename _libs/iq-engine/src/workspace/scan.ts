@@ -99,7 +99,7 @@ export const filterScope = (entries: readonly FileEntry[], scope: Scope): FileEn
         if (prefixes !== undefined && !prefixes.some((p) => entry.path === p || entry.path.startsWith(`${p}/`))) {
             return false;
         }
-        if (scope.repo !== undefined && entry.repo !== scope.repo && entry.repo !== `repositories/${scope.repo}`) {
+        if (scope.repo !== undefined && entry.repo !== scope.repo) {
             return false;
         }
         if (langs !== undefined && !langs.includes(langOf(entry.path) ?? "")) {

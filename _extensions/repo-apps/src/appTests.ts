@@ -1,5 +1,5 @@
 /* Split a repo's vitest project dirs into three buckets for the merged AppsView:
- *   • byApp     — a project under repositories/<repo>/_apps/<X> where X is a DISCOVERED (startable) app →
+ *   • byApp     — a project under <repo>/_apps/<X> where X is a DISCOVERED (startable) app →
  *                 rendered as that app's nested Run-tests.
  *   • packages  — a project under _apps/<X> where X is NOT a discovered app (a package without a preview,
  *                 e.g. this repo's cli/sandbox/sync) → its own "Packages" group.
@@ -22,7 +22,7 @@ const pushInto = (map: Map<string, string[]>, key: string, project: string): voi
 };
 
 export const groupTests = (projects: readonly string[], apps: readonly string[], repo: string): GroupedTests => {
-    const appsPrefix = `repositories/${repo}/_apps/`;
+    const appsPrefix = `${repo}/_apps/`;
     const appSet = new Set(apps);
     const byApp = new Map<string, string[]>();
     const packages = new Map<string, string[]>();

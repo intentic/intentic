@@ -15,14 +15,12 @@ const { dir } = defineProps<{ dir: string }>();
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 
-// repositories/<name> → <name> (the operator only opens for a repo dir, so the prefix is always present).
-const repoName = computed(() => (dir.startsWith(`repositories/`) ? dir.slice(`repositories/`.length) : dir));
 // One activation per directory-surface VIEW for this repo — an extension may register several views (ext-apps
 // contributes Apps + Dependencies), so the view id uniquely selects among them (activation.key is the repo
 // name and collides across views).
 const activations = computed(() =>
     detectActivations(panels.value, capabilities.value).filter(
-        ({ extension, activation }) => extension.surface === `directory` && activation.repo === repoName.value,
+        ({ extension, activation }) => extension.surface === `directory` && activation.repo === dir,
     ),
 );
 

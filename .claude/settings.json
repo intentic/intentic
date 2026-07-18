@@ -13,20 +13,19 @@
   },
   "permissions": {
     "allow": [
-      "Bash(*)",
-      "Read(*)",
-      "Write(*)",
-      "Edit(*)",
-      "MultiEdit(*)",
-      "Glob(*)",
-      "Grep(*)",
-      "WebSearch(*)",
+      "Bash",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "WebSearch",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:help.router-for.me)",
       "mcp__playwright__browser_resize",
-      "mcp__playwright__browser_navigate",
-      "WebFetch(domain:help.router-for.me)"
+      "mcp__playwright__browser_navigate"
     ]
   },
   "model": "fable",

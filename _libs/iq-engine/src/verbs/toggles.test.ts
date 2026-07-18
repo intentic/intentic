@@ -61,7 +61,7 @@ test("boosts off changes ranking deterministically (pure RRF)", async () => {
     const withBoosts = await engineWith().run(request("q", "createWidget"));
     const withoutBoosts = await engineWith("-boosts").run(request("q", "createWidget"));
     // Both deterministic; the def-boosted run puts the definition file first.
-    expect(withBoosts.result.groups[0]?.path).toBe("repositories/alpha/src/widget.ts");
+    expect(withBoosts.result.groups[0]?.path).toBe("alpha/src/widget.ts");
     const again = await engineWith("-boosts").run(request("q", "createWidget"));
     expect(JSON.stringify(withoutBoosts.result.groups)).toBe(JSON.stringify(again.result.groups));
 });

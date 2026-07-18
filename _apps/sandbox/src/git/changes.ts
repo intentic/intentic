@@ -23,7 +23,7 @@ const headSha = async (dir: string, git: GitRunner): Promise<string | undefined>
 
 // One repo's uncommitted work via `git status --porcelain=v1 -z -uall`: -z gives exact NUL-delimited paths
 // (a rename is `R… new\0old`), -uall expands untracked dirs into real file paths (per-path actions need them).
-// info/exclude + .gitignore keep the scan off repositories/, .intentic/ and junk in the root repo.
+// info/exclude + .gitignore keep the scan off the repo dirs, .intentic/ and junk in the root repo.
 export const changedFiles = async (dir: string, git: GitRunner = defaultGit): Promise<{ branch?: string; changes: GitChange[] }> => {
     const branch = (await git(dir, ["branch", "--show-current"])).stdout.trim();
     const { stdout } = await git(dir, ["status", "--porcelain=v1", "-z", "-uall"]);
@@ -118,7 +118,7 @@ export const commitPaths = async (
 };
 
 // Discard uncommitted work: everything (no paths) or exactly `paths`. Tracked content returns to HEAD;
-// untracked files are deleted. Ignored files (secrets, node_modules, nested repositories/) always survive —
+// untracked files are deleted. Ignored files (secrets, node_modules, nested repo dirs) always survive —
 // clean runs without -x. The doubled -f also removes an embedded repo the agent git-init'ed (a single -f
 // silently skips it, leaving a "discarded" dir behind).
 export const discardPaths = async (dir: string, paths: readonly string[] | undefined, git: GitRunner = defaultGit): Promise<void> => {

@@ -1,15 +1,15 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { access, mkdir, readdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
-import { isValidRepoName } from "../workspace/extra-repos.js";
-import { REPO_ROLES, type WorkspacePaths } from "../workspace/workspace.js";
+import { discoverRepos, hasGitEntry } from "../workspace/repo-discovery.js";
+import type { WorkspacePaths } from "../workspace/workspace.js";
 
-// Daemon-owned workspace history: every scope (the /work root plus each repo under /work/repositories) gets a
+// Daemon-owned workspace history: every scope (the /work root plus each discovered repo under it) gets a
 // bare git dir under <historyRoot>/scopes, and snapshots are taken with a private index (add -A → write-tree →
 // commit-tree → update-ref refs/snapshots/head). The agent's own repos are never touched — no commits land on
 // its branches, no HEAD/index moves — and the history lives outside /work, so workspace accidents (rm -rf,
@@ -47,9 +47,10 @@ export type HistoryGitRunner = (
 const defaultRunner: HistoryGitRunner = (args, options) =>
     exec("git", [...args], { cwd: options.cwd, env: { ...process.env, ...options.env }, maxBuffer: 8 * 1024 * 1024 });
 
-// The protected real git dir for a daemon-created nested repo: scaffold + addRepo pass this to
-// --separate-git-dir, so the in-worktree .git is a pointer file the daemon rewrites if the agent deletes it.
-export const repoGitDir = (historyRoot: string, name: string): string => join(historyRoot, "gits", name);
+// The protected real git dir for a daemon-created repo: scaffold + addRepo pass this to --separate-git-dir,
+// so the in-worktree .git is a pointer file the daemon rewrites if the agent deletes it. The dir name is the
+// URI-encoded repo id (single-segment ids encode to themselves) so nested ids stay one filesystem entry.
+export const repoGitDir = (historyRoot: string, name: string): string => join(historyRoot, "gits", encodeURIComponent(name));
 
 // Junk + secret patterns every scope excludes (the worktree's own .gitignore files apply on top). Lives in
 // $GIT_DIR/info/exclude — outside /work — so the agent can't edit the rules. A self-contained list (the secret
@@ -79,10 +80,33 @@ const COMMON_EXCLUDES = [
     ".ruff_cache/",
     ".gradle/",
 ];
-// The root scope additionally skips /repositories/ (each repo is its own scope — also avoids git's
-// embedded-repo gitlink handling) and /.intentic/ (daemon-internal manifests + credentials). The real /work
-// repo (git/root-repo.ts) shares this list so history and review agree on what's versionable.
-export const ROOT_EXCLUDES = ["/repositories/", "/.intentic/", ...COMMON_EXCLUDES];
+// The root scope additionally skips every discovered repo dir (each repo is its own scope — also avoids git's
+// embedded-repo gitlink handling) and /.intentic/ (daemon-internal manifests + credentials). Repos can appear
+// anywhere under /work, so the list is DERIVED from the live repo set, not static.
+export const rootExcludes = (repoIds: readonly string[]): string[] => [
+    ...repoIds.map((id) => `/${id}/`),
+    "/.intentic/",
+    ...COMMON_EXCLUDES,
+];
+
+// Converge the root exclude list onto both consumers — the real /work repo's git dir (git/root-repo.ts; its
+// info/ is shared with every agent worktree) and the history root scope's — so history and the Changes review
+// agree on what's versionable. Compare-then-write keeps the every-snapshot call stat-cheap; a target whose git
+// dir doesn't exist yet (fresh boot) is skipped and converges when it's created.
+export const syncRootExcludes = async (historyRoot: string, repoIds: readonly string[]): Promise<void> => {
+    const content = `${rootExcludes(repoIds).join("\n")}\n`;
+    for (const gitDir of [repoGitDir(historyRoot, "root"), join(historyRoot, "scopes", "root.git")]) {
+        try {
+            await access(join(gitDir, "info"));
+        } catch {
+            continue;
+        }
+        const target = join(gitDir, "info", "exclude");
+        if ((await readFile(target, "utf8").catch(() => undefined)) !== content) {
+            await writeFile(target, content);
+        }
+    }
+};
 
 export interface WorkspaceHistory {
     readonly start: () => void;
@@ -101,7 +125,8 @@ export interface WorkspaceHistory {
 }
 
 interface Scope {
-    // "root" or "repositories/<name>" — the wire-visible scope name.
+    // "root" or a repo id (the root-relative repo dir, e.g. "intent" or "clients/foo") — the wire-visible
+    // scope name.
     readonly name: string;
     readonly gitDir: string;
     readonly worktree: string;
@@ -151,13 +176,13 @@ export const createWorkspaceHistory = (
     const { workspace, historyRoot, logger } = options;
     const scopesRoot = join(historyRoot, "scopes");
 
-    const scopeOf = (name: string): Scope => {
-        if (name === "root") {
-            return { name, gitDir: join(scopesRoot, "root.git"), worktree: workspace.root };
-        }
-        const repo = name.slice("repositories/".length);
-        return { name, gitDir: join(scopesRoot, `repositories__${repo}.git`), worktree: join(workspace.repositories, repo) };
-    };
+    // The scope's git dir name is the URI-encoded scope name (slashes in nested repo ids become %2F, so every
+    // scope stays one filesystem entry and decodes losslessly in knownScopes).
+    const scopeOf = (name: string): Scope => ({
+        name,
+        gitDir: join(scopesRoot, `${encodeURIComponent(name)}.git`),
+        worktree: name === "root" ? workspace.root : join(workspace.root, name),
+    });
 
     // Tree-to-tree ops (log/diff-tree/cat-file) need no worktree — they must work after a repo is deleted.
     const bare = (scope: Scope): { cwd: string; env: Record<string, string> } => ({ cwd: historyRoot, env: { GIT_DIR: scope.gitDir } });
@@ -167,8 +192,9 @@ export const createWorkspaceHistory = (
             return;
         }
         await git(["init", "--bare", "-q", "--initial-branch=main", scope.gitDir], { cwd: historyRoot, env: {} });
-        const excludes = scope.name === "root" ? ROOT_EXCLUDES : COMMON_EXCLUDES;
-        await writeFile(join(scope.gitDir, "info", "exclude"), `${excludes.join("\n")}\n`);
+        // The root scope's list is immediately re-derived from the live repo set (syncRootExcludes in
+        // snapshotAll) — this seed just guarantees the file exists before the first add -A.
+        await writeFile(join(scope.gitDir, "info", "exclude"), `${COMMON_EXCLUDES.join("\n")}\n`);
     };
 
     // Rewrite the --separate-git-dir pointer file if the agent deleted it ("root" heals the /work repo's).
@@ -176,9 +202,26 @@ export const createWorkspaceHistory = (
         if (await exists(join(scope.worktree, ".git"))) {
             return;
         }
-        const realGitDir = repoGitDir(historyRoot, scope.name === "root" ? "root" : scope.name.slice("repositories/".length));
+        const realGitDir = repoGitDir(historyRoot, scope.name);
         if (await exists(realGitDir)) {
             await writeFile(join(scope.worktree, ".git"), `gitdir: ${realGitDir}\n`);
+        }
+    };
+
+    // Pre-discovery heal for every DAEMON-created repo (/history/gits/*): a repo whose in-worktree .git the
+    // agent deleted would otherwise vanish from .git-based discovery — and with it from history. Repos the
+    // AGENT created (in-worktree .git dirs, no /history/gits entry) that lose their .git intentionally stop
+    // being repos: their files dissolve into the root scope, which still covers them.
+    const healGitPointers = async (): Promise<void> => {
+        for (const entry of await readdir(join(historyRoot, "gits")).catch(() => [])) {
+            const id = decodeURIComponent(entry);
+            if (id === "root") {
+                continue;
+            }
+            const worktree = join(workspace.root, id);
+            if ((await exists(worktree)) && !(await hasGitEntry(worktree))) {
+                await writeFile(join(worktree, ".git"), `gitdir: ${join(historyRoot, "gits", entry)}\n`);
+            }
         }
     };
 
@@ -230,28 +273,10 @@ export const createWorkspaceHistory = (
         return commit;
     };
 
-    // Live scopes to snapshot: the root, plus every directory under /work/repositories (with or without a .git
-    // — a deleted .git must not hide a repo from history).
-    const liveScopes = async (): Promise<Scope[]> => {
-        const scopes = [scopeOf("root")];
-        const entries = await readdir(workspace.repositories, { withFileTypes: true }).catch(() => []);
-        for (const entry of entries) {
-            if (entry.isDirectory() && (isValidRepoName(entry.name) || (REPO_ROLES as readonly string[]).includes(entry.name))) {
-                scopes.push(scopeOf(`repositories/${entry.name}`));
-            }
-        }
-        return scopes;
-    };
-
     // Every scope that ever recorded history — deleted repos stay listable, diffable, and restorable.
     const knownScopes = async (): Promise<Scope[]> => {
         const entries = await readdir(scopesRoot).catch(() => []);
-        return entries
-            .filter((name) => name.endsWith(".git"))
-            .map((name) => {
-                const stem = name.slice(0, -".git".length);
-                return scopeOf(stem === "root" ? "root" : `repositories/${stem.slice("repositories__".length)}`);
-            });
+        return entries.filter((name) => name.endsWith(".git")).map((name) => scopeOf(decodeURIComponent(name.slice(0, -".git".length))));
     };
 
     const scopeLog = async (scope: Scope): Promise<ScopeCommit[]> => {
@@ -388,10 +413,18 @@ export const createWorkspaceHistory = (
 
     const snapshotAll = async (trigger: SnapshotTrigger, label?: string): Promise<string | undefined> => {
         await mkdir(scopesRoot, { recursive: true });
+        // Heal → discover → sync excludes → snapshot, in that order: the heal makes daemon-created repos
+        // discoverable again, and the root scope never runs its add -A with excludes staler than this cycle's
+        // repo set (a fresh clone's files must not sweep into the root scope).
+        await healGitPointers();
+        const rootScope = scopeOf("root");
+        await ensureScope(rootScope);
+        const repoIds = await discoverRepos(workspace.root);
+        await syncRootExcludes(historyRoot, repoIds);
         const id = randomUUID();
         const cleanLabel = label !== undefined ? sanitizeLabel(label) : undefined;
         let changed = false;
-        for (const scope of await liveScopes()) {
+        for (const scope of [rootScope, ...repoIds.map(scopeOf)]) {
             try {
                 if ((await snapshotScope(scope, id, trigger, cleanLabel)) !== undefined) {
                     changed = true;
@@ -420,10 +453,19 @@ export const createWorkspaceHistory = (
 
     const restoreAll = async (group: SnapshotGroup): Promise<void> => {
         await snapshotAll("pre-restore");
+        const scopes = await knownScopes();
+        // The repo dirs being restored must be in the root excludes BEFORE the root scope's clean runs: the
+        // restore brings back dirs that live discovery (post-deletion) no longer excludes, and without this
+        // the root clean would wipe the just-restored nested worktrees. The trailing snapshotAll re-derives
+        // the list from live discovery — a restored repo without a .git then dissolves into the root scope.
+        await syncRootExcludes(
+            historyRoot,
+            scopes.filter((scope) => scope.name !== "root").map((scope) => scope.name),
+        );
         // Restore EVERY known scope to its state at the group's moment — a snapshot only lists the scopes that
         // changed in it, but "bring the workspace back" means all of them. A scope with no commit at-or-before
         // that moment (created later) is left in place.
-        for (const scope of await knownScopes()) {
+        for (const scope of scopes) {
             const sha = await stateAt(scope, group);
             if (sha === undefined) {
                 continue;

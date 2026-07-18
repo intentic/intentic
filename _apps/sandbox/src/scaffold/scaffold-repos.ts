@@ -10,17 +10,16 @@ import { readTemplatesConfig } from "./templates-config.js";
 // extensions — no operator panel is scaffolded into them here. All shell (git bookkeeping, the monorepo CLI)
 // runs through the caller's visible job session so the user watches the actual commands.
 
-// Scaffold an empty pnpm+turbo monorepo as its OWN repo at repositories/<name> by running the `intentic
-// monorepo` CLI (the same @intentic/scaffold path, add-apps style — one visible command doing the template
-// clone + shell layout + git init). Its UI is the web app's apps extension — no operator panel is scaffolded.
+// Scaffold an empty pnpm+turbo monorepo as its OWN repo at /work/<name> by running the `intentic monorepo`
+// CLI (the same @intentic/scaffold path, add-apps style — one visible command doing the template clone +
+// shell layout + git init). Its UI is the web app's apps extension — no operator panel is scaffolded.
 // The caller (the monorepo capability) gates on existence for idempotency.
 export const scaffoldAppMonorepo = async (services: Services, name: string, session: string): Promise<void> => {
-    await services.files.mkdir(services.workspace.repositories);
     const { source, ref } = await readTemplatesConfig(services);
     await services.terminalRun.run(
         session,
-        `intentic monorepo --dir ${shellQuote(services.workspace.repositories)} --name ${shellQuote(name)} --source ${shellQuote(source)} --ref ${shellQuote(ref)}`,
-        { cwd: services.workspace.repositories, window: "scaffold" },
+        `intentic monorepo --dir ${shellQuote(services.workspace.root)} --name ${shellQuote(name)} --source ${shellQuote(source)} --ref ${shellQuote(ref)}`,
+        { cwd: services.workspace.root, window: "scaffold" },
     );
     // Mint the preview route NOW, not at first start — the hostname must exist long before a browser resolves
     // it, or the early NXDOMAIN gets negative-cached for the zone's SOA TTL. (Covers a root dev script; the

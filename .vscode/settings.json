@@ -21,7 +21,7 @@
         "tmp": true
     },
     "window.title": "${folderName}",
-    "terminal.integrated.fontSize": 13,
+    "terminal.integrated.fontSize": 12,
 
     // File nesting.
     "explorer.fileNesting.enabled": true,

@@ -90,17 +90,13 @@ const fakeProcesses = (ports: Record<string, number> = {}): ManagedProcesses & {
     };
 };
 
-// A temp workspace on disk (discoverPanels reads it): each entry names a repo and whether it gets an
-// operator/ panel (a package.json with a dev script). Role dirs (intent/desired-state/app) and extra repos
-// (which need a .git) both surface as sidebar entries.
-const tempWorkspace = (repos: { name: string; panel?: boolean; extra?: boolean }[]): ReturnType<typeof workspacePaths> => {
+// A temp workspace on disk (repo discovery reads it): each entry names a repo — a dir owning a .git, role and
+// clone alike — and whether it gets an operator/ panel (a package.json with a dev script).
+const tempWorkspace = (repos: { name: string; panel?: boolean }[]): ReturnType<typeof workspacePaths> => {
     const root = mkdtempSync(join(tmpdir(), "panels-"));
     for (const repo of repos) {
-        const dir = join(root, "repositories", repo.name);
-        mkdirSync(dir, { recursive: true });
-        if (repo.extra === true) {
-            mkdirSync(join(dir, ".git"), { recursive: true });
-        }
+        const dir = join(root, repo.name);
+        mkdirSync(join(dir, ".git"), { recursive: true });
         if (repo.panel === true) {
             mkdirSync(join(dir, "operator"), { recursive: true });
             writeFileSync(join(dir, "operator", "package.json"), JSON.stringify({ scripts: { dev: "vite" } }));
@@ -255,8 +251,8 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     agents: createAgentsRegistry({ load: async () => [], save: async () => {} }),
     agentWorktrees: {
         conversationDir: (id) => `/history/worktrees/${id}`,
-        worktreeDir: (id, repo) => (repo === "root" ? `/history/worktrees/${id}` : `/history/worktrees/${id}/repositories/${repo}`),
-        mainDir: (repo) => (repo === "root" ? "/work" : `/work/repositories/${repo}`),
+        worktreeDir: (id, repo) => (repo === "root" ? `/history/worktrees/${id}` : `/history/worktrees/${id}/${repo}`),
+        mainDir: (repo) => (repo === "root" ? "/work" : `/work/${repo}`),
         exists: async () => false,
         ensure: async (id) => ({ cwd: `/history/worktrees/${id}`, branch: `agent/${id}`, repos: [{ repo: "root", base: "a".repeat(40) }] }),
         remove: async () => {},
@@ -358,8 +354,8 @@ test("panels.list enumerates every repo with its operator panel + runtime status
 });
 
 test("panels.list reports the content facts extensions detect on", async () => {
-    const workspace = tempWorkspace([{ name: "extra", extra: true }]);
-    const dir = join(workspace.repositories, "extra");
+    const workspace = tempWorkspace([{ name: "extra" }]);
+    const dir = join(workspace.root, "extra");
     writeFileSync(join(dir, "deploy.config.ts"), "export default {};");
     writeFileSync(join(dir, "desired-state.json"), "{}");
     writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages: []");
@@ -426,7 +422,7 @@ test("panels.start runs the repo's operator dir, rejects unknown repos + repos w
     );
 
     expect(await client.panels.start({ repo: "app" })).toEqual({ ok: true });
-    expect(processes.started).toEqual([{ repo: "app", cwd: join(workspace.repositories, "app", "operator") }]);
+    expect(processes.started).toEqual([{ repo: "app", cwd: join(workspace.root, "app", "operator") }]);
     // The preview route is minted before the panel is observable as running.
     expect(ensured).toEqual(["app"]);
     // A repo with no operator/ can't start; an unknown repo is NOT_FOUND.
@@ -1349,10 +1345,12 @@ test("a turn's title seeds a fresh entry and agents.rename overwrites it", async
 });
 
 test("git.status resolves the repo dir, and rejects an unknown repo", async () => {
+    const workspace = tempWorkspace([{ name: "app" }]);
     const seen: string[] = [];
     const client = clientFor(
         createApp(
             services({
+                workspace,
                 git: {
                     init: async () => {},
                     status: async (dir) => {
@@ -1368,18 +1366,20 @@ test("git.status resolves the repo dir, and rejects an unknown repo", async () =
         ),
     );
     expect(await client.git.status({ repo: "app" })).toEqual({ branch: "main", dirty: false, files: [] });
-    expect(seen).toEqual(["/work/repositories/app"]);
+    expect(seen).toEqual([join(workspace.root, "app")]);
     expect(await errorCode(client.git.status({ repo: "nope" }))).toBe("NOT_FOUND");
 });
 
 test("git.files lists the repo's tracked files", async () => {
+    const workspace = tempWorkspace([{ name: "intent" }]);
     const client = clientFor(
         createApp(
             services({
+                workspace,
                 git: {
                     init: async () => {},
                     status: async () => ({ branch: "main", dirty: false, files: [] }),
-                    listFiles: async (dir) => (dir === "/work/repositories/intent" ? ["deploy.config.ts", "package.json"] : []),
+                    listFiles: async (dir) => (dir === join(workspace.root, "intent") ? ["deploy.config.ts", "package.json"] : []),
                     commitAll: async () => false,
                     push: async () => {},
                     clone: async () => {},
@@ -1391,11 +1391,13 @@ test("git.files lists the repo's tracked files", async () => {
 });
 
 test("git.readFile reads a contained file, NOT_FOUNDs a missing one, and BAD_REQUESTs a path escape", async () => {
+    const workspace = tempWorkspace([{ name: "intent" }]);
     const client = clientFor(
         createApp(
             services({
+                workspace,
                 files: fakeFiles({
-                    read: async (absPath) => (absPath === "/work/repositories/intent/deploy.config.ts" ? "export const intent = 1;" : undefined),
+                    read: async (absPath) => (absPath === join(workspace.root, "intent", "deploy.config.ts") ? "export const intent = 1;" : undefined),
                 }),
             }),
         ),
@@ -1409,10 +1411,12 @@ test("git.readFile reads a contained file, NOT_FOUNDs a missing one, and BAD_REQ
 });
 
 test("git.writeFile writes a contained file and rejects a path escape", async () => {
+    const workspace = tempWorkspace([{ name: "intent" }]);
     const writes: { path: string; content: string | Uint8Array }[] = [];
     const client = clientFor(
         createApp(
             services({
+                workspace,
                 files: fakeFiles({
                     write: async (absPath, content) => {
                         writes.push({ path: absPath, content });
@@ -1422,13 +1426,13 @@ test("git.writeFile writes a contained file and rejects a path escape", async ()
         ),
     );
     expect(await client.git.writeFile({ repo: "intent", path: "deploy.config.ts", content: "next" })).toEqual({ ok: true });
-    expect(writes).toEqual([{ path: "/work/repositories/intent/deploy.config.ts", content: "next" }]);
+    expect(writes).toEqual([{ path: join(workspace.root, "intent", "deploy.config.ts"), content: "next" }]);
     expect(await errorCode(client.git.writeFile({ repo: "intent", path: "../escape", content: "x" }))).toBe("BAD_REQUEST");
     expect(writes).toHaveLength(1);
 });
 
 test("git.changes aggregates dirty repos across root + roles + clones, skipping clean and broken ones", async () => {
-    const workspace = tempWorkspace([{ name: "intent" }, { name: "shop", extra: true }]);
+    const workspace = tempWorkspace([{ name: "intent" }, { name: "shop" }]);
     const client = clientFor(
         createApp(
             services({
@@ -1439,7 +1443,7 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
                         if (dir === workspace.root) {
                             return { branch: "main", changes: [{ path: "notes.md", status: "added" as const }] };
                         }
-                        if (dir === join(workspace.repositories, "shop")) {
+                        if (dir === join(workspace.root, "shop")) {
                             throw new Error("broken repo");
                         }
                         return { changes: [] };
@@ -1454,10 +1458,12 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
 });
 
 test("git.commit routes paths to the per-path commit and no paths to commit-all", async () => {
+    const workspace = tempWorkspace([{ name: "intent" }]);
     const calls: string[] = [];
     const client = clientFor(
         createApp(
             services({
+                workspace,
                 git: {
                     ...services().git,
                     commitAll: async (dir, message) => {
@@ -1474,7 +1480,7 @@ test("git.commit routes paths to the per-path commit and no paths to commit-all"
     );
     expect(await client.git.commit({ repo: "root", message: "m1", paths: ["notes.md"] })).toEqual({ committed: true });
     expect(await client.git.commit({ repo: "intent", message: "m2" })).toEqual({ committed: true });
-    expect(calls).toEqual(["paths /work m1 notes.md", "all /work/repositories/intent m2"]);
+    expect(calls).toEqual([`paths ${workspace.root} m1 notes.md`, `all ${join(workspace.root, "intent")} m2`]);
 });
 
 test("git.discard forwards paths and records the worktree change as a user write", async () => {
@@ -1732,7 +1738,7 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
     );
     expect(await client.workspace.addRepo({ name: "extra", cloneUrl: "https://example.com/extra.git" })).toEqual({ name: "extra", path: "extra" });
     expect(clones).toEqual([
-        { parentDir: "/work/repositories", name: "extra", cloneUrl: "https://example.com/extra.git", separateGitDir: "/history/gits/extra" },
+        { parentDir: "/work", name: "extra", cloneUrl: "https://example.com/extra.git", separateGitDir: "/history/gits/extra" },
     ]);
     // The preview route is minted at clone time, not first panel start (DNS negative-caching).
     expect(ensured).toEqual(["extra"]);
@@ -1744,7 +1750,7 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
 
 test("workspace.addApps launches `intentic add-app` as a one-shot tmux job and mints each app's preview route up front", async () => {
     const workspace = tempWorkspace([{ name: "shop" }]);
-    const repoDir = join(workspace.repositories, "shop");
+    const repoDir = join(workspace.root, "shop");
     const jobs: { key: string; spec: ProcessSpec }[] = [];
     const ensured: string[] = [];
     const processes: ManagedProcesses = {

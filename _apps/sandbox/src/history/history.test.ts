@@ -171,8 +171,9 @@ test("restore runs read-tree → clean → checkout-index in order, with a safet
     expect(await history.restore("nope")).toBe(false);
 });
 
-test("repoGitDir derives the protected git dir path", () => {
+test("repoGitDir derives the protected git dir path, URI-encoding nested ids", () => {
     expect(repoGitDir("/history", "intent")).toBe("/history/gits/intent");
+    expect(repoGitDir("/history", "clients/foo")).toBe("/history/gits/clients%2Ffoo");
 });
 
 // End-to-end over a REAL git: snapshot → mutate (root file, new file, nested-repo edit, secret) → snapshot →
@@ -181,7 +182,7 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     const base = await tempBase();
     const work = join(base, "work");
     const historyRoot = join(base, "history");
-    const intent = join(work, "repositories", "intent");
+    const intent = join(work, "intent");
     await mkdir(intent, { recursive: true });
     await writeFile(join(work, "hello.txt"), "one\n");
     await writeFile(join(work, ".env"), "SECRET=x\n");
@@ -217,7 +218,7 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     const changes = await history.diff(second ?? "");
     expect(changes).toContainEqual({ scope: "root", path: "hello.txt", status: "modified" });
     expect(changes).toContainEqual({ scope: "root", path: "later.txt", status: "added" });
-    expect(changes).toContainEqual({ scope: "repositories/intent", path: "deploy.config.ts", status: "modified" });
+    expect(changes).toContainEqual({ scope: "intent", path: "deploy.config.ts", status: "modified" });
     expect(changes?.some((change) => change.path.includes(".env"))).toBe(false);
 
     expect(await history.fileDiff(second ?? "", "root", "hello.txt")).toEqual({ before: "one\n", after: "two\n" });
@@ -233,4 +234,34 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     const snapshots = await history.list();
     expect(snapshots.map((snapshot) => snapshot.id)).toContain(first);
     expect(snapshots.map((snapshot) => snapshot.trigger)).toContain("restore");
+});
+
+// A repo nested below the top level: its id carries a slash, its scope dir the encoded form, and a full
+// deletion is recoverable from history.
+test("integration: a nested repo scopes under its slash id and restores after deletion", async () => {
+    const base = await tempBase();
+    const work = join(base, "work");
+    const historyRoot = join(base, "history");
+    const nested = join(work, "clients", "foo");
+    await mkdir(nested, { recursive: true });
+    await writeFile(join(nested, "readme.md"), "v1\n");
+    const sh = async (cwd: string, ...args: string[]) => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
+    await sh(nested, "init", "-q");
+    await sh(nested, "add", "-A");
+    await sh(nested, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init");
+
+    const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger });
+    const first = await history.snapshot("user");
+    expect(first).toBeDefined();
+    // One filesystem entry per scope: the slash is URI-encoded in the bare dir name.
+    expect(existsSync(join(historyRoot, "scopes", "clients%2Ffoo.git"))).toBe(true);
+
+    await writeFile(join(nested, "readme.md"), "v2\n");
+    const second = await history.snapshot("turn");
+    expect(await history.diff(second ?? "")).toContainEqual({ scope: "clients/foo", path: "readme.md", status: "modified" });
+
+    // rm -rf the whole repo — the deleted scope stays known (bare dir survives) and restore rebuilds the files.
+    await rm(nested, { recursive: true, force: true });
+    expect(await history.restore(first ?? "")).toBe(true);
+    expect(await readFile(join(nested, "readme.md"), "utf8")).toBe("v1\n");
 });

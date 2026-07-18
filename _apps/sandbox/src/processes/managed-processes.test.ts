@@ -22,7 +22,7 @@ const fakeRunner = () => {
     return { runner, launches, killed, cmd };
 };
 
-const SPEC: ProcessSpec = { command: "pnpm dev", cwd: "/work/repositories/app/operator" };
+const SPEC: ProcessSpec = { command: "pnpm dev", cwd: "/work/app/operator" };
 
 afterEach(() => {
     vi.useRealTimers();
@@ -34,7 +34,7 @@ test("start launches tmux session panel-<key> with the assigned port, exposed vi
     await panels.start("app", SPEC);
     expect(launches[0]?.session).toBe("panel-app");
     expect(launches[0]?.spec.command).toBe("pnpm dev");
-    expect(launches[0]?.spec.cwd).toBe("/work/repositories/app/operator");
+    expect(launches[0]?.spec.cwd).toBe("/work/app/operator");
     // The manager assigned a real free port and injected it (runner sees it, portOf reports it).
     const port = panels.portOf("app");
     expect(port).toBeGreaterThan(0);
@@ -58,7 +58,7 @@ test("two panels run concurrently with separate ports and separate sessions", as
     const { runner, launches } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
-    await panels.start("site--web", { command: "pnpm dev", cwd: "/work/repositories/site" });
+    await panels.start("site--web", { command: "pnpm dev", cwd: "/work/site" });
     expect(launches.map((launch) => launch.session)).toEqual(["panel-app", "panel-site--web"]);
     expect(panels.portOf("app")).not.toBe(panels.portOf("site--web"));
     panels.stopAll();
@@ -68,7 +68,7 @@ test("stop kills only the targeted panel's session", async () => {
     const { runner, killed } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
-    await panels.start("site", { command: "pnpm dev", cwd: "/work/repositories/site/operator" });
+    await panels.start("site", { command: "pnpm dev", cwd: "/work/site/operator" });
     panels.stop("app");
     expect(killed).toEqual(["panel-app"]);
     expect(panels.running("app")).toBe(false);
@@ -81,7 +81,7 @@ test("stopAll kills everything", async () => {
     const { runner, killed } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
-    await panels.start("site", { command: "pnpm dev", cwd: "/work/repositories/site/operator" });
+    await panels.start("site", { command: "pnpm dev", cwd: "/work/site/operator" });
     panels.stopAll();
     expect(killed.toSorted()).toEqual(["panel-app", "panel-site"]);
     expect(panels.running("app")).toBe(false);

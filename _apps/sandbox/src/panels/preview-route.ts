@@ -2,7 +2,7 @@ import type { Logger } from "pino";
 import type { Services } from "../composition.js";
 import type { Config } from "../env.config.js";
 import { postToPlatform } from "../platform/platform-client.js";
-import { discoverPanels } from "./panels.js";
+import { discoverPanels, panelKey } from "./panels.js";
 
 // Asks the platform to mint a panel's preview route (proxied CNAME + tunnel ingress → the preview proxy) on
 // the sandbox's intentic-provided tunnel. Called on panel start, BEFORE the panel is observable as running, so
@@ -17,7 +17,8 @@ import { discoverPanels } from "./panels.js";
 // not panel start.
 export const ensureAllPreviewRoutes = async (services: Services): Promise<void> => {
     const discovered = await discoverPanels(services.workspace);
-    await Promise.all(discovered.map(({ repo }) => services.ensurePreviewRoute(repo)));
+    const keys = discovered.map(({ repo }) => panelKey(repo)).filter((key): key is string => key !== undefined);
+    await Promise.all(keys.map((key) => services.ensurePreviewRoute(key)));
 };
 
 export const createPreviewRouteEnsurer = (config: Config, logger: Logger): ((panel: string) => Promise<void>) => {

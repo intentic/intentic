@@ -1,14 +1,14 @@
+import { REPO_ROLES } from "@intentic/scaffold";
 import { expect, test } from "vitest";
-import { REPO_ROLES, workspacePaths } from "./workspace.js";
+import { workspacePaths } from "./workspace.js";
 
-test("workspacePaths lays each repo out under <root>/repositories/<role>", () => {
+test("workspacePaths lays each role repo out directly under <root>", () => {
     const paths = workspacePaths("/work");
     expect(paths.root).toBe("/work");
-    expect(paths.repositories).toBe("/work/repositories");
     expect(paths.repos).toEqual({
-        intent: "/work/repositories/intent",
-        "desired-state": "/work/repositories/desired-state",
-        app: "/work/repositories/app",
+        intent: "/work/intent",
+        "desired-state": "/work/desired-state",
+        app: "/work/app",
     });
 });
 

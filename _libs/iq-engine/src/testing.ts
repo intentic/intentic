@@ -16,7 +16,7 @@ const GIT_ENV = {
 };
 
 // Copies the committed fixture workspace into a tmp dir and adds what must never be committed: security-floor
-// decoys (a fake .env, index-dir contents) and a REAL git repo in repositories/alpha (with a token-bearing
+// decoys (a fake .env, index-dir contents) and a REAL git repo in alpha (with a token-bearing
 // remote URL, so floor tests can assert .git content never surfaces). Every "denied" path exists on disk.
 export const makeFixtureWorkspace = async (): Promise<{ root: string; cleanup: () => Promise<void> }> => {
     const root = await mkdtemp(join(tmpdir(), "iq-fixture-"));
@@ -26,7 +26,7 @@ export const makeFixtureWorkspace = async (): Promise<{ root: string; cleanup: (
     await writeFile(join(root, ".env.example"), "FIXTURE_SECRET_TOKEN=\n");
     await mkdir(join(root, ".intentic/iq/spool"), { recursive: true });
     await writeFile(join(root, ".intentic/iq/decoy.txt"), "index dir contents must never be surfaced\n");
-    const alpha = join(root, "repositories/alpha");
+    const alpha = join(root, "alpha");
     // The .gitignore'd build artifact — synthesized (alpha's own .gitignore keeps it out of THIS repo too, so it
     // can't ship as a committed fixture file). Written before `git add` so the fixture repo also ignores it.
     await mkdir(join(alpha, "dist"), { recursive: true });

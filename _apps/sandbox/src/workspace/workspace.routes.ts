@@ -13,7 +13,7 @@ import { shellQuote } from "../terminal/terminal-run.js";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 import { classifyWorkspace } from "./classify.js";
 import { readPackageGraph } from "./package-graph.js";
-import { isValidRepoName, listRepos } from "./extra-repos.js";
+import { discoverRepos, isValidRepoName } from "./repo-discovery.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
 import { resolveWithin } from "./workspace-files.js";
@@ -43,7 +43,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         if (!isValidRepoName(repo)) {
             throw new ORPCError("BAD_REQUEST", { message: "missing or invalid repo" });
         }
-        if (!existsSync(join(services.workspace.repositories, repo))) {
+        if (!existsSync(join(services.workspace.root, repo))) {
             throw new ORPCError("NOT_FOUND", { message: `no monorepo named "${repo}"` });
         }
         return repo;
@@ -111,17 +111,15 @@ export const createWorkspaceRoutes = (services: Services) => {
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
-        repos: i.repos.handler(async () => ({ repos: await listRepos(services.workspace.repositories) })),
+        repos: i.repos.handler(async () => ({ repos: await discoverRepos(services.workspace.root) })),
         addRepo: i.addRepo.handler(async ({ input }) => {
             if (!isValidRepoName(input.name)) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid or reserved repo name" });
             }
-            if ((await listRepos(services.workspace.repositories)).includes(input.name)) {
-                throw new ORPCError("CONFLICT", { message: `a repo named "${input.name}" already exists` });
+            if (existsSync(join(services.workspace.root, input.name))) {
+                throw new ORPCError("CONFLICT", { message: `"${input.name}" already exists in the workspace` });
             }
-            // The repositories/ dir may not exist yet on a fresh sandbox; git clone needs its parent present.
-            await services.files.mkdir(services.workspace.repositories);
-            await services.git.clone(services.workspace.repositories, input.name, input.cloneUrl, {
+            await services.git.clone(services.workspace.root, input.name, input.cloneUrl, {
                 ...(input.branch !== undefined ? { branch: input.branch } : {}),
                 separateGitDir: repoGitDir(services.config.historyRoot, input.name),
             });
@@ -151,7 +149,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         // Add to the same repo can't spawn a concurrent install.
         addApps: i.addApps.handler(async ({ input }) => {
             const repo = monorepoOf(input.repo);
-            const repoDir = join(services.workspace.repositories, repo);
+            const repoDir = join(services.workspace.root, repo);
             const { source, ref } = await readTemplatesConfig(services);
             const apps = input.apps.map((app) => (app.name === app.template ? app.template : `${app.template}:${app.name}`)).join(",");
             const command = `intentic add-app --dir ${shellQuote(repoDir)} --apps ${shellQuote(apps)} --source ${shellQuote(source)} --ref ${shellQuote(ref)}`;
@@ -167,7 +165,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         // the apps extension's list. Scans `_apps/` and resolves each to its template type.
         appsList: i.appsList.handler(async ({ input }) => {
             const repo = monorepoOf(input.repo);
-            const repoDir = join(services.workspace.repositories, repo);
+            const repoDir = join(services.workspace.root, repo);
             const manifest = await loadManifest(services);
             const apps = await Promise.all(
                 discoverApps(repoDir, manifest).map(async ({ app, template }) => {
@@ -181,11 +179,11 @@ export const createWorkspaceRoutes = (services: Services) => {
             return { apps };
         }),
         // The monorepo's workspace package dependency graph — drives the apps extension's Dependencies view.
-        packageGraph: i.packageGraph.handler(({ input }) => readPackageGraph(join(services.workspace.repositories, monorepoOf(input.repo)))),
+        packageGraph: i.packageGraph.handler(({ input }) => readPackageGraph(join(services.workspace.root, monorepoOf(input.repo)))),
         // Start one app instance's preview dev server (its own process + port + preview-<repo>--<app>-<id>.<zone> host).
         startApp: i.startApp.handler(async ({ input }) => {
             const repo = monorepoOf(input.repo);
-            const repoDir = join(services.workspace.repositories, repo);
+            const repoDir = join(services.workspace.root, repo);
             const manifest = await loadManifest(services);
             const found = discoverApps(repoDir, manifest).find(({ app }) => app === input.app);
             if (found === undefined) {
@@ -214,7 +212,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             if (!/^[a-z0-9][a-z0-9_-]*$/.test(input.session)) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid session" });
             }
-            const repoDir = join(services.workspace.repositories, repo);
+            const repoDir = join(services.workspace.root, repo);
             const command = input.dirs
                 .map((dir) => {
                     const abs = dir === "" ? repoDir : resolveWithin(repoDir, dir);

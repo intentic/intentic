@@ -95,9 +95,9 @@ const { capabilities } = useCapabilities();
 const manageableDirs = computed(
     () =>
         new Set(
-            detectActivations(panels.value, capabilities.value)
-                .filter(({ extension, activation }) => extension.surface === `directory` && activation.repo !== undefined)
-                .map(({ activation }) => `repositories/${activation.repo}`),
+            detectActivations(panels.value, capabilities.value).flatMap(({ extension, activation }) =>
+                extension.surface === `directory` && activation.repo !== undefined ? [activation.repo] : [],
+            ),
         ),
 );
 const activeFile = computed(() => (activeTab.value?.kind === `file` ? activeTab.value : undefined));

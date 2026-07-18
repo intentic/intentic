@@ -32,6 +32,7 @@ import { createAnnouncer } from "./platform/announce.js";
 import { seedPairing } from "./platform/sync.js";
 import { reapIdleWebSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
+import { startRepoWatch } from "./workspace/repo-watch.js";
 import { startWorkspaceWatch } from "./workspace/workspace-watch.js";
 
 // The sandbox container's entrypoint. Config comes from env set at `docker run` — by connect.sh (your PC) or
@@ -208,6 +209,9 @@ const main = async (): Promise<void> => {
     // Live file-change push: watch /work so the browser's tree + open file refresh the instant the agent (or a
     // Bash command / the terminal) touches a file, over the /events stream — no manual Refresh.
     startWorkspaceWatch(services.workspace.root, logger);
+    // Repo-set change push riding the same watcher: a repo cloned/deleted anywhere under /work re-frames the
+    // discovered repo list on /events (the watcher itself never sees .git paths).
+    startRepoWatch(services.workspace.root, logger);
 
     // Warm the iq search index (symbols + embeddings) so the agent's first search hits a fresh index instead of
     // paying the full build. Best-effort: on failure iq self-builds incrementally on first use.

@@ -23,7 +23,7 @@ export const PersistedAgentSchema = z.object({
     model: z.string().optional(),
     account: z.string().optional(),
     sessionId: z.string().optional(),
-    // The worktree composition: each workspace repo ("root" or a repositories/<name> dir name) with the full
+    // The worktree composition: each workspace repo ("root" or a repo id — its root-relative dir) with the full
     // base sha its worktree branched from, and the branch tip whose delta has already LANDED into the main
     // tree (absent ⇒ nothing landed yet — the base is the reference). Diff/land read `landedTip ?? base`, so
     // the review shows only the not-yet-landed remainder and each land applies only the new delta.

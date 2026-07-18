@@ -27,9 +27,9 @@ test("recent: committed files with change summaries, uncommitted by mtime", asyn
     const outcome = await engine.run(request({ verb: "recent", query: "" }));
     expect(outcome.exitCode).toBe(0);
     // Committed alpha files carry a commit summary…
-    expect(outcome.text).toMatch(/repositories\/alpha\/src\/widget\.ts\s+just now\s+\+\d+ -\d+\s+\(1 commit\)/);
+    expect(outcome.text).toMatch(/alpha\/src\/widget\.ts\s+just now\s+\+\d+ -\d+\s+\(1 commit\)/);
     // …while beta (no git repo) files appear as uncommitted mtime hits.
-    expect(outcome.text).toMatch(/repositories\/beta\/app\.py\s+just now\s+uncommitted/);
+    expect(outcome.text).toMatch(/beta\/app\.py\s+just now\s+uncommitted/);
 
     const filtered = await engine.run(request({ verb: "recent", query: "widget" }));
     expect(filtered.result.groups.every((group) => group.path.includes("widget"))).toBe(true);
@@ -50,18 +50,18 @@ test("log: pickaxe finds the commit that added a string; metadata only", async (
 });
 
 test("who: blames an anchor with commit metadata and the source line", async () => {
-    const outcome = await engine.run(request({ verb: "who", query: "repositories/alpha/src/widget.ts:6" }));
+    const outcome = await engine.run(request({ verb: "who", query: "alpha/src/widget.ts:6" }));
     expect(outcome.exitCode).toBe(0);
     expect(outcome.text).toContain("fixture-author");
     expect(outcome.text).toContain("add widget module");
     expect(outcome.text).toContain("line: export const createWidget");
 
-    await expect(engine.run(request({ verb: "who", query: "repositories/beta/app.py:1" }))).rejects.toThrow("not inside a git repo");
+    await expect(engine.run(request({ verb: "who", query: "beta/app.py:1" }))).rejects.toThrow("not inside a git repo");
 });
 
 test("uncommitted edits show up in recent immediately", async () => {
-    await writeFile(join(root, "repositories/alpha/src/fresh.ts"), "export const fresh = 1;\n");
+    await writeFile(join(root, "alpha/src/fresh.ts"), "export const fresh = 1;\n");
     const outcome = await engine.run(request({ verb: "recent", query: "fresh" }));
-    expect(outcome.text).toContain("repositories/alpha/src/fresh.ts");
+    expect(outcome.text).toContain("alpha/src/fresh.ts");
     expect(outcome.text).toContain("uncommitted");
 });

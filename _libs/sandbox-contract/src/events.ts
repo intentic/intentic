@@ -199,6 +199,12 @@ export type Heartbeat = z.infer<typeof HeartbeatSchema>;
 export const HelloSchema = z.object({ kind: z.literal("hello"), workspaceId: z.string() });
 export type Hello = z.infer<typeof HelloSchema>;
 
+// The FULL discovered repo set (sorted root-relative ids), pushed whenever it changes — a clone, a scaffold,
+// or a deleted repo re-frames it. The watcher descent-ignores .git, so no workspaceChanged path pattern can
+// detect a repo appearing; the daemon diffs its own discovery instead. Snapshot-not-diff, last frame wins.
+export const ReposChangedSchema = z.object({ kind: z.literal("reposChanged"), repos: z.array(z.string()) });
+export type ReposChanged = z.infer<typeof ReposChangedSchema>;
+
 // A batch of workspace paths that just changed on disk (created/edited/deleted), pushed on the same /events
 // stream as the heartbeat so the browser refreshes the tree + any open file live — the agent edits files
 // out-of-band (its own Write/Edit/Bash tools), so there's no HTTP mutation to hang an invalidate on. Paths are
@@ -237,7 +243,14 @@ export const AgentsSchema = z.object({ kind: z.literal("agents"), agents: z.arra
 export type Agents = z.infer<typeof AgentsSchema>;
 
 // The /events stream union: the hello identity frame, then liveness heartbeats interleaved with
-// workspace-change batches and presence + fleet roster snapshots. oRPC validates every yielded frame against
-// this, so all kinds must live here.
-export const SystemEventSchema = z.discriminatedUnion("kind", [HelloSchema, HeartbeatSchema, WorkspaceChangedSchema, PresenceSchema, AgentsSchema]);
+// workspace-change batches, repo-set snapshots, and presence + fleet roster snapshots. oRPC validates every
+// yielded frame against this, so all kinds must live here.
+export const SystemEventSchema = z.discriminatedUnion("kind", [
+    HelloSchema,
+    HeartbeatSchema,
+    WorkspaceChangedSchema,
+    ReposChangedSchema,
+    PresenceSchema,
+    AgentsSchema,
+]);
 export type SystemEvent = z.infer<typeof SystemEventSchema>;

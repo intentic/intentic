@@ -2,11 +2,11 @@ import { access, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
-import { listRepos } from "../workspace/extra-repos.js";
-import { REPO_ROLES, type WorkspacePaths } from "../workspace/workspace.js";
+import { discoverRepos } from "../workspace/repo-discovery.js";
+import type { WorkspacePaths } from "../workspace/workspace.js";
 
 // A conversation's isolated checkout: one git worktree per workspace repo, mirroring the /work layout —
-// <worktreesRoot>/<id>/ is the ROOT repo's worktree and <worktreesRoot>/<id>/repositories/<name>/ each nested
+// <worktreesRoot>/<id>/ is the ROOT repo's worktree and <worktreesRoot>/<id>/<repo>/ each nested
 // repo's — so the agent, .claude/ config resolution, and monorepo-relative paths work unmodified. Worktrees
 // live on /history (the volume the real git dirs already occupy): they survive container rebuilds, stay
 // invisible to the /work tree walk + watcher + iq + history scopes, and their gitdir pointers never straddle
@@ -54,9 +54,8 @@ export const createAgentWorktrees = (
     const { workspace, worktreesRoot, logger } = options;
 
     const conversationDir = (id: string): string => join(worktreesRoot, id);
-    const worktreeDir = (id: string, repo: string): string =>
-        repo === "root" ? conversationDir(id) : join(conversationDir(id), "repositories", repo);
-    const mainDir = (repo: string): string => (repo === "root" ? workspace.root : join(workspace.repositories, repo));
+    const worktreeDir = (id: string, repo: string): string => (repo === "root" ? conversationDir(id) : join(conversationDir(id), repo));
+    const mainDir = (repo: string): string => (repo === "root" ? workspace.root : join(workspace.root, repo));
 
     // Per-repo op chains (the history.ts serialize pattern): worktree add/remove and land all touch the repo's
     // shared admin area (<gitdir>/worktrees/) and, for land, the main-tree index. Turns themselves never come
@@ -89,21 +88,9 @@ export const createAgentWorktrees = (
         }
     };
 
-    // The workspace repos a NEW conversation spans: root, the fixed-role repos that exist (listRepos
-    // deliberately excludes them), and every extra clone. Unborn-HEAD repos are skipped in createOne — an
-    // unborn HEAD has nothing to branch from.
-    const liveRepos = async (): Promise<string[]> => {
-        const repos = ["root"];
-        for (const role of REPO_ROLES) {
-            if (await exists(join(workspace.repositories, role, ".git"))) {
-                repos.push(role);
-            }
-        }
-        for (const name of await listRepos(workspace.repositories)) {
-            repos.push(name);
-        }
-        return repos;
-    };
+    // The workspace repos a NEW conversation spans: root plus every discovered repo. Unborn-HEAD repos are
+    // skipped in createOne — an unborn HEAD has nothing to branch from.
+    const liveRepos = async (): Promise<string[]> => ["root", ...(await discoverRepos(workspace.root))];
 
     const createOne = async (id: string, repo: string): Promise<{ repo: string; base: string } | undefined> => {
         const main = mainDir(repo);
@@ -156,7 +143,8 @@ export const createAgentWorktrees = (
             }
             const repos: { repo: string; base: string }[] = [];
             // Root first: its checkout creates the conversation dir the nested worktrees mount into (the root
-            // repo excludes /repositories/, so the mounts never collide with its own tracked files).
+            // repo excludes every repo dir — syncRootExcludes — so the mounts never collide with its own
+            // tracked files).
             for (const repo of await liveRepos()) {
                 const created = await withRepoLock(repo, () => createOne(id, repo));
                 if (created !== undefined) {

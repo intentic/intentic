@@ -33,7 +33,7 @@ export async function* runCheckCommand(services: Services, args: readonly string
     let settled = false;
     const done = services.terminalRun
         .tryRun(INFRA_CHECK_SESSION, ["intentic", ...args].map(shellQuote).join(" "), {
-            cwd: services.workspace.repositories,
+            cwd: services.workspace.root,
             window: args[0] ?? "run",
             // Rides -e onto the tmux window (pane env ≠ daemon env) AND the wrapper's env for the fallback.
             env: { INTENTIC_EVENTS_FILE: path },

@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { capabilityJobSession } from "../../terminal/terminal-session.js";
-import { isValidRepoName } from "../../workspace/extra-repos.js";
+import { isValidRepoName } from "../../workspace/repo-discovery.js";
 import type { CapabilityHandler } from "../capability.js";
 
-// Monorepo: scaffold an empty pnpm+turbo monorepo as its own repo at repositories/<id> (the `id` is the repo
+// Monorepo: scaffold an empty pnpm+turbo monorepo as its own repo at /work/<id> (the `id` is the repo
 // name), with a control operator panel — so the user can then add apps (API/Web/Landing) into it from that panel.
 // Mirrors devops (a platform capability that scaffolds a repo); idempotent via the existence gate, and no
 // `remove` — deleting the repo would destroy the user's work. The scaffold is one visible `intentic monorepo`
@@ -18,7 +18,7 @@ export const monorepoHandler: CapabilityHandler = {
                 `"${id}" is not a valid monorepo name — use lowercase letters, digits and single hyphens, and avoid the reserved repo names`,
             );
         }
-        if (existsSync(join(ctx.workspace.repositories, id))) {
+        if (existsSync(join(ctx.workspace.root, id))) {
             yield { kind: "log", message: `Monorepo "${id}" already present.` };
             return;
         }
@@ -30,5 +30,5 @@ export const monorepoHandler: CapabilityHandler = {
         await ctx.scaffoldMonorepo(id, session);
         yield { kind: "log", message: `Monorepo "${id}" ready — open its panel to add apps (API / Web / Landing).` };
     },
-    status: (ctx, id) => Promise.resolve(existsSync(join(ctx.workspace.repositories, id)) ? { state: "active" } : { state: "inactive" }),
+    status: (ctx, id) => Promise.resolve(existsSync(join(ctx.workspace.root, id)) ? { state: "active" } : { state: "inactive" }),
 };

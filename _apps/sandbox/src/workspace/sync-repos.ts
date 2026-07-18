@@ -1,8 +1,7 @@
-import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import type { GitSyncResult } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
-import { listRepos } from "./extra-repos.js";
+import { discoverRepos } from "./repo-discovery.js";
 
 // A repo's sync outcome for one turn: the git result, plus the two turn-orchestration outcomes that aren't the
 // git op itself — "skipped" (throttled, or a concurrent turn is already syncing this repo) and "error" (the
@@ -20,21 +19,17 @@ export interface RepoSync {
 const lastSync = new Map<string, number>();
 const inFlight = new Set<string>();
 
-// Fetch + guarded fast-forward every EXISTING repo that has a remote (whichever of the three roles are present
-// + every cloned extra repo), so the agent's turn starts on current code. Runs all repos in parallel; each
-// repo's failure is isolated into its outcome so one unreachable remote can't fail the turn or block the others.
-// `throttleMs === 0` forces a fetch (the explicit Sync route); the turn hook passes 60s.
+// Fetch + guarded fast-forward every discovered repo that has a remote, so the agent's turn starts on current
+// code. A neutral sandbox has none until DevOps scaffolds intent + desired-state (and an app is built); a
+// never-created repo simply isn't discovered. Runs all repos in parallel; each repo's failure is isolated into
+// its outcome so one unreachable remote can't fail the turn or block the others. `throttleMs === 0` forces a
+// fetch (the explicit Sync route); the turn hook passes 60s.
 export const syncWorkspaceRepos = async (services: Services, throttleMs: number): Promise<RepoSync[]> => {
-    const extra = await listRepos(services.workspace.repositories);
-    // Only role repos that actually exist. A neutral sandbox has none until DevOps scaffolds intent +
-    // desired-state (and an app is built); a never-created repo is expected state, not a sync failure. Extras
-    // from listRepos are already existence-filtered.
-    const roleDirs = Object.values(services.workspace.repos).filter((dir) => existsSync(dir));
-    const dirs = [...roleDirs, ...extra.map((name) => join(services.workspace.repositories, name))];
+    const repos = await discoverRepos(services.workspace.root);
     const now = Date.now();
     return Promise.all(
-        dirs.map(async (dir): Promise<RepoSync> => {
-            const repo = basename(dir);
+        repos.map(async (repo): Promise<RepoSync> => {
+            const dir = join(services.workspace.root, repo);
             if (inFlight.has(dir) || now - (lastSync.get(dir) ?? 0) < throttleMs) {
                 return { repo, outcome: { status: "skipped" } };
             }

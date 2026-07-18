@@ -45,7 +45,7 @@ const grouped = computed(() =>
 );
 const testsOf = (app: string): string[] => grouped.value.byApp.get(app) ?? [];
 const packageEntries = computed(() => [...grouped.value.packages.entries()]);
-const label = (dir: string): string => (dir === `repositories/${props.repo}` ? `root` : dir.slice(`repositories/${props.repo}/`.length));
+const label = (dir: string): string => (dir === props.repo ? `root` : dir.slice(`${props.repo}/`.length));
 
 // The app's dev-server tmux session (started server-side by startApp).
 const sessionOf = (app: string): string => `panel-${props.repo}--${app}`;
@@ -77,7 +77,7 @@ const runTests = (suffix: string, dirs: readonly string[]): Promise<void> =>
         }
         await postRunTests(
             suffix,
-            dirs.map((dir) => (dir === `repositories/${props.repo}` ? `` : dir.slice(`repositories/${props.repo}/`.length))),
+            dirs.map((dir) => (dir === props.repo ? `` : dir.slice(`${props.repo}/`.length))),
         );
         openFocused(`panel-${props.repo}--${suffix}`);
     });

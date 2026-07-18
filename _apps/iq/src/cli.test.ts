@@ -35,7 +35,7 @@ test("bare query routes to q (defaultCommand)", async () => {
     const { out, exitCode } = await invoke(["createWidget"]);
     expect(exitCode).toBe(0);
     expect(out).toContain("iq: createWidget —");
-    expect(out).toContain("repositories/alpha/src/widget.ts");
+    expect(out).toContain("alpha/src/widget.ts");
 });
 
 test("find: hits → 0, zero hits → 1, bad regex → 2", async () => {
@@ -48,7 +48,7 @@ test("--json emits a single WorkspaceSearchResult document", async () => {
     const { out } = await invoke(["files", "widget", "--json"]);
     const result = JSON.parse(out) as { mode: string; groups: { path: string }[] };
     expect(result.mode).toBe("files");
-    expect(result.groups[0]?.path).toBe("repositories/alpha/src/widget.ts");
+    expect(result.groups[0]?.path).toBe("alpha/src/widget.ts");
 });
 
 test("--ndjson emits one line per group plus a result line", async () => {
@@ -122,11 +122,11 @@ test("zero hits always carry a diagnostic hint", async () => {
 });
 
 test("parseMultiLine: quoted query and per-line flags parse instead of being searched literally", () => {
-    const parsed = parseMultiLine('find "createWidget" --lang ts --in repositories/alpha');
+    const parsed = parseMultiLine('find "createWidget" --lang ts --in alpha');
     expect(parsed.error).toBeUndefined();
     expect(parsed.verb).toBe("find");
     expect(parsed.query).toBe("createWidget");
-    expect(parsed.scope).toEqual({ lang: ["ts"], in: ["repositories/alpha"] });
+    expect(parsed.scope).toEqual({ lang: ["ts"], in: ["alpha"] });
 });
 
 test("parseMultiLine: errors on unknown flags, unknown langs, and bad kinds — never literal-searches them", () => {

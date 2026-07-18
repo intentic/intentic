@@ -9,9 +9,9 @@
  * fields are guaranteed to it. Optional fields carry `| undefined` so zod-inferred wire types assign under
  * exactOptionalPropertyTypes. */
 
-// Daemon-computed content facts for one repository under /work/repositories — evidence over identity: a repo is
-// served because of what it CONTAINS (deploy.config.ts, pnpm-workspace.yaml + turbo.json, .intentic/ui), not
-// what it happens to be named.
+// Daemon-computed content facts for one discovered repository under /work (`repo` is its root-relative dir) —
+// evidence over identity: a repo is served because of what it CONTAINS (deploy.config.ts, pnpm-workspace.yaml
+// + turbo.json, .intentic/ui), not what it happens to be named.
 export interface RepoFacts {
     readonly repo: string;
     // The workspace role this repo dir occupies; absent for extra clones.

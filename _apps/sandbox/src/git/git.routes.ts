@@ -4,9 +4,8 @@ import { gitContract, type RepoChanges } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { repoGitDir } from "../history/history.js";
-import { isValidRepoName, listRepos } from "../workspace/extra-repos.js";
-import { REPO_ROLES, type RepoRole } from "../workspace/workspace.js";
+import { repoGitDir, syncRootExcludes } from "../history/history.js";
+import { discoverRepos, isValidRepoId } from "../workspace/repo-discovery.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { AGENT_GIT_AUTHOR } from "./git.js";
 
@@ -19,10 +18,10 @@ const exists = async (path: string): Promise<boolean> => {
     }
 };
 
-// Per-repo git ops over "root" (the /work repo), the three roles, and extra clones under /work/repositories.
-// An unknown {repo} is NOT_FOUND; a path that escapes the repo dir is BAD_REQUEST; a missing file is
-// NOT_FOUND. `changes` is the Changes panel's aggregated review set; commit/discard take optional `paths` for
-// the per-file actions.
+// Per-repo git ops over "root" (the /work repo) and every discovered repo under it ({repo} is the repo's
+// root-relative dir). An unknown {repo} is NOT_FOUND; a path that escapes the repo dir is BAD_REQUEST; a
+// missing file is NOT_FOUND. `changes` is the Changes panel's aggregated review set; commit/discard take
+// optional `paths` for the per-file actions.
 export const createGitRoutes = (services: Services) => {
     const i = implement(gitContract).$context<OrpcContext>();
     // Rewrite the --separate-git-dir pointer file if the agent deleted it, so every git route self-heals
@@ -36,20 +35,13 @@ export const createGitRoutes = (services: Services) => {
             await writeFile(join(dir, ".git"), `gitdir: ${gitDir}\n`);
         }
     };
-    // "root" and the three roles resolve unconditionally (the sandbox boots empty — status/commit on a
-    // not-yet-scaffolded role fails naturally, matching the prior behavior); an extra clone must exist.
     const repoDir = async (repo: string): Promise<string> => {
         if (repo === "root") {
             await healPointer(repo, services.workspace.root);
             return services.workspace.root;
         }
-        if ((REPO_ROLES as readonly string[]).includes(repo)) {
-            const dir = services.workspace.repos[repo as RepoRole];
-            await healPointer(repo, dir);
-            return dir;
-        }
-        if (isValidRepoName(repo)) {
-            const dir = join(services.workspace.repositories, repo);
+        if (isValidRepoId(repo)) {
+            const dir = join(services.workspace.root, repo);
             if (await exists(dir)) {
                 await healPointer(repo, dir);
                 return dir;
@@ -59,19 +51,16 @@ export const createGitRoutes = (services: Services) => {
     };
     return {
         changes: i.changes.handler(async () => {
+            const repoIds = await discoverRepos(services.workspace.root);
+            // A Changes review right after a clone must not sweep the new repo's files into the root scope —
+            // converge the root excludes on the repo set we're about to scan.
+            await syncRootExcludes(services.config.historyRoot, repoIds);
             const candidates = [
                 { repo: "root", dir: services.workspace.root },
-                ...REPO_ROLES.map((role) => ({ repo: role as string, dir: services.workspace.repos[role] })),
-                ...(await listRepos(services.workspace.repositories)).map((name) => ({
-                    repo: name,
-                    dir: join(services.workspace.repositories, name),
-                })),
+                ...repoIds.map((id) => ({ repo: id, dir: join(services.workspace.root, id) })),
             ];
             const repos: RepoChanges[] = [];
             for (const candidate of candidates) {
-                if (candidate.repo !== "root" && !(await exists(candidate.dir))) {
-                    continue;
-                }
                 try {
                     await healPointer(candidate.repo, candidate.dir);
                     const { branch, changes } = await services.git.changedFiles(candidate.dir);

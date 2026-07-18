@@ -7,7 +7,7 @@
 export type RepoRole = "intent" | "desired-state" | "app";
 export const REPO_ROLES: readonly RepoRole[] = ["intent", "desired-state", "app"];
 
-// Well-known directory names — used as the on-disk dir (relative to the workspace root's `repositories/`)
+// Well-known directory names — used as the on-disk dir (relative to the workspace root)
 // AND as control-plane repo names.
 export const INTENT_DIR = "intent";
 export const TARGET_DIR = "desired-state";

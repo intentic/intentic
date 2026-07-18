@@ -46,13 +46,13 @@ test("extractTarToWorkspace writes every contained entry — former secrets, .gi
         root,
         await tarOf([
             { name: ".env", content: "SECRET" },
-            { name: "repositories/app/.git/config", content: "x" },
+            { name: "app/.git/config", content: "x" },
             { name: "keep.txt", content: "ok" },
         ]),
     );
     // No write floor: a former-secret file lands like any other; `.git` lands so a dropped repo keeps its remote.
     expect(await readFile(join(root, ".env"), "utf8")).toBe("SECRET");
-    expect(await readFile(join(root, "repositories/app/.git/config"), "utf8")).toBe("x");
+    expect(await readFile(join(root, "app/.git/config"), "utf8")).toBe("x");
     expect(await readFile(join(root, "keep.txt"), "utf8")).toBe("ok");
     await rm(root, { recursive: true, force: true });
 });

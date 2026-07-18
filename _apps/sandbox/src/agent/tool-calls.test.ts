@@ -43,7 +43,7 @@ test("toolTarget picks the most specific key across both spelling families", () 
 });
 
 test("toolLocations relativizes absolute paths onto the route space and keeps relative ones", () => {
-    expect(toolLocations({ file_path: "/work/repositories/app/src/a.ts" }, CWD)).toEqual([{ path: "repositories/app/src/a.ts" }]);
+    expect(toolLocations({ file_path: "/work/app/src/a.ts" }, CWD)).toEqual([{ path: "app/src/a.ts" }]);
     expect(toolLocations({ filePath: "docs/readme.md" }, CWD)).toEqual([{ path: "docs/readme.md" }]);
 });
 

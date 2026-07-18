@@ -69,8 +69,8 @@ describe("createPreviewRouteEnsurer", () => {
 describe("ensureAllPreviewRoutes", () => {
     it("ensures every discovered repo (role dirs + extras) — the boot-time self-heal", async () => {
         const root = mkdtempSync(join(tmpdir(), "preview-sweep-"));
-        mkdirSync(join(root, "repositories", "intent"), { recursive: true });
-        mkdirSync(join(root, "repositories", "extra", ".git"), { recursive: true });
+        mkdirSync(join(root, "intent", ".git"), { recursive: true });
+        mkdirSync(join(root, "extra", ".git"), { recursive: true });
         const ensured: string[] = [];
         await ensureAllPreviewRoutes({
             workspace: workspacePaths(root),

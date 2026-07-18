@@ -6,7 +6,7 @@ import { applyEventsPath, isTerminalExit, tailIntenticEvents } from "./apply-eve
 import { runCheckCommand } from "./check-run.js";
 import { INFRA_APPLY_KEY, startInfraApplyJob } from "./infra-apply.js";
 
-// Run the in-sandbox intentic CLI over the repositories dir (where intent/desired-state/app live), streaming
+// Run the in-sandbox intentic CLI over the workspace root (where intent/desired-state/app live), streaming
 // structured lines as they arrive. resolve/plan (the check flow — real shell actions) run VISIBLY in the
 // job-infra-check tmux session with their events tailed from a per-run file; anything else (`deployments`, a
 // polled read) stays on the invisible streamed child — never run polled reads in terminals. A non-zero exit
@@ -21,7 +21,7 @@ export const createIntenticRoutes = (services: Services) => {
                 if (input.args[0] === "resolve" || input.args[0] === "plan") {
                     yield* runCheckCommand(services, input.args, signal);
                 } else {
-                    yield* services.intentic({ args: input.args, cwd: services.workspace.repositories }, signal);
+                    yield* services.intentic({ args: input.args, cwd: services.workspace.root }, signal);
                 }
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);

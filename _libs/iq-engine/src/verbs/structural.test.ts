@@ -24,7 +24,7 @@ const request = (partial: Partial<QueryRequest> & { verb: QueryRequest["verb"]; 
 test("def: finds the definition with signature and a refs hint", async () => {
     const outcome = await engine.run(request({ verb: "def", query: "createWidget" }));
     expect(outcome.exitCode).toBe(0);
-    expect(outcome.result.groups[0]?.path).toBe("repositories/alpha/src/widget.ts");
+    expect(outcome.result.groups[0]?.path).toBe("alpha/src/widget.ts");
     expect(outcome.result.groups[0]?.hits[0]?.text).toContain("export const createWidget");
     expect(outcome.text).toContain("hint: refs: iq refs createWidget");
 });
@@ -33,7 +33,7 @@ test("refs: classifies imports vs calls and drops the definition line", async ()
     const all = await engine.run(request({ verb: "refs", query: "createWidget" }));
     expect(all.exitCode).toBe(0);
     // The def line itself (widget.ts:6) is not a ref.
-    const widgetGroup = all.result.groups.find((group) => group.path === "repositories/alpha/src/widget.ts");
+    const widgetGroup = all.result.groups.find((group) => group.path === "alpha/src/widget.ts");
     expect(widgetGroup).toBeUndefined();
 
     const imports = await engine.run(request({ verb: "refs", query: "createWidget", options: { refKind: "import" } }));
@@ -60,14 +60,14 @@ test("ast: structural pattern with metavariables", async () => {
     expect(outcome.exitCode).toBe(0);
     // Calls only — the parenthesized pattern does not match the def's arrow or bare imports.
     expect(outcome.result.groups.map((group) => group.path).toSorted()).toEqual([
-        "repositories/alpha/src/registry.ts",
-        "repositories/alpha/src/widget.spec.ts",
+        "alpha/src/registry.ts",
+        "alpha/src/widget.spec.ts",
     ]);
     await expect(engine.run(request({ verb: "ast", query: "x", options: {} }))).rejects.toThrow("--lang is required");
 });
 
 test("outline: signatures with doc first-lines, anchored to real lines", async () => {
-    const outcome = await engine.run(request({ verb: "outline", query: "repositories/alpha/src/widget.ts" }));
+    const outcome = await engine.run(request({ verb: "outline", query: "alpha/src/widget.ts" }));
     expect(outcome.exitCode).toBe(0);
     const texts = outcome.result.groups[0]!.hits.map((hit) => hit.text);
     expect(texts.some((text) => text.includes("createWidget") && text.includes("// Builds one widget."))).toBe(true);
@@ -75,12 +75,12 @@ test("outline: signatures with doc first-lines, anchored to real lines", async (
 });
 
 test("context: returns the enclosing region of an anchor and grows with -C", async () => {
-    const outcome = await engine.run(request({ verb: "context", query: "repositories/alpha/src/registry.ts:3" }));
+    const outcome = await engine.run(request({ verb: "context", query: "alpha/src/registry.ts:3" }));
     expect(outcome.exitCode).toBe(0);
     expect(outcome.text).toContain("defaultWidgets");
 
     const grown = await engine.run(
-        request({ verb: "context", query: "repositories/alpha/src/registry.ts:3", render: { budget: 1500, contextLines: 2 } }),
+        request({ verb: "context", query: "alpha/src/registry.ts:3", render: { budget: 1500, contextLines: 2 } }),
     );
     expect(grown.result.groups[0]!.hits.length).toBeGreaterThan(outcome.result.groups[0]!.hits.length);
 
