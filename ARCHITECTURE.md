@@ -102,7 +102,9 @@ survive reconnects. Its subsystems:
   (a procfs scan lists listening ports, an explicit forward maps one onto a fixed slot behind
   `port-<slot>-<id>.<zone>`, and Ctrl+clicking a `localhost:<port>` link in a terminal rides this
   automatically) ([ports/](_apps/sandbox/src/ports/)). Port targets get Host/Origin rewritten to
-  `localhost:<port>` at the proxy, so stock dev-server host checks pass unconfigured.
+  `localhost:<port>` at the proxy, so stock dev-server host checks pass unconfigured. Desktop users can go
+  further: `intentic-sync mirror` binds the same ports on their own machine's localhost (see `@intentic/sync`),
+  which is the only path where a frontend hard-coded to `localhost:<other-port>` works untouched.
 - **Automations** — cron schedules, webhooks (`/automations/:id/fire`), and event listeners
   ([automations/](_apps/sandbox/src/automations/)).
 - **Capabilities** — everything a user adds to the sandbox (connectors, vpn, mcp, plugins, …),
@@ -274,7 +276,7 @@ graph ──► resources ──► engine ──► providers
 | [`@intentic/scaffold`](_libs/scaffold) | lib | Shared workspace scaffold: the intent-repo skeleton + deploy.config managed-region render/parse, used by the CLI's `init` and the sandbox daemon. |
 | [`@intentic/cli`](_apps/cli) | **app** | The runnable product, `bin: intentic`: `init` · `monorepo` · `addApp` · `resolve` · `plan` · `apply` · `destroy` · `adopt` · `restore` · `secrets` · `deployments` · `logs` · `sandboxTunnel` · `hostSshTunnel` ([app.ts](_apps/cli/src/app.ts)). |
 | [`@intentic/sandbox`](_apps/sandbox) | **app** (image) | The per-project multi-agent dev workspace daemon (see [The sandbox daemon](#the-sandbox-daemon)), reached by the browser directly over its own Cloudflare tunnel. |
-| [`@intentic/sync`](_apps/sync) | **app** | Local background agent keeping a directory bidirectionally in sync with a remote sandbox — one HTTP enrollment call, then Mutagen over tunnel SSH. |
+| [`@intentic/sync`](_apps/sync) | **app** | Local background agent keeping a directory bidirectionally in sync with a remote sandbox — one HTTP enrollment call, then Mutagen over tunnel SSH. `intentic-sync mirror` also mirrors the sandbox's workspace ports onto the desktop's localhost (Mutagen TCP forwards driven by the daemon's `/ports`, read with an enrollment-minted token scoped to that one route), so remote dev servers behave exactly like local ones — localhost URLs, cookies, and CORS included. |
 
 The libs + the CLI publish to npm; **`sandbox` ships as a Docker image** to the GitLab Container
 Registry (`registry.gitlab.com/radarsu/intentic/sandbox`) — published by

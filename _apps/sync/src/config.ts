@@ -13,12 +13,17 @@ export const knownHostsPath = join(baseDir, "known_hosts");
 export const binDir = join(baseDir, "bin");
 
 // What `intentic-sync setup` writes and the other commands read back. sshHostname is what the daemon returned
-// on enrollment — the tunnel host Mutagen reaches; sandboxId namespaces the ssh alias + Mutagen session.
+// on enrollment — the tunnel host Mutagen reaches; sandboxId namespaces the ssh alias + Mutagen sessions.
+// syncToken is the enrollment-minted credential for the daemon's GET /ports (what `mirror` reconciles
+// against); absent when the daemon predates port mirroring. mirroredPorts is the set of Mutagen forward
+// sessions the last `mirror` run left alive — the reconcile baseline, so vanished ports get terminated.
 export interface SyncConfig {
     readonly sandboxUrl: string;
     readonly sandboxId: string;
     readonly sshHostname: string;
     readonly localDir: string;
+    readonly syncToken?: string;
+    readonly mirroredPorts?: readonly number[];
 }
 
 export const readConfig = async (): Promise<SyncConfig> => JSON.parse(await readFile(configPath, "utf8")) as SyncConfig;

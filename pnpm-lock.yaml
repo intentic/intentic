@@ -876,6 +876,9 @@ importers:
 
   _apps/sync:
     dependencies:
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_libs/sandbox-contract
       '@stricli/core':
         specifier: 'catalog:'
         version: 1.2.8

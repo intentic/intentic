@@ -1083,6 +1083,9 @@ export const PanelRepoParamSchema = z.object({ repo: z.string() });
 
 export const PortSummarySchema = z.object({
     port: z.number(),
+    // The loopback address the listener actually answers at inside the sandbox — a `localhost` bind can land
+    // on ::1 only (Vite). The preview proxy and the desktop mirror (Mutagen forward) both dial this.
+    host: z.enum(["127.0.0.1", "::1"]),
     // Which bucket the Ports view files it under: `workspace` = user-run (dev servers in repos, terminal
     // processes, published container ports) — the previewable set; `system` = the sandbox's own machinery
     // (agent runtimes, translator, dockerd, sshd), listed for transparency but nobody previews it.

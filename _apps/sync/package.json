@@ -26,6 +26,7 @@
         "test:watch": "vitest"
     },
     "dependencies": {
+        "@intentic/sandbox-contract": "workspace:*",
         "@stricli/core": "catalog:",
         "tslib": "catalog:"
     },

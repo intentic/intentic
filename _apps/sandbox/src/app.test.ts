@@ -455,14 +455,15 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
         ),
     );
     expect(await client.ports.list()).toEqual({
-        ports: [{ port: 3000, kind: "workspace", pid: 7, command: "vite", cwd: "/work/app", forwarded: false }],
+        ports: [{ port: 3000, host: "127.0.0.1", kind: "workspace", pid: 7, command: "vite", cwd: "/work/app", forwarded: false }],
     });
 
-    await portForwards.forward(3000);
+    await portForwards.forward(3000, "127.0.0.1");
     expect(await client.ports.list()).toEqual({
         ports: [
             {
                 port: 3000,
+                host: "127.0.0.1",
                 kind: "workspace",
                 pid: 7,
                 command: "vite",
@@ -498,7 +499,7 @@ test("ports.forward maps a listener onto a slot, mints its route label, and refu
     // Unforward frees the slot; the port reads unforwarded again.
     expect(await client.ports.unforward({ port: 3000 })).toEqual({ ok: true });
     // No cwd and not a known sandbox binary -> unattributable, filed under system.
-    expect((await client.ports.list()).ports).toEqual([{ port: 3000, kind: "system", pid: 7, command: "vite", forwarded: false }]);
+    expect((await client.ports.list()).ports).toEqual([{ port: 3000, host: "127.0.0.1", kind: "system", pid: 7, command: "vite", forwarded: false }]);
 });
 
 test("ports.forward on a loopback sandbox (no zone/token) still maps the slot but returns no URL", async () => {
@@ -759,6 +760,36 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
     // An explicit takeover replaces the key; the status route now reports the new holder.
     expect((await enroll(KEY_B, { "x-intentic-sync-takeover": "1" })).status).toBe(200);
     expect(await (await app.request("/system/sync")).json()).toMatchObject({ enrolled: true, syncingFrom: "machine-b" });
+});
+
+test("the enrollment-minted sync token reads /ports and nothing else", async () => {
+    process.env.HOME = mkdtempSync(join(tmpdir(), "sync-token-home-"));
+    // Bearer auth rejects everything, so a 200 proves the sync-token branch authorized the read.
+    const app = createApp(
+        services({
+            auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
+            config: { ...baseConfig, connectToken: "token", sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
+            scanPorts: async () => [{ port: 3000, host: "127.0.0.1" }],
+        }),
+    );
+    const enrolled = await app.request("/system/authorized-key", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-intentic-pair": mintPairing().token },
+        body: JSON.stringify({ key: "ssh-ed25519 AAAAA laptop" }),
+    });
+    expect(enrolled.status).toBe(200);
+    const { syncToken } = (await enrolled.json()) as { syncToken: string };
+    expect(syncToken).toMatch(/^ist_/);
+
+    const withToken = (path: string, method = "GET") => app.request(path, { method, headers: { "x-intentic-sync": syncToken } });
+    const list = await withToken("/ports");
+    expect(list.status).toBe(200);
+    expect(await list.json()).toEqual({ ports: [{ port: 3000, host: "127.0.0.1", kind: "system", forwarded: false }] });
+    // Out of scope (403): any other route, and even the ports MUTATIONS — the token is read-only by design.
+    expect((await withToken("/panels")).status).toBe(403);
+    expect((await withToken("/ports/forward", "POST")).status).toBe(403);
+    // A bogus token on the in-scope route is plain unauthorized.
+    expect((await app.request("/ports", { headers: { "x-intentic-sync": "ist_bogus" } })).status).toBe(401);
 });
 
 test("POST /automations/:id/fire skips bearer auth, enforces the automation token, and records a run", async () => {

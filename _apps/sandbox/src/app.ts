@@ -14,6 +14,7 @@ import { enrollHost } from "./inventory/enroll-host.js";
 import { createRouter } from "./router.js";
 import {
     clearAuthorizedKeys,
+    clearSyncToken,
     consumePairing,
     currentSyncKey,
     enrollAuthorizedKey,
@@ -21,8 +22,10 @@ import {
     isValidAuthorizedKey,
     isValidPairing,
     mintPairing,
+    mintSyncToken,
     syncingFrom,
     syncSshHostname,
+    verifySyncToken,
 } from "./platform/sync.js";
 import { approveEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
@@ -126,6 +129,19 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                     return c.json({ error: "bridge token not valid for this route" }, 403);
                 }
                 if (!(await services.bridgeTokens.verify(bridge))) {
+                    return c.json({ error: "unauthorized" }, 401);
+                }
+                return next();
+            }
+            // The desktop-sync agent presents its enrollment-minted token to read the listening-ports list —
+            // the ONE route port mirroring needs (`intentic-sync mirror` drives Mutagen forwards from it).
+            // Scope check first and explicit, like the bridge: an out-of-scope route is a clear 403.
+            const sync = c.req.header("x-intentic-sync");
+            if (sync !== undefined && sync !== "") {
+                if (c.req.method !== "GET" || c.req.path !== "/ports") {
+                    return c.json({ error: "sync token not valid for this route" }, 403);
+                }
+                if (!(await verifySyncToken(sync))) {
                     return c.json({ error: "unauthorized" }, 401);
                 }
                 return next();
@@ -507,11 +523,14 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.json({ error: "sync already active", machine: current.split(" ")[2] }, 423);
         }
         await enrollAuthorizedKey(key);
+        // The ports-read credential for `intentic-sync mirror` — rotated with every enrollment, so a takeover
+        // invalidates the ousted machine's token along with its key.
+        const syncToken = await mintSyncToken();
         // Burn the pairing token only on success, so a transient failure leaves it usable for a retry.
         if (pair !== undefined) {
             consumePairing(pair);
         }
-        return c.json({ ok: true, sshHostname });
+        return c.json({ ok: true, sshHostname, syncToken });
     });
     app.get("/system/sync", async (c) => {
         const denied = await ownerDenied(c);
@@ -535,6 +554,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return denied;
         }
         await clearAuthorizedKeys();
+        await clearSyncToken();
         return c.json({ ok: true });
     });
 

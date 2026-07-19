@@ -11,6 +11,28 @@ const CLOUDFLARED_VERSION = "2026.6.1";
 // The Mutagen session name (letters/digits/dashes) so `mutagen sync {list,pause,resume,terminate}` can target it.
 export const sessionName = (sandboxId: string): string => `intentic-${sanitizeId(sandboxId)}`;
 
+// One port-mirror forward session per port, deterministically named so `mirror` can reconcile (terminate a
+// vanished port's session, recreate a live one) without querying Mutagen's session list.
+export const forwardSessionName = (sandboxId: string, port: number): string => `intentic-fwd-${sanitizeId(sandboxId)}-${port}`;
+
+// `mutagen forward create` args: bind the SAME port on the local loopback and pipe it to the sandbox listener
+// at its recorded loopback address — `host` is the daemon-reported dial host, because a `localhost` bind inside
+// the sandbox can land on ::1 only (Vite), where dialing 127.0.0.1 is connection-refused. TCP-level, so a
+// dev server's TLS passes through untouched and the local browser sees exactly what a local dev server serves.
+export const mutagenForwardArgs = (args: {
+    readonly name: string;
+    readonly port: number;
+    readonly alias: string;
+    readonly host: string;
+}): string[] => [
+    "forward",
+    "create",
+    "--name",
+    args.name,
+    `tcp:127.0.0.1:${args.port}`,
+    `${args.alias}:tcp:${args.host.includes(":") ? `[${args.host}]` : args.host}:${args.port}`,
+];
+
 // `mutagen sync create` args: two-way-safe (flags conflicts rather than clobber), our ignore set, and
 // neighboring staging on the remote so a huge file stages on the same filesystem as /work (atomic rename, no
 // cross-fs 2× copy). local first, then user@alias:/work. The sync mode is pinned explicitly — Mutagen's default

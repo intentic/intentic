@@ -1,5 +1,5 @@
-import { randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -80,6 +80,33 @@ export const syncingFrom = async (): Promise<string | undefined> => (await curre
 // Revoke desktop sync: drop all enrolled keys (the UI's Disable). Removing the key halts Mutagen's SSH transport.
 export const clearAuthorizedKeys = async (): Promise<void> => {
     await writeFile(authorizedKeysPath(), "", { mode: 0o600 }).catch(() => {});
+};
+
+// The sync token accompanying the enrolled key: the agent's credential for the ONE daemon route mirroring
+// needs (GET /ports — see the bearer middleware). Minted fresh at every enrollment — so a takeover rotates it
+// and the ousted machine's token dies with its key — and stored as a digest, sharing the key's lifetime and
+// trust root (the owner-minted pairing). Raw tokens never touch disk.
+const syncTokenDigestPath = (): string => join(homedir(), ".intentic-sync-token.digest");
+const digestOf = (token: string): string => createHash("sha256").update(token).digest("hex");
+
+export const mintSyncToken = async (): Promise<string> => {
+    const token = `ist_${randomBytes(32).toString("base64url")}`;
+    await writeFile(syncTokenDigestPath(), digestOf(token), { mode: 0o600 });
+    return token;
+};
+
+export const verifySyncToken = async (presented: string): Promise<boolean> => {
+    const stored = (await readFile(syncTokenDigestPath(), "utf8").catch(() => "")).trim();
+    if (stored === "") {
+        return false;
+    }
+    const digest = digestOf(presented);
+    return stored.length === digest.length && timingSafeEqual(Buffer.from(stored), Buffer.from(digest));
+};
+
+// Disable (DELETE /system/authorized-key) revokes the token alongside the key.
+export const clearSyncToken = async (): Promise<void> => {
+    await rm(syncTokenDigestPath(), { force: true });
 };
 
 // The SSH hostname the sandbox tunnel exposes for Mutagen — derived via sandboxIdFromToken (the same digest
