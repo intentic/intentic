@@ -58,6 +58,12 @@ else
     CONFIG="{\"version\":\"${VERSION}\",\"bundle\":{\"createUpdaterArtifacts\":false}}"
 fi
 
+# The AppImage bundler runs linuxdeploy (itself an AppImage), which FUSE-mounts by default — CI
+# containers have no FUSE, so make it self-extract instead. NO_STRIP because linuxdeploy's bundled
+# strip predates RELR relocations and distro libs ship pre-stripped anyway.
+export APPIMAGE_EXTRACT_AND_RUN=1
+export NO_STRIP=true
+
 # Stale bundles from a previous (cached) build would make the glob-copies below ambiguous.
 LINUX_BUNDLES="$TAURI_DIR/target/release/bundle"
 WIN_BUNDLES="$TAURI_DIR/target/x86_64-pc-windows-msvc/release/bundle"

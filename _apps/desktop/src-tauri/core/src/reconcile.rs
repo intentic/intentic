@@ -14,6 +14,7 @@ pub struct ReconcileContext {
 pub fn probe(context: &ReconcileContext) -> EnvironmentReport {
     #[cfg(target_os = "linux")]
     {
+        let _ = context;
         crate::linux::probe()
     }
     #[cfg(target_os = "windows")]

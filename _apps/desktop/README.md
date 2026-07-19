@@ -91,3 +91,9 @@ Dev: `pnpm --filter @intentic-app/desktop dev` (launcher UI only) or `pnpm --fil
 tauri:dev` (full app; point the workspace at a local web via `INTENTIC_APP_URL=https://localhost:47145`,
 trusting the `_tools/localhost-https` CA system-wide). Linux builds need
 `webkit2gtk-4.1`/`libappindicator3`/`librsvg` dev packages; the core crate alone does not.
+
+Local download links: on a localhost platform the Setup page's "Get it" links point at the local site
+(`http://localhost:4321/desktop/…`) instead of intentic.dev. `pnpm --filter @intentic-app/desktop
+stage:downloads` (add `-- --windows` for the NSIS cross-build) builds installers from the checkout and
+stages them into `_apps/site/public/desktop/` (gitignored); the site's dev server then serves them, and
+the deployed worker prefers the same asset paths before falling back to the release redirect.

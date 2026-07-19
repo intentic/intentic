@@ -16,24 +16,32 @@ const SCRIPTS: Record<string, string> = {
     "/update": "update.sh",
 };
 
-// Desktop-app downloads: stable vanity URLs redirecting to the newest release's assets (the same
-// permalink convention sync.sh uses for its binaries). Names match release-build.sh's un-versioned
-// artifact names so these never need a bump.
+// Desktop-app downloads: stable vanity URLs. A locally-staged installer in public/desktop/ (see
+// _apps/desktop/scripts/stage-local-downloads.sh — gitignored, so deploys normally ship none) is
+// served directly; otherwise redirect to the newest release's asset (the same permalink convention
+// sync.sh uses for its binaries). Names match release-build.sh's un-versioned artifact names so
+// nothing here ever needs a version bump.
 const RELEASE_DOWNLOADS = "https://gitlab.com/radarsu/intentic/-/releases/permalink/latest/downloads";
-const DESKTOP_DOWNLOADS: Record<string, string> = {
-    "/desktop": `${RELEASE_DOWNLOADS}/desktop/Intentic-setup.exe`,
-    "/desktop/windows": `${RELEASE_DOWNLOADS}/desktop/Intentic-setup.exe`,
-    "/desktop/linux": `${RELEASE_DOWNLOADS}/desktop/Intentic.AppImage`,
-    "/desktop/deb": `${RELEASE_DOWNLOADS}/desktop/Intentic.deb`,
-    "/desktop/rpm": `${RELEASE_DOWNLOADS}/desktop/Intentic.rpm`,
+const DESKTOP_FILES: Record<string, string> = {
+    "/desktop": "Intentic-setup.exe",
+    "/desktop/windows": "Intentic-setup.exe",
+    "/desktop/linux": "Intentic.AppImage",
+    "/desktop/deb": "Intentic.deb",
+    "/desktop/rpm": "Intentic.rpm",
 };
 
 export default {
     async fetch(request: Request, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
         const url = new URL(request.url);
-        const download = DESKTOP_DOWNLOADS[url.pathname];
+        const download = DESKTOP_FILES[url.pathname];
         if (download !== undefined) {
-            return Response.redirect(download, 302);
+            const staged = await env.ASSETS.fetch(new Request(new URL(`/desktop/${download}`, url), request));
+            if (staged.ok) {
+                const headers = new Headers(staged.headers);
+                headers.set("content-disposition", `attachment; filename="${download}"`);
+                return new Response(staged.body, { status: staged.status, headers });
+            }
+            return Response.redirect(`${RELEASE_DOWNLOADS}/desktop/${download}`, 302);
         }
         const file = SCRIPTS[url.pathname];
         if (file === undefined) {

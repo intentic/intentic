@@ -1,3 +1,5 @@
+import { environment } from "./environment";
+
 /* The desktop app (\_apps/desktop) marks its workspace webview by injecting `__INTENTIC_DESKTOP__`
  * via a Tauri initialization script. The handoff channel is deliberately NOT IPC: the app's window
  * intercepts `intentic://` navigations in Rust, so the same link works from the in-app webview AND
@@ -40,10 +42,26 @@ export const desktopSetupLink = (args: DesktopSetupArgs): string => {
     return `intentic://setup?${params.toString()}`;
 };
 
-/* Stable download links, served as GitLab "latest release" permalinks via intentic.dev vanity URLs. */
+/* Download links, chosen by build like scriptCommand.ts:
+ *   • deploy (production): the intentic.dev vanity URLs — the site worker serves a locally-staged
+ *     installer when one exists in its assets, else redirects to the latest release's asset.
+ *   • local dev: the site's own dev server (`pnpm --filter @intentic-dev/site dev`, port 4321),
+ *     which serves _apps/site/public/ at the root — stage installers into public/desktop/ with
+ *     `pnpm --filter @intentic-app/desktop stage:downloads`, so the download is your local build.
+ * File names are the release-stable ones from _apps/desktop/scripts/release-build.sh. */
+const DESKTOP_FILES = {
+    windows: { vanity: `windows`, file: `Intentic-setup.exe` },
+    linuxAppImage: { vanity: `linux`, file: `Intentic.AppImage` },
+    linuxDeb: { vanity: `deb`, file: `Intentic.deb` },
+    linuxRpm: { vanity: `rpm`, file: `Intentic.rpm` },
+} as const;
+
+const downloadUrl = ({ vanity, file }: { vanity: string; file: string }): string =>
+    environment.production ? `https://intentic.dev/desktop/${vanity}` : `http://localhost:4321/desktop/${file}`;
+
 export const DESKTOP_DOWNLOADS = {
-    windows: `https://intentic.dev/desktop/windows`,
-    linuxAppImage: `https://intentic.dev/desktop/linux`,
-    linuxDeb: `https://intentic.dev/desktop/deb`,
-    linuxRpm: `https://intentic.dev/desktop/rpm`,
+    windows: downloadUrl(DESKTOP_FILES.windows),
+    linuxAppImage: downloadUrl(DESKTOP_FILES.linuxAppImage),
+    linuxDeb: downloadUrl(DESKTOP_FILES.linuxDeb),
+    linuxRpm: downloadUrl(DESKTOP_FILES.linuxRpm),
 } as const;

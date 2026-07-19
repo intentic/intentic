@@ -778,6 +778,17 @@ watch(
                             <a :href="DESKTOP_DOWNLOADS.linuxDeb" class="text-link hover:underline">.deb</a>
                             <a :href="DESKTOP_DOWNLOADS.linuxRpm" class="text-link hover:underline">.rpm</a>
                         </span>
+                        <!-- Local dev: DESKTOP_DOWNLOADS points at the local site's /desktop/ assets — the links
+                             download YOUR build once staged, mirroring the dev sandbox-image story above. -->
+                        <p v-if="platformUrlOverride" class="flex items-center gap-2 text-warning">
+                            <Icon name="box" class="shrink-0" />
+                            <span
+                                >Local dev: these links serve from your local site — stage installers with
+                                <code>pnpm --filter @intentic-app/desktop stage:downloads</code>, then run the site (<code
+                                    >pnpm --filter @intentic-dev/site dev</code
+                                >).</span
+                            >
+                        </p>
                     </div>
                 </template>
             </StepSection>

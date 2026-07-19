@@ -55,13 +55,16 @@ pub fn shell_escape(value: &str) -> String {
 }
 
 /// Suppress the console window flash spawned processes cause on Windows GUI apps.
+#[cfg(windows)]
 pub fn quiet(mut command: Command) -> Command {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
+#[cfg(not(windows))]
+pub fn quiet(command: Command) -> Command {
     command
 }
 
