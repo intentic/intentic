@@ -45,6 +45,7 @@ const {
     filter = ``,
     selectedPath,
     manageableDirs = new Set<string>(),
+    repoDirs = new Set<string>(),
 } = defineProps<{
     tree: readonly WorkspaceTreeEntry[];
     rootTruncated?: boolean;
@@ -53,8 +54,12 @@ const {
     // Directory paths that have a management surface (a directory-surface extension serves the repo). Activating
     // such a row also opens its operator tab, and the row shows a cog affordance.
     manageableDirs?: ReadonlySet<string>;
+    // Directory paths that are git repos (nested under /work). Each shows a git-history affordance that opens
+    // its commit graph as a tab — the per-repo entry point for the graph (root's is the Changes header). This
+    // is where the multi-repo axis surfaces: a repo nested in the workspace gets its own history right here.
+    repoDirs?: ReadonlySet<string>;
 }>();
-const emit = defineEmits<{ openFile: [path: string]; openDirectory: [path: string] }>();
+const emit = defineEmits<{ openFile: [path: string]; openDirectory: [path: string]; openGraph: [path: string] }>();
 
 const {
     saveText,
@@ -283,6 +288,13 @@ const clipPaths = (): string[] => (selection.value.size > 0 ? [...selection.valu
 const onCogClick = (entry: WorkspaceTreeEntry): void => {
     selectSingle(entry.path);
     emit(`openDirectory`, entry.path);
+};
+
+// The git-history affordance on a repo dir row: open that repo's commit graph as a tab — the same shape as the
+// cog (select the row, open the surface), one level over at the sibling per-repo action.
+const onGraphClick = (entry: WorkspaceTreeEntry): void => {
+    selectSingle(entry.path);
+    emit(`openGraph`, entry.path);
 };
 
 const onRowClick = (event: MouseEvent, row: Row): void => {
@@ -748,6 +760,16 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         :spin="true"
                         aria-hidden="true"
                         class="shrink-0 text-2xs text-subtle"
+                    />
+                    <!-- Git repo: a git-history affordance opens its commit graph as a tab — the per-repo entry
+                         point, sibling to the management cog (root's graph opens from the Changes header). -->
+                    <Icon
+                        v-if="row.entry.type === 'dir' && repoDirs.has(row.entry.path)"
+                        name="sitemap"
+                        aria-hidden="true"
+                        class="shrink-0 cursor-pointer text-2xs text-subtle hover:text-content"
+                        v-tooltip.right="'Open git history'"
+                        @click.stop="onGraphClick(row.entry)"
                     />
                     <!-- Managed repo: its cog opens the management surface as a tab (row click only expands). -->
                     <Icon

@@ -15,6 +15,7 @@ import { useChat } from "../../composables/chat/useChat";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { reportOpenPath } from "../../composables/usePresence";
 import { useChanges } from "../../composables/workspace/useChanges";
+import { useRepos } from "../../composables/workspace/useRepos";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute";
 import { useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
@@ -27,6 +28,7 @@ import DirectoryUiHost from "./DirectoryUiHost.vue";
 import FileBreadcrumb from "./FileBreadcrumb.vue";
 import FileTabs from "./FileTabs.vue";
 import FileViewer from "./viewers/FileViewer.vue";
+import GitGraph from "./GitGraph.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import MarkdownViewer from "./viewers/MarkdownViewer.vue";
 import ReviewPanel from "./ReviewPanel.vue";
@@ -46,6 +48,9 @@ const { tree, truncated, error, isLoading, refetch, entry, expanded, collapseAll
 const { files: uploadFiles, scanning: uploadScanning, skippedNotice: uploadSkipped, enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
+// Every git repo under /work (root + nested). Marks the tree rows that get a git-history affordance, and feeds
+// the graph's repo switcher — the multi-repo axis of the workspace ("root is a repo; it may contain repos").
+const { repoDirs } = useRepos();
 const router = useRouter();
 
 // The active nudge: once a turn leaves uncommitted changes, show a banner until the user opens Changes or
@@ -84,7 +89,7 @@ const {
 } = useWorkspaceSearch(filter, contentMode);
 // The open tabs live in the useWorkspaceTabs singleton (the chat pushes plan previews in from the shell, and
 // tabs survive navigation); this component owns closing — the dirty-confirm dialog and edit-buffer forget.
-const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, openDirectory, selectTab } = useWorkspaceTabs();
+const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, openDirectory, openGraph, selectTab } = useWorkspaceTabs();
 // Mirror the active file into the URL (`/workspace/<path>`) so a reload / shared link reopens it.
 useWorkspaceRoute();
 
@@ -345,7 +350,7 @@ const endResize = (event: PointerEvent): void => {
                 <div class="flex h-8 shrink-0 items-center border-b border-line px-1.5">
                     <Segmented v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
                 </div>
-                <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" @open-diff="openDiff" />
+                <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" @open-diff="openDiff" @open-graph="openGraph" />
                 <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" />
                 <!-- Search header: input hero on row 1; mode switch + ignored-scope toggle on row 2. One `filter`
                      ref, two scopes (name = instant client-side tree filter, content = debounced daemon search). The
@@ -436,8 +441,10 @@ const endResize = (event: PointerEvent): void => {
                         :filter="filter"
                         :selected-path="openPath"
                         :manageable-dirs="manageableDirs"
+                        :repo-dirs="repoDirs"
                         @open-file="openFile"
                         @open-directory="openDirectory"
+                        @open-graph="openGraph"
                     />
                 </div>
                 <div
@@ -522,6 +529,9 @@ const endResize = (event: PointerEvent): void => {
                 </div>
                 <div v-else-if="activeTab?.kind === 'directory'" class="min-h-0 flex-1">
                     <DirectoryOperator :dir="activeTab.dir" />
+                </div>
+                <div v-else-if="activeTab?.kind === 'graph'" class="min-h-0 flex-1">
+                    <GitGraph :repo="activeTab.repo" @open-diff="openDiff" @switch-repo="openGraph" />
                 </div>
                 <WorkspaceEmptyState v-else @pick="fileInput?.click()" />
                 <!-- Drop-to-root hint over the viewer, shown only for external file drags (an internal move is

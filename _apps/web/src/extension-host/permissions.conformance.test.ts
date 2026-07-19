@@ -31,17 +31,49 @@ interface Call {
     readonly path: string;
 }
 
+// The balanced argument list of a call, starting at its opening `(` — depth-counted so nested calls in the
+// options object (JSON.stringify(...), a helper call) don't truncate it. Scopes method detection to exactly one
+// call's args instead of a fixed-size window that could bleed into the next call.
+const callArgs = (text: string, openParen: number): string => {
+    let depth = 0;
+    for (let i = openParen; i < text.length; i++) {
+        if (text[i] === "(") depth++;
+        else if (text[i] === ")" && --depth === 0) return text.slice(openParen + 1, i);
+    }
+    return text.slice(openParen + 1);
+};
+
+// Method-producing request helpers defined in the file: `const jsonPost = (...) => ({ method: "POST", ... })`.
+// A call site that passes `jsonPost(...)` as its options carries that method even though no literal `method:`
+// appears at the call — resolve it here rather than defaulting to GET.
+const scanMethodHelpers = (text: string): Map<string, string> => {
+    const helpers = new Map<string, string>();
+    const re = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::[^=]*)?=>\s*\(?\{[^}]*?method:\s*[`'"]([A-Za-z]+)/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(text)) !== null) {
+        helpers.set(match[1] ?? "", match[2] ?? "");
+    }
+    return helpers;
+};
+
 // Every api.sandbox.request/json (or host().sandbox.*) call in a source file: its first string/template-literal
-// path arg (normalized — query stripped, `${…}` → `*`) and the method from the following options object (GET default).
-const scanCalls = (text: string): Call[] => {
+// path arg (normalized — query stripped, `${…}` → `*`) and its method — a literal `method:` in the options
+// object, else a method-producing helper passed as the options, else GET.
+const scanCalls = (text: string, helpers: Map<string, string>): Call[] => {
     const calls: Call[] = [];
     const re = /sandbox\.(?:json|request)(?:<[^>]*>)?\(\s*[`'"]([^`'"]*)/g;
     let match: RegExpExecArray | null;
     while ((match = re.exec(text)) !== null) {
         const raw = match[1] ?? "";
         const path = raw.split("?")[0]?.replace(/\$\{[^}]*\}/g, "*") ?? "";
-        const window = text.slice(match.index, match.index + 300);
-        const method = /method:\s*[`'"]([A-Za-z]+)/.exec(window)?.[1] ?? "GET";
+        // The call's opening `(` sits just before the path's quote (regex allows only `\s*` between them). Anchor
+        // there rather than lastIndexOf("(") — a path like `/x/${encodeURIComponent(id)}` carries its own parens.
+        let paren = match[0].length - raw.length - 2;
+        while (paren > 0 && /\s/.test(match[0][paren] ?? "")) paren--;
+        const args = callArgs(text, match.index + paren);
+        const literal = /method:\s*[`'"]([A-Za-z]+)/.exec(args)?.[1];
+        const helper = literal ? undefined : [...helpers].find(([helperName]) => new RegExp(`\\b${helperName}\\s*\\(`).test(args));
+        const method = literal ?? helper?.[1] ?? "GET";
         calls.push({ method, path });
     }
     return calls;
@@ -50,7 +82,10 @@ const scanCalls = (text: string): Call[] => {
 describe.each(BUILTINS)("%s declares every sandbox route it calls", (name) => {
     const manifest = ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(extensionsRoot, name, "intentic-extension.json"), "utf8")));
     const permissions = manifest.permissions?.sandbox ?? [];
-    const calls = sourceFiles(join(extensionsRoot, name, "src")).flatMap((file) => scanCalls(readFileSync(file, "utf8")));
+    const calls = sourceFiles(join(extensionsRoot, name, "src")).flatMap((file) => {
+        const text = readFileSync(file, "utf8");
+        return scanCalls(text, scanMethodHelpers(text));
+    });
 
     test("makes at least one sandbox call (scanner sanity)", () => {
         expect(calls.length).toBeGreaterThan(0);
