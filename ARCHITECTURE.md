@@ -115,7 +115,12 @@ survive reconnects. Its subsystems:
   ([auth.ts](_apps/sandbox/src/auth/auth.ts)).
 - **Workspace file service** — search, tree, watch, diff, and chunked multi-GB uploads
   ([workspace/](_apps/sandbox/src/workspace/)); desktop sync is Mutagen over tunnel SSH
-  (`ssh-<id>.<zone>`, paired via `@intentic/sync`).
+  (`ssh-<id>.<zone>`, paired via `@intentic/sync`). Enrollment ([platform/sync.ts](_apps/sandbox/src/platform/sync.ts))
+  carries a **mode**: `sync` (bidirectional file sync, SINGLE-HOLDER — two machines two-way-syncing `/work`
+  would race) or `mirror` (port mirroring only, UNLIMITED — forwards are per-machine and independent, so every
+  collaborator mirrors the ports to their own localhost at once). The **owner** may enroll either; a **member**
+  is capped to `mirror` at pairing-mint. Each enrolled machine gets its own key in `authorized_keys` and its own
+  `/ports`-scoped sync token, so machines revoke independently (self-revoke on uninstall; owner clears all).
 - **History** — git snapshots every 60 s + per agent turn, on a `/history` volume mounted *outside*
   `/work` so an agent `rm -rf` can't reach it ([history/](_apps/sandbox/src/history/)).
 - **Environment overlays** — agent-proposed Dockerfile layers, applied only after owner approval
@@ -277,7 +282,7 @@ graph ──► resources ──► engine ──► providers
 | [`@intentic/scaffold`](_libs/scaffold) | lib | Shared workspace scaffold: the intent-repo skeleton + deploy.config managed-region render/parse, used by the CLI's `init` and the sandbox daemon. |
 | [`@intentic/cli`](_apps/cli) | **app** | The runnable product, `bin: intentic`: `init` · `monorepo` · `addApp` · `resolve` · `plan` · `apply` · `destroy` · `adopt` · `restore` · `secrets` · `deployments` · `logs` · `sandboxTunnel` · `hostSshTunnel` ([app.ts](_apps/cli/src/app.ts)). |
 | [`@intentic/sandbox`](_apps/sandbox) | **app** (image) | The per-project multi-agent dev workspace daemon (see [The sandbox daemon](#the-sandbox-daemon)), reached by the browser directly over its own Cloudflare tunnel. |
-| [`@intentic/sync`](_apps/sync) | **app** | Local background agent keeping a directory bidirectionally in sync with a remote sandbox — one HTTP enrollment call, then Mutagen over tunnel SSH. `setup` also auto-starts a **port-mirror watcher** (a detached, pidfile-guarded loop) that binds the sandbox's workspace ports onto the desktop's SAME localhost ports via Mutagen TCP forwards, polling the daemon's `/ports` (read with an enrollment-minted token scoped to that one route) so newly-started dev servers appear automatically, and **registers it for login autostart** (launchd / Task Scheduler / XDG autostart) so it resumes after a reboot. Remote dev servers then behave exactly like local ones — localhost URLs, cookies, and CORS included — with no command to run, ever. |
+| [`@intentic/sync`](_apps/sync) | **app** | Local background agent keeping a directory bidirectionally in sync with a remote sandbox — one HTTP enrollment call, then Mutagen over tunnel SSH. The daemon grants a **mode** at enrollment (file `sync`, or `mirror`-only for collaborators — see the workspace file service above), and the agent adapts: `sync` runs file sync + mirroring, `mirror` skips file sync and only forwards ports. `setup` auto-starts a **port-mirror watcher** (a detached, pidfile-guarded loop) that binds the sandbox's workspace ports onto the desktop's SAME localhost ports via Mutagen TCP forwards, polling the daemon's `/ports` (read with the enrollment-minted, `/ports`-scoped sync token) so newly-started dev servers appear automatically, and **registers it for login autostart** (launchd / Task Scheduler / XDG autostart) so it resumes after a reboot. Remote dev servers then behave exactly like local ones — localhost URLs, cookies, and CORS included — with no command to run, ever, and **every collaborator can mirror the same sandbox at once**. |
 
 The libs + the CLI publish to npm; **`sandbox` ships as a Docker image** to the GitLab Container
 Registry (`registry.gitlab.com/radarsu/intentic/sandbox`) — published by

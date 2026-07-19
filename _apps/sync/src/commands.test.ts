@@ -9,21 +9,21 @@ afterEach(() => {
 });
 
 describe("enrollKey", () => {
-    it("retries through transient tunnel-warmup 502s, then returns the ssh hostname + sync token", async () => {
+    it("retries through transient tunnel-warmup 502s, then returns the ssh hostname + token + granted mode", async () => {
         const fetchMock = vi
             .fn<typeof fetch>()
             .mockResolvedValueOnce(new Response("bad gateway", { status: 502 }))
             .mockResolvedValueOnce(new Response("bad gateway", { status: 502 }))
-            .mockResolvedValueOnce(jsonResponse(200, { ok: true, sshHostname: "ssh-abc.example.dev", syncToken: "ist_tok" }));
+            .mockResolvedValueOnce(jsonResponse(200, { ok: true, sshHostname: "ssh-abc.example.dev", syncToken: "ist_tok", mode: "mirror" }));
         vi.stubGlobal("fetch", fetchMock);
 
         const enrolled = await enrollKey("https://sandbox-abc.example.dev/", "pair-token", "ssh-ed25519 AAAA", { delayMs: 0 });
 
-        expect(enrolled).toEqual({ sshHostname: "ssh-abc.example.dev", syncToken: "ist_tok" });
+        expect(enrolled).toEqual({ sshHostname: "ssh-abc.example.dev", syncToken: "ist_tok", mode: "mirror" });
         expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
-    it("retries when fetch throws (host not resolving yet), and tolerates a daemon with no sync token", async () => {
+    it("retries when fetch throws, and defaults mode to sync for a daemon that omits it (predates modes)", async () => {
         const fetchMock = vi
             .fn<typeof fetch>()
             .mockRejectedValueOnce(new Error("getaddrinfo ENOTFOUND"))
@@ -32,6 +32,7 @@ describe("enrollKey", () => {
 
         await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).resolves.toEqual({
             sshHostname: "ssh-abc.example.dev",
+            mode: "sync",
         });
         expect(fetchMock).toHaveBeenCalledTimes(2);
     });

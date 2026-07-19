@@ -536,10 +536,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return c.json({ ok: true, sshHostname, syncToken: result.syncToken, mode });
     });
     app.get("/system/sync", async (c) => {
-        const denied = await ownerDenied(c);
-        if (denied !== undefined) {
-            return denied;
-        }
+        // Any collaborator (owner or member) may read enrollment state — the bearer middleware already blocked a
+        // non-member — so a member's Desktop-sync card can render and mint its mirror-only pairing.
         const sshHostname = syncSshHostname(services.config.connectToken, services.config.zone, services.config.sandbox.publicUrl);
         const holder = await syncHolder();
         const mirrors = await mirrorMachines();

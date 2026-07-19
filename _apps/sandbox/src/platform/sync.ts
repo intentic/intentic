@@ -106,7 +106,11 @@ export const isValidAuthorizedKey = (key: string): boolean => !key.includes("\n"
 // DIFFERENT machine already holds sync and this isn't a takeover, refuse (returns `{ locked }`); a takeover
 // replaces that holder (dropping its key + token) while leaving every "mirror" enrollment untouched. A "mirror"
 // enroll is always accepted and never disturbs anyone else. Re-enrolling the same machine rotates its token.
-export const enrollSyncKey = async (args: { key: string; mode: SyncMode; takeover: boolean }): Promise<{ syncToken: string } | { locked: string }> => {
+export const enrollSyncKey = async (args: {
+    key: string;
+    mode: SyncMode;
+    takeover: boolean;
+}): Promise<{ syncToken: string } | { locked: string }> => {
     const key = args.key.trim();
     const enrollments = await readEnrollments();
     if (args.mode === "sync") {
@@ -142,7 +146,8 @@ export const isKeyEnrolled = async (): Promise<boolean> => (await readEnrollment
 export const syncHolder = async (): Promise<string | undefined> => (await readEnrollments()).find((entry) => entry.mode === "sync")?.machine;
 
 // The machines currently mirroring ports (any number) — for the UI to show who has live previews.
-export const mirrorMachines = async (): Promise<string[]> => (await readEnrollments()).filter((entry) => entry.mode === "mirror").map((entry) => entry.machine);
+export const mirrorMachines = async (): Promise<string[]> =>
+    (await readEnrollments()).filter((entry) => entry.mode === "mirror").map((entry) => entry.machine);
 
 // Self-revoke: drop the enrollment owning this sync token (the agent's uninstall). Returns false when no
 // enrollment matches (already gone). Rewrites authorized_keys, so the machine's SSH access dies with it.

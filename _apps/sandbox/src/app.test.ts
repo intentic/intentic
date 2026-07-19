@@ -726,7 +726,7 @@ test("POST /system/authorized-key authorizes via the pairing token alone (no bea
             headers: { "content-type": "application/json", ...headers },
             body: JSON.stringify({}),
         });
-    expect((await post({ "x-intentic-pair": mintPairing().token })).status).toBe(400);
+    expect((await post({ "x-intentic-pair": mintPairing("sync").token })).status).toBe(400);
     expect((await post()).status).toBe(401);
     expect((await post({ "x-intentic-pair": "bogus" })).status).toBe(401);
 });
@@ -740,11 +740,11 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
             config: { ...baseConfig, connectToken: "token", sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
         }),
     );
-    // A fresh single-use pairing per call (the agent's real path); the key's comment is the machine label.
+    // A fresh single-use SYNC pairing per call (the owner's file-sync path); the key's comment is the machine label.
     const enroll = (key: string, extra: Record<string, string> = {}) =>
         app.request("/system/authorized-key", {
             method: "POST",
-            headers: { "content-type": "application/json", "x-intentic-pair": mintPairing().token, ...extra },
+            headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("sync").token, ...extra },
             body: JSON.stringify({ key }),
         });
     const KEY_A = "ssh-ed25519 AAAAA machine-a";
@@ -762,6 +762,65 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
     expect(await (await app.request("/system/sync")).json()).toMatchObject({ enrolled: true, syncingFrom: "machine-b" });
 });
 
+test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll — no single-holder lock", async () => {
+    process.env.HOME = mkdtempSync(join(tmpdir(), "sync-mirror-multi-"));
+    const app = createApp(
+        services({
+            config: { ...baseConfig, connectToken: "token", sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
+        }),
+    );
+    const enrollMirror = (key: string) =>
+        app.request("/system/authorized-key", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("mirror").token },
+            body: JSON.stringify({ key }),
+        });
+    // Three collaborators mirror the same sandbox concurrently — every enroll succeeds, none locks.
+    expect((await enrollMirror("ssh-ed25519 AAA laptop-a")).status).toBe(200);
+    expect((await enrollMirror("ssh-ed25519 BBB laptop-b")).status).toBe(200);
+    const c = await enrollMirror("ssh-ed25519 CCC laptop-c");
+    expect(c.status).toBe(200);
+    expect(await c.json()).toMatchObject({ ok: true, mode: "mirror" });
+    // /system/sync shows all three mirroring and no file-sync holder.
+    const sync = await (await app.request("/system/sync")).json();
+    expect(sync).toMatchObject({ enrolled: true, mirroredBy: ["laptop-a", "laptop-b", "laptop-c"] });
+    expect(sync).not.toHaveProperty("syncingFrom");
+});
+
+test("POST /system/sync/pair: the owner may mint a sync pairing, a member is capped to mirror", async () => {
+    // Owner (loopback = owner): default sync, or mirror on request.
+    const owner = createApp(services());
+    expect(await (await owner.request("/system/sync/pair", { method: "POST" })).json()).toMatchObject({ mode: "sync" });
+    expect(await (await owner.request("/system/sync/pair?mode=mirror", { method: "POST" })).json()).toMatchObject({ mode: "mirror" });
+    // Member (authorized but not owner): forced to mirror even when asking for sync.
+    const member = createApp(services({ auth: { authorize: async () => ({ email: "m@x.com" }), authorizeOwner: rejectForbidden } }));
+    const asMember = (query = "") => member.request(`/system/sync/pair${query}`, { method: "POST", headers: { authorization: "Bearer m" } });
+    expect(await (await asMember()).json()).toMatchObject({ mode: "mirror" });
+    expect(await (await asMember("?mode=sync")).json()).toMatchObject({ mode: "mirror" });
+});
+
+test("DELETE /system/authorized-key: a sync token self-revokes just its own enrollment", async () => {
+    process.env.HOME = mkdtempSync(join(tmpdir(), "sync-revoke-"));
+    const app = createApp(
+        services({
+            config: { ...baseConfig, connectToken: "token", sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
+        }),
+    );
+    const enroll = (key: string) =>
+        app.request("/system/authorized-key", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("mirror").token },
+            body: JSON.stringify({ key }),
+        });
+    const tokenA = ((await (await enroll("ssh-ed25519 AAA laptop-a")).json()) as { syncToken: string }).syncToken;
+    await enroll("ssh-ed25519 BBB laptop-b");
+    // Self-revoke with A's token removes only A; B keeps mirroring.
+    expect((await app.request("/system/authorized-key", { method: "DELETE", headers: { "x-intentic-sync": tokenA } })).status).toBe(200);
+    expect(await (await app.request("/system/sync")).json()).toMatchObject({ mirroredBy: ["laptop-b"] });
+    // A stale token that matches nothing is a 404.
+    expect((await app.request("/system/authorized-key", { method: "DELETE", headers: { "x-intentic-sync": tokenA } })).status).toBe(404);
+});
+
 test("the enrollment-minted sync token reads /ports and nothing else", async () => {
     process.env.HOME = mkdtempSync(join(tmpdir(), "sync-token-home-"));
     // Bearer auth rejects everything, so a 200 proves the sync-token branch authorized the read.
@@ -774,7 +833,7 @@ test("the enrollment-minted sync token reads /ports and nothing else", async () 
     );
     const enrolled = await app.request("/system/authorized-key", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-intentic-pair": mintPairing().token },
+        headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("mirror").token },
         body: JSON.stringify({ key: "ssh-ed25519 AAAAA laptop" }),
     });
     expect(enrolled.status).toBe(200);

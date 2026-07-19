@@ -124,7 +124,9 @@ const setup = buildCommand<SetupFlags>({
         // no sync session, just port forwards. A `~` prefix can reach us verbatim (SYNC_DIR travels as data from
         // the claim payload — no shell expands it), so expand it here where every entry path converges.
         const localDir =
-            mode === "sync" ? resolve(flags.dir === undefined ? join(homedir(), "intentic", sandboxId) : flags.dir.replace(/^~(?=[\\/]|$)/, homedir())) : undefined;
+            mode === "sync"
+                ? resolve(flags.dir === undefined ? join(homedir(), "intentic", sandboxId) : flags.dir.replace(/^~(?=[\\/]|$)/, homedir()))
+                : undefined;
         if (localDir !== undefined) {
             // Create the local root up front — an immediately-visible folder is the user's anchor that setup worked.
             await mkdir(localDir, { recursive: true });
@@ -153,7 +155,9 @@ const setup = buildCommand<SetupFlags>({
             try {
                 runMutagen(mutagen, ["daemon", "register"]);
             } catch (error) {
-                out(`note: could not register the Mutagen daemon for autostart (${error instanceof Error ? error.message : String(error)}); it still runs while you're logged in.`);
+                out(
+                    `note: could not register the Mutagen daemon for autostart (${error instanceof Error ? error.message : String(error)}); it still runs while you're logged in.`,
+                );
             }
         }
         out(

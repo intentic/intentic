@@ -37,6 +37,7 @@ export type IconName =
     | "cloud-upload"
     | "code"
     | "cog"
+    | "collapse-all"
     | "comments"
     | "copy"
     | "credit-card"
@@ -136,6 +137,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "cloud-upload": "ph:cloud-arrow-up",
         code: "ph:code",
         cog: "ph:gear",
+        "collapse-all": "ph:arrows-in-line-vertical",
         comments: "ph:chat",
         copy: "ph:copy",
         "credit-card": "ph:credit-card",
@@ -230,6 +232,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "cloud-upload": "solar:cloud-upload-linear",
         code: "solar:code-linear",
         cog: "solar:settings-linear",
+        "collapse-all": "ph:arrows-in-line-vertical",
         comments: "solar:chat-round-linear",
         copy: "solar:copy-linear",
         "credit-card": "solar:card-2-linear",
@@ -324,6 +327,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "cloud-upload": "ri:upload-cloud-line",
         code: "ri:code-line",
         cog: "ri:settings-3-line",
+        "collapse-all": "ph:arrows-in-line-vertical",
         comments: "ri:chat-2-line",
         copy: "ri:file-copy-line",
         "credit-card": "ri:bank-card-line",
@@ -418,6 +422,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "cloud-upload": "hugeicons:cloud-upload",
         code: "hugeicons:source-code",
         cog: "hugeicons:settings-01",
+        "collapse-all": "ph:arrows-in-line-vertical",
         comments: "hugeicons:message-multiple-01",
         copy: "hugeicons:copy-01",
         "credit-card": "hugeicons:credit-card",
@@ -512,6 +517,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         "cloud-upload": "prime:cloud-upload",
         code: "prime:code",
         cog: "prime:cog",
+        "collapse-all": "ph:arrows-in-line-vertical",
         comments: "prime:comments",
         copy: "prime:copy",
         "credit-card": "prime:credit-card",
