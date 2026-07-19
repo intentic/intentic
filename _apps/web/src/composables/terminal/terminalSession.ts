@@ -26,6 +26,8 @@ const STALE_MS = 90_000;
 // Scrollback snapshots (page-reload survival) above this size aren't worth the sessionStorage quota.
 const SCROLLBACK_MAX_CHARS = 400_000;
 const SCROLLBACK_LINES = 1000;
+// A pressed pointer that wanders at least this far (px, per axis) is a selection drag; shorter is a click.
+const DRAG_PX = 5;
 
 export type TerminalSession = {
     readonly name: string;
@@ -48,10 +50,10 @@ export type TerminalSession = {
     down: boolean;
 };
 
-// Ctrl/Cmd+click opens a link (VSCode's terminal gesture) — a plain click must stay a selection/tmux
-// gesture, and the forced-selection mousedown below turns it into one anyway. The URI is arbitrary program
-// output, so the new tab gets no opener. Fired from the linkifier's mouseup, whose modifier state is real
-// (the shiftKey forcing only touches mousedown), and whose user activation keeps popup blockers quiet.
+// Ctrl/Cmd+click opens a link (VSCode's terminal gesture) — a plain click must stay a click/selection
+// gesture (createTerminalSession's drag gate routes it to tmux). Ctrl+click bypasses that gate, so the
+// linkifier's mouseup here is the trusted event: real modifier state, and the user activation that keeps
+// popup blockers quiet. The URI is arbitrary program output, so the new tab gets no opener.
 const openLink = (event: MouseEvent, uri: string): void => {
     if (event.ctrlKey || event.metaKey) {
         window.open(uri, `_blank`, `noopener`);
@@ -202,18 +204,73 @@ export const persistScrollback = (s: TerminalSession): void => {
 export const createTerminalSession = (name: string, onExit: (name: string) => void, readOnly = false): TerminalSession => {
     const host = document.createElement(`div`);
     host.className = `h-full w-full`;
-    // tmux runs with `mouse on` (so the wheel scrolls its scrollback), which means a drag is reported to tmux —
-    // whose copy-mode selection is cleared the instant the button is released. Force xterm's OWN selection
-    // instead: on a plain primary-button press set shiftKey, which xterm's shouldForceSelection honours (it then
-    // selects locally and does NOT report the mouse to tmux). Capture phase so this runs before xterm's own
-    // screen listener reads the event. ponytail: a full-screen mouse-driven TUI (vim/htop) won't receive plain
-    // clicks while this is active — fine for a shell-centric sandbox terminal; gate on drag distance if it bites.
+    // tmux runs with `mouse on` (so the wheel scrolls its scrollback), which makes plain gestures ambiguous: a
+    // drag reported to tmux is copy-mode selection (cleared the instant the button is released — useless in a
+    // browser), while a CLICK must reach tmux so mouse-driven TUIs (turbo's task list, vim, htop) get it, like
+    // VSCode's terminal. Disambiguate by drag distance: swallow the plain primary-button mousedown (capture
+    // phase beats xterm's screen listener; preventDefault keeps the browser from blurring xterm's textarea,
+    // which xterm's own suppressed handler would have done) and hold it. If the pointer wanders ≥ DRAG_PX it's
+    // a drag — replay the held press with shiftKey forced, which xterm's shouldForceSelection honours: it
+    // selects locally, anchored at the original press cell, and never reports to tmux. If the button releases
+    // in place it's a click — swallow the real mouseup too and replay press then release, so xterm runs its
+    // full pipeline (focus, report press to tmux, arm its document-level release listener, report release).
+    // Replays are synthetic (isTrusted false), which is what stops this gate from re-capturing them.
+    const replayMouse = (event: MouseEvent, forceShift: boolean): void => {
+        // The constructor reads coords, button, buttons, detail and modifiers off the source instance.
+        const clone = new MouseEvent(event.type, event);
+        if (forceShift) {
+            Object.defineProperty(clone, `shiftKey`, { value: true });
+        }
+        event.target?.dispatchEvent(clone);
+    };
+    let pending: MouseEvent | undefined;
     host.addEventListener(
         `mousedown`,
         (event) => {
-            if (event.button === 0 && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
-                Object.defineProperty(event, `shiftKey`, { value: true, configurable: true });
+            if (!event.isTrusted || event.button !== 0 || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
+                return;
             }
+            // Only gate presses on the character grid — a press on the viewport's native scrollbar (or any
+            // other chrome) must keep its default action, which the preventDefault below would kill.
+            if (!(event.target instanceof Element) || event.target.closest(`.xterm-screen`) === null) {
+                return;
+            }
+            event.stopImmediatePropagation();
+            event.preventDefault();
+            pending = event;
+        },
+        true,
+    );
+    host.addEventListener(
+        `mousemove`,
+        (event) => {
+            if (!event.isTrusted || pending === undefined) {
+                return;
+            }
+            // A held press whose release we never saw (it landed outside the host) — drop it on the next hover.
+            if ((event.buttons & 1) === 0) {
+                pending = undefined;
+                return;
+            }
+            if (Math.abs(event.clientX - pending.clientX) < DRAG_PX && Math.abs(event.clientY - pending.clientY) < DRAG_PX) {
+                return;
+            }
+            replayMouse(pending, true);
+            pending = undefined;
+        },
+        true,
+    );
+    host.addEventListener(
+        `mouseup`,
+        (event) => {
+            if (!event.isTrusted || pending === undefined) {
+                return;
+            }
+            event.stopImmediatePropagation();
+            const press = pending;
+            pending = undefined;
+            replayMouse(press, false);
+            replayMouse(event, false);
         },
         true,
     );
