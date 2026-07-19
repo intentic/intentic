@@ -5,10 +5,12 @@ export interface PageMeta {
 }
 
 export const pageMeta: Record<string, PageMeta> = {
+    // The landing page's real title/description come from the selected variant in landing.ts;
+    // this entry is the fallback and the datePublished source.
     "/": {
-        title: "intentic — Build software with intent",
+        title: "intentic — Your coding agent, on your machine, in any browser",
         description:
-            "An AI-native workspace for infra, data, apps, and code. Your agent runs on your machine — the platform can't read your code or secrets. Capabilities, automations, team sandboxes, and an open-source engine that self-hosts your infrastructure. Free to start.",
+            "Your coding agent — Claude Code or Codex — running on your own machine, driven from any browser. Your code and secrets never leave your hardware. Capabilities, automations, and an open-source deploy engine included. Free to start.",
         datePublished: "2026-07-06",
     },
     "/privacy/": {

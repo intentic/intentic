@@ -19,8 +19,10 @@ daemon — on a machine *you* control (your laptop, a VPS), reached by your brow
 Cloudflare tunnel. Inside it, a coding agent (Claude Code or Codex) works over your files and
 repos with human-in-the-loop approval. You grow the sandbox with **capabilities** (GitHub,
 databases, Discord, Stripe, SSH, MCP servers…), wake the agent on **automations** (cron, webhooks,
-live events), and — via the flagship **DevOps capability** — have it stand up and operate real
-self-hosted infrastructure using the open-source intentic engine.
+live events), and — via the **DevOps capability**, a deliberate sidecar rather than the headline —
+have it stand up and operate real self-hosted infrastructure using the open-source intentic engine.
+The thing being sold is the workspace and the single use-case it enables: *your coding agent, on
+your machine, from any browser* (see messaging.md).
 
 **Category**: an AI development workspace you own — cloud-grade agent UX with local-grade
 ownership. The platform is architecturally a thin identity store that *cannot* touch your code,

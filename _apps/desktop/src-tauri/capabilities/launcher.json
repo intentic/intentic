@@ -1,0 +1,7 @@
+{
+    "$schema": "../gen/schemas/desktop-schema.json",
+    "identifier": "launcher",
+    "description": "The local launcher/manager window. The workspace window is remote content and gets no IPC at all — its only channel into the app is the intentic:// navigation the window handler intercepts.",
+    "windows": ["launcher"],
+    "permissions": ["core:default", "dialog:default"]
+}

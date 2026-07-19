@@ -329,6 +329,8 @@ export type CfZones = z.infer<typeof CfZonesSchema>;
 //     server; the sandbox only ever sees the narrow per-tunnel connector token) → {TUNNEL_TOKEN, SANDBOX_HOSTNAME}.
 //   • own: the user's zone/subdomain picks → {ZONE, SUBDOMAIN}. Their CF token NEVER enters the code — it stays
 //     an env var on the command (the never-stored invariant).
+//   • local: no tunnel at all (desktop-app sandboxes private to one machine) → the claim yields only the
+//     connect values; the daemon publishes on 127.0.0.1 and announces its loopback URL.
 // When desktop sync is requested at setup, the payload additionally carries {SYNC_DIR, SYNC_PAIR_TOKEN} — a
 // platform-minted single-use pairing token the sandbox seeds at boot, so the connect script can enroll the sync
 // agent without a second pasted command (the command itself stays identical either way).
@@ -336,6 +338,7 @@ export type CfZones = z.infer<typeof CfZonesSchema>;
 export const SetupCodeTargetSchema = z.discriminatedUnion("mode", [
     z.object({ mode: z.literal("intentic") }),
     z.object({ mode: z.literal("own"), zone: z.string().min(1), subdomain: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i) }),
+    z.object({ mode: z.literal("local") }),
 ]);
 export type SetupCodeTarget = z.infer<typeof SetupCodeTargetSchema>;
 export const SetupCodeSchema = z.object({ code: z.string(), hostname: z.string(), expiresAt: z.string() });

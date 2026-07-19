@@ -14,11 +14,11 @@ export const navEntries: NavEntry[] = [
         label: "Features",
         prefix: "/#",
         items: [
-            { label: "Workspace", href: "/#onboarding" },
+            { label: "Get connected", href: "/#connect" },
+            { label: "From anywhere", href: "/#anywhere" },
             { label: "Ownership", href: "/#ownership" },
-            { label: "Capabilities", href: "/#capabilities" },
-            { label: "Automations", href: "/#automations" },
-            { label: "DevOps Engine", href: "/#devops" },
+            { label: "Control", href: "/#control" },
+            { label: "What's included", href: "/#more" },
         ],
     },
     {

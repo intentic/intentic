@@ -27,7 +27,7 @@ export const faqItems: FaqItem[] = [
         id: "which-models",
         question: "Which AI models does it use?",
         answer: [
-            "Your choice per conversation: Claude Code (Opus, Sonnet, Haiku) or Codex, with adjustable reasoning effort. Your provider, your account, your usage.",
+            "Your choice per conversation: Claude Code (Opus, Sonnet, Haiku), Codex, or Grok, with adjustable reasoning effort. Your provider, your account, your usage.",
         ],
     },
     {

@@ -12,6 +12,10 @@
 **/*.tsbuildinfo
 **/npm-debug.log*
 **/pnpm-debug.log*
+
+# desktop (Tauri): build tree + tauri-build codegen
+_apps/desktop/src-tauri/target
+_apps/desktop/src-tauri/gen
 /tmp
 **/tmp
 **/.astro-indexnow-cache.json

@@ -24,6 +24,9 @@
         "_apps/api": {
             "entry": ["src/main.ts", "src/**/*.test.ts"]
         },
+        "_apps/desktop": {
+            "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh"]
+        },
         "_apps/sandbox": {
             "entry": ["src/main.ts", "src/**/*.test.ts", "bin/*.mjs", "bin/*.test.mjs", "scripts/*.{sh,mjs}"]
         },

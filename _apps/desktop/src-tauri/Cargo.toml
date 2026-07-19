@@ -1,0 +1,38 @@
+[workspace]
+members = ["core"]
+resolver = "2"
+
+[package]
+name = "intentic-desktop"
+version = "0.0.0"
+description = "Intentic desktop — sandbox onboarding and lifecycle for Windows/Linux"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+
+[lib]
+name = "intentic_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+intentic-desktop-core = { path = "core" }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-updater = "2"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

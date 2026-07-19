@@ -14,36 +14,49 @@ the DevOps capability.
   The app and the site must sound like one author.
 - Ownership language is the spine: "your machine", "your accounts", "you own every line",
   "stays inside your sandbox". Never "we host your code" — we don't.
+- Provider-agnostic: intentic works with Claude Code, Codex, and whatever ships next. Name
+  providers as plural examples for credibility, never as the headline or the brand hook — the
+  subject is always "your coding agent".
 - Honesty is a feature: the free tier is stated plainly, the engine's v0 status and limitations are linked.
 
 ## Message hierarchy
 
-**Tagline / hero H1 (sitewide, meta, OG) — verbatim from the product (`Login.vue:46-48`):**
-> Build software with intent.
+**The one thing the page sells (single use-case):** your coding agent — Claude Code or Codex —
+running on a machine you own, driven from any browser. Everything else (capabilities, automations,
+the deploy engine) is support: one card each in the "What's included" row, never a flagship band.
+The deploy engine is a deliberate **sidecar** — it lives in that row and in the FAQ, and its
+vocabulary never leads.
 
-**Hero subhead — verbatim (`Login.vue:51`):**
-> An AI-native workspace for infra, data, apps, and code — you own every line, we handle the wiring.
+Landing copy lives in code: `_libs/site-content/src/landing.ts` defines three complete variants of
+the page — the same skeleton and claims, three doors in:
 
-**Hero CTA:** `Get started free` → app.intentic.dev. Secondary: `See the open-source engine` → GitHub.
+| Variant | Angle | H1 |
+|---------|-------|----|
+| `a` (default) | Agent-led — the terminal agent, upgraded | Your coding agent. Out of the terminal. |
+| `b` | Ownership-led — the pain of vendor-cloud custody | The AI workspace you own. |
+| `c` | Moment-led — narrates the use-case itself | Start at your desk. Approve from your phone. |
 
-**Hero footnote:** `Free plan · Your machine, your accounts · No open inbound ports · Open-source MIT engine`
+Switching: `SITE_VARIANT=a|b|c` at build/dev time selects what `/` renders (default `a`);
+`astro dev` additionally serves `/preview/a|b|c` with a floating switcher for side-by-side
+comparison (those routes do not exist in production builds).
 
-Alternate H1s (only if testing): "Your agent. Your machine. Any browser." / "The AI workspace you own."
-Retired: "Infrastructure as intent for self-hosters" (now the DevOps-band message, not the brand).
+**Hero CTA (all variants):** `Get started free` → app.intentic.dev. Secondary: `See the open-source engine` → GitHub.
 
-## Section messages (one-liners the page is built from)
+Retired hero: "Build software with intent." (stays as the brand tagline in org metadata / fallback
+titles) and the infra-first subhead "An AI-native workspace for infra, data, apps, and code…".
 
-| ID | Section | Headline | Support line | Pain |
-|----|---------|----------|--------------|------|
-| M1 | Hero | Build software with intent. | An AI-native workspace for infra, data, apps, and code — you own every line, we handle the wiring. | P1, P2 |
-| M2 | Onboarding | A few minutes to a live workspace. | Sign in with Google, name your sandbox, paste one command. No Cloudflare account required; Docker installed if missing; no open ports, nothing deployed. | P3 |
-| M3 | Ownership | You own every line. | Your sandbox runs on your machine. The platform stores your identity and a URL — nothing else. It can't read your code, hold your credentials, or reach your daemon. | P1 |
-| M4 | Agent in control | Autonomy with a steering wheel. | Plan mode by default: the agent proposes, you approve. Review every change as a diff — discard or commit. Environment changes ship only with your sign-off. | P4 |
-| M5 | Capabilities | Grow your sandbox. | GitHub, databases, Sentry, Discord, Stripe, SSH, MCP servers, plugins — credentials stay inside your sandbox and never leave it. | P5 |
-| M6 | Automations | Your agent, on call. | Wake it on a schedule, a webhook, or live events — a Sentry alert, a Stripe payment, a push, an email. Each run is a fresh session with a transcript. | P6 |
-| M7 | DevOps band | Infrastructure as intent. | The flagship capability: declare what you have and what you want; the open-source engine derives git, CI, registry, deploys, tunnel, and DNS — and reconciles until reality matches. Zero inbound ports. | P7 |
-| M8 | Trust band | Built to be unable to betray you. | Off-command-path platform, AES-256-GCM secrets at rest, GDPR export and deletion, unprivileged sandbox, MIT open-source engine you can read. | trust |
-| M9 | Final CTA | Build software with intent. | One command from a live workspace. Free to start. | close |
+## Page skeleton (shared by all variants; per-variant copy in landing.ts)
+
+| # | Section (id) | Job | Pain |
+|---|--------------|-----|------|
+| 1 | Hero (`#hero`) | The one-sentence what + the workspace mock mid-plan-approval. | P1, P2 |
+| 2 | Get connected (`#connect`) | Speed proof: the 3 wizard steps + the one command. | P3 |
+| 3 | Anywhere (`#anywhere`) | The use-case in action: desk → phone → back to diffs. | P2 |
+| 4 | Ownership (`#ownership`) | The moat: browser → tunnel → sandbox diagram + three facts. | P1 |
+| 5 | Control (`#control`) | Plan mode default, four permission modes, changes review. | P4 |
+| 6 | Included (`#more`) | Capabilities · automations · deploys — one card each. | P5, P6, P7 |
+| 7 | FAQ (`#faq`) | The objection bank (shared across variants). | all |
+| 8 | Final CTA | Variant close + `Get started free`. | close |
 
 **Free-first, no pricing section (principle, not a section).** There is deliberately no on-page
 pricing block and no "Pricing" nav/footer link — a monetization-forward page reads as slop that
@@ -64,9 +77,11 @@ Do not reintroduce a pricing section.
 - **plan mode** — the default agent permission mode: propose, then wait for approval. Also:
   accept edits / ask before edits / auto.
 - **desktop sync** — two-way near-real-time folder sync between the user's editor and the sandbox.
-- **agent** — Claude Code or Codex working inside the sandbox. Name the providers; never "our AI".
+- **agent** — the coding agent working inside the sandbox (Claude Code, Codex, …). Name providers
+  as examples; never "our AI", never one provider as the brand.
 - Engine vocabulary — **intent, `i.have`/`i.want`, derive, desired state, reconcile, reads true** —
-  is used only inside the DevOps band and engine docs, defined on first use.
+  is used only in the FAQ's DevOps answer and engine docs, defined on first use. It never appears
+  in a landing section.
 
 ## Objection bank (FAQ source of truth)
 
@@ -108,7 +123,10 @@ Do not reintroduce a pricing section.
 
 ## SEO strings
 
-- Title: `intentic — Build software with intent`
-- Meta description: `An AI-native workspace for infra, data, apps, and code. Your agent runs on your machine — the platform can't read your code or secrets. Capabilities, automations, team sandboxes, and an open-source engine that self-hosts your infrastructure. Free to start.`
-- Keywords to carry naturally: AI development workspace, coding agent, Claude Code, self-hosted AI
-  agent, agent sandbox, Devin alternative, AI DevOps, infrastructure as intent, own your code.
+- Landing title/description are **per variant** — see `meta` in `landing.ts`. Fallback (page-meta.ts):
+  `intentic — Your coding agent, on your machine, in any browser`.
+- Org description (site.ts, JSON-LD): `Your coding agent — Claude Code or Codex — running on your
+  own machine, driven from any browser. Your code and secrets never leave your hardware.
+  Capabilities, automations, and an open-source deploy engine included. Free to start.`
+- Keywords to carry naturally: coding agent, Claude Code, run Claude Code remotely, self-hosted AI
+  agent, agent sandbox, AI workspace in the browser, Devin alternative, own your code.
