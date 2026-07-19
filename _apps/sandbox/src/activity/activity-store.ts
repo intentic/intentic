@@ -3,7 +3,7 @@ import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { type ActivityEvent, ActivityEventSchema } from "@intentic/sandbox-contract";
 
-// The agent-activity audit log (historyRoot/activity.jsonl): append-only JSONL, written by the daemon only.
+// The activity audit log (historyRoot/activity.jsonl): append-only JSONL, written by the daemon only.
 // Living under historyRoot keeps it outside the agent's /work mount, so the agent can't read or rewrite its
 // own trail — the same placement rationale as workspace history.
 

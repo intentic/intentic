@@ -4,7 +4,7 @@ import { Card, cmp, Icon, type IconName, InfoHint, Page, Segmented, StatusBadge,
 import { computed, ref } from "vue";
 import { useActivity } from "./useActivity";
 
-/* The agent-activity extension: the audit surface for what the agent does through its connected provider
+/* The activity extension: the audit surface for what the agent does through its connected provider
  * capabilities (Discord first). TOP is connection health — per-bot gateway state plus the live voice session.
  * BELOW is the feed: inbound messages that woke automations, the agent's sniffed outbound API calls, and
  * system events (wake outcomes, failures), filterable by direction. Read-only — the log is daemon-written. */
@@ -61,9 +61,9 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
         <Page class="max-w-none">
             <header class="mb-6">
                 <div class="flex items-center gap-2">
-                    <h1 class="text-2xl font-semibold">Agent activity</h1>
-                    <InfoHint label="Agent activity">
-                        <span class="block text-sm font-medium text-content">Agent activity</span>
+                    <h1 class="text-2xl font-semibold">Activity</h1>
+                    <InfoHint label="Activity">
+                        <span class="block text-sm font-medium text-content">Activity</span>
                         <span class="mt-1 block text-xs text-muted">
                             The audit trail of the agent's provider interactions: <b>inbound</b> messages that woke it, its <b>outbound</b> API calls,
                             and <b>system</b> events (wake outcomes, connection failures, voice sessions).

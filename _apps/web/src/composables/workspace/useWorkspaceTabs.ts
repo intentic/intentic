@@ -73,11 +73,23 @@ const openDirectory = (dir: string): void => {
     }
 };
 
+// One repo's git-history graph opens as a document tab in the main area (VSCode "Git Graph"-style), scoped to
+// "root" (the /work repo) or a nested repo's dir. Open-or-focus by repo, like openDirectory — re-opening the
+// same repo's graph focuses its tab rather than stacking a duplicate.
+const openGraph = (repo: string): void => {
+    const id = `graph:${repo}`;
+    openLine.value = undefined;
+    activeId.value = id;
+    if (!tabs.value.some((tab) => tab.id === id)) {
+        tabs.value = [...tabs.value, { kind: `graph`, id, repo }];
+    }
+};
+
 const selectTab = (id: string): void => {
     openLine.value = undefined;
     activeId.value = id;
 };
 
 export function useWorkspaceTabs() {
-    return { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, openPlan, openDirectory, selectTab };
+    return { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, openPlan, openDirectory, openGraph, selectTab };
 }

@@ -81,6 +81,22 @@ export const createGitRoutes = (services: Services) => {
             }
             return services.git.fileDiff(dir, input.path, "HEAD");
         }),
+        // The git-history graph: every workspace repo (for the tree affordance + the graph's switcher), one
+        // repo's commit log, and lazy per-commit detail. "root" is implicit for the switcher; discoverRepos
+        // returns only the nested repos (the same set the Changes panel and history scopes use).
+        repos: i.repos.handler(async () => ({ repos: await discoverRepos(services.workspace.root) })),
+        log: i.log.handler(async ({ input }) => {
+            const { branch, commits } = await services.git.commitLog(await repoDir(input.repo), input.limit ?? 300);
+            return { repo: input.repo, ...(branch !== undefined ? { branch } : {}), commits };
+        }),
+        commitDiff: i.commitDiff.handler(async ({ input }) => ({ files: await services.git.commitChanges(await repoDir(input.repo), input.sha) })),
+        commitFileDiff: i.commitFileDiff.handler(async ({ input }) => {
+            const dir = await repoDir(input.repo);
+            if (resolveWithin(dir, input.path) === undefined) {
+                throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
+            }
+            return services.git.commitFileDiff(dir, input.sha, input.path);
+        }),
         status: i.status.handler(async ({ input }) => services.git.status(await repoDir(input.repo))),
         commit: i.commit.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);

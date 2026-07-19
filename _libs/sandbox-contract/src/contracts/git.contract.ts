@@ -5,11 +5,17 @@ import {
     DiscardSchema,
     FileDiffSchema,
     GitChangesSchema,
+    GitCommitDiffQuerySchema,
+    GitCommitDiffSchema,
+    GitCommitFileDiffQuerySchema,
     GitFileDiffQuerySchema,
     GitFileQuerySchema,
     GitFileSchema,
     GitFilesSchema,
     GitFileWriteSchema,
+    GitLogQuerySchema,
+    GitLogSchema,
+    GitReposSchema,
     GitStatusSchema,
     OkSchema,
     PushSchema,
@@ -22,6 +28,13 @@ import {
 // Changes panel renders; commit/discard take optional `paths` for per-file actions.
 export const gitContract = {
     changes: oc.route({ method: "GET", path: "/git/changes" }).output(GitChangesSchema),
+    // The git-history graph over one repo's real commits: the repo list (for the tree affordance + switcher),
+    // one repo's commit log, and lazy per-commit detail (changed files, then a file's before/after AT the
+    // commit). Read-only — commit/discard on the working tree stay the write path (above).
+    repos: oc.route({ method: "GET", path: "/git/repos" }).output(GitReposSchema),
+    log: oc.route({ method: "GET", path: "/git/{repo}/log" }).input(GitLogQuerySchema).output(GitLogSchema),
+    commitDiff: oc.route({ method: "GET", path: "/git/{repo}/commit-diff" }).input(GitCommitDiffQuerySchema).output(GitCommitDiffSchema),
+    commitFileDiff: oc.route({ method: "GET", path: "/git/{repo}/commit-file-diff" }).input(GitCommitFileDiffQuerySchema).output(FileDiffSchema),
     fileDiff: oc.route({ method: "GET", path: "/git/{repo}/file-diff" }).input(GitFileDiffQuerySchema).output(FileDiffSchema),
     status: oc.route({ method: "GET", path: "/git/{repo}/status" }).input(RepoParamSchema).output(GitStatusSchema),
     commit: oc.route({ method: "POST", path: "/git/{repo}/commit" }).input(CommitSchema).output(CommitResultSchema),

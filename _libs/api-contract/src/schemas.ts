@@ -32,6 +32,10 @@ import {
     FileDiffSchema,
     GitChangeSchema,
     GitChangesSchema,
+    GitCommitDiffSchema,
+    GitCommitSchema,
+    GitLogSchema,
+    GitReposSchema,
     RepoChangesSchema,
     SnapshotChangeSchema,
     SnapshotDiffSchema,
@@ -198,6 +202,10 @@ export type FileDiffResponse = z.infer<typeof FileDiffSchema>;
 export type GitChange = z.infer<typeof GitChangeSchema>;
 export type RepoChanges = z.infer<typeof RepoChangesSchema>;
 export type GitChangesResponse = z.infer<typeof GitChangesSchema>;
+export type GitCommit = z.infer<typeof GitCommitSchema>;
+export type GitLogResponse = z.infer<typeof GitLogSchema>;
+export type GitCommitDiffResponse = z.infer<typeof GitCommitDiffSchema>;
+export type GitReposResponse = z.infer<typeof GitReposSchema>;
 
 // ---- platform-native (owned by the platform; NOT daemon wire shapes) ----
 

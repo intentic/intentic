@@ -12,7 +12,7 @@ export const bindHost = (api: IntenticApi): void => {
 
 export const host = (): IntenticApi => {
     if (current === undefined) {
-        throw new Error(`ext-agent-activity: host() called before activate()`);
+        throw new Error(`ext-activity: host() called before activate()`);
     }
     return current;
 };

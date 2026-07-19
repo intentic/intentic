@@ -4,7 +4,7 @@ import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { devFillGet } from "../composables/devFill";
 import { useCapabilitySecret } from "../composables/extensions/useCapabilities";
-import { useSecrets } from "../composables/extensions/useSecrets";
+import { useSecrets } from "../composables/secrets/useSecrets";
 import { useAsyncAction } from "../composables/useAsyncAction";
 
 /* The one way a secret value enters the app: a masked input with an eye toggle that writes KEY=value straight

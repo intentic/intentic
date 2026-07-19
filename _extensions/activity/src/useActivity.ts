@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
-/* The agent-activity audit feed, via the daemon's /activity routes: the durable event log (inbound wakes,
+/* The activity audit feed, via the daemon's /activity routes: the durable event log (inbound wakes,
  * sniffed outbound provider calls, voice sessions, failures) plus the live connection/voice status probe.
  * Plain polling — an audit feed doesn't need sub-second freshness. All daemon access goes through the host api. */
 

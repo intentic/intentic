@@ -6,7 +6,7 @@ import { computed, ref } from "vue";
 import SecretField from "../../components/SecretField.vue";
 import { useCloudflareZones } from "../../composables/extensions/useCloudflareZones";
 import { useInventory } from "../../composables/extensions/useInventory";
-import { useSecretKeys, useSecrets } from "../../composables/extensions/useSecrets";
+import { useSecretKeys, useSecrets } from "../../composables/secrets/useSecrets";
 import { errorMessage } from "../../composables/useAsyncAction";
 
 /* The reusable "Connect Cloudflare" step. Collects a Cloudflare API token (unless the sandbox already has

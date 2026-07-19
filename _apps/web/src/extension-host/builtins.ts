@@ -1,6 +1,6 @@
 import type { ExtensionManifest, ExtensionModule } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-api";
-import * as agentActivity from "@intentic/ext-agent-activity";
+import * as activity from "@intentic/ext-activity";
 import * as apps from "@intentic/ext-repo-apps";
 import * as automations from "@intentic/ext-automations";
 import * as logs from "@intentic/ext-logs";
@@ -22,7 +22,7 @@ interface Builtin {
 const builtins: readonly Builtin[] = [
     { manifest: automations.manifest, module: automations },
     { manifest: logs.manifest, module: logs },
-    { manifest: agentActivity.manifest, module: agentActivity },
+    { manifest: activity.manifest, module: activity },
     { manifest: apps.manifest, module: apps },
     { manifest: preview.manifest, module: preview },
     { manifest: viewers.manifest, module: viewers },

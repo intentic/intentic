@@ -56,14 +56,27 @@ const {
 }>();
 const emit = defineEmits<{ openFile: [path: string]; openDirectory: [path: string] }>();
 
-const { saveText, createDir, moveEntry, removeEntries, copyEntries, moveIntoMany, run, loadChildren, lazyChildren, lazyTruncated, lazyLoading } =
-    useWorkspaceTree();
+const {
+    saveText,
+    createDir,
+    moveEntry,
+    removeEntries,
+    copyEntries,
+    moveIntoMany,
+    run,
+    loadChildren,
+    expanded,
+    collapseAll,
+    lazyChildren,
+    lazyTruncated,
+    lazyLoading,
+} = useWorkspaceTree();
 const layout = useLayout();
 const { enqueueFromDataTransfer } = useUploadQueue();
 const { fileNesting } = useFileNesting();
 
-// Expanded directory paths (only consulted when not filtering; a filter force-expands matched branches).
-const expanded = ref<ReadonlySet<string>>(new Set());
+// Expanded directory paths live in useWorkspaceTree (shared with the explorer toolbar's Collapse All), consulted
+// here only when not filtering — a filter force-expands matched branches.
 // Multi-selection: the set of selected paths, plus an `anchor` (Shift-range pivot) and a `lead` (keyboard focus
 // cursor). Ops act on the whole `selection`; opening a file collapses it back to that one (the watch below).
 const selection = ref<Set<string>>(new Set(selectedPath ? [selectedPath] : []));
@@ -628,6 +641,9 @@ const menuItems = computed<MenuItem[]>(() => {
     }
     if (clipboard.value !== undefined) {
         items.push({ label: `Paste`, icon: `clone`, command: () => doPaste(dir) });
+    }
+    if (expanded.value.size > 0) {
+        items.push({ separator: true }, { label: `Collapse Folders`, icon: `collapse-all`, command: collapseAll });
     }
     return items;
 });

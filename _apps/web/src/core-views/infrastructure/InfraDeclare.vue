@@ -11,7 +11,7 @@ import { useDeployments } from "../../composables/extensions/useDeployments";
 import { useInventory } from "../../composables/extensions/useInventory";
 import { usePanels } from "../../composables/extensions/usePanels";
 import { convergedBadge } from "../../composables/extensions/reconcileStatus";
-import { useSecrets } from "../../composables/extensions/useSecrets";
+import { useSecrets } from "../../composables/secrets/useSecrets";
 import { useWorkspaceState } from "../../composables/extensions/useWorkspaceState";
 import { detectActivations, extensionPath } from "../registry";
 import AddWantDialog from "./AddWantDialog.vue";

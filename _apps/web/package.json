@@ -19,7 +19,7 @@
         "@intentic-app/capability-catalog": "workspace:*",
         "@intentic-app/localhost-https": "workspace:*",
         "@intentic-app/ui": "workspace:*",
-        "@intentic/ext-agent-activity": "workspace:*",
+        "@intentic/ext-activity": "workspace:*",
         "@intentic/ext-repo-apps": "workspace:*",
         "@intentic/ext-automations": "workspace:*",
         "@intentic/ext-logs": "workspace:*",

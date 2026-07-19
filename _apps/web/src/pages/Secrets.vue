@@ -11,7 +11,7 @@ import { readIntenticLines } from "../composables/intenticStream";
 import { sandboxRequest } from "../composables/sandbox/sandboxClient";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { useSecretInventory } from "../composables/extensions/useSecrets";
+import { useSecretInventory } from "../composables/secrets/useSecrets";
 
 /* The one place every secret is visible: what the intent requires (and which resources use it), what's set,
  * what intentic generated, which capability credentials are connected, and whether the CI copy is current.

@@ -42,7 +42,7 @@ import { closeTabs } from "./workspaceTabs";
  * a collapsible terminal panel along the bottom. Read-only — editing happens via the agent in chat. */
 
 const layout = useLayout();
-const { tree, truncated, error, isLoading, refetch, entry, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
+const { tree, truncated, error, isLoading, refetch, entry, expanded, collapseAll, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
 const { files: uploadFiles, scanning: uploadScanning, skippedNotice: uploadSkipped, enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
@@ -402,6 +402,19 @@ const endResize = (event: PointerEvent): void => {
                         >
                             <Icon class="text-2xs" :name="layout.includeIgnored.value ? `eye` : `eye-slash`" />
                             Ignored
+                        </button>
+                        <!-- Collapse every open folder. Tree scope only (content search shows a flat match list);
+                             inert while a name filter is active (a filter force-expands matches) or nothing is open. -->
+                        <button
+                            v-if="!contentMode"
+                            type="button"
+                            class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content disabled:cursor-default disabled:opacity-40 disabled:hover:text-muted"
+                            :disabled="filter.trim() !== '' || expanded.size === 0"
+                            v-tooltip.bottom="'Collapse all folders'"
+                            aria-label="Collapse all folders"
+                            @click="collapseAll"
+                        >
+                            <Icon name="collapse-all" class="text-xs" />
                         </button>
                     </div>
                 </div>

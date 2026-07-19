@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { FileDiff, GitChange } from "@intentic/sandbox-contract";
+import type { FileDiff, GitChange, GitCommit } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { EMPTY_TREE, MAX_FILE_DIFF_BYTES } from "../history/history.js";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../workspace/workspace-files.js";
@@ -10,6 +10,34 @@ import { readWorkspaceFile, statWorkspaceFileSize } from "../workspace/workspace
 // injectable GitRunner (defaultGit shells out) so command sequences are unit-testable without a real repo.
 
 const STATUS_OF: Record<string, GitChange["status"]> = { A: "added", M: "modified", D: "deleted", T: "type-changed" };
+
+// Parse `--name-status -z` output (from `git diff` or `git diff-tree`) into GitChanges. NUL-separated records
+// are `STATUS\0path\0`, except renames/copies which span three fields (`R<score>\0old\0new\0`) — a cursor walk,
+// not a fixed stride. Keyed by the (new) path so a later record for the same path wins.
+const parseNameStatusZ = (stdout: string): GitChange[] => {
+    const parts = stdout.split("\0");
+    const changes = new Map<string, GitChange>();
+    let cursor = 0;
+    while (cursor + 1 < parts.length) {
+        const status = parts[cursor] ?? "";
+        const path = parts[cursor + 1] ?? "";
+        if (status === "" || path === "") {
+            break;
+        }
+        if (status.startsWith("R") || status.startsWith("C")) {
+            const to = parts[cursor + 2] ?? "";
+            cursor += 3;
+            if (to === "") {
+                break;
+            }
+            changes.set(to, status.startsWith("R") ? { path: to, status: "renamed", from: path } : { path: to, status: "added" });
+            continue;
+        }
+        cursor += 2;
+        changes.set(path, { path, status: STATUS_OF[status[0] ?? ""] ?? "modified" });
+    }
+    return [...changes.values()];
+};
 
 // HEAD's sha; undefined on an unborn HEAD (a repo initialized but never committed) — everything is "added"
 // there and the index-reset verbs need a different spelling.
@@ -60,29 +88,7 @@ export const changedFiles = async (dir: string, git: GitRunner = defaultGit): Pr
 // would bring to the main tree, in the same GitChange shape the Changes panel renders.
 export const changesAgainstBase = async (dir: string, base: string, git: GitRunner = defaultGit): Promise<GitChange[]> => {
     const { stdout } = await git(dir, ["diff", "--name-status", "-z", base]);
-    // NUL-separated records: `STATUS\0path\0`, except renames/copies which span three fields
-    // (`R<score>\0old\0new\0`). A cursor walk, not a fixed stride.
-    const parts = stdout.split("\0");
-    const changes = new Map<string, GitChange>();
-    let cursor = 0;
-    while (cursor + 1 < parts.length) {
-        const status = parts[cursor] ?? "";
-        const path = parts[cursor + 1] ?? "";
-        if (status === "" || path === "") {
-            break;
-        }
-        if (status.startsWith("R") || status.startsWith("C")) {
-            const to = parts[cursor + 2] ?? "";
-            cursor += 3;
-            if (to === "") {
-                break;
-            }
-            changes.set(to, status.startsWith("R") ? { path: to, status: "renamed", from: path } : { path: to, status: "added" });
-            continue;
-        }
-        cursor += 2;
-        changes.set(path, { path, status: STATUS_OF[status[0] ?? ""] ?? "modified" });
-    }
+    const changes = new Map(parseNameStatusZ(stdout).map((change) => [change.path, change]));
     const untracked = (await git(dir, ["ls-files", "--others", "--exclude-standard", "-z"])).stdout.split("\0");
     for (const path of untracked) {
         if (path !== "" && !changes.has(path)) {
@@ -204,6 +210,83 @@ export const workingFileDiff = async (dir: string, path: string, ref: string, gi
     return {
         ...(before !== undefined ? { before } : {}),
         ...(after !== undefined ? { after } : {}),
+        ...(binary ? { binary: true } : {}),
+        ...(truncated ? { truncated: true } : {}),
+    };
+};
+
+// The graph/log view: recent commits ACROSS ALL REFS (--all, so branch topology is visible), newest first,
+// capped at `limit`. Fields are delimited with US (\x1f) and records with RS (\x1e) so subjects and multi-line
+// bodies survive intact (a plain -z / newline split can't). `%D` carries the ref decorations; the bare "HEAD"
+// marker is lifted into `head` so `refs` holds only branch/tag names. Author time (%at, seconds) → ms.
+const RS = "\x1e";
+const US = "\x1f";
+export const commitLog = async (dir: string, limit: number, git: GitRunner = defaultGit): Promise<{ branch?: string; commits: GitCommit[] }> => {
+    const branch = (await git(dir, ["branch", "--show-current"])).stdout.trim();
+    const format = `${RS}%H${US}%h${US}%P${US}%an${US}%ae${US}%at${US}%D${US}%s${US}%b`;
+    const { stdout } = await git(dir, ["log", "--all", "--topo-order", `--max-count=${limit}`, `--pretty=format:${format}`]);
+    const commits: GitCommit[] = [];
+    for (const record of stdout.split(RS)) {
+        if (record === "") {
+            continue;
+        }
+        const fields = record.split(US);
+        if (fields.length < 9) {
+            continue;
+        }
+        const [sha, short, parents, author, email, at, decor, subject] = fields;
+        // %b (the body) is last; join any trailing US it might have contained back together.
+        const body = fields.slice(8).join(US).trim();
+        const decorations = (decor ?? "")
+            .split(", ")
+            .map((ref) => ref.trim())
+            .filter((ref) => ref !== "");
+        const head = decorations.some((ref) => ref === "HEAD" || ref.startsWith("HEAD -> "));
+        const refs = decorations.map((ref) => (ref.startsWith("HEAD -> ") ? ref.slice("HEAD -> ".length) : ref)).filter((ref) => ref !== "HEAD");
+        commits.push({
+            sha: sha ?? "",
+            short: short ?? "",
+            parents: (parents ?? "").split(" ").filter((parent) => parent !== ""),
+            subject: subject ?? "",
+            body,
+            author: author ?? "",
+            email: email ?? "",
+            at: Number(at ?? "0") * 1000,
+            refs,
+            head,
+        });
+    }
+    return { ...(branch !== "" ? { branch } : {}), commits };
+};
+
+// The files one commit changed vs its first parent — `--root` renders a root commit's files as additions
+// (vs the empty tree) instead of nothing. Same GitChange shape the Changes panel renders.
+export const commitChanges = async (dir: string, sha: string, git: GitRunner = defaultGit): Promise<GitChange[]> =>
+    parseNameStatusZ((await git(dir, ["diff-tree", "--no-commit-id", "--name-status", "-r", "-z", "--root", sha])).stdout);
+
+// Both sides of a file AT a commit: the blob at the first parent (`<sha>^`) vs the blob at `<sha>`. A root
+// commit (no parent) or a freshly-added file has no before; a deletion has no after. Same size/binary guards
+// as workingFileDiff. The route has validated `path` stays inside `dir` (resolveWithin).
+export const commitFileDiff = async (dir: string, sha: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> => {
+    const side = async (ref: string): Promise<{ content?: string; binary: boolean; truncated: boolean }> => {
+        try {
+            const size = Number((await git(dir, ["cat-file", "-s", `${ref}:${path}`])).stdout.trim());
+            if (size > MAX_FILE_DIFF_BYTES) {
+                return { binary: false, truncated: true };
+            }
+            const content = (await git(dir, ["cat-file", "-p", `${ref}:${path}`])).stdout;
+            return content.includes("\0") ? { binary: true, truncated: false } : { content, binary: false, truncated: false };
+        } catch {
+            return { binary: false, truncated: false }; // absent at this ref (added / deleted / root commit)
+        }
+    };
+    const before = await side(`${sha}^`);
+    const after = await side(sha);
+    const binary = before.binary || after.binary;
+    const truncated = before.truncated || after.truncated;
+    return {
+        ...(before.content !== undefined ? { before: before.content } : {}),
+        ...(after.content !== undefined ? { after: after.content } : {}),
         ...(binary ? { binary: true } : {}),
         ...(truncated ? { truncated: true } : {}),
     };

@@ -21,6 +21,16 @@ const lazyChildren = ref<Map<string, readonly WorkspaceTreeEntry[]>>(new Map());
 const lazyTruncated = ref<Set<string>>(new Set());
 const lazyLoading = ref<Set<string>>(new Set());
 
+// Expanded directory paths (also the nest parents that fold sibling files, keyed by path). Module-level, next to
+// the lazy subtrees above, so the explorer's toolbar (WorkspaceDesktop) and its context menu can Collapse All
+// against the same set the tree rows toggle. Only consulted when not filtering — a filter force-expands matches.
+const expanded = ref<ReadonlySet<string>>(new Set());
+// Collapse every open directory back to the roots (clears the whole set); nothing to reload since the tree data
+// is untouched. No-op when already empty.
+const collapseAll = (): void => {
+    expanded.value = new Set();
+};
+
 // Clear the shared file-action feedback when the active sandbox changes (see sandboxScope) — a spinner or error
 // from the previous sandbox must not bleed onto the next, and the upload queue + lazy-loaded subtrees are reset
 // alongside it.
@@ -30,6 +40,7 @@ export const resetWorkspaceTreeState = (): void => {
     lazyChildren.value = new Map();
     lazyTruncated.value = new Set();
     lazyLoading.value = new Set();
+    expanded.value = new Set();
     resetUploadQueue();
 };
 
@@ -191,6 +202,8 @@ export function useWorkspaceTree() {
         readFile,
         readBlob,
         loadChildren,
+        expanded,
+        collapseAll,
         lazyChildren,
         lazyTruncated,
         lazyLoading,

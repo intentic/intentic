@@ -368,6 +368,42 @@ export type RepoChanges = z.infer<typeof RepoChangesSchema>;
 export const GitChangesSchema = z.object({ repos: z.array(RepoChangesSchema) });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
 
+// ---- git history graph (the "Git Graph" view over a repo's real commits) ----
+// A hex sha (full or git-abbreviated): the only shape the graph ever sends back, so the per-commit routes
+// constrain to it rather than accepting an arbitrary git revision expression.
+const ShaSchema = z.string().regex(/^[0-9a-f]{4,64}$/);
+// One commit in the graph. `parents` (0 = root, 1 = normal, 2+ = merge) drive the lane layout, computed
+// client-side. `refs` are the branch/tag decorations at this commit (tags keep their `tag: ` prefix; the bare
+// "HEAD" marker is lifted into `head` instead). `at` is author time in ms since epoch; `short` is git's
+// abbreviated sha; `body` is the message minus its subject line.
+export const GitCommitSchema = z.object({
+    sha: z.string(),
+    short: z.string(),
+    parents: z.array(z.string()),
+    subject: z.string(),
+    body: z.string(),
+    author: z.string(),
+    email: z.string(),
+    at: z.number(),
+    refs: z.array(z.string()),
+    head: z.boolean(),
+});
+export type GitCommit = z.infer<typeof GitCommitSchema>;
+// One repo's log: commits newest-first across ALL refs (branch topology is the point of a graph), plus the
+// checked-out branch (absent on a detached HEAD or an unborn repo).
+export const GitLogSchema = z.object({ repo: z.string(), branch: z.string().optional(), commits: z.array(GitCommitSchema) });
+export type GitLog = z.infer<typeof GitLogSchema>;
+export const GitLogQuerySchema = RepoParamSchema.extend({ limit: z.coerce.number().int().positive().max(2000).optional() });
+// Every real git repo under /work as root-relative dir ids ("root" is implicit — the /work repo itself).
+export const GitReposSchema = z.object({ repos: z.array(z.string()) });
+export type GitRepos = z.infer<typeof GitReposSchema>;
+export const GitCommitDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema });
+// The files a commit changed vs its first parent (a root commit vs the empty tree) — the same GitChange shape
+// the Changes panel renders, so the graph's detail list reuses the diff UI.
+export const GitCommitDiffSchema = z.object({ files: z.array(GitChangeSchema) });
+export type GitCommitDiff = z.infer<typeof GitCommitDiffSchema>;
+export const GitCommitFileDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema, path: z.string().min(1) });
+
 // ---- history: daemon-owned workspace snapshots (diff + restore) ----
 // The daemon snapshots /work into bare git dirs on /history (outside the agent's reach). A "snapshot" groups
 // one commit per scope (root + each nested repo) under a shared id. Only checkpoint triggers (turn / user /
@@ -1211,7 +1247,7 @@ export const InfoSchema = z.object({
 export const HostTunnelInputSchema = z.object({ hostName: z.string().min(1) });
 export const HostTunnelSchema = z.object({ hostname: z.string(), tunnelToken: z.string() });
 
-// ---- activity: the agent-activity audit log (historyRoot/activity.jsonl) ----
+// ---- activity: the activity audit log (historyRoot/activity.jsonl) ----
 // One provider-agnostic event per agent↔provider interaction, appended by the daemon only (never the agent —
 // the log lives under historyRoot, outside /work, so the agent can't read or rewrite its own trail). Discord
 // is the first source; other cli providers reuse the same shape.

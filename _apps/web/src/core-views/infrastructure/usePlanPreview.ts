@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { type PlanOrphan, type PlanStep, readPlanSteps } from "../../composables/extensions/reconcileStatus";
-import { useSecretKeys } from "../../composables/extensions/useSecrets";
+import { useSecretKeys } from "../../composables/secrets/useSecrets";
 import { readIntenticLines } from "../../composables/intenticStream";
 import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { useTerminalPanel } from "../../composables/terminal/useTerminalPanel";

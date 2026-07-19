@@ -16,7 +16,7 @@ export const resolveConnections = (connections: ActivityConnection[], idle: bool
         return { ...connection, gateway, ...(gateway === "disconnected" && lastError !== undefined ? { lastError } : {}) };
     });
 
-// The agent-activity audit feed. `list` reads the daemon-written log; `status` reports the realtime connection +
+// The activity audit feed. `list` reads the daemon-written log; `status` reports the realtime connection +
 // voice health that the provider gateways (extension processes) push to /listeners/<provider>/status — the daemon
 // holds no connection of its own to probe. An empty result means no gateway has reported within the TTL.
 export const createActivityRoutes = (services: Services) => {

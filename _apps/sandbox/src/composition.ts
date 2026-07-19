@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import type { AcpAgentConfig, AgentEvent, FileDiff, GitChange, IntenticLine, WorkspaceChildren, WorkspaceTree } from "@intentic/sandbox-contract";
+import type { AcpAgentConfig, AgentEvent, FileDiff, GitChange, GitCommit, IntenticLine, WorkspaceChildren, WorkspaceTree } from "@intentic/sandbox-contract";
 import {
     type GitCloneOptions,
     type GitStatus,
@@ -37,7 +37,7 @@ import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
 import { fileAgentsStore } from "./agents/agents-store.js";
 import { createAgentWorktrees, type AgentWorktrees } from "./agents/worktrees.js";
-import { changedFiles, changesAgainstBase, commitPaths, discardPaths, workingFileDiff } from "./git/changes.js";
+import { changedFiles, changesAgainstBase, commitChanges, commitFileDiff, commitLog, commitPaths, discardPaths, workingFileDiff } from "./git/changes.js";
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
@@ -113,7 +113,7 @@ export interface Services {
     // Agent-proposed post drafts (.intentic/drafts/, one file per draft) — the agent writes them; /drafts is
     // the owner's approve/edit/reject side.
     readonly drafts: DraftsStore;
-    // The agent-activity audit log (historyRoot/activity.jsonl, outside the agent's reach): inbound wakes,
+    // The activity audit log (historyRoot/activity.jsonl, outside the agent's reach): inbound wakes,
     // sniffed outbound provider calls, voice sessions, failures. /activity reads it; only the daemon appends.
     readonly activity: ActivityStore;
     // Per-sandbox agent settings (.intentic/settings.json) — /settings edits it; streamAgent reads it to gate
@@ -177,6 +177,11 @@ export interface Services {
         // `ref` is the before side: HEAD for the working-tree review, a conversation's base sha for the agents review.
         readonly fileDiff: (dir: string, path: string, ref: string) => Promise<FileDiff>;
         readonly changesAgainstBase: (dir: string, base: string) => Promise<GitChange[]>;
+        // The git-history graph (read-only): one repo's commit log across all refs, and lazy per-commit detail
+        // (changed files, then a file's before/after AT the commit).
+        readonly commitLog: (dir: string, limit: number) => Promise<{ branch?: string; commits: GitCommit[] }>;
+        readonly commitChanges: (dir: string, sha: string) => Promise<GitChange[]>;
+        readonly commitFileDiff: (dir: string, sha: string, path: string) => Promise<FileDiff>;
     };
     // The fleet registry (persisted at historyRoot/agents.json + runtime turn state) — one entry per isolated
     // conversation. streamAgent begins/observes/finishes turns; /agents lists, lands, and discards.
@@ -344,6 +349,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
             discardPaths,
             fileDiff: workingFileDiff,
             changesAgainstBase,
+            commitLog,
+            commitChanges,
+            commitFileDiff,
         },
         agents: createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json"))),
         agentWorktrees: createAgentWorktrees({ workspace, worktreesRoot: join(config.historyRoot, "worktrees"), logger }),

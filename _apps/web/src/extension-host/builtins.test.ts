@@ -1,5 +1,5 @@
 import type { CapabilityFacts, ExtensionContext, IntenticApi, RepoFacts, ViewRegistration } from "@intentic/extension-api";
-import * as agentActivity from "@intentic/ext-agent-activity";
+import * as activity from "@intentic/ext-activity";
 import * as logs from "@intentic/ext-logs";
 import { describe, expect, it } from "vitest";
 
@@ -29,11 +29,11 @@ describe(`ext-logs`, () => {
     });
 });
 
-describe(`ext-agent-activity`, () => {
+describe(`ext-activity`, () => {
     it(`activates its rail view only when a discord cli capability is connected`, () => {
-        const view = activateAndCapture(agentActivity);
-        expect(view.id).toBe(`agent-activity`);
+        const view = activateAndCapture(activity);
+        expect(view.id).toBe(`activity`);
         expect(view.detect(noRepos, [])).toEqual([]);
-        expect(view.detect(noRepos, [discordCap])).toEqual([{ key: `activity`, title: `Agent activity`, icon: `wave-pulse` }]);
+        expect(view.detect(noRepos, [discordCap])).toEqual([{ key: `activity`, title: `Activity`, icon: `wave-pulse` }]);
     });
 });

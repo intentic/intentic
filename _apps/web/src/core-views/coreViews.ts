@@ -8,7 +8,7 @@ import type { ViewRegistration } from "@intentic/extension-api";
  *     (devFill), and shared secret management. They are the editor↔platform/onboarding surface, not a daemon
  *     client, so extracting them would push platform+environment coupling into an extension.
  *   • directory-ui — its DirectoryUiHost sandboxed-iframe bridge is shared with the workspace file-open path.
- * Everything cleanly separable (logs, agent-activity, automations, apps, preview) has moved to a package and is
+ * Everything cleanly separable (logs, activity, automations, apps, preview) has moved to a package and is
  * activated through the public IntenticApi via extension-host/builtins.ts. These three consume privileged app
  * internals directly, by design. */
 
