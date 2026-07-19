@@ -20,13 +20,13 @@ beforeEach(() => {
 });
 
 describe("createPreviewRouteEnsurer", () => {
-    it("posts the panel once and memoizes the 2xx — a re-start costs no platform call", async () => {
+    it("posts the label once and memoizes the 2xx — a re-start costs no platform call", async () => {
         postMock.mockResolvedValue({ status: 200, json: { hostname: "x" } });
         const ensure = createPreviewRouteEnsurer(config(), logger);
-        await ensure("app");
-        await ensure("app");
+        await ensure("preview-app");
+        await ensure("preview-app");
         expect(postMock).toHaveBeenCalledTimes(1);
-        expect(postMock).toHaveBeenCalledWith(expect.anything(), "/sandbox/preview-route", { panel: "app" });
+        expect(postMock).toHaveBeenCalledWith(expect.anything(), "/sandbox/preview-route", { label: "preview-app" });
     });
 
     it("never rejects: a non-2xx warns and is retried on the next start; a transport error too", async () => {
@@ -74,10 +74,10 @@ describe("ensureAllPreviewRoutes", () => {
         const ensured: string[] = [];
         await ensureAllPreviewRoutes({
             workspace: workspacePaths(root),
-            ensurePreviewRoute: async (panel: string) => {
-                ensured.push(panel);
+            ensurePreviewRoute: async (label: string) => {
+                ensured.push(label);
             },
         } as unknown as Parameters<typeof ensureAllPreviewRoutes>[0]);
-        expect(ensured.toSorted()).toEqual(["extra", "intent"]);
+        expect(ensured.toSorted()).toEqual(["preview-extra", "preview-intent"]);
     });
 });

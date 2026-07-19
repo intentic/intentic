@@ -16,6 +16,7 @@ import { createIntenticRoutes } from "./intentic/intentic.routes.js";
 import { createInventoryRoutes } from "./inventory/inventory.routes.js";
 import { createLogsRoutes } from "./logs/logs.routes.js";
 import { createPanelsRoutes } from "./panels/panels.routes.js";
+import { createPortsRoutes } from "./ports/ports.routes.js";
 import { createSecretsRoutes } from "./secrets/secrets.routes.js";
 import { createSessionsRoutes } from "./sessions/sessions.routes.js";
 import { createSettingsRoutes } from "./settings/settings.routes.js";
@@ -44,6 +45,7 @@ export const createRouter = (services: Services) => ({
     inventory: createInventoryRoutes(services),
     logs: createLogsRoutes(services),
     panels: createPanelsRoutes(services),
+    ports: createPortsRoutes(services),
     translator: createTranslatorRoutes(services),
     secrets: createSecretsRoutes(services),
     system: createSystemRoutes(services),

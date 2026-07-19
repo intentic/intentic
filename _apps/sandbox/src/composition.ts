@@ -44,6 +44,8 @@ import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
 import { createPreviewRouteEnsurer } from "./panels/preview-route.js";
+import { type PortForwards, createPortForwards } from "./ports/port-forwards.js";
+import { type ListeningPort, scanListeningPorts } from "./ports/port-scan.js";
 import {
     listWorkspaceSessions,
     readWorkspaceSession,
@@ -83,6 +85,11 @@ export interface Services {
     // Per-repository operator panels: the in-memory process manager the /panels routes and the preview proxy
     // drive (discovery of which repo has a panel is convention-only — see panels/panels.ts).
     readonly processes: ManagedProcesses;
+    // The forwarded-port slot table the /ports routes drive and the preview proxy resolves port-<slot> hosts
+    // against (see ports/port-forwards.ts).
+    readonly portForwards: PortForwards;
+    // Discovers every listening TCP socket via procfs — the /ports routes' discovery seam.
+    readonly scanPorts: () => Promise<ListeningPort[]>;
     // Runs user-triggered shell commands inside visible job-* tmux sessions (window per command) — the
     // surfacing substrate for capability adds and the infra check (see terminal-run.ts for the principle).
     readonly terminalRun: TerminalRunner;
@@ -199,9 +206,10 @@ export interface Services {
     // platformHostTunnel relays to the platform (connect-token auth) to mint an intentic-provided host tunnel,
     // which needs intentic's platform Cloudflare account the daemon doesn't hold.
     readonly platformHostTunnel: (hostName: string) => Promise<PlatformResponse>;
-    // Relays to the platform (connect-token auth) to mint a panel's preview route on the sandbox's
-    // intentic-provided tunnel before the panel starts; never rejects (see panels/preview-route.ts).
-    readonly ensurePreviewRoute: (panel: string) => Promise<void>;
+    // Relays to the platform (connect-token auth) to mint a preview route (a `preview-<panel>` or
+    // `port-<slot>` label) on the sandbox's intentic-provided tunnel before the hostname reaches a browser;
+    // never rejects (see panels/preview-route.ts).
+    readonly ensurePreviewRoute: (label: string) => Promise<void>;
     // Shared-access grants — the emails authorized besides the owner. Always present; the /members routes read
     // and write it, and the authorizer consults it. The daemon is the enforcer; the platform only mirrors these.
     readonly members: MembersStore;
@@ -281,6 +289,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger,
         workspace,
         processes: createManagedProcesses(),
+        portForwards: createPortForwards(),
+        scanPorts: () => scanListeningPorts(),
         terminalRun,
         panelToken: randomBytes(32).toString("hex"),
         info,

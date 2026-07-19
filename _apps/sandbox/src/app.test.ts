@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
-import { sandboxContract } from "@intentic/sandbox-contract";
-import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { portUrl, sandboxContract } from "@intentic/sandbox-contract";
+import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
@@ -21,6 +21,7 @@ import type { Services } from "./composition.js";
 import type { Config } from "./env.config.js";
 import { createLogger } from "./logger.js";
 import type { ManagedProcesses, ProcessSpec } from "./processes/managed-processes.js";
+import { createPortForwards } from "./ports/port-forwards.js";
 import { mintPairing } from "./platform/sync.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { AgentTool } from "./agent/agent-tools.js";
@@ -165,6 +166,9 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     logger: createLogger(baseConfig),
     workspace: workspacePaths("/work"),
     processes: fakeProcesses(),
+    // The real slot table with a no-dial probe; `scanPorts` is empty so tests opt into listeners explicitly.
+    portForwards: createPortForwards(async () => "http"),
+    scanPorts: async () => [],
     terminalRun: createTerminalRunner(),
     panelToken: "panel-secret",
     // In-memory bridge-token fake: one fixed valid token, so middleware tests need no store file.
@@ -423,14 +427,74 @@ test("panels.start runs the repo's operator dir, rejects unknown repos + repos w
 
     expect(await client.panels.start({ repo: "app" })).toEqual({ ok: true });
     expect(processes.started).toEqual([{ repo: "app", cwd: join(workspace.root, "app", "operator") }]);
-    // The preview route is minted before the panel is observable as running.
-    expect(ensured).toEqual(["app"]);
+    // The preview route is minted (as its label) before the panel is observable as running.
+    expect(ensured).toEqual(["preview-app"]);
     // A repo with no operator/ can't start; an unknown repo is NOT_FOUND.
     expect(await errorCode(client.panels.start({ repo: "desired-state" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.panels.start({ repo: "ghost" }))).toBe("NOT_FOUND");
     expect(await client.panels.stop({ repo: "app" })).toEqual({ ok: true });
     expect(processes.stopped).toEqual(["app"]);
     expect(await errorCode(client.panels.stop({ repo: "ghost" }))).toBe("NOT_FOUND");
+});
+
+test("ports.list scans on demand, hides the daemon's own listeners, and marks forwards with their URLs", async () => {
+    const config = { ...baseConfig, zone: "example.com", connectToken: "tok" };
+    const portForwards = createPortForwards(async () => "http");
+    const client = clientFor(
+        createApp(
+            services({
+                config,
+                portForwards,
+                scanPorts: async () => [{ port: 22 }, { port: 3000, pid: 7, command: "vite", cwd: "/work/app" }, { port: 5173 }, { port: 8787 }],
+            }),
+        ),
+    );
+    expect(await client.ports.list()).toEqual({ ports: [{ port: 3000, pid: 7, command: "vite", cwd: "/work/app", forwarded: false }] });
+
+    await portForwards.forward(3000);
+    expect(await client.ports.list()).toEqual({
+        ports: [
+            {
+                port: 3000,
+                pid: 7,
+                command: "vite",
+                cwd: "/work/app",
+                forwarded: true,
+                previewUrl: portUrl("a", "example.com", sandboxIdFromToken("tok")),
+            },
+        ],
+    });
+});
+
+test("ports.forward maps a listener onto a slot, mints its route label, and refuses reserved/dead ports", async () => {
+    const config = { ...baseConfig, zone: "example.com", connectToken: "tok" };
+    const ensured: string[] = [];
+    const portForwards = createPortForwards(async () => "http");
+    const client = clientFor(
+        createApp(
+            services({
+                config,
+                portForwards,
+                scanPorts: async () => [{ port: 3000, pid: 7, command: "vite" }],
+                ensurePreviewRoute: async (label) => {
+                    ensured.push(label);
+                },
+            }),
+        ),
+    );
+    expect(await client.ports.forward({ port: 3000 })).toEqual({ previewUrl: portUrl("a", "example.com", sandboxIdFromToken("tok")) });
+    expect(ensured).toEqual(["port-a"]);
+    // The daemon's own surfaces are never forwardable; a port nothing listens on is NOT_FOUND.
+    expect(await errorCode(client.ports.forward({ port: 8787 }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.ports.forward({ port: 4000 }))).toBe("NOT_FOUND");
+    // Unforward frees the slot; the port reads unforwarded again.
+    expect(await client.ports.unforward({ port: 3000 })).toEqual({ ok: true });
+    expect((await client.ports.list()).ports).toEqual([{ port: 3000, pid: 7, command: "vite", forwarded: false }]);
+});
+
+test("ports.forward on a loopback sandbox (no zone/token) still maps the slot but returns no URL", async () => {
+    const client = clientFor(createApp(services({ scanPorts: async () => [{ port: 3000 }] })));
+    expect(await client.ports.forward({ port: 3000 })).toEqual({});
 });
 
 test("system.terminals lists every attachable web-*/panel-* tmux session (none in the test env)", async () => {

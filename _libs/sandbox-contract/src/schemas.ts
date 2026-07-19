@@ -1074,6 +1074,34 @@ export type PanelsList = z.infer<typeof PanelsListSchema>;
 // The {repo} path param on the start/stop/terminals routes (a bare string: unknown repo is a handler NOT_FOUND).
 export const PanelRepoParamSchema = z.object({ repo: z.string() });
 
+// ---- ports: every listening TCP socket in the sandbox + explicit port forwarding ----
+// Anything run in a terminal (a turbo TUI fanning out dev servers, `python -m http.server`, an agent's ad-hoc
+// process) binds ports the daemon never assigned — the panel machinery can't see them. The /ports routes are
+// the generic complement: `list` reports the live listeners (procfs scan, on demand), `forward` makes one
+// reachable at port-<slot>-<sandboxId>.<zone> through the preview proxy. Forwarding is an explicit gesture —
+// previews are public, so nothing is exposed until the owner (or an agent acting for them) asks.
+
+export const PortSummarySchema = z.object({
+    port: z.number(),
+    // The owning process, resolved from procfs; absent when no /proc/*/fd entry matched the socket's inode.
+    pid: z.number().optional(),
+    // The process argv joined with spaces ("node /work/app/node_modules/.bin/vite").
+    command: z.string().optional(),
+    // The process working directory (how the UI attributes a port to a repo).
+    cwd: z.string().optional(),
+    forwarded: z.boolean(),
+    // https://port-<slot>-<sandboxId>.<zone>; present only while forwarded AND the sandbox has a zone + id.
+    previewUrl: z.string().optional(),
+});
+export type PortSummary = z.infer<typeof PortSummarySchema>;
+export const PortsListSchema = z.object({ ports: z.array(PortSummarySchema) });
+export type PortsList = z.infer<typeof PortsListSchema>;
+
+export const PortParamSchema = z.object({ port: z.number().int().min(1).max(65535) });
+// `previewUrl` is absent on a loopback/no-tunnel sandbox — the slot is mapped, but no public hostname exists.
+export const PortForwardResultSchema = z.object({ previewUrl: z.string().optional() });
+export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
+
 // ---- terminal ----
 // EVERY attachable tmux session in the sandbox — the web app's ONE global terminal panel (the interactive I/O
 // is the /system/terminal WebSocket, not oRPC): `shell` = a web-* session the user opened (numbered pill),

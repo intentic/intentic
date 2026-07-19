@@ -2,9 +2,12 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
 import { useGoogleIdentity } from "../useGoogleIdentity";
 import { useSandbox } from "../sandbox/useSandbox";
+import { registerFilePathLinks } from "./terminalFileLinks";
+import { openLoopbackPreview, parseLoopbackLink } from "./portPreview";
 import "@xterm/xterm/css/xterm.css";
 
 /* One xterm ↔ one tmux session over the daemon's /system/terminal WebSocket — the shared core under the
@@ -53,16 +56,40 @@ export type TerminalSession = {
 // Ctrl/Cmd+click opens a link (VSCode's terminal gesture) — a plain click must stay a click/selection
 // gesture (createTerminalSession's drag gate routes it to tmux). Ctrl+click bypasses that gate, so the
 // linkifier's mouseup here is the trusted event: real modifier state, and the user activation that keeps
-// popup blockers quiet. The URI is arbitrary program output, so the new tab gets no opener.
+// popup blockers quiet. A localhost link names the SANDBOX's loopback (the printing process runs inside the
+// remote container), so it opens as a forwarded-port preview instead of a dead tab. Any other URI is arbitrary
+// program output — the new tab gets no opener.
 const openLink = (event: MouseEvent, uri: string): void => {
-    if (event.ctrlKey || event.metaKey) {
-        window.open(uri, `_blank`, `noopener`);
+    if (!event.ctrlKey && !event.metaKey) {
+        return;
     }
+    const loopback = parseLoopbackLink(uri);
+    if (loopback !== undefined) {
+        openLoopbackPreview(loopback);
+        return;
+    }
+    window.open(uri, `_blank`, `noopener`);
 };
 
 const send = (s: TerminalSession, message: TerminalClientMessage): void => {
     if (s.socket?.readyState === WebSocket.OPEN) {
         s.socket.send(JSON.stringify(message));
+    }
+};
+
+// Swap xterm's default DOM renderer for the GPU one — the DOM renderer repaints per cell and pegs the main
+// thread under the flooding output this terminal sees (docker pulls, pnpm install, turbo/vite). Must run AFTER
+// term.open() (the addon needs the canvas). A lost GL context (GPU sleep, backgrounded tab, or too many live
+// contexts across many opened tabs) would otherwise blank the terminal — dispose on loss so xterm falls back to
+// the DOM renderer rather than showing nothing. A missing WebGL2 (blocklisted driver) throws on load, same
+// fallback. Loaded once per session, from the first mount's open() guard.
+const loadWebglRenderer = (term: Terminal): void => {
+    try {
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => webgl.dispose());
+        term.loadAddon(webgl);
+    } catch {
+        // No WebGL2 available — xterm keeps its default DOM renderer.
     }
 };
 
@@ -291,6 +318,10 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     term.loadAddon(serialize);
     // Plain-text URLs in output (a dev server's localhost line, pnpm's changelog link) become Ctrl/Cmd+clickable.
     term.loadAddon(new WebLinksAddon(openLink));
+    // File references in output (tsc/eslint/vitest errors, node stack traces) become Ctrl/Cmd+clickable, opening
+    // in the workspace editor at the referenced line. Registered after the URL addon so a URL's path tail stays
+    // owned by the URL provider.
+    registerFilePathLinks(term);
     // tmux runs with `set-clipboard on`, so a copy (mouse drag in copy-mode, `y`, …) arrives here as OSC 52
     // with a base64 payload — land it in the browser clipboard, which xterm otherwise ignores. `?` asks to
     // READ the clipboard; that stays unanswered. Guarded: the payload is arbitrary program output.
@@ -360,6 +391,7 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement)
     container.append(s.host);
     if (!s.term.element) {
         s.term.open(s.host);
+        loadWebglRenderer(s.term);
     }
     s.fit.fit();
     // Unconditional resync: onResize only fires on a dimension CHANGE, so a PTY that drifted while hidden (or

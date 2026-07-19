@@ -9,6 +9,12 @@ import { DeviceStartSchema, KeyedProviderSchema, OkSchema, TranslatorAccountsSch
 // polls `accounts` until connected — there is no paste-back); `disconnect` clears a provider's tokens.
 export const translatorContract = {
     accounts: oc.route({ method: "GET", path: "/translator/accounts" }).output(TranslatorAccountsSchema),
-    connect: oc.route({ method: "POST", path: "/translator/{provider}/connect" }).input(z.object({ provider: KeyedProviderSchema })).output(DeviceStartSchema),
-    disconnect: oc.route({ method: "POST", path: "/translator/{provider}/disconnect" }).input(z.object({ provider: KeyedProviderSchema })).output(OkSchema),
+    connect: oc
+        .route({ method: "POST", path: "/translator/{provider}/connect" })
+        .input(z.object({ provider: KeyedProviderSchema }))
+        .output(DeviceStartSchema),
+    disconnect: oc
+        .route({ method: "POST", path: "/translator/{provider}/disconnect" })
+        .input(z.object({ provider: KeyedProviderSchema }))
+        .output(OkSchema),
 };

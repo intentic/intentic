@@ -192,8 +192,8 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     });
 
     // Mint a panel's preview route (`preview-<panel>-<id>.<zone>` CNAME + tunnel ingress → the sandbox preview
-    // proxy) on the sandbox's intentic-provided tunnel — the daemon relays here when a panel starts, so the
-    // hostname resolves before the browser's iframe ever loads it. Authenticated by the connect token like
+    // proxy) on the sandbox's intentic-provided tunnel — the daemon relays here when a panel starts or a port
+    // is forwarded, so the hostname resolves before the browser ever loads it. Authenticated by the connect token like
     // /sandbox/announce; 404 for unknown tokens (no oracle). Own-Cloudflare sandboxes (no cached tunnelToken)
     // are a no-op: their `*.<zone>` wildcard already serves the hostname.
     app.post(`/sandbox/preview-route`, async (c) => {
@@ -201,11 +201,12 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (token === undefined || token === ``) {
             return c.text(`error: missing token`, 400);
         }
-        const body = (await c.req.json().catch(() => undefined)) as { panel?: unknown } | undefined;
-        const panel = body?.panel;
-        // ≤42 chars keeps the full label `preview-<panel>-<12-hex id>` inside DNS's 63-char label limit.
-        if (typeof panel !== `string` || !/^[a-z0-9][a-z0-9-]*$/.test(panel) || panel.length > 42) {
-            return c.text(`error: panel must be a lowercase DNS-safe name of at most 42 characters`, 400);
+        const body = (await c.req.json().catch(() => undefined)) as { label?: unknown } | undefined;
+        const label = body?.label;
+        // Only the two preview schemes are mintable (an arbitrary label could shadow sandbox-/ssh- hostnames);
+        // ≤50 chars keeps the full first label `<label>-<12-hex id>` inside DNS's 63-char label limit.
+        if (typeof label !== `string` || !/^(preview|port)-[a-z0-9][a-z0-9-]*$/.test(label) || label.length > 50) {
+            return c.text(`error: label must be a lowercase DNS-safe preview-* or port-* name of at most 50 characters`, 400);
         }
         const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
         if (!sandbox) {
@@ -219,7 +220,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             return c.json({ error: `intentic-provided tunnels are not enabled` }, 404);
         }
         try {
-            return c.json(await ensurePreviewRoute({ apiToken, zone, connectToken: decryptSecret(config, sandbox.token), panel }));
+            return c.json(await ensurePreviewRoute({ apiToken, zone, connectToken: decryptSecret(config, sandbox.token), label }));
         } catch (error) {
             // A bad/under-scoped intentic token is the actionable case (400, like sandbox.zones); any other
             // Cloudflare failure is upstream (502).

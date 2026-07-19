@@ -25,30 +25,53 @@ export const CATCH_ALL = { service: "http_status:404" } as const;
 // Preview scheme: `preview-<panel>-<sandboxId>.<zone>` — one DNS label (the free Universal SSL `*.<zone>` cert
 // covers exactly one level), where <panel> is `<repo>` or `<repo>--<app>` and <sandboxId> pins the hostname to
 // this sandbox (the shared intentic zone hosts many sandboxes; without the id two users' panels would collide).
-export const previewHostname = (panel: string, id: string, zone: string): string => `preview-${panel}-${id}.${zone}`;
+// Port-forward scheme: `port-<slot>-<sandboxId>.<zone>` — the same shape with a `port-` prefix, where <slot>
+// is one of the sandbox's fixed forward slots (see PORT_SLOTS), not the port number itself: slots keep the
+// intentic-provided path's minted routes bounded and warm while dev servers churn ephemeral ports.
+//
+// A *label* is the first-DNS-label prefix before `-<sandboxId>` (`preview-<panel>` / `port-<slot>`) — the unit
+// the platform's /sandbox/preview-route mints, so one endpoint serves both schemes.
+export const previewLabel = (panel: string): string => `preview-${panel}`;
+export const portLabel = (slot: string): string => `port-${slot}`;
 
-// A panel's preview URL — undefined unless the sandbox has both a zone and an id (headless/loopback sandboxes
-// have neither and advertise no preview).
+// The fixed per-sandbox forward slots. Eight is deliberate: enough for a monorepo's worth of concurrent dev
+// servers, and the hard cap on preview DNS records a sandbox can ever cost the shared intentic zone.
+export const PORT_SLOTS = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
+
+// The hostname a label resolves to — what the platform's /sandbox/preview-route mints from the label alone.
+export const labelHostname = (label: string, id: string, zone: string): string => `${label}-${id}.${zone}`;
+export const previewHostname = (panel: string, id: string, zone: string): string => labelHostname(previewLabel(panel), id, zone);
+export const portHostname = (slot: string, id: string, zone: string): string => labelHostname(portLabel(slot), id, zone);
+
+// A panel's / forwarded port's preview URL — undefined unless the sandbox has both a zone and an id
+// (headless/loopback sandboxes have neither and advertise no preview).
 export const previewUrl = (panel: string, zone: string | undefined, sandboxId: string | undefined): string | undefined =>
     zone !== undefined && zone !== "" && sandboxId !== undefined ? `https://${previewHostname(panel, sandboxId, zone)}` : undefined;
+export const portUrl = (slot: string, zone: string | undefined, sandboxId: string | undefined): string | undefined =>
+    zone !== undefined && zone !== "" && sandboxId !== undefined ? `https://${portHostname(slot, sandboxId, zone)}` : undefined;
 
-// The panel key from a request's Host header. The first DNS label must carry the `preview-` prefix (the
+// The key after `<prefix>` from a request's Host header. The first DNS label must carry the prefix (the
 // own-Cloudflare wildcard also catches stray subdomains → undefined → the caller's 404) and, when the sandbox
-// has an id, the exact `-<sandboxId>` suffix — a fixed-length match, so panel keys containing `-` stay
-// unambiguous. Without an id the bare label is the panel key (loopback tests and provider-deployed workspaces,
-// which front the proxy themselves).
-export const panelFromHost = (hostHeader: string | undefined, sandboxId: string | undefined): string | undefined => {
+// has an id, the exact `-<sandboxId>` suffix — a fixed-length match, so keys containing `-` stay unambiguous.
+// Without an id the bare label is the key (loopback tests and provider-deployed workspaces, which front the
+// proxy themselves).
+const keyFromHost = (prefix: string, hostHeader: string | undefined, sandboxId: string | undefined): string | undefined => {
     const label = hostHeader?.split(":")[0]?.split(".")[0] ?? "";
-    if (!label.startsWith("preview-")) {
+    if (!label.startsWith(prefix)) {
         return undefined;
     }
-    const panel = label.slice("preview-".length);
+    const key = label.slice(prefix.length);
     if (sandboxId === undefined) {
-        return panel === "" ? undefined : panel;
+        return key === "" ? undefined : key;
     }
     const suffix = `-${sandboxId}`;
-    return panel.length > suffix.length && panel.endsWith(suffix) ? panel.slice(0, -suffix.length) : undefined;
+    return key.length > suffix.length && key.endsWith(suffix) ? key.slice(0, -suffix.length) : undefined;
 };
+
+export const panelFromHost = (hostHeader: string | undefined, sandboxId: string | undefined): string | undefined =>
+    keyFromHost("preview-", hostHeader, sandboxId);
+export const portSlotFromHost = (hostHeader: string | undefined, sandboxId: string | undefined): string | undefined =>
+    keyFromHost("port-", hostHeader, sandboxId);
 
 // The Cloudflare zone from a sandbox public URL (https://sandbox-<id>.<zone> → <zone>): the hostname minus its
 // first DNS label. undefined when the URL is unparsable OR the hostname has fewer than three labels (no zone

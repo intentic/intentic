@@ -223,7 +223,7 @@ describe(`ensurePreviewRoute`, () => {
             { match: (method, url) => method === `POST` && url.endsWith(`/dns_records`), respond: () => ok({}) },
         ]);
 
-        await expect(ensurePreviewRoute({ apiToken: `api`, zone, connectToken, panel: `app` })).resolves.toEqual({ hostname });
+        await expect(ensurePreviewRoute({ apiToken: `api`, zone, connectToken, label: `preview-app` })).resolves.toEqual({ hostname });
 
         // The tunnel searched is the sandbox's own.
         expect(calls.some((call) => call.url.includes(`/cfd_tunnel?name=sandbox-${id}`))).toBe(true);
@@ -261,7 +261,7 @@ describe(`ensurePreviewRoute`, () => {
             { match: (method, url) => method === `PUT` && url.endsWith(`/dns_records/r1`), respond: () => ok({}) },
         ]);
 
-        await ensurePreviewRoute({ apiToken: `api`, zone, connectToken, panel: `app` });
+        await ensurePreviewRoute({ apiToken: `api`, zone, connectToken, label: `preview-app` });
 
         expect(calls.some((call) => call.method === `PUT` && call.url.endsWith(`/configurations`))).toBe(false);
         expect(calls.some((call) => call.method === `PUT` && call.url.endsWith(`/dns_records/r1`))).toBe(true);
@@ -272,7 +272,7 @@ describe(`ensurePreviewRoute`, () => {
             { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
             { match: (method, url) => method === `GET` && url.includes(`/cfd_tunnel?name=`), respond: () => ok([]) },
         ]);
-        await expect(ensurePreviewRoute({ apiToken: `api`, zone, connectToken, panel: `app` })).rejects.toThrow(`was not found`);
+        await expect(ensurePreviewRoute({ apiToken: `api`, zone, connectToken, label: `preview-app` })).rejects.toThrow(`was not found`);
     });
 });
 

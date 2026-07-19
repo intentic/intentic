@@ -98,7 +98,11 @@ survive reconnects. Its subsystems:
   ([webchat/](_apps/sandbox/src/webchat/)).
 - **Terminals** — interactive PTYs over WebSocket ([terminal/terminal.ts](_apps/sandbox/src/terminal/terminal.ts)).
 - **Panels & previews** — per-repo dev servers behind `preview-<panel>-<id>.<zone>` hostnames
-  ([panels/](_apps/sandbox/src/panels/)).
+  ([panels/](_apps/sandbox/src/panels/)); plus generic **port forwarding** for anything run in a terminal
+  (a procfs scan lists listening ports, an explicit forward maps one onto a fixed slot behind
+  `port-<slot>-<id>.<zone>`, and Ctrl+clicking a `localhost:<port>` link in a terminal rides this
+  automatically) ([ports/](_apps/sandbox/src/ports/)). Port targets get Host/Origin rewritten to
+  `localhost:<port>` at the proxy, so stock dev-server host checks pass unconfigured.
 - **Automations** — cron schedules, webhooks (`/automations/:id/fire`), and event listeners
   ([automations/](_apps/sandbox/src/automations/)).
 - **Capabilities** — everything a user adds to the sandbox (connectors, vpn, mcp, plugins, …),
@@ -127,7 +131,9 @@ tunnel is named `sandbox-<id>` where `<id> = sha256(connectToken).slice(0, 12)`
 - **Intentic-provided** — for users with no Cloudflare, the platform provisions the tunnel on
   intentic's own account under a shared zone (`sandbox-<id>.intentic.dev`) and hands the sandbox only
   the narrow per-tunnel connector token. A shared zone can't give each user a wildcard, so the daemon
-  asks the platform to mint each `preview-<panel>-<id>.<zone>` route lazily when a panel first appears.
+  asks the platform to mint each preview route (a `preview-<panel>` or `port-<slot>` label) lazily when a
+  panel first appears or a port is first forwarded — forwarded ports go through a fixed slot pool
+  (`PORT_SLOTS`) precisely so churning dev-server ports cost at most that many routes per sandbox, ever.
 
 On a server the workspace is just another service on that host's shared tunnel, exposing only the
 preview wildcard (the daemon stays host-internal — the server workspace is preview-only; `connect.sh`
@@ -481,8 +487,9 @@ Who pays for scale is a design decision, not an accident:
   Postgres advisory lock so replicas don't duplicate the work.
 - **The one ceiling intentic owns is the shared Cloudflare account** behind intentic-provided
   tunnels: each such sandbox is 1 named tunnel + 2 DNS records (`sandbox-<id>`, `ssh-<id>`), plus one
-  record + ingress rule per panel preview — and preview routes have no per-panel teardown; they live
-  until the sandbox is deleted or reaped. Cloudflare accounts cap out around 1000 named tunnels, plus
+  record + ingress rule per panel preview and per used port-forward slot (capped at `PORT_SLOTS.length`
+  per sandbox by construction) — and preview routes have no per-panel teardown; they live until the
+  sandbox is deleted or reaped. Cloudflare accounts cap out around 1000 named tunnels, plus
   per-zone DNS-record and API-rate limits shared by pool top-up, setup provisioning, preview minting,
   and the reaper. Mitigations in place: a daily reaper deletes tunnels idle > 7 days, the
   pre-provisioned pool absorbs signup latency, and provisioning is sequenced to stay under rate

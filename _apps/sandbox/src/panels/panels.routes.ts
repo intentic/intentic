@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ARTIFACT_FILE, CONFIG_FILE } from "@intentic/scaffold";
-import { panelsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { panelsContract, previewLabel, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import { REPO_ROLES, type RepoRole } from "@intentic/scaffold";
@@ -69,7 +69,7 @@ export const createPanelsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no runnable panel — add an operator/ dev server or a dev script` });
             }
             // Mint the preview route before the panel is observable as running (see preview-route.ts).
-            await services.ensurePreviewRoute(key);
+            await services.ensurePreviewRoute(previewLabel(key));
             await services.processes.start(key, {
                 // Install deps on first start (async — the terminal + "starting" badge cover it), then run the dev
                 // server; skipped once installed. No --ignore-workspace: an app repo IS its own pnpm monorepo (its

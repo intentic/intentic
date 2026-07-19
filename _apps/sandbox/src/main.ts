@@ -175,10 +175,11 @@ const main = async (): Promise<void> => {
     const server = serve({ fetch: app.fetch, port: config.sandbox.port, hostname: config.sandbox.host, websocket: { server: terminalSockets } });
     logger.info({ host: config.sandbox.host, port: config.sandbox.port, workspace: config.workspaceRoot }, "intentic sandbox daemon listening");
 
-    // The preview proxy: preview-<panel>-<id>.<zone> lands here (the tunnel's fixed origin) and the Host
-    // header's first label routes to the matching panel's running port. Always listening — with no panel up it
-    // answers 502 ("start it"), not connection-refused. Every preview is public — no owner-gating.
-    const previewProxy = createPreviewProxy(services.processes.portOf, sandboxIdFromToken(config.connectToken));
+    // The preview proxy: preview-<panel>-<id>.<zone> and port-<slot>-<id>.<zone> land here (the tunnel's
+    // fixed origin) and the Host header's first label routes to the panel's running port or the slot's
+    // forwarded port. Always listening — with nothing up it answers 502, not connection-refused. Every preview
+    // is public — no owner-gating.
+    const previewProxy = createPreviewProxy(services.processes.portOf, services.portForwards.targetOf, sandboxIdFromToken(config.connectToken));
     previewProxy.listen(config.preview.port, config.sandbox.host);
 
     // Scheduled agent wake-ups: poll the automations manifest and fire whatever comes due.

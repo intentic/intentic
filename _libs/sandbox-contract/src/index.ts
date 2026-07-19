@@ -14,6 +14,7 @@ import { intenticContract } from "./contracts/intentic.contract.js";
 import { inventoryContract } from "./contracts/inventory.contract.js";
 import { logsContract } from "./contracts/logs.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
+import { portsContract } from "./contracts/ports.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
@@ -37,6 +38,7 @@ export { intenticContract } from "./contracts/intentic.contract.js";
 export { inventoryContract } from "./contracts/inventory.contract.js";
 export { logsContract } from "./contracts/logs.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
+export { portsContract } from "./contracts/ports.contract.js";
 export { secretsContract } from "./contracts/secrets.contract.js";
 export { sessionsContract } from "./contracts/sessions.contract.js";
 export { settingsContract } from "./contracts/settings.contract.js";
@@ -75,6 +77,7 @@ export const sandboxContract = {
     inventory: inventoryContract,
     logs: logsContract,
     panels: panelsContract,
+    ports: portsContract,
     secrets: secretsContract,
     system: systemContract,
     translator: translatorContract,

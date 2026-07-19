@@ -171,7 +171,15 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         kind: z.literal("error"),
         message: z.string(),
         code: z
-            .enum(["session-not-found", "rate_limit", "codex-reauth", "grok-model-invalid", "codex-model-invalid", "subscription-required", "agent-busy"])
+            .enum([
+                "session-not-found",
+                "rate_limit",
+                "codex-reauth",
+                "grok-model-invalid",
+                "codex-model-invalid",
+                "subscription-required",
+                "agent-busy",
+            ])
             .optional(),
     }),
     z.object({ kind: z.literal("done") }),

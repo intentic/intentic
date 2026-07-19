@@ -3,7 +3,7 @@ import {
     CATCH_ALL,
     cfargotunnelCname,
     hostSshTunnelName,
-    previewHostname,
+    labelHostname,
     sandboxHostname as sandboxHost,
     sandboxSubdomain,
     sshHostname,
@@ -259,20 +259,20 @@ const tunnelConfigSchema = z.object({
     config: z.looseObject({ ingress: z.array(z.looseObject({ hostname: z.string().optional(), service: z.string() })).optional() }).nullable(),
 });
 
-// Ensure a panel's preview route exists on the sandbox's intentic-owned tunnel: a proxied CNAME
-// `preview-<panel>-<id>.<zone>` → <tunnelId>.cfargotunnel.com plus an ingress rule → the preview proxy.
-// Idempotent — the daemon calls it on every panel start; an already-routed hostname skips the config PUT, and
-// the CNAME upsert repairs a half-failed earlier run. The PUT replaces the whole ingress list (Cloudflare has
-// no append), so the current config is read and merged; the daemon serializes its calls, so two panels
-// starting at once can't race the read-modify-write.
+// Ensure a preview route exists on the sandbox's intentic-owned tunnel for a label (`preview-<panel>` /
+// `port-<slot>` — see hostnames.ts): a proxied CNAME `<label>-<id>.<zone>` → <tunnelId>.cfargotunnel.com plus
+// an ingress rule → the preview proxy. Idempotent — the daemon calls it on every panel start / port forward;
+// an already-routed hostname skips the config PUT, and the CNAME upsert repairs a half-failed earlier run. The
+// PUT replaces the whole ingress list (Cloudflare has no append), so the current config is read and merged;
+// the daemon serializes its calls, so two ensures at once can't race the read-modify-write.
 export const ensurePreviewRoute = async (args: {
     apiToken: string;
     zone: string;
     connectToken: string;
-    panel: string;
+    label: string;
 }): Promise<{ hostname: string }> => {
     const id = sandboxTunnelId(args.connectToken);
-    const hostname = previewHostname(args.panel, id, args.zone);
+    const hostname = labelHostname(args.label, id, args.zone);
     const { zoneId, accountId } = await resolveZone(args.apiToken, args.zone);
     const tunnels = await cfCall(
         args.apiToken,
@@ -370,7 +370,9 @@ const listTunnels = async (apiToken: string, accountId: string): Promise<z.infer
         page += 1;
     } while (pageCount === PER_PAGE && page <= MAX_TUNNEL_PAGES);
     if (pageCount === PER_PAGE) {
-        throw new Error(`Cloudflare GET /cfd_tunnel still returned full pages at page ${MAX_TUNNEL_PAGES} — refusing to sweep further (the API may be ignoring the page param).`);
+        throw new Error(
+            `Cloudflare GET /cfd_tunnel still returned full pages at page ${MAX_TUNNEL_PAGES} — refusing to sweep further (the API may be ignoring the page param).`,
+        );
     }
     return tunnels;
 };

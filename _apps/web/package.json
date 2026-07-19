@@ -39,6 +39,7 @@
         "@xterm/addon-fit": "catalog:",
         "@xterm/addon-serialize": "catalog:",
         "@xterm/addon-web-links": "catalog:",
+        "@xterm/addon-webgl": "catalog:",
         "@xterm/xterm": "catalog:",
         "better-auth": "catalog:",
         "croner": "catalog:",

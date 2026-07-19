@@ -148,32 +148,37 @@ describe(`POST /sandbox/host-tunnel`, () => {
     });
 });
 
-const previewRoute = (prisma: PrismaClient, token: string | undefined, panel: unknown, cfg: Config = config) =>
+const previewRoute = (prisma: PrismaClient, token: string | undefined, label: unknown, cfg: Config = config) =>
     createApp(cfg, prisma, logger).app.request(`/sandbox/preview-route`, {
         method: `POST`,
         headers: { "content-type": `application/json`, ...(token === undefined ? {} : { "x-intentic-connect": token }) },
-        body: JSON.stringify({ panel }),
+        body: JSON.stringify({ label }),
     });
 
-// The connect-token preview-route mint (the daemon's panel-start relay). The CF provisioning itself is
-// ensurePreviewRoute (covered by cloudflare.test.ts); these lock the auth + guard paths and the own-Cloudflare
-// no-op that run before any Cloudflare call.
+// The connect-token preview-route mint (the daemon's panel-start / port-forward relay). The CF provisioning
+// itself is ensurePreviewRoute (covered by cloudflare.test.ts); these lock the auth + guard paths and the
+// own-Cloudflare no-op that run before any Cloudflare call.
 describe(`POST /sandbox/preview-route`, () => {
-    it(`rejects a missing token / a non-DNS-safe or over-long panel before the database`, async () => {
+    it(`rejects a missing token / a non-preview, non-DNS-safe or over-long label before the database`, async () => {
         const findUnique = vi.fn();
         const prisma = fakePrisma({ sandbox: { findUnique } });
-        expect((await previewRoute(prisma, undefined, `app`)).status).toBe(400);
+        expect((await previewRoute(prisma, undefined, `preview-app`)).status).toBe(400);
         expect((await previewRoute(prisma, `tok`, ``)).status).toBe(400);
-        expect((await previewRoute(prisma, `tok`, `App`)).status).toBe(400);
-        expect((await previewRoute(prisma, `tok`, `my.repo`)).status).toBe(400);
-        expect((await previewRoute(prisma, `tok`, `my_repo`)).status).toBe(400);
-        expect((await previewRoute(prisma, `tok`, `-app`)).status).toBe(400);
-        expect((await previewRoute(prisma, `tok`, `a`.repeat(43))).status).toBe(400);
+        expect((await previewRoute(prisma, `tok`, `preview-App`)).status).toBe(400);
+        expect((await previewRoute(prisma, `tok`, `preview-my.repo`)).status).toBe(400);
+        expect((await previewRoute(prisma, `tok`, `preview-my_repo`)).status).toBe(400);
+        expect((await previewRoute(prisma, `tok`, `preview--app`)).status).toBe(400);
+        // Only the two preview schemes mint — an arbitrary label could shadow sandbox-/ssh- hostnames.
+        expect((await previewRoute(prisma, `tok`, `app`)).status).toBe(400);
+        expect((await previewRoute(prisma, `tok`, `sandbox-app`)).status).toBe(400);
+        expect((await previewRoute(prisma, `tok`, `preview-${`a`.repeat(43)}`)).status).toBe(400);
         expect(findUnique).not.toHaveBeenCalled();
-        // The `<repo>--<app>` panel key and the 42-char boundary are valid (fail later, at the missing row).
+        // The `<repo>--<app>` panel key, a port slot, and the 50-char boundary are valid (fail later, at the
+        // missing row).
         const prisma404 = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null) } });
-        expect((await previewRoute(prisma404, `tok`, `shop--web`)).status).toBe(404);
-        expect((await previewRoute(prisma404, `tok`, `a`.repeat(42))).status).toBe(404);
+        expect((await previewRoute(prisma404, `tok`, `preview-shop--web`)).status).toBe(404);
+        expect((await previewRoute(prisma404, `tok`, `port-a`)).status).toBe(404);
+        expect((await previewRoute(prisma404, `tok`, `preview-${`a`.repeat(42)}`)).status).toBe(404);
     });
 
     it(`no-ops for an own-Cloudflare sandbox (no cached tunnelToken) without any Cloudflare call`, async () => {
@@ -181,7 +186,7 @@ describe(`POST /sandbox/preview-route`, () => {
             throw new Error(`own-Cloudflare previews ride the wildcard — no Cloudflare call expected`);
         });
         const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, token: `tok`, tunnelToken: null }) } });
-        const res = await previewRoute(prisma, `tok`, `app`);
+        const res = await previewRoute(prisma, `tok`, `preview-app`);
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ ok: true });
     });
@@ -189,12 +194,12 @@ describe(`POST /sandbox/preview-route`, () => {
     it(`404s when intentic-provided tunnels are not configured, 502s a Cloudflare failure`, async () => {
         const row = { id: `s1`, token: `tok`, tunnelToken: `ct` };
         const disabled = { ...config, intenticCloudflare: { ...config.intenticCloudflare, apiToken: ``, zone: `` } } as Config;
-        expect((await previewRoute(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row) } }), `tok`, `app`, disabled)).status).toBe(
-            404,
-        );
+        expect(
+            (await previewRoute(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row) } }), `tok`, `preview-app`, disabled)).status,
+        ).toBe(404);
 
         vi.stubGlobal(`fetch`, () => Promise.reject(new Error(`cloudflare down`)));
-        const res = await previewRoute(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row) } }), `tok`, `app`);
+        const res = await previewRoute(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row) } }), `tok`, `preview-app`);
         expect(res.status).toBe(502);
         expect(await res.json()).toEqual({ error: `cloudflare down` });
     });
