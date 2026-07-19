@@ -1,0 +1,518 @@
+diff --git a/.gitignore b/.gitignore
+index 6ccad83..0bd156c 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -12,6 +12,11 @@
+ **/*.tsbuildinfo
+ **/npm-debug.log*
+ **/pnpm-debug.log*
++
++# desktop (Tauri): build tree + tauri-build codegen + locally-staged site downloads
++_apps/desktop/src-tauri/target
++_apps/desktop/src-tauri/gen
++_apps/site/public/desktop
+ /tmp
+ **/tmp
+ **/.astro-indexnow-cache.json
+diff --git a/.gitlab-ci.yml b/.gitlab-ci.yml
+index 58d1311..1331467 100644
+--- a/.gitlab-ci.yml
++++ b/.gitlab-ci.yml
+@@ -41,6 +41,46 @@ test:
+     - pnpm turbo run build
+     - pnpm turbo run test
+ 
++# Desktop app (Tauri, _apps/desktop): Rust fmt/clippy/tests + the launcher UI build. Runs only when the
++# desktop tree changes — on MRs as the gate, and on main so a broken desktop surfaces before the release
++# job's release-build.sh (which cross-builds the same crates). clippy compiles the app crate against real
++# webkit2gtk, covering the Linux target; the Windows msvc target is covered by the release cross-build.
++desktop:check:
++  stage: test
++  interruptible: true
++  rules:
++    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
++      changes: &desktop-changes
++        - _apps/desktop/**/*
++        - _libs/ui/**/*
++        - pnpm-lock.yaml
++    - if: '$CI_COMMIT_BRANCH == "main"'
++      changes: *desktop-changes
++  variables:
++    CARGO_HOME: $CI_PROJECT_DIR/.cargo
++  cache:
++    - key: turbo-$CI_COMMIT_REF_SLUG
++      paths:
++        - .turbo
++        - "_*/*/.turbo"
++    - key: desktop-cargo
++      paths:
++        - .cargo/registry
++        - _apps/desktop/src-tauri/target
++  before_script:
++    - !reference [.pnpm-setup, script]
++    - apt-get update && apt-get install -y --no-install-recommends
++      libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
++      build-essential libssl-dev pkg-config
++    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal --component rustfmt,clippy
++    # rustup writes its env file into CARGO_HOME when overridden (as it is here, for caching).
++    - source "${CARGO_HOME:-$HOME/.cargo}/env"
++  script:
++    - pnpm --filter @intentic-app/desktop build
++    - cargo fmt --manifest-path _apps/desktop/src-tauri/Cargo.toml --all --check
++    - cargo clippy --manifest-path _apps/desktop/src-tauri/Cargo.toml --workspace --all-targets -- -D warnings
++    - cargo test --manifest-path _apps/desktop/src-tauri/Cargo.toml -p intentic-desktop-core
++
+ # Hermetic infra e2e on merge requests — NON-BLOCKING sidecar (allow_failure). Boots a Docker-in-Docker host
+ # via testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no
+ # external services or secrets. turbo scopes e2e:hermetic to @intentic/cli.
+@@ -146,12 +186,24 @@ release:
+   resource_group: release
+   services:
+     - docker:27-dind
++  # The desktop cross-build (release-build.sh in prepareCmd) adds real minutes on a cold cargo cache.
++  timeout: 2h
+   variables:
+     GIT_DEPTH: 0
++    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+     DOCKER_HOST: tcp://docker:2376
+     DOCKER_TLS_CERTDIR: "/certs"
+     DOCKER_TLS_VERIFY: "1"
+     DOCKER_CERT_PATH: "/certs/client"
++  cache:
++    - key: turbo-$CI_COMMIT_REF_SLUG
++      paths:
++        - .turbo
++        - "_*/*/.turbo"
++    - key: desktop-cargo
++      paths:
++        - .cargo/registry
++        - _apps/desktop/src-tauri/target
+   # npm trusted publishing (OIDC): GitLab must be a registered trusted publisher for each @intentic/* package
+   # on npmjs.org. The aud must be exactly npm:<registry-host>.
+   id_tokens:
+diff --git a/.oxlintrc.json b/.oxlintrc.json
+index b347861..968fae7 100644
+--- a/.oxlintrc.json
++++ b/.oxlintrc.json
+@@ -9,7 +9,7 @@
+     "rules": {
+         "typescript/no-extraneous-class": ["error", { "allowWithDecorator": true }],
+         "import/no-unassigned-import": ["error", { "allow": ["**/*.css", "**/composables/sandbox/sandboxScope", "**/extension-host/hostModules"] }],
+-        "no-underscore-dangle": ["error", { "allow": ["__API_URL__", "__intentic"] }],
++        "no-underscore-dangle": ["error", { "allow": ["__API_URL__", "__intentic", "__INTENTIC_DESKTOP__"] }],
+         "no-await-in-loop": "off"
+     },
+     "env": {
+diff --git a/.releaserc.json b/.releaserc.json
+index c602d83..2f6a6ba 100644
+--- a/.releaserc.json
++++ b/.releaserc.json
+@@ -7,7 +7,7 @@
+         [
+             "@semantic-release/exec",
+             {
+-                "prepareCmd": "pnpm --dir _tools/constants version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/graph version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/resources version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/need-resolver version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/state-resolver version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/sdk version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/engine version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/providers version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/extension-api version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/sandbox-contract version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/workspace-ignore version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/scaffold version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/iq-engine version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/iq-recall version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/iq version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/sandbox version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/cli version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/sync version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm turbo run build && bash _apps/sync/scripts/build-binaries.sh",
++                "prepareCmd": "pnpm --dir _tools/constants version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/graph version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/resources version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/need-resolver version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/state-resolver version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/sdk version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/engine version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/providers version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/extension-api version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/sandbox-contract version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/workspace-ignore version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/scaffold version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/iq-engine version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _libs/iq-recall version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/iq version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/sandbox version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/cli version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/sync version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm --dir _apps/desktop version ${nextRelease.version} --no-git-tag-version --no-git-checks --allow-same-version && pnpm turbo run build && bash _apps/sync/scripts/build-binaries.sh && bash _apps/desktop/scripts/release-build.sh ${nextRelease.version}",
+                 "publishCmd": "bash _tools/scripts/publish-npm.sh ${nextRelease.version} && TAGS=\"${nextRelease.version} stable\" bash _tools/scripts/publish-images.sh",
+                 "successCmd": "git tag -f stable && git push -f origin stable"
+             }
+@@ -22,7 +22,14 @@
+                     { "path": "_apps/sync/dist-bin/intentic-sync-linux-arm64", "filepath": "/bin/intentic-sync-linux-arm64" },
+                     { "path": "_apps/sync/dist-bin/intentic-sync-darwin-amd64", "filepath": "/bin/intentic-sync-darwin-amd64" },
+                     { "path": "_apps/sync/dist-bin/intentic-sync-darwin-arm64", "filepath": "/bin/intentic-sync-darwin-arm64" },
+-                    { "path": "_apps/sync/dist-bin/intentic-sync-windows-amd64.exe", "filepath": "/bin/intentic-sync-windows-amd64.exe" }
++                    { "path": "_apps/sync/dist-bin/intentic-sync-windows-amd64.exe", "filepath": "/bin/intentic-sync-windows-amd64.exe" },
++                    { "path": "_apps/desktop/dist-release/Intentic-setup.exe", "filepath": "/desktop/Intentic-setup.exe" },
++                    { "path": "_apps/desktop/dist-release/Intentic.AppImage", "filepath": "/desktop/Intentic.AppImage" },
++                    { "path": "_apps/desktop/dist-release/Intentic.deb", "filepath": "/desktop/Intentic.deb" },
++                    { "path": "_apps/desktop/dist-release/Intentic.rpm", "filepath": "/desktop/Intentic.rpm" },
++                    { "path": "_apps/desktop/dist-release/intentic-machine-amd64.tar.gz", "filepath": "/desktop/intentic-machine-amd64.tar.gz" },
++                    { "path": "_apps/desktop/dist-release/latest.json*", "filepath": "/desktop/latest.json" },
++                    { "path": "_apps/desktop/dist-release/SHA256SUMS", "filepath": "/desktop/SHA256SUMS" }
+                 ]
+             }
+         ]
+diff --git a/ARCHITECTURE.md b/ARCHITECTURE.md
+index 0e41741..5bd27e9 100644
+--- a/ARCHITECTURE.md
++++ b/ARCHITECTURE.md
+@@ -114,8 +114,10 @@ survive reconnects. Its subsystems:
+ - **Discord** — chat/stream/voice integration, now an image-baked extension: a gateway `process` +
+   `listener` in [\_extensions/discord](_extensions/discord).
+ 
+-**One image, two ways to start.** The sandbox `connect.sh` runs on your PC and the one the
+-`i.want.workspace` provider deploys onto a remote host (over SSH) are the *same image*. Either way the
++**One image, three ways to start.** The sandbox `connect.sh` runs on your PC, the one the
++`i.want.workspace` provider deploys onto a remote host (over SSH), and the one the desktop app
++([_apps/desktop](_apps/desktop)) launches natively are the *same image* (the desktop adds a
++tunnel-free `local` mode: ports on 127.0.0.1, the loopback URL announced). Either way the
+ tunnel is named `sandbox-<id>` where `<id> = sha256(connectToken).slice(0, 12)`
+ ([tunnel-ids.ts](_libs/sandbox-contract/src/tunnel-ids.ts)), and it is provisioned one of two ways:
+ 
+@@ -289,6 +291,7 @@ core never depends back on the app.
+ | --- | --- |
+ | [`@intentic-app/web`](_apps/web) | The Vue 3 SPA shell — the editor UI (rail · workspace tree + file viewers + Monaco · chat). Signs in against the platform, then drives the sandbox daemon **directly** over its tunnel. The **extension host** lives here. |
+ | [`@intentic-app/api`](_apps/api) | The thin platform: Better Auth sign-in + the `setup.*` handshake + Stripe. Off the command path (see topology above). |
++| [`@intentic-app/desktop`](_apps/desktop) | The Windows/Linux desktop app (Tauri 2): its workspace window IS the hosted web SPA, while a native layer replaces the `curl \| sh` onboarding — it reconciles the machine (Docker on Linux; WSL2 + a managed distro on Windows, never Docker Desktop), claims the same setup code, and runs the sandbox + cloudflared containers with `connect.sh` parity, plus a lifecycle manager (start/stop/update/logs/remove). Setup handoff is an intercepted `intentic://` link, so remote content gets zero IPC. See [_apps/desktop/README.md](_apps/desktop/README.md). |
+ | [`@intentic/sandbox`](_apps/sandbox) | The per-user daemon (documented under [The sandbox daemon](#the-sandbox-daemon)) — also the app plane's whole backend: workspace files, chat, terminals, panels, search, settings, and the daemon-side half of the extension system. |
+ | [`@intentic/sandbox-contract`](_libs/sandbox-contract) | **The keystone wire contract** — the oRPC route + schema surface shared by the daemon, the web client, and every UI extension (~15 dependents). It is deliberately *the* first-party data contract: because everything that consumes it is in-repo and compiled together, a wire change is caught by the compiler and fixed atomically, so there is no separate "stable API" shim to maintain. |
+ | [`@intentic-app/api-contract`](_libs/api-contract) | The platform (web↔api) oRPC contract. |
+diff --git a/_apps/api/src/sandbox/sandbox.routes.ts b/_apps/api/src/sandbox/sandbox.routes.ts
+index 133e262..fa6cad8 100644
+--- a/_apps/api/src/sandbox/sandbox.routes.ts
++++ b/_apps/api/src/sandbox/sandbox.routes.ts
+@@ -212,9 +212,14 @@ export const sandboxRoutes = {
+             }
+             // SANDBOX_HOSTNAME both feeds the connect script and marks the code as intentic-mode for /setup/claim.
+             payload = { SANDBOX_HOSTNAME: hostname };
+-        } else {
++        } else if (input.target.mode === `own`) {
+             hostname = `${input.target.subdomain}.${input.target.zone}`;
+             payload = { ZONE: input.target.zone, SUBDOMAIN: input.target.subdomain };
++        } else {
++            // local (desktop app, no tunnel): the claim carries only the connect values; the daemon
++            // publishes on loopback and announces http://127.0.0.1:8787 itself.
++            hostname = `127.0.0.1:8787`;
++            payload = {};
+         }
+         // Seed the creator's account email so the daemon binds ONLY this Google identity as owner (TOFU by
+         // the intended person, not just whoever holds the connect token) — daemon ownership then always
+diff --git a/_apps/site/worker.ts b/_apps/site/worker.ts
+index a8126e3..9dcbea0 100644
+--- a/_apps/site/worker.ts
++++ b/_apps/site/worker.ts
+@@ -16,9 +16,33 @@ const SCRIPTS: Record<string, string> = {
+     "/update": "update.sh",
+ };
+ 
++// Desktop-app downloads: stable vanity URLs. A locally-staged installer in public/desktop/ (see
++// _apps/desktop/scripts/stage-local-downloads.sh — gitignored, so deploys normally ship none) is
++// served directly; otherwise redirect to the newest release's asset (the same permalink convention
++// sync.sh uses for its binaries). Names match release-build.sh's un-versioned artifact names so
++// nothing here ever needs a version bump.
++const RELEASE_DOWNLOADS = "https://gitlab.com/radarsu/intentic/-/releases/permalink/latest/downloads";
++const DESKTOP_FILES: Record<string, string> = {
++    "/desktop": "Intentic-setup.exe",
++    "/desktop/windows": "Intentic-setup.exe",
++    "/desktop/linux": "Intentic.AppImage",
++    "/desktop/deb": "Intentic.deb",
++    "/desktop/rpm": "Intentic.rpm",
++};
++
+ export default {
+     async fetch(request: Request, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
+         const url = new URL(request.url);
++        const download = DESKTOP_FILES[url.pathname];
++        if (download !== undefined) {
++            const staged = await env.ASSETS.fetch(new Request(new URL(`/desktop/${download}`, url), request));
++            if (staged.ok) {
++                const headers = new Headers(staged.headers);
++                headers.set("content-disposition", `attachment; filename="${download}"`);
++                return new Response(staged.body, { status: staged.status, headers });
++            }
++            return Response.redirect(`${RELEASE_DOWNLOADS}/desktop/${download}`, 302);
++        }
+         const file = SCRIPTS[url.pathname];
+         if (file === undefined) {
+             return env.ASSETS.fetch(request);
+diff --git a/_apps/web/src/pages/Setup.vue b/_apps/web/src/pages/Setup.vue
+index 714d8d7..35a9c17 100644
+--- a/_apps/web/src/pages/Setup.vue
++++ b/_apps/web/src/pages/Setup.vue
+@@ -14,6 +14,7 @@ import { useAuth } from "../composables/useAuth";
+ import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
+ import { syncFolder } from "../composables/sandbox/syncFolder";
+ import { useSandbox } from "../composables/sandbox/useSandbox";
++import { desktopSetupLink, desktopVersion, DESKTOP_DOWNLOADS } from "../environments/desktop";
+ import { environment } from "../environments/environment";
+ import { bashCommand, psCommand } from "../environments/scriptCommand";
+ 
+@@ -51,11 +52,17 @@ const atLimit = computed(() => {
+     return limit !== undefined && sandbox.sandboxes.value.filter((entry) => entry.role === `owner`).length >= limit;
+ });
+ 
+-// Step 2 mode. Default is the zero-config intentic-provided path; "own" is the bring-your-own-Cloudflare toggle.
+-const mode = ref<"intentic" | "own">(`intentic`);
++// Step 2 mode. Default is the zero-config intentic-provided path; "own" is the bring-your-own-Cloudflare
++// toggle; "local" (desktop app only) runs with no tunnel at all — reachable on that computer alone.
++const mode = ref<"intentic" | "own" | "local">(`intentic`);
+ // Whether the intentic-provided path is offered at all (false once its mint 404s — the server feature flag).
+ const intenticAvailable = ref(true);
+ 
++// Inside the desktop app's workspace window (see environments/desktop.ts): step 3 becomes a one-click
++// "Run on this computer" — the app intercepts the intentic:// link, checks Docker/WSL, and runs the
++// same claim → container → tunnel pipeline natively. The copy-paste command stays for servers.
++const desktop = desktopVersion() !== undefined;
++
+ // --- setup code state (both paths) ---
+ // The minted {code, hostname, expiresAt} for the currently chosen target; the command carries only the code.
+ const setup = ref<SetupCode | null>(null);
+@@ -96,6 +103,9 @@ const target = computed<SetupCodeTarget | undefined>(() => {
+     if (mode.value === `intentic`) {
+         return { mode: `intentic` };
+     }
++    if (mode.value === `local`) {
++        return { mode: `local` };
++    }
+     if (cfTokenValid.value && selectedZone.value !== undefined && subdomainValid.value) {
+         return { mode: `own`, zone: selectedZone.value, subdomain: subdomain.value.trim() };
+     }
+@@ -111,7 +121,7 @@ const targetKey = computed<string | undefined>(() => {
+     if (chosen === undefined || created.value === null) {
+         return undefined;
+     }
+-    return `${created.value.id}:${chosen.mode === `intentic` ? `intentic` : `own:${chosen.zone}:${chosen.subdomain}`}`;
++    return `${created.value.id}:${chosen.mode === `own` ? `own:${chosen.zone}:${chosen.subdomain}` : chosen.mode}`;
+ });
+ 
+ // The command can be built only once the chosen target has a code minted for it.
+@@ -120,6 +130,9 @@ const lockedReason = computed(() => {
+     if (mode.value === `intentic`) {
+         return setupError.value ?? `Preparing your intentic domain…`;
+     }
++    if (mode.value === `local`) {
++        return setupError.value ?? `Preparing your sandbox…`;
++    }
+     if (cfToken.value.length === 0) {
+         return `Enter your Cloudflare API token to reveal your install command.`;
+     }
+@@ -295,6 +308,32 @@ const windowsCommand = (): string => {
+ const selectedCommand = computed(() => (cmdOs.value === `windows` ? windowsCommand() : linuxCommand()));
+ const selectedCommandLang = computed(() => (cmdOs.value === `windows` ? `powershell` : `bash`));
+ 
++// Desktop-app handoff: navigate to the intentic:// link — inside the app the window intercepts it
++// (nothing leaves the process); from an external browser the OS routes it to the installed app.
++// The app claims the same code and runs the same pipeline, so step 4's announce-watch is unchanged.
++const runHere = (): void => {
++    const code = setup.value?.code;
++    if (code === undefined || created.value === null) {
++        return;
++    }
++    track(`desktop_setup_started`, { mode: mode.value, inApp: desktop });
++    globalThis.location.href = desktopSetupLink({
++        code,
++        mode: mode.value,
++        name: created.value.name,
++        cfToken: mode.value === `own` ? cfToken.value.trim() : undefined,
++        syncDir: syncEnabled.value && mode.value !== `local` ? syncDir.value : undefined,
++        platformUrl: platformUrlOverride.value,
++    });
++};
++
++// Whether the copy-paste server command applies: a local-only sandbox exists precisely to run on
++// THIS computer through the app, so there is no server variant to show.
++const serverCommandApplies = computed(() => mode.value !== `local`);
++// Non-desktop browsers still get a one-click path when the app is installed (same deep link, minus
++// the CF token, which the app asks for natively), plus download links when it isn't.
++const showServerCommand = ref(false);
++
+ // When the gate's "Open setup" carried a sandbox id, resume setup for that sandbox (name + steps 2-4) instead
+ // of a blank create form. Owned only — a member can't mint someone else's sandbox, so their id falls through
+ // to create. The check loop acts on the ACTIVE sandbox, so select it to make the URL self-contained.
+@@ -465,13 +504,36 @@ watch(
+                             <Icon name="lock" class="text-subtle" />
+                             <span>{{ setup.hostname }}</span>
+                         </div>
+-                        <button type="button" class="self-start text-xs text-link hover:underline" @click="mode = `own`">
+-                            Use my own domain instead
+-                        </button>
++                        <div class="flex flex-wrap items-center gap-x-3">
++                            <button type="button" class="text-xs text-link hover:underline" @click="mode = `own`">Use my own domain instead</button>
++                            <button v-if="desktop" type="button" class="text-xs text-link hover:underline" @click="mode = `local`">
++                                Keep it private to this computer
++                            </button>
++                        </div>
+                     </template>
+                     <p v-else class="text-xs text-muted"><Icon name="spinner" spin /> Preparing your intentic domain…</p>
+                 </template>
+ 
++                <!-- Local-only (desktop app): no tunnel, loopback reachability, this machine only. -->
++                <template v-else-if="mode === `local`">
++                    <div class="flex items-start gap-2 rounded-md border border-line bg-canvas px-3 py-2 text-sm text-content">
++                        <Icon name="lock" class="mt-0.5 text-subtle" />
++                        <div class="flex flex-col gap-0.5">
++                            <span class="font-mono">http://127.0.0.1:8787</span>
++                            <span class="text-xs text-muted">
++                                Private to this computer — no tunnel, no public URL. Panel previews and desktop sync need a domain; you can switch any
++                                time by re-running setup.
++                            </span>
++                        </div>
++                    </div>
++                    <div class="flex flex-wrap items-center gap-x-3">
++                        <button v-if="intenticAvailable" type="button" class="text-xs text-link hover:underline" @click="mode = `intentic`">
++                            ← Use intentic's domain
++                        </button>
++                        <button type="button" class="text-xs text-link hover:underline" @click="mode = `own`">Use my own domain</button>
++                    </div>
++                </template>
++
+                 <!-- Own Cloudflare: token + zone + editable subdomain. -->
+                 <template v-else>
+                     <button v-if="intenticAvailable" type="button" class="self-start text-xs text-link hover:underline" @click="mode = `intentic`">
+@@ -610,14 +672,15 @@ watch(
+                     </InfoHint>
+                 </template>
+ 
+-                <p class="flex items-center gap-2 text-xs text-muted">
++                <p v-if="!desktop" class="flex items-center gap-2 text-xs text-muted">
+                     <Icon name="box" class="text-info" />
+                     Needs Docker — installed automatically if missing (you'll be asked first).
+                 </p>
+ 
+-                <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
+-                     the SYNC_DIR env on the command below — no re-mint. The folder is derived from the name. -->
+-                <div class="flex items-center gap-3 rounded-xl border border-line bg-canvas p-4">
++                <!-- Desktop sync opt-in: the same command (or desktop handoff) also enrolls the sync agent.
++                     Toggling just adds/removes the SYNC_DIR value — no re-mint. The folder is derived from the
++                     name. A local-only sandbox has no ssh tunnel for sync, so the toggle disappears with it. -->
++                <div v-if="mode !== `local`" class="flex items-center gap-3 rounded-xl border border-line bg-canvas p-4">
+                     <ToggleSwitch v-model="syncEnabled" class="shrink-0" aria-label="Also sync a local folder with this sandbox" />
+                     <div class="flex flex-col gap-0.5">
+                         <span class="text-sm font-semibold text-content">Also sync a local folder with this sandbox</span>
+@@ -636,7 +699,43 @@ watch(
+                     <span>{{ lockedReason }}</span>
+                 </div>
+                 <template v-else>
+-                    <div class="flex flex-col gap-2">
++                    <!-- Inside the desktop app: one click replaces the terminal. The app checks Docker (or
++                         provisions its WSL machine on Windows), claims this same setup code, and starts the
++                         sandbox + tunnel with live progress in its manager window. -->
++                    <div v-if="desktop" class="flex flex-col gap-3 rounded-xl border border-primary-600/40 bg-primary-600/5 p-4">
++                        <div class="flex items-center gap-2">
++                            <Icon name="bolt" class="text-primary-400" />
++                            <span class="text-sm font-semibold text-content">Run on this computer</span>
++                        </div>
++                        <ul class="flex flex-col gap-1.5 text-xs text-muted">
++                            <li class="flex items-start gap-2">
++                                <Icon name="check-circle" class="mt-0.5 text-success" />
++                                <span>Checks this computer and sets up everything missing — no Docker Desktop needed</span>
++                            </li>
++                            <li class="flex items-start gap-2">
++                                <Icon name="check-circle" class="mt-0.5 text-success" />
++                                <span>Starts your sandbox{{ mode === `local` ? ` privately on this machine` : ` and connects its tunnel` }}</span>
++                            </li>
++                            <li class="flex items-start gap-2">
++                                <Icon name="check-circle" class="mt-0.5 text-success" />
++                                <span>Your workspace opens here the moment it's ready</span>
++                            </li>
++                        </ul>
++                        <Button label="Set up on this computer" class="self-start" @click="runHere">
++                            <template #icon><Icon name="bolt" /></template>
++                        </Button>
++                    </div>
++
++                    <button
++                        v-if="desktop && serverCommandApplies"
++                        type="button"
++                        class="self-start text-xs text-muted underline hover:text-content"
++                        @click="showServerCommand = !showServerCommand"
++                    >
++                        {{ showServerCommand ? `Hide the server command` : `Prefer to run it on a server? Show the command` }}
++                    </button>
++
++                    <div v-if="!desktop || (serverCommandApplies && showServerCommand)" class="flex flex-col gap-2">
+                         <div class="flex flex-wrap items-center justify-between gap-2">
+                             <Segmented
+                                 v-model="cmdOs"
+@@ -653,9 +752,41 @@ watch(
+                         <p v-if="platformUrlOverride" class="flex items-center gap-2 text-xs text-warning">
+                             <Icon name="box" class="shrink-0" />
+                             <span
+-                                >Local dev: this command runs your locally-built <code>{{ DEV_SANDBOX_IMAGE }}</code> image,
+-                                building it automatically when missing (first build takes a few minutes). Rebuilds after
+-                                sandbox edits come from <code>pnpm dev:sandbox</code>.</span
++                                >Local dev: this command runs your locally-built <code>{{ DEV_SANDBOX_IMAGE }}</code> image, building it automatically
++                                when missing (first build takes a few minutes). Rebuilds after sandbox edits come from
++                                <code>pnpm dev:sandbox</code>.</span
++                            >
++                        </p>
++                    </div>
++
++                    <!-- Browser (no app detected): offer the desktop app as the no-terminal path. The deep link
++                         works when it's already installed; the download links cover when it isn't. -->
++                    <div v-if="!desktop" class="flex flex-col gap-1.5 border-t border-line pt-3 text-2xs text-subtle">
++                        <span>
++                            Skip the terminal — the
++                            <button type="button" class="text-link hover:underline" @click="runHere">Intentic Desktop app</button>
++                            does this in one click (opens if installed).
++                        </span>
++                        <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
++                            Get it:
++                            <a :href="DESKTOP_DOWNLOADS.windows" class="inline-flex items-center gap-1 text-link hover:underline">
++                                Windows <Icon name="external-link" />
++                            </a>
++                            <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="inline-flex items-center gap-1 text-link hover:underline">
++                                Linux AppImage <Icon name="external-link" />
++                            </a>
++                            <a :href="DESKTOP_DOWNLOADS.linuxDeb" class="text-link hover:underline">.deb</a>
++                            <a :href="DESKTOP_DOWNLOADS.linuxRpm" class="text-link hover:underline">.rpm</a>
++                        </span>
++                        <!-- Local dev: DESKTOP_DOWNLOADS points at the local site's /desktop/ assets — the links
++                             download YOUR build once staged, mirroring the dev sandbox-image story above. -->
++                        <p v-if="platformUrlOverride" class="flex items-center gap-2 text-warning">
++                            <Icon name="box" class="shrink-0" />
++                            <span
++                                >Local dev: these links serve from your local site — stage installers with
++                                <code>pnpm --filter @intentic-app/desktop stage:downloads</code>, then run the site (<code
++                                    >pnpm --filter @intentic-dev/site dev</code
++                                >).</span
+                             >
+                         </p>
+                     </div>
+diff --git a/_libs/api-contract/src/schemas.ts b/_libs/api-contract/src/schemas.ts
+index 8e0cf48..2fbafcc 100644
+--- a/_libs/api-contract/src/schemas.ts
++++ b/_libs/api-contract/src/schemas.ts
+@@ -329,6 +329,8 @@ export type CfZones = z.infer<typeof CfZonesSchema>;
+ //     server; the sandbox only ever sees the narrow per-tunnel connector token) → {TUNNEL_TOKEN, SANDBOX_HOSTNAME}.
+ //   • own: the user's zone/subdomain picks → {ZONE, SUBDOMAIN}. Their CF token NEVER enters the code — it stays
+ //     an env var on the command (the never-stored invariant).
++//   • local: no tunnel at all (desktop-app sandboxes private to one machine) → the claim yields only the
++//     connect values; the daemon publishes on 127.0.0.1 and announces its loopback URL.
+ // When desktop sync is requested at setup, the payload additionally carries {SYNC_DIR, SYNC_PAIR_TOKEN} — a
+ // platform-minted single-use pairing token the sandbox seeds at boot, so the connect script can enroll the sync
+ // agent without a second pasted command (the command itself stays identical either way).
+@@ -336,6 +338,7 @@ export type CfZones = z.infer<typeof CfZonesSchema>;
+ export const SetupCodeTargetSchema = z.discriminatedUnion("mode", [
+     z.object({ mode: z.literal("intentic") }),
+     z.object({ mode: z.literal("own"), zone: z.string().min(1), subdomain: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i) }),
++    z.object({ mode: z.literal("local") }),
+ ]);
+ export type SetupCodeTarget = z.infer<typeof SetupCodeTargetSchema>;
+ export const SetupCodeSchema = z.object({ code: z.string(), hostname: z.string(), expiresAt: z.string() });
+diff --git a/knip.json b/knip.json
+index 783574f..f612e33 100644
+--- a/knip.json
++++ b/knip.json
+@@ -24,6 +24,9 @@
+         "_apps/api": {
+             "entry": ["src/main.ts", "src/**/*.test.ts"]
+         },
++        "_apps/desktop": {
++            "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh"]
++        },
+         "_apps/sandbox": {
+             "entry": ["src/main.ts", "src/**/*.test.ts", "bin/*.mjs", "bin/*.test.mjs", "scripts/*.{sh,mjs}"]
+         },
+diff --git a/pnpm-workspace.yaml b/pnpm-workspace.yaml
+index 97e2909..c8c35a8 100644
+--- a/pnpm-workspace.yaml
++++ b/pnpm-workspace.yaml
+@@ -23,6 +23,7 @@ minimumReleaseAgeExclude:
+   - vite@8.1.2
+   - vue-tsc@3.3.6
+   - "@posthog/core@1.40.2"
++  - '@tauri-apps/plugin-dialog@2.7.2'
+ 
+ allowBuilds:
+   "@ast-grep/lang-go": true
+@@ -106,6 +107,9 @@ catalog:
+   "@tailwindcss/vite": 4.3.0
+   "@tanstack/query-persist-client-core": 5.101.2
+   "@tanstack/vue-query": 5.101.2
++  "@tauri-apps/api": 2.11.1
++  "@tauri-apps/cli": 2.11.4
++  "@tauri-apps/plugin-dialog": 2.7.2
+   "@types/bun": 1.3.14
+   "@types/mailparser": 3.4.6
+   "@types/node": 24.13.2

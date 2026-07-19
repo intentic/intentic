@@ -41,46 +41,6 @@ test:
     - pnpm turbo run build
     - pnpm turbo run test
 
-# Desktop app (Tauri, _apps/desktop): Rust fmt/clippy/tests + the launcher UI build. Runs only when the
-# desktop tree changes — on MRs as the gate, and on main so a broken desktop surfaces before the release
-# job's release-build.sh (which cross-builds the same crates). clippy compiles the app crate against real
-# webkit2gtk, covering the Linux target; the Windows msvc target is covered by the release cross-build.
-desktop:check:
-  stage: test
-  interruptible: true
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      changes: &desktop-changes
-        - _apps/desktop/**/*
-        - _libs/ui/**/*
-        - pnpm-lock.yaml
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      changes: *desktop-changes
-  variables:
-    CARGO_HOME: $CI_PROJECT_DIR/.cargo
-  cache:
-    - key: turbo-$CI_COMMIT_REF_SLUG
-      paths:
-        - .turbo
-        - "_*/*/.turbo"
-    - key: desktop-cargo
-      paths:
-        - .cargo/registry
-        - _apps/desktop/src-tauri/target
-  before_script:
-    - !reference [.pnpm-setup, script]
-    - apt-get update && apt-get install -y --no-install-recommends
-      libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-      build-essential libssl-dev pkg-config
-    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal --component rustfmt,clippy
-    # rustup writes its env file into CARGO_HOME when overridden (as it is here, for caching).
-    - source "${CARGO_HOME:-$HOME/.cargo}/env"
-  script:
-    - pnpm --filter @intentic-app/desktop build
-    - cargo fmt --manifest-path _apps/desktop/src-tauri/Cargo.toml --all --check
-    - cargo clippy --manifest-path _apps/desktop/src-tauri/Cargo.toml --workspace --all-targets -- -D warnings
-    - cargo test --manifest-path _apps/desktop/src-tauri/Cargo.toml -p intentic-desktop-core
-
 # Hermetic infra e2e on merge requests — NON-BLOCKING sidecar (allow_failure). Boots a Docker-in-Docker host
 # via testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no
 # external services or secrets. turbo scopes e2e:hermetic to @intentic/cli.
@@ -186,24 +146,12 @@ release:
   resource_group: release
   services:
     - docker:27-dind
-  # The desktop cross-build (release-build.sh in prepareCmd) adds real minutes on a cold cargo cache.
-  timeout: 2h
   variables:
     GIT_DEPTH: 0
-    CARGO_HOME: $CI_PROJECT_DIR/.cargo
     DOCKER_HOST: tcp://docker:2376
     DOCKER_TLS_CERTDIR: "/certs"
     DOCKER_TLS_VERIFY: "1"
     DOCKER_CERT_PATH: "/certs/client"
-  cache:
-    - key: turbo-$CI_COMMIT_REF_SLUG
-      paths:
-        - .turbo
-        - "_*/*/.turbo"
-    - key: desktop-cargo
-      paths:
-        - .cargo/registry
-        - _apps/desktop/src-tauri/target
   # npm trusted publishing (OIDC): GitLab must be a registered trusted publisher for each @intentic/* package
   # on npmjs.org. The aud must be exactly npm:<registry-host>.
   id_tokens:

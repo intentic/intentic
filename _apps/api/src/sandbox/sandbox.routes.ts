@@ -212,14 +212,9 @@ export const sandboxRoutes = {
             }
             // SANDBOX_HOSTNAME both feeds the connect script and marks the code as intentic-mode for /setup/claim.
             payload = { SANDBOX_HOSTNAME: hostname };
-        } else if (input.target.mode === `own`) {
+        } else {
             hostname = `${input.target.subdomain}.${input.target.zone}`;
             payload = { ZONE: input.target.zone, SUBDOMAIN: input.target.subdomain };
-        } else {
-            // local (desktop app, no tunnel): the claim carries only the connect values; the daemon
-            // publishes on loopback and announces http://127.0.0.1:8787 itself.
-            hostname = `127.0.0.1:8787`;
-            payload = {};
         }
         // Seed the creator's account email so the daemon binds ONLY this Google identity as owner (TOFU by
         // the intended person, not just whoever holds the connect token) — daemon ownership then always

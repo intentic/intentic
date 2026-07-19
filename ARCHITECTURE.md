@@ -114,10 +114,8 @@ survive reconnects. Its subsystems:
 - **Discord** — chat/stream/voice integration, now an image-baked extension: a gateway `process` +
   `listener` in [\_extensions/discord](_extensions/discord).
 
-**One image, three ways to start.** The sandbox `connect.sh` runs on your PC, the one the
-`i.want.workspace` provider deploys onto a remote host (over SSH), and the one the desktop app
-([_apps/desktop](_apps/desktop)) launches natively are the *same image* (the desktop adds a
-tunnel-free `local` mode: ports on 127.0.0.1, the loopback URL announced). Either way the
+**One image, two ways to start.** The sandbox `connect.sh` runs on your PC and the one the
+`i.want.workspace` provider deploys onto a remote host (over SSH) are the *same image*. Either way the
 tunnel is named `sandbox-<id>` where `<id> = sha256(connectToken).slice(0, 12)`
 ([tunnel-ids.ts](_libs/sandbox-contract/src/tunnel-ids.ts)), and it is provisioned one of two ways:
 
@@ -291,7 +289,6 @@ core never depends back on the app.
 | --- | --- |
 | [`@intentic-app/web`](_apps/web) | The Vue 3 SPA shell — the editor UI (rail · workspace tree + file viewers + Monaco · chat). Signs in against the platform, then drives the sandbox daemon **directly** over its tunnel. The **extension host** lives here. |
 | [`@intentic-app/api`](_apps/api) | The thin platform: Better Auth sign-in + the `setup.*` handshake + Stripe. Off the command path (see topology above). |
-| [`@intentic-app/desktop`](_apps/desktop) | The Windows/Linux desktop app (Tauri 2): its workspace window IS the hosted web SPA, while a native layer replaces the `curl \| sh` onboarding — it reconciles the machine (Docker on Linux; WSL2 + a managed distro on Windows, never Docker Desktop), claims the same setup code, and runs the sandbox + cloudflared containers with `connect.sh` parity, plus a lifecycle manager (start/stop/update/logs/remove). Setup handoff is an intercepted `intentic://` link, so remote content gets zero IPC. See [_apps/desktop/README.md](_apps/desktop/README.md). |
 | [`@intentic/sandbox`](_apps/sandbox) | The per-user daemon (documented under [The sandbox daemon](#the-sandbox-daemon)) — also the app plane's whole backend: workspace files, chat, terminals, panels, search, settings, and the daemon-side half of the extension system. |
 | [`@intentic/sandbox-contract`](_libs/sandbox-contract) | **The keystone wire contract** — the oRPC route + schema surface shared by the daemon, the web client, and every UI extension (~15 dependents). It is deliberately *the* first-party data contract: because everything that consumes it is in-repo and compiled together, a wire change is caught by the compiler and fixed atomically, so there is no separate "stable API" shim to maintain. |
 | [`@intentic-app/api-contract`](_libs/api-contract) | The platform (web↔api) oRPC contract. |

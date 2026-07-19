@@ -14,7 +14,6 @@ import { useAuth } from "../composables/useAuth";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import { syncFolder } from "../composables/sandbox/syncFolder";
 import { useSandbox } from "../composables/sandbox/useSandbox";
-import { desktopSetupLink, desktopVersion, DESKTOP_DOWNLOADS } from "../environments/desktop";
 import { environment } from "../environments/environment";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
 
@@ -52,16 +51,10 @@ const atLimit = computed(() => {
     return limit !== undefined && sandbox.sandboxes.value.filter((entry) => entry.role === `owner`).length >= limit;
 });
 
-// Step 2 mode. Default is the zero-config intentic-provided path; "own" is the bring-your-own-Cloudflare
-// toggle; "local" (desktop app only) runs with no tunnel at all — reachable on that computer alone.
-const mode = ref<"intentic" | "own" | "local">(`intentic`);
+// Step 2 mode. Default is the zero-config intentic-provided path; "own" is the bring-your-own-Cloudflare toggle.
+const mode = ref<"intentic" | "own">(`intentic`);
 // Whether the intentic-provided path is offered at all (false once its mint 404s — the server feature flag).
 const intenticAvailable = ref(true);
-
-// Inside the desktop app's workspace window (see environments/desktop.ts): step 3 becomes a one-click
-// "Run on this computer" — the app intercepts the intentic:// link, checks Docker/WSL, and runs the
-// same claim → container → tunnel pipeline natively. The copy-paste command stays for servers.
-const desktop = desktopVersion() !== undefined;
 
 // --- setup code state (both paths) ---
 // The minted {code, hostname, expiresAt} for the currently chosen target; the command carries only the code.
@@ -103,9 +96,6 @@ const target = computed<SetupCodeTarget | undefined>(() => {
     if (mode.value === `intentic`) {
         return { mode: `intentic` };
     }
-    if (mode.value === `local`) {
-        return { mode: `local` };
-    }
     if (cfTokenValid.value && selectedZone.value !== undefined && subdomainValid.value) {
         return { mode: `own`, zone: selectedZone.value, subdomain: subdomain.value.trim() };
     }
@@ -121,7 +111,7 @@ const targetKey = computed<string | undefined>(() => {
     if (chosen === undefined || created.value === null) {
         return undefined;
     }
-    return `${created.value.id}:${chosen.mode === `own` ? `own:${chosen.zone}:${chosen.subdomain}` : chosen.mode}`;
+    return `${created.value.id}:${chosen.mode === `intentic` ? `intentic` : `own:${chosen.zone}:${chosen.subdomain}`}`;
 });
 
 // The command can be built only once the chosen target has a code minted for it.
@@ -129,9 +119,6 @@ const commandReady = computed(() => setup.value !== null && mintedFor.value === 
 const lockedReason = computed(() => {
     if (mode.value === `intentic`) {
         return setupError.value ?? `Preparing your intentic domain…`;
-    }
-    if (mode.value === `local`) {
-        return setupError.value ?? `Preparing your sandbox…`;
     }
     if (cfToken.value.length === 0) {
         return `Enter your Cloudflare API token to reveal your install command.`;
@@ -308,32 +295,6 @@ const windowsCommand = (): string => {
 const selectedCommand = computed(() => (cmdOs.value === `windows` ? windowsCommand() : linuxCommand()));
 const selectedCommandLang = computed(() => (cmdOs.value === `windows` ? `powershell` : `bash`));
 
-// Desktop-app handoff: navigate to the intentic:// link — inside the app the window intercepts it
-// (nothing leaves the process); from an external browser the OS routes it to the installed app.
-// The app claims the same code and runs the same pipeline, so step 4's announce-watch is unchanged.
-const runHere = (): void => {
-    const code = setup.value?.code;
-    if (code === undefined || created.value === null) {
-        return;
-    }
-    track(`desktop_setup_started`, { mode: mode.value, inApp: desktop });
-    globalThis.location.href = desktopSetupLink({
-        code,
-        mode: mode.value,
-        name: created.value.name,
-        cfToken: mode.value === `own` ? cfToken.value.trim() : undefined,
-        syncDir: syncEnabled.value && mode.value !== `local` ? syncDir.value : undefined,
-        platformUrl: platformUrlOverride.value,
-    });
-};
-
-// Whether the copy-paste server command applies: a local-only sandbox exists precisely to run on
-// THIS computer through the app, so there is no server variant to show.
-const serverCommandApplies = computed(() => mode.value !== `local`);
-// Non-desktop browsers still get a one-click path when the app is installed (same deep link, minus
-// the CF token, which the app asks for natively), plus download links when it isn't.
-const showServerCommand = ref(false);
-
 // When the gate's "Open setup" carried a sandbox id, resume setup for that sandbox (name + steps 2-4) instead
 // of a blank create form. Owned only — a member can't mint someone else's sandbox, so their id falls through
 // to create. The check loop acts on the ACTIVE sandbox, so select it to make the URL self-contained.
@@ -504,34 +465,11 @@ watch(
                             <Icon name="lock" class="text-subtle" />
                             <span>{{ setup.hostname }}</span>
                         </div>
-                        <div class="flex flex-wrap items-center gap-x-3">
-                            <button type="button" class="text-xs text-link hover:underline" @click="mode = `own`">Use my own domain instead</button>
-                            <button v-if="desktop" type="button" class="text-xs text-link hover:underline" @click="mode = `local`">
-                                Keep it private to this computer
-                            </button>
-                        </div>
+                        <button type="button" class="self-start text-xs text-link hover:underline" @click="mode = `own`">
+                            Use my own domain instead
+                        </button>
                     </template>
                     <p v-else class="text-xs text-muted"><Icon name="spinner" spin /> Preparing your intentic domain…</p>
-                </template>
-
-                <!-- Local-only (desktop app): no tunnel, loopback reachability, this machine only. -->
-                <template v-else-if="mode === `local`">
-                    <div class="flex items-start gap-2 rounded-md border border-line bg-canvas px-3 py-2 text-sm text-content">
-                        <Icon name="lock" class="mt-0.5 text-subtle" />
-                        <div class="flex flex-col gap-0.5">
-                            <span class="font-mono">http://127.0.0.1:8787</span>
-                            <span class="text-xs text-muted">
-                                Private to this computer — no tunnel, no public URL. Panel previews and desktop sync need a domain; you can switch any
-                                time by re-running setup.
-                            </span>
-                        </div>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-x-3">
-                        <button v-if="intenticAvailable" type="button" class="text-xs text-link hover:underline" @click="mode = `intentic`">
-                            ← Use intentic's domain
-                        </button>
-                        <button type="button" class="text-xs text-link hover:underline" @click="mode = `own`">Use my own domain</button>
-                    </div>
                 </template>
 
                 <!-- Own Cloudflare: token + zone + editable subdomain. -->
@@ -672,15 +610,14 @@ watch(
                     </InfoHint>
                 </template>
 
-                <p v-if="!desktop" class="flex items-center gap-2 text-xs text-muted">
+                <p class="flex items-center gap-2 text-xs text-muted">
                     <Icon name="box" class="text-info" />
                     Needs Docker — installed automatically if missing (you'll be asked first).
                 </p>
 
-                <!-- Desktop sync opt-in: the same command (or desktop handoff) also enrolls the sync agent.
-                     Toggling just adds/removes the SYNC_DIR value — no re-mint. The folder is derived from the
-                     name. A local-only sandbox has no ssh tunnel for sync, so the toggle disappears with it. -->
-                <div v-if="mode !== `local`" class="flex items-center gap-3 rounded-xl border border-line bg-canvas p-4">
+                <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
+                     the SYNC_DIR env on the command below — no re-mint. The folder is derived from the name. -->
+                <div class="flex items-center gap-3 rounded-xl border border-line bg-canvas p-4">
                     <ToggleSwitch v-model="syncEnabled" class="shrink-0" aria-label="Also sync a local folder with this sandbox" />
                     <div class="flex flex-col gap-0.5">
                         <span class="text-sm font-semibold text-content">Also sync a local folder with this sandbox</span>
@@ -699,43 +636,7 @@ watch(
                     <span>{{ lockedReason }}</span>
                 </div>
                 <template v-else>
-                    <!-- Inside the desktop app: one click replaces the terminal. The app checks Docker (or
-                         provisions its WSL machine on Windows), claims this same setup code, and starts the
-                         sandbox + tunnel with live progress in its manager window. -->
-                    <div v-if="desktop" class="flex flex-col gap-3 rounded-xl border border-primary-600/40 bg-primary-600/5 p-4">
-                        <div class="flex items-center gap-2">
-                            <Icon name="bolt" class="text-primary-400" />
-                            <span class="text-sm font-semibold text-content">Run on this computer</span>
-                        </div>
-                        <ul class="flex flex-col gap-1.5 text-xs text-muted">
-                            <li class="flex items-start gap-2">
-                                <Icon name="check-circle" class="mt-0.5 text-success" />
-                                <span>Checks this computer and sets up everything missing — no Docker Desktop needed</span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <Icon name="check-circle" class="mt-0.5 text-success" />
-                                <span>Starts your sandbox{{ mode === `local` ? ` privately on this machine` : ` and connects its tunnel` }}</span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <Icon name="check-circle" class="mt-0.5 text-success" />
-                                <span>Your workspace opens here the moment it's ready</span>
-                            </li>
-                        </ul>
-                        <Button label="Set up on this computer" class="self-start" @click="runHere">
-                            <template #icon><Icon name="bolt" /></template>
-                        </Button>
-                    </div>
-
-                    <button
-                        v-if="desktop && serverCommandApplies"
-                        type="button"
-                        class="self-start text-xs text-muted underline hover:text-content"
-                        @click="showServerCommand = !showServerCommand"
-                    >
-                        {{ showServerCommand ? `Hide the server command` : `Prefer to run it on a server? Show the command` }}
-                    </button>
-
-                    <div v-if="!desktop || (serverCommandApplies && showServerCommand)" class="flex flex-col gap-2">
+                    <div class="flex flex-col gap-2">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <Segmented
                                 v-model="cmdOs"
@@ -752,41 +653,9 @@ watch(
                         <p v-if="platformUrlOverride" class="flex items-center gap-2 text-xs text-warning">
                             <Icon name="box" class="shrink-0" />
                             <span
-                                >Local dev: this command runs your locally-built <code>{{ DEV_SANDBOX_IMAGE }}</code> image, building it automatically
-                                when missing (first build takes a few minutes). Rebuilds after sandbox edits come from
-                                <code>pnpm dev:sandbox</code>.</span
-                            >
-                        </p>
-                    </div>
-
-                    <!-- Browser (no app detected): offer the desktop app as the no-terminal path. The deep link
-                         works when it's already installed; the download links cover when it isn't. -->
-                    <div v-if="!desktop" class="flex flex-col gap-1.5 border-t border-line pt-3 text-2xs text-subtle">
-                        <span>
-                            Skip the terminal — the
-                            <button type="button" class="text-link hover:underline" @click="runHere">Intentic Desktop app</button>
-                            does this in one click (opens if installed).
-                        </span>
-                        <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            Get it:
-                            <a :href="DESKTOP_DOWNLOADS.windows" class="inline-flex items-center gap-1 text-link hover:underline">
-                                Windows <Icon name="external-link" />
-                            </a>
-                            <a :href="DESKTOP_DOWNLOADS.linuxAppImage" class="inline-flex items-center gap-1 text-link hover:underline">
-                                Linux AppImage <Icon name="external-link" />
-                            </a>
-                            <a :href="DESKTOP_DOWNLOADS.linuxDeb" class="text-link hover:underline">.deb</a>
-                            <a :href="DESKTOP_DOWNLOADS.linuxRpm" class="text-link hover:underline">.rpm</a>
-                        </span>
-                        <!-- Local dev: DESKTOP_DOWNLOADS points at the local site's /desktop/ assets — the links
-                             download YOUR build once staged, mirroring the dev sandbox-image story above. -->
-                        <p v-if="platformUrlOverride" class="flex items-center gap-2 text-warning">
-                            <Icon name="box" class="shrink-0" />
-                            <span
-                                >Local dev: these links serve from your local site — stage installers with
-                                <code>pnpm --filter @intentic-app/desktop stage:downloads</code>, then run the site (<code
-                                    >pnpm --filter @intentic-dev/site dev</code
-                                >).</span
+                                >Local dev: this command runs your locally-built <code>{{ DEV_SANDBOX_IMAGE }}</code> image,
+                                building it automatically when missing (first build takes a few minutes). Rebuilds after
+                                sandbox edits come from <code>pnpm dev:sandbox</code>.</span
                             >
                         </p>
                     </div>

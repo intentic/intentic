@@ -16,6 +16,9 @@ _apps/sandbox/operator-templates
 # Local tooling config, not project source.
 .claude
 
+# Frozen experiments — kept as-is for possible revival, not part of the live codebase.
+_archive
+
 # Formatting is intentionally scoped to JS / TS / JSON.
 # Astro, YAML, CSS, HTML and Markdown are left untouched (no auto-formatting).
 **/*.astro
