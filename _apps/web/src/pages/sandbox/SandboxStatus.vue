@@ -3,7 +3,7 @@ import { Card, cmp, StatusBadge, type StatusVariant } from "@intentic-app/ui";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
 import { useRunning } from "../../composables/sandbox/useRunning";
-import { detectActivations } from "../../core-views/registry";
+import { detectActivations, extensionPath } from "../../core-views/registry";
 
 /* The Sandbox hub's "Status" tab: live things across both classes — operator-panel dev servers (with port +
  * preview) and active services. The only at-a-glance view of what is actually up right now. */
@@ -16,7 +16,7 @@ const { runningPanels, activeServices } = useRunning();
 // a running dev server's row to its UI; undefined when nothing serves it.
 const activationRoute = (repo: string): string | undefined => {
     const found = detectActivations(panels.value, capabilities.value).find(({ activation }) => activation.repo === repo);
-    return found === undefined ? undefined : `/ext/${found.extension.id}/${encodeURIComponent(found.activation.key)}`;
+    return found === undefined ? undefined : extensionPath(found.extension, found.activation);
 };
 
 const stateVariant = (state: string): StatusVariant =>

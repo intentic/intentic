@@ -9,7 +9,8 @@ export interface Disposable {
     dispose(): void;
 }
 
-// One sidebar element a view contributes: routed at /ext/<viewId>/<key>, rendered by the view's component with
+// One sidebar element a view contributes: routed at /ext/<viewId>/<key> (the key segment is dropped when it
+// equals the view id — a singleton view links to /ext/<viewId>), rendered by the view's component with
 // `repo` (+ props) bound.
 export interface Activation {
     // Stable per-view key (usually the repo name) — the route segment, so deep links survive reloads.

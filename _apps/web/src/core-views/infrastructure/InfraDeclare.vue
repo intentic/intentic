@@ -13,7 +13,7 @@ import { usePanels } from "../../composables/extensions/usePanels";
 import { convergedBadge } from "../../composables/extensions/reconcileStatus";
 import { useSecrets } from "../../composables/extensions/useSecrets";
 import { useWorkspaceState } from "../../composables/extensions/useWorkspaceState";
-import { detectActivations } from "../registry";
+import { detectActivations, extensionPath } from "../registry";
 import AddWantDialog from "./AddWantDialog.vue";
 import ApplyProgress from "./ApplyProgress.vue";
 import ChangePreview from "./ChangePreview.vue";
@@ -295,7 +295,7 @@ const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 const liveStatusRoute = computed(() => {
     const found = detectActivations(panels.value, capabilities.value).find(({ extension }) => extension.id === `live-status`);
-    return found === undefined ? undefined : `/ext/live-status/${encodeURIComponent(found.activation.key)}`;
+    return found === undefined ? undefined : extensionPath(found.extension, found.activation);
 });
 
 // Apply is enabled only against a fresh, non-stale preview: the daemon's apply job consumes the desired-state

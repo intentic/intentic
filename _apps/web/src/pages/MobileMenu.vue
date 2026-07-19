@@ -4,7 +4,7 @@ import { computed, onMounted } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { detectActivations } from "../core-views/registry";
+import { detectActivations, extensionPath } from "../core-views/registry";
 import { usePanels } from "../composables/extensions/usePanels";
 import { presenceActivity, presenceHue, presenceInitials, presenceOthers } from "../composables/usePresence";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -39,7 +39,7 @@ const areas = computed<readonly AreaRow[]>(() => [
     ...detectActivations(panels.value, capabilities.value)
         .filter(({ extension }) => extension.surface === `rail`)
         .map(({ extension, activation }): AreaRow => {
-            const to = `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
+            const to = extensionPath(extension, activation);
             // Activation.icon is an open string in the public extension API; trusted to name one of the app's icons.
             return activation.icon === undefined
                 ? { to, label: activation.title }

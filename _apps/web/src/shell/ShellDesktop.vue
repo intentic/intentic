@@ -6,7 +6,7 @@ import { useAgents } from "../composables/agents/useAgents";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
-import { detectActivations } from "../core-views/registry";
+import { detectActivations, extensionPath } from "../core-views/registry";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useLayout } from "../composables/useLayout";
@@ -75,7 +75,7 @@ const tiles = computed<readonly AreaTile[]>(() => {
             // the Workspace tree instead, so the rail stays a short, capability-first list.
             .filter(({ extension }) => extension.surface === `rail`)
             .map(({ extension, activation }): AreaTile => {
-                const to = `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
+                const to = extensionPath(extension, activation);
                 // Activation.icon is an open string in the public extension API; the rail trusts it names one
                 // of the app's icons (an unknown name renders the icon set's fallback).
                 return activation.icon === undefined

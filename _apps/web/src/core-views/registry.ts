@@ -29,6 +29,13 @@ export interface ActiveExtension {
     readonly activation: Activation;
 }
 
+// The deep-link path to a sidebar element. The `:key` segment only disambiguates a view's multiple activations
+// (one per repo: /ext/preview/<repo>); a singleton view names its sole activation after itself (key === id), so
+// that segment would just repeat the view id — drop it. `/ext/ports`, not `/ext/ports/ports`. ExtensionHost
+// resolves the missing segment back to the view id.
+export const extensionPath = (extension: ViewRegistration, activation: Activation): string =>
+    activation.key === extension.id ? `/ext/${extension.id}` : `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
+
 // detect() failures are contained, not propagated: one broken extension contributes nothing this round instead
 // of blanking every sidebar element with it.
 const safeDetect = (entry: RegisteredView, repos: readonly RepoFacts[], capabilities: readonly CapabilityFacts[]): Activation[] => {
