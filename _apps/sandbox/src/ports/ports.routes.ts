@@ -35,10 +35,12 @@ export const createPortsRoutes = (services: Services) => {
             if (reserved.has(input.port)) {
                 throw new ORPCError("BAD_REQUEST", { message: `port ${input.port} belongs to the sandbox itself and can't be forwarded` });
             }
-            if (!(await services.scanPorts()).some(({ port }) => port === input.port)) {
+            const listener = (await services.scanPorts()).find(({ port }) => port === input.port);
+            if (listener === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: `nothing is listening on port ${input.port}` });
             }
-            const slot = await services.portForwards.forward(input.port);
+            // The listener's dial host rides into the forward: a `localhost` bind can be ::1-only (Vite).
+            const slot = await services.portForwards.forward(input.port, listener.host);
             // Mint the route before the URL reaches a browser (a no-op on own-Cloudflare, and after the slot's
             // first use on the intentic path — slots exist precisely so this stays a bounded, warm set).
             await services.ensurePreviewRoute(portLabel(slot));

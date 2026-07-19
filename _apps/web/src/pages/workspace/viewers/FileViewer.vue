@@ -76,6 +76,12 @@ const reconcileOpenFile = (currentPath: string): void => {
             if (content === edit.baselineOf(currentPath)) {
                 return;
             }
+            // Equal to the live buffer ⇒ disk caught up to the user's text (a save echo racing markSaved, or an
+            // external write of identical content): nothing is lost — record it as saved, no warning.
+            if (content === edit.bufferOf(currentPath)) {
+                edit.markSaved(currentPath, content);
+                return;
+            }
             // A genuine external edit landed while the user has unsaved work — keep the buffer, offer Reload.
             if (edit.isDirty(currentPath)) {
                 staleOnDisk.value = true;

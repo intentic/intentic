@@ -13,8 +13,10 @@ export type SlotResolver = (slot: string) => PortTarget | undefined;
 // scaffolded dev servers allow the preview hostname); forwarded ports rewrite Host AND Origin to
 // localhost:<port> — those are arbitrary user apps, and stock Vite/webpack host checks reject any hostname
 // they weren't configured for, so the rewrite is what makes an unmodified dev server just work. The target is
-// identified by the port, never the vhost, so the rewrite loses nothing.
-type Upstream = { port: number; scheme: "http" | "https"; headers: http.IncomingHttpHeaders } | { status: number; message: string };
+// identified by the port, never the vhost, so the rewrite loses nothing. `dial` is the loopback address the
+// upstream actually answers at: panels bind the daemon-assigned PORT on 127.0.0.1, but a forwarded server that
+// bound `localhost` can sit on ::1 only (Vite) — the forward table records which.
+type Upstream = { dial: string; port: number; scheme: "http" | "https"; headers: http.IncomingHttpHeaders } | { status: number; message: string };
 
 const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTargetOf: SlotResolver, sandboxId: string | undefined): Upstream => {
     const repo = panelFromHost(req.headers.host, sandboxId);
@@ -23,7 +25,7 @@ const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTa
         if (port === undefined) {
             return { status: 502, message: `panel "${repo}" is not running — start it from the ${repo} entry in the sidebar` };
         }
-        return { port, scheme: "http", headers: req.headers };
+        return { dial: "127.0.0.1", port, scheme: "http", headers: req.headers };
     }
     const slot = portSlotFromHost(req.headers.host, sandboxId);
     if (slot !== undefined) {
@@ -36,7 +38,7 @@ const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTa
         if (req.headers.origin !== undefined) {
             headers.origin = `${target.scheme}://${localhost}`;
         }
-        return { port: target.port, scheme: target.scheme, headers };
+        return { dial: target.host, port: target.port, scheme: target.scheme, headers };
     }
     return { status: 404, message: "not a preview host" };
 };
@@ -45,11 +47,11 @@ const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTa
 // detected (a vite serving https on 47145 gets a TLS dial with verification off: the cert is self-signed and
 // the socket never leaves the sandbox's own netns).
 const dialUpstream = (
-    upstream: { port: number; scheme: "http" | "https"; headers: http.IncomingHttpHeaders },
+    upstream: { dial: string; port: number; scheme: "http" | "https"; headers: http.IncomingHttpHeaders },
     req: http.IncomingMessage,
 ): http.ClientRequest =>
     (upstream.scheme === "https" ? https : http).request({
-        host: "127.0.0.1",
+        host: upstream.dial,
         port: upstream.port,
         method: req.method,
         path: req.url,

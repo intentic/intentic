@@ -445,7 +445,12 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
             services({
                 config,
                 portForwards,
-                scanPorts: async () => [{ port: 22 }, { port: 3000, pid: 7, command: "vite", cwd: "/work/app" }, { port: 5173 }, { port: 8787 }],
+                scanPorts: async () => [
+                    { port: 22, host: "127.0.0.1" },
+                    { port: 3000, host: "127.0.0.1", pid: 7, command: "vite", cwd: "/work/app" },
+                    { port: 5173, host: "127.0.0.1" },
+                    { port: 8787, host: "127.0.0.1" },
+                ],
             }),
         ),
     );
@@ -475,7 +480,7 @@ test("ports.forward maps a listener onto a slot, mints its route label, and refu
             services({
                 config,
                 portForwards,
-                scanPorts: async () => [{ port: 3000, pid: 7, command: "vite" }],
+                scanPorts: async () => [{ port: 3000, host: "127.0.0.1", pid: 7, command: "vite" }],
                 ensurePreviewRoute: async (label) => {
                     ensured.push(label);
                 },
@@ -493,7 +498,7 @@ test("ports.forward maps a listener onto a slot, mints its route label, and refu
 });
 
 test("ports.forward on a loopback sandbox (no zone/token) still maps the slot but returns no URL", async () => {
-    const client = clientFor(createApp(services({ scanPorts: async () => [{ port: 3000 }] })));
+    const client = clientFor(createApp(services({ scanPorts: async () => [{ port: 3000, host: "127.0.0.1" }] })));
     expect(await client.ports.forward({ port: 3000 })).toEqual({});
 });
 

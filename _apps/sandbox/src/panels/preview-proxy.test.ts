@@ -68,14 +68,35 @@ test("a repo whose panel isn't running is a 502 pointing at the sidebar", async 
 // Forwarded-port slots: `port-<slot>` routes through the slot table, and — unlike panels — Host and Origin are
 // rewritten to localhost:<port>, because arbitrary dev servers' host checks only allow localhost.
 test("a port- host resolves through the slot table and rewrites Host to localhost:<port>", async () => {
-    const { proxyPort, appPort } = await setup((port) => (slot) => (slot === "a" ? { port, scheme: "http" } : undefined));
+    const { proxyPort, appPort } = await setup((port) => (slot) => (slot === "a" ? { port, host: "127.0.0.1", scheme: "http" } : undefined));
     const response = await get(proxyPort, "port-a.example.com", "/page");
     expect(response.status).toBe(200);
     expect(response.body).toBe(`hello from localhost:${appPort}/page`);
 });
 
+// The field failure behind this test: Vite binds `localhost`, which can land on IPv6 loopback ONLY — a
+// 127.0.0.1 dial gets connection-refused. The forward table records the dialable host; the proxy must honor it.
+test("a ::1-only upstream (a `localhost`-bound dev server) is dialed at ::1, not 127.0.0.1", async () => {
+    const v6Server = http.createServer((req, res) => {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end(`v6 hello from ${req.headers.host ?? "?"}`);
+    });
+    servers.push(v6Server);
+    await new Promise<void>((resolve) => v6Server.listen(0, "::1", resolve));
+    const v6Port = (v6Server.address() as AddressInfo).port;
+    const proxyPort = await listen(
+        createPreviewProxy(
+            () => undefined,
+            (slot) => (slot === "a" ? { port: v6Port, host: "::1", scheme: "http" } : undefined),
+        ),
+    );
+    const response = await get(proxyPort, "port-a.example.com");
+    expect(response.status).toBe(200);
+    expect(response.body).toBe(`v6 hello from localhost:${v6Port}`);
+});
+
 test("an unmapped slot is a 502, not a 404 — the hostname is ours, the forward just lapsed", async () => {
-    const { proxyPort } = await setup((port) => (slot) => (slot === "a" ? { port, scheme: "http" } : undefined));
+    const { proxyPort } = await setup((port) => (slot) => (slot === "a" ? { port, host: "127.0.0.1", scheme: "http" } : undefined));
     const response = await get(proxyPort, "port-b.example.com");
     expect(response.status).toBe(502);
     expect(response.body).toContain("nothing is forwarded here");
@@ -91,7 +112,7 @@ test("a port target rewrites Origin alongside Host", async () => {
     const proxyPort = await listen(
         createPreviewProxy(
             () => undefined,
-            (slot) => (slot === "a" ? { port: echoPort, scheme: "http" } : undefined),
+            (slot) => (slot === "a" ? { port: echoPort, host: "127.0.0.1", scheme: "http" } : undefined),
         ),
     );
     const response = await get(proxyPort, "port-a.example.com", "/", { origin: "https://port-a.example.com" });
@@ -155,7 +176,7 @@ test("an https-scheme slot target is dialed over TLS with verification off (self
             res.end(`secure hello from ${req.headers.host ?? "?"}`);
         }),
     );
-    const target: PortTarget = { port: tlsPort, scheme: "https" };
+    const target: PortTarget = { port: tlsPort, host: "127.0.0.1", scheme: "https" };
     const proxyPort = await listen(
         createPreviewProxy(
             () => undefined,
@@ -178,7 +199,7 @@ const idSetup = async (): Promise<{ proxyPort: number; appPort: number }> => {
         }),
     );
     const portOf: PortResolver = (repo) => (repo === "app" ? appPort : undefined);
-    const slotTargetOf: SlotResolver = (slot) => (slot === "a" ? { port: appPort, scheme: "http" } : undefined);
+    const slotTargetOf: SlotResolver = (slot) => (slot === "a" ? { port: appPort, host: "127.0.0.1", scheme: "http" } : undefined);
     return { proxyPort: await listen(createPreviewProxy(portOf, slotTargetOf, ID)), appPort };
 };
 

@@ -99,10 +99,14 @@ export function useWorkspaceTree() {
     // ["workspace","tree"] prefix-matches every ["workspace","tree","all"|"filtered", id] (see useSandbox).
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
     // The editor's text save persists verbatim through the same upload route drag-drop uses (bulk drag-drop
-    // uploads go through useUploadQueue). An emptied buffer writes an empty file.
+    // uploads go through useUploadQueue). An emptied buffer writes an empty file. The tree refetch is fired but
+    // NOT awaited: the caller must markSaved before the daemon's ~250ms file-watch echo re-reads the file, and a
+    // slow tree walk here loses that race — the echo then compares against a stale baseline and raises a false
+    // "changed on disk" warning. The echo's own push invalidates the tree anyway (markWorkspaceChanged), so this
+    // kick is latency-only.
     const saveText = async (path: string, text: string): Promise<void> => {
         await sandboxJson<{ ok: true }>(`/workspace/upload?path=${encodeURIComponent(path)}`, { method: `POST`, body: text });
-        await invalidate();
+        void invalidate();
     };
     const createDir = async (path: string): Promise<void> => {
         await jsonPost(`/workspace/dir`, { path });

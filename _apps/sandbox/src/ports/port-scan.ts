@@ -7,27 +7,37 @@ import { join } from "node:path";
 // an agent's ad-hoc process, a docker-proxy for a published container) binds ports the daemon never assigned,
 // and this scan is the only way to see them.
 
+// The loopback address the proxy must DIAL to reach a listener. Not always 127.0.0.1: a server that binds
+// `localhost` can land on IPv6 loopback only (Vite does exactly this — [::1]:<port> refuses IPv4), so the
+// dialable family is a per-listener fact the scan records and the forward/proxy honor.
+export type LoopbackHost = "127.0.0.1" | "::1";
+
 export interface ListeningPort {
     readonly port: number;
+    readonly host: LoopbackHost;
     readonly pid?: number;
     readonly command?: string;
     readonly cwd?: string;
 }
 
-// A /proc/net/tcp{,6} LISTEN row's local address, hex-encoded (IPv4 little-endian). Only listeners the preview
-// proxy can actually reach at 127.0.0.1 count: the wildcard binds and loopback itself. A bind to a specific
-// non-loopback interface (a docker bridge address) is skipped — dialing 127.0.0.1 would just fail.
-const reachableLocally = (hexAddress: string): boolean => {
+// A /proc/net/tcp{,6} LISTEN row's local address, hex-encoded (IPv4 little-endian), resolved to the loopback
+// address that reaches it — or undefined for a bind the proxy can't reach (a docker bridge address). Wildcard
+// binds (0.0.0.0 and ::, which accepts v4-mapped connections on Linux) dial as 127.0.0.1; a v6-loopback-only
+// bind must be dialed at ::1.
+const dialHost = (hexAddress: string): LoopbackHost | undefined => {
     if (hexAddress.length === 8) {
-        return hexAddress === "00000000" || hexAddress.endsWith("7F"); // 0.0.0.0 or 127/8
+        return hexAddress === "00000000" || hexAddress.endsWith("7F") ? "127.0.0.1" : undefined; // 0.0.0.0 or 127/8
     }
-    return hexAddress === "0".repeat(32) || hexAddress === `${"0".repeat(24)}01000000`; // :: or ::1
+    if (hexAddress === "0".repeat(32)) {
+        return "127.0.0.1"; // ::
+    }
+    return hexAddress === `${"0".repeat(24)}01000000` ? "::1" : undefined; // ::1
 };
 
 // LISTEN rows from one /proc/net/tcp{,6} table: whitespace-split fields are
 // [sl, local_address, rem_address, st, tx:rx, tr:tm, retrnsmt, uid, timeout, inode, …]; st 0A is LISTEN.
-const parseListeners = (table: string): { port: number; inode: string }[] => {
-    const listeners: { port: number; inode: string }[] = [];
+const parseListeners = (table: string): { port: number; host: LoopbackHost; inode: string }[] => {
+    const listeners: { port: number; host: LoopbackHost; inode: string }[] = [];
     for (const line of table.split("\n").slice(1)) {
         const fields = line.trim().split(/\s+/);
         const local = fields[1]?.split(":");
@@ -35,10 +45,11 @@ const parseListeners = (table: string): { port: number; inode: string }[] => {
         if (fields[3] !== "0A" || local?.[0] === undefined || local[1] === undefined || inode === undefined) {
             continue;
         }
-        if (!reachableLocally(local[0].toUpperCase())) {
+        const host = dialHost(local[0].toUpperCase());
+        if (host === undefined) {
             continue;
         }
-        listeners.push({ port: Number.parseInt(local[1], 16), inode });
+        listeners.push({ port: Number.parseInt(local[1], 16), host, inode });
     }
     return listeners;
 };
@@ -75,9 +86,11 @@ const resolvePids = async (procRoot: string, wanted: ReadonlySet<string>): Promi
 // fixture tree. Dual-stack listeners (the same port on tcp and tcp6) collapse to one row.
 export const scanListeningPorts = async (procRoot = "/proc"): Promise<ListeningPort[]> => {
     const tables = await Promise.all(["tcp", "tcp6"].map((table) => readFile(join(procRoot, "net", table), "utf8").catch(() => "")));
-    const byPort = new Map<number, { port: number; inode: string }>();
+    const byPort = new Map<number, { port: number; host: LoopbackHost; inode: string }>();
     for (const listener of tables.flatMap(parseListeners)) {
-        if (!byPort.has(listener.port)) {
+        const existing = byPort.get(listener.port);
+        // A dual-stack port collapses to one row, preferring the 127.0.0.1-dialable side.
+        if (existing === undefined || (existing.host === "::1" && listener.host === "127.0.0.1")) {
             byPort.set(listener.port, listener);
         }
     }
@@ -85,17 +98,17 @@ export const scanListeningPorts = async (procRoot = "/proc"): Promise<ListeningP
     return Promise.all(
         [...byPort.values()]
             .toSorted((a, b) => a.port - b.port)
-            .map(async ({ port, inode }) => {
+            .map(async ({ port, host, inode }) => {
                 const pid = owners.get(inode);
                 if (pid === undefined) {
-                    return { port };
+                    return { port, host };
                 }
                 // cmdline is NUL-separated argv; empty for kernel threads. cwd needs the same-user privilege the
                 // daemon (root in the container) has — either read failing just drops the annotation.
                 const cmdline = await readFile(join(procRoot, String(pid), "cmdline"), "utf8").catch(() => "");
                 const command = cmdline.split("\0").filter(Boolean).join(" ");
                 const cwd = await readlink(join(procRoot, String(pid), "cwd")).catch(() => undefined);
-                const listener: { port: number; pid: number; command?: string; cwd?: string } = { port, pid };
+                const listener: { port: number; host: LoopbackHost; pid: number; command?: string; cwd?: string } = { port, host, pid };
                 if (command !== "") {
                     listener.command = command;
                 }

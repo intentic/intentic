@@ -44,9 +44,10 @@ const fixture = (): string => {
 test("reports loopback/wildcard LISTEN sockets once per port, attributed to their owning process", async () => {
     const ports = await scanListeningPorts(fixture());
     expect(ports).toEqual([
-        { port: 3000 }, // no fd matched its inode — still listed, just unattributed
-        { port: 9999, pid: 123, command: "node /work/app/node_modules/.bin/vite", cwd: "/work/app" },
-        { port: 45678, pid: 123, command: "node /work/app/node_modules/.bin/vite", cwd: "/work/app" },
+        { port: 3000, host: "127.0.0.1" }, // no fd matched its inode — still listed, just unattributed
+        // A ::1-only bind (a server that bound `localhost`, like Vite) must be dialed at ::1, not 127.0.0.1.
+        { port: 9999, host: "::1", pid: 123, command: "node /work/app/node_modules/.bin/vite", cwd: "/work/app" },
+        { port: 45678, host: "127.0.0.1", pid: 123, command: "node /work/app/node_modules/.bin/vite", cwd: "/work/app" },
     ]);
 });
 
