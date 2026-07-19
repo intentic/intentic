@@ -1,21 +1,20 @@
 <script setup lang="ts">
 import { useListNavigation } from "@intentic-app/ui";
 import { computed, ref, toRef } from "vue";
-import { useWorkspaceSearch } from "../composables/workspace/useWorkspaceSearch";
+import { useFuzzyFiles } from "../composables/workspace/useFuzzyFiles";
 
 /* The composer's @-mention picker: an inline panel above the textarea listing workspace files matching the
- * active token (the daemon's ranked filename search — the QuickOpen data path). The parent owns the keyboard
- * flow (the textarea keeps focus) and calls the exposed move/pickActive from its keydown handler. */
+ * active token (client-ranked over the cached tree — the QuickOpen data path, useFuzzyFiles). The parent owns
+ * the keyboard flow (the textarea keeps focus) and calls the exposed move/pickActive from its keydown handler. */
 
 const props = defineProps<{ query: string }>();
 const emit = defineEmits<{ pick: [path: string] }>();
 
 const active = ref(true);
-const mode = ref<`files`>(`files`);
-const { groups, searching, pending } = useWorkspaceSearch(toRef(props, `query`), active, mode);
+const { paths: ranked, floor, searching, pending } = useFuzzyFiles(toRef(props, `query`), active);
 
 const MAX_ROWS = 8;
-const paths = computed<readonly string[]>(() => groups.value.slice(0, MAX_ROWS).map((group) => group.path));
+const paths = computed<readonly string[]>(() => ranked.value.slice(0, MAX_ROWS));
 
 const { activeIndex, activeRow, move, setRowEl } = useListNavigation(paths, (path) => path);
 
@@ -41,7 +40,7 @@ const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, 
             Mention a file
             <Icon v-if="searching || pending" name="spinner" class="text-2xs" spin />
         </p>
-        <p v-if="query.length < 2" class="px-3 py-2 text-xs text-subtle">Keep typing to search files…</p>
+        <p v-if="query.trim().length < floor" class="px-3 py-2 text-xs text-subtle">Keep typing to search files…</p>
         <p v-else-if="paths.length === 0 && !searching && !pending" class="px-3 py-2 text-xs text-subtle">No files match "{{ query }}".</p>
         <button
             v-for="(path, index) in paths"

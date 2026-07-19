@@ -1,27 +1,26 @@
 <script setup lang="ts">
-import type { WorkspaceSearchMode } from "@intentic-app/api-contract";
 import Dialog from "primevue/dialog";
 import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { commands, executeCommand, type RegisteredCommand } from "../composables/commands/useCommands";
 import { useQuickOpen } from "../composables/useQuickOpen";
-import { useWorkspaceSearch } from "../composables/workspace/useWorkspaceSearch";
+import { useFuzzyFiles } from "../composables/workspace/useFuzzyFiles";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { iconForEntry } from "@intentic-app/ui";
 
-/* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type — the sandbox
- * daemon's `files` search — and opens the pick as an editor tab. Mounted once in the desktop shell and opened
- * from its global keydown. Server-ranked: no local tree load, no client-side fuzzy matcher. Below the 2-char
- * search floor it offers the open tabs as jump targets so Enter always has somewhere to go. A `>` prefix flips
- * the palette to COMMAND mode (VSCode's Ctrl+Shift+P folded into the same field), filtering the command
- * registry (useCommands) instead of files. */
+/* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type — client-
+ * ranked over the explorer's cached tree (useFuzzyFiles), so results land in the same frame as the keystroke;
+ * the daemon's `files` search serves only the include-ignored / truncated-tree fallback — and opens the pick
+ * as an editor tab. Mounted once in the desktop shell and opened from its global keydown. Below the search
+ * floor it offers the open tabs as jump targets so Enter always has somewhere to go. A `>` prefix flips the
+ * palette to COMMAND mode (VSCode's Ctrl+Shift+P folded into the same field), filtering the command registry
+ * (useCommands) instead of files. */
 
 const { isOpen } = useQuickOpen();
 const router = useRouter();
 const { tabs } = useWorkspaceTabs();
 
 const query = ref(``);
-const mode = ref<WorkspaceSearchMode>(`files`);
 // `>` prefix = command mode; the rest of the text filters registered commands by title or id.
 const commandMode = computed(() => query.value.trimStart().startsWith(`>`));
 const commandQuery = computed(() => query.value.trimStart().slice(1).trim().toLowerCase());
@@ -30,18 +29,18 @@ const commandRows = computed<readonly RegisteredCommand[]>(() =>
         (entry) => entry.title.toLowerCase().includes(commandQuery.value) || entry.command.toLowerCase().includes(commandQuery.value),
     ),
 );
-// The daemon query stays idle until the palette is open, the query clears the 2-char floor, AND we're not in
-// command mode (a ">foo" query would otherwise search files for the literal text).
+// File matching stays idle until the palette is open AND we're not in command mode (a ">foo" query would
+// otherwise match files against the literal text).
 const searchActive = computed(() => isOpen.value && !commandMode.value);
-const { groups, searching, pending, truncated, error } = useWorkspaceSearch(query, searchActive, mode);
+const { paths: filePaths, floor, searching, pending, truncated, error } = useFuzzyFiles(query, searchActive);
 
 const input = ref<HTMLInputElement | null>(null);
 const activeIndex = ref(0);
 const rowEls = new Map<string, HTMLElement>();
 
 const openTabPaths = computed<readonly string[]>(() => tabs.value.flatMap((tab) => (tab.kind === `file` ? [tab.path] : [])));
-const showingRecents = computed(() => query.value.trim().length < 2);
-const rows = computed<readonly string[]>(() => (showingRecents.value ? openTabPaths.value : groups.value.map((group) => group.path)));
+const showingRecents = computed(() => query.value.trim().length < floor.value);
+const rows = computed<readonly string[]>(() => (showingRecents.value ? openTabPaths.value : filePaths.value));
 const rowCount = computed(() => (commandMode.value ? commandRows.value.length : rows.value.length));
 
 // Snap the highlight back to the top whenever the result set changes under it.
@@ -191,7 +190,7 @@ const onShow = async (): Promise<void> => {
                 </button>
                 <p v-if="error" class="px-3 py-3 text-center text-2xs text-danger">{{ error }}</p>
                 <p v-else-if="rows.length === 0 && showingRecents" class="px-3 py-3 text-center text-2xs text-subtle">
-                    Type at least 2 characters to search files.
+                    {{ floor > 1 ? `Type at least ${floor} characters to search files.` : `Type to search files.` }}
                 </p>
                 <p v-else-if="rows.length === 0 && (searching || pending)" class="px-3 py-3 text-center text-2xs text-subtle">
                     <Icon name="spinner" spin />

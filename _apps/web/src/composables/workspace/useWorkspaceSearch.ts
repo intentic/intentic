@@ -8,9 +8,11 @@ import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 
 // Search over /work, read directly from the sandbox daemon (GET /workspace/search — results come
 // relevance-ranked and grouped). `mode` picks the search verb: the default fused content search when
-// omitted, or `files` for filename quick-open. The input is debounced so a keystroke burst becomes one query;
-// keepPreviousData keeps the last results on screen while a refinement is in flight (no flash to the spinner).
-export function useWorkspaceSearch(filter: Ref<string>, active: Ref<boolean>, mode?: Ref<WorkspaceSearchMode | undefined>) {
+// omitted, or `files` for filename quick-open. The input is debounced so a keystroke burst becomes one query
+// (each query spawns an iq process daemon-side — the content search panel keeps the default; quick-open's
+// server fallback passes a tighter window); keepPreviousData keeps the last results on screen while a
+// refinement is in flight (no flash to the spinner).
+export function useWorkspaceSearch(filter: Ref<string>, active: Ref<boolean>, mode?: Ref<WorkspaceSearchMode | undefined>, debounceMs = 400) {
     const { reachable } = useSandbox();
     const { includeIgnored } = useLayout();
 
@@ -20,7 +22,7 @@ export function useWorkspaceSearch(filter: Ref<string>, active: Ref<boolean>, mo
         clearTimeout(timer);
         timer = setTimeout(() => {
             debounced.value = value.trim();
-        }, 400);
+        }, debounceMs);
     });
 
     // The daemon rejects queries under 2 chars (min length in the contract), so short input just disables the query.
