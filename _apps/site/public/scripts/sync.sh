@@ -12,6 +12,8 @@
 # Optional env:
 #   SYNC_DIR     local folder to sync (default: ~/intentic/<sandbox-host>)
 #   TAKEOVER     any non-empty value takes over sync from another machine already enrolled on this sandbox.
+#   AGENT_BIN    run THIS agent command instead of downloading a release — for local dev / dogfooding an
+#                unreleased build, e.g. AGENT_BIN="node /path/to/intentic/_apps/sync/dist/cli.js".
 set -eu
 
 URL="${SANDBOX_URL:-}"
@@ -40,8 +42,9 @@ case "$arch" in
         ;;
 esac
 
-# Resolve the agent: an installed `intentic-sync`, else the released binary, else npx (when Node is present).
-BIN="$(command -v intentic-sync || true)"
+# Resolve the agent: an explicit AGENT_BIN (local dev), else an installed `intentic-sync`, else the released
+# binary, else npx (when Node is present).
+BIN="${AGENT_BIN:-$(command -v intentic-sync || true)}"
 if [ -z "$BIN" ]; then
     dest="${HOME}/.intentic/sync/bin/intentic-sync"
     mkdir -p "$(dirname "$dest")"

@@ -7,6 +7,8 @@
 #
 # Required env: SANDBOX_URL, PAIR_TOKEN (the one-time token from the card).
 # Optional: SYNC_DIR (default: ~\intentic\<host>); TAKEOVER (any non-empty value takes over sync from another machine).
+#   AGENT_BIN  local dev / dogfooding an unreleased build: run this command instead of downloading a release,
+#              whitespace-separated (e.g. "node C:\intentic\_apps\sync\dist\cli.js"; a path with spaces needs a wrapper .cmd).
 $ErrorActionPreference = 'Stop'
 
 $url = $env:SANDBOX_URL
@@ -18,7 +20,8 @@ if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($pair)) {
 }
 
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
-$bin = (Get-Command intentic-sync -ErrorAction SilentlyContinue).Source
+# AGENT_BIN (local dev) short-circuits the download; else resolve an installed agent, else download/npx below.
+$bin = if (-not [string]::IsNullOrEmpty($env:AGENT_BIN)) { $env:AGENT_BIN } else { (Get-Command intentic-sync -ErrorAction SilentlyContinue).Source }
 if (-not $bin) {
     $dest = Join-Path $HOME '.intentic\sync\bin\intentic-sync.exe'
     New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
@@ -34,4 +37,9 @@ if (-not $bin) {
 $syncArgs = @('setup', '--url', $url, '--pair', $pair)
 if (-not [string]::IsNullOrEmpty($dir)) { $syncArgs += @('--dir', $dir) }
 if (-not [string]::IsNullOrEmpty($env:TAKEOVER)) { $syncArgs += @('--takeover') }
-if ($bin -eq 'npx') { & npx -y '@intentic/sync@latest' @syncArgs } else { & $bin @syncArgs }
+if (-not [string]::IsNullOrEmpty($env:AGENT_BIN)) {
+    # A whitespace-separated command: first token is the executable, the rest are leading args before setup.
+    $parts = $env:AGENT_BIN -split '\s+'
+    $lead = if ($parts.Length -gt 1) { $parts[1..($parts.Length - 1)] } else { @() }
+    & $parts[0] @($lead + $syncArgs)
+} elseif ($bin -eq 'npx') { & npx -y '@intentic/sync@latest' @syncArgs } else { & $bin @syncArgs }
