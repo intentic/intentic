@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { scanListeningPorts } from "./port-scan.js";
+import { portKind, scanListeningPorts } from "./port-scan.js";
 
 // A procfs fixture tree: net/tcp{,6} tables plus /proc/<pid>/{fd,cmdline,cwd}. The fd entries are dangling
 // symlinks whose TARGET STRING is the socket marker — exactly what readlink returns on the real thing.
@@ -53,4 +53,19 @@ test("reports loopback/wildcard LISTEN sockets once per port, attributed to thei
 
 test("an unreadable proc tree yields an empty scan, not a rejection", async () => {
     await expect(scanListeningPorts(join(tmpdir(), "port-scan-missing"))).resolves.toEqual([]);
+});
+
+test("portKind: repo cwds and terminal processes are workspace; sandbox machinery and unknowns are system", () => {
+    // A cwd inside a repo wins outright — even for a binary that is otherwise sandbox machinery.
+    expect(portKind({ command: "node /work/intentic/_apps/web/node_modules/.bin/vite", cwd: "/work/intentic/_apps/web" }, "/work")).toBe("workspace");
+    expect(portKind({ command: "opencode serve --port=4096", cwd: "/work/myrepo" }, "/work")).toBe("workspace");
+    // Known sandbox binaries at the workspace root are system.
+    expect(portKind({ command: "opencode serve --hostname=127.0.0.1 --port=4096", cwd: "/work" }, "/work")).toBe("system");
+    expect(portKind({ command: "cli-proxy-api --config /history/translator/config.yaml", cwd: "/work" }, "/work")).toBe("system");
+    // docker-proxy publishes a USER container's port — workspace, wherever it runs from.
+    expect(portKind({ command: "/usr/bin/docker-proxy -proto tcp -host-port 5440", cwd: "/" }, "/work")).toBe("workspace");
+    // Anything else run from the workspace root is a user terminal process (shells open there).
+    expect(portKind({ command: "python -m http.server 8000", cwd: "/work" }, "/work")).toBe("workspace");
+    // Unattributable listeners default to system.
+    expect(portKind({}, "/work")).toBe("system");
 });

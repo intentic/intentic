@@ -1083,6 +1083,10 @@ export const PanelRepoParamSchema = z.object({ repo: z.string() });
 
 export const PortSummarySchema = z.object({
     port: z.number(),
+    // Which bucket the Ports view files it under: `workspace` = user-run (dev servers in repos, terminal
+    // processes, published container ports) — the previewable set; `system` = the sandbox's own machinery
+    // (agent runtimes, translator, dockerd, sshd), listed for transparency but nobody previews it.
+    kind: z.enum(["workspace", "system"]),
     // The owning process, resolved from procfs; absent when no /proc/*/fd entry matched the socket's inode.
     pid: z.number().optional(),
     // The process argv joined with spaces ("node /work/app/node_modules/.bin/vite").

@@ -1,4 +1,5 @@
 import { portLabel, portsContract, portUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { portKind } from "./port-scan.js";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -26,7 +27,7 @@ export const createPortsRoutes = (services: Services) => {
                     .map((listener) => {
                         const slot = services.portForwards.slotOf(listener.port);
                         const url = slot !== undefined ? portUrl(slot, zone, sandboxId) : undefined;
-                        const summary = Object.assign({ forwarded: slot !== undefined }, listener);
+                        const summary = Object.assign({ kind: portKind(listener, services.workspace.root), forwarded: slot !== undefined }, listener);
                         return url === undefined ? summary : Object.assign(summary, { previewUrl: url });
                     }),
             };

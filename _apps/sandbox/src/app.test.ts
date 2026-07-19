@@ -454,13 +454,16 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
             }),
         ),
     );
-    expect(await client.ports.list()).toEqual({ ports: [{ port: 3000, pid: 7, command: "vite", cwd: "/work/app", forwarded: false }] });
+    expect(await client.ports.list()).toEqual({
+        ports: [{ port: 3000, kind: "workspace", pid: 7, command: "vite", cwd: "/work/app", forwarded: false }],
+    });
 
     await portForwards.forward(3000);
     expect(await client.ports.list()).toEqual({
         ports: [
             {
                 port: 3000,
+                kind: "workspace",
                 pid: 7,
                 command: "vite",
                 cwd: "/work/app",
@@ -494,7 +497,8 @@ test("ports.forward maps a listener onto a slot, mints its route label, and refu
     expect(await errorCode(client.ports.forward({ port: 4000 }))).toBe("NOT_FOUND");
     // Unforward frees the slot; the port reads unforwarded again.
     expect(await client.ports.unforward({ port: 3000 })).toEqual({ ok: true });
-    expect((await client.ports.list()).ports).toEqual([{ port: 3000, pid: 7, command: "vite", forwarded: false }]);
+    // No cwd and not a known sandbox binary -> unattributable, filed under system.
+    expect((await client.ports.list()).ports).toEqual([{ port: 3000, kind: "system", pid: 7, command: "vite", forwarded: false }]);
 });
 
 test("ports.forward on a loopback sandbox (no zone/token) still maps the slot but returns no URL", async () => {
