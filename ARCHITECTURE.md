@@ -131,9 +131,10 @@ tunnel is named `sandbox-<id>` where `<id> = sha256(connectToken).slice(0, 12)`
 - **Intentic-provided** — for users with no Cloudflare, the platform provisions the tunnel on
   intentic's own account under a shared zone (`sandbox-<id>.intentic.dev`) and hands the sandbox only
   the narrow per-tunnel connector token. A shared zone can't give each user a wildcard, so the daemon
-  asks the platform to mint each preview route (a `preview-<panel>` or `port-<slot>` label) lazily when a
-  panel first appears or a port is first forwarded — forwarded ports go through a fixed slot pool
-  (`PORT_SLOTS`) precisely so churning dev-server ports cost at most that many routes per sandbox, ever.
+  asks the platform to mint preview routes (`preview-<panel>` / `port-<slot>` labels, batched per call) —
+  panel labels lazily as repos appear, and the whole fixed port-slot pool (`PORT_SLOTS`) eagerly: slot
+  routes are created at tunnel provisioning and re-ensured by the boot sweep, so a port forward never
+  waits on fresh DNS, and churning dev-server ports cost at most the pool's size in routes per sandbox, ever.
 
 On a server the workspace is just another service on that host's shared tunnel, exposing only the
 preview wildcard (the daemon stays host-internal — the server workspace is preview-only; `connect.sh`
@@ -486,10 +487,11 @@ Who pays for scale is a design decision, not an accident:
   sessions, so it scales horizontally; background jobs (retention sweep, tunnel pool top-up) take a
   Postgres advisory lock so replicas don't duplicate the work.
 - **The one ceiling intentic owns is the shared Cloudflare account** behind intentic-provided
-  tunnels: each such sandbox is 1 named tunnel + 2 DNS records (`sandbox-<id>`, `ssh-<id>`), plus one
-  record + ingress rule per panel preview and per used port-forward slot (capped at `PORT_SLOTS.length`
-  per sandbox by construction) — and preview routes have no per-panel teardown; they live until the
-  sandbox is deleted or reaped. Cloudflare accounts cap out around 1000 named tunnels, plus
+  tunnels: each such sandbox is 1 named tunnel + 2 DNS records (`sandbox-<id>`, `ssh-<id>`) + the
+  port-forward slot pool's records (`PORT_SLOTS.length`, provisioned eagerly so forwards are instant),
+  plus one record + ingress rule per panel preview — and preview routes have no per-panel teardown; they
+  live until the sandbox is deleted or reaped (the reaper removes every CNAME pointing at a reaped
+  tunnel, slots included). Cloudflare accounts cap out around 1000 named tunnels, plus
   per-zone DNS-record and API-rate limits shared by pool top-up, setup provisioning, preview minting,
   and the reaper. Mitigations in place: a daily reaper deletes tunnels idle > 7 days, the
   pre-provisioned pool absorbs signup latency, and provisioning is sequenced to stay under rate

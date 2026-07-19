@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { ProcessContribution } from "@intentic/extension-api";
+import { previewLabel } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { type ExtensionHost, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 import { listenerProcessesDesired, listenerState } from "./listener-state.js";
@@ -16,7 +17,7 @@ export const startExtensionProcess = async (services: Services, extension: Insta
     const key = extensionProcessKey(extension.id, process.name);
     if (process.preview === true) {
         // Mint the tunneled preview hostname BEFORE the process binds (the panels-start pattern); never rejects.
-        await services.ensurePreviewRoute(key);
+        await services.ensurePreviewRoutes([previewLabel(key)]);
     }
     await services.processes.start(key, {
         command: process.command,

@@ -69,7 +69,7 @@ export const createPanelsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no runnable panel — add an operator/ dev server or a dev script` });
             }
             // Mint the preview route before the panel is observable as running (see preview-route.ts).
-            await services.ensurePreviewRoute(previewLabel(key));
+            await services.ensurePreviewRoutes([previewLabel(key)]);
             await services.processes.start(key, {
                 // Install deps on first start (async — the terminal + "starting" badge cover it), then run the dev
                 // server; skipped once installed. No --ignore-workspace: an app repo IS its own pnpm monorepo (its

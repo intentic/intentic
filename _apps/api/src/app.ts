@@ -6,7 +6,7 @@ import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { type Auth, createAuth } from "./auth.js";
-import { CloudflareTokenError, ensurePreviewRoute, provisionHostSshTunnel } from "./sandbox/cloudflare.js";
+import { CloudflareTokenError, ensurePreviewRoutes, provisionHostSshTunnel } from "./sandbox/cloudflare.js";
 import type { Config } from "./config.js";
 import { buildOrpcContext, type OrpcContext } from "./context.js";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -26,6 +26,12 @@ const isHttpsUrl = (value: string): boolean => {
         return false;
     }
 };
+
+// A mintable preview-route label. Only the two preview schemes are allowed (an arbitrary label could shadow
+// sandbox-/ssh- hostnames); ≤50 chars keeps the full first label `<label>-<12-hex id>` inside DNS's 63-char
+// label limit.
+const validPreviewLabel = (label: unknown): boolean =>
+    typeof label === `string` && /^(preview|port)-[a-z0-9][a-z0-9-]*$/.test(label) && label.length <= 50;
 
 const logUnexpectedError = (log: Logger, error: unknown): void => {
     // oRPC "expected" errors (UNAUTHORIZED, NOT_FOUND, …) are control flow, not incidents — don't log them.
@@ -201,12 +207,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (token === undefined || token === ``) {
             return c.text(`error: missing token`, 400);
         }
-        const body = (await c.req.json().catch(() => undefined)) as { label?: unknown } | undefined;
-        const label = body?.label;
-        // Only the two preview schemes are mintable (an arbitrary label could shadow sandbox-/ssh- hostnames);
-        // ≤50 chars keeps the full first label `<label>-<12-hex id>` inside DNS's 63-char label limit.
-        if (typeof label !== `string` || !/^(preview|port)-[a-z0-9][a-z0-9-]*$/.test(label) || label.length > 50) {
-            return c.text(`error: label must be a lowercase DNS-safe preview-* or port-* name of at most 50 characters`, 400);
+        const body = (await c.req.json().catch(() => undefined)) as { labels?: unknown } | undefined;
+        const labels = body?.labels;
+        if (!Array.isArray(labels) || labels.length === 0 || labels.length > 64 || !labels.every(validPreviewLabel)) {
+            return c.text(`error: labels must be 1-64 lowercase DNS-safe preview-* or port-* names of at most 50 characters`, 400);
         }
         const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
         if (!sandbox) {
@@ -220,7 +224,9 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             return c.json({ error: `intentic-provided tunnels are not enabled` }, 404);
         }
         try {
-            return c.json(await ensurePreviewRoute({ apiToken, zone, connectToken: decryptSecret(config, sandbox.token), label }));
+            return c.json(
+                await ensurePreviewRoutes({ apiToken, zone, connectToken: decryptSecret(config, sandbox.token), labels: labels as string[] }),
+            );
         } catch (error) {
             // A bad/under-scoped intentic token is the actionable case (400, like sandbox.zones); any other
             // Cloudflare failure is upstream (502).

@@ -206,10 +206,10 @@ export interface Services {
     // platformHostTunnel relays to the platform (connect-token auth) to mint an intentic-provided host tunnel,
     // which needs intentic's platform Cloudflare account the daemon doesn't hold.
     readonly platformHostTunnel: (hostName: string) => Promise<PlatformResponse>;
-    // Relays to the platform (connect-token auth) to mint a preview route (a `preview-<panel>` or
-    // `port-<slot>` label) on the sandbox's intentic-provided tunnel before the hostname reaches a browser;
+    // Relays to the platform (connect-token auth) to mint a batch of preview routes (`preview-<panel>` /
+    // `port-<slot>` labels) on the sandbox's intentic-provided tunnel before the hostnames reach a browser;
     // never rejects (see panels/preview-route.ts).
-    readonly ensurePreviewRoute: (label: string) => Promise<void>;
+    readonly ensurePreviewRoutes: (labels: readonly string[]) => Promise<void>;
     // Shared-access grants — the emails authorized besides the owner. Always present; the /members routes read
     // and write it, and the authorizer consults it. The daemon is the enforcer; the platform only mirrors these.
     readonly members: MembersStore;
@@ -363,7 +363,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         workspaceChildren: listWorkspaceChildren,
         sessions: { list: listWorkspaceSessions, read: readWorkspaceSession, search: searchWorkspaceSessions, exists: workspaceSessionExists },
         platformHostTunnel: (hostName) => postToPlatform(config, "/sandbox/host-tunnel", { hostName }),
-        ensurePreviewRoute: createPreviewRouteEnsurer(config, logger),
+        ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),
         members,
         auth,
     };

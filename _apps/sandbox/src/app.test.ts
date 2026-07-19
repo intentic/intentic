@@ -267,7 +267,7 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     workspaceTree: async () => ({ root: "/work", tree: [], truncated: false }),
     sessions: { list: async () => [], read: async () => [], search: async () => [], exists: async () => true },
     platformHostTunnel: async () => ({ status: 200, json: { hostname: "ssh-abc.example.com", tunnelToken: "tok" } }),
-    ensurePreviewRoute: async () => {},
+    ensurePreviewRoutes: async () => {},
     members: { list: async () => [], add: async () => {}, remove: async () => {} },
     auth: undefined,
     ...overrides,
@@ -418,8 +418,8 @@ test("panels.start runs the repo's operator dir, rejects unknown repos + repos w
             services({
                 workspace,
                 processes: processes,
-                ensurePreviewRoute: async (panel) => {
-                    ensured.push(panel);
+                ensurePreviewRoutes: async (labels) => {
+                    ensured.push(...labels);
                 },
             }),
         ),
@@ -481,8 +481,8 @@ test("ports.forward maps a listener onto a slot, mints its route label, and refu
                 config,
                 portForwards,
                 scanPorts: async () => [{ port: 3000, host: "127.0.0.1", pid: 7, command: "vite" }],
-                ensurePreviewRoute: async (label) => {
-                    ensured.push(label);
+                ensurePreviewRoutes: async (labels) => {
+                    ensured.push(...labels);
                 },
             }),
         ),
@@ -1800,8 +1800,8 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
                         });
                     },
                 },
-                ensurePreviewRoute: async (panel) => {
-                    ensured.push(panel);
+                ensurePreviewRoutes: async (labels) => {
+                    ensured.push(...labels);
                 },
             }),
         ),
@@ -1809,7 +1809,7 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
     expect(await client.workspace.addRepo({ name: "extra", cloneUrl: "https://example.com/extra.git" })).toEqual({ name: "extra", path: "extra" });
     expect(clones).toEqual([{ parentDir: "/work", name: "extra", cloneUrl: "https://example.com/extra.git", separateGitDir: "/history/gits/extra" }]);
     // The preview route is minted at clone time, not first panel start (DNS negative-caching).
-    expect(ensured).toEqual(["extra"]);
+    expect(ensured).toEqual(["preview-extra"]);
     // A reserved role (one of the three fixed repos) cannot be clobbered, and a path-escape name is rejected.
     expect(await errorCode(client.workspace.addRepo({ name: "intent", cloneUrl: "https://example.com/x.git" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.workspace.addRepo({ name: "../evil", cloneUrl: "https://example.com/x.git" }))).toBe("BAD_REQUEST");
@@ -1835,8 +1835,8 @@ test("workspace.addApps launches `intentic add-app` as a one-shot tmux job and m
             services({
                 workspace,
                 processes,
-                ensurePreviewRoute: async (panel) => {
-                    ensured.push(panel);
+                ensurePreviewRoutes: async (labels) => {
+                    ensured.push(...labels);
                 },
             }),
         ),
@@ -1865,7 +1865,7 @@ test("workspace.addApps launches `intentic add-app` as a one-shot tmux job and m
         },
     ]);
     // Preview routes are minted before the job runs (hostnames must predate the first browser lookup).
-    expect(ensured).toEqual(["shop--api", "shop--shop-web"]);
+    expect(ensured).toEqual(["preview-shop--api", "preview-shop--shop-web"]);
     // An unknown monorepo is NOT_FOUND (before any job is launched).
     expect(await errorCode(client.workspace.addApps({ repo: "ghost", apps: [{ template: "api", name: "api" }] }))).toBe("NOT_FOUND");
     expect(jobs).toHaveLength(1);

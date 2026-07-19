@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { WorkspaceSearchResultSchema, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
+import { WorkspaceSearchResultSchema, previewLabel, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -125,7 +125,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             });
             // Mint the preview route at clone time — hostnames must predate the first browser lookup (an early
             // NXDOMAIN gets negative-cached for the zone's SOA TTL).
-            void services.ensurePreviewRoute(input.name);
+            void services.ensurePreviewRoutes([previewLabel(input.name)]);
             services.history.notifyUserWrite();
             return { name: input.name, path: input.name };
         }),
@@ -153,11 +153,9 @@ export const createWorkspaceRoutes = (services: Services) => {
             const { source, ref } = await readTemplatesConfig(services);
             const apps = input.apps.map((app) => (app.name === app.template ? app.template : `${app.template}:${app.name}`)).join(",");
             const command = `intentic add-app --dir ${shellQuote(repoDir)} --apps ${shellQuote(apps)} --source ${shellQuote(source)} --ref ${shellQuote(ref)}`;
-            // Mint each app's preview route up front — idempotent, and hostnames must predate the first browser
-            // lookup (an early NXDOMAIN gets negative-cached for the zone's SOA TTL).
-            for (const app of input.apps) {
-                void services.ensurePreviewRoute(appPanelKey(repo, app.name));
-            }
+            // Mint every app's preview route up front in one batch — idempotent, and hostnames must predate the
+            // first browser lookup (an early NXDOMAIN gets negative-cached for the zone's SOA TTL).
+            void services.ensurePreviewRoutes(input.apps.map((app) => previewLabel(appPanelKey(repo, app.name))));
             await services.processes.start(`${repo}--add_apps`, { command, cwd: repoDir, oneShot: true });
             return { ok: true } as const;
         }),
@@ -190,7 +188,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: `no app "${input.app}" in ${repo}` });
             }
             // Mint the preview route before the app is observable as running (see panels/preview-route.ts).
-            await services.ensurePreviewRoute(appPanelKey(repo, input.app));
+            await services.ensurePreviewRoutes([previewLabel(appPanelKey(repo, input.app))]);
             await services.processes.start(
                 appPanelKey(repo, input.app),
                 buildAppSpec({ repo, repoDir, pkg: found.pkg, app: input.app, preview: found.preview, zone, sandboxId }),

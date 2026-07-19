@@ -41,9 +41,9 @@ export const createPortsRoutes = (services: Services) => {
             }
             // The listener's dial host rides into the forward: a `localhost` bind can be ::1-only (Vite).
             const slot = await services.portForwards.forward(input.port, listener.host);
-            // Mint the route before the URL reaches a browser (a no-op on own-Cloudflare, and after the slot's
-            // first use on the intentic path — slots exist precisely so this stays a bounded, warm set).
-            await services.ensurePreviewRoute(portLabel(slot));
+            // Almost always a memoized no-op: the boot sweep pre-mints every slot label (and own-Cloudflare
+            // rides its wildcard), so this only pays a platform call if boot ran with the platform unreachable.
+            await services.ensurePreviewRoutes([portLabel(slot)]);
             const url = portUrl(slot, zone, sandboxId);
             return url === undefined ? {} : { previewUrl: url };
         }),

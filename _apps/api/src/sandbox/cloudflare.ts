@@ -4,6 +4,8 @@ import {
     cfargotunnelCname,
     hostSshTunnelName,
     labelHostname,
+    PORT_SLOTS,
+    portHostname,
     sandboxHostname as sandboxHost,
     sandboxSubdomain,
     sshHostname,
@@ -210,6 +212,11 @@ const sandboxTunnelId = (connectToken: string): string => {
 // hostname (an early NXDOMAIN gets negative-cached by resolvers for the zone's SOA TTL).
 export const sandboxHostname = (zone: string, connectToken: string): string => sandboxHost(sandboxTunnelId(connectToken), zone);
 
+// The in-container origin the sandbox preview proxy listens on — fixed like the daemon's :8787 and sshd's :22.
+// On the intentic-provided path the ingress is platform-owned, so a container-side PREVIEW_PORT override is
+// not honored here.
+const PREVIEW_SERVICE = `http://intentic-sandbox-workspace:${PREVIEW_PORT}`;
+
 export const provisionSandboxTunnel = async (args: {
     apiToken: string;
     zone: string;
@@ -225,6 +232,15 @@ export const provisionSandboxTunnel = async (args: {
         routes: [
             { hostname, service: `http://intentic-sandbox-workspace:${DAEMON_PORT}`, comment: "intentic sandbox tunnel" },
             { hostname: sshHostname(id, args.zone), service: "ssh://intentic-sandbox-workspace:22", comment: "intentic sandbox ssh tunnel" },
+            // The whole port-forward slot pool, warm from provisioning: a port preview's latency is DNS
+            // propagation on a freshly minted record, so the records are minted before the sandbox even boots
+            // (the pool provisions them long before a user claims the tunnel). Panels stay lazily minted —
+            // their names aren't known here — but the slot pool is finite and fixed by contract.
+            ...PORT_SLOTS.map((slot) => ({
+                hostname: portHostname(slot, id, args.zone),
+                service: PREVIEW_SERVICE,
+                comment: "intentic sandbox preview",
+            })),
         ],
     });
     return { hostname, tunnelToken };
@@ -248,31 +264,29 @@ export const deleteSandboxTunnel = async (args: { apiToken: string; zone: string
     }
 };
 
-// The in-container origin the sandbox preview proxy listens on — fixed like the daemon's :8787 and sshd's :22
-// above. On the intentic-provided path the ingress is platform-owned, so a container-side PREVIEW_PORT
-// override is not honored here.
-const PREVIEW_SERVICE = `http://intentic-sandbox-workspace:${PREVIEW_PORT}`;
-
 // A remotely-managed tunnel's current config. Parsed loosely so fields this code doesn't set (warp-routing,
 // originRequest, …) survive the read-modify-PUT round-trip; config is null for a never-configured tunnel.
 const tunnelConfigSchema = z.object({
     config: z.looseObject({ ingress: z.array(z.looseObject({ hostname: z.string().optional(), service: z.string() })).optional() }).nullable(),
 });
 
-// Ensure a preview route exists on the sandbox's intentic-owned tunnel for a label (`preview-<panel>` /
-// `port-<slot>` — see hostnames.ts): a proxied CNAME `<label>-<id>.<zone>` → <tunnelId>.cfargotunnel.com plus
-// an ingress rule → the preview proxy. Idempotent — the daemon calls it on every panel start / port forward;
-// an already-routed hostname skips the config PUT, and the CNAME upsert repairs a half-failed earlier run. The
-// PUT replaces the whole ingress list (Cloudflare has no append), so the current config is read and merged;
-// the daemon serializes its calls, so two ensures at once can't race the read-modify-write.
-export const ensurePreviewRoute = async (args: {
+// Ensure preview routes exist on the sandbox's intentic-owned tunnel for a batch of labels
+// (`preview-<panel>` / `port-<slot>` — see hostnames.ts): a proxied CNAME `<label>-<id>.<zone>` →
+// <tunnelId>.cfargotunnel.com plus an ingress rule → the preview proxy, per label. Batched deliberately: the
+// daemon's boot sweep ensures every panel label + the whole port-slot pool in ONE call, so a warm re-ensure
+// costs a handful of Cloudflare calls regardless of label count — all missing ingress rules land in a single
+// config PUT, and one list of the CNAMEs already pointing at this tunnel decides which records need creating.
+// Idempotent; the per-hostname upsert repairs a half-failed earlier run. The PUT replaces the whole ingress
+// list (Cloudflare has no append), so the current config is read and merged; the daemon serializes its calls,
+// so two ensures at once can't race the read-modify-write.
+export const ensurePreviewRoutes = async (args: {
     apiToken: string;
     zone: string;
     connectToken: string;
-    label: string;
-}): Promise<{ hostname: string }> => {
+    labels: readonly string[];
+}): Promise<{ hostnames: string[] }> => {
     const id = sandboxTunnelId(args.connectToken);
-    const hostname = labelHostname(args.label, id, args.zone);
+    const hostnames = args.labels.map((label) => labelHostname(label, id, args.zone));
     const { zoneId, accountId } = await resolveZone(args.apiToken, args.zone);
     const tunnels = await cfCall(
         args.apiToken,
@@ -286,16 +300,34 @@ export const ensurePreviewRoute = async (args: {
     const configPath = `/accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnel.id)}/configurations`;
     const { config } = await cfCall(args.apiToken, configPath, tunnelConfigSchema);
     const ingress = config?.ingress ?? [CATCH_ALL];
-    if (!ingress.some((rule) => "hostname" in rule && rule.hostname === hostname)) {
+    const missingRules = hostnames.filter((hostname) => !ingress.some((rule) => "hostname" in rule && rule.hostname === hostname));
+    if (missingRules.length > 0) {
         // Insert above the trailing catch-all (cloudflared matches rules in order).
-        const merged = [...ingress.slice(0, -1), { hostname, service: PREVIEW_SERVICE }, ...ingress.slice(-1)];
+        const merged = [...ingress.slice(0, -1), ...missingRules.map((hostname) => ({ hostname, service: PREVIEW_SERVICE })), ...ingress.slice(-1)];
         await cfCall(args.apiToken, configPath, z.unknown(), {
             method: "PUT",
             body: JSON.stringify({ config: { ...config, ingress: merged } }),
         });
     }
-    await upsertCname(args.apiToken, zoneId, hostname, cfargotunnelCname(tunnel.id), "intentic sandbox preview");
-    return { hostname };
+    // One list of every CNAME already pointing at this tunnel; only absent hostnames pay an upsert. A record
+    // that exists but points elsewhere won't show in this list and gets repaired by its upsert.
+    const content = cfargotunnelCname(tunnel.id);
+    const existing = new Set(
+        (
+            await cfCall(
+                args.apiToken,
+                `/zones/${encodeURIComponent(zoneId)}/dns_records?type=CNAME&content=${encodeURIComponent(content)}&per_page=100`,
+                z.array(z.object({ name: z.string() })),
+            )
+        ).map((record) => record.name),
+    );
+    for (const hostname of hostnames) {
+        if (!existing.has(hostname)) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of records; sequenced to keep upserts simple
+            await upsertCname(args.apiToken, zoneId, hostname, content, "intentic sandbox preview");
+        }
+    }
+    return { hostnames };
 };
 
 // Provision the intentic-owned per-host SSH tunnel that exposes a deploy target's sshd at `ssh-<id>.<zone>`, for

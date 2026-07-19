@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PORT_SLOTS } from "@intentic/sandbox-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspacePaths } from "../workspace/workspace.js";
 
@@ -20,27 +21,32 @@ beforeEach(() => {
 });
 
 describe("createPreviewRouteEnsurer", () => {
-    it("posts the label once and memoizes the 2xx — a re-start costs no platform call", async () => {
-        postMock.mockResolvedValue({ status: 200, json: { hostname: "x" } });
+    it("posts the labels once and memoizes the 2xx per label — a re-ensure costs no platform call", async () => {
+        postMock.mockResolvedValue({ status: 200, json: { hostnames: [] } });
         const ensure = createPreviewRouteEnsurer(config(), logger);
-        await ensure("preview-app");
-        await ensure("preview-app");
+        await ensure(["preview-app", "port-a"]);
+        await ensure(["preview-app"]);
+        await ensure(["port-a"]);
         expect(postMock).toHaveBeenCalledTimes(1);
-        expect(postMock).toHaveBeenCalledWith(expect.anything(), "/sandbox/preview-route", { label: "preview-app" });
+        expect(postMock).toHaveBeenCalledWith(expect.anything(), "/sandbox/preview-route", { labels: ["preview-app", "port-a"] });
+        // A batch with one new label posts ONLY the missing one.
+        await ensure(["preview-app", "preview-other"]);
+        expect(postMock).toHaveBeenCalledTimes(2);
+        expect(postMock).toHaveBeenLastCalledWith(expect.anything(), "/sandbox/preview-route", { labels: ["preview-other"] });
     });
 
-    it("never rejects: a non-2xx warns and is retried on the next start; a transport error too", async () => {
+    it("never rejects: a non-2xx warns and is retried on the next ensure; a transport error too", async () => {
         postMock.mockResolvedValueOnce({ status: 502, json: undefined });
         postMock.mockRejectedValueOnce(new Error("down"));
         postMock.mockResolvedValueOnce({ status: 200, json: {} });
         const ensure = createPreviewRouteEnsurer(config(), logger);
-        await expect(ensure("app")).resolves.toBeUndefined();
-        await expect(ensure("app")).resolves.toBeUndefined();
-        await ensure("app");
+        await expect(ensure(["preview-app"])).resolves.toBeUndefined();
+        await expect(ensure(["preview-app"])).resolves.toBeUndefined();
+        await ensure(["preview-app"]);
         expect(postMock).toHaveBeenCalledTimes(3);
         expect(warn).toHaveBeenCalledTimes(2);
         // Now memoized.
-        await ensure("app");
+        await ensure(["preview-app"]);
         expect(postMock).toHaveBeenCalledTimes(3);
     });
 
@@ -49,8 +55,8 @@ describe("createPreviewRouteEnsurer", () => {
         postMock.mockImplementationOnce(() => gate.promise);
         postMock.mockResolvedValueOnce({ status: 200, json: {} });
         const ensure = createPreviewRouteEnsurer(config(), logger);
-        const first = ensure("a");
-        const second = ensure("b");
+        const first = ensure(["preview-a"]);
+        const second = ensure(["preview-b"]);
         // Flush the chained microtask: "a" is in flight, "b" must wait for it.
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(postMock).toHaveBeenCalledTimes(1);
@@ -60,24 +66,25 @@ describe("createPreviewRouteEnsurer", () => {
     });
 
     it("is a no-op without a platform or connect token (loopback/headless)", async () => {
-        await createPreviewRouteEnsurer(config(""), logger)("app");
-        await createPreviewRouteEnsurer(config("https://p", ""), logger)("app");
+        await createPreviewRouteEnsurer(config(""), logger)(["preview-app"]);
+        await createPreviewRouteEnsurer(config("https://p", ""), logger)(["preview-app"]);
         expect(postMock).not.toHaveBeenCalled();
     });
 });
 
 describe("ensureAllPreviewRoutes", () => {
-    it("ensures every discovered repo (role dirs + extras) — the boot-time self-heal", async () => {
+    it("ensures every discovered repo + the whole port-slot pool in one batch — the boot-time pre-mint", async () => {
         const root = mkdtempSync(join(tmpdir(), "preview-sweep-"));
         mkdirSync(join(root, "intent", ".git"), { recursive: true });
         mkdirSync(join(root, "extra", ".git"), { recursive: true });
-        const ensured: string[] = [];
+        const batches: (readonly string[])[] = [];
         await ensureAllPreviewRoutes({
             workspace: workspacePaths(root),
-            ensurePreviewRoute: async (label: string) => {
-                ensured.push(label);
+            ensurePreviewRoutes: async (labels: readonly string[]) => {
+                batches.push(labels);
             },
         } as unknown as Parameters<typeof ensureAllPreviewRoutes>[0]);
-        expect(ensured.toSorted()).toEqual(["preview-extra", "preview-intent"]);
+        expect(batches).toHaveLength(1);
+        expect(batches[0]!.toSorted()).toEqual(["preview-extra", "preview-intent", ...PORT_SLOTS.map((slot) => `port-${slot}`)].toSorted());
     });
 });

@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PORT_SLOTS } from "@intentic/sandbox-contract";
 import {
     CloudflareTokenError,
     deleteSandboxTunnel,
-    ensurePreviewRoute,
+    ensurePreviewRoutes,
     listZoneNames,
     provisionHostSshTunnel,
     provisionSandboxTunnel,
@@ -70,7 +71,7 @@ describe(`provisionSandboxTunnel`, () => {
     const hostname = `sandbox-${id}.${zone}`;
     const sshHostname = `ssh-${id}.${zone}`;
 
-    it(`creates the tunnel, routes the daemon + sshd, and creates both DNS records when none exist`, async () => {
+    it(`creates the tunnel, routes the daemon + sshd + the port-slot pool, and creates every DNS record when none exist`, async () => {
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
             { match: (method, url) => method === `GET` && url.includes(`/cfd_tunnel?name=`), respond: () => ok([]) },
@@ -89,12 +90,20 @@ describe(`provisionSandboxTunnel`, () => {
         };
         expect(ingress.config.ingress[0]).toEqual({ hostname, service: `http://intentic-sandbox-workspace:8787` });
         expect(ingress.config.ingress[1]).toEqual({ hostname: sshHostname, service: `ssh://intentic-sandbox-workspace:22` });
+        // The whole slot pool is routed at provision time — a port preview's first forward never waits on DNS.
+        for (const [index, slot] of PORT_SLOTS.entries()) {
+            expect(ingress.config.ingress[2 + index]).toEqual({
+                hostname: `port-${slot}-${id}.${zone}`,
+                service: `http://intentic-sandbox-workspace:5173`,
+            });
+        }
         const dns = calls
             .filter((call) => call.method === `POST` && call.url.endsWith(`/dns_records`))
             .map((call) => call.body as Record<string, unknown>);
-        expect(dns).toHaveLength(2);
+        expect(dns).toHaveLength(2 + PORT_SLOTS.length);
         expect(dns[0]).toMatchObject({ type: `CNAME`, name: hostname, content: `t1.cfargotunnel.com`, proxied: true });
         expect(dns[1]).toMatchObject({ type: `CNAME`, name: sshHostname, content: `t1.cfargotunnel.com`, proxied: true });
+        expect(dns[2]).toMatchObject({ type: `CNAME`, name: `port-a-${id}.${zone}`, content: `t1.cfargotunnel.com`, proxied: true });
     });
 
     it(`reuses an existing tunnel and updates an existing DNS record in place`, async () => {
@@ -199,18 +208,19 @@ describe(`provisionHostSshTunnel`, () => {
     });
 });
 
-describe(`ensurePreviewRoute`, () => {
+describe(`ensurePreviewRoutes`, () => {
     const zone = `example.com`;
     const connectToken = `connect-token`;
     const id = createHash(`sha256`).update(connectToken).digest(`hex`).slice(0, 12);
     const hostname = `preview-app-${id}.${zone}`;
+    const portSlotHostname = `port-a-${id}.${zone}`;
     const existingIngress = [
         { hostname: `sandbox-${id}.${zone}`, service: `http://intentic-sandbox-workspace:8787` },
         { hostname: `ssh-${id}.${zone}`, service: `ssh://intentic-sandbox-workspace:22` },
         { service: `http_status:404` },
     ];
 
-    it(`appends the panel route above the catch-all, preserving existing rules, and creates the CNAME`, async () => {
+    it(`appends every missing route above the catch-all in ONE config PUT and creates the absent CNAMEs`, async () => {
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
             { match: (method, url) => method === `GET` && url.includes(`/cfd_tunnel?name=`), respond: () => ok([{ id: `t1` }]) },
@@ -219,28 +229,67 @@ describe(`ensurePreviewRoute`, () => {
                 respond: () => ok({ config: { ingress: existingIngress } }),
             },
             { match: (method, url) => method === `PUT` && url.endsWith(`/cfd_tunnel/t1/configurations`), respond: () => ok({}) },
+            // The batch lists records already pointing at this tunnel (by content) once; none exist, so each
+            // hostname pays an upsert (list-by-name -> create).
             { match: (method, url) => method === `GET` && url.includes(`/dns_records?type=CNAME`), respond: () => ok([]) },
             { match: (method, url) => method === `POST` && url.endsWith(`/dns_records`), respond: () => ok({}) },
         ]);
 
-        await expect(ensurePreviewRoute({ apiToken: `api`, zone, connectToken, label: `preview-app` })).resolves.toEqual({ hostname });
+        await expect(ensurePreviewRoutes({ apiToken: `api`, zone, connectToken, labels: [`preview-app`, `port-a`] })).resolves.toEqual({
+            hostnames: [hostname, portSlotHostname],
+        });
 
         // The tunnel searched is the sandbox's own.
         expect(calls.some((call) => call.url.includes(`/cfd_tunnel?name=sandbox-${id}`))).toBe(true);
-        const put = calls.find((call) => call.method === `PUT` && call.url.endsWith(`/configurations`))!.body as {
-            config: { ingress: { hostname?: string; service: string }[] };
-        };
+        const puts = calls.filter((call) => call.method === `PUT` && call.url.endsWith(`/configurations`));
+        expect(puts).toHaveLength(1);
+        const put = puts[0]!.body as { config: { ingress: { hostname?: string; service: string }[] } };
         expect(put.config.ingress).toEqual([
             existingIngress[0],
             existingIngress[1],
             { hostname, service: `http://intentic-sandbox-workspace:5173` },
+            { hostname: portSlotHostname, service: `http://intentic-sandbox-workspace:5173` },
             { service: `http_status:404` },
         ]);
-        const dns = calls.find((call) => call.method === `POST` && call.url.endsWith(`/dns_records`))!.body as Record<string, unknown>;
-        expect(dns).toMatchObject({ type: `CNAME`, name: hostname, content: `t1.cfargotunnel.com`, proxied: true });
+        const dns = calls
+            .filter((call) => call.method === `POST` && call.url.endsWith(`/dns_records`))
+            .map((call) => call.body as Record<string, unknown>);
+        expect(dns).toHaveLength(2);
+        expect(dns[0]).toMatchObject({ type: `CNAME`, name: hostname, content: `t1.cfargotunnel.com`, proxied: true });
+        expect(dns[1]).toMatchObject({ type: `CNAME`, name: portSlotHostname, content: `t1.cfargotunnel.com`, proxied: true });
     });
 
-    it(`skips the config PUT when the route already exists but still repairs the CNAME`, async () => {
+    it(`is a handful of reads when everything already exists — no config PUT, no DNS writes`, async () => {
+        const calls = stubFetch([
+            { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
+            { match: (method, url) => method === `GET` && url.includes(`/cfd_tunnel?name=`), respond: () => ok([{ id: `t1` }]) },
+            {
+                match: (method, url) => method === `GET` && url.endsWith(`/cfd_tunnel/t1/configurations`),
+                respond: () =>
+                    ok({
+                        config: {
+                            ingress: [
+                                ...existingIngress.slice(0, 2),
+                                { hostname, service: `http://intentic-sandbox-workspace:5173` },
+                                { hostname: portSlotHostname, service: `http://intentic-sandbox-workspace:5173` },
+                                { service: `http_status:404` },
+                            ],
+                        },
+                    }),
+            },
+            // Both records already point at the tunnel — the content list proves it, so no per-name upserts run.
+            {
+                match: (method, url) => method === `GET` && url.includes(`content=`),
+                respond: () => ok([{ name: hostname }, { name: portSlotHostname }]),
+            },
+        ]);
+
+        await ensurePreviewRoutes({ apiToken: `api`, zone, connectToken, labels: [`preview-app`, `port-a`] });
+
+        expect(calls.some((call) => call.method === `PUT` || call.method === `POST`)).toBe(false);
+    });
+
+    it(`repairs a CNAME that exists but points at the wrong content (absent from the content list)`, async () => {
         const calls = stubFetch([
             { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
             { match: (method, url) => method === `GET` && url.includes(`/cfd_tunnel?name=`), respond: () => ok([{ id: `t1` }]) },
@@ -257,11 +306,13 @@ describe(`ensurePreviewRoute`, () => {
                         },
                     }),
             },
-            { match: (method, url) => method === `GET` && url.includes(`/dns_records?type=CNAME`), respond: () => ok([{ id: `r1` }]) },
+            { match: (method, url) => method === `GET` && url.includes(`content=`), respond: () => ok([]) },
+            // The upsert's list-by-name finds the stale record and PUTs it in place.
+            { match: (method, url) => method === `GET` && url.includes(`name=preview-app-`), respond: () => ok([{ id: `r1` }]) },
             { match: (method, url) => method === `PUT` && url.endsWith(`/dns_records/r1`), respond: () => ok({}) },
         ]);
 
-        await ensurePreviewRoute({ apiToken: `api`, zone, connectToken, label: `preview-app` });
+        await ensurePreviewRoutes({ apiToken: `api`, zone, connectToken, labels: [`preview-app`] });
 
         expect(calls.some((call) => call.method === `PUT` && call.url.endsWith(`/configurations`))).toBe(false);
         expect(calls.some((call) => call.method === `PUT` && call.url.endsWith(`/dns_records/r1`))).toBe(true);
@@ -272,7 +323,7 @@ describe(`ensurePreviewRoute`, () => {
             { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1`, account: { id: `a1` } }]) },
             { match: (method, url) => method === `GET` && url.includes(`/cfd_tunnel?name=`), respond: () => ok([]) },
         ]);
-        await expect(ensurePreviewRoute({ apiToken: `api`, zone, connectToken, label: `preview-app` })).rejects.toThrow(`was not found`);
+        await expect(ensurePreviewRoutes({ apiToken: `api`, zone, connectToken, labels: [`preview-app`] })).rejects.toThrow(`was not found`);
     });
 });
 
