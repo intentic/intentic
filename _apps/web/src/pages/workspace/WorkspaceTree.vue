@@ -8,17 +8,22 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, type VNode, watch } from "vue";
 import { useLayout } from "../../composables/useLayout";
 import { viewersOfPath } from "../../composables/usePresence";
+import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { isRecentlyChanged } from "../../composables/workspace/useWorkspaceLive";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import PresenceAvatars from "../../presence/PresenceAvatars.vue";
 import { explorerTreatment, iconForEntry } from "@intentic-app/ui";
+import { nestSiblings, type NestedEntry } from "./fileNesting";
 import { selectRange, stepLead } from "./treeSelect";
 
 interface Row {
     readonly entry: WorkspaceTreeEntry;
     readonly depth: number;
     readonly isExpanded: boolean;
+    // A file row that folds sibling files under it (a dir's package.json, see fileNesting.ts): draws a
+    // chevron and expands/collapses like a dir, while clicking the row still opens the file itself.
+    readonly nest?: boolean;
 }
 // A non-interactive "… more items not shown" marker rendered under a dir whose children were cut by the server's
 // entry cap (or at the root). Kept out of the selection/keyboard axis — it's a hint, not a row you can act on.
@@ -55,6 +60,7 @@ const { saveText, createDir, moveEntry, removeEntries, copyEntries, moveIntoMany
     useWorkspaceTree();
 const layout = useLayout();
 const { enqueueFromDataTransfer } = useUploadQueue();
+const { fileNesting } = useFileNesting();
 
 // Expanded directory paths (only consulted when not filtering; a filter force-expands matched branches).
 const expanded = ref<ReadonlySet<string>>(new Set());
@@ -131,10 +137,13 @@ const targetDir = (path: string | null): string => {
 const visibleRows = computed<(Row | MoreRow)[]>(() => {
     const needle = filter.trim().toLowerCase();
     const open = expanded.value;
+    // Nesting only applies unfiltered — a filter flattens every level so it can match folded names directly.
+    const level = (nodes: readonly WorkspaceTreeEntry[]): readonly NestedEntry[] =>
+        fileNesting.value && needle === `` ? nestSiblings(nodes) : nodes.map((entry) => ({ entry }));
 
     const walk = (nodes: readonly WorkspaceTreeEntry[], depth: number): (Row | MoreRow)[] => {
         const out: (Row | MoreRow)[] = [];
-        for (const entry of nodes) {
+        for (const { entry, nested } of level(nodes)) {
             if (entry.type === `dir`) {
                 if (needle === ``) {
                     const isExpanded = open.has(entry.path);
@@ -152,6 +161,12 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
                     }
                     out.push({ entry, depth, isExpanded: true });
                     out.push(...childRows);
+                }
+            } else if (nested !== undefined) {
+                const isExpanded = open.has(entry.path);
+                out.push({ entry, depth, isExpanded, nest: true });
+                if (isExpanded) {
+                    out.push(...nested.map((child): Row => ({ entry: child, depth: depth + 1, isExpanded: false })));
                 }
             } else if (needle === `` || entry.name.toLowerCase().includes(needle)) {
                 out.push({ entry, depth, isExpanded: false });
@@ -173,6 +188,13 @@ const orderedPaths = computed<string[]>(() => visibleRows.value.filter((row): ro
 const tabbablePath = computed<string | null>(() =>
     lead.value !== null && orderedPaths.value.includes(lead.value) ? lead.value : (orderedPaths.value[0] ?? null),
 );
+
+// The lead's visible row + index — expand/collapse and parent jumps work on rows, not raw entries, so a
+// nest parent (package.json) behaves like a dir on the keyboard.
+const leadRowAt = (): { row: Row; index: number } | undefined => {
+    const index = visibleRows.value.findIndex((row) => !(`more` in row) && row.entry.path === lead.value);
+    return index === -1 ? undefined : { row: visibleRows.value[index] as Row, index };
+};
 
 // The active file-tree setup (minimal/colorful/vivid) — size, colour and folder emphasis for every row.
 const { explorerStyle } = useExplorerStyle();
@@ -262,6 +284,15 @@ const onRowClick = (event: MouseEvent, row: Row): void => {
     }
     selectSingle(path);
     activate(row.entry, false);
+};
+
+// A nest parent's chevron owns the expand/collapse (its row click opens the file); a dir's chevron just
+// falls through to the row click, which already toggles.
+const onChevronClick = (event: MouseEvent, row: Row): void => {
+    if (row.nest === true) {
+        event.stopPropagation();
+        toggleExpand(row.entry.path);
+    }
 };
 
 // ---- rename (inline) ----
@@ -448,15 +479,13 @@ const onKeydown = (event: KeyboardEvent): void => {
         }
         event.preventDefault();
     } else if (event.key === `ArrowRight`) {
-        const e = leadEntry.value;
-        if (e !== undefined && e.type === `dir`) {
-            if (!expanded.value.has(e.path)) {
-                toggleExpand(e.path); // expand
+        const at = leadRowAt();
+        if (at !== undefined && (at.row.entry.type === `dir` || at.row.nest === true)) {
+            if (!at.row.isExpanded) {
+                toggleExpand(at.row.entry.path); // expand
             } else {
-                const i = visibleRows.value.findIndex((row) => !(`more` in row) && row.entry.path === e.path);
-                const cur = visibleRows.value[i];
-                const child = visibleRows.value[i + 1];
-                if (cur !== undefined && child !== undefined && !(`more` in child) && child.depth > cur.depth) {
+                const child = visibleRows.value[at.index + 1];
+                if (child !== undefined && !(`more` in child) && child.depth > at.row.depth) {
                     selectSingle(child.entry.path);
                     void focusLead();
                 }
@@ -464,12 +493,20 @@ const onKeydown = (event: KeyboardEvent): void => {
         }
         event.preventDefault();
     } else if (event.key === `ArrowLeft`) {
-        const e = leadEntry.value;
-        if (e !== undefined && e.type === `dir` && expanded.value.has(e.path)) {
-            toggleExpand(e.path); // collapse
-        } else if (led !== null && parentDir(led) !== ``) {
-            selectSingle(parentDir(led)); // jump to parent
-            void focusLead();
+        const at = leadRowAt();
+        if (at !== undefined && (at.row.entry.type === `dir` || at.row.nest === true) && at.row.isExpanded) {
+            toggleExpand(at.row.entry.path); // collapse
+        } else if (at !== undefined) {
+            // Jump to the visual parent: the nearest shallower row above — the containing dir, or the nest
+            // parent when the lead is a file folded under a package.json.
+            for (let i = at.index - 1; i >= 0; i--) {
+                const above = visibleRows.value[i];
+                if (above !== undefined && !(`more` in above) && above.depth < at.row.depth) {
+                    selectSingle(above.entry.path);
+                    void focusLead();
+                    break;
+                }
+            }
         }
         event.preventDefault();
     } else if (event.key === ` `) {
@@ -643,7 +680,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     type="button"
                     role="treeitem"
                     :aria-selected="selection.has(row.entry.path)"
-                    :aria-expanded="row.entry.type === 'dir' ? row.isExpanded : undefined"
+                    :aria-expanded="row.entry.type === 'dir' || row.nest ? row.isExpanded : undefined"
                     :tabindex="tabbablePath === row.entry.path ? 0 : -1"
                     :draggable="renamingPath !== row.entry.path"
                     class="treerow flex w-full items-center gap-1.5 py-1 pr-2 text-left text-[0.8125rem]"
@@ -663,9 +700,10 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     @drop="onRowDrop($event, row)"
                 >
                     <Icon
-                        v-if="row.entry.type === 'dir'"
+                        v-if="row.entry.type === 'dir' || row.nest"
                         class="w-[0.7rem] shrink-0 text-[0.6rem] text-subtle"
                         :name="row.isExpanded ? 'chevron-down' : 'chevron-right'"
+                        @click="onChevronClick($event, row)"
                     />
                     <span v-else class="w-[0.7rem] shrink-0"></span>
                     <!-- Icon size/colour come from the active explorer setup (minimal/colorful/vivid). The fixed-width

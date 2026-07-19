@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Card, useExplorerStyle, useIconSet, useTheme } from "@intentic-app/ui";
 import { explorerTreatment } from "@intentic-app/ui";
+import { useFileNesting } from "../../composables/workspace/useFileNesting";
 
 /* Appearance: how the workspace looks for this account — color scheme (data-mode), brand style (data-theme),
  * icon set, and file-tree treatment. Each recolors/re-renders the whole UI live, so most of the app is the
@@ -9,6 +10,7 @@ import { explorerTreatment } from "@intentic-app/ui";
 const { scheme, set: setScheme, theme, setTheme, themes } = useTheme();
 const { iconSet, iconSets } = useIconSet();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
+const { fileNesting } = useFileNesting();
 
 // A few representative rows so the Explorer setup is visible here without opening the workspace.
 const explorerPreview: { name: string; type: "file" | "dir" }[] = [
@@ -132,6 +134,36 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     </span>
                     <span class="truncate text-content/90">{{ entry.name }}</span>
                 </div>
+            </div>
+        </Card>
+
+        <!-- File nesting — opinionated, binary: every explorer directory with a package.json folds its other
+             files under it. No per-pattern rules to configure. -->
+        <Card class="flex items-center justify-between">
+            <div class="flex min-w-0 items-center gap-2.5">
+                <Icon name="folder-open" class="text-lg text-muted" />
+                <div class="min-w-0">
+                    <h2 class="font-semibold leading-tight">File nesting</h2>
+                    <p class="text-xs text-muted">Fold a folder's files under its package.json in the explorer.</p>
+                </div>
+            </div>
+            <div class="flex shrink-0 items-center gap-0.5 rounded-md border border-line p-0.5">
+                <button
+                    type="button"
+                    class="rounded px-2.5 py-1 text-xs font-medium transition-colors"
+                    :class="fileNesting ? 'bg-content/10 text-content' : 'text-muted hover:text-content'"
+                    @click="fileNesting = true"
+                >
+                    On
+                </button>
+                <button
+                    type="button"
+                    class="rounded px-2.5 py-1 text-xs font-medium transition-colors"
+                    :class="!fileNesting ? 'bg-content/10 text-content' : 'text-muted hover:text-content'"
+                    @click="fileNesting = false"
+                >
+                    Off
+                </button>
             </div>
         </Card>
     </div>
