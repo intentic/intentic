@@ -38,6 +38,7 @@
         "@tanstack/vue-query": "catalog:",
         "@xterm/addon-fit": "catalog:",
         "@xterm/addon-serialize": "catalog:",
+        "@xterm/addon-web-links": "catalog:",
         "@xterm/xterm": "catalog:",
         "better-auth": "catalog:",
         "croner": "catalog:",

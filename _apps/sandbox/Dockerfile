@@ -7,6 +7,9 @@
 FROM node:24.18.0-bookworm@sha256:fdddfb3e688158251943d52eba361de991548f6814007acba4917ae6b512d6be AS build
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+# The image build itself must not phone home: turbo reports usage to Vercel unless opted out, and
+# Scarf-instrumented packages ping from their postinstall during pnpm install.
+ENV DO_NOT_TRACK=1 TURBO_TELEMETRY_DISABLED=1 SCARF_ANALYTICS=false
 RUN corepack enable
 # Fetch the cloudflared binary (copied into the runtime image below) so the in-sandbox `intentic apply` can
 # run `cloudflared access tcp` to reach a NAT'd self-host's SSH over its Cloudflare tunnel (via:"cloudflared").
@@ -244,5 +247,37 @@ ENV DO_NOT_TRACK=1 \
     DISABLE_FEEDBACK_COMMAND=1 \
     DISABLE_AUTOUPDATER=1 \
     OPENCODE_DISABLE_AUTOUPDATE=1
+# Toolchain-wide telemetry opt-outs for everything that runs in the sandbox — the agent's Bash tool, the web
+# terminals' zsh, and any install/build/dev command in /work inherit this env. Tools not baked into the image
+# are covered on purpose: the agent installs toolchains at will, and an unused var is inert. Each name is the
+# tool's own documented switch; folk-list vars that don't exist (VITE_/PODMAN_/DOCKER_CLI_ telemetry opt-outs,
+# CRATES_EDITION_METRICS) are omitted, as is ANSIBLE_GATHERING=explicit — that changes playbook semantics, not
+# privacy. npm audit/fund are off because install-time audit posts the dependency graph to the registry.
+# NOTE: containers under the sandbox's inner dockerd do NOT inherit this env — only processes in the sandbox itself.
+ENV DISABLE_OPENCOLLECTIVE=1 \
+    ADBLOCK=true \
+    NPM_CONFIG_AUDIT=false \
+    NPM_CONFIG_FUND=false \
+    YARN_ENABLE_TELEMETRY=0 \
+    SCARF_ANALYTICS=false \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NUXT_TELEMETRY_DISABLED=1 \
+    GATSBY_TELEMETRY_DISABLED=1 \
+    ASTRO_TELEMETRY_DISABLED=1 \
+    TURBO_TELEMETRY_DISABLED=1 \
+    EXPO_NO_TELEMETRY=1 \
+    STORYBOOK_DISABLE_TELEMETRY=1 \
+    NG_CLI_ANALYTICS=false \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    POWERSHELL_TELEMETRY_OPTOUT=1 \
+    SAM_CLI_TELEMETRY=0 \
+    CHECKPOINT_DISABLE=1 \
+    CLOUDSDK_CORE_DISABLE_USAGE_REPORTING=true \
+    AZURE_CORE_COLLECT_TELEMETRY=0 \
+    WRANGLER_SEND_METRICS=false \
+    STRIPE_CLI_TELEMETRY_OPTOUT=1 \
+    HASURA_GRAPHQL_ENABLE_TELEMETRY=false \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    CONDA_ANACONDA_ANON_USAGE=false
 EXPOSE 8787 22
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

@@ -1,6 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
 import { useGoogleIdentity } from "../useGoogleIdentity";
 import { useSandbox } from "../sandbox/useSandbox";
@@ -45,6 +46,16 @@ export type TerminalSession = {
     closing: boolean;
     // True while the connection is known-down — gates the disconnect/not-reachable banner to once per outage.
     down: boolean;
+};
+
+// Ctrl/Cmd+click opens a link (VSCode's terminal gesture) — a plain click must stay a selection/tmux
+// gesture, and the forced-selection mousedown below turns it into one anyway. The URI is arbitrary program
+// output, so the new tab gets no opener. Fired from the linkifier's mouseup, whose modifier state is real
+// (the shiftKey forcing only touches mousedown), and whose user activation keeps popup blockers quiet.
+const openLink = (event: MouseEvent, uri: string): void => {
+    if (event.ctrlKey || event.metaKey) {
+        window.open(uri, `_blank`, `noopener`);
+    }
 };
 
 const send = (s: TerminalSession, message: TerminalClientMessage): void => {
@@ -211,6 +222,9 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         disableStdin: readOnly,
         fontFamily: `'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace`,
         fontSize: 13,
+        // OSC 8 hyperlinks (CLIs that emit explicit link escapes) — without this, xterm falls back to a
+        // blocking confirm() dialog on activation.
+        linkHandler: { activate: openLink },
         // Snapshotted at creation; fine while --color-terminal is constant across themes/modes.
         theme: { background: getComputedStyle(document.documentElement).getPropertyValue(`--color-terminal`).trim() || `#0a0a0a` },
     });
@@ -218,6 +232,8 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     term.loadAddon(fit);
     const serialize = new SerializeAddon();
     term.loadAddon(serialize);
+    // Plain-text URLs in output (a dev server's localhost line, pnpm's changelog link) become Ctrl/Cmd+clickable.
+    term.loadAddon(new WebLinksAddon(openLink));
     // tmux runs with `set-clipboard on`, so a copy (mouse drag in copy-mode, `y`, …) arrives here as OSC 52
     // with a base64 payload — land it in the browser clipboard, which xterm otherwise ignores. `?` asks to
     // READ the clipboard; that stays unanswered. Guarded: the payload is arbitrary program output.

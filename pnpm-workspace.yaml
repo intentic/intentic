@@ -117,6 +117,7 @@ catalog:
   "@vue-flow/core": 1.48.2
   "@xterm/addon-fit": 0.11.0
   "@xterm/addon-serialize": 0.14.0
+  "@xterm/addon-web-links": 0.12.0
   "@xterm/headless": 6.0.0
   "@xterm/xterm": 6.0.0
   "@ast-grep/napi": 0.44.1
