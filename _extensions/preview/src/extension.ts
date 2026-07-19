@@ -20,7 +20,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             id: `ports`,
             label: `Ports`,
             surface: `rail`,
-            detect: () => [{ key: `ports`, title: `Ports`, icon: `desktop` }],
+            detect: () => [{ key: `ports`, title: `Ports`, icon: `globe` }],
             view: async () => (await import(`./PortsView.vue`)).default,
         }),
     );

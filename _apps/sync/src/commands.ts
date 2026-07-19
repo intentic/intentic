@@ -1,13 +1,13 @@
 import { spawnSync } from "node:child_process";
-import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import { buildCommand, type CommandContext } from "@stricli/core";
+import { registerAutostart, unregisterAutostart } from "./autostart.js";
 import { knownHostsPath, readConfig, type SyncConfig, sshKeyPath, writeConfig } from "./config.js";
-import { ensureCloudflared, ensureMutagen, forwardSessionName, mutagenCreateArgs, mutagenForwardArgs, runMutagen, sessionName } from "./mutagen.js";
+import { type Log, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
+import { ensureCloudflared, ensureMutagen, mutagenCreateArgs, runMutagen, sessionName } from "./mutagen.js";
 import { ensureSshKey, INCLUDE_MARKER, sanitizeId, sshAlias, sshConfigBlock, writeManagedSshConfig } from "./ssh.js";
 
 // Enroll our SSH public key using the browser-minted pairing token (single-use). The daemon returns the tunnel's
@@ -142,6 +142,13 @@ const setup = buildCommand<SetupFlags>({
             }
         }
         out(`Sync started: ${config.localDir} ↔ ${sshHostname}:/work. Check it with \`intentic-sync status\`.`);
+
+        // Auto-start port mirroring so the user never types a command: the sandbox's dev servers become
+        // localhost:<same-port> here, new ones appear as they start, and it resumes after a reboot. Needs the
+        // enrollment sync token; a daemon that predates mirroring simply skips this (file sync still works).
+        if (syncToken !== undefined) {
+            await enableMirroring(out);
+        }
     },
 });
 
@@ -150,99 +157,55 @@ const withMutagen = async (run: (mutagen: string, name: string) => void): Promis
     run(await ensureMutagen(), sessionName(config.sandboxId));
 };
 
-// The sandbox's currently-listening WORKSPACE ports (dev servers, terminal processes, published containers) —
-// what `mirror` reconciles against. Authenticated by the enrollment-minted sync token, which the daemon scopes
-// to exactly this read. System ports (the sandbox's own machinery) are never mirrored.
-export const fetchWorkspacePorts = async (sandboxUrl: string, syncToken: string): Promise<PortSummary[]> => {
-    const response = await fetch(`${sandboxUrl.replace(/\/$/, "")}/ports`, { headers: { "x-intentic-sync": syncToken } });
-    if (response.status === 401 || response.status === 403) {
-        throw new Error("the sandbox rejected the sync token — click “Enable desktop sync” in your browser and re-run setup to mint a fresh one.");
+// The path this CLI was invoked as — re-exec'd (with `--watch`) to spawn the detached mirror watcher and named
+// by the OS autostart entries. Always set for a bin/`node dist/cli.js` invocation; the guard keeps the type honest.
+const cliEntry = (): string => {
+    const entry = process.argv[1];
+    if (entry === undefined) {
+        throw new Error("cannot locate the intentic-sync entry to start the mirror watcher");
     }
-    if (!response.ok) {
-        throw new Error(`reading the sandbox's ports failed (${response.status}): ${await response.text()}`);
-    }
-    return PortsListSchema.parse(await response.json()).ports.filter((port) => port.kind === "workspace");
+    return entry;
 };
 
-// Whether the local loopback port is free to bind — checked after terminating our own prior forward (which
-// held it), so a remaining conflict is genuinely foreign (something else on this machine owns the port).
-const localPortFree = (port: number): Promise<boolean> =>
-    new Promise((resolvePort) => {
-        const probe = net.createServer();
-        probe.once("error", () => resolvePort(false));
-        probe.listen(port, "127.0.0.1", () => probe.close(() => resolvePort(true)));
-    });
+// Turn mirroring on: register it to resume at every login AND run it now. registerAutostart returns true when
+// the OS mechanism (macOS launchd) already launched this session's watcher, so we don't spawn a second one.
+const enableMirroring = async (log: Log): Promise<void> => {
+    const startedNow = await registerAutostart(cliEntry(), log);
+    if (!startedNow) {
+        await startMirrorWatcher(cliEntry(), log);
+    }
+};
 
 interface MirrorFlags {
+    readonly watch: boolean;
     readonly stop: boolean;
 }
 
-// Port mirroring: every workspace port listening in the sandbox becomes the SAME port on this machine's
-// localhost, over Mutagen TCP forward sessions riding the enrolled SSH transport. This is what makes remote
-// development feel local — a frontend baked with `https://localhost:6480` just works, cookies and CORS
-// included, because localhost IS serving it. One-shot reconcile (Mutagen's daemon keeps the pipes alive):
-// re-run after starting/stopping dev servers; sessions for vanished ports are terminated, live ones recreated.
+// Port mirroring driver. `setup` already auto-starts the watcher, so a user rarely runs this; the entry points
+// are here for control: bare `mirror` (re)starts the detached watcher, `--watch` runs the loop in the
+// foreground (what the detached process runs, also handy to watch live), `--stop` tears it all down.
 const mirror = buildCommand<MirrorFlags>({
-    docs: { brief: "Mirror the sandbox's workspace ports onto this machine's localhost (re-run to refresh; --stop to end)" },
+    docs: { brief: "Manage the background mirror of the sandbox's workspace ports onto localhost (auto-started by setup)" },
     parameters: {
         flags: {
-            stop: { kind: "boolean", brief: "Terminate every mirror forward session" },
+            watch: { kind: "boolean", brief: "Run the mirror watcher in the foreground (normally auto-started detached)" },
+            stop: { kind: "boolean", brief: "Stop mirroring and tear down the port forwards" },
         },
     },
     async func(this: CommandContext, flags: MirrorFlags) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        const config = await readConfig();
-        const mutagen = await ensureMutagen();
-        const current = config.mirroredPorts ?? [];
-        // Terminate silently — "no session found" (user cleaned up by hand) is not an error worth surfacing.
-        const terminate = (port: number): void =>
-            void spawnSync(mutagen, ["forward", "terminate", forwardSessionName(config.sandboxId, port)], { stdio: "ignore" });
-
         if (flags.stop) {
-            for (const port of current) {
-                terminate(port);
-            }
-            await writeConfig({ ...config, mirroredPorts: [] });
-            out(current.length === 0 ? "nothing was mirrored." : `stopped mirroring ${current.length} port(s).`);
+            // Unregister login-autostart first, so mirroring stays stopped across the next reboot too.
+            await unregisterAutostart(out);
+            await stopMirror(out);
             return;
         }
-
-        if (config.syncToken === undefined) {
-            throw new Error("this pairing predates port mirroring — click “Enable desktop sync” in your browser and re-run setup.");
-        }
-        const ports = await fetchWorkspacePorts(config.sandboxUrl, config.syncToken);
-        for (const port of current.filter((candidate) => !ports.some(({ port: live }) => live === candidate))) {
-            terminate(port);
-        }
-        const mirrored: number[] = [];
-        for (const summary of ports) {
-            // Recreate rather than diff: terminating our own prior session frees the local bind, and a fresh
-            // create picks up a listener that moved between loopback families. Mid-connection re-runs drop
-            // active sockets for a moment — an explicit user action, not a background surprise.
-            terminate(summary.port);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of ports; sequenced keeps output readable
-            if (!(await localPortFree(summary.port))) {
-                out(`  localhost:${summary.port} is busy on this machine — skipped (${summary.command ?? "unknown process"})`);
-                continue;
-            }
-            runMutagen(
-                mutagen,
-                mutagenForwardArgs({
-                    name: forwardSessionName(config.sandboxId, summary.port),
-                    port: summary.port,
-                    alias: sshAlias(config.sandboxId),
-                    host: summary.host,
-                }),
-            );
-            mirrored.push(summary.port);
-            out(`  localhost:${summary.port} ← ${summary.command ?? "unknown process"}`);
-        }
-        await writeConfig({ ...config, mirroredPorts: mirrored });
-        if (mirrored.length === 0) {
-            out("nothing to mirror — no workspace ports are listening in the sandbox.");
+        if (flags.watch) {
+            // Timestamp the foreground/detached loop's lines — mirror.log is long-lived, so bare lines are useless.
+            await runMirrorWatch((message) => void this.process.stdout.write(`[${new Date().toISOString()}] ${message}\n`));
             return;
         }
-        out(`mirroring ${mirrored.length} port(s). Re-run \`intentic-sync mirror\` after starting/stopping dev servers; \`--stop\` ends it.`);
+        await enableMirroring(out);
     },
 });
 
@@ -274,6 +237,11 @@ const uninstall = buildCommand<Record<string, never>>({
     docs: { brief: "Terminate the sync session and remove the managed ssh-config include" },
     parameters: { flags: {} },
     async func(this: CommandContext) {
+        // Stop mirroring first: unregister login-autostart, kill the watcher, and tear down its port forwards
+        // before the SSH transport goes.
+        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        await unregisterAutostart(out);
+        await stopMirror(out);
         await withMutagen((mutagen, name) => runMutagen(mutagen, ["sync", "terminate", name]));
         const userConfig = join(homedir(), ".ssh", "config");
         const current = await readFile(userConfig, "utf8").catch(() => "");

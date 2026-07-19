@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { enrollKey, fetchWorkspacePorts } from "./commands.js";
-import { forwardSessionName, mutagenForwardArgs } from "./mutagen.js";
+import { enrollKey } from "./commands.js";
 
 const jsonResponse = (status: number, body: unknown): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -53,44 +52,5 @@ describe("enrollKey", () => {
             /enrolling the sync key failed \(502\)/,
         );
         expect(fetchMock).toHaveBeenCalledTimes(3);
-    });
-});
-
-describe("fetchWorkspacePorts", () => {
-    it("sends the sync token and returns only workspace-kind ports", async () => {
-        const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-            jsonResponse(200, {
-                ports: [
-                    { port: 47145, host: "::1", kind: "workspace", command: "vite", forwarded: false },
-                    { port: 4096, host: "127.0.0.1", kind: "system", command: "opencode serve", forwarded: false },
-                ],
-            }),
-        );
-        vi.stubGlobal("fetch", fetchMock);
-
-        const ports = await fetchWorkspacePorts("https://sandbox-abc.example.dev/", "ist_tok");
-
-        expect(ports).toEqual([{ port: 47145, host: "::1", kind: "workspace", command: "vite", forwarded: false }]);
-        expect(fetchMock).toHaveBeenCalledWith("https://sandbox-abc.example.dev/ports", { headers: { "x-intentic-sync": "ist_tok" } });
-    });
-
-    it("maps a rejected token to the re-pair message", async () => {
-        vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("unauthorized", { status: 401 })));
-        await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toThrow(/re-run setup/);
-    });
-});
-
-describe("mirror forward sessions", () => {
-    it("names sessions per sandbox + port, and dials the listener's recorded loopback host (::1 bracketed)", () => {
-        expect(forwardSessionName("sandbox-abc.example.dev", 47145)).toBe("intentic-fwd-sandbox-abc-example-dev-47145");
-        expect(mutagenForwardArgs({ name: "n", port: 6480, alias: "intentic-x", host: "127.0.0.1" })).toEqual([
-            "forward",
-            "create",
-            "--name",
-            "n",
-            "tcp:127.0.0.1:6480",
-            "intentic-x:tcp:127.0.0.1:6480",
-        ]);
-        expect(mutagenForwardArgs({ name: "n", port: 47145, alias: "intentic-x", host: "::1" }).at(-1)).toBe("intentic-x:tcp:[::1]:47145");
     });
 });
