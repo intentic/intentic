@@ -649,13 +649,15 @@ watch(
                         </div>
                         <Code :code="selectedCommand" :lang="selectedCommandLang" :wrap="true" :copyable="false" />
                         <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
-                             builds it from this checkout when it's missing, so the pasted command is self-sufficient. -->
+                             rebuilds it from this checkout on every run (layer-cached), so the pasted command is
+                             self-sufficient and never runs a stale image after sandbox edits. -->
                         <p v-if="platformUrlOverride" class="flex items-center gap-2 text-xs text-warning">
                             <Icon name="box" class="shrink-0" />
                             <span
-                                >Local dev: this command runs your locally-built <code>{{ DEV_SANDBOX_IMAGE }}</code> image,
-                                building it automatically when missing (first build takes a few minutes). Rebuilds after
-                                sandbox edits come from <code>pnpm dev:sandbox</code>.</span
+                                >Local dev: this command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and
+                                runs it — every run rebuilds, so sandbox edits are always picked up (cached when unchanged;
+                                the first build takes a few minutes). For a live edit loop, keep
+                                <code>pnpm dev:sandbox</code> running.</span
                             >
                         </p>
                     </div>

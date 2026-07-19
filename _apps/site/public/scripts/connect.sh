@@ -311,9 +311,11 @@ image_has_registry() {
 
 # Make the sandbox image runnable, announcing which path it takes (the caller stays silent). A registry-less
 # reference (dev override, e.g. SANDBOX_IMAGE=intentic-sandbox:dev) can only resolve to Docker Hub, so it is
-# never pulled — that pull's "denied" output is pure noise. Use the local image, or build it from the checkout
-# this script was run from (the dev one-liner is `sh _apps/site/public/scripts/connect.sh` at the repo root;
-# the piped curl|sh form has no script path in $0, so it lands on the error instead).
+# never pulled — that pull's "denied" output is pure noise. It is rebuilt from the checkout this script was
+# run from on EVERY run, not just when missing: a cached image would otherwise silently outlive Dockerfile or
+# source edits, and docker's layer cache makes an unchanged rebuild near-instant, so eager is the right default.
+# (The dev one-liner is `sh _apps/site/public/scripts/connect.sh` at the repo root; the piped curl|sh form has
+# no script path in $0 and thus no checkout — it runs an existing local image as-is, or errors.)
 # Registry images are pulled even when cached so the moving `stable` tag always runs the newest release. The
 # image is PUBLIC, so no login is needed — but a stale/expired `docker login registry.gitlab.com` (commonly
 # left by Docker Desktop's credential store) makes docker present that token instead of pulling anonymously
@@ -321,23 +323,27 @@ image_has_registry() {
 ensure_image() {
     image="$1"
     if ! image_has_registry "$image"; then
-        if docker image inspect "$image" >/dev/null 2>&1; then
-            echo "intentic: using the locally-built sandbox image ${image}."
-            return 0
-        fi
         # $0 carries a path only when the script was invoked by path (the dev flow); piped runs get no checkout.
         repo_root=""
         case "$0" in */*) repo_root="$(dirname "$0")/../../../.." ;; esac
         if [ -z "$repo_root" ] || [ ! -f "$repo_root/_apps/sandbox/Dockerfile" ]; then
+            if docker image inspect "$image" >/dev/null 2>&1; then
+                echo "intentic: using the existing local sandbox image ${image} (no intentic checkout found to rebuild it from)."
+                return 0
+            fi
             echo "intentic: '${image}' is a local dev tag that isn't built, and no intentic checkout was found to build it from — run 'pnpm build:sandbox' in the repo, or unset SANDBOX_IMAGE to use the published image." >&2
             return 1
         fi
-        echo "intentic: building the local sandbox image ${image} (first build can take a few minutes)…"
-        if ! docker build -f "$repo_root/_apps/sandbox/Dockerfile" -t "$image" "$repo_root"; then
-            echo "intentic: building ${image} failed (see the docker output above) — fix the build, or unset SANDBOX_IMAGE to use the published image." >&2
-            return 1
+        echo "intentic: building the local sandbox image ${image} from your checkout (cached when unchanged; the first build takes a few minutes)…"
+        if docker build -f "$repo_root/_apps/sandbox/Dockerfile" -t "$image" "$repo_root"; then
+            return 0
         fi
-        return 0
+        if docker image inspect "$image" >/dev/null 2>&1; then
+            echo "intentic: building ${image} failed (see the docker output above) — continuing with the PREVIOUS local build, which does NOT include your latest changes." >&2
+            return 0
+        fi
+        echo "intentic: building ${image} failed (see the docker output above) — fix the build, or unset SANDBOX_IMAGE to use the published image." >&2
+        return 1
     fi
     echo "intentic: pulling sandbox image ${image} (first run can take a minute)…"
     if docker pull "$image"; then

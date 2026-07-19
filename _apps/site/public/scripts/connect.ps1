@@ -276,29 +276,37 @@ if (-not $Yes) {
 }
 
 # Make the sandbox image runnable (mirrors connect.sh's ensure_image). A registry-less tag (local dev:
-# intentic-sandbox:dev) can only resolve to Docker Hub, so it is never pulled - use the local image, or build it
-# from the checkout this script lives in ($PSScriptRoot is empty on the irm|iex path - no checkout there).
+# intentic-sandbox:dev) can only resolve to Docker Hub, so it is never pulled - it is rebuilt from the checkout
+# this script lives in on EVERY run, not just when missing: a cached image would otherwise silently outlive
+# Dockerfile or source edits, and docker's layer cache makes an unchanged rebuild near-instant. ($PSScriptRoot
+# is empty on the irm|iex path - no checkout there, so that path runs an existing local image as-is, or errors.)
 # Registry images are pulled even when cached so the moving `stable` tag always runs the newest release. The
 # image is PUBLIC; if a stale Docker Desktop `docker login registry.gitlab.com` makes the pull "denied", clear
 # it and retry anonymously.
 $FirstSegment = ($SandboxImage -split '/', 2)[0]
 $HasRegistry = $SandboxImage.Contains('/') -and ($FirstSegment -match '[.:]' -or $FirstSegment -eq 'localhost')
 if (-not $HasRegistry) {
-    docker image inspect $SandboxImage *> $null
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "intentic: using the locally-built sandbox image $SandboxImage."
-    } else {
-        $RepoRoot = if ($PSScriptRoot) { Resolve-Path (Join-Path $PSScriptRoot '../../../..') } else { $null }
-        $Dockerfile = if ($RepoRoot) { Join-Path $RepoRoot '_apps/sandbox/Dockerfile' } else { $null }
-        if (-not $Dockerfile -or -not (Test-Path $Dockerfile)) {
+    $RepoRoot = if ($PSScriptRoot) { Resolve-Path (Join-Path $PSScriptRoot '../../../..') } else { $null }
+    $Dockerfile = if ($RepoRoot) { Join-Path $RepoRoot '_apps/sandbox/Dockerfile' } else { $null }
+    if (-not $Dockerfile -or -not (Test-Path $Dockerfile)) {
+        docker image inspect $SandboxImage *> $null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "intentic: using the existing local sandbox image $SandboxImage (no intentic checkout found to rebuild it from)."
+        } else {
             Write-Error "'$SandboxImage' is a local dev tag that isn't built, and no intentic checkout was found to build it from - run 'pnpm build:sandbox' in the repo, or remove SANDBOX_IMAGE to use the published image."
             exit 1
         }
-        Write-Host "intentic: building the local sandbox image $SandboxImage (first build can take a few minutes)..."
+    } else {
+        Write-Host "intentic: building the local sandbox image $SandboxImage from your checkout (cached when unchanged; the first build takes a few minutes)..."
         docker build -f $Dockerfile -t $SandboxImage $RepoRoot
         if ($LASTEXITCODE -ne 0) {
-            Write-Error 'building the sandbox image failed (see the docker output above).'
-            exit 1
+            docker image inspect $SandboxImage *> $null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "intentic: building $SandboxImage failed (see the docker output above) - continuing with the PREVIOUS local build, which does NOT include your latest changes."
+            } else {
+                Write-Error 'building the sandbox image failed (see the docker output above).'
+                exit 1
+            }
         }
     }
 } else {
