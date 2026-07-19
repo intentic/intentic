@@ -6,12 +6,15 @@ import {
     type PermissionMode,
     query,
     type SDKMessage,
+    type SDKUserMessage,
     tool,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AskQuestion, TodoItem } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createPlanRequest, createQuestionRequest, type QuestionResponse } from "./agent-requests.js";
+import type { SteeringQueue } from "./agent-steering.js";
 import { agentSessionName, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
 import { editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 
@@ -79,11 +82,26 @@ export interface AgentRequest {
     // Extra turn-scoped instructions appended to the claude_code preset system prompt (e.g. the CLI
     // delegation note when Codex/Grok accounts are connected — see agent/delegation.ts).
     readonly systemAppend?: string;
+    // Mid-turn steering: when present, the turn runs in the SDK's streaming-input mode and messages pushed
+    // onto this queue (via /agent/steer) are injected between tool calls. Absent ⇒ single-message mode.
+    readonly steering?: SteeringQueue;
 }
 
 // The SDK `query` is injected so tests drive a fake message stream — no API calls, no bundled binary.
-export type QueryFn = (args: { readonly prompt: string; readonly options: Options }) => AsyncIterable<SDKMessage>;
+export type QueryFn = (args: { readonly prompt: string | AsyncIterable<SDKUserMessage>; readonly options: Options }) => AsyncIterable<SDKMessage>;
 const defaultQuery: QueryFn = (args) => query(args);
+
+// The turn's prompt input: a steerable turn streams user messages (the initial prompt, then whatever the
+// steer route pushes until the queue closes at turn end); an unsteerable one keeps single-message mode.
+const promptInput = (request: AgentRequest): string | AsyncIterable<SDKUserMessage> =>
+    request.steering === undefined ? request.prompt : steeredInput(request.prompt, request.steering);
+
+async function* steeredInput(first: string, steering: SteeringQueue): AsyncGenerator<SDKUserMessage> {
+    yield { type: "user", message: { role: "user", content: first }, parent_tool_use_id: null };
+    for await (const text of steering) {
+        yield { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null };
+    }
+}
 
 // Flatten a tool_result block's content (a string, or an array of text/other blocks) to plain text — the
 // edit diff / bash output the UI shows under the tool card. Non-text blocks are summarised by type.
@@ -124,7 +142,13 @@ const todoItems = (input: unknown): TodoItem[] | undefined => {
 // Normalize the SDK's SDKMessage stream onto AgentEvents. High-value block types get a dedicated frame;
 // any SDK message without a mapping is dropped. Shared by the plain and plan paths; does NOT emit the
 // terminal `done` (callers do that once the whole turn settles).
-async function* streamSdk(queryFn: QueryFn, prompt: string, options: Options, cwd: string, tmuxEnabled: boolean): AsyncGenerator<AgentEvent> {
+async function* streamSdk(
+    queryFn: QueryFn,
+    prompt: string | AsyncIterable<SDKUserMessage>,
+    options: Options,
+    cwd: string,
+    tmuxEnabled: boolean,
+): AsyncGenerator<AgentEvent> {
     let sessionSent = false;
     let terminalSent = false;
     // The agent's live tmux terminal is surfaced twice: once at the first Bash tool_use (so a long command is
@@ -404,10 +428,14 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
         // The output-cleaner spec/holdout (or the filter-off flag) that the agent's Bash → tmux-run → agent-output-filter reads.
         ...cleanerEnv(request),
     },
-    // Run every Bash command inside an `agent-*` tmux session (bin/tmux-run) so the terminal panel can
-    // watch the agent work live. Hooks fire even under bypassPermissions, and for subagents too. The rtk
-    // backend rewrites the command to `rtk <cmd>` inside the same wrapper.
-    ...(tmuxEnabled ? { hooks: bashTmuxHooks(request.filterBackend, Object.keys(request.cliEnv ?? {})) } : {}),
+    // Hooks fire even under bypassPermissions, and for subagents too. tmux: every Bash command runs inside an
+    // `agent-*` tmux session (bin/tmux-run) so the terminal panel can watch the agent work live (the rtk
+    // backend rewrites the command to `rtk <cmd>` inside the same wrapper). Diagnostics: every native
+    // Edit/Write is type-checked via the baked lsp CLI and compile errors ride back as additionalContext.
+    hooks: {
+        ...(tmuxEnabled ? bashTmuxHooks(request.filterBackend, Object.keys(request.cliEnv ?? {})) : {}),
+        ...editDiagnosticsHooks(request.cwd),
+    },
     ...(request.model !== undefined ? { model: request.model } : {}),
     ...(request.sessionId !== undefined ? { resume: request.sessionId } : {}),
     ...(request.plugins !== undefined ? { plugins: request.plugins.map((path) => ({ type: "local" as const, path })) } : {}),
@@ -445,9 +473,12 @@ export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaul
         ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
     };
     try {
-        yield* streamSdk(queryFn, request.prompt, options, request.cwd, tmuxEnabled);
+        yield* streamSdk(queryFn, promptInput(request), options, request.cwd, tmuxEnabled);
     } catch (error) {
         yield { kind: "error", message: errorMessage(error, stderr) };
+    } finally {
+        // Ends the streaming input, so the SDK subprocess settles; late steer pushes then report undelivered.
+        request.steering?.close();
     }
     yield { kind: "done" };
 }
@@ -531,12 +562,13 @@ async function* runPlanTurn(request: AgentRequest, queryFn: QueryFn, abortContro
 
     const pump = (async () => {
         try {
-            for await (const event of streamSdk(queryFn, request.prompt, options, request.cwd, tmuxEnabled)) {
+            for await (const event of streamSdk(queryFn, promptInput(request), options, request.cwd, tmuxEnabled)) {
                 push(event);
             }
         } catch (error) {
             push({ kind: "error", message: errorMessage(error, stderr) });
         } finally {
+            request.steering?.close();
             finished = true;
             wake();
         }

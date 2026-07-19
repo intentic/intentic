@@ -12,7 +12,9 @@ import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSpeechInput } from "../composables/chat/useSpeechInput";
 import { sandboxJson, sandboxUpload } from "../composables/sandbox/sandboxClient";
+import { useEditorSelection } from "../composables/workspace/useEditorSelection";
 import { useFollowAlong } from "../composables/workspace/useFollowAlong";
+import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { useLayout } from "../composables/useLayout";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { collectDroppedFiles } from "../pages/workspace/dropEntries";
@@ -59,6 +61,7 @@ const {
     connected,
     setActive,
     send,
+    steer,
     stop,
     decidePlan,
     openConversation,
@@ -317,9 +320,45 @@ const onDrop = (event: DragEvent): void => {
     });
 };
 
-// The composer Send is usable when there's text or a finished attachment and either nothing is streaming or
-// a plan is pending (typed text becomes plan feedback). Blocked while a turn is mid-generation, while a
-// question card is the input, and while any attachment is still uploading (or failed — remove it to proceed).
+// --- Editor context chip ---------------------------------------------------------------------
+// What the chip would attach: the live Monaco selection, else the active file tab. OFF by default — the user
+// clicks the chip to attach it to the next message (the inverse of VSCode Claude Code's always-on injection).
+const workspaceTabs = useWorkspaceTabs();
+const editorSelection = useEditorSelection();
+const editorTarget = computed<{ file: string; startLine?: number; endLine?: number; selection?: string } | undefined>(() => {
+    const selection = editorSelection.selection.value;
+    if (selection !== undefined) {
+        return { file: selection.path, startLine: selection.startLine, endLine: selection.endLine, selection: selection.text };
+    }
+    const tab = workspaceTabs.activeTab.value;
+    return tab?.kind === `file` ? { file: tab.path } : undefined;
+});
+const includeEditorContext = ref(false);
+// Attaching is an explicit per-file choice — a different file in the editor resets the opt-in.
+watch(
+    () => editorTarget.value?.file,
+    () => {
+        includeEditorContext.value = false;
+    },
+);
+const editorChipLabel = computed(() => {
+    const target = editorTarget.value;
+    if (target === undefined) {
+        return ``;
+    }
+    const name = target.file.split(`/`).pop() ?? target.file;
+    return target.startLine !== undefined ? `${name}:${target.startLine}-${target.endLine}` : name;
+});
+// Whether the running turn accepts mid-turn steering: the Claude Code harness only (the claude provider, or
+// codex/grok routed under harness "claude-code") — mirrors the daemon's steerable gate.
+const steerable = computed(
+    () => provider.value === `claude` || ((provider.value === `codex` || provider.value === `grok`) && harness.value === `claude-code`),
+);
+
+// The composer Send is usable when there's text or a finished attachment and the turn state accepts it: idle
+// (a fresh send), a pending plan (typed text becomes feedback), or mid-generation on a steerable turn (typed
+// text is injected into it). Blocked while a question card is the input and while any attachment is still
+// uploading (or failed — remove it to proceed).
 const canSend = computed(() => {
     if (attachments.value.some((entry) => entry.status !== `done`)) {
         return false;
@@ -328,17 +367,33 @@ const canSend = computed(() => {
         // Plan feedback is text-only; staged attachments wait for the next real turn.
         return draft.value.trim().length > 0;
     }
+    if (streaming.value) {
+        // Mid-turn steering: text-only (staged attachments wait for a real turn), and never past a pending
+        // question card — the card is the input surface there.
+        return steerable.value && !awaitingDecision.value && draft.value.trim().length > 0 && attachments.value.length === 0;
+    }
     if (draft.value.trim().length === 0 && attachments.value.length === 0) {
         return false;
     }
-    return !streaming.value;
+    return true;
 });
-const sendHint = computed(() => (pendingPlanMessage.value ? `Send as feedback (keep planning)` : `Send`));
-// While a plan awaits a decision, typing revises it (reject-with-feedback), so the placeholder says so.
-const composerPlaceholder = computed(() => (pendingPlanMessage.value ? `Reply to revise the plan…` : `Ask ${providerName.value}…`));
+const sendHint = computed(() =>
+    pendingPlanMessage.value ? `Send as feedback (keep planning)` : streaming.value ? `Send to the running turn` : `Send`,
+);
+// While a plan awaits a decision, typing revises it (reject-with-feedback); while a steerable turn runs,
+// typing steers it — the placeholder says which.
+const composerPlaceholder = computed(() => {
+    if (pendingPlanMessage.value) {
+        return `Reply to revise the plan…`;
+    }
+    if (streaming.value && steerable.value && !awaitingDecision.value) {
+        return `Steer ${providerName.value} mid-turn…`;
+    }
+    return `Ask ${providerName.value}…`;
+});
 
 const submit = (): void => {
-    // canSend covers all the gates: mid-generation, empty composer, uploads still in flight.
+    // canSend covers all the gates: empty composer, uploads still in flight, unsteerable mid-generation.
     if (!connected.value || !canSend.value) {
         return;
     }
@@ -347,7 +402,20 @@ const submit = (): void => {
     if (pendingPlan) {
         // Typing while a plan is pending rejects it with that text as feedback (Claude Code style).
         void decidePlan(pendingPlan, false, text);
+    } else if (streaming.value) {
+        // Mid-turn steering: injected into the running turn between tool calls; chip and attachments wait.
+        void steer(text);
     } else {
+        const target = editorTarget.value;
+        const editorContext =
+            includeEditorContext.value && target !== undefined
+                ? {
+                      file: target.file,
+                      ...(target.selection !== undefined
+                          ? { startLine: target.startLine, endLine: target.endLine, selection: target.selection.slice(0, 20_000) }
+                          : {}),
+                  }
+                : undefined;
         // Snapshot the chips onto the turn, then clear WITHOUT revoking preview URLs — the thumbnails
         // now live on the sent user bubble.
         void send(
@@ -357,8 +425,10 @@ const submit = (): void => {
                 path,
                 ...(previewUrl !== undefined ? { previewUrl } : {}),
             })),
+            editorContext,
         );
         attachments.value = [];
+        includeEditorContext.value = false;
     }
     draft.value = ``;
     // Snap the box back to one line and keep the cursor ready for the next message.
@@ -648,7 +718,26 @@ watch(keyboardInset, () => {
                             :commands="availableCommands"
                             @pick="pickCommand"
                         />
-                        <div v-if="attachments.length > 0" class="flex flex-wrap gap-2 px-3 pt-3">
+                        <div v-if="attachments.length > 0 || editorTarget !== undefined" class="flex flex-wrap gap-2 px-3 pt-3">
+                            <!-- Editor-context chip: off by default, one click attaches the open file /
+                                 selection to the next message — the inverse of VSCode Claude Code. Sized
+                                 like the attachment chips beside it. -->
+                            <button
+                                v-if="editorTarget !== undefined"
+                                type="button"
+                                class="flex items-center gap-1.5 rounded-lg border py-1.5 px-2 text-xs transition-colors"
+                                :class="
+                                    includeEditorContext
+                                        ? 'border-primary-500 bg-primary-500/10 text-content'
+                                        : 'border-dashed border-line text-subtle hover:text-content'
+                                "
+                                @click="includeEditorContext = !includeEditorContext"
+                                :aria-pressed="includeEditorContext"
+                                aria-label="Attach editor context"
+                            >
+                                <Icon name="code" class="shrink-0 text-2xs" />
+                                <span class="max-w-36 truncate">{{ editorChipLabel }}</span>
+                            </button>
                             <div
                                 v-for="a in attachments"
                                 :key="a.id"
@@ -765,7 +854,16 @@ watch(keyboardInset, () => {
                             >
                                 <Icon name="stop" class="text-sm" />
                             </button>
-                            <button v-else type="submit" class="composer-send shrink-0" :disabled="!canSend" v-tooltip.top="sendHint" aria-label="Send">
+                            <!-- Send stays alongside Stop while a steerable turn runs — typed text is
+                                 injected into the running turn instead of waiting for it. -->
+                            <button
+                                v-if="!streaming || awaitingDecision || steerable"
+                                type="submit"
+                                class="composer-send shrink-0"
+                                :disabled="!canSend"
+                                v-tooltip.top="sendHint"
+                                aria-label="Send"
+                            >
                                 <Icon name="send" class="text-sm" />
                             </button>
                         </div>

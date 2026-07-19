@@ -32,6 +32,7 @@ Thumbs.db
 .idea/
 
 # intentic dogfood / demo (local only)
+/.intentic
 /intent
 /desired-state
 /app

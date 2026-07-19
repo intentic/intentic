@@ -683,7 +683,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     :aria-expanded="row.entry.type === 'dir' || row.nest ? row.isExpanded : undefined"
                     :tabindex="tabbablePath === row.entry.path ? 0 : -1"
                     :draggable="renamingPath !== row.entry.path"
-                    class="treerow flex w-full items-center gap-1.5 py-1 pr-2 text-left text-[0.8125rem]"
+                    class="treerow flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
                     :class="{
                         'treerow-on': selection.has(row.entry.path),
                         'treerow-drop': row.entry.path === dragOverPath,

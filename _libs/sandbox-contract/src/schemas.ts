@@ -36,6 +36,20 @@ export type AgentProvider = z.infer<typeof AgentProviderSchema>;
 export const AgentHarnessSchema = z.enum(["native", "claude-code"]);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
 
+// What the user is looking at in the editor, attached to a turn only when they explicitly opt in (the
+// composer chip — off by default). The daemon folds it into the prompt as a context note, so deictic
+// prompts ("fix this") resolve without an @-mention. Selection is bounded — it's context, not an upload.
+export const EditorContextSchema = z.object({
+    // Workspace-relative path of the file open in the editor.
+    file: z.string().min(1),
+    // 1-based line range of the selection; absent when the whole file is the context.
+    startLine: z.number().int().min(1).optional(),
+    endLine: z.number().int().min(1).optional(),
+    // The selected text itself, truncated client-side to the cap.
+    selection: z.string().max(20_000).optional(),
+});
+export type EditorContext = z.infer<typeof EditorContextSchema>;
+
 export const AgentTurnSchema = z
     .object({
         prompt: z.string(),
@@ -79,6 +93,8 @@ export const AgentTurnSchema = z
         plan: z.boolean().optional(),
         effort: z.string().optional(),
         thinking: z.boolean().optional(),
+        // The opt-in editor context chip: what the user is looking at, folded into the prompt daemon-side.
+        editorContext: EditorContextSchema.optional(),
     })
     // An attachment-only send (no text) is legal; an entirely empty turn is not.
     .refine((turn) => turn.prompt.trim().length > 0 || (turn.attachments?.length ?? 0) > 0, {
@@ -178,6 +194,13 @@ export const AnswerSchema = z.object({
     answers: z.record(z.string(), z.array(z.string())).optional(),
     cancelled: z.boolean().optional(),
 });
+// Steering: a user message delivered INTO the running turn (injected between tool calls, Claude Code style),
+// keyed by the conversation whose turn is in flight. NOT_FOUND when no steerable turn is running — the client
+// then falls back to a fresh send.
+export const SteerSchema = z.object({ conversationId: z.string().min(1), text: z.string().min(1).max(20_000) });
+// True cancel for the conversation's in-flight turn — aborts the agent daemon-side, unlike closing the
+// /agent fetch (which sends no cancel frame).
+export const StopTurnSchema = z.object({ conversationId: z.string().min(1) });
 
 // ---- provider oauth ----
 // Claude uses the PKCE authorize-URL + paste-back handshake (start → exchange). Codex uses OpenAI's device-code

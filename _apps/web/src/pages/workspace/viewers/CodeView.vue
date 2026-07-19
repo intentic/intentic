@@ -8,6 +8,7 @@ const viewStates = new Map<string, Monaco.editor.ICodeEditorViewState>();
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { useEditorSelection } from "../../../composables/workspace/useEditorSelection";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
 
 /* The workspace code surface — a single Monaco editor for BOTH the read-only preview and (with `editable`) the
@@ -24,6 +25,7 @@ const { code, lang, scrollToLine, editable, path } = defineProps<{
 const emit = defineEmits<{ change: [value: string]; save: [value: string] }>();
 
 const { ensureMonaco, ensureLanguage } = useMonaco();
+const editorSelection = useEditorSelection();
 
 const host = ref<HTMLElement>();
 const editor = shallowRef<Monaco.editor.IStandaloneCodeEditor>();
@@ -62,6 +64,12 @@ onMounted(async () => {
         domReadOnly: !editable,
         automaticLayout: true,
         minimap: { enabled: true },
+        // The minimap slider is the vertical scroll affordance — a scrollbar beside it is redundant
+        // (wheel/keyboard/minimap-drag still scroll). Horizontal stays for long lines. Size 0 too:
+        // `hidden` alone still reserves the 14px strip in the layout.
+        scrollbar: { vertical: `hidden`, verticalScrollbarSize: 0 },
+        overviewRulerLanes: 0,
+        hideCursorInOverviewRuler: true,
         scrollBeyondLastLine: false,
         fontFamily: mono,
         fontSize: 13,
@@ -80,6 +88,25 @@ onMounted(async () => {
             if ((event.ctrlKey || event.metaKey) && event.keyCode === m.KeyCode.KeyS) {
                 event.preventDefault();
             }
+        });
+    }
+
+    // Publish the live selection for the chat composer's editor-context chip (opt-in there, so reporting is
+    // free). Collapsed cursor ⇒ no selection; the chip then offers the whole file instead.
+    if (path !== undefined) {
+        const filePath = path;
+        view.onDidChangeCursorSelection((event) => {
+            const selection = event.selection;
+            if (selection.isEmpty() || model === undefined) {
+                editorSelection.clear(filePath);
+                return;
+            }
+            editorSelection.report({
+                path: filePath,
+                startLine: selection.startLineNumber,
+                endLine: selection.endLineNumber,
+                text: model.getValueInRange(selection),
+            });
         });
     }
 
@@ -109,6 +136,9 @@ watch(
 onBeforeUnmount(() => {
     disposed = true;
     clearTimeout(flashTimer);
+    if (path !== undefined) {
+        editorSelection.clear(path);
+    }
     if (path !== undefined && editor.value !== undefined) {
         const state = editor.value.saveViewState();
         if (state !== null) {

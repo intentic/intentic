@@ -38,6 +38,10 @@ onMounted(async () => {
         automaticLayout: true,
         renderSideBySide: !mobile.value,
         minimap: { enabled: true },
+        // Minimap slider + diff overview ruler cover vertical navigation; the per-pane scrollbars are
+        // redundant next to them. Horizontal stays for long lines. Size 0 too: `hidden` alone still
+        // reserves the 14px strip in the layout.
+        scrollbar: { vertical: `hidden`, verticalScrollbarSize: 0 },
         // Collapse runs of unchanged lines to a few lines of context, like the old collapseUnchanged.
         hideUnchangedRegions: { enabled: true, contextLineCount: 3, minimumLineCount: 3, revealLineCount: 20 },
         scrollBeyondLastLine: false,

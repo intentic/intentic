@@ -1,6 +1,7 @@
 import {
     type AgentHarness,
     type AgentProvider,
+    type EditorContext,
     NATIVE_PROVIDERS,
     type OauthAccount,
     type UsageAccount,
@@ -663,7 +664,7 @@ const closeTab = (id: string): void => {
 };
 
 // --- Active-conversation actions (forwarded) --------------------------------------------------
-const send = (prompt: string, staged?: readonly ChatAttachment[]): Promise<void> => {
+const send = (prompt: string, staged?: readonly ChatAttachment[], editorContext?: EditorContext): Promise<void> => {
     // Core funnel milestone (autocapture misses Enter-key sends); PostHog derives "first message" per person.
     track(`message_sent`, { agent: active.value.provider.value });
     return active.value.send(
@@ -677,7 +678,14 @@ const send = (prompt: string, staged?: readonly ChatAttachment[]): Promise<void>
             thinking: active.value.thinking.value,
         },
         staged,
+        editorContext,
     );
+};
+
+// Mid-turn steering: the composer stays live while a turn runs; typed text is injected into it.
+const steer = (text: string): Promise<void> => {
+    track(`message_sent`, { agent: active.value.provider.value, steered: true });
+    return active.value.steer(text);
 };
 
 // Edit a past user message and re-run from that point: the conversation truncates at the message, retires
@@ -1000,6 +1008,7 @@ export function useChat() {
         setActive,
         closeTab,
         send,
+        steer,
         editAndResend,
         stop,
         decidePlan,

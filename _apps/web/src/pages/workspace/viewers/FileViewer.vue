@@ -289,6 +289,7 @@ const onEditorSave = (value: string): void =>
         <!-- Context bar: breadcrumb path + edit actions (text files only). The actions stay put across the
              post-save refetch via `|| editingThis`; the tab's dirty dot makes an "Unsaved" label redundant. -->
         <FileBreadcrumb :path="path" :meta="meta">
+            <CopyButton v-if="text !== null" :text="editorSeed" aria-label="Copy file content" v-tooltip.bottom="'Copy content'" />
             <template v-if="!mobile && (canEdit || editingThis)">
                 <span v-if="dirtyThis" class="inline-flex shrink-0 items-center text-warning" v-tooltip.bottom="'Unsaved changes — Ctrl+S to save'">
                     <Icon name="circle-fill" class="text-[0.4rem]" />
@@ -337,14 +338,7 @@ const onEditorSave = (value: string): void =>
             </button>
         </div>
 
-        <div class="group relative min-h-0 flex-1">
-            <CopyButton
-                v-if="text !== null"
-                :text="editorSeed"
-                aria-label="Copy file content"
-                v-tooltip.bottom="'Copy content'"
-                class="absolute right-2 top-2 z-10 bg-canvas/70 opacity-0 transition-opacity group-hover:opacity-100"
-            />
+        <div class="relative min-h-0 flex-1">
             <CodeView
                 v-if="editingThis"
                 :key="`${path}:${reloadNonce}`"

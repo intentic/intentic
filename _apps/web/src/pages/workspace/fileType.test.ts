@@ -46,6 +46,7 @@ describe(`resolveFile config dotfiles`, () => {
         expect(resolveFile(`.prettierrc`, 100)).toEqual({ mode: `code`, lang: `json` });
         expect(resolveFile(`.zshrc`, 100)).toEqual({ mode: `code`, lang: `bash` });
         expect(resolveFile(`Makefile`, 100)).toEqual({ mode: `code`, lang: `make` });
+        expect(resolveFile(`manifest.webmanifest`, 100)).toEqual({ mode: `code`, lang: `json` });
     });
 
     it(`leaves unknown dotfiles plain`, () => {

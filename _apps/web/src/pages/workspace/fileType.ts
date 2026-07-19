@@ -31,6 +31,7 @@ const EXT_LANG: Record<string, string> = {
     json: "json",
     jsonc: "json",
     json5: "json",
+    webmanifest: "json",
     yaml: "yaml",
     yml: "yaml",
     css: "css",

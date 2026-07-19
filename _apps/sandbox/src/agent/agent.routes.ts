@@ -1,4 +1,4 @@
-import { type ActivityEvent, type AgentEvent, type AgentTurn, agentContract, NATIVE_PROVIDERS } from "@intentic/sandbox-contract";
+import { type ActivityEvent, type AgentEvent, type AgentTurn, agentContract, type EditorContext, NATIVE_PROVIDERS } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { createOutboundSniffer } from "../activity/outbound.js";
 import { browserServersOf } from "../browser/browser-tools.js";
@@ -17,6 +17,7 @@ import { resolveWithin } from "../workspace/workspace-files.js";
 import { landAgent } from "../agents/land.js";
 import type { AgentRequest } from "./agent.js";
 import { resolvePlanDecision, resolveQuestionAnswer } from "./agent-requests.js";
+import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { delegationNote } from "./delegation.js";
 
 // The upstream model id a routed turn (codex/grok under the Claude Code harness) hands the translator, which maps
@@ -29,6 +30,17 @@ const routedModel = (provider: "codex" | "grok", model: string | undefined): str
 // handles images and PDFs from disk natively, same as dragging a file into the CLI).
 const withAttachmentNote = (prompt: string, paths: readonly string[]): string =>
     `${prompt}\n\nThe user attached these files — read them with the Read tool as needed:\n${paths.map((path) => `- ${path}`).join("\n")}`;
+
+// Fold the opt-in editor context (the composer chip, off by default) into the prompt: the file the user is
+// looking at and, when they selected text, the lines themselves — so deictic prompts ("fix this") ground
+// without an @-mention. Four-backtick fence so a selection containing ``` doesn't break out.
+const editorContextNote = (context: EditorContext): string => {
+    if (context.selection === undefined) {
+        return `The user has \`${context.file}\` open in the editor — "this file" likely refers to it.`;
+    }
+    const range = context.startLine !== undefined && context.endLine !== undefined ? ` (lines ${context.startLine}-${context.endLine})` : "";
+    return `The user has \`${context.file}\` open in the editor with this text selected${range} — "this" likely refers to it:\n\`\`\`\`\n${context.selection}\n\`\`\`\``;
+};
 
 // Appended to the system prompt when terseOutput is on (verbosity steering): a stable suffix that trims the
 // model's OWN output tokens without dropping substance. Kept short so it barely costs tokens itself each turn.
@@ -61,13 +73,47 @@ const withHistory = (prompt: string, history: NonNullable<AgentTurn["history"]>)
 // container env as fallback. A turn with no stored account and no env fallback surfaces an actionable error
 // rather than an opaque CLI failure.
 // Exported because it IS "wake the agent" — the automations scheduler drives the same composition headlessly.
-// An ISOLATED turn (isolated + conversationId) is wrapped in the fleet-registry lifecycle here — mutex acquire
-// + worktree ensure before the turn, finish (usage flush + mutex release) in a finally — so EVERY exit of the
-// turn body (provider gates, stream errors, aborts) releases the conversation. The wake paths never set
-// `isolated`, so automations/webchat/listeners run the main-tree body unchanged.
+// Owns the turn's control surface: the AbortController /agent/stop hard-cancels (closing the /agent fetch
+// sends no cancel frame, so the browser alone can't) and, on the Claude Code harness, the SteeringQueue
+// /agent/steer injects mid-turn user messages into. Both are registered under the conversationId for the
+// life of the turn; a headless wake without one runs unregistered (nothing to steer or stop it by).
 export async function* streamAgent(services: Services, input: AgentTurn, signal: AbortSignal | undefined): AsyncGenerator<AgentEvent> {
+    const controller = new AbortController();
+    if (signal?.aborted === true) {
+        controller.abort();
+    } else {
+        signal?.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+    // Steering needs the SDK's streaming-input mode, so it exists only where the Claude Code harness runs the
+    // turn: the claude provider (any harness), or codex/grok routed under harness "claude-code". A native
+    // codex/grok/ACP turn registers abort alone — steering it reports NOT_FOUND and the client falls back.
+    const provider = input.agent ?? "claude";
+    const steerable = provider === "claude" || ((provider === "codex" || provider === "grok") && (input.harness ?? "native") === "claude-code");
+    const steering = steerable ? new SteeringQueue() : undefined;
+    const unregister =
+        input.conversationId !== undefined
+            ? registerTurn(input.conversationId, { abort: () => controller.abort(), ...(steering !== undefined ? { steering } : {}) })
+            : undefined;
+    try {
+        yield* runConversationTurn(services, input, controller.signal, steering);
+    } finally {
+        unregister?.();
+        steering?.close();
+    }
+}
+
+// The fleet-registry lifecycle around a turn. An ISOLATED turn (isolated + conversationId) is wrapped here —
+// mutex acquire + worktree ensure before the turn, finish (usage flush + mutex release) in a finally — so
+// EVERY exit of the turn body (provider gates, stream errors, aborts) releases the conversation. The wake
+// paths never set `isolated`, so automations/webchat/listeners run the main-tree body unchanged.
+async function* runConversationTurn(
+    services: Services,
+    input: AgentTurn,
+    signal: AbortSignal | undefined,
+    steering: SteeringQueue | undefined,
+): AsyncGenerator<AgentEvent> {
     if (input.isolated !== true || input.conversationId === undefined) {
-        yield* runTurn(services, input, signal, undefined);
+        yield* runTurn(services, input, signal, undefined, steering);
         return;
     }
     const conversationId = input.conversationId;
@@ -100,7 +146,7 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         yield { kind: "worktree", branch: worktree.branch, base };
         // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
         let failed = false;
-        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd })) {
+        for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd }, steering)) {
             if (event.kind === "error") {
                 failed = true;
             }
@@ -138,6 +184,7 @@ async function* runTurn(
     input: AgentTurn,
     signal: AbortSignal | undefined,
     conversation: { readonly id: string; readonly cwd: string } | undefined,
+    steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
     // cli-kind capabilities contribute env vars (their stored credentials) so either agent's shell can run
     // their CLI tools; extension `contributes.settings` with an `env` name inject theirs the same way.
@@ -160,6 +207,12 @@ async function* runTurn(
         }
         attachmentPaths.push(abs);
     }
+    // The editor-context chip's file rides workspace-relative too — same escape guard as attachments.
+    if (input.editorContext !== undefined && resolveWithin(services.workspace.root, input.editorContext.file) === undefined) {
+        yield { kind: "error", message: `invalid editor context path: ${input.editorContext.file}` };
+        yield { kind: "done" };
+        return;
+    }
     const effectiveCwd = conversation?.cwd ?? services.workspace.root;
     // Kick the repo sync off now so its network git-fetch overlaps the token refresh, browser-server setup,
     // and config reads below instead of running strictly after them. Throttled to 60s, so it's a no-op on most
@@ -174,8 +227,10 @@ async function* runTurn(
                   services.logger.warn({ err: error }, "repo sync failed");
                   return [];
               });
+    // Editor context attaches to THIS message, so it folds in before the (older) history preamble wraps it.
+    const promptWithEditor = input.editorContext !== undefined ? `${input.prompt}\n\n${editorContextNote(input.editorContext)}` : input.prompt;
     const base: AgentRequest = {
-        prompt: input.history !== undefined && input.history.length > 0 ? withHistory(input.prompt, input.history) : input.prompt,
+        prompt: input.history !== undefined && input.history.length > 0 ? withHistory(promptWithEditor, input.history) : promptWithEditor,
         cwd: effectiveCwd,
         signal: signal ?? new AbortController().signal,
         ...(Object.keys(cliEnv).length > 0 ? { cliEnv } : {}),
@@ -457,6 +512,8 @@ async function* runTurn(
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
             // Delegation note (when stableSystemPrompt left it here) + terseOutput steer, composed above.
             ...(systemAppend !== undefined ? { systemAppend } : {}),
+            // Mid-turn steering (the /agent/steer queue streamAgent registered) — Claude Code harness only.
+            ...(steering !== undefined ? { steering } : {}),
         };
     }
     // Bring every repo with a remote up to its latest commit before the agent reads the tree, so the turn works
@@ -572,6 +629,21 @@ export const createAgentRoutes = (services: Services) => {
             );
             if (!resolved) {
                 throw new ORPCError("NOT_FOUND", { message: "no pending question for that request" });
+            }
+            return { ok: true } as const;
+        }),
+        // Inject a user message into the conversation's running turn (delivered between tool calls);
+        // NOT_FOUND when no steerable turn is live — the client falls back to a fresh send.
+        steer: i.steer.handler(({ input }) => {
+            if (!steerTurn(input.conversationId, input.text)) {
+                throw new ORPCError("NOT_FOUND", { message: "no steerable turn running for that conversation" });
+            }
+            return { ok: true } as const;
+        }),
+        // Hard-cancel the conversation's running turn daemon-side (the browser's fetch abort can't).
+        stop: i.stop.handler(({ input }) => {
+            if (!stopTurn(input.conversationId)) {
+                throw new ORPCError("NOT_FOUND", { message: "no running turn for that conversation" });
             }
             return { ok: true } as const;
         }),

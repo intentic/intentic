@@ -6,6 +6,7 @@ import {
     type AskQuestion,
     type CatalogOption,
     type ContextUsage,
+    type EditorContext,
     modelsFor,
     type OauthAccount,
     providerLabel,
@@ -456,6 +457,10 @@ export class Conversation {
     // Aborts the in-flight turn when the user hits Stop / closes the tab; cleared once the turn settles.
     private inflight: AbortController | null = null;
 
+    // The in-flight turn's streaming context, held so a successful steer can redirect the continuation to a
+    // fresh bubble below the injected user message (same mechanism as the plan/question cards).
+    private activeTurn: TurnContext | null = null;
+
     // Typewriter buffer: deltas land here and a rAF loop drains them into the visible message a few characters
     // per frame, so the answer reveals smoothly regardless of how chunky the upstream deltas arrive. `typeId`
     // is the bubble being drained into; `rafId` is the active frame handle.
@@ -582,7 +587,7 @@ export class Conversation {
         this.error.value = null;
     }
 
-    async send(prompt: string, settings: TurnSettings, attachments: readonly ChatAttachment[] = []): Promise<void> {
+    async send(prompt: string, settings: TurnSettings, attachments: readonly ChatAttachment[] = [], editorContext?: EditorContext): Promise<void> {
         const text = prompt.trim();
         if ((text.length === 0 && attachments.length === 0) || this.streaming.value) {
             return;
@@ -618,6 +623,7 @@ export class Conversation {
         const turn: TurnContext = { id: assistantId, userMessageId, provider: agent, account, harness };
         this.streaming.value = true;
         this.turnStartedAt.value = Date.now();
+        this.activeTurn = turn;
         const controller = new AbortController();
         this.inflight = controller;
 
@@ -663,6 +669,8 @@ export class Conversation {
                     // Plan mode → propose-then-approve via /agent/decision (the daemon's gate). The finer
                     // permission modes aren't a daemon input, so only the `plan` boolean is sent.
                     plan: this.mode.value === `plan`,
+                    // The opt-in editor-context chip: the file (and selection) the user chose to attach.
+                    ...(editorContext !== undefined ? { editorContext } : {}),
                 }),
             });
             if (!response.ok || !response.body) {
@@ -677,8 +685,34 @@ export class Conversation {
         } finally {
             this.flushType();
             this.inflight = null;
+            this.activeTurn = null;
             this.streaming.value = false;
             this.turnStartedAt.value = undefined;
+        }
+    }
+
+    // Mid-turn steering: deliver a user message INTO the running turn (the daemon injects it between tool
+    // calls — Claude Code's queue-and-steer). On the rare miss (the turn ended before delivery) the bubble is
+    // withdrawn and the text goes back to the draft, so nothing is silently lost.
+    async steer(text: string): Promise<void> {
+        const trimmed = text.trim();
+        if (trimmed.length === 0 || !this.streaming.value) {
+            return;
+        }
+        const messageId = this.nextId++;
+        this.append({ id: messageId, role: `user`, text: trimmed });
+        const ok = await this.postTurnControl(`/agent/steer`, { conversationId: this.conversationId, text: trimmed });
+        if (!ok) {
+            this.messages.value = this.messages.value.filter((message) => message.id !== messageId);
+            this.draft.value = this.draft.value.trim().length > 0 ? `${trimmed} ${this.draft.value}` : trimmed;
+            this.appendNotice(`The turn ended before your message was delivered — send it again.`);
+            return;
+        }
+        // Redirect the continuation into a fresh bubble below the injected message (plan-card mechanism), so
+        // the reply to the steer doesn't stream into the bubble above it.
+        this.flushType();
+        if (this.activeTurn !== null) {
+            this.activeTurn.id = null;
         }
     }
 
@@ -713,19 +747,21 @@ export class Conversation {
         await this.send(text, settings, attachments);
     }
 
-    // User-initiated Stop button: record a muted notice, then abort the turn.
+    // User-initiated Stop button: record a muted notice, hard-cancel the turn daemon-side (/agent/stop —
+    // fire-and-forget; NOT_FOUND just means it already settled), then abort the local stream.
     stop(): void {
         if (!this.streaming.value) {
             return;
         }
         this.appendNotice(`Stopped.`);
+        void this.postTurnControl(`/agent/stop`, { conversationId: this.conversationId });
         this.abort();
     }
 
-    // Aborts the in-flight browser stream; whatever streamed so far stays in the transcript. NOTE: closing the
-    // `/agent` fetch has no cancel frame, so this does not hard-cancel the sandbox agent — a parked or
-    // still-generating query is reaped by the daemon's idle timeout (a true cancel needs a daemon route). Also
-    // called by the manager when its tab is closed.
+    // Aborts the in-flight browser stream; whatever streamed so far stays in the transcript. Closing the
+    // `/agent` fetch has no cancel frame, so this alone does not hard-cancel the sandbox agent — stop() above
+    // pairs it with the /agent/stop route. Called bare by the manager when its tab is closed (deliberately
+    // soft: a closed tab's turn may finish and land its work).
     abort(): void {
         this.flushType();
         this.inflight?.abort();

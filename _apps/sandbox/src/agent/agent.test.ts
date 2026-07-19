@@ -1,7 +1,8 @@
-import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { Options, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { type QueryFn, runAgent } from "./agent.js";
+import { SteeringQueue } from "./agent-steering.js";
 
 // Build a fake QueryFn yielding canned SDK messages (cast to SDKMessage — tests exercise only the fields
 // runAgent reads), so the agent loop is verified without the SDK, a binary, or network.
@@ -31,7 +32,9 @@ test("a turn surfaces session, text deltas, tool actions, and a terminal done", 
             {
                 type: "assistant",
                 session_id: "sess-1",
-                message: { content: [{ type: "tool_use", id: "e1", name: "Edit", input: { file_path: "src/app.ts", old_string: "a", new_string: "b" } }] },
+                message: {
+                    content: [{ type: "tool_use", id: "e1", name: "Edit", input: { file_path: "src/app.ts", old_string: "a", new_string: "b" } }],
+                },
             },
             {
                 type: "assistant",
@@ -260,6 +263,34 @@ test("no context_usage is emitted when the result carries no context window", as
         ),
     );
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "done" }]);
+});
+
+test("without steering the prompt stays a plain string (single-message mode)", async () => {
+    let captured: string | AsyncIterable<SDKUserMessage> | undefined;
+    const capture: QueryFn = async function* (args) {
+        captured = args.prompt;
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    await collect(request, capture);
+    expect(captured).toBe("add a /ping route");
+});
+
+test("a steering queue switches the turn to streaming input: initial prompt, then injected messages, closed at turn end", async () => {
+    let captured: string | AsyncIterable<SDKUserMessage> | undefined;
+    const capture: QueryFn = async function* (args) {
+        captured = args.prompt;
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    const steering = new SteeringQueue();
+    steering.push("also check the tests");
+    await collect({ ...request, steering }, capture);
+    // runAgent closed the queue when the turn settled, so the input stream terminates after the steer.
+    const messages: SDKUserMessage[] = [];
+    for await (const message of captured as AsyncIterable<SDKUserMessage>) {
+        messages.push(message);
+    }
+    expect(messages.map((message) => message.message.content)).toEqual(["add a /ping route", "also check the tests"]);
+    expect(steering.push("too late")).toBe(false);
 });
 
 const throwing: QueryFn = async function* () {
