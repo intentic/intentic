@@ -23,4 +23,4 @@ The front door of the pipeline. A `deploy.config.ts` imports this + `@intentic/g
 ## Conventions & gotchas
 
 - Authors import `env` (secret refs) from its true source, [`@intentic/graph`](../graph) — **not** re-exported here.
-- The fixtures are snapshot-tested ([src/index.test.ts](src/index.test.ts), [src/deploy.config.test.ts](src/deploy.config.test.ts)); changing builder output updates them. See [examples/deploy.config.ts](../../examples/deploy.config.ts) and [ARCHITECTURE.md](../../ARCHITECTURE.md).
+- The fixtures are snapshot-tested ([src/index.test.ts](src/index.test.ts), [src/deploy.config.test.ts](src/deploy.config.test.ts)); changing builder output updates them. See [_tools/examples/deploy.config.ts](../../_tools/examples/deploy.config.ts) and [ARCHITECTURE.md](../../ARCHITECTURE.md).

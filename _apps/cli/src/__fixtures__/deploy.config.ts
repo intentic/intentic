@@ -1,7 +1,7 @@
 import { env } from "@intentic/graph";
 import { defineIntent } from "@intentic/sdk";
 
-// A self-contained intent config for the cli tests, mirroring examples/deploy.config.ts.
+// A self-contained intent config for the cli tests, mirroring _tools/examples/deploy.config.ts.
 export const intent = defineIntent((i) => {
     const host = i.have.host("host", {
         address: "203.0.113.10",

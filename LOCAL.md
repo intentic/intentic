@@ -59,7 +59,7 @@ Edit `intentic-local/intent/deploy.config.ts` and re-run `up` to reconcile chang
 
 ## Extending to full parity
 
-The scaffolded config is intentionally minimal (the workspace + one app). The generated file includes commented lines to add observability (SignOz), a database (Postgres), a cache (Valkey), SSO (Authentik), and object storage (Garage) — uncomment them and re-run `up`. See [examples/deploy.config.ts](examples/deploy.config.ts) for the full surface.
+The scaffolded config is intentionally minimal (the workspace + one app). The generated file includes commented lines to add observability (SignOz), a database (Postgres), a cache (Valkey), SSO (Authentik), and object storage (Garage) — uncomment them and re-run `up`. See [_tools/examples/deploy.config.ts](_tools/examples/deploy.config.ts) for the full surface.
 
 ## Configuration
 

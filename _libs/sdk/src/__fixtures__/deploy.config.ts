@@ -1,5 +1,5 @@
 // Test fixture: a representative authoring declaration, compiled and asserted against deploy.graph.ts.
-// The canonical user-facing example lives in /examples/deploy.config.ts; this copy exists only to pin the
+// The canonical user-facing example lives in /_tools/examples/deploy.config.ts; this copy exists only to pin the
 // compiled desired-state graph. In-repo we import relatively so it runs under vitest with no resolve
 // condition (a real consumer would `import { defineStack, env } from "@intentic/sdk"`).
 import { env } from "@intentic/graph";

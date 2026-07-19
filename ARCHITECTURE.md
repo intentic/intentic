@@ -493,7 +493,7 @@ Who pays for scale is a design decision, not an accident:
 
 ## The intent contract
 
-A local `deploy.config.ts` (see [/examples/deploy.config.ts](examples/deploy.config.ts)) must
+A local `deploy.config.ts` (see [_tools/examples/deploy.config.ts](_tools/examples/deploy.config.ts)) must
 `export const intent = defineIntent(...)`; `resolve` derives the desired state from it
 ([resolve.ts](_apps/cli/src/resolve/resolve.ts)). `defineStack(...)` is the one-shot,
 single-graph form used when a single deterministic graph is wanted directly.

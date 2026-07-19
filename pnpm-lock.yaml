@@ -1821,6 +1821,22 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  _tools/examples:
+    dependencies:
+      '@intentic/graph':
+        specifier: workspace:*
+        version: link:../../_libs/graph
+      '@intentic/sdk':
+        specifier: workspace:*
+        version: link:../../_libs/sdk
+    devDependencies:
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   _tools/iq-bench:
     dependencies:
       '@intentic/iq-engine':

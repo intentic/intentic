@@ -175,7 +175,7 @@ pnpm intentic --help     # the CLI (bin: intentic) — init · resolve · plan �
 pnpm intentic init       # scaffold the intent + desired-state repos
 ```
 
-> Requires **Node 24** and **pnpm 11**. From this repo the CLI runs as `pnpm intentic <command>` (the first call builds `dist`, then runs incrementally). The full authoring reference is [examples/deploy.config.ts](examples/deploy.config.ts).
+> Requires **Node 24** and **pnpm 11**. From this repo the CLI runs as `pnpm intentic <command>` (the first call builds `dist`, then runs incrementally). The full authoring reference is [_tools/examples/deploy.config.ts](_tools/examples/deploy.config.ts).
 
 ## Develop locally
 
