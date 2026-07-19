@@ -74,11 +74,11 @@ function Confirm-Action($Message) {
     return (Read-Host "$Message [y/N]") -match '^[yY]'
 }
 
-# Remove one sandbox by slug: its 3 containers, 3 named volumes, and network. Idempotent (missing = no-op).
+# Remove one sandbox by slug: its 3 containers, 4 named volumes, and network. Idempotent (missing = no-op).
 function Remove-Slug($s) {
     Write-Host "intentic: removing sandbox '$s' (containers + named volumes + network)..."
     foreach ($c in @("intentic-sandbox-$s", "intentic-sandbox-tunnel-$s", "intentic-dind-host-$s")) { docker rm -f $c *> $null }
-    foreach ($v in @("intentic-workspace-$s", "intentic-history-$s", "intentic-dind-docker-$s")) { docker volume rm $v *> $null }
+    foreach ($v in @("intentic-workspace-$s", "intentic-history-$s", "intentic-docker-$s", "intentic-dind-docker-$s")) { docker volume rm $v *> $null }
     docker network rm "intentic-workspace-$s" *> $null
 }
 
@@ -87,7 +87,7 @@ function Remove-All {
     Write-Host 'intentic: removing sandbox containers...'
     foreach ($c in (@(docker ps -aq --filter 'name=intentic-sandbox-') + @(docker ps -aq --filter 'name=intentic-dind-host-'))) { if ($c) { docker rm -f $c *> $null } }
     Write-Host 'intentic: removing named volumes (the persistent /work)...'
-    foreach ($v in (@(docker volume ls -q --filter 'name=intentic-workspace-') + @(docker volume ls -q --filter 'name=intentic-history-') + @(docker volume ls -q --filter 'name=intentic-dind-docker-'))) { if ($v) { docker volume rm $v *> $null } }
+    foreach ($v in (@(docker volume ls -q --filter 'name=intentic-workspace-') + @(docker volume ls -q --filter 'name=intentic-history-') + @(docker volume ls -q --filter 'name=intentic-docker-') + @(docker volume ls -q --filter 'name=intentic-dind-docker-'))) { if ($v) { docker volume rm $v *> $null } }
     Write-Host 'intentic: removing sandbox network(s)...'
     foreach ($n in @(docker network ls -q --filter 'name=intentic-workspace-')) { if ($n) { docker network rm $n *> $null } }
 }

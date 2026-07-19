@@ -31,9 +31,11 @@ type WorkspaceInputs = z.infer<typeof workspaceSchema>;
 const parse = (inputs: ResolvedInputs): WorkspaceInputs => parseInputs(workspaceSchema, inputs, "workspace");
 
 // One sandbox per host (like the platform's Forgejo/Komodo) — a fixed name + workspace volume, matching the
-// connect.sh local flow so the two bootstraps stay in lockstep.
+// connect.sh local flow so the two bootstraps stay in lockstep. DOCKER_VOLUME backs the in-sandbox Docker
+// Engine's /var/lib/docker (images + dev-DB volumes survive recreates; layers land on a real filesystem).
 const CONTAINER = "intentic-sandbox-workspace";
 const WORKSPACE_VOLUME = "intentic-workspace-workspace";
+const DOCKER_VOLUME = "intentic-docker-workspace";
 
 // A stable digest of the resolved tools, stamped as a container label so a tools change (not just an image
 // bump) triggers a recreate. Empty when no tools are wired.
@@ -100,11 +102,12 @@ const runningToolsDigest = async (session: SshSession): Promise<string> => {
 };
 
 // The per-host AI-agent workspace: one long-lived SANDBOX container (the workspace IS the sandbox now — no
-// runner, no docker socket). Its preview proxy listens on `previewPort`, which the host's wildcard `*.<zone>`
-// tunnel route points at; the daemon on `daemonPort` is host-internal (preview-only — connect.sh is the
-// browser-direct path). read returns the resource only when the container runs the desired image; apply is
-// idempotent — it ensures the shared network exists, then (re)creates the sandbox unprivileged with the
-// workspace volume and both ports bound to the host's internal ip (so only the tunnel reaches them).
+// runner, no HOST docker socket; it carries its own isolated Docker Engine). Its preview proxy listens on
+// `previewPort`, which the host's wildcard `*.<zone>` tunnel route points at; the daemon on `daemonPort` is
+// host-internal (preview-only — connect.sh is the browser-direct path). read returns the resource only when
+// the container runs the desired image; apply is idempotent — it ensures the shared network exists, then
+// (re)creates the sandbox privileged with the workspace + docker volumes and both ports bound to the host's
+// internal ip (so only the tunnel reaches them).
 export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
         // A dependency of these $ref inputs is still a pending create (plan resolves leniently) —
@@ -183,9 +186,9 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
             const run = await session.exec(
                 // rm + run in ONE exec: when `intentic apply` runs INSIDE the sandbox being recreated, the rm
                 // kills the CLI — two separate execs would never reach the run.
-                // Unprivileged: no --user root, no docker-socket mount, no extra caps/devices (the sandbox no
-                // longer manages other containers, it IS the workspace) — devices/caps come only from the
-                // overlay's runtime directives (runtimeFlags above), like rebuild.sh's local path.
+                // Privileged with its own ISOLATED Docker Engine (dockerd inside; the host's docker socket is
+                // never mounted) — the vpn overlay's runtime directives (runtimeFlags above) are subsumed by
+                // it but still validated, like rebuild.sh's local path.
                 // Both ports bind the host's INTERNAL ip — cloudflared
                 // (--network host) reaches the preview proxy there for the wildcard preview route, and the engine
                 // health-probes the daemon, without exposing either on the host's public interface. The tools
@@ -198,12 +201,12 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 // avoids the operator resolver's negatively-cached NXDOMAIN that otherwise fails the dial (ECONNRESET).
                 `(docker logs --tail 2000 ${CONTAINER} > /opt/intentic/workspace-previous.log 2>&1 || true) && ` +
                     `(docker rm -f ${CONTAINER} 2>/dev/null || true) && ` +
-                    `docker run -d --restart unless-stopped --name ${CONTAINER} --label intentic.id=${ctx.id} --label intentic.type=workspace --label intentic.tools=${digest} ` +
+                    `docker run -d --privileged --restart unless-stopped --name ${CONTAINER} --label intentic.id=${ctx.id} --label intentic.type=workspace --label intentic.tools=${digest} ` +
                     `--network ${parsed.network} --add-host host.docker.internal:host-gateway --dns 1.1.1.1 --dns 1.0.0.1 ` +
                     `--log-opt max-size=10m --log-opt max-file=3 ` +
                     runtime +
                     `-p ${parsed.internalIp}:${parsed.previewPort}:${parsed.previewPort} -p ${parsed.internalIp}:${parsed.daemonPort}:${parsed.daemonPort} ` +
-                    `-v ${WORKSPACE_VOLUME}:/work ` +
+                    `-v ${WORKSPACE_VOLUME}:/work -v ${DOCKER_VOLUME}:/var/lib/docker ` +
                     `-e WORKSPACE_ROOT=/work -e SANDBOX_HOST=0.0.0.0 -e SANDBOX_PORT=${parsed.daemonPort} ` +
                     `-e PREVIEW_PORT=${parsed.previewPort} ` +
                     `-e SANDBOX_NAME=${CONTAINER} -e SANDBOX_IMAGE=${image}${environmentEnv}${agentEnv}${toolsEnv} ${image}`,

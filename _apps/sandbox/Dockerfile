@@ -66,6 +66,19 @@ LABEL org.opencontainers.image.source=https://gitlab.com/radarsu/intentic
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 make g++ ripgrep \
     && rm -rf /var/lib/apt/lists/*
+# Docker Engine + Compose + buildx are part of the base sandbox: a full-stack app's `pnpm db:up` runs its dev
+# Postgres in-sandbox exactly like a local dev machine, with no capability toggle or overlay rebuild. main.ts
+# starts dockerd at boot as the visible panel-docker tmux session; every runner (connect.sh/.ps1, dev-sandbox.sh,
+# rebuild.sh, update.sh, the workspace provider) runs this container --privileged (dockerd needs it) and mounts a
+# named volume at /var/lib/docker so images and dev-DB volumes survive recreates — and layers land on a real
+# filesystem (overlay2), not the container's own overlayfs.
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin \
+    && rm -rf /var/lib/apt/lists/*
 # Repos the agent creates by hand default to main, matching gitInit's --initial-branch and Forgejo.
 RUN git config --global init.defaultBranch main
 RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \

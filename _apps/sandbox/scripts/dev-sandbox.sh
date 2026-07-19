@@ -49,6 +49,7 @@ CONTAINER="$matches"
 SLUG="${CONTAINER#intentic-sandbox-}"
 WORKSPACE_VOLUME="intentic-workspace-${SLUG}"
 HISTORY_VOLUME="intentic-history-${SLUG}"
+DOCKER_VOLUME="intentic-docker-${SLUG}"
 NETWORK="intentic-workspace-${SLUG}"
 
 # Replay the running container's env as argv (never word-split — HOST_SSH_KEY is a multi-line key),
@@ -71,15 +72,17 @@ auth_src="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/age
 
 echo "intentic: recreating ${CONTAINER} from ${TAG}…"
 docker rm -f "$CONTAINER" >/dev/null
-# Same shape as connect.sh's run: unprivileged, per-sandbox network + the stable tunnel-origin alias,
-# the persistent /work + /history volumes, bounded json-file logs.
-if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
+# Same shape as connect.sh's run: privileged (the sandbox carries its own isolated Docker Engine), per-sandbox
+# network + the stable tunnel-origin alias, the persistent /work + /history + /var/lib/docker volumes, bounded
+# json-file logs.
+if ! docker run -d --init --privileged --restart unless-stopped --name "$CONTAINER" \
     --network "$NETWORK" \
     --network-alias "$ORIGIN_HOST" \
     --add-host host.docker.internal:host-gateway \
     --log-opt max-size=10m --log-opt max-file=3 \
     -v "${WORKSPACE_VOLUME}:/work" \
     -v "${HISTORY_VOLUME}:/history" \
+    -v "${DOCKER_VOLUME}:/var/lib/docker" \
     "$@" \
     -e SANDBOX_IMAGE="$TAG" \
     "$TAG" >/dev/null; then

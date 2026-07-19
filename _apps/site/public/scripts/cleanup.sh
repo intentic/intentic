@@ -81,14 +81,14 @@ confirm() {
 # The Nth word (1-based) of the remaining args: `nth 2 a b c` -> b.
 nth() { _n="$1"; shift; while [ "$_n" -gt 1 ]; do shift; _n=$((_n - 1)); done; printf '%s' "$1"; }
 
-# Remove one sandbox by slug: its 3 containers, 3 named volumes, and network. Idempotent (missing = no-op).
+# Remove one sandbox by slug: its 3 containers, 4 named volumes, and network. Idempotent (missing = no-op).
 remove_slug() {
     s="$1"
     echo "intentic: removing sandbox '$s' (containers + named volumes + network)…"
     for c in "intentic-sandbox-$s" "intentic-sandbox-tunnel-$s" "intentic-dind-host-$s"; do
         docker rm -f "$c" >/dev/null 2>&1 || true
     done
-    for v in "intentic-workspace-$s" "intentic-history-$s" "intentic-dind-docker-$s"; do
+    for v in "intentic-workspace-$s" "intentic-history-$s" "intentic-docker-$s" "intentic-dind-docker-$s"; do
         docker volume rm "$v" >/dev/null 2>&1 || true
     done
     docker network rm "intentic-workspace-$s" >/dev/null 2>&1 || true
@@ -103,7 +103,7 @@ remove_all() {
     done
     # `docker rm -v` prunes only ANONYMOUS volumes; the named /work volume must be removed explicitly.
     echo "intentic: removing named volumes (the persistent /work)…"
-    for v in $(docker volume ls -q --filter 'name=intentic-workspace-'; docker volume ls -q --filter 'name=intentic-history-'; docker volume ls -q --filter 'name=intentic-dind-docker-'); do
+    for v in $(docker volume ls -q --filter 'name=intentic-workspace-'; docker volume ls -q --filter 'name=intentic-history-'; docker volume ls -q --filter 'name=intentic-docker-'; docker volume ls -q --filter 'name=intentic-dind-docker-'); do
         docker volume rm "$v" >/dev/null 2>&1 || true
     done
     echo "intentic: removing sandbox network(s)…"

@@ -4,7 +4,8 @@
 #
 # How: the agent proposes .intentic/environment.Dockerfile inside the sandbox; the owner approves it in the
 # browser (the daemon copies it to .intentic/environment.approved.Dockerfile) and the platform's Environment
-# card hands them this one-liner. The sandbox has no Docker socket, so the rebuild runs HERE: read the approved
+# card hands them this one-liner. The sandbox holds no HOST Docker socket (its own engine is nested — it
+# cannot recreate its own container), so the rebuild runs HERE: read the approved
 # overlay off the workspace volume, verify it against the hash pinned in the pasted command, build, and
 # recreate the container with the same env/volumes/network as connect.sh (the /work volume persists).
 #
@@ -24,6 +25,7 @@ WANT_HASH="${2:?usage: rebuild.sh <slug> <sha256-of-approved-overlay>}"
 CONTAINER="intentic-sandbox-${SLUG}"
 WORKSPACE_VOLUME="intentic-workspace-${SLUG}"
 HISTORY_VOLUME="intentic-history-${SLUG}"
+DOCKER_VOLUME="intentic-docker-${SLUG}"
 NETWORK="intentic-workspace-${SLUG}"
 ORIGIN_HOST="intentic-sandbox-workspace"
 APPROVED_FILE="/work/.intentic/environment.approved.Dockerfile"
@@ -100,16 +102,17 @@ auth_src="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/age
 [ -n "$auth_src" ] && set -- "$@" -v "${auth_src}:/agent-auth"
 
 # Runtime flags (container devices/caps) come ONLY from "# intentic:runtime" directive lines in the
-# hash-verified overlay — emitted by capability fragments (the vpn's WireGuard needs tun + NET_ADMIN; the
-# docker capability needs --privileged for an in-sandbox Docker daemon) — allowlisted hard so an overlay can't
-# smuggle arbitrary docker flags. NOTE: --privileged is a real escalation; it's opt-in per sandbox via the
-# docker capability + this owner-run rebuild. The hosted workspace provider keeps its own matching allowlist.
+# hash-verified overlay — emitted by capability fragments (the vpn's WireGuard needs tun + NET_ADMIN) —
+# allowlisted hard so an overlay can't smuggle arbitrary docker flags. The base run below is already
+# --privileged (the in-sandbox Docker Engine needs it), which subsumes these; they stay declared so the
+# overlay still records each capability's own privilege intent. The hosted workspace provider keeps its own
+# matching allowlist.
 while IFS= read -r line; do
     case "$line" in
         "# intentic:runtime "*)
             for tok in ${line#"# intentic:runtime "}; do
                 case "$tok" in
-                    --device=/dev/net/tun | --cap-add=NET_ADMIN | --privileged) set -- "$@" "$tok" ;;
+                    --device=/dev/net/tun | --cap-add=NET_ADMIN) set -- "$@" "$tok" ;;
                     *)
                         echo "error: unsupported runtime directive '$tok' in the approved overlay." >&2
                         exit 1
@@ -126,17 +129,18 @@ echo "intentic: recreating the sandbox from ${TAG}…"
 echo "== previous container logs (${CONTAINER}) ==" >>"$LOG"
 docker logs --tail 5000 "$CONTAINER" >>"$LOG" 2>&1 || true
 docker rm -f "$CONTAINER" >/dev/null
-# Same shape as connect.sh's run: unprivileged (runtime flags only from the overlay's directives above),
-# per-sandbox network + the stable tunnel-origin alias, the persistent /work + /history volumes, bounded
+# Same shape as connect.sh's run: privileged (the sandbox carries its own isolated Docker Engine), per-sandbox
+# network + the stable tunnel-origin alias, the persistent /work + /history + /var/lib/docker volumes, bounded
 # json-file logs. The tunnel sidecar keeps running and reconnects to the alias.
 echo "== docker run ${TAG} ==" >>"$LOG"
-if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
+if ! docker run -d --init --privileged --restart unless-stopped --name "$CONTAINER" \
     --network "$NETWORK" \
     --network-alias "$ORIGIN_HOST" \
     --add-host host.docker.internal:host-gateway \
     --log-opt max-size=10m --log-opt max-file=3 \
     -v "${WORKSPACE_VOLUME}:/work" \
     -v "${HISTORY_VOLUME}:/history" \
+    -v "${DOCKER_VOLUME}:/var/lib/docker" \
     "$@" \
     -e SANDBOX_IMAGE="$TAG" \
     -e SANDBOX_ENVIRONMENT_HASH="$WANT_HASH" \

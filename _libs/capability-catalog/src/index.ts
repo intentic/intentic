@@ -261,25 +261,6 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         },
     },
     {
-        id: "docker",
-        name: "Docker",
-        kind: "docker",
-        category: "servers",
-        logo: "docker",
-        description: "Run Docker + Compose in the workspace, so a full-stack app's dev database (pnpm db:up) works.",
-        fields: [
-            {
-                key: "enabled",
-                label: "Daemon",
-                default: "on",
-                options: [
-                    { value: "on", label: "On" },
-                    { value: "off", label: "Off" },
-                ],
-            },
-        ],
-    },
-    {
         id: "reddit",
         name: "Reddit",
         kind: "browser",
@@ -411,7 +392,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "Custom ACP agent",
         kind: "agent",
         category: "extend",
-        description: "Run any agent speaking the Agent Client Protocol (stdio) as a chat provider — Goose, Qwen Code, anything from the ACP registry.",
+        description:
+            "Run any agent speaking the Agent Client Protocol (stdio) as a chat provider — Goose, Qwen Code, anything from the ACP registry.",
         fields: [
             { key: "command", label: "Command", placeholder: "npx -y my-acp-agent" },
             { key: "name", label: "Display name", optional: true },

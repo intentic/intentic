@@ -8,7 +8,7 @@ import type { TerminalTabs } from "./useTerminal";
  * the live "process" sessions the terminals list reports (running state + the tmux session for log views;
  * whatever maps to no declared process is dockerd or an orphaned session of an uninstalled extension).
  * Extension rows start/stop through their /extensions process routes; session-only rows can only be stopped
- * (killTerminal) — dockerd is capability-owned, its converge paths are boot and the docker capability apply. */
+ * (killTerminal) — dockerd is daemon-owned (part of the base sandbox), its converge path is the daemon's boot. */
 
 export interface BackgroundProcessRow {
     // Stable row key: `${extensionId}/${processName}` for declared rows, the session name otherwise.

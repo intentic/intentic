@@ -689,7 +689,6 @@ export const CapabilityKindSchema = z.enum([
     "extension",
     "ssh",
     "vpn",
-    "docker",
     "browser",
     "agent",
 ]);
@@ -777,11 +776,6 @@ export const SshConfigSchema = z.discriminatedUnion("auth", [
 // the conf is stored but the tunnel stays down. The id doubles as the wg interface name, hence the union arm
 // below caps it at Linux's 15-char IFNAMSIZ limit.
 export const VpnConfigSchema = z.object({ config: z.string().min(1), enabled: z.enum(["on", "off"]).default("on") });
-// In-sandbox Docker Engine + Compose, so `pnpm db:up` (dev databases) works like a local dev machine. Bringing
-// the tooling in needs a privileged runtime, so — like vpn — the daemon composes a Dockerfile fragment + the
-// `--privileged` run flag into the environment overlay, applied by an owner-run rebuild. `enabled` toggles
-// whether the daemon starts dockerd (on boot + on apply).
-export const DockerConfigSchema = z.object({ enabled: z.enum(["on", "off"]).default("on") });
 // A logged-in browser session the AGENT drives via Playwright MCP tools — for social platforms whose APIs can't
 // cover "all the actions" (X reads are paywalled; X community-join and YouTube community-posts have no API). No
 // secret in the manifest: the session lives in a persisted Chromium profile under .intentic/browser/<platform>,
@@ -810,7 +804,6 @@ export type PluginConfig = z.infer<typeof PluginConfigSchema>;
 export type ExtensionConfig = z.infer<typeof ExtensionConfigSchema>;
 export type SshConfig = z.infer<typeof SshConfigSchema>;
 export type VpnConfig = z.infer<typeof VpnConfigSchema>;
-export type DockerConfig = z.infer<typeof DockerConfigSchema>;
 export type BrowserPlatform = z.infer<typeof BrowserPlatformSchema>;
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
 export type AcpAgentConfig = z.infer<typeof AcpAgentConfigSchema>;
@@ -828,7 +821,6 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("extension"), config: ExtensionConfigSchema }),
     z.object({ id: entryId, kind: z.literal("ssh"), config: SshConfigSchema }),
     z.object({ id: entryId.max(15), kind: z.literal("vpn"), config: VpnConfigSchema }),
-    z.object({ id: entryId, kind: z.literal("docker"), config: DockerConfigSchema }),
     z.object({ id: entryId, kind: z.literal("browser"), config: BrowserConfigSchema }),
     z.object({ id: entryId, kind: z.literal("agent"), config: AcpAgentConfigSchema }),
 ]);

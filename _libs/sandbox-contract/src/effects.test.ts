@@ -110,12 +110,7 @@ describe("capabilityEffects", () => {
         expect(full).toContainEqual({ kind: "process", names: ["gateway"] });
     });
 
-    it("marks docker and vpn as privileged-runtime image changes", () => {
-        expect(capabilityEffects({ kind: "docker", config: {} })).toEqual([
-            { kind: "image" },
-            { kind: "runtime", level: "privileged" },
-            { kind: "process", names: ["dockerd"] },
-        ]);
+    it("marks vpn as a privileged-runtime image change", () => {
         expect(capabilityEffects({ kind: "vpn", config: {} })).toContainEqual({ kind: "runtime", level: "net-admin" });
     });
 

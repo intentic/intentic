@@ -67,7 +67,7 @@ const nameEdited = ref(false);
 // Cards that share a `kind` are told apart by a discriminator field the card fixes — `provider` for the cli cards,
 // `platform` for the browser cards (both map straight to the capability's config). The value is a single fixed
 // value, or the options for a multi-provider card (the SQL card owns postgres + mysql). Single-card kinds
-// (mcp/plugin/ssh/docker/…) have no such field → undefined → every instance of the kind matches. Used to find a
+// (mcp/plugin/ssh/…) have no such field → undefined → every instance of the kind matches. Used to find a
 // card's live instances.
 const cardDiscriminator = (entry: CapabilityCatalogEntry): { key: string; values: string[] } | undefined => {
     const field = entry.fields.find((f) => f.key === `provider` || f.key === `platform`);

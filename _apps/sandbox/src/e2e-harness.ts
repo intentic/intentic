@@ -35,9 +35,12 @@ export const startSandboxContainer = async (environment: Record<string, string>)
         await buildSourceImage();
         image = SOURCE_IMAGE_TAG;
     }
+    // Privileged like every production runner: the image carries its own Docker Engine and main.ts starts
+    // dockerd at boot (an unprivileged run would leave a failing dockerd warning in every suite's logs).
     return new GenericContainer(image)
         .withEnvironment(environment)
         .withExposedPorts(8787, 22)
+        .withPrivilegedMode()
         .withWaitStrategy(Wait.forHttp("/health", 8787).forStatusCode(200))
         .withStartupTimeout(180_000)
         .start();

@@ -1,7 +1,7 @@
 #!/bin/sh
 # intentic update — pull the latest sandbox image (:stable) and recreate THIS machine's sandbox container from
-# it, preserving /work + /history. The sandbox has no Docker socket, so — like rebuild.sh — the update runs
-# HERE, on the machine that runs the container. The platform's Sandbox card hands you this one-liner when a
+# it, preserving /work + /history. The sandbox holds no HOST Docker socket (its own engine is nested), so —
+# like rebuild.sh — the update runs HERE, on the machine that runs the container. The platform's Sandbox card hands you this one-liner when a
 # newer release is available.
 #
 # No hash and no connect token: the base image is trusted by its :stable tag, and every env var is replayed
@@ -22,6 +22,7 @@ IMAGE="${SANDBOX_IMAGE:-registry.gitlab.com/radarsu/intentic/sandbox:stable}"
 CONTAINER="intentic-sandbox-${SLUG}"
 WORKSPACE_VOLUME="intentic-workspace-${SLUG}"
 HISTORY_VOLUME="intentic-history-${SLUG}"
+DOCKER_VOLUME="intentic-docker-${SLUG}"
 NETWORK="intentic-workspace-${SLUG}"
 ORIGIN_HOST="intentic-sandbox-workspace"
 APPROVED_FILE="/work/.intentic/environment.approved.Dockerfile"
@@ -125,15 +126,15 @@ if [ -n "$ENV_HASH" ]; then
 fi
 
 # Runtime flags (container devices/caps) come ONLY from "# intentic:runtime" directives in the approved overlay
-# — same hard allowlist as rebuild.sh (a plain base update has none). --privileged is a real escalation, opt-in
-# per sandbox via the docker capability + this owner-run update.
+# — same hard allowlist as rebuild.sh (a plain base update has none). The base run below is already --privileged
+# (the in-sandbox Docker Engine needs it), which subsumes these.
 if [ -s "$overlay" ]; then
     while IFS= read -r line; do
         case "$line" in
             "# intentic:runtime "*)
                 for tok in ${line#"# intentic:runtime "}; do
                     case "$tok" in
-                        --device=/dev/net/tun | --cap-add=NET_ADMIN | --privileged) set -- "$@" "$tok" ;;
+                        --device=/dev/net/tun | --cap-add=NET_ADMIN) set -- "$@" "$tok" ;;
                         *)
                             echo "error: unsupported runtime directive '$tok' in the approved overlay." >&2
                             exit 1
@@ -150,17 +151,18 @@ echo "intentic: recreating the sandbox from ${TARGET_IMAGE}…"
 echo "== previous container logs (${CONTAINER}) ==" >>"$LOG"
 docker logs --tail 5000 "$CONTAINER" >>"$LOG" 2>&1 || true
 docker rm -f "$CONTAINER" >/dev/null
-# Same shape as connect.sh's run: unprivileged (runtime flags only from the overlay's directives above), the
-# per-sandbox network + stable tunnel-origin alias, the persistent /work + /history volumes, bounded json-file
-# logs. The tunnel sidecar keeps running and reconnects to the alias.
+# Same shape as connect.sh's run: privileged (the sandbox carries its own isolated Docker Engine), the
+# per-sandbox network + stable tunnel-origin alias, the persistent /work + /history + /var/lib/docker volumes,
+# bounded json-file logs. The tunnel sidecar keeps running and reconnects to the alias.
 echo "== docker run ${TARGET_IMAGE} ==" >>"$LOG"
-if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
+if ! docker run -d --init --privileged --restart unless-stopped --name "$CONTAINER" \
     --network "$NETWORK" \
     --network-alias "$ORIGIN_HOST" \
     --add-host host.docker.internal:host-gateway \
     --log-opt max-size=10m --log-opt max-file=3 \
     -v "${WORKSPACE_VOLUME}:/work" \
     -v "${HISTORY_VOLUME}:/history" \
+    -v "${DOCKER_VOLUME}:/var/lib/docker" \
     "$@" \
     -e SANDBOX_IMAGE="$TARGET_IMAGE" \
     "$TARGET_IMAGE" >/dev/null 2>>"$LOG"; then

@@ -20,9 +20,9 @@ export type CapabilityEffect =
     | { readonly kind: "clone"; readonly url?: string | undefined }
     // Bakes a Dockerfile fragment into the sandbox image overlay — needs a one-time owner rebuild.
     | { readonly kind: "image" }
-    // The baked fragment carries a privileged runtime directive (docker --privileged / vpn NET_ADMIN + tun).
-    | { readonly kind: "runtime"; readonly level: "privileged" | "net-admin" }
-    // Runs long-lived background processes in the sandbox (dockerd, an extension's declared processes).
+    // The baked fragment carries a privileged runtime directive (vpn NET_ADMIN + tun).
+    | { readonly kind: "runtime"; readonly level: "net-admin" }
+    // Runs long-lived background processes in the sandbox (an extension's declared processes).
     | { readonly kind: "process"; readonly names: readonly string[] }
     // Registers an mcp__<id>__ server the agent connects to next turn.
     | { readonly kind: "mcp" }
@@ -113,8 +113,6 @@ export const capabilityEffects = (input: CapabilityEffectInput): readonly Capabi
             ];
         case "vpn":
             return [{ kind: "secret", exposure: "disk" }, { kind: "skill", name: "vpn" }, { kind: "image" }, { kind: "runtime", level: "net-admin" }];
-        case "docker":
-            return [{ kind: "image" }, { kind: "runtime", level: "privileged" }, { kind: "process", names: ["dockerd"] }];
         case "browser": {
             const effects: CapabilityEffect[] = [{ kind: "skill", name: input.id }, { kind: "image" }];
             const platform = input.config["platform"];

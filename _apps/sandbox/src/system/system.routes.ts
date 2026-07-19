@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { type SystemEvent, type TerminalsList, type UsageAccount, HostTunnelSchema, systemContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { VerifiedIdentity } from "../auth/auth.js";
-import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.js";
+import { DOCKER_PANEL_KEY } from "../processes/dockerd.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { EXTENSION_PROCESS_PREFIX, extensionProcessIndex } from "../extensions/extension-processes.js";

@@ -127,14 +127,15 @@ test("diff updates when the agent tools change (digest drift), and is noop again
     expect(provider.diff(withTools, { outputs: {}, detail: { image: IMAGE, tools: digest as string } })).toEqual({ action: "noop" });
 });
 
-test("apply ensures the network, then runs the sandbox UNPRIVILEGED with internalIp-bound ports + the env", async () => {
+test("apply ensures the network, then runs the sandbox privileged with internalIp-bound ports + the env", async () => {
     const ssh = fakeSsh();
     const outputs = await createWorkspaceProvider(ssh.executor).apply(inputs, undefined, ctx());
     expect(outputs).toEqual(OUTPUTS);
     expect(ssh.commands.some((c) => c.includes("docker network") && c.includes("intentic-workspace"))).toBe(true);
     const run = ssh.commands.find((c) => c.includes("docker run")) ?? "";
-    // Unprivileged: the sandbox IS the workspace now — no docker-socket mount, no root, and no devices/caps
-    // without an overlay carrying runtime directives.
+    // Privileged with its own isolated Docker Engine — the HOST's docker socket is never mounted, no root
+    // override, and no devices/caps without an overlay carrying runtime directives.
+    expect(run).toContain("--privileged");
     expect(run).not.toContain("--user root");
     expect(run).not.toContain("/var/run/docker.sock");
     expect(run).not.toContain("--device=");
@@ -143,6 +144,7 @@ test("apply ensures the network, then runs the sandbox UNPRIVILEGED with interna
     expect(run).toContain("-p 10.0.0.5:5173:5173");
     expect(run).toContain("-p 10.0.0.5:8787:8787");
     expect(run).toContain("-v intentic-workspace-workspace:/work");
+    expect(run).toContain("-v intentic-docker-workspace:/var/lib/docker");
     expect(run).toContain("--network intentic-workspace");
     expect(run).toContain("--add-host host.docker.internal:host-gateway");
     expect(run).toContain("-e SANDBOX_PORT=8787");

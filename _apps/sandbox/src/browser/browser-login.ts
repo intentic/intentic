@@ -117,7 +117,7 @@ export const createBrowserLoginRoute = (services: Services) =>
                         // Look like a normal desktop browser (headed full Chromium already has a real UA / window.chrome).
                         locale: "en-US",
                         timezoneId: "America/New_York",
-                        // --no-sandbox: the container is unprivileged and IS the isolation boundary. --disable-dev-shm-usage:
+                        // --no-sandbox: Chromium runs as root and the container IS the isolation boundary. --disable-dev-shm-usage:
                         // a container's tiny /dev/shm crashes Chromium. The blink flag drops navigator.webdriver.
                         args: ["--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage"],
                     });

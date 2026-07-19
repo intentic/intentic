@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 // A single shared virtual X display for HEADED Chromium. Headless Chromium is fingerprinted and blocked by
 // anti-bot WAFs (e.g. Reddit's "network security"), so both the guided-login browser and the agent's
 // @playwright/mcp run headed against this Xvfb instead. One display serves every browser process; Xvfb is a
-// userspace X server and needs no container privilege (unlike the docker capability). Xvfb rides the browser
+// userspace X server and needs no container privilege of its own. Xvfb rides the browser
 // capability's Dockerfile fragment, installed on the owner's rebuild.
 
 const DISPLAY = ":99";
@@ -23,7 +23,7 @@ const waitForSocket = async (): Promise<void> => {
 };
 
 // Ensure Xvfb is running on :99 and return the DISPLAY value. Idempotent + concurrency-safe (one spawn, shared
-// promise). Mirrors the detached-daemon spawn in capabilities/handlers/docker.ts.
+// promise).
 export const ensureXvfb = (): Promise<string> => {
     if (existsSync(X_SOCKET)) {
         return Promise.resolve(DISPLAY);

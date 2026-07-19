@@ -6,7 +6,7 @@ import { extensionDir, extensionRead, extensionRootOf, readExtensionManifest } f
 import type { Services } from "../composition.js";
 
 /* The single resolver for every Dockerfile fragment a capability contributes to the composed overlay. Two
- * sources with DIFFERENT trust: core capability handlers (vpn/docker/browser) return code-authored fragments
+ * sources with DIFFERENT trust: core capability handlers (vpn/browser) return code-authored fragments
  * that MAY carry privileged `# intentic:runtime` directives; an extension's `contributes.environment.fragment`
  * is a checkout file restricted to RUN/ENV instructions only. Keeping the split here — not in
  * CapabilityHandler.fragment (which stays sync + trusted) — means the "what can an extension bake into the

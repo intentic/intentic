@@ -66,7 +66,7 @@ const stateVariant = (state: string): StatusVariant =>
                     <StatusBadge :variant="panel.healthy ? 'success' : 'warning'" :label="panel.healthy ? 'Healthy' : 'Starting'" size="xs" dot />
                 </div>
             </div>
-            <!-- Service-type capabilities reporting active (self-hosted stacks, docker, vpn, ssh). URLs live in Live status. -->
+            <!-- Service-type capabilities reporting active (self-hosted stacks, vpn, ssh). URLs live in Live status. -->
             <div
                 v-for="service in activeServices"
                 :key="service.id"

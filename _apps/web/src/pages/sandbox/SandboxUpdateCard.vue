@@ -3,7 +3,8 @@ import { Card, Code, StatusBadge } from "@intentic-app/ui";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 
 /* "Update available" — the non-blocking prompt on the /sandbox hub when a newer sandbox image has shipped. The
- * daemon reports installed vs latest on /info; the update runs on the host (the sandbox has no Docker socket)
+ * daemon reports installed vs latest on /info; the update runs on the host (the sandbox holds no host Docker
+ * socket — its own engine is nested, so it can't recreate its own container)
  * via the copy-paste one-liner — the same shape as the environment rebuild, minus the hash. A server-managed
  * sandbox updates on its host's next deploy, so it gets a note instead of a command. Hidden unless an update
  * is available. */

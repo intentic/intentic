@@ -196,8 +196,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         if (!order.value.some((tab) => tab.name === name)) {
             await refresh();
         }
-        // A background-process session never tabs directly — route it through its read-only log view (the
-        // docker capability add streams `panel-docker` here).
+        // A background-process session never tabs directly — route it through its read-only log view
+        // (`panel-docker`, an extension's gateway).
         if (processes.value.some((process) => process.name === name)) {
             await viewProcess(name);
             return;

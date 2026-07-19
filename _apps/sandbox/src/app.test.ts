@@ -1066,13 +1066,13 @@ test("secrets.reveal returns env and generated values, 404s unknown keys, and is
 
 test("capabilities.setSecret replaces just the secret, and reveal returns it — even pre-scaffold", async () => {
     const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "gh-1" } };
-    const docker: Capability = { id: "docker", kind: "docker", config: { enabled: "on" } };
-    const client = clientFor(createApp(services({ capabilities: memoryCapabilitiesStore([github, docker]) })));
+    const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
+    const client = clientFor(createApp(services({ capabilities: memoryCapabilitiesStore([github, reddit]) })));
     await client.capabilities.setSecret({ id: "github", value: "gh-2" });
     // No desired-state repo under test — capability reveal works before DevOps scaffolds it.
     expect(await client.secrets.reveal({ key: "github" })).toEqual({ value: "gh-2" });
     // A secretless capability is CONFLICT; an unknown id is NOT_FOUND.
-    expect(await errorCode(client.capabilities.setSecret({ id: "docker", value: "x" }))).toBe("CONFLICT");
+    expect(await errorCode(client.capabilities.setSecret({ id: "reddit", value: "x" }))).toBe("CONFLICT");
     expect(await errorCode(client.capabilities.setSecret({ id: "ghost", value: "x" }))).toBe("NOT_FOUND");
 });
 
@@ -1397,7 +1397,8 @@ test("git.readFile reads a contained file, NOT_FOUNDs a missing one, and BAD_REQ
             services({
                 workspace,
                 files: fakeFiles({
-                    read: async (absPath) => (absPath === join(workspace.root, "intent", "deploy.config.ts") ? "export const intent = 1;" : undefined),
+                    read: async (absPath) =>
+                        absPath === join(workspace.root, "intent", "deploy.config.ts") ? "export const intent = 1;" : undefined,
                 }),
             }),
         ),
@@ -1737,9 +1738,7 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
         ),
     );
     expect(await client.workspace.addRepo({ name: "extra", cloneUrl: "https://example.com/extra.git" })).toEqual({ name: "extra", path: "extra" });
-    expect(clones).toEqual([
-        { parentDir: "/work", name: "extra", cloneUrl: "https://example.com/extra.git", separateGitDir: "/history/gits/extra" },
-    ]);
+    expect(clones).toEqual([{ parentDir: "/work", name: "extra", cloneUrl: "https://example.com/extra.git", separateGitDir: "/history/gits/extra" }]);
     // The preview route is minted at clone time, not first panel start (DNS negative-caching).
     expect(ensured).toEqual(["extra"]);
     // A reserved role (one of the three fixed repos) cannot be clobbered, and a path-escape name is rejected.

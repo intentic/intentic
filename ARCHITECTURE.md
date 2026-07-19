@@ -49,8 +49,10 @@ flowchart TB
   by the **daemon** on boot), member invites (a discovery mirror — the daemon is the enforcer), and
   a pool of pre-provisioned tunnels (`ReservedSandbox`) so setup pays no Cloudflare round-trips
   inline. It never probes the sandbox, owns no infrastructure, and sits **off the command path**.
-- **Sandbox** — one per user, run **unprivileged** (its container holds no Docker socket; its
-  cloudflared runs as a separate sidecar container). Runs the coding agents (Claude via the agent
+- **Sandbox** — one per user, run **privileged with its own isolated Docker Engine** (the image bakes
+  Docker + Compose and the daemon starts dockerd at boot, so `pnpm db:up` / `docker compose` work in the
+  workspace out of the box; the HOST's Docker socket is never mounted, so the agent's containers live inside
+  the sandbox's engine, not on the host daemon; its cloudflared runs as a separate sidecar container). Runs the coding agents (Claude via the agent
   SDK, Codex, Grok — spawned per turn, not resident) and the `intentic` CLI over the three repos
   (`intent` = `deploy.config.ts`, the IaC; `desired-state` = resolved artifact + status; `app` =
   the application code), and exposes its daemon over its **own Cloudflare tunnel**. SSH keys,
@@ -99,7 +101,7 @@ survive reconnects. Its subsystems:
   ([panels/](_apps/sandbox/src/panels/)).
 - **Automations** — cron schedules, webhooks (`/automations/:id/fire`), and event listeners
   ([automations/](_apps/sandbox/src/automations/)).
-- **Capabilities** — everything a user adds to the sandbox (connectors, docker, vpn, mcp, plugins, …),
+- **Capabilities** — everything a user adds to the sandbox (connectors, vpn, mcp, plugins, …),
   one unified model with a per-kind handler ([capabilities/](_apps/sandbox/src/capabilities/)) — see
   [Capabilities](#capabilities).
 - **Members** — shared access for invited collaborators, enforced by the daemon
@@ -367,9 +369,9 @@ gap to close now.
 ### Capabilities
 
 Everything a user adds to a sandbox is a **capability**: one `{ id, kind, config }` entry in a single
-discriminated union (`CapabilitySchema` in [schemas.ts](_libs/sandbox-contract/src/schemas.ts)) over twelve
+discriminated union (`CapabilitySchema` in [schemas.ts](_libs/sandbox-contract/src/schemas.ts)) over the
 kinds — `devops`, `monorepo`, `mcp`, `service`, `integration`, `cli`, `plugin`, `extension`, `ssh`, `vpn`,
-`docker`, `browser`. There is deliberately **no top-level taxonomy** of "skills vs connectors vs
+`browser`, `agent`. There is deliberately **no top-level taxonomy** of "skills vs connectors vs
 environments vs secrets": those are overlapping *ingredients*, not disjoint categories (a connector is a
 skill + a secret + env injection + maybe an image fragment; an extension is a repo + skills + processes +
 views + a fragment), so the model unifies the noun and differentiates behaviour per kind — the same bet
@@ -386,7 +388,7 @@ machinery is uniform:
 - **One total registry** — `Record<CapabilityKind, CapabilityHandler>` where a handler is
   `{ requires?, fragment?, apply, status, remove? }`
   ([registry.ts](_apps/sandbox/src/capabilities/registry.ts),
-  [capability.ts](_apps/sandbox/src/capabilities/capability.ts)) — a thirteenth kind is a compile error
+  [capability.ts](_apps/sandbox/src/capabilities/capability.ts)) — a new kind is a compile error
   until it is handled everywhere, including the effects deriver and the secret/echo switches.
 
 **Cards are derived, not duplicated.** The web's `/capabilities` grid
@@ -397,8 +399,8 @@ is actually addable, third-party connectors surface automatically, and the conne
 source of a card's name/logo/fields/credential guide — nothing to drift.
 
 **Effects — what adding actually does, as data.** Kinds differ wildly in consequence (an extension runs
-code with your session; docker needs a privileged runtime; a cli connector just writes a skill and stores a
-secret), so the consequences are a first-class taxonomy: the `CapabilityEffect` union, derived by
+code with your session; a vpn bakes an image fragment with runtime directives; a cli connector just writes a
+skill and stores a secret), so the consequences are a first-class taxonomy: the `CapabilityEffect` union, derived by
 `capabilityEffects()` ([effects.ts](_libs/sandbox-contract/src/effects.ts)) from kind + live config +
 connector/extension contributions — the same data the handlers consume, so there is no per-card effects
 list to maintain — and rendered as the "This will add to your sandbox" panel
@@ -411,15 +413,15 @@ on connected instances, and as grid badges for the consequential ones (image / r
 | `secret` | `agent-env`: injected into the agent's environment each turn, never written to disk (`cli`). `disk`: a `0600` file or a denylisted manifest field (ssh key/password, WireGuard conf, git token). |
 | `clone` | Git checkout into `.intentic/plugins/<id>` or `.intentic/extensions/<id>` (staged → pinned detached checkout → swap; tokens ride `GIT_CONFIG_*`, never the URL). |
 | `image` | A Dockerfile fragment composed into the environment overlay — needs a one-time owner-run rebuild. |
-| `runtime` | Privileged directives riding a core fragment: `docker` → `--privileged`; `vpn` → `NET_ADMIN` + `/dev/net/tun`. |
-| `process` | Long-lived tmux-managed background processes (`dockerd`, an extension's declared `processes`), restored on boot. |
+| `runtime` | Privileged directives riding a core fragment: `vpn` → `NET_ADMIN` + `/dev/net/tun` (subsumed by the sandbox's `--privileged` base run, still declared as intent). |
+| `process` | Long-lived tmux-managed background processes (an extension's declared `processes`), restored on boot. |
 | `mcp` | The manifest entry itself becomes an `mcp__<id>__` server the agent connects to next turn. |
 | `scaffold` | Repos created in the workspace: `devops` → the intent + desired-state repos; `monorepo` → an empty pnpm+turbo repo named after the instance. |
 | `deploy` | A managed `deploy.config.ts` entry; `service` also runs the shared infra-apply job now, `integration` applies on the next provision. |
 | `trusted-code` | Extension code runs inside the app with the owner's session — owner-only, full-sha-pinned install; the trust decision of the system. |
 | `profile` | A persisted logged-in Chromium profile under `.intentic/browser/<platform>`, established through the guided-login WebSocket (`/system/browser-login`) — the credential is a browser session, not a token. |
 
-**Environment fragments have two trust tiers.** Core handler fragments (`docker`/`vpn`/`browser`) are
+**Environment fragments have two trust tiers.** Core handler fragments (`vpn`/`browser`) are
 code-authored and may carry privileged `# intentic:runtime` directives; extension/connector checkout
 fragments are restricted to RUN/ENV instructions — the whole "what can an extension bake into the image"
 security surface is `invalidExtensionFragment`

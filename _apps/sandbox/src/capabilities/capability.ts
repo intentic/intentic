@@ -21,7 +21,7 @@ export interface CapabilityCtx {
     readonly git: Services["git"];
     readonly files: Services["files"];
     readonly terminalRun: Services["terminalRun"];
-    // The docker capability's persistent dockerd session (panel-docker) — start/stop via the panel manager.
+    // Extension-declared background processes ride panel sessions — start/stop via the panel manager.
     readonly panels: ManagedProcesses;
     readonly infraApply: {
         // Launch `intentic resolve && intentic apply --yes && intentic adopt` (resolveFirst) as the shared
@@ -112,7 +112,6 @@ export const secretField = (capability: Capability, connectors: Map<string, Reso
         case "monorepo":
         case "service":
         case "integration":
-        case "docker":
         // The browser session lives in a Chromium profile (managed by the guided-login flow), not a manifest field.
         case "browser":
             return undefined;
@@ -153,8 +152,6 @@ export const echoConfig = (capability: Capability, connectors: Map<string, Resol
         case "ssh":
             return { host: capability.config.host, port: capability.config.port, user: capability.config.user, auth: capability.config.auth };
         case "vpn":
-            return { enabled: capability.config.enabled };
-        case "docker":
             return { enabled: capability.config.enabled };
         case "plugin":
             return {

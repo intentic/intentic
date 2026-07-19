@@ -33,10 +33,7 @@ const describe = (effect: CapabilityEffect): EffectRow => {
         case "image":
             return { icon: `box`, label: `Extends the sandbox image — one-time rebuild required` };
         case "runtime":
-            return {
-                icon: `shield`,
-                label: effect.level === `privileged` ? `Requires a privileged container runtime` : `Requires network-admin container access`,
-            };
+            return { icon: `shield`, label: `Requires network-admin container access` };
         case "process":
             return { icon: `play`, label: `Runs background process${effect.names.length === 1 ? `` : `es`}: ${effect.names.join(`, `)}` };
         case "mcp":

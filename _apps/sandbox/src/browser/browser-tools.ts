@@ -31,7 +31,8 @@ const resolveMcpCli = (): string => {
 // `playwright` dep installed. Instead of pinning the two together, install Chromium via our stable playwright and
 // point the MCP at that exact binary with `--executable-path` — one install serves both. HEADED (no --headless)
 // on the shared Xvfb via `DISPLAY`, so the browser isn't fingerprinted as a headless bot; `--init-script` loads
-// the same stealth patch as the login. `--no-sandbox` because the container is unprivileged; `--user-data-dir` is
+// the same stealth patch as the login. `--no-sandbox` because Chromium runs as root and the container IS the
+// isolation boundary; `--user-data-dir` is
 // the persisted logged-in profile. Runs on the daemon's own node — no PATH/npx lookup.
 export const browserServerSpec = (
     cli: string,

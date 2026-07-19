@@ -48,7 +48,7 @@ export const startAutoStartProcesses = async (services: Services, extension: Ins
     }
 };
 
-// Boot convergence (beside startEnabledDocker): sessions died with the container / the boot sweep while the
+// Boot convergence (beside startDockerd): sessions died with the container / the boot sweep while the
 // manifests survived — bring every installed extension's autoStart processes back up. Best-effort.
 export const startAllExtensionProcesses = async (services: Services): Promise<void> => {
     for (const extension of await installedExtensions(services)) {

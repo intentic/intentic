@@ -31,7 +31,7 @@ test("listenerState returns the provider's enabled listener automations and its 
             [
                 { id: "discord", kind: "cli", config: { provider: "discord", botToken: "SECRET" } },
                 { id: "pg", kind: "cli", config: { provider: "postgres", url: "u" } },
-                { id: "dock", kind: "docker", config: { enabled: "on" } },
+                { id: "reddit", kind: "browser", config: { platform: "reddit" } },
             ],
         ),
         "discord",
