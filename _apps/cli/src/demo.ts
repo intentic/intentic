@@ -27,6 +27,7 @@ const { utils } = createRequire(import.meta.url)("ssh2") as {
 
 const exec = promisify(execFile);
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
+const hostContext = fileURLToPath(new URL("../node_modules/@intentic/dind-host", import.meta.url));
 const cliJs = join(repoRoot, "_apps/cli/dist/cli.js");
 const stateDir = join(repoRoot, ".demo");
 const stateFile = join(stateDir, "state.json");
@@ -129,8 +130,8 @@ const up = async (): Promise<void> => {
     let forgejoPassword = "";
     let komodoPassword = "";
 
-    log(`▶ building the demo host image (${CONTAINER}) from fixtures/dind-host …`);
-    await run("docker", ["build", "-t", CONTAINER, join(repoRoot, "fixtures/dind-host")]);
+    log(`▶ building the demo host image (${CONTAINER}) from @intentic/dind-host …`);
+    await run("docker", ["build", "-t", CONTAINER, hostContext]);
 
     log("▶ starting the persistent Docker-in-Docker host …");
     await quiet("docker", ["rm", "-f", CONTAINER]);

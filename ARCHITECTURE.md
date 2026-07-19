@@ -528,7 +528,7 @@ passing nothing uses the real SSH/Cloudflare/Forgejo/Komodo implementations.
 
 [cli.e2e.test.ts](_apps/cli/src/cli.e2e.test.ts) is a **manual, real** run that drives the actual CLI
 exactly as an operator would. It boots a Docker-in-Docker "host"
-([fixtures/dind-host/Dockerfile](fixtures/dind-host/Dockerfile)) via `testcontainers`, scaffolds with `init`, authors a
+([_tools/dind-host/Dockerfile](_tools/dind-host/Dockerfile)) via `testcontainers`, scaffolds with `init`, authors a
 `deploy.config.ts` pointed at the host's mapped SSH port (with a per-run generated key), fills
 `desired-state/.env`, then runs `resolve` + `apply`. Phase 1 stands up the platform (Forgejo + its Actions
 runner + Komodo + the workspace sandbox) and exposes `git.<zone>`/`deploy.<zone>` through a **real
@@ -572,7 +572,7 @@ docker state, the node's logs, listeners, addresses, one verbose probe) before t
 
 Run it locally with `pnpm e2e:hermetic` (privileged local Docker, Linux/WSL2). In GitLab CI it runs on
 every merge request as a **non-blocking** sidecar (`e2e:hermetic` job, `allow_failure: true`), pulling
-the published `dind-host:latest` image (falling back to building [fixtures/dind-host](fixtures/dind-host)) and uploading
+the published `dind-host:latest` image (falling back to building [_tools/dind-host](_tools/dind-host)) and uploading
 the CLI run logs as artifacts on failure. `adopt --baseUrl` is also the field escape hatch for adopting
 before public DNS is live.
 

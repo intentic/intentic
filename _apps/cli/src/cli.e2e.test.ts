@@ -54,7 +54,7 @@ const WILDCARD_PREVIEW = `*.${ZONE}`;
 const PREVIEW_PROBE = `probe.${ZONE}`;
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
-const hostContext = join(repoRoot, "fixtures", "dind-host");
+const hostContext = fileURLToPath(new URL("../node_modules/@intentic/dind-host", import.meta.url));
 
 // The deterministic host port the resolver assigns this environment's deployment; the seeded app must listen
 // on it (Komodo runs the container on the host network, so it binds this port directly) and the tunnel routes

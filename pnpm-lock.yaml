@@ -599,6 +599,9 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
+      '@intentic/dind-host':
+        specifier: workspace:*
+        version: link:../../_tools/dind-host
       '@intentic/sdk':
         specifier: workspace:*
         version: link:../../_libs/sdk
@@ -1794,6 +1797,8 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+
+  _tools/dind-host: {}
 
   _tools/e2e:
     devDependencies:
