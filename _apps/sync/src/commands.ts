@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { registerAutostart, unregisterAutostart } from "./autostart.js";
-import { knownHostsPath, readConfig, type SyncConfig, sshKeyPath, writeConfig } from "./config.js";
+import { knownHostsPath, readConfig, type SyncConfig, type SyncMode, sshKeyPath, writeConfig } from "./config.js";
 import { type Log, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
 import { ensureCloudflared, ensureMutagen, mutagenCreateArgs, runMutagen, sessionName } from "./mutagen.js";
 import { ensureSshKey, INCLUDE_MARKER, sanitizeId, sshAlias, sshConfigBlock, writeManagedSshConfig } from "./ssh.js";
@@ -23,7 +23,7 @@ export const enrollKey = async (
     pairToken: string,
     key: string,
     { attempts = 10, delayMs = 3000, takeover = false }: { attempts?: number; delayMs?: number; takeover?: boolean } = {},
-): Promise<{ sshHostname: string; syncToken?: string }> => {
+): Promise<{ sshHostname: string; syncToken?: string; mode: SyncMode }> => {
     const url = `${sandboxUrl.replace(/\/$/, "")}/system/authorized-key`;
     for (let attempt = 1; ; attempt++) {
         let response: Response;
@@ -65,14 +65,21 @@ export const enrollKey = async (
         if (!response.ok) {
             throw new Error(`enrolling the sync key failed (${response.status}): ${await response.text()}`);
         }
-        const body = (await response.json()) as { sshHostname?: string; syncToken?: string };
+        const body = (await response.json()) as { sshHostname?: string; syncToken?: string; mode?: SyncMode };
         if (body.sshHostname === undefined) {
             throw new Error("this sandbox has no SSH tunnel configured for sync — reconnect it so its tunnel routes ssh-<id>.<zone>.");
         }
-        // syncToken stays optional: a daemon predating port mirroring still syncs files fine — only `mirror`
-        // needs it, and it reports the gap itself.
-        return { sshHostname: body.sshHostname, ...(body.syncToken === undefined ? {} : { syncToken: body.syncToken }) };
+        // `mode` is what the daemon GRANTED (per the pairing's role): "sync" = file sync + mirroring, "mirror" =
+        // ports only. A daemon predating modes omits it → treat as "sync" (its historical behavior). syncToken
+        // stays optional: a daemon predating port mirroring still syncs files fine.
+        return { sshHostname: body.sshHostname, mode: body.mode ?? "sync", ...(body.syncToken === undefined ? {} : { syncToken: body.syncToken }) };
     }
+};
+
+// Self-revoke this machine's enrollment (uninstall): DELETE /system/authorized-key authed by the sync token,
+// so the sandbox drops just this machine's key + token. Best-effort — the caller ignores failures.
+export const revokeEnrollment = async (sandboxUrl: string, syncToken: string): Promise<void> => {
+    await fetch(`${sandboxUrl.replace(/\/$/, "")}/system/authorized-key`, { method: "DELETE", headers: { "x-intentic-sync": syncToken } });
 };
 
 interface SetupFlags {
@@ -97,16 +104,10 @@ const setup = buildCommand<SetupFlags>({
     async func(this: CommandContext, flags: SetupFlags) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
         const publicKey = await ensureSshKey();
-        const { sshHostname, syncToken } = await enrollKey(flags.url, flags.pair, publicKey, { takeover: flags.takeover });
+        const { sshHostname, syncToken, mode } = await enrollKey(flags.url, flags.pair, publicKey, { takeover: flags.takeover });
         out(`enrolled SSH key; sandbox reachable at ${sshHostname}`);
 
         const sandboxId = flags.sandboxId ?? sanitizeId(new URL(flags.url).host);
-        // A `~` prefix can reach us verbatim (SYNC_DIR travels as data from the setup wizard's claim payload —
-        // no shell ever expands it), so expand it here where every entry path converges.
-        const localDir = resolve(flags.dir === undefined ? join(homedir(), "intentic", sandboxId) : flags.dir.replace(/^~(?=[\\/]|$)/, homedir()));
-        // Create the local root up front — Mutagen only materializes it once content propagates, and an
-        // immediately-visible folder is the user's anchor that setup worked.
-        await mkdir(localDir, { recursive: true });
         const cloudflaredPath = await ensureCloudflared();
         const mutagen = await ensureMutagen();
         await writeManagedSshConfig(
@@ -119,29 +120,47 @@ const setup = buildCommand<SetupFlags>({
             }),
         );
 
-        const config: SyncConfig = { sandboxUrl: flags.url, sandboxId, sshHostname, localDir, ...(syncToken === undefined ? {} : { syncToken }) };
+        // File sync exists only in "sync" mode — a mirror-only enrollment (a collaborator) has no local dir and
+        // no sync session, just port forwards. A `~` prefix can reach us verbatim (SYNC_DIR travels as data from
+        // the claim payload — no shell expands it), so expand it here where every entry path converges.
+        const localDir =
+            mode === "sync" ? resolve(flags.dir === undefined ? join(homedir(), "intentic", sandboxId) : flags.dir.replace(/^~(?=[\\/]|$)/, homedir())) : undefined;
+        if (localDir !== undefined) {
+            // Create the local root up front — an immediately-visible folder is the user's anchor that setup worked.
+            await mkdir(localDir, { recursive: true });
+        }
+
+        const config: SyncConfig = {
+            sandboxUrl: flags.url,
+            sandboxId,
+            sshHostname,
+            mode,
+            ...(localDir === undefined ? {} : { localDir }),
+            ...(syncToken === undefined ? {} : { syncToken }),
+        };
         await writeConfig(config);
 
-        // Terminate any previous session of the same name so re-running setup (a fresh pairing) replaces it
-        // instead of failing on the name collision. Silent: "no session found" is the common case.
-        spawnSync(mutagen, ["sync", "terminate", sessionName(sandboxId)], { stdio: "ignore" });
-        runMutagen(
-            mutagen,
-            mutagenCreateArgs({ name: sessionName(sandboxId), localDir: config.localDir, alias: sshAlias(sandboxId), remoteDir: "/work" }),
-        );
-        // Register the Mutagen daemon to autostart at login and resume sessions across reboots (its own native
-        // mechanism — launchd/Task Scheduler; Mutagen has no register on Linux, where the daemon parent command
-        // would just dump its help). Best-effort: already-registered is not an error worth failing on.
+        if (mode === "sync" && localDir !== undefined) {
+            // Terminate any previous session of the same name so re-running setup (a fresh pairing) replaces it
+            // instead of failing on the name collision. Silent: "no session found" is the common case.
+            spawnSync(mutagen, ["sync", "terminate", sessionName(sandboxId)], { stdio: "ignore" });
+            runMutagen(mutagen, mutagenCreateArgs({ name: sessionName(sandboxId), localDir, alias: sshAlias(sandboxId), remoteDir: "/work" }));
+        }
+        // Register the Mutagen daemon to autostart at login and resume sessions across reboots — it holds BOTH
+        // sync and forward sessions, so this covers mirror-only too. Its own native mechanism (launchd/Task
+        // Scheduler); no register verb on Linux. Best-effort: already-registered isn't worth failing on.
         if (process.platform !== "linux") {
             try {
                 runMutagen(mutagen, ["daemon", "register"]);
             } catch (error) {
-                out(
-                    `note: could not register the Mutagen daemon for autostart (${error instanceof Error ? error.message : String(error)}); it still runs while you're logged in.`,
-                );
+                out(`note: could not register the Mutagen daemon for autostart (${error instanceof Error ? error.message : String(error)}); it still runs while you're logged in.`);
             }
         }
-        out(`Sync started: ${config.localDir} ↔ ${sshHostname}:/work. Check it with \`intentic-sync status\`.`);
+        out(
+            mode === "sync"
+                ? `Sync started: ${localDir} ↔ ${sshHostname}:/work. Check it with \`intentic-sync status\`.`
+                : `Enrolled for port mirroring on ${sshHostname} (mirror-only — no file sync). Check it with \`intentic-sync status\`.`,
+        );
 
         // Auto-start port mirroring so the user never types a command: the sandbox's dev servers become
         // localhost:<same-port> here, new ones appear as they start, and it resumes after a reboot. Needs the
@@ -151,11 +170,6 @@ const setup = buildCommand<SetupFlags>({
         }
     },
 });
-
-const withMutagen = async (run: (mutagen: string, name: string) => void): Promise<void> => {
-    const config = await readConfig();
-    run(await ensureMutagen(), sessionName(config.sandboxId));
-};
 
 // The path this CLI was invoked as — re-exec'd (with `--watch`) to spawn the detached mirror watcher and named
 // by the OS autostart entries. Always set for a bin/`node dist/cli.js` invocation; the guard keeps the type honest.
@@ -210,28 +224,39 @@ const mirror = buildCommand<MirrorFlags>({
 });
 
 const status = buildCommand<Record<string, never>>({
-    docs: { brief: "Show Mutagen sync status" },
+    docs: { brief: "Show file-sync and port-mirror status" },
     parameters: { flags: {} },
-    async func() {
-        runMutagen(await ensureMutagen(), ["sync", "list"]);
+    async func(this: CommandContext) {
+        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        const config = await readConfig();
+        const mutagen = await ensureMutagen();
+        if (config.mode === "sync") {
+            out("File sync:");
+            runMutagen(mutagen, ["sync", "list", sessionName(config.sandboxId)]);
+        }
+        out("Port mirroring:");
+        runMutagen(mutagen, ["forward", "list"]);
     },
 });
 
-const pause = buildCommand<Record<string, never>>({
-    docs: { brief: "Pause syncing" },
-    parameters: { flags: {} },
-    async func() {
-        await withMutagen((mutagen, name) => runMutagen(mutagen, ["sync", "pause", name]));
-    },
-});
+// Pause/resume act on file sync — a no-op with a note for a mirror-only enrollment (mirroring is controlled by
+// `intentic-sync mirror`, not paused).
+const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
+    buildCommand<Record<string, never>>({
+        docs: { brief },
+        parameters: { flags: {} },
+        async func(this: CommandContext) {
+            const config = await readConfig();
+            if (config.mode !== "sync") {
+                this.process.stdout.write(`mirror-only enrollment — no file sync to ${verb}.\n`);
+                return;
+            }
+            runMutagen(await ensureMutagen(), ["sync", verb, sessionName(config.sandboxId)]);
+        },
+    });
 
-const resume = buildCommand<Record<string, never>>({
-    docs: { brief: "Resume syncing" },
-    parameters: { flags: {} },
-    async func() {
-        await withMutagen((mutagen, name) => runMutagen(mutagen, ["sync", "resume", name]));
-    },
-});
+const pause = fileSyncOnly("Pause file syncing", "pause");
+const resume = fileSyncOnly("Resume file syncing", "resume");
 
 const uninstall = buildCommand<Record<string, never>>({
     docs: { brief: "Terminate the sync session and remove the managed ssh-config include" },
@@ -242,7 +267,17 @@ const uninstall = buildCommand<Record<string, never>>({
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
         await unregisterAutostart(out);
         await stopMirror(out);
-        await withMutagen((mutagen, name) => runMutagen(mutagen, ["sync", "terminate", name]));
+        const config = await readConfig();
+        const mutagen = await ensureMutagen();
+        if (config.mode === "sync") {
+            spawnSync(mutagen, ["sync", "terminate", sessionName(config.sandboxId)], { stdio: "ignore" });
+        }
+        // Self-revoke this machine's enrollment so the sandbox drops its key + token (a collaborator leaving
+        // cleans up after itself, without touching anyone else's mirror). Best-effort — an unreachable sandbox
+        // shouldn't block local teardown.
+        if (config.syncToken !== undefined) {
+            await revokeEnrollment(config.sandboxUrl, config.syncToken).catch(() => {});
+        }
         const userConfig = join(homedir(), ".ssh", "config");
         const current = await readFile(userConfig, "utf8").catch(() => "");
         const stripped = current

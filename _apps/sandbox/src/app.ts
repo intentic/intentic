@@ -13,17 +13,18 @@ import { type AppEnv, buildOrpcContext } from "./context.js";
 import { enrollHost } from "./inventory/enroll-host.js";
 import { createRouter } from "./router.js";
 import {
-    clearAuthorizedKeys,
-    clearSyncToken,
+    clearAllEnrollments,
     consumePairing,
-    currentSyncKey,
-    enrollAuthorizedKey,
+    enrollSyncKey,
     isKeyEnrolled,
     isValidAuthorizedKey,
     isValidPairing,
     mintPairing,
-    mintSyncToken,
-    syncingFrom,
+    mirrorMachines,
+    pairingMode,
+    revokeEnrollmentByToken,
+    type SyncMode,
+    syncHolder,
     syncSshHostname,
     verifySyncToken,
 } from "./platform/sync.js";
@@ -351,6 +352,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return error instanceof ForbiddenError ? c.json({ error: error.message }, 403) : c.json({ error: "unauthorized" }, 401);
         }
     };
+    // Whether the caller is the owner (vs a member). Loopback/test mode (no auth) counts as owner. Used to gate
+    // what a pairing may grant: the owner can mint a full "sync" pairing, a member only "mirror".
+    const isOwner = async (c: Context): Promise<boolean> => (await ownerDenied(c)) === undefined;
     app.get("/members", async (c) => {
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
@@ -458,16 +462,17 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/listeners/:provider/failure", listenerRoutes.failure);
     app.post("/listeners/:provider/status", listenerRoutes.status);
 
-    // Local-sync (Mutagen) enrollment. The owner mints a short-lived pairing token in the browser (owner-gated,
-    // like /members); the desktop agent redeems it once here to enroll its SSH key — so the agent needs no OAuth,
-    // and trust still roots in the owner's Google identity that minted the token. These sit before the oRPC
-    // catch-all, like /members and /workspace/raw.
+    // Desktop enrollment (Mutagen). The browser mints a short-lived pairing token; the desktop agent redeems it
+    // once at /system/authorized-key to land its SSH key — so the agent needs no OAuth, and trust roots in the
+    // Google identity that minted the token. The pairing carries the MODE it may enroll: the owner gets full
+    // file "sync" (default, or "mirror" on request), a member (collaborator) can only get port "mirror" — so
+    // live previews are everyone's while the single-holder file-sync lock stays owner-territory. The route runs
+    // through the bearer middleware (not exempt), so an unauthenticated caller is already 401'd here. Sits before
+    // the oRPC catch-all, like /members and /workspace/raw.
     app.post("/system/sync/pair", async (c) => {
-        const denied = await ownerDenied(c);
-        if (denied !== undefined) {
-            return denied;
-        }
-        return c.json(mintPairing());
+        const requested = c.req.query("mode") === "mirror" ? "mirror" : "sync";
+        const mode: SyncMode = (await isOwner(c)) ? requested : "mirror";
+        return c.json({ ...mintPairing(mode), mode });
     });
     // Bridge tokens for the ACP editor bridge — owner-minted (the sync-pair trust model, made durable +
     // revocable), raw value returned exactly once. Plain routes before the oRPC catch-all, like the pair block.
@@ -514,23 +519,21 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         if (sshHostname === undefined) {
             return c.json({ error: "ssh tunnel not configured" }, 409);
         }
-        // Exclusive sync: one machine at a time. If a *different* key already holds it, refuse (423 Locked)
-        // unless this is an explicit takeover — which overwrites the other key and stops its Mutagen transport.
-        // Refuse before consuming the token so the user can retry with --takeover using the same pairing.
-        const current = await currentSyncKey();
+        // The mode comes from the pairing (minted per the requester's role), never from the agent — so a member's
+        // pairing can only ever enroll "mirror". The owner-Google fallback path defaults to full "sync".
+        const mode: SyncMode = viaPair ? (pairingMode(pair) ?? "mirror") : "sync";
+        // A "sync" enroll is single-holder: if a different machine holds it and this isn't a takeover, 423 Locked
+        // (before consuming the token, so a retry with --takeover reuses the same pairing). Mirror enrolls never lock.
         const takeover = c.req.header("x-intentic-sync-takeover") === "1";
-        if (current !== undefined && current !== key.trim() && !takeover) {
-            return c.json({ error: "sync already active", machine: current.split(" ")[2] }, 423);
+        const result = await enrollSyncKey({ key, mode, takeover });
+        if ("locked" in result) {
+            return c.json({ error: "sync already active", machine: result.locked }, 423);
         }
-        await enrollAuthorizedKey(key);
-        // The ports-read credential for `intentic-sync mirror` — rotated with every enrollment, so a takeover
-        // invalidates the ousted machine's token along with its key.
-        const syncToken = await mintSyncToken();
         // Burn the pairing token only on success, so a transient failure leaves it usable for a retry.
         if (pair !== undefined) {
             consumePairing(pair);
         }
-        return c.json({ ok: true, sshHostname, syncToken });
+        return c.json({ ok: true, sshHostname, syncToken: result.syncToken, mode });
     });
     app.get("/system/sync", async (c) => {
         const denied = await ownerDenied(c);
@@ -538,23 +541,31 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return denied;
         }
         const sshHostname = syncSshHostname(services.config.connectToken, services.config.zone, services.config.sandbox.publicUrl);
-        const machine = await syncingFrom();
+        const holder = await syncHolder();
+        const mirrors = await mirrorMachines();
         // Always 200 so the UI can render its "enable" vs "enabled" state; sshHostname is omitted when this
         // sandbox has no SSH tunnel (loopback/preview), which the card treats as "sync unavailable". syncingFrom
-        // names the machine currently holding sync so the card can show it and offer a takeover.
+        // names the single machine holding file sync (takeover target); mirroredBy lists every machine mirroring
+        // ports (unlimited — each collaborator on their own localhost).
         return c.json({
             enrolled: await isKeyEnrolled(),
-            ...(machine !== undefined ? { syncingFrom: machine } : {}),
+            ...(holder !== undefined ? { syncingFrom: holder } : {}),
+            ...(mirrors.length > 0 ? { mirroredBy: mirrors } : {}),
             ...(sshHostname !== undefined ? { sshHostname } : {}),
         });
     });
     app.delete("/system/authorized-key", async (c) => {
+        // Two revoke paths: an agent uninstalling self-revokes with its own sync token (removes just its
+        // enrollment); the owner (Google) clears EVERY enrollment — the "Disable desktop sync" kill switch.
+        const sync = c.req.header("x-intentic-sync") ?? undefined;
+        if (sync !== undefined && sync !== "") {
+            return (await revokeEnrollmentByToken(sync)) ? c.json({ ok: true }) : c.json({ error: "unknown enrollment" }, 404);
+        }
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        await clearAuthorizedKeys();
-        await clearSyncToken();
+        await clearAllEnrollments();
         return c.json({ ok: true });
     });
 
