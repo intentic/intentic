@@ -192,6 +192,8 @@ const SHEBANG_LANG: Record<string, string> = {
     powershell: "powershell",
 };
 
+const basename = (token: string): string => token.slice(token.lastIndexOf("/") + 1);
+
 // The Shiki lang id implied by a `#!…` first line, or undefined when there's no shebang or its interpreter
 // isn't one we ship. Called AFTER the bytes are read (unlike resolveFile), only when the filename resolved no
 // language — so a known extension always wins, matching VSCode's precedence. Handles `#!/bin/bash`,
@@ -211,7 +213,6 @@ export const langFromShebang = (content: string): string | undefined => {
     if (first === undefined) {
         return undefined;
     }
-    const basename = (token: string): string => token.slice(token.lastIndexOf("/") + 1);
     // `env` execs the first following non-flag argument (so skip `-S` and friends); otherwise the path itself.
     const interpreter =
         basename(first) === "env" ? tokens.slice(1).map(basename).find((token) => !token.startsWith("-")) : basename(first);
