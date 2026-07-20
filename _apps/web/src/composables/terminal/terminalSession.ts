@@ -4,9 +4,8 @@ import { Terminal } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
-import { commands } from "../commands/useCommands";
-import { effectiveKeybinding } from "../commands/useKeymap";
-import { isApplePlatform, matchesChord } from "../commands/keybindings";
+import { boundCommand } from "../commands/useCommands";
+import { isApplePlatform } from "../commands/keybindings";
 import { useGoogleIdentity } from "../useGoogleIdentity";
 import { useSandbox } from "../sandbox/useSandbox";
 import { registerFilePathLinks } from "./terminalFileLinks";
@@ -348,15 +347,10 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     // terminal split/kill/new shortcuts, anything the user remapped) must reach the global dispatcher, not the
     // PTY — without this, xterm feeds tmux the raw keystroke FIRST and the command fires on top of it (VSCode
     // uses this same hook). Returning false makes xterm ignore the keydown; it still propagates to the window.
+    // boundCommand honors each command's `when` gate, so a contextual chord (Mod+F's workspace search, tab
+    // cycling) steps aside here and the raw keystroke stays with the shell.
     const isMac = isApplePlatform();
-    term.attachCustomKeyEventHandler(
-        (event) =>
-            event.type !== `keydown` ||
-            !commands.value.some((entry) => {
-                const chord = effectiveKeybinding(entry.command, entry.keybinding);
-                return chord !== undefined && matchesChord(chord, event, isMac);
-            }),
-    );
+    term.attachCustomKeyEventHandler((event) => event.type !== `keydown` || boundCommand(event, isMac) === undefined);
     const fit = new FitAddon();
     term.loadAddon(fit);
     const serialize = new SerializeAddon();

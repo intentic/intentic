@@ -93,4 +93,9 @@ describe(`formatChord`, () => {
         expect(formatChord(`Mod+Shift+P`, false)).toBe(`Ctrl+Shift+P`);
         expect(formatChord(`Mod+P`, false)).toBe(`Ctrl+P`);
     });
+
+    it(`labels multi-word named keys readably`, () => {
+        expect(formatChord(`Ctrl+PageDown`, false)).toBe(`Ctrl+PageDown`);
+        expect(formatChord(`Ctrl+PageUp`, true)).toBe(`⌃PageUp`);
+    });
 });

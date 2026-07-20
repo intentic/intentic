@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { commands, executeCommand, registerCommand, type RegisteredCommand } from "./useCommands";
+import { boundCommand, commands, executeCommand, registerCommand, type RegisteredCommand } from "./useCommands";
 
 /* The command registry backs the palette's `>` command mode: the shell's built-in commands and every extension's
  * contributed ones register here, and Quick Open filters + runs them by id. These pin the invariants the palette
@@ -40,5 +40,28 @@ describe(`command registry`, () => {
 
     it(`throws when executing an unknown command`, async () => {
         await expect(executeCommand(`nope`)).rejects.toThrow(/no command "nope"/);
+    });
+});
+
+// The one matching loop shared by the window dispatcher and the terminal's key-forwarding hook. Same minimal
+// event stub as keybindings.test — boundCommand reads only the modifier flags and `key`.
+const keydown = (init: Partial<KeyboardEvent>): KeyboardEvent =>
+    ({ ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...init }) as KeyboardEvent;
+
+describe(`boundCommand`, () => {
+    it(`resolves a keydown to the command whose chord it matches`, () => {
+        registerCommand(entry(`palette.only`, () => undefined));
+        registerCommand({ ...entry(`bound`, () => undefined), keybinding: `Mod+K` });
+        expect(boundCommand(keydown({ key: `k`, ctrlKey: true }), false)?.command).toBe(`bound`);
+        expect(boundCommand(keydown({ key: `k`, metaKey: true }), true)?.command).toBe(`bound`);
+        expect(boundCommand(keydown({ key: `j`, ctrlKey: true }), false)).toBeUndefined();
+    });
+
+    it(`skips a command whose when gate is closed, leaving the keystroke to the focused surface`, () => {
+        let open = false;
+        registerCommand({ ...entry(`gated`, () => undefined), keybinding: `Mod+K`, when: () => open });
+        expect(boundCommand(keydown({ key: `k`, ctrlKey: true }), false)).toBeUndefined();
+        open = true;
+        expect(boundCommand(keydown({ key: `k`, ctrlKey: true }), false)?.command).toBe(`gated`);
     });
 });

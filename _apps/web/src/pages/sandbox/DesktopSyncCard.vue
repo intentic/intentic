@@ -9,11 +9,16 @@ import { useDesktopSync } from "../../composables/sandbox/useDesktopSync";
  * copy-paste one-liner carrying a single-use pairing token → "enabled" once the daemon reports the key enrolled.
  * No Google sign-in on the laptop; reuses the shared Code + status-pill markup. The card is explicit that the
  * one-liner installs a resident agent doing TWO things — file sync and localhost port mirroring — and that
- * Disable revokes access but leaves the agent installed (`intentic-sync uninstall` removes it). */
+ * Disable revokes access but leaves the agent installed (`intentic-sync uninstall` removes it).
+ *
+ * Two enrollment modes surface here: full "sync" (file sync + ports, single holder, owner-only) and "mirror"
+ * (ports only, any number of machines). An owner can pick either — including mirroring a second computer while
+ * their first holds sync; a member only ever sees the mirror flow, matching what the daemon would grant them. */
 
 const { highlight = false } = defineProps<{ highlight?: boolean }>();
 
 const {
+    isOwner,
     enrolled,
     syncingFrom,
     mirroredBy,
@@ -21,6 +26,7 @@ const {
     available,
     folder,
     pairToken,
+    pairMode,
     minting,
     takeover,
     linuxCommand,
@@ -37,6 +43,21 @@ const portMachines = computed(() => {
     const machines = [...(syncingFrom.value === undefined ? [] : [syncingFrom.value]), ...mirroredBy.value];
     return machines.length > 0 ? machines.join(", ") : "the enrolled computer";
 });
+
+// The owner's opt-in to the ports-only flow (skip file sync on a fresh enable, or add a mirror machine while
+// another holds sync). Members don't need the toggle: portsOnly is forced for them.
+const mirrorOnly = ref(false);
+const portsOnly = computed(() => !isOwner.value || mirrorOnly.value);
+
+// Takeover and mirror setup are mutually exclusive forms — entering one leaves the other.
+const startTakeover = (): void => {
+    takeover.value = true;
+    mirrorOnly.value = false;
+};
+const startMirror = (): void => {
+    mirrorOnly.value = true;
+    takeover.value = false;
+};
 
 // "What stays on your computer" disclosure — collapsed by default, but always one click away before pasting.
 const showFootprint = ref(false);
@@ -77,7 +98,10 @@ onUnmounted(stop);
                 <div>
                     <h2 class="font-semibold leading-tight">Desktop sync</h2>
                     <p class="text-2xs text-subtle">
-                        Edit your sandbox in your own editor, and reach its dev servers on your own localhost — same ports, cookies, and CORS.
+                        <template v-if="isOwner">
+                            Edit your sandbox in your own editor, and reach its dev servers on your own localhost — same ports, cookies, and CORS.
+                        </template>
+                        <template v-else>Mirror this sandbox's dev servers onto your own localhost — same ports, cookies, and CORS.</template>
                     </p>
                 </div>
             </div>
@@ -109,24 +133,34 @@ onUnmounted(stop);
                         <dd class="font-mono text-content">intentic-sync status</dd>
                     </div>
                 </dl>
-                <div class="flex items-center justify-between gap-2">
-                    <button
-                        v-if="!takeover && pairToken === undefined"
-                        type="button"
-                        class="text-2xs text-link hover:underline"
-                        @click="takeover = true"
-                    >
-                        Sync from this computer instead
-                    </button>
-                    <span v-else></span>
+                <div v-if="isOwner" class="flex items-center justify-between gap-2">
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <button
+                            v-if="!takeover && pairToken === undefined"
+                            type="button"
+                            class="text-2xs text-link hover:underline"
+                            @click="startTakeover"
+                        >
+                            Sync from this computer instead
+                        </button>
+                        <button
+                            v-if="!portsOnly && pairToken === undefined"
+                            type="button"
+                            class="text-2xs text-link hover:underline"
+                            @click="startMirror"
+                        >
+                            Mirror ports on another computer
+                        </button>
+                    </div>
                     <Button label="Disable sync" size="small" severity="danger" :text="true" :loading="disabling" @click="runDisable">
                         <template #icon><Icon name="times" /></template>
                     </Button>
                 </div>
             </template>
 
-            <!-- Setup (fresh enable) or takeover (move an active sync here): pick a folder, reveal the one-liner. -->
-            <template v-if="!enrolled || takeover">
+            <!-- Setup: fresh enable, takeover (move an active sync here), or a mirror-only enrollment (always
+                 addable — mirrors don't contend). Pick a folder (sync only), reveal the one-liner. -->
+            <template v-if="!enrolled || takeover || portsOnly">
                 <!-- Just disabled: revoking stops the agent's access (its watcher shuts down on its own), but the
                      installation stays until uninstall runs on that machine. -->
                 <p v-if="!enrolled && revokedFrom !== undefined" class="text-2xs text-subtle">
@@ -136,32 +170,64 @@ onUnmounted(stop);
                 <p v-if="takeover" class="text-2xs text-warning">
                     This takes over from {{ syncingFrom ?? "the other computer" }} — its sync stops when you run the command below.
                 </p>
-                <div class="flex flex-col gap-1.5">
+                <p v-if="portsOnly && pairToken === undefined" class="text-2xs text-subtle">
+                    <template v-if="isOwner">
+                        Ports only: the sandbox's dev servers appear on the enrolling computer's localhost — no files are synced.
+                    </template>
+                    <template v-else>
+                        As a collaborator, you can mirror the sandbox's dev servers onto your own localhost — live previews without file access beyond
+                        what the workspace already shows. Files aren't synced.
+                    </template>
+                </p>
+                <div v-if="!portsOnly" class="flex flex-col gap-1.5">
                     <label class="text-2xs font-medium text-muted" for="desktop-sync-folder">Local folder</label>
                     <InputText id="desktop-sync-folder" v-model="folder" class="w-full font-mono text-xs" spellcheck="false" />
                 </div>
 
                 <template v-if="pairToken === undefined">
-                    <Button
-                        :label="takeover ? 'Take over on this computer' : 'Enable desktop sync'"
-                        size="small"
-                        :loading="minting"
-                        class="self-start"
-                        @click="enable"
-                    >
-                        <template #icon><Icon name="desktop" /></template>
-                    </Button>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <Button
+                            :label="portsOnly ? 'Mirror ports to this computer' : takeover ? 'Take over on this computer' : 'Enable desktop sync'"
+                            size="small"
+                            :loading="minting"
+                            @click="enable(portsOnly ? 'mirror' : 'sync')"
+                        >
+                            <template #icon><Icon name="desktop" /></template>
+                        </Button>
+                        <button
+                            v-if="isOwner && !takeover && !mirrorOnly && !enrolled"
+                            type="button"
+                            class="text-2xs text-link hover:underline"
+                            @click="startMirror"
+                        >
+                            Mirror ports only (skip file sync)
+                        </button>
+                        <button
+                            v-else-if="isOwner && mirrorOnly"
+                            type="button"
+                            class="text-2xs text-link hover:underline"
+                            @click="mirrorOnly = false"
+                        >
+                            {{ enrolled ? "Cancel" : "Include file sync instead" }}
+                        </button>
+                    </div>
                 </template>
                 <template v-else>
                     <p class="text-2xs text-subtle">
-                        Run this on your computer. It installs the sync agent and starts two things — file sync, and a port mirror that puts the
-                        sandbox's dev servers on your localhost — no sign-in needed.
+                        <template v-if="pairMode === 'mirror'">
+                            Run this on the computer that should get the ports. It installs the sync agent and mirrors the sandbox's dev servers onto
+                            its localhost — no files are synced, no sign-in needed.
+                        </template>
+                        <template v-else>
+                            Run this on your computer. It installs the sync agent and starts two things — file sync, and a port mirror that puts the
+                            sandbox's dev servers on your localhost — no sign-in needed.
+                        </template>
                     </p>
                     <Code :code="linuxCommand" lang="bash" label="Linux / macOS" :wrap="true" />
                     <Code :code="windowsCommand" lang="powershell" label="Windows (PowerShell)" :wrap="true" />
                     <p class="text-2xs text-subtle">
                         This command is single-use and expires in ~10 minutes.
-                        <button type="button" class="text-link hover:underline" @click="enable">Regenerate</button>
+                        <button type="button" class="text-link hover:underline" @click="enable(pairMode ?? 'sync')">Regenerate</button>
                         ·
                         <button type="button" class="text-link hover:underline" @click="showFootprint = !showFootprint">
                             What stays on your computer?

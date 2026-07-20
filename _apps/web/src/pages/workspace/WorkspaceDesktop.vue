@@ -5,7 +5,7 @@ import Button from "primevue/button";
 import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { commandShortcut, registerCommand, type RegisteredCommand } from "../../composables/commands/useCommands";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
@@ -225,14 +225,24 @@ const openTabMenu = (id: string, event: Event): void => {
     tabMenu.value?.show(event);
 };
 
-// The same four closes as commands — palette-searchable (Ctrl+P `>`) and on a shortcut, not just the
-// right-click menu. Keyboard/palette invocations act on the ACTIVE tab (the menu keeps acting on the
-// right-clicked one), and no-op on an empty strip. Registered while the Workspace is mounted (scoped to
-// /workspace, where tabs exist) and disposed on unmount. Chords are Ctrl+Shift+…: the browser owns Ctrl+W
-// and Ctrl+Shift+W (close tab / close window, un-interceptable), so Close is Ctrl+Shift+X (the × glyph); the
-// "." key reads as ">" and aims Close-to-the-Right (its neighbour "," takes Close Others), matched by physical
-// key so the shifted glyph doesn't matter (see keybindings' CODE_TO_KEY); Close All wipes the strip on
-// Ctrl+Shift+Backspace. All rebindable in Settings → Keybindings, and shown as hints in the menu above.
+// Every workspace action as a registered command — palette-searchable (Ctrl+P `>`), on a default chord where
+// one earns its keys, all rebindable in Settings → Keybindings and shown as hints in the tab menu above.
+// Registered while the Workspace is mounted (scoped to /workspace) and disposed on unmount. Keyboard/palette
+// close commands act on the ACTIVE tab (the context menu keeps acting on the right-clicked one) and no-op on
+// an empty strip.
+//
+// Chord choices dodge three owners of the keyboard. The BROWSER: Ctrl+W / Ctrl+Shift+W / Ctrl+Tab are
+// un-interceptable, so Close is Ctrl+Shift+X (the × glyph), "," and "." (reads ">") aim Close Others / Close
+// to the Right (physical-key matched, see keybindings' CODE_TO_KEY), Close All is Ctrl+Shift+Backspace, and
+// tab cycling takes VSCode's OTHER pair, Ctrl+PageUp/PageDown (interceptable — Sheets uses it for sheets).
+// The SHELL: a bound chord is FORWARDED off a focused terminal (terminalSession's key hook), so a bare-Ctrl
+// chord would steal a readline/tmux key — Mod+F and the cycling pair carry a `when` gate that leaves the
+// keystroke with a focused terminal (^F, vim's C-PageDown), Mod+B (VSCode's sidebar toggle) IS the tmux
+// prefix so the explorer toggles on Ctrl+Shift+B instead, and everything else stays in the Ctrl+Shift family
+// the terminal panel's commands established. MONACO: Mod+F while the editor is focused belongs to its find
+// widget — the same `when` gate steps aside, mirroring VSCode's contextual Ctrl+F. Changes opens on
+// Ctrl+Shift+D (D = diff; VSCode's Ctrl+Shift+G is terminal.join's "G = group"); Show Files / Checkpoints /
+// Refresh ship unbound (palette-only), as VSCode leaves rarely-chorded views.
 const closeActiveTab = (): void => {
     if (activeId.value !== null) {
         closeTab(activeId.value);
@@ -263,13 +273,67 @@ const closeAllTabs = (): void => {
         requestClose(new Set(tabs.value.map((tab) => tab.id)));
     }
 };
-const TAB_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
+// A keydown targets the focused element, so `event.target` outside the selector means neither Monaco nor a
+// terminal owns the keystroke — read off the event (not `document.activeElement`) so the gate is also correct
+// inside a picture-in-picture pop-out window.
+const keyOutside = (event: KeyboardEvent, selector: string): boolean => !(event.target instanceof Element) || event.target.closest(selector) === null;
+
+const filterInput = ref<HTMLInputElement>();
+// Reveal the Files sidebar with the cursor in its search input, selecting any previous query (VSCode's find
+// flow). Plain find keeps the scope the user last chose; Search in Files forces content scope. The nextTick
+// waits out the v-if that mounts the input when the sidebar mode flips.
+const focusSearch = (scope?: "name" | "content"): void => {
+    layout.setSidebarCollapsed(false);
+    layout.setSidebarPanel(`files`);
+    if (scope !== undefined) {
+        searchScope.value = scope;
+    }
+    void nextTick(() => {
+        filterInput.value?.focus();
+        filterInput.value?.select();
+    });
+};
+// Ctrl+PageDown/PageUp cycle the strip with wrap-around (VSCode's Next/Previous Editor).
+const cycleTab = (delta: number): void => {
+    const count = tabs.value.length;
+    if (count < 2) {
+        return;
+    }
+    const index = tabs.value.findIndex((tab) => tab.id === activeId.value);
+    const next = tabs.value[(index + delta + count) % count];
+    if (next !== undefined) {
+        selectTab(next.id);
+    }
+};
+const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
+    {
+        command: `workspace.search`,
+        title: `Search Workspace…`,
+        icon: `search`,
+        keybinding: `Mod+F`,
+        when: (event) => keyOutside(event, `.monaco-editor, .xterm`),
+        handler: () => focusSearch(),
+    },
+    { command: `workspace.searchContent`, title: `Search in Files…`, icon: `search`, keybinding: `Mod+Shift+F`, handler: () => focusSearch(`content`) },
+    { command: `workspace.showChanges`, title: `Show Changes`, icon: `check-square`, keybinding: `Ctrl+Shift+D`, handler: openReview },
+    { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
+    { command: `workspace.showHistory`, title: `Show Checkpoints`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
+    { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => layout.toggleSidebar() },
+    { command: `workspace.nextTab`, title: `Next Tab`, keybinding: `Ctrl+PageDown`, when: (event) => keyOutside(event, `.xterm`), handler: () => cycleTab(1) },
+    {
+        command: `workspace.previousTab`,
+        title: `Previous Tab`,
+        keybinding: `Ctrl+PageUp`,
+        when: (event) => keyOutside(event, `.xterm`),
+        handler: () => cycleTab(-1),
+    },
     { command: `workspace.closeTab`, title: `Close Tab`, icon: `times`, keybinding: `Ctrl+Shift+X`, handler: closeActiveTab },
     { command: `workspace.closeOtherTabs`, title: `Close Other Tabs`, icon: `times`, keybinding: `Ctrl+Shift+,`, handler: closeOtherTabs },
     { command: `workspace.closeTabsToRight`, title: `Close Tabs to the Right`, icon: `times`, keybinding: `Ctrl+Shift+.`, handler: closeTabsToRight },
     { command: `workspace.closeAllTabs`, title: `Close All Tabs`, icon: `times`, keybinding: `Ctrl+Shift+Backspace`, handler: closeAllTabs },
+    { command: `workspace.refresh`, title: `Refresh Workspace Files`, icon: `refresh`, handler: () => refetch() },
 ];
-let tabCommandDisposables: readonly Disposable[] = [];
+let workspaceCommandDisposables: readonly Disposable[] = [];
 
 // Root-level upload: files dropped on the explorer background (a folder row handles its own drop) or picked via
 // the empty state's browse button land at the /work root. Directories recurse through collectDroppedFiles.
@@ -315,15 +379,15 @@ onMounted(() => {
     window.addEventListener(`dragend`, resetRootDrag, true);
     // Load Monaco (+ Shiki bridge) while the user browses the tree, so the first file open isn't cold.
     void useMonaco().ensureMonaco();
-    tabCommandDisposables = TAB_COMMANDS.map((spec) => registerCommand({ owner: `builtin`, ...spec }));
+    workspaceCommandDisposables = WORKSPACE_COMMANDS.map((spec) => registerCommand({ owner: `builtin`, ...spec }));
 });
 onBeforeUnmount(() => {
     window.removeEventListener(`drop`, resetRootDrag, true);
     window.removeEventListener(`dragend`, resetRootDrag, true);
-    for (const disposable of tabCommandDisposables) {
+    for (const disposable of workspaceCommandDisposables) {
         disposable.dispose();
     }
-    tabCommandDisposables = [];
+    workspaceCommandDisposables = [];
 });
 const onPick = (event: Event): void => {
     const input = event.target as HTMLInputElement;
@@ -332,6 +396,14 @@ const onPick = (event: Event): void => {
     }
     input.value = ``;
 };
+
+// Toolbar tooltips teach their command's key: live through commandShortcut, so a remap re-renders the hint.
+const tooltipWithChord = (label: string, command: string): string => {
+    const chord = commandShortcut(command);
+    return chord === undefined ? label : `${label} (${chord})`;
+};
+const explorerTooltip = computed(() => tooltipWithChord(layout.sidebarCollapsed.value ? `Show explorer` : `Hide explorer`, `workspace.toggleSidebar`));
+const terminalTooltip = computed(() => tooltipWithChord(`Toggle terminal`, `terminal.toggle`));
 
 const startResize = (event: PointerEvent): void => {
     event.preventDefault();
@@ -428,6 +500,7 @@ const endResize = (event: PointerEvent): void => {
                             :spin="contentMode && (searching || searchPending)"
                         />
                         <input
+                            ref="filterInput"
                             v-model="filter"
                             type="text"
                             :placeholder="contentMode ? `Search in files…` : `Filter files…`"
@@ -531,7 +604,7 @@ const endResize = (event: PointerEvent): void => {
                         type="button"
                         class="mx-1 flex h-7 w-7 shrink-0 items-center justify-center self-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                         @click="layout.toggleSidebar()"
-                        v-tooltip.bottom="layout.sidebarCollapsed.value ? 'Show explorer' : 'Hide explorer'"
+                        v-tooltip.bottom="explorerTooltip"
                         aria-label="Toggle explorer"
                     >
                         <Icon name="bars" class="text-sm" />
@@ -548,7 +621,7 @@ const endResize = (event: PointerEvent): void => {
                             class="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                             :class="{ 'bg-primary-600/15 text-link': layout.terminalOpen.value }"
                             @click="layout.toggleTerminalVisibility()"
-                            v-tooltip.bottom="'Toggle terminal (Ctrl+`)'"
+                            v-tooltip.bottom="terminalTooltip"
                             aria-label="Toggle terminal"
                         >
                             <Icon name="code" class="text-sm" />
