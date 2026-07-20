@@ -701,7 +701,7 @@ const endResize = (event: PointerEvent): void => {
                 <Icon name="times" class="text-xs" />
             </button>
         </div>
-        <!-- xterm sizes to this container; FitAddon + a ResizeObserver keep each cell filling its share of the
+        <!-- xterm sizes to this container; the session's fit observer keeps each cell filling its share of the
              pane (useTerminal's mount builds one .term-cell per split). v-show (not v-if) keeps xterm open()'d
              and the shell alive while collapsed — it refits when shown again. -->
         <div v-show="!effectiveCollapsed" ref="container" class="term-body flex min-h-0 flex-1 bg-terminal p-2"></div>

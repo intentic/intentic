@@ -1,6 +1,6 @@
 import { ref, type Ref, watch } from "vue";
 import { pruneTerminalMeta } from "./terminalMeta";
-import { createTerminalSession, disposeTerminalSession, mountTerminalSession, persistScrollback, type TerminalSession } from "./terminalSession";
+import { createTerminalSession, disposeTerminalSession, mountTerminalSession, parkTerminalSession, persistScrollback, type TerminalSession } from "./terminalSession";
 
 /* Multi-tab terminal state for the terminal panel (pages/TerminalPanel.vue): an instance (createTerminalTabs)
  * over ONE module-level session cache, so a session's xterm/socket/scrollback survives unmount, collapse, and
@@ -143,7 +143,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             cached.onExit = endSession;
             return cached;
         }
-        const session = createTerminalSession(name, endSession, readOnly);
+        // The container sizes the PTY at birth (even for a tab that stays hidden — it would mount here).
+        const session = createTerminalSession(name, endSession, readOnly, container);
         cache.set(name, session);
         return session;
     };
@@ -159,7 +160,10 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         const tabbed = new Set(order.value.map((tab) => tab.name));
         const group = groupOf(name).filter((member) => tabbed.has(member));
         for (const mounted of mountedNames) {
-            cache.get(mounted)?.host.remove();
+            const session = cache.get(mounted);
+            if (session !== undefined) {
+                parkTerminalSession(session);
+            }
         }
         container.replaceChildren();
         container.classList.toggle(`term-split`, group.length > 1);
@@ -243,7 +247,10 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // alive. (The cell wrappers die with the panel's own DOM.)
     const detach = (): void => {
         for (const mounted of mountedNames) {
-            cache.get(mounted)?.host.remove();
+            const session = cache.get(mounted);
+            if (session !== undefined) {
+                parkTerminalSession(session);
+            }
         }
         mountedNames = [];
     };

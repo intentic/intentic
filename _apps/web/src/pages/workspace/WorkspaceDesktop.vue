@@ -231,18 +231,19 @@ const openTabMenu = (id: string, event: Event): void => {
 // close commands act on the ACTIVE tab (the context menu keeps acting on the right-clicked one) and no-op on
 // an empty strip.
 //
-// Chord choices dodge three owners of the keyboard. The BROWSER: Ctrl+W / Ctrl+Shift+W / Ctrl+Tab are
-// un-interceptable, so Close is Ctrl+Shift+X (the × glyph), "," and "." (reads ">") aim Close Others / Close
-// to the Right (physical-key matched, see keybindings' CODE_TO_KEY), Close All is Ctrl+Shift+Backspace, and
-// tab cycling takes VSCode's OTHER pair, Ctrl+PageUp/PageDown (interceptable — Sheets uses it for sheets).
-// The SHELL: a bound chord is FORWARDED off a focused terminal (terminalSession's key hook), so a bare-Ctrl
-// chord would steal a readline/tmux key — Mod+F and the cycling pair carry a `when` gate that leaves the
-// keystroke with a focused terminal (^F, vim's C-PageDown), Mod+B (VSCode's sidebar toggle) IS the tmux
-// prefix so the explorer toggles on Ctrl+Shift+B instead, and everything else stays in the Ctrl+Shift family
-// the terminal panel's commands established. MONACO: Mod+F while the editor is focused belongs to its find
-// widget — the same `when` gate steps aside, mirroring VSCode's contextual Ctrl+F. Changes opens on
-// Ctrl+Shift+D (D = diff; VSCode's Ctrl+Shift+G is terminal.join's "G = group"); Show Files / Checkpoints /
-// Refresh ship unbound (palette-only), as VSCode leaves rarely-chorded views.
+// Chord choices dodge three owners of the keyboard. The BROWSER: Ctrl+W / Ctrl+Shift+W / Ctrl+Tab AND
+// Ctrl+PageUp/PageDown (VSCode's editor-cycling pair) are un-interceptable tab chords, so Close is
+// Ctrl+Shift+X (the × glyph), "," and "." (reads ">") aim Close Others / Close to the Right (physical-key
+// matched, see keybindings' CODE_TO_KEY), Close All is Ctrl+Shift+Backspace, and tab cycling sits on
+// Alt+PageUp/PageDown — free in every browser, and unlike Ctrl+Shift+[/] not a Monaco fold chord, so it
+// still works while editing. The SHELL: a bound chord is FORWARDED off a focused terminal (terminalSession's
+// key hook), so a bare-Ctrl chord would steal a readline/tmux key — Mod+F carries a `when` gate that leaves
+// the keystroke with a focused terminal (^F), Mod+B (VSCode's sidebar toggle) IS the tmux prefix so the
+// explorer toggles on Ctrl+Shift+B instead, and everything else stays in the Ctrl+Shift family the terminal
+// panel's commands established. MONACO: Mod+F while the editor is focused belongs to its find widget — the
+// same `when` gate steps aside, mirroring VSCode's contextual Ctrl+F. Changes opens on Ctrl+Shift+D
+// (D = diff; VSCode's Ctrl+Shift+G is terminal.join's "G = group"); Show Files / Checkpoints / Refresh ship
+// unbound (palette-only), as VSCode leaves rarely-chorded views.
 const closeActiveTab = (): void => {
     if (activeId.value !== null) {
         closeTab(activeId.value);
@@ -293,7 +294,7 @@ const focusSearch = (scope?: "name" | "content"): void => {
         filterInput.value?.select();
     });
 };
-// Ctrl+PageDown/PageUp cycle the strip with wrap-around (VSCode's Next/Previous Editor).
+// Alt+PageDown/PageUp cycle the strip with wrap-around (Next/Previous Editor).
 const cycleTab = (delta: number): void => {
     const count = tabs.value.length;
     if (count < 2) {
@@ -319,14 +320,8 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
     { command: `workspace.showHistory`, title: `Show Checkpoints`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => layout.toggleSidebar() },
-    { command: `workspace.nextTab`, title: `Next Tab`, keybinding: `Ctrl+PageDown`, when: (event) => keyOutside(event, `.xterm`), handler: () => cycleTab(1) },
-    {
-        command: `workspace.previousTab`,
-        title: `Previous Tab`,
-        keybinding: `Ctrl+PageUp`,
-        when: (event) => keyOutside(event, `.xterm`),
-        handler: () => cycleTab(-1),
-    },
+    { command: `workspace.nextTab`, title: `Next Tab`, keybinding: `Alt+PageDown`, handler: () => cycleTab(1) },
+    { command: `workspace.previousTab`, title: `Previous Tab`, keybinding: `Alt+PageUp`, handler: () => cycleTab(-1) },
     { command: `workspace.closeTab`, title: `Close Tab`, icon: `times`, keybinding: `Ctrl+Shift+X`, handler: closeActiveTab },
     { command: `workspace.closeOtherTabs`, title: `Close Other Tabs`, icon: `times`, keybinding: `Ctrl+Shift+,`, handler: closeOtherTabs },
     { command: `workspace.closeTabsToRight`, title: `Close Tabs to the Right`, icon: `times`, keybinding: `Ctrl+Shift+.`, handler: closeTabsToRight },

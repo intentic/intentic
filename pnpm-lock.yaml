@@ -208,9 +208,6 @@ catalogs:
     '@vue-flow/core':
       specifier: 1.48.2
       version: 1.48.2
-    '@xterm/addon-fit':
-      specifier: 0.11.0
-      version: 0.11.0
     '@xterm/addon-serialize':
       specifier: 0.14.0
       version: 0.14.0
@@ -970,9 +967,6 @@ importers:
       '@tanstack/vue-query':
         specifier: 'catalog:'
         version: 5.101.2(vue@3.5.39(typescript@5.9.3))
-      '@xterm/addon-fit':
-        specifier: 'catalog:'
-        version: 0.11.0
       '@xterm/addon-serialize':
         specifier: 'catalog:'
         version: 0.14.0
@@ -4914,9 +4908,6 @@ packages:
 
   '@vueuse/shared@10.11.1':
     resolution: {integrity: sha512-LHpC8711VFZlDaYUXEBbFBCQ7GS3dVU9mjOhhMhXP6txTV4EhYQg/KGnQuvt/sPAtoUKq7VVUnL6mVtFoL42sA==}
-
-  '@xterm/addon-fit@0.11.0':
-    resolution: {integrity: sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==}
 
   '@xterm/addon-serialize@0.14.0':
     resolution: {integrity: sha512-uteyTU1EkrQa2Ux6P/uFl2fzmXI46jy5uoQMKEOM0fKTyiW7cSn0WrFenHm5vO5uEXX/GpwW/FgILvv3r0WbkA==}
@@ -12014,8 +12005,6 @@ snapshots:
     transitivePeerDependencies:
       - '@vue/composition-api'
       - vue
-
-  '@xterm/addon-fit@0.11.0': {}
 
   '@xterm/addon-serialize@0.14.0': {}
 

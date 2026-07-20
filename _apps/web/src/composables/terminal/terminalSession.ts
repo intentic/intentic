@@ -1,4 +1,3 @@
-import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -37,13 +36,13 @@ const DRAG_PX = 5;
 export type TerminalSession = {
     readonly name: string;
     readonly term: Terminal;
-    readonly fit: FitAddon;
     readonly serialize: SerializeAddon;
     // Persistent xterm mount — moves in/out of containers as the surface shows/hides it.
     readonly host: HTMLElement;
-    // The fit observer for the WINDOW the host currently lives in — rebuilt when a mount moves the host into
-    // another document (the pop-out pip window), since an observer only tracks elements of its own window.
-    observer?: ResizeObserver;
+    // Tears down the fit triggers (ResizeObserver + window resize listener) for the WINDOW the host last lived
+    // in — rebuilt when a mount moves the host into another document (the pop-out pip window), since both are
+    // per-window machinery that stops tracking an element adopted elsewhere.
+    unobserve?: () => void;
     // The document of the LAST mount — mountTerminalSession's move signal. host.ownerDocument can't be it: the
     // pop-out Teleport adopts the mounted host (with the whole panel) into the pip document BEFORE the remount
     // watcher runs, so by then host and container already agree and the move would go undetected.
@@ -233,15 +232,43 @@ export const persistScrollback = (s: TerminalSession): void => {
     }
 };
 
-// (Re)build the session's fit observer against the window its host currently lives in. A ResizeObserver — and
+// The private render-service surface both fit and the redraw-forcing resize need. The same access
+// @xterm/addon-fit makes (its own TODO admits it) — xterm exposes no public cell-metrics API.
+type XtermCore = { _renderService: { clear: () => void; dimensions: { css: { cell: { width: number; height: number } } } } };
+const coreOf = (term: Terminal): XtermCore => (term as unknown as { _core: XtermCore })._core;
+
+// xterm's viewport reserves this much for its native scrollbar (ViewportConstants.DEFAULT_SCROLL_BAR_WIDTH).
+const SCROLLBAR_PX = 14;
+
+// Fit the grid to the host's box, measured in the HOST'S OWN realm (clientWidth/Height). Not @xterm/addon-fit:
+// its proposeDimensions measures through the GLOBAL window's getComputedStyle, which is cross-realm for a host
+// living in the pop-out pip document — where it can silently misresolve, no-oping every fit and leaving the
+// PTY at the docked grid while the window floats at another size entirely.
+const fitSession = (s: TerminalSession): void => {
+    const cell = coreOf(s.term)._renderService.dimensions.css.cell;
+    if (cell.width === 0 || cell.height === 0) {
+        return;
+    }
+    const cols = Math.max(2, Math.floor((s.host.clientWidth - SCROLLBAR_PX) / cell.width));
+    const rows = Math.max(1, Math.floor(s.host.clientHeight / cell.height));
+    if (cols !== s.term.cols || rows !== s.term.rows) {
+        coreOf(s.term)._renderService.clear();
+        s.term.resize(cols, rows);
+    }
+};
+
+// (Re)build the session's fit triggers against the window its host currently lives in. A ResizeObserver — and
 // the rAF that coalesces its fits (the panel's drag handle fires it per pointermove) — is per-window machinery:
 // after the host is adopted into the pop-out pip document, the ORIGINAL window's observer no longer tracks it,
-// so every document move rebuilds both from the host's own view.
+// so every document move rebuilds both from the host's own view. The window resize listener doubles the
+// observer on purpose: a pip window's OS-level resize (Chrome restoring its remembered bounds, the user
+// dragging its frame) must refit even where the observer's delivery proves unreliable; a duplicate trigger
+// collapses in the rAF and a same-size fit is a no-op.
 const observeHost = (s: TerminalSession): void => {
-    s.observer?.disconnect();
+    s.unobserve?.();
     const view = s.host.ownerDocument.defaultView ?? window;
     let raf = 0;
-    const observer = new view.ResizeObserver(() => {
+    const schedule = (): void => {
         view.cancelAnimationFrame(raf);
         raf = view.requestAnimationFrame(() => {
             // Skip while detached (hidden host) or mid-drag at zero size — fit measures against a laid-out
@@ -249,17 +276,30 @@ const observeHost = (s: TerminalSession): void => {
             if (s.host.clientWidth === 0 || s.host.clientHeight === 0) {
                 return;
             }
-            s.fit.fit();
+            fitSession(s);
         });
-    });
+    };
+    const observer = new view.ResizeObserver(schedule);
     observer.observe(s.host);
-    s.observer = observer;
+    view.addEventListener(`resize`, schedule);
+    s.unobserve = () => {
+        observer.disconnect();
+        view.removeEventListener(`resize`, schedule);
+    };
 };
+
+// Pre-measurement cell estimate (fontSize 13 JetBrains Mono ≈ 7.8×17 css px) for the SPAWN grid only — the
+// first real fit corrects it by at most a row or two. Without it the PTY spawns at xterm's 80x24 default and
+// the immediate shrink to the panel's real grid banks the difference as BLANK lines in tmux's pane history;
+// every later grow (the pop-out) then resurrects them as junk rows above the prompt.
+const EST_CELL_W = 7.8;
+const EST_CELL_H = 17;
 
 // Build one session's xterm + host + socket. The host stays out of the DOM until mountTerminalSession.
 // `readOnly` makes it a log view (a background process's tab): stdin is disabled and keystrokes never reach
-// the PTY — resize/ping still flow, tmux needs the grid to redraw.
-export const createTerminalSession = (name: string, onExit: (name: string) => void, readOnly = false): TerminalSession => {
+// the PTY — resize/ping still flow, tmux needs the grid to redraw. `spawnWithin` is the surface the session
+// will mount into — its box sizes the PTY at birth (see EST_CELL_*).
+export const createTerminalSession = (name: string, onExit: (name: string) => void, readOnly = false, spawnWithin?: HTMLElement): TerminalSession => {
     const host = document.createElement(`div`);
     host.className = `h-full w-full`;
     // tmux runs with `mouse on` (so the wheel scrolls its scrollback), which makes plain gestures ambiguous: a
@@ -347,12 +387,10 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     // terminal split/kill/new shortcuts, anything the user remapped) must reach the global dispatcher, not the
     // PTY — without this, xterm feeds tmux the raw keystroke FIRST and the command fires on top of it (VSCode
     // uses this same hook). Returning false makes xterm ignore the keydown; it still propagates to the window.
-    // boundCommand honors each command's `when` gate, so a contextual chord (Mod+F's workspace search, tab
-    // cycling) steps aside here and the raw keystroke stays with the shell.
+    // boundCommand honors each command's `when` gate, so a contextual chord (Mod+F's workspace search) steps
+    // aside here and the raw keystroke stays with the shell.
     const isMac = isApplePlatform();
     term.attachCustomKeyEventHandler((event) => event.type !== `keydown` || boundCommand(event, isMac) === undefined);
-    const fit = new FitAddon();
-    term.loadAddon(fit);
     const serialize = new SerializeAddon();
     term.loadAddon(serialize);
     // Plain-text URLs in output (a dev server's localhost line, pnpm's changelog link) become Ctrl/Cmd+clickable.
@@ -388,9 +426,15 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
             void navigator.clipboard.writeText(selection).catch(() => {});
         }
     });
-    const s: TerminalSession = { name, term, fit, serialize, host, mountedDocument: document, onExit, retryDelay: RETRY_MS, closing: false, down: false };
+    if (spawnWithin !== undefined && spawnWithin.clientWidth > 0 && spawnWithin.clientHeight > 0) {
+        term.resize(
+            Math.max(2, Math.floor((spawnWithin.clientWidth - SCROLLBAR_PX) / EST_CELL_W)),
+            Math.max(1, Math.floor(spawnWithin.clientHeight / EST_CELL_H)),
+        );
+    }
+    const s: TerminalSession = { name, term, serialize, host, mountedDocument: document, onExit, retryDelay: RETRY_MS, closing: false, down: false };
     observeHost(s);
-    // Keystrokes → pty; xterm's resize (from FitAddon) → pty resize. Wired once — send() targets the current
+    // Keystrokes → pty; xterm's resize (from fitSession) → pty resize. Wired once — send() targets the current
     // socket, so these survive reconnects. A read-only session wires no input path at all (disableStdin already
     // drops keystrokes; this also covers programmatic term.input, e.g. the touch extra-keys row).
     if (!readOnly) {
@@ -421,8 +465,14 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
     if (!s.term.element) {
         s.term.open(s.host);
         loadWebglRenderer(s.term);
+    } else {
+        // Idempotent re-open — xterm 6's documented cross-window move: it short-circuits to re-pointing the
+        // core's window binding (char measurement, renderer scheduling, event realms) at the host's current
+        // window, a no-op when nothing changed. Not keyed on `moved`: parking re-homes the binding to the main
+        // realm between mounts, so even a same-document remount may need the re-point.
+        s.term.open(s.host);
     }
-    s.fit.fit();
+    fitSession(s);
     if (moved) {
         observeHost(s);
         // A document move (pop-out/dock) leaves xterm's grid and tmux's screen laid out for the OLD window,
@@ -433,7 +483,7 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
         send(s, { type: `resize`, cols: s.term.cols, rows: Math.max(1, s.term.rows - 1) });
         s.host.ownerDocument.defaultView?.requestAnimationFrame(() => {
             if (s.host.clientWidth !== 0 && s.host.clientHeight !== 0) {
-                s.fit.fit();
+                fitSession(s);
                 send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
             }
         });
@@ -446,11 +496,30 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
     }
 };
 
+// Unmount a session's host WITHOUT losing it to a dying document. A host merely .remove()d while the panel
+// floats stays ADOPTED by the pip document; when that window closes, the whole rendered realm dies with it —
+// the WebGL context is lost inside a dead document and the fallback DOM renderer rebuilds against it, leaving
+// the terminal a blank white pane. Adopting the detached host home (and re-open()ing to re-point xterm's
+// window binding) keeps every hidden session anchored to the main realm. mountedDocument is deliberately NOT
+// updated: the next mount must still read as a move so it rebuilds the observer and forces the tmux redraw.
+export const parkTerminalSession = (s: TerminalSession): void => {
+    s.host.remove();
+    if (s.host.ownerDocument === document) {
+        return;
+    }
+    s.unobserve?.();
+    s.unobserve = undefined;
+    document.adoptNode(s.host);
+    if (s.term.element) {
+        s.term.open(s.host);
+    }
+};
+
 // Fully dispose one session's client state. Does NOT kill the tmux session server-side.
 export const disposeTerminalSession = (s: TerminalSession): void => {
     s.closing = true;
     window.clearTimeout(s.reconnect);
-    s.observer?.disconnect();
+    s.unobserve?.();
     s.socket?.close();
     s.term.dispose();
     s.host.remove();
