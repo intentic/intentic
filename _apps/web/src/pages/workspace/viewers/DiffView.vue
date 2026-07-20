@@ -3,7 +3,7 @@ import { useDevice } from "@intentic-app/ui";
 import type * as Monaco from "monaco-editor-core";
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
-import { resolveFile } from "../fileType";
+import { langFromShebang, resolveFile } from "../fileType";
 
 /* Diff of one file across a snapshot (before = parent, after = the snapshot) on Monaco's diff editor — the
  * same engine VSCode uses, so it brings its own minimap, change overview ruler, and diff computation. Side-by-side
@@ -26,7 +26,9 @@ const step = (forward: boolean): void => diff.value?.goToDiff(forward ? `next` :
 
 onMounted(async () => {
     const m = await ensureMonaco();
-    const lang = resolveFile(path, undefined).lang;
+    // Filename first (like resolveFile); for an extensionless script fall back to the shebang in either side's
+    // bytes (both panes carry the same file, so whichever is present agrees), matching VSCode.
+    const lang = resolveFile(path, undefined).lang ?? langFromShebang(after ?? before ?? ``);
     await ensureLanguage(m, lang);
     if (disposed || host.value === undefined) {
         return; // unmounted (fast file-switch) while Monaco/grammar loaded

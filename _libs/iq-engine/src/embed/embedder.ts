@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { EMBED_INTRA_OP_THREADS } from "./onnx-threads.js";
 
 export const MODEL_ID = "Xenova/bge-small-en-v1.5";
 const EMBEDDING_DIM = 384;
@@ -22,7 +23,10 @@ export const loadEmbedder = async (modelDir: string | undefined): Promise<Embedd
     env.localModelPath = modelDir;
     env.cacheDir = modelDir;
     env.allowRemoteModels = false;
-    const extractor = await pipeline("feature-extraction", MODEL_ID, { dtype: "q8" });
+    const extractor = await pipeline("feature-extraction", MODEL_ID, {
+        dtype: "q8",
+        session_options: { intraOpNumThreads: EMBED_INTRA_OP_THREADS, interOpNumThreads: 1 },
+    });
     const embed = async (texts: readonly string[]): Promise<Float32Array[]> => {
         const tensor = await extractor([...texts], { pooling: "mean", normalize: true });
         const data = tensor.data as Float32Array;

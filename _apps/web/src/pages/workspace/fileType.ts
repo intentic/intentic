@@ -169,6 +169,59 @@ const langFor = (name: string, ext: string): string | undefined => {
     return NAME_LANG[name] ?? EXT_LANG[ext];
 };
 
+// Shebang interpreter basename → Shiki lang id, for extensionless scripts whose name carries no clue
+// (`intentic-machine-boot`, `run`, …). This is the content-based fallback VSCode uses when the filename
+// doesn't already resolve a language. Only interpreters whose grammar the app ships appear here; the rest
+// stay plain text. Deno/Bun run TS as often as JS, and the TypeScript grammar is a JS superset, so both map
+// to typescript (it colors plain JS correctly too).
+const SHEBANG_LANG: Record<string, string> = {
+    sh: "bash",
+    bash: "bash",
+    zsh: "bash",
+    dash: "bash",
+    ksh: "bash",
+    ash: "bash",
+    node: "javascript",
+    nodejs: "javascript",
+    deno: "typescript",
+    bun: "typescript",
+    python: "python",
+    ruby: "ruby",
+    php: "php",
+    pwsh: "powershell",
+    powershell: "powershell",
+};
+
+// The Shiki lang id implied by a `#!…` first line, or undefined when there's no shebang or its interpreter
+// isn't one we ship. Called AFTER the bytes are read (unlike resolveFile), only when the filename resolved no
+// language — so a known extension always wins, matching VSCode's precedence. Handles `#!/bin/bash`,
+// `#!/usr/bin/env bash`, `#!/usr/bin/env -S bash -eu`, and version suffixes (`python3.11` → python). Cheap for
+// the overwhelmingly common no-shebang case: it bails on the first two bytes before scanning anything.
+export const langFromShebang = (content: string): string | undefined => {
+    if (!content.startsWith("#!")) {
+        return undefined;
+    }
+    const newline = content.indexOf("\n");
+    const tokens = (newline === -1 ? content : content.slice(0, newline))
+        .slice(2)
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    const first = tokens[0];
+    if (first === undefined) {
+        return undefined;
+    }
+    const basename = (token: string): string => token.slice(token.lastIndexOf("/") + 1);
+    // `env` execs the first following non-flag argument (so skip `-S` and friends); otherwise the path itself.
+    const interpreter =
+        basename(first) === "env" ? tokens.slice(1).map(basename).find((token) => !token.startsWith("-")) : basename(first);
+    if (interpreter === undefined) {
+        return undefined;
+    }
+    // Trim a trailing version (python3, python3.11, ruby2.7) so the base interpreter still resolves.
+    return SHEBANG_LANG[interpreter] ?? SHEBANG_LANG[interpreter.replace(/[0-9.]+$/, "")];
+};
+
 // Resolve how to render `path` given its byte size (undefined when unknown — the tree cap, or stat failed; we
 // then proceed optimistically and let the post-read NUL check / daemon 413 catch the rare bad case).
 export const resolveFile = (path: string, size: number | undefined): FileResolution => {

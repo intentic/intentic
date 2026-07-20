@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RAW_MAX_BYTES, resolveFile } from "./fileType";
+import { langFromShebang, RAW_MAX_BYTES, resolveFile } from "./fileType";
 
 // Empty (0-byte) files: text types stay editable (code/markdown); non-text preview types show the "empty" fallback.
 describe(`resolveFile empty files`, () => {
@@ -69,5 +69,40 @@ describe(`resolveFile audio / docx / xlsx`, () => {
         expect(resolveFile(`clip.mp3`, RAW_MAX_BYTES + 1)).toEqual({ mode: `too-large` });
         expect(resolveFile(`report.docx`, RAW_MAX_BYTES + 1)).toEqual({ mode: `too-large` });
         expect(resolveFile(`budget.xlsx`, RAW_MAX_BYTES + 1)).toEqual({ mode: `too-large` });
+    });
+});
+
+// The content-based fallback used post-fetch when the filename resolved no language (extensionless scripts
+// like `intentic-machine-boot`), mirroring VSCode's first-line detection.
+describe(`langFromShebang`, () => {
+    it(`maps absolute-path shells to bash`, () => {
+        expect(langFromShebang(`#!/bin/sh\nset -eu\n`)).toBe(`bash`);
+        expect(langFromShebang(`#!/bin/bash -x`)).toBe(`bash`);
+        expect(langFromShebang(`#!/usr/bin/zsh`)).toBe(`bash`);
+    });
+
+    it(`resolves the interpreter through env, skipping flags`, () => {
+        expect(langFromShebang(`#!/usr/bin/env bash`)).toBe(`bash`);
+        expect(langFromShebang(`#!/usr/bin/env -S bash -eu`)).toBe(`bash`);
+        expect(langFromShebang(`#!/usr/bin/env node`)).toBe(`javascript`);
+    });
+
+    it(`trims version suffixes`, () => {
+        expect(langFromShebang(`#!/usr/bin/python3`)).toBe(`python`);
+        expect(langFromShebang(`#!/usr/bin/env python3.11`)).toBe(`python`);
+    });
+
+    it(`covers the other shipped interpreters`, () => {
+        expect(langFromShebang(`#!/usr/bin/env ruby`)).toBe(`ruby`);
+        expect(langFromShebang(`#!/usr/bin/env php`)).toBe(`php`);
+        expect(langFromShebang(`#!/usr/bin/env pwsh`)).toBe(`powershell`);
+        expect(langFromShebang(`#!/usr/bin/env deno run`)).toBe(`typescript`);
+    });
+
+    it(`returns undefined without a shebang or for an unshipped interpreter`, () => {
+        expect(langFromShebang(`set -eu\necho hi\n`)).toBeUndefined();
+        expect(langFromShebang(``)).toBeUndefined();
+        expect(langFromShebang(`#!/usr/bin/env perl`)).toBeUndefined();
+        expect(langFromShebang(`#!`)).toBeUndefined();
     });
 });

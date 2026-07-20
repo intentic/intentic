@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { EMBED_INTRA_OP_THREADS } from "./onnx-threads.js";
 
 const RERANKER_ID = "Xenova/ms-marco-MiniLM-L-6-v2";
 
@@ -18,7 +19,10 @@ export const loadReranker = async (modelDir: string | undefined): Promise<Rerank
     env.cacheDir = modelDir;
     env.allowRemoteModels = false;
     const tokenizer = await AutoTokenizer.from_pretrained(RERANKER_ID);
-    const model = await AutoModelForSequenceClassification.from_pretrained(RERANKER_ID, { dtype: "q8" });
+    const model = await AutoModelForSequenceClassification.from_pretrained(RERANKER_ID, {
+        dtype: "q8",
+        session_options: { intraOpNumThreads: EMBED_INTRA_OP_THREADS, interOpNumThreads: 1 },
+    });
     return {
         async rerank(query, passages) {
             if (passages.length === 0) {

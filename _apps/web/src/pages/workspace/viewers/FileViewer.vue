@@ -13,7 +13,7 @@ import { useWorkspaceTree } from "../../../composables/workspace/useWorkspaceTre
 import CodeView from "./CodeView.vue";
 import FileBreadcrumb from "../FileBreadcrumb.vue";
 import FileUnsupported from "./FileUnsupported.vue";
-import { resolveFile, type ViewMode } from "../fileType";
+import { langFromShebang, resolveFile, type ViewMode } from "../fileType";
 import type { LineJump } from "../workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
 import SvgViewer from "./SvgViewer.vue";
@@ -175,6 +175,11 @@ watch(
                 if (resolution.mode === `code` && content.includes("\u0000")) {
                     mode.value = `binary`;
                     return;
+                }
+                // The filename resolved no language (extensionless `intentic-machine-boot`, `run`, …): fall back
+                // to the shebang the way VSCode does. Set before `text` so CodeView mounts already colored.
+                if (resolution.mode === `code` && lang.value === undefined) {
+                    lang.value = langFromShebang(content);
                 }
                 text.value = content;
                 // Record the on-disk text so the editor can diff it for the dirty state (never clobbers live edits).
