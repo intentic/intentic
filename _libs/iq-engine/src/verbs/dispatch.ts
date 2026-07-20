@@ -1,4 +1,4 @@
-import type { WorkspaceSearchGroup, WorkspaceSearchResult } from "@intentic/sandbox-contract";
+import type { WorkspaceSearchFreshness, WorkspaceSearchGroup, WorkspaceSearchResult } from "@intentic/sandbox-contract";
 import type { Embedder } from "../embed/embedder.js";
 import type { Reranker } from "../embed/reranker.js";
 import { astSearch } from "../engines/astq.js";
@@ -23,11 +23,15 @@ export interface DispatchContext {
     readonly indexDir: string;
     readonly db: IndexDb;
     readonly generation: number;
-    readonly sweepStart: number;
+    // How current the index is relative to disk, as of this query — the caller knows (the CLI just revalidated:
+    // fresh; the resident engine may be mid-revalidation: building/stale).
+    readonly freshness: WorkspaceSearchFreshness;
     readonly getEmbedder: () => Promise<Embedder | undefined>;
     readonly getReranker: () => Promise<Reranker | undefined>;
     readonly features: ReadonlySet<Feature>;
     readonly rgPath?: string;
+    // Aborts cancellable work (the rg child) when the caller's request dies mid-query.
+    readonly signal?: AbortSignal;
 }
 
 interface VerbPlan {
@@ -294,6 +298,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         allowed,
         ...(request.scope.ignored ? { ignored: true } : {}),
         ...(context.rgPath !== undefined ? { rgPath: context.rgPath } : {}),
+        ...(context.signal !== undefined ? { signal: context.signal } : {}),
     };
 
     if (request.verb === "find") {
@@ -532,7 +537,6 @@ const toResult = (
 export const dispatch = async (context: DispatchContext, request: QueryRequest, defaultEntries: readonly FileEntry[]): Promise<QueryOutcome> => {
     const scopeKey = JSON.stringify(request.scope);
     const id = cursorId(request.echo, scopeKey);
-    const freshness = { state: "fresh" as const, ageMs: Date.now() - context.sweepStart };
 
     let plan: VerbPlan | undefined;
     let offset = 0;
@@ -595,7 +599,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         showTags: plan.showTags,
         groups: plan.groups,
         offset,
-        freshness,
+        freshness: context.freshness,
         budget: request.render.budget,
         ...(request.render.limit !== undefined ? { limit: request.render.limit } : {}),
         ...(request.render.filesOnly !== undefined ? { filesOnly: request.render.filesOnly } : {}),
@@ -620,7 +624,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
     }
 
     return {
-        result: toResult(plan, rendered, request, offset, freshness, hint, context.features),
+        result: toResult(plan, rendered, request, offset, context.freshness, hint, context.features),
         text: rendered.text,
         exitCode: rendered.exitCode,
     };

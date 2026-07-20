@@ -21,6 +21,8 @@ export interface RgOptions {
     // The sweep's admitted paths — the authority on what may be surfaced. rg's own ignore handling is pruning only.
     readonly allowed: ReadonlySet<string>;
     readonly rgPath?: string;
+    // Kills the rg child when the caller's request dies (a superseded panel search must not keep burning CPU).
+    readonly signal?: AbortSignal;
 }
 
 interface RgMatchData {
@@ -59,7 +61,11 @@ export const rgSearch = async (options: RgOptions): Promise<EngineHit[]> => {
     }
     args.push(options.caseSensitive ? "-s" : "-S");
     args.push("-e", options.pattern, "./");
-    const { stdout } = await exec(options.rgPath ?? "rg", args, { cwd: options.root, maxBuffer: 64 * 1024 * 1024 }).catch(
+    const { stdout } = await exec(options.rgPath ?? "rg", args, {
+        cwd: options.root,
+        maxBuffer: 64 * 1024 * 1024,
+        ...(options.signal !== undefined ? { signal: options.signal } : {}),
+    }).catch(
         (error: Error & { code?: unknown; stdout?: string; stderr?: string }) => {
             // Exit 1 = no matches. Other numeric exits = real error (e.g. bad pattern) — surface rg's own message.
             if (error.code === 1) {

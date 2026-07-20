@@ -54,6 +54,12 @@ const configSchema = z.object({
     // Daemon-wide default Claude model for turns that don't pin one (headless wakes like Discord). Empty ⇒
     // the account/subscription default. A per-automation `model` still overrides this.
     intenticAgentModel: z.string().default(""),
+    // The image-baked iq embedding/reranker models dir (Dockerfile: IQ_MODEL_DIR=/opt/iq-models) — the resident
+    // search engine's semantic tier. Empty (bare `tsx watch` dev run) ⇒ semantic degrades, everything else works.
+    iqModelDir: z.string().default(""),
+    // Explicit ripgrep path for the resident engine (same contract as the iq CLI's IQ_RG_PATH); empty ⇒ "rg"
+    // from PATH (the image always has it).
+    iqRgPath: z.string().default(""),
     // The image-baked iq Claude Code plugin dir (skill + SessionStart nudge) — prepended to the agent's
     // `plugins` so the agent prefers iq for code search, exactly as external users get it from the marketplace,
     // gated per sandbox by the iqSearch setting (opt-in, default off). Set by the Dockerfile

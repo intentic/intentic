@@ -28,6 +28,7 @@
         "@intentic/constants": "workspace:*",
         "@intentic/extension-api": "workspace:*",
         "@intentic/graph": "workspace:*",
+        "@intentic/iq-engine": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/scaffold": "workspace:*",
         "@intentic/sdk": "workspace:*",

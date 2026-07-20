@@ -53,6 +53,11 @@ export function useShellCommands(): void {
             { command: `view.capabilities`, title: `Add a Capability`, icon: `plus`, handler: () => router.push(`/capabilities`) },
             { command: `view.keybindings`, title: `Keyboard Shortcuts`, icon: `sliders-h`, handler: () => router.push(`/settings/keybindings`) },
             { command: `terminal.toggle`, title: `Toggle Terminal Panel`, icon: `code`, keybinding: `Ctrl+\``, handler: () => terminal.toggle() },
+            // Global (not panel-scoped like the other terminal.* commands) so it works with the panel closed —
+            // spawnShell opens it and routes the create through the mounted panel's spawn hook. Ctrl+Shift+`,
+            // VSCode's New Terminal chord, matched by physical key (the Backquote row) so the Shift glyph "~"
+            // or a dead-key layout can't break it.
+            { command: `terminal.new`, title: `New Terminal`, icon: `code`, keybinding: `Ctrl+Shift+\``, handler: () => terminal.spawnShell() },
         ];
         // Pop-out rides the Document Picture-in-Picture API — only offer the commands where the gesture is offered.
         if (chat.supported) {

@@ -521,10 +521,10 @@ export type WorkspaceClassification = z.infer<typeof WorkspaceClassificationSche
 // ---- workspace search ----
 
 // The workspace-search wire shape — shared by the daemon's /workspace/search route and the web client.
-// (Implementation detail, not part of the contract: the daemon backs this route by shelling the baked search CLI
-// and parsing its JSON; the engine is interchangeable behind this shape.) Groups are relevance-ranked (best
-// first, never path order); each hit carries the match-reason tags the fused engines contributed. `start`/`end`
-// are char offsets within `text` so clients highlight without re-finding the needle.
+// (Implementation detail, not part of the contract: the daemon backs this route with a resident in-process iq
+// engine; the engine is interchangeable behind this shape.) Groups are relevance-ranked (best first, never path
+// order); each hit carries the match-reason tags the fused engines contributed. `start`/`end` are char offsets
+// within `text` so clients highlight without re-finding the needle.
 export const WorkspaceSearchQuerySchema = z.object({
     query: z.string().min(2).max(512),
     // Search verbs only — anchor/git verbs (outline, context, log, who, …) are CLI-only surface.

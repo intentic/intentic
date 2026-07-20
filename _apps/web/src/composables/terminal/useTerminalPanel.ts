@@ -28,6 +28,26 @@ const requested = ref<{ readonly name: string } | undefined>(undefined);
 // without hijacking the user's current terminal/view). A fresh object per request re-triggers the watch.
 const surfaced = ref<{ readonly name: string } | undefined>(undefined);
 
+// The mounted panel's newTab plus a pending flag for when none is mounted — the global "New Terminal" command
+// (useShellCommands) spawns directly into a live panel, else opens the panel and lets its mount consume the
+// request. registerTerminalSpawn is called by TerminalPanel with its instance's newTab.
+let liveNewTab: (() => void) | undefined;
+let pendingSpawn = false;
+export const registerTerminalSpawn = (newTab: () => void): (() => void) => {
+    liveNewTab = newTab;
+    return () => {
+        if (liveNewTab === newTab) {
+            liveNewTab = undefined;
+        }
+    };
+};
+// One-shot read of a spawn that arrived while no panel was mounted (consumed by the panel's onMounted).
+export const consumeSpawnRequest = (): boolean => {
+    const pending = pendingSpawn;
+    pendingSpawn = false;
+    return pending;
+};
+
 // Cached sockets die with the sandbox they were opened against.
 watch(useSandbox().activeSandboxId, () => {
     disposeAllSessions();
@@ -46,6 +66,16 @@ export function useTerminalPanel() {
     const surface = (name: string): void => {
         surfaced.value = { name };
     };
+    // Open a brand-new shell tab from anywhere (the "New Terminal" command): straight into a mounted panel,
+    // else flag the spawn for the panel that the setOpen brings up.
+    const spawnShell = (): void => {
+        layout.setTerminalOpen(true);
+        if (liveNewTab !== undefined) {
+            liveNewTab();
+            return;
+        }
+        pendingSpawn = true;
+    };
     return {
         open: layout.terminalOpen,
         setOpen: layout.setTerminalOpen,
@@ -54,5 +84,6 @@ export function useTerminalPanel() {
         surfaced,
         openFocused,
         surface,
+        spawnShell,
     };
 }

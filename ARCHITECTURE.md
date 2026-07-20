@@ -465,17 +465,18 @@ Per-kind mechanics ([handlers/](_apps/sandbox/src/capabilities/handlers/)):
 
 ### Dependency islands: iq & lsp
 
-Two recent subsystems are **subprocess CLIs baked into the sandbox image, not linked into any code path** —
-no workspace package imports them; the daemon and agent invoke them by spawning a process. Keeping them at
-arm's length is intentional, and nothing may `import` these packages:
+Two recent subsystems are **agent-facing subprocess CLIs baked into the sandbox image** — the agent invokes
+them by spawning a process, never by import:
 
 - **iq** ([`@intentic/iq`](_apps/iq) + [`@intentic/iq-engine`](_libs/iq-engine) +
   [`@intentic/iq-recall`](_libs/iq-recall) + [`@intentic/iq-bench`](_tools/iq-bench)) — an agent-native
   workspace-search engine: a local index (SQLite) fused across lexical (ripgrep), structural (ast-grep),
   semantic (local embed + rerank), and git signals, rendered to a token-budgeted ranked answer. It replaces
-  an agent's grep/find chains with one call, and it also backs the **editor's Search panel** — the daemon's
-  `/workspace/search` route shells `iq --json` and returns the parsed result. Search is a **core editor
-  feature**; iq is merely the interchangeable engine behind that route.
+  an agent's grep/find chains with one call. The **CLI** stays a subprocess (the agent's Bash calls), but the
+  **engine library** is also linked into the daemon: `/workspace/search` runs a resident
+  `createResidentEngine` instance in-process (index DB held open, sweep cached, revalidation driven by the
+  workspace watcher), sharing the on-disk index with the CLI. Search is a **core editor feature**; iq is
+  merely the interchangeable engine behind that route.
 - **lsp** ([`@intentic/lsp`](_apps/lsp)) — despite the name, **not** a language-server host: a small
   agent-facing TypeScript CLI (`lsp rename`, `lsp diag`) over the TS language service, advertised to the
   agent through a gated skill file. TypeScript/JavaScript only.

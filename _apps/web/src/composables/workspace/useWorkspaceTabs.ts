@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { type DiffTabPayload, diffTabId, type WorkspaceTab } from "../../pages/workspace/workspaceTabs";
+import { type DiffTabPayload, diffTabId, type LineJump, type WorkspaceTab } from "../../pages/workspace/workspaceTabs";
 
 /* The Workspace editor area's open tabs, as a module-level singleton (like useChat/useLayout): the chat panel
  * lives in the persistent shell and pushes plan previews in from outside the Workspace subtree, and the open
@@ -13,7 +13,9 @@ const tabs = ref<readonly WorkspaceTab[]>([]);
 const activeId = ref<string | null>(null);
 const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeId.value));
 // The line the viewer should scroll to — set by a content-search match, cleared on any plain open/tab switch.
-const openLine = ref<number | undefined>(undefined);
+// Every jump is a NEW object (seq++), so the viewer reacts even when the same hit is clicked again.
+const openLine = ref<LineJump | undefined>(undefined);
+let jumpSeq = 0;
 
 const openFile = (path: string): void => {
     openLine.value = undefined;
@@ -25,7 +27,7 @@ const openFile = (path: string): void => {
 
 const openAtLine = (path: string, line: number): void => {
     openFile(path);
-    openLine.value = line;
+    openLine.value = { line, seq: ++jumpSeq };
 };
 
 // A changed file from the Changes or History panel opens as a diff tab in the main area. Re-opening the same

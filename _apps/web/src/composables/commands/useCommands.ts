@@ -1,5 +1,7 @@
 import type { Disposable } from "@intentic/extension-api";
 import { shallowRef } from "vue";
+import { formatChord, isApplePlatform } from "./keybindings";
+import { effectiveKeybinding } from "./useKeymap";
 
 /* The command registry: commands registered by extensions (and, opportunistically, builtins) surfaced in Quick
  * Open's `>` command mode and executable by id. A module-level singleton ref, like the extension registry —
@@ -37,4 +39,18 @@ export const executeCommand = async (command: string, ...args: unknown[]): Promi
         throw new Error(`no command "${command}" is registered`);
     }
     return await found.handler(...args);
+};
+
+// The formatted shortcut label for a registered command — its EFFECTIVE chord (user override ?? declared
+// default) run through the platform-native formatter (⇧⌘P vs Ctrl+Shift+P), or undefined when it has no
+// binding / isn't registered. Menus and tooltips call this so a discoverable action also teaches its key; it
+// reads the registry and keymap reactively, so a live remap re-renders the hint. Platform is read per call
+// (cheap) rather than at module load, to keep this import-safe in non-DOM test setups.
+export const commandShortcut = (command: string): string | undefined => {
+    const entry = commands.value.find((candidate) => candidate.command === command);
+    if (entry === undefined) {
+        return undefined;
+    }
+    const chord = effectiveKeybinding(command, entry.keybinding);
+    return chord === undefined ? undefined : formatChord(chord, isApplePlatform());
 };

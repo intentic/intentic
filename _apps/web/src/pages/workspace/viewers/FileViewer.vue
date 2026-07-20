@@ -14,6 +14,7 @@ import CodeView from "./CodeView.vue";
 import FileBreadcrumb from "../FileBreadcrumb.vue";
 import FileUnsupported from "./FileUnsupported.vue";
 import { resolveFile, type ViewMode } from "../fileType";
+import type { LineJump } from "../workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
 import SvgViewer from "./SvgViewer.vue";
 
@@ -23,8 +24,8 @@ import SvgViewer from "./SvgViewer.vue";
  * file-change or unmount via the watcher's cleanup — leak-safe. A monotonic seq guard drops stale async
  * results when the user switches files mid-fetch. <object :data> takes the blob: URL directly. */
 
-// `line` = scroll the read view to this line (a content-search match); undefined for a plain open.
-const { path, meta, line } = defineProps<{ path: string; meta?: WorkspaceTreeEntry; line?: number }>();
+// `line` = jump the viewer to this line (a content-search match); undefined for a plain open.
+const { path, meta, line } = defineProps<{ path: string; meta?: WorkspaceTreeEntry; line?: LineJump }>();
 // The open file was deleted on disk (daemon read 404s) — the parent closes this tab rather than leaving a
 // "not found" panel. Only fires for a clean read; a dirty file's re-read is skipped (staleOnDisk) so edits survive.
 const emit = defineEmits<{ gone: [path: string] }>();
@@ -352,6 +353,7 @@ const onEditorSave = (value: string): void =>
                 :path="path"
                 :code="editorSeed"
                 :lang="editorLang"
+                :scroll-to-line="line"
                 @change="onEditorChange"
                 @save="onEditorSave"
             />

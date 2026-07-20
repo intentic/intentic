@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { type IconName, useDevice } from "@intentic-app/ui";
+import type { Disposable } from "@intentic/extension-api";
 import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
+import { commandShortcut, registerCommand, type RegisteredCommand } from "../composables/commands/useCommands";
 import { setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
 import { createTerminalTabs, type TerminalTab, type TerminalTabsSource } from "../composables/terminal/useTerminal";
+import { consumeSpawnRequest, registerTerminalSpawn } from "../composables/terminal/useTerminalPanel";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 
 /* THE terminal panel — mounted once in the shell, below every view. Each tab is a tmux-backed session in the
@@ -72,6 +75,12 @@ const stripIndex = computed(() => {
     }
     return index;
 });
+// A tooltip that also teaches its shortcut: "New terminal (Ctrl+Shift+`)" when the command is bound, plain
+// text otherwise. Inline in the template binding, so a live remap reflects on the next render.
+const withShortcut = (text: string, command: string): string => {
+    const shortcut = commandShortcut(command);
+    return shortcut === undefined ? text : `${text} (${shortcut})`;
+};
 const KIND_ICONS: Record<TerminalTab[`kind`], IconName> = { agent: `sparkles`, job: `bolt`, process: `cog`, shell: `desktop`, panel: `desktop` };
 const segmentIcon = (name: string): IconName => terminalMeta(name).icon ?? KIND_ICONS[tabByName.value.get(name)?.kind ?? `shell`];
 const segmentColor = (name: string): string | undefined => {
@@ -193,12 +202,14 @@ const menuItems = computed<MenuItem[]>(() => {
     }
     const { name } = target;
     const group = groups.value[target.groupIndex] ?? [name];
-    // A multi-selection gets the mass actions; a single pill gets the per-terminal ones.
+    // A multi-selection gets the mass actions; a single pill gets the per-terminal ones. Each item carries its
+    // command's effective shortcut (commandShortcut) so the menu teaches the key — right-aligned via #item.
     if (selectedGroups.value.length > 1) {
         const names = selectedNames.value;
         const items: MenuItem[] = [
             {
                 label: `Join ${selectedGroups.value.length} tabs`,
+                shortcut: commandShortcut(`terminal.join`),
                 command: () => {
                     joinTabs(names);
                     selectedKeys.value = [];
@@ -210,6 +221,7 @@ const menuItems = computed<MenuItem[]>(() => {
                 { separator: true },
                 {
                     label: `Kill ${names.length} terminals`,
+                    shortcut: commandShortcut(`terminal.kill`),
                     command: () => {
                         killTabs(names);
                         selectedKeys.value = [];
@@ -221,30 +233,154 @@ const menuItems = computed<MenuItem[]>(() => {
     }
     const items: MenuItem[] = [];
     if (splitTab !== undefined) {
-        items.push({ label: `Split terminal`, command: () => splitTab(name) });
+        items.push({ label: `Split terminal`, shortcut: commandShortcut(`terminal.split`), command: () => splitTab(name) });
     }
     if (group.length > 1) {
-        items.push({ label: `Unsplit terminal`, command: () => unsplit(name) });
+        items.push({ label: `Unsplit terminal`, shortcut: commandShortcut(`terminal.unsplit`), command: () => unsplit(name) });
     }
     if (items.length > 0) {
         items.push({ separator: true });
     }
     items.push(
-        { label: `Rename…`, command: () => openCustomize(name, `rename`) },
-        { label: `Change color…`, command: () => openCustomize(name, `color`) },
-        { label: `Change icon…`, command: () => openCustomize(name, `icon`) },
+        { label: `Rename…`, shortcut: commandShortcut(`terminal.rename`), command: () => openCustomize(name, `rename`) },
+        { label: `Change color…`, shortcut: commandShortcut(`terminal.changeColor`), command: () => openCustomize(name, `color`) },
+        { label: `Change icon…`, shortcut: commandShortcut(`terminal.changeIcon`), command: () => openCustomize(name, `icon`) },
     );
     if (closeTab !== undefined) {
         items.push(
             { separator: true },
-            { label: tabByName.value.get(name)?.kind === `process` ? `Close log view` : `Kill terminal`, command: () => closeTab(name) },
+            {
+                label: tabByName.value.get(name)?.kind === `process` ? `Close log view` : `Kill terminal`,
+                shortcut: commandShortcut(`terminal.kill`),
+                command: () => closeTab(name),
+            },
         );
     }
     if (popout.supported) {
-        items.push({ separator: true }, { label: popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`, command: popout.toggle });
+        items.push(
+            { separator: true },
+            {
+                label: popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`,
+                shortcut: commandShortcut(`terminal.togglePopout`),
+                command: popout.toggle,
+            },
+        );
     }
     return items;
 });
+
+// --- Palette commands + shortcuts --------------------------------------------------------------
+// Every strip action is also a registered command, so it lives in `>` (Ctrl+P) and on a shortcut. Registered
+// while THIS panel is mounted (the desktop shell and the mobile route are exclusive, so the ids can't
+// double-register) and disposed on unmount. Join and kill are selection-aware; the rest act on the focused
+// session.
+//
+// The defaults are all Ctrl+Shift+<key> — the ONE modifier family that's safe here, for two independent
+// reasons: (1) the shell owns every Ctrl+<letter> (C/D/R/U/K/W/A/E… — SIGINT, EOF, reverse-search, readline
+// line-edits), and Shift makes a DISTINCT keydown, so createTerminalSession's handler swallows only the exact
+// bound chord and leaves the bare control code untouched; (2) it dodges Ctrl+Alt, which is AltGr on
+// Windows/Linux (types € @ … and international glyphs) and an ESC-prefixed control code in a terminal — the
+// trap the old Ctrl+Alt+{R,J,U} defaults fell into. Letters steer clear of the browser chords the page can't
+// intercept (Ctrl+Shift+{I,J,C}=DevTools, N=incognito, T=reopen tab, W=close window, C/V=terminal copy/paste),
+// and lean mnemonic: K=kill, U=unsplit, G=group(join), E=edit(rename). Split keeps Ctrl+Shift+5 and New keeps
+// Ctrl+Shift+` — the VSCode/tmux muscle memory — matched by physical key (matchesChord's CODE_TO_KEY path), so
+// the Shift glyph ("%","~"), a dead-key layout, or a non-US layout can't break them. Everything is rebindable
+// in Settings → Keybindings; the two cosmetic pickers (color, icon) ship UNBOUND — a global chord for a rare
+// "open a swatch grid" earns its keys the least, so they stay palette- and menu-only, exactly as VSCode leaves
+// them (double-click a tab renames without one).
+// "New Terminal" is NOT here: it registers globally (useShellCommands) so it works with the panel closed,
+// routed through useTerminalPanel's spawn hook.
+let commandDisposables: readonly Disposable[] = [];
+const registerPanelCommands = (): void => {
+    const entries: Omit<RegisteredCommand, `owner`>[] = [
+        {
+            command: `terminal.rename`,
+            title: `Rename Terminal…`,
+            icon: `pencil`,
+            keybinding: `Ctrl+Shift+E`,
+            handler: (): void => {
+                if (activeName.value !== undefined) {
+                    openCustomize(activeName.value, `rename`);
+                }
+            },
+        },
+        {
+            command: `terminal.changeColor`,
+            title: `Change Terminal Color…`,
+            icon: `palette`,
+            handler: (): void => {
+                if (activeName.value !== undefined) {
+                    openCustomize(activeName.value, `color`);
+                }
+            },
+        },
+        {
+            command: `terminal.changeIcon`,
+            title: `Change Terminal Icon…`,
+            icon: `star`,
+            handler: (): void => {
+                if (activeName.value !== undefined) {
+                    openCustomize(activeName.value, `icon`);
+                }
+            },
+        },
+        {
+            command: `terminal.join`,
+            title: `Join Selected Terminals`,
+            icon: `code`,
+            keybinding: `Ctrl+Shift+G`,
+            handler: (): void => {
+                if (selectedGroups.value.length > 1) {
+                    joinTabs(selectedNames.value);
+                    selectedKeys.value = [];
+                }
+            },
+        },
+        {
+            command: `terminal.unsplit`,
+            title: `Unsplit Terminal`,
+            icon: `code`,
+            keybinding: `Ctrl+Shift+U`,
+            handler: (): void => {
+                if (activeName.value !== undefined) {
+                    unsplit(activeName.value);
+                }
+            },
+        },
+    ];
+    if (splitTab !== undefined) {
+        entries.push({
+            command: `terminal.split`,
+            title: `Split Terminal`,
+            icon: `code`,
+            keybinding: `Ctrl+Shift+5`,
+            handler: (): void => {
+                if (activeName.value !== undefined) {
+                    splitTab(activeName.value);
+                }
+            },
+        });
+    }
+    if (closeTab !== undefined) {
+        entries.push({
+            command: `terminal.kill`,
+            title: `Kill Terminal`,
+            icon: `trash`,
+            keybinding: `Ctrl+Shift+K`,
+            handler: (): void => {
+                if (killTabs !== undefined && selectedNames.value.length > 0) {
+                    killTabs(selectedNames.value);
+                    selectedKeys.value = [];
+                    return;
+                }
+                if (activeName.value !== undefined) {
+                    closeTab(activeName.value);
+                }
+            },
+        });
+    }
+    commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
+};
 
 // Right-click on the bar's EMPTY space (not a pill, not a button) pops the panel out / docks it — the same
 // gesture the chat strip uses.
@@ -353,9 +489,21 @@ const setCollapsed = (value: boolean): void => {
 const root = ref<HTMLElement>();
 const container = ref<HTMLElement>();
 
+// The spawn-hook disposer (registered after attach, so a mid-attach "New Terminal" lands in the pending flag
+// instead of racing the initial relist).
+let disposeSpawn: (() => void) | undefined;
+
 onMounted(async () => {
+    registerPanelCommands();
     if (container.value !== undefined) {
-        await tabs.attach(container.value);
+        const autoCreated = await tabs.attach(container.value);
+        if (newTab !== undefined) {
+            disposeSpawn = registerTerminalSpawn(newTab);
+            // A "New Terminal" issued while no panel was mounted; an empty panel's auto-created shell IS it.
+            if (consumeSpawnRequest() && !autoCreated) {
+                newTab();
+            }
+        }
     }
     if (initial !== undefined) {
         await tabs.focus(initial.name);
@@ -364,6 +512,12 @@ onMounted(async () => {
 onBeforeUnmount(() => {
     tabs.detach();
     window.removeEventListener(`keydown`, onArmedKeydown, true);
+    for (const disposable of commandDisposables) {
+        disposable.dispose();
+    }
+    commandDisposables = [];
+    disposeSpawn?.();
+    disposeSpawn = undefined;
 });
 // A parent-driven focus request (a row's terminal button while the panel is already open) — a fresh object per
 // request, so the same session refocuses too.
@@ -454,6 +608,7 @@ const endResize = (event: PointerEvent): void => {
                             :class="{ 'opacity-60': tabByName.get(name)?.running === false }"
                             v-tooltip.top="segmentTooltip(name)"
                             @click="onSegmentClick($event, gi, name)"
+                            @dblclick.prevent.stop="openCustomize(name, `rename`)"
                             @contextmenu.prevent.stop="openTabMenu($event, gi, name)"
                         >
                             <Icon
@@ -488,7 +643,7 @@ const endResize = (event: PointerEvent): void => {
                     type="button"
                     class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                     @click="newTab()"
-                    v-tooltip.top="'New terminal'"
+                    v-tooltip.top="withShortcut('New terminal', 'terminal.new')"
                     aria-label="New terminal"
                 >
                     <Icon name="plus" class="text-2xs" />
@@ -540,6 +695,7 @@ const endResize = (event: PointerEvent): void => {
                 type="button"
                 class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                 @click="emit(`close`)"
+                v-tooltip.top="withShortcut('Close terminal', 'terminal.toggle')"
                 aria-label="Close terminal"
             >
                 <Icon name="times" class="text-xs" />
@@ -562,13 +718,30 @@ const endResize = (event: PointerEvent): void => {
         </div>
 
         <!-- Right-click pill menu: split/join/unsplit/kill + the per-terminal cosmetic overrides. Rendered into
-             the pop-out window while the panel floats there. -->
+             the pop-out window while the panel floats there. The #item slot renders each row's shortcut hint
+             right-aligned (VSCode parity), reusing PrimeVue's own itemLink styling via props.action. -->
         <ContextMenu
             ref="menu"
             :model="menuItems"
             :append-to="popout.overlayTarget.value"
-            :pt="{ root: '!min-w-52 !text-xs', rootList: '!p-1', itemLink: '!rounded !px-2 !py-1 !text-xs', separator: '!my-1' }"
-        />
+            :pt="{
+                root: '!min-w-56 !text-xs',
+                rootList: '!p-1',
+                itemLink: '!flex !items-center !gap-2 !rounded !px-2 !py-1 !text-xs',
+                separator: '!my-1',
+            }"
+        >
+            <template #item="{ item, props }">
+                <a v-bind="props.action">
+                    <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+                    <kbd
+                        v-if="item['shortcut']"
+                        class="shrink-0 rounded border border-line bg-overlay px-1 py-px font-mono text-[0.65rem] leading-none text-muted"
+                        >{{ item["shortcut"] }}</kbd
+                    >
+                </a>
+            </template>
+        </ContextMenu>
 
         <!-- One dialog for rename / color / icon. Rename applies on Enter (empty resets to the default label);
              color and icon apply on click, with a leading "default" swatch that clears the override. -->

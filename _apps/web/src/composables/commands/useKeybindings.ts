@@ -1,7 +1,9 @@
-import { onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted, watch } from "vue";
 import { commands, executeCommand } from "./useCommands";
 import { effectiveKeybinding } from "./useKeymap";
 import { isApplePlatform, matchesChord } from "./keybindings";
+import { useChatPopout } from "../chat/useChatPopout";
+import { useTerminalPopout } from "../terminal/useTerminalPopout";
 
 /* The shell's global keybinding dispatcher: ONE window keydown listener that turns a keystroke into a command
  * invocation. Registered commands are the single source of truth — a command's own `keybinding` is its shortcut,
@@ -33,5 +35,22 @@ export function useKeybindings(): void {
     };
 
     onMounted(() => window.addEventListener(`keydown`, onKey));
-    onUnmounted(() => window.removeEventListener(`keydown`, onKey));
+
+    // A popped-out panel's keystrokes dispatch in ITS window, never this one — mirror the listener onto each
+    // pip window while it exists, so shortcuts keep working inside the floating chat/terminal. The pip document
+    // dies with its window, so only a still-open body needs explicit removal on unmount.
+    const popouts = [useChatPopout(), useTerminalPopout()];
+    for (const popout of popouts) {
+        watch(popout.pipBody, (body, previous) => {
+            previous?.ownerDocument.defaultView?.removeEventListener(`keydown`, onKey);
+            body?.ownerDocument.defaultView?.addEventListener(`keydown`, onKey);
+        });
+    }
+
+    onUnmounted(() => {
+        window.removeEventListener(`keydown`, onKey);
+        for (const popout of popouts) {
+            popout.pipBody.value?.ownerDocument.defaultView?.removeEventListener(`keydown`, onKey);
+        }
+    });
 }

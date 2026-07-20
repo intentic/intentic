@@ -10,6 +10,7 @@ const viewStates = new Map<string, Monaco.editor.ICodeEditorViewState>();
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useEditorSelection } from "../../../composables/workspace/useEditorSelection";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
+import type { LineJump } from "../workspaceTabs";
 
 /* The workspace code surface — a single Monaco editor for BOTH the read-only preview and (with `editable`) the
  * editor, so the two are the same rendering with a VSCode minimap. `lang === undefined` (unknown extension or a
@@ -18,7 +19,7 @@ import { useMonaco } from "../../../composables/workspace/useMonaco";
 const { code, lang, scrollToLine, editable, path } = defineProps<{
     code: string;
     lang?: string;
-    scrollToLine?: number;
+    scrollToLine?: LineJump;
     editable?: boolean;
     path?: string;
 }>();
@@ -34,11 +35,14 @@ let model: Monaco.editor.ITextModel | undefined;
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
 
-// One-shot highlight of the line a content-search match landed on (reuses the ws-line-flash keyframes).
-const flash = (line: number): void => {
+// Land a content-search jump: cursor on the line (keyboard nav continues from the hit), centered scroll, and a
+// one-shot highlight of the line (reuses the ws-line-flash keyframes).
+const jumpTo = (line: number): void => {
     if (monaco === undefined || editor.value === undefined) {
         return;
     }
+    editor.value.setPosition({ lineNumber: line, column: 1 });
+    editor.value.revealLineInCenter(line);
     const marks = editor.value.createDecorationsCollection([
         { range: new monaco.Range(line, 1, line, 1), options: { isWholeLine: true, className: `ws-line-flash` } },
     ]);
@@ -112,8 +116,7 @@ onMounted(async () => {
 
     // A content-search jump wins; otherwise restore the remembered position (first open of a file has none).
     if (scrollToLine !== undefined) {
-        view.revealLineInCenter(scrollToLine);
-        flash(scrollToLine);
+        jumpTo(scrollToLine.line);
         return;
     }
     const saved = path !== undefined ? viewStates.get(path) : undefined;
@@ -121,6 +124,17 @@ onMounted(async () => {
         view.restoreViewState(saved);
     }
 });
+
+// Later jumps land on the LIVE editor — clicking hits while the file is already open. Each jump is a fresh
+// object (seq), so even the same line re-reveals; the mount path above covers jumps that open the file.
+watch(
+    () => scrollToLine,
+    (next) => {
+        if (next !== undefined) {
+            jumpTo(next.line);
+        }
+    },
+);
 
 // Read-only mirrors the incoming prop (post-save refetch, external change); editable is uncontrolled and
 // remounted per file via :key, so it never clobbers the live text from the textarea.

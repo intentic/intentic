@@ -100,12 +100,16 @@ const open = (dir: string): IndexDb => {
     return wrapped;
 };
 
-// Open the index at `<dir>/index.db`, treating any failure (corruption, schema drift) as cache loss: delete the
-// whole index dir and start fresh.
+// Open the index at `<dir>/index.db`, treating corruption or schema drift as cache loss: delete the whole index
+// dir and start fresh. A held write lock is contention from a concurrent opener (another iq process mid-write),
+// NOT corruption — dropping the dir there would nuke an index that process is building, so it propagates.
 export const openIndex = (dir: string): IndexDb => {
     try {
         return open(dir);
-    } catch {
+    } catch (error) {
+        if (error instanceof Error && /database is locked|database is busy/i.test(error.message)) {
+            throw error;
+        }
         rmSync(dir, { recursive: true, force: true });
         return open(dir);
     }

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { type IconName, Segmented } from "@intentic-app/ui";
+import type { Disposable } from "@intentic/extension-api";
 import Button from "primevue/button";
 import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { commandShortcut, registerCommand, type RegisteredCommand } from "../../composables/commands/useCommands";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
 import { detectActivations } from "../../core-views/registry";
@@ -193,11 +195,21 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     const toRight = new Set(tabs.value.slice(index + 1).map((tab) => tab.id));
     const all = new Set(tabs.value.map((tab) => tab.id));
     return [
-        { label: `Close`, icon: `times`, command: () => closeTab(id) },
-        { label: `Close Others`, disabled: others.size === 0, command: () => requestClose(others) },
-        { label: `Close to the Right`, disabled: toRight.size === 0, command: () => requestClose(toRight) },
+        { label: `Close`, icon: `times`, shortcut: commandShortcut(`workspace.closeTab`), command: () => closeTab(id) },
+        {
+            label: `Close Others`,
+            disabled: others.size === 0,
+            shortcut: commandShortcut(`workspace.closeOtherTabs`),
+            command: () => requestClose(others),
+        },
+        {
+            label: `Close to the Right`,
+            disabled: toRight.size === 0,
+            shortcut: commandShortcut(`workspace.closeTabsToRight`),
+            command: () => requestClose(toRight),
+        },
         { separator: true },
-        { label: `Close All`, command: () => requestClose(all) },
+        { label: `Close All`, shortcut: commandShortcut(`workspace.closeAllTabs`), command: () => requestClose(all) },
         // Only file/diff tabs have a filesystem path to copy (a plan preview and a directory panel don't).
         // Clipboard may be unavailable (insecure context) — swallow, matching CopyButton.
         ...(menuTab.kind === `file` || menuTab.kind === `diff`
@@ -212,6 +224,52 @@ const openTabMenu = (id: string, event: Event): void => {
     menuTabId.value = id;
     tabMenu.value?.show(event);
 };
+
+// The same four closes as commands — palette-searchable (Ctrl+P `>`) and on a shortcut, not just the
+// right-click menu. Keyboard/palette invocations act on the ACTIVE tab (the menu keeps acting on the
+// right-clicked one), and no-op on an empty strip. Registered while the Workspace is mounted (scoped to
+// /workspace, where tabs exist) and disposed on unmount. Chords are Ctrl+Shift+…: the browser owns Ctrl+W
+// and Ctrl+Shift+W (close tab / close window, un-interceptable), so Close is Ctrl+Shift+X (the × glyph); the
+// "." key reads as ">" and aims Close-to-the-Right (its neighbour "," takes Close Others), matched by physical
+// key so the shifted glyph doesn't matter (see keybindings' CODE_TO_KEY); Close All wipes the strip on
+// Ctrl+Shift+Backspace. All rebindable in Settings → Keybindings, and shown as hints in the menu above.
+const closeActiveTab = (): void => {
+    if (activeId.value !== null) {
+        closeTab(activeId.value);
+    }
+};
+const closeOtherTabs = (): void => {
+    const id = activeId.value;
+    if (id === null) {
+        return;
+    }
+    const others = new Set(tabs.value.filter((tab) => tab.id !== id).map((tab) => tab.id));
+    if (others.size > 0) {
+        requestClose(others);
+    }
+};
+const closeTabsToRight = (): void => {
+    const index = tabs.value.findIndex((tab) => tab.id === activeId.value);
+    if (index === -1) {
+        return;
+    }
+    const toRight = new Set(tabs.value.slice(index + 1).map((tab) => tab.id));
+    if (toRight.size > 0) {
+        requestClose(toRight);
+    }
+};
+const closeAllTabs = (): void => {
+    if (tabs.value.length > 0) {
+        requestClose(new Set(tabs.value.map((tab) => tab.id)));
+    }
+};
+const TAB_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
+    { command: `workspace.closeTab`, title: `Close Tab`, icon: `times`, keybinding: `Ctrl+Shift+X`, handler: closeActiveTab },
+    { command: `workspace.closeOtherTabs`, title: `Close Other Tabs`, icon: `times`, keybinding: `Ctrl+Shift+,`, handler: closeOtherTabs },
+    { command: `workspace.closeTabsToRight`, title: `Close Tabs to the Right`, icon: `times`, keybinding: `Ctrl+Shift+.`, handler: closeTabsToRight },
+    { command: `workspace.closeAllTabs`, title: `Close All Tabs`, icon: `times`, keybinding: `Ctrl+Shift+Backspace`, handler: closeAllTabs },
+];
+let tabCommandDisposables: readonly Disposable[] = [];
 
 // Root-level upload: files dropped on the explorer background (a folder row handles its own drop) or picked via
 // the empty state's browse button land at the /work root. Directories recurse through collectDroppedFiles.
@@ -257,10 +315,15 @@ onMounted(() => {
     window.addEventListener(`dragend`, resetRootDrag, true);
     // Load Monaco (+ Shiki bridge) while the user browses the tree, so the first file open isn't cold.
     void useMonaco().ensureMonaco();
+    tabCommandDisposables = TAB_COMMANDS.map((spec) => registerCommand({ owner: `builtin`, ...spec }));
 });
 onBeforeUnmount(() => {
     window.removeEventListener(`drop`, resetRootDrag, true);
     window.removeEventListener(`dragend`, resetRootDrag, true);
+    for (const disposable of tabCommandDisposables) {
+        disposable.dispose();
+    }
+    tabCommandDisposables = [];
 });
 const onPick = (event: Event): void => {
     const input = event.target as HTMLInputElement;
@@ -558,14 +621,27 @@ const endResize = (event: PointerEvent): void => {
             ref="tabMenu"
             :model="tabMenuItems"
             :pt="{
-                root: '!min-w-40 !text-xs',
+                root: '!min-w-52 !text-xs',
                 rootList: '!p-1',
-                itemLink: '!gap-2 !rounded !px-2 !py-1 !text-xs',
-                itemIcon: '!text-2xs',
+                itemLink: '!flex !items-center !gap-2 !rounded !px-2 !py-1 !text-xs',
                 separator: '!my-1',
             }"
         >
-            <template #itemicon="{ item }"><Icon :name="item.icon as IconName" /></template>
+            <!-- Custom row so each item can show its command's shortcut right-aligned (VSCode parity). A reserved
+                 icon column keeps labels aligned whether or not the item carries an icon. -->
+            <template #item="{ item, props }">
+                <a v-bind="props.action">
+                    <span class="flex w-3.5 shrink-0 justify-center">
+                        <Icon v-if="item.icon" :name="item.icon as IconName" class="text-2xs" />
+                    </span>
+                    <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+                    <kbd
+                        v-if="item['shortcut']"
+                        class="shrink-0 rounded border border-line bg-overlay px-1 py-px font-mono text-[0.65rem] leading-none text-muted"
+                        >{{ item["shortcut"] }}</kbd
+                    >
+                </a>
+            </template>
         </ContextMenu>
         <Dialog
             :visible="pendingClose !== undefined"

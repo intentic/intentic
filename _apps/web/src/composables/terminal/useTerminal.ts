@@ -73,7 +73,8 @@ export interface TerminalTabs {
     readonly processes: Ref<TerminalTab[]>;
     // The FOCUSED session — keystrokes land here; its group is the mounted pane.
     readonly activeName: Ref<string | undefined>;
-    readonly attach: (el: HTMLElement) => Promise<void>;
+    // Resolves true when attaching auto-created the first shell (an empty managed panel opens with one).
+    readonly attach: (el: HTMLElement) => Promise<boolean>;
     readonly detach: () => void;
     readonly refresh: () => Promise<void>;
     // Focus a specific session, refreshing the list first when it isn't tabbed yet (a row's terminal button).
@@ -228,12 +229,14 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         void refresh();
     });
 
-    const attach = async (el: HTMLElement): Promise<void> => {
+    const attach = async (el: HTMLElement): Promise<boolean> => {
         container = el;
         await refresh();
         if (order.value.length === 0 && source.create !== undefined) {
             newTab();
+            return true;
         }
+        return false;
     };
 
     // Remove the mounted hosts from the DOM without touching any session — sockets, xterms, scrollback stay

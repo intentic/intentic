@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
-import { WorkspaceSearchResultSchema, previewLabel, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
+import { previewLabel, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -17,8 +15,6 @@ import { discoverRepos, isValidRepoName } from "./repo-discovery.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
 import { resolveWithin } from "./workspace-files.js";
-
-const exec = promisify(execFile);
 
 // The full /work view + extra-repo cloning. The binary /workspace/raw preview is a plain Hono route in app.ts
 // (a streamed binary body doesn't fit oRPC). External MCP tools moved to the unified capabilities manifest.
@@ -59,30 +55,31 @@ export const createWorkspaceRoutes = (services: Services) => {
             }
             return { path: input.path, content };
         }),
-        // Shells into the iq CLI (on PATH in the image): one search implementation for the agent's Bash calls
-        // and this route. Exit 1 = zero hits, still a valid WorkspaceSearchResult document.
-        search: i.search.handler(async ({ input }) => {
-            const args = [input.mode ?? "q", input.query, "--json"];
-            if (input.includeIgnored === true) {
-                args.push("--ignored");
-            }
-            if (input.limit !== undefined) {
-                args.push("--limit", String(input.limit));
-            }
-            if (input.after !== undefined) {
-                args.push("--after", input.after);
-            }
-            const { stdout } = await exec("iq", args, {
-                cwd: services.workspace.root,
-                env: { ...process.env, WORKSPACE_ROOT: services.workspace.root },
-                maxBuffer: 8 * 1024 * 1024,
-            }).catch((error: Error & { code?: unknown; stdout?: string }) => {
-                if (error.code === 1 && error.stdout !== undefined) {
-                    return { stdout: error.stdout };
-                }
-                throw error;
-            });
-            return WorkspaceSearchResultSchema.parse(JSON.parse(stdout));
+        // Runs the resident iq engine in-process (services.iq) — same engine the agent's Bash `iq` calls use,
+        // minus the per-query process spawn, workspace sweep, and inline revalidation those pay. The request's
+        // abort signal kills the engine's rg child when the browser supersedes a search mid-flight.
+        search: i.search.handler(async ({ input, signal }) => {
+            const verb = input.mode ?? "q";
+            const ignored = input.includeIgnored === true;
+            const outcome = await services.iq.run(
+                {
+                    verb,
+                    query: input.query,
+                    scope: ignored ? { ignored: true } : {},
+                    // Budget mirrors the iq CLI's default so the panel's result sizes match a bare `iq` call.
+                    render: {
+                        budget: 1500,
+                        ...(input.limit !== undefined ? { limit: input.limit } : {}),
+                        ...(input.after !== undefined ? { after: input.after } : {}),
+                    },
+                    options: {},
+                    // Echo mirrors the CLI form — it seeds the pagination cursor id, so it must be stable for
+                    // the same query+mode+scope across requests.
+                    echo: `${verb === "q" ? "" : `${verb} `}"${input.query}"${ignored ? " --ignored" : ""}`,
+                },
+                signal,
+            );
+            return outcome.result;
         }),
         // Read-only, no-LLM classification of the dropped workspace into coarse buckets. Runs over the same
         // filtered tree the file view uses, so it never sees .git/secrets/node_modules. The browser turns the

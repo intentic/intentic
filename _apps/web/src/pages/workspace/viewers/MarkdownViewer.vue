@@ -2,6 +2,7 @@
 import { Segmented } from "@intentic-app/ui";
 import { computed, ref, watch } from "vue";
 import { renderMarkdown } from "../../../composables/renderMarkdown";
+import type { LineJump } from "../workspaceTabs";
 import CodeView from "./CodeView.vue";
 
 /* Markdown preview for the file viewer: renders to prose by default, with a Source toggle that shows the raw
@@ -11,7 +12,7 @@ import CodeView from "./CodeView.vue";
 
 // `line` = a content-search match landing here: open on (or switch to) the Source view so the hit is visible —
 // rendered prose has no stable line mapping.
-const { source, line } = defineProps<{ source: string; line?: number }>();
+const { source, line } = defineProps<{ source: string; line?: LineJump }>();
 const view = ref<`preview` | `source`>(line !== undefined ? `source` : `preview`);
 watch(
     () => line,

@@ -34,7 +34,7 @@ export const workspaceContract = {
     children: oc.route({ method: "GET", path: "/workspace/children" }).input(WorkspaceChildrenQuerySchema).output(WorkspaceChildrenSchema),
     file: oc.route({ method: "GET", path: "/workspace/file" }).input(WorkspaceFileQuerySchema).output(WorkspaceFileSchema),
     // Ranked groups, match-reason tags, freshness, resumable cursor. `mode` narrows to one verb; default is
-    // auto-mode fusion. (Implementation detail: the daemon backs this by shelling the baked search CLI.)
+    // auto-mode fusion. (Implementation detail: the daemon backs this with a resident in-process iq engine.)
     search: oc.route({ method: "GET", path: "/workspace/search" }).input(WorkspaceSearchQuerySchema).output(WorkspaceSearchResultSchema),
     // Deterministic, no-LLM classification of the dropped workspace into coarse buckets (repositories / documents
     // / media / archives / other). Read-only proposal: the browser renders it and applies accepted moves via the

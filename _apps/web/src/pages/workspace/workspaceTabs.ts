@@ -11,6 +11,13 @@ import type { GitChange, SnapshotChange } from "@intentic-app/api-contract";
 // A snapshot's parent-vs-snapshot statuses plus the working tree's (which adds "renamed").
 export type ChangeStatus = SnapshotChange["status"] | GitChange["status"];
 
+// A jump to a line in the open file (a content-search match). `seq` makes every jump a fresh identity, so
+// re-clicking the SAME hit after scrolling away still re-reveals — a bare line number couldn't re-fire.
+export interface LineJump {
+    readonly line: number;
+    readonly seq: number;
+}
+
 export type WorkspaceTab =
     | { readonly kind: "file"; readonly id: string; readonly path: string }
     | {

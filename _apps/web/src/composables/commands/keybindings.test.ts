@@ -34,6 +34,17 @@ describe(`matchesChord`, () => {
         expect(matchesChord(`Mod+Enter`, keydown({ key: `Enter`, metaKey: true }), true)).toBe(true);
         expect(matchesChord(`Esc`, keydown({ key: `Escape` }), false)).toBe(true);
     });
+
+    it(`matches number/punctuation chords by physical key, so a Shift glyph or dead-key layout can't break them`, () => {
+        // New Terminal: under Shift the Backquote key reports "~" (US) or "Dead" (accent-composing layouts) —
+        // the physical code carries the match either way.
+        expect(matchesChord(`Ctrl+Shift+\``, keydown({ key: `~`, code: `Backquote`, ctrlKey: true, shiftKey: true }), false)).toBe(true);
+        expect(matchesChord(`Ctrl+Shift+\``, keydown({ key: `Dead`, code: `Backquote`, ctrlKey: true, shiftKey: true }), false)).toBe(true);
+        // Split: Digit5 under Shift reports "%".
+        expect(matchesChord(`Ctrl+Shift+5`, keydown({ key: `%`, code: `Digit5`, ctrlKey: true, shiftKey: true }), false)).toBe(true);
+        // Still modifier-exact: plain Ctrl+` (toggle) must not fire on Ctrl+Shift+`.
+        expect(matchesChord(`Ctrl+\``, keydown({ key: `~`, code: `Backquote`, ctrlKey: true, shiftKey: true }), false)).toBe(false);
+    });
 });
 
 describe(`chordFromEvent`, () => {
@@ -62,6 +73,13 @@ describe(`chordFromEvent`, () => {
 
     it(`allows a bare function key`, () => {
         expect(chordFromEvent(keydown({ key: `F5` }), false)).toBe(`f5`);
+    });
+
+    it(`records number/punctuation keys by physical base character, not the Shift glyph`, () => {
+        expect(chordFromEvent(keydown({ key: `%`, code: `Digit5`, ctrlKey: true, shiftKey: true }), false)).toBe(`Mod+Shift+5`);
+        expect(chordFromEvent(keydown({ key: `~`, code: `Backquote`, ctrlKey: true, shiftKey: true }), false)).toBe(`Mod+Shift+\``);
+        // …and the recorded chord matches the same keystroke back.
+        expect(matchesChord(`Mod+Shift+\``, keydown({ key: `~`, code: `Backquote`, ctrlKey: true, shiftKey: true }), false)).toBe(true);
     });
 });
 

@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createResidentEngine, type QueryRequest } from "@intentic/iq-engine";
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
 import { portUrl, sandboxContract } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -265,6 +266,17 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     },
     files: fakeFiles(),
     workspaceTree: async () => ({ root: "/work", tree: [], truncated: false }),
+    // Inert resident search — no index, no rg. The search route test overrides `run` with a canned outcome.
+    iq: {
+        run: async () => ({
+            result: { mode: "q", total: 0, shown: 0, groups: [], freshness: { state: "fresh" as const }, truncated: false },
+            text: "",
+            exitCode: 1 as const,
+        }),
+        markDirty: () => {},
+        warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh" as const, ageMs: 0 } }),
+        close: () => {},
+    },
     sessions: { list: async () => [], read: async () => [], search: async () => [], exists: async () => true },
     platformHostTunnel: async () => ({ status: 200, json: { hostname: "ssh-abc.example.com", tunnelToken: "tok" } }),
     ensurePreviewRoutes: async () => {},
@@ -355,6 +367,42 @@ test("panels.list enumerates every repo with its operator panel + runtime status
             },
         ],
     });
+});
+
+test("workspace.search runs the resident engine in-process, mapping the wire query to a QueryRequest", async () => {
+    const requests: QueryRequest[] = [];
+    const groups = [{ path: "alpha/src/widget.ts", score: 1, hits: [{ line: 3, text: "export const createWidget", tags: [] }] }];
+    const client = clientFor(
+        createApp(
+            services({
+                iq: {
+                    run: async (request) => {
+                        requests.push(request);
+                        return {
+                            result: { mode: request.verb, total: 1, shown: 1, groups, freshness: { state: "fresh" }, truncated: false },
+                            text: "",
+                            exitCode: 0,
+                        };
+                    },
+                    markDirty: () => {},
+                    warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh", ageMs: 0 } }),
+                    close: () => {},
+                },
+            }),
+        ),
+    );
+    const result = await client.workspace.search({ query: "createWidget", mode: "find", includeIgnored: true, limit: 3 });
+    expect(result.groups).toEqual(groups);
+    expect(requests).toEqual([
+        {
+            verb: "find",
+            query: "createWidget",
+            scope: { ignored: true },
+            render: { budget: 1500, limit: 3 },
+            options: {},
+            echo: 'find "createWidget" --ignored',
+        },
+    ]);
 });
 
 test("panels.list reports the content facts extensions detect on", async () => {
@@ -1708,18 +1756,14 @@ test("workspace.file reads any contained file (former-secret paths included), NO
     expect(await errorCode(client.workspace.file({ path: "../../etc/passwd" }))).toBe("BAD_REQUEST");
 });
 
-// Search is backed by the iq CLI (execFile "iq" … --json). Round-trip through a PATH shim to the built CLI
-// against a real tmp workspace; the min-length rejection is contract validation and never spawns anything.
-test("workspace.search shells into iq --json and round-trips the WorkspaceSearchResult; rejects a too-short query", async () => {
+// Search is backed by the resident in-process iq engine. Round-trip against a REAL engine over a real tmp
+// workspace (rg on PATH); the min-length rejection is contract validation and never reaches the engine.
+test("workspace.search round-trips the WorkspaceSearchResult from the resident engine; rejects a too-short query", async () => {
     const root = await mkdtemp(join(tmpdir(), "iq-daemon-"));
-    const bin = await mkdtemp(join(tmpdir(), "iq-bin-"));
-    const cli = fileURLToPath(new URL("../../iq/dist/cli.js", import.meta.url));
-    await writeFile(join(bin, "iq"), `#!/bin/sh\nexec node ${cli} "$@"\n`, { mode: 0o755 });
     await writeFile(join(root, "notes.md"), "the needle is here\n");
-    const previousPath = process.env["PATH"];
-    process.env["PATH"] = `${bin}:${previousPath ?? ""}`;
+    const iq = createResidentEngine({ root });
     try {
-        const client = clientFor(createApp(services({ workspace: workspacePaths(root) })));
+        const client = clientFor(createApp(services({ workspace: workspacePaths(root), iq })));
         const result = await client.workspace.search({ query: "needle" });
         expect(result.mode).toBe("q");
         expect(result.groups[0]?.path).toBe("notes.md");
@@ -1728,9 +1772,8 @@ test("workspace.search shells into iq --json and round-trips the WorkspaceSearch
         expect(empty.total).toBe(0);
         expect(await errorCode(client.workspace.search({ query: "x" }))).toBe("BAD_REQUEST");
     } finally {
-        process.env["PATH"] = previousPath;
+        iq.close();
         await rm(root, { recursive: true, force: true });
-        await rm(bin, { recursive: true, force: true });
     }
 });
 

@@ -718,6 +718,9 @@ importers:
       '@intentic/graph':
         specifier: workspace:*
         version: link:../../_libs/graph
+      '@intentic/iq-engine':
+        specifier: workspace:*
+        version: link:../../_libs/iq-engine
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_libs/sandbox-contract

@@ -1,7 +1,5 @@
-import { execFile } from "node:child_process";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { WebSocketServer } from "ws";
@@ -33,7 +31,7 @@ import { seedPairing } from "./platform/sync.js";
 import { reapIdleWebSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
 import { startRepoWatch } from "./workspace/repo-watch.js";
-import { startWorkspaceWatch } from "./workspace/workspace-watch.js";
+import { startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/workspace-watch.js";
 
 // The sandbox container's entrypoint. Config comes from env set at `docker run` — by connect.sh (your PC) or
 // the workspace provider (a server); the workspace (the repos) and agent credentials are injected there,
@@ -210,16 +208,19 @@ const main = async (): Promise<void> => {
     // Live file-change push: watch /work so the browser's tree + open file refresh the instant the agent (or a
     // Bash command / the terminal) touches a file, over the /events stream — no manual Refresh.
     startWorkspaceWatch(services.workspace.root, logger);
+    // The resident search engine revalidates on the same watch stream, so a query never pays re-indexing for
+    // the agent's latest writes inline — it serves the current index and the refresh happens between queries.
+    subscribeWorkspaceChanges(() => services.iq.markDirty());
     // Repo-set change push riding the same watcher: a repo cloned/deleted anywhere under /work re-frames the
     // discovered repo list on /events (the watcher itself never sees .git paths).
     startRepoWatch(services.workspace.root, logger);
 
-    // Warm the iq search index (symbols + embeddings) so the agent's first search hits a fresh index instead of
-    // paying the full build. Best-effort: on failure iq self-builds incrementally on first use.
-    void promisify(execFile)("iq", ["index", "rebuild"], {
-        cwd: services.workspace.root,
-        env: { ...process.env, WORKSPACE_ROOT: services.workspace.root },
-    }).catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed — first query builds incrementally"));
+    // Warm the resident search engine (sweep + symbols + the embedding backlog) so the first search hits a
+    // ready index. In-process and incremental — a valid on-disk index survives boot instead of being dropped
+    // and rebuilt. Best-effort: on failure the first query triggers its own refresh.
+    void services.iq
+        .warm()
+        .catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed — first query builds incrementally"));
 
     // Warm the Grok provider's OpenCode server at boot instead of lazily on the first /grok/oauth/start. The cold
     // `opencode serve` spawn is CPU-heavy; in a constrained container it can deschedule the daemon long enough to

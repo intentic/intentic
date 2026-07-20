@@ -17,6 +17,37 @@ interface Chord {
 
 const KEY_ALIASES: Readonly<Record<string, string>> = { esc: `escape`, space: ` `, return: `enter` };
 
+// Physical-key fallback for the number/punctuation row, whose `event.key` is unreliable: under Shift the
+// Backquote key reports "~" (or "Dead" on layouts where tilde composes accents) and Digit5 reports "%", and
+// the produced glyph shifts with the layout. Matching a chord's BASE character against `event.code` too — the
+// VSCode approach (physical position) — makes "Ctrl+Shift+`" / "Ctrl+Shift+5" fire regardless. Scoped to this
+// row on purpose: letters keep their produced-character semantics (a Dvorak user's Ctrl+P stays the P they
+// typed, not the physical QWERTY position), and the reliable named keys match through `event.key` as before.
+const CODE_TO_KEY: Readonly<Record<string, string>> = {
+    Backquote: `\``,
+    Minus: `-`,
+    Equal: `=`,
+    BracketLeft: `[`,
+    BracketRight: `]`,
+    Backslash: `\\`,
+    Semicolon: `;`,
+    Quote: `'`,
+    Comma: `,`,
+    Period: `.`,
+    Slash: `/`,
+    Digit0: `0`,
+    Digit1: `1`,
+    Digit2: `2`,
+    Digit3: `3`,
+    Digit4: `4`,
+    Digit5: `5`,
+    Digit6: `6`,
+    Digit7: `7`,
+    Digit8: `8`,
+    Digit9: `9`,
+};
+const codeToKey = (code: string | undefined): string | undefined => (code === undefined ? undefined : CODE_TO_KEY[code]);
+
 const parseChord = (binding: string): Chord => {
     const tokens = binding.split(`+`).map((token) => token.trim().toLowerCase());
     let mod = false;
@@ -44,7 +75,9 @@ const parseChord = (binding: string): Chord => {
 };
 
 // Does a live keydown satisfy this binding? Modifiers are matched EXACTLY (VSCode semantics) so "Mod+P" never
-// also fires on "Mod+Shift+P". `Mod` resolves to the Command key on Apple platforms and Control elsewhere.
+// also fires on "Mod+Shift+P". `Mod` resolves to the Command key on Apple platforms and Control elsewhere. The
+// key matches on the produced character OR — for the number/punctuation row — the physical key (see
+// CODE_TO_KEY), so a Shift glyph / dead key / foreign layout can't break a symbol chord like Ctrl+Shift+`.
 export const matchesChord = (binding: string, event: KeyboardEvent, isMac: boolean): boolean => {
     const chord = parseChord(binding);
     const needCtrl = chord.ctrl || (chord.mod && !isMac);
@@ -54,7 +87,7 @@ export const matchesChord = (binding: string, event: KeyboardEvent, isMac: boole
         event.metaKey === needMeta &&
         event.shiftKey === chord.shift &&
         event.altKey === chord.alt &&
-        event.key.toLowerCase() === chord.key
+        (event.key.toLowerCase() === chord.key || codeToKey(event.code) === chord.key)
     );
 };
 
@@ -67,7 +100,10 @@ export const chordFromEvent = (event: KeyboardEvent, isMac: boolean): string | u
     if (event.key === `Control` || event.key === `Shift` || event.key === `Alt` || event.key === `Meta`) {
         return undefined;
     }
-    const key = event.key === ` ` ? `space` : event.key.toLowerCase();
+    // Record number/punctuation keys by their physical base character (codeToKey), so a Shift-recorded chord
+    // stores "5"/"`" not "%"/"~" and matches back through the same physical-key path; named/letter keys keep
+    // their produced character.
+    const key = codeToKey(event.code) ?? (event.key === ` ` ? `space` : event.key.toLowerCase());
     const hasNonShiftModifier = event.ctrlKey || event.metaKey || event.altKey;
     if (!hasNonShiftModifier && !/^f\d+$/.test(key)) {
         return undefined;

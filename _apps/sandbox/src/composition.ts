@@ -25,6 +25,7 @@ import {
     gitStatus,
     gitSync,
 } from "@intentic/scaffold";
+import { createResidentEngine, type ResidentEngine } from "@intentic/iq-engine";
 import type { Logger } from "pino";
 import { createAcpAgent } from "./acp/acp-agent.js";
 import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.js";
@@ -243,6 +244,10 @@ export interface Services {
     };
     readonly workspaceTree: (root: string) => Promise<WorkspaceTree>;
     readonly workspaceChildren: (root: string, relPath: string) => Promise<WorkspaceChildren>;
+    // Resident workspace search: one iq engine instance holding the index DB open with its sweep cached in
+    // memory — /workspace/search runs in-process (no per-query CLI spawn), revalidation rides the workspace
+    // watcher (main.ts) instead of the query path. The agent's Bash `iq` calls share the same on-disk index.
+    readonly iq: ResidentEngine;
     readonly sessions: {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
         readonly read: (dir: string, id: string) => Promise<SessionTranscriptMessage[]>;
@@ -419,6 +424,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
         },
         workspaceTree: walkWorkspaceTree,
         workspaceChildren: listWorkspaceChildren,
+        iq: createResidentEngine({
+            root: workspace.root,
+            ...(config.iqModelDir !== "" ? { modelDir: config.iqModelDir } : {}),
+            ...(config.iqRgPath !== "" ? { rgPath: config.iqRgPath } : {}),
+        }),
         sessions: { list: listWorkspaceSessions, read: readWorkspaceSession, search: searchWorkspaceSessions, exists: workspaceSessionExists },
         platformHostTunnel: (hostName) => postToPlatform(config, "/sandbox/host-tunnel", { hostName }),
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),
