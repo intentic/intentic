@@ -78,13 +78,22 @@
         background: transparent;
     }
 
-    /* Centered, width-constrained page shell. */
+    /* Centered, width-constrained page shell. The default (`content`) reads its cap from the density token;
+       `wide` fits dense data-list panels without stretching edge-to-edge on large monitors; `full` is for
+       canvas surfaces that need every pixel. Attribute selectors (higher specificity, same layer) override
+       the base cap. */
     .ui-page {
         display: block;
         width: 100%;
         max-width: var(--ui-page-max-width);
         margin-inline: auto;
         padding: var(--ui-page-padding);
+    }
+    .ui-page[data-width="wide"] {
+        max-width: 72rem;
+    }
+    .ui-page[data-width="full"] {
+        max-width: none;
     }
 
     /* Inline field-level error message — slides in below the input. */

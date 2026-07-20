@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AutomationRun, AutomationSummary } from "@intentic/sandbox-contract";
-import { Button, Card, cmp, CopyButton, Icon, Page, StatusBadge, type StatusVariant, ToggleSwitch } from "@intentic/extension-ui";
+import { Button, Card, cmp, CopyButton, Icon, Page, PageHeader, StatusBadge, type StatusVariant, ToggleSwitch } from "@intentic/extension-ui";
 import { computed, reactive, ref } from "vue";
 import CreateAutomationDialog from "./CreateAutomationDialog.vue";
 import { formatAt, scheduleLabel } from "./cronSchedule";
@@ -82,14 +82,11 @@ const outcomeVariant = (outcome: string): StatusVariant => (outcome === `complet
 </script>
 
 <template>
-    <Page>
-        <header class="mb-6">
-            <h1 class="text-2xl font-semibold">Automations</h1>
-            <p class="mt-1 text-sm text-muted">
-                Wake your agent on a schedule, on a webhook, or instantly from live provider events. An optional guard command runs in your workspace
-                first and decides whether each wake actually happens.
-            </p>
-        </header>
+    <Page width="wide">
+        <PageHeader
+            title="Automations"
+            description="Wake your agent on a schedule, on a webhook, or instantly from live provider events. An optional guard command runs in your workspace first and decides whether each wake actually happens."
+        />
 
         <div v-if="topError" :class="cmp.alertDanger('mb-3')">{{ topError }}</div>
 

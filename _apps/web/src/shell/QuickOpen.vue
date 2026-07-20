@@ -6,7 +6,7 @@ import { commands, executeCommand, type RegisteredCommand } from "../composables
 import { useQuickOpen } from "../composables/useQuickOpen";
 import { useFuzzyFiles } from "../composables/workspace/useFuzzyFiles";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
-import { iconForEntry } from "@intentic-app/ui";
+import { iconForEntry, type IconName } from "@intentic-app/ui";
 
 /* Quick Open (VSCode Ctrl/Cmd+P): a top-anchored palette that ranks /work files by name as you type — client-
  * ranked over the explorer's cached tree (useFuzzyFiles), so results land in the same frame as the keystroke;
@@ -16,7 +16,7 @@ import { iconForEntry } from "@intentic-app/ui";
  * palette to COMMAND mode (VSCode's Ctrl+Shift+P folded into the same field), filtering the command registry
  * (useCommands) instead of files. */
 
-const { isOpen } = useQuickOpen();
+const { isOpen, mode } = useQuickOpen();
 const router = useRouter();
 const { tabs } = useWorkspaceTabs();
 
@@ -94,11 +94,21 @@ const openActive = (): void => {
     }
 };
 
-// Focus + select the field each time the palette opens (the ChatTabs @show pattern), starting at the top row.
+// Focus the field each time the palette opens (the ChatTabs @show pattern), starting at the top row. Seed the
+// query from the shortcut that opened us — `> ` for the Command Palette (Ctrl/Cmd+Shift+P), empty for Go to File
+// (Ctrl/Cmd+P) — a fresh field each open, like VSCode.
 const onShow = async (): Promise<void> => {
+    query.value = mode.value === `commands` ? `> ` : ``;
     await nextTick();
     input.value?.focus();
-    input.value?.select();
+    // In command mode the field already holds the `> ` prefix, so drop the caret at the end; a select would let the
+    // next keystroke wipe the prefix and fall the palette back to file mode.
+    if (mode.value === `commands`) {
+        const end = input.value?.value.length ?? 0;
+        input.value?.setSelectionRange(end, end);
+    } else {
+        input.value?.select();
+    }
     activeIndex.value = 0;
 };
 </script>
@@ -152,7 +162,7 @@ const onShow = async (): Promise<void> => {
                     @click="run(entry)"
                     @mouseenter="activeIndex = index"
                 >
-                    <Icon name="chevron-right" class="shrink-0 text-2xs text-muted" />
+                    <Icon :name="(entry.icon ?? `chevron-right`) as IconName" class="shrink-0 text-2xs text-muted" />
                     <span class="min-w-0 truncate text-sm text-content">{{ entry.title }}</span>
                     <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ entry.command }}</span>
                 </button>

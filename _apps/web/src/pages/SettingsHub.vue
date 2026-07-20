@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Page, Segmented } from "@intentic-app/ui";
+import { Page, PageHeader, Segmented } from "@intentic-app/ui";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import SettingsAppearance from "./settings/SettingsAppearance.vue";
@@ -46,10 +46,7 @@ watch(
 
 <template>
     <Page>
-        <header class="mb-5">
-            <h1 class="text-2xl font-semibold">Settings</h1>
-            <p class="mt-1 text-sm text-muted">Your personal preferences on this platform.</p>
-        </header>
+        <PageHeader title="Settings" description="Your personal preferences on this platform." />
 
         <div class="scrollbar-thin mb-5 overflow-x-auto border-b border-line pb-2">
             <Segmented :model-value="activeTab" :options="options" @update:model-value="selectTab" />

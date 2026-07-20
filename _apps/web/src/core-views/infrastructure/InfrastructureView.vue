@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Page } from "@intentic-app/ui";
+import { Page, PageHeader } from "@intentic-app/ui";
 import InfraDeclare from "./InfraDeclare.vue";
 
 /* The infrastructure extension: the want-first declare surface of the intent repo. No onboarding gate — the
@@ -10,11 +10,8 @@ import InfraDeclare from "./InfraDeclare.vue";
 
 <template>
     <div class="h-full min-h-0 overflow-auto">
-        <Page class="max-w-6xl">
-            <header class="mb-6">
-                <h1 class="text-2xl font-semibold">Infrastructure</h1>
-                <p class="mt-1 text-sm text-muted">Run your own services on your own server.</p>
-            </header>
+        <Page width="wide">
+            <PageHeader title="Infrastructure" description="Run your own services on your own server." />
             <InfraDeclare />
         </Page>
     </div>

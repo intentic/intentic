@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DraftStatus, DraftSummary } from "@intentic-app/api-contract";
-import { Card, cmp, Page, StatusBadge, type StatusVariant } from "@intentic-app/ui";
+import { Card, cmp, Page, PageHeader, StatusBadge, type StatusVariant } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { useAsyncAction } from "../composables/useAsyncAction";
 import { useDrafts } from "../composables/extensions/useDrafts";
@@ -58,13 +58,12 @@ const removeDraft = (id: string): Promise<void> =>
 
 <template>
     <Page>
-        <header class="mb-6">
-            <h1 class="text-2xl font-semibold">Drafts</h1>
-            <p class="mt-1 text-sm text-muted">
+        <PageHeader title="Drafts">
+            <template #description>
                 Posts your agent prepared for approval. Approve one to queue it — the "Publish approved drafts" automation posts it on its scheduled
                 date through the matching platform connector. Reject to discard.
-            </p>
-        </header>
+            </template>
+        </PageHeader>
 
         <div v-if="actionError ?? listError" :class="cmp.alertDanger('mb-3')">
             {{ actionError ?? listError }}

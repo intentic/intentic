@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
-import { cmp, Page, Segmented, StatusBadge } from "@intentic-app/ui";
+import { cmp, Page, PageHeader, Segmented, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -111,14 +111,11 @@ const pushToCi = async (): Promise<void> => {
 </script>
 
 <template>
-    <Page>
-        <header class="mb-4">
-            <h1 class="text-2xl font-semibold">Secrets</h1>
-            <p class="mt-1 text-sm text-muted">
-                Everything lives inside your sandbox — the platform never sees a value. Your intent declares which secrets it needs; intentic
-                generates the rest.
-            </p>
-        </header>
+    <Page width="wide">
+        <PageHeader
+            title="Secrets"
+            description="Everything lives inside your sandbox — the platform never sees a value. Your intent declares which secrets it needs; intentic generates the rest."
+        />
 
         <div v-if="missingCount > 0" :class="cmp.alertWarning('mb-4')">
             {{ missingCount }} required secret{{ missingCount === 1 ? ` is` : `s are` }} not set yet — deploys fail until every required value is in

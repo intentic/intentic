@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, InfoHint, Page, StatusBadge } from "@intentic/extension-ui";
+import { Button, cmp, Icon, InfoHint, Page, PageHeader, StatusBadge } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { usePorts } from "./usePorts";
 
@@ -91,10 +91,9 @@ const displayCwd = (cwd: string): string => cwd.replace(/^\/work\//, ``);
 
 <template>
     <div class="h-full min-h-0 overflow-auto">
-        <Page class="max-w-none">
-            <header class="mb-6">
-                <div class="flex items-center gap-2">
-                    <h1 class="text-2xl font-semibold">Ports</h1>
+        <Page width="wide">
+            <PageHeader title="Ports" description="What's serving inside the sandbox — and which of it your browser can reach.">
+                <template #info>
                     <InfoHint label="Ports">
                         <span class="block text-sm font-medium text-content">Listening ports</span>
                         <span class="mt-1 block text-xs text-muted">
@@ -103,9 +102,8 @@ const displayCwd = (cwd: string): string => cwd.replace(/^\/work\//, ``);
                             until you stop it.
                         </span>
                     </InfoHint>
-                </div>
-                <p class="mt-1 text-sm text-muted">What's serving inside the sandbox — and which of it your browser can reach.</p>
-            </header>
+                </template>
+            </PageHeader>
 
             <div v-if="error || actionError" :class="cmp.alertDanger('mb-4 px-4 py-3 text-sm')">{{ error ?? actionError }}</div>
 

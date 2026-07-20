@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Page, Segmented } from "@intentic-app/ui";
+import { Page, PageHeader, Segmented } from "@intentic-app/ui";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRunning } from "../composables/sandbox/useRunning";
@@ -60,12 +60,10 @@ watch(
 
 <template>
     <Page>
-        <header class="mb-5">
-            <h1 class="text-2xl font-semibold">{{ sandbox.active.value?.name ?? `Sandbox` }}</h1>
-            <p class="mt-1 text-sm text-muted">
-                The workspace AI operates from. The platform keeps only its address; accounts and credentials stay inside it.
-            </p>
-        </header>
+        <PageHeader
+            :title="sandbox.active.value?.name ?? `Sandbox`"
+            description="The workspace AI operates from. The platform keeps only its address; accounts and credentials stay inside it."
+        />
 
         <div class="scrollbar-thin mb-5 overflow-x-auto border-b border-line pb-2">
             <Segmented :model-value="activeTab" :options="options" @update:model-value="selectTab" />

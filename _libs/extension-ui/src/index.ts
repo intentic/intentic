@@ -20,6 +20,7 @@ export {
     type IconName,
     InfoHint,
     Page,
+    PageHeader,
     ProgressRing,
     Segmented,
     StatusBadge,

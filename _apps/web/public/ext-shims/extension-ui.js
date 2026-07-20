@@ -14,6 +14,7 @@ export const Icon = m["Icon"];
 export const InfoHint = m["InfoHint"];
 export const InputText = m["InputText"];
 export const Page = m["Page"];
+export const PageHeader = m["PageHeader"];
 export const Popover = m["Popover"];
 export const ProgressRing = m["ProgressRing"];
 export const Segmented = m["Segmented"];

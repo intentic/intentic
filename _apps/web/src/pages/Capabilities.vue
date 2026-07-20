@@ -8,7 +8,7 @@ import {
     connectorCard,
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace, type MarketplacePlugin } from "@intentic-app/api-contract";
-import { cmp, type IconName, Page, Segmented } from "@intentic-app/ui";
+import { cmp, type IconName, Page, PageHeader, Segmented } from "@intentic-app/ui";
 import { type CapabilityEffect, capabilityEffects } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
@@ -466,7 +466,7 @@ const submitLabel = computed(() =>
 </script>
 
 <template>
-    <Page class="max-w-6xl">
+    <Page width="wide">
         <div v-if="topError" :class="cmp.alertDanger('mb-4')">{{ topError }}</div>
 
         <!-- STEP 2: configure + apply the picked capability. Centered so a short form doesn't stretch the page. -->
@@ -678,13 +678,10 @@ const submitLabel = computed(() =>
 
         <!-- STEP 1: the catalog, grouped into sections. -->
         <template v-else>
-            <header class="mb-6">
-                <h1 class="text-2xl font-semibold">Add a capability</h1>
-                <p class="mt-1 text-sm text-muted">
-                    Grow your sandbox. DevOps unlocks self-hosting and deployment; the rest give your agent new tools or connect your accounts.
-                    Everything is stored only in your sandbox.
-                </p>
-            </header>
+            <PageHeader
+                title="Add a capability"
+                description="Grow your sandbox. DevOps unlocks self-hosting and deployment; the rest give your agent new tools or connect your accounts. Everything is stored only in your sandbox."
+            />
 
             <div class="flex flex-col gap-8">
                 <div v-for="group in groupedCatalog" :key="group.label" class="flex flex-col gap-3">

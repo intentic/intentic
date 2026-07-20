@@ -147,7 +147,7 @@ onUnmounted(() => {
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <div class="min-h-0 flex-1 overflow-auto">
-            <Page class="flex flex-col gap-6">
+            <Page width="wide" class="flex flex-col gap-6">
                 <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
                 <div v-if="testsError" :class="cmp.alertDanger()">{{ testsError }}</div>
                 <div v-if="actionError" :class="cmp.alertDanger()">{{ actionError }}</div>

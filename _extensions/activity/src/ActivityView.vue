@@ -1,6 +1,18 @@
 <script setup lang="ts">
 import type { ActivityEvent } from "@intentic/sandbox-contract";
-import { Card, cmp, Icon, type IconName, InfoHint, Page, Segmented, StatusBadge, type StatusVariant, timeAgo } from "@intentic/extension-ui";
+import {
+    Card,
+    cmp,
+    Icon,
+    type IconName,
+    InfoHint,
+    Page,
+    PageHeader,
+    Segmented,
+    StatusBadge,
+    type StatusVariant,
+    timeAgo,
+} from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { useActivity } from "./useActivity";
 
@@ -58,10 +70,9 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
 
 <template>
     <div class="h-full min-h-0 overflow-auto">
-        <Page class="max-w-none">
-            <header class="mb-6">
-                <div class="flex items-center gap-2">
-                    <h1 class="text-2xl font-semibold">Activity</h1>
+        <Page width="wide">
+            <PageHeader title="Activity" description="What the agent heard, said, and did through its connected capabilities.">
+                <template #info>
                     <InfoHint label="Activity">
                         <span class="block text-sm font-medium text-content">Activity</span>
                         <span class="mt-1 block text-xs text-muted">
@@ -69,9 +80,8 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
                             and <b>system</b> events (wake outcomes, connection failures, voice sessions).
                         </span>
                     </InfoHint>
-                </div>
-                <p class="mt-1 text-sm text-muted">What the agent heard, said, and did through its connected capabilities.</p>
-            </header>
+                </template>
+            </PageHeader>
 
             <div v-if="error" :class="cmp.alertDanger('mb-4 px-4 py-3 text-sm')">{{ error }}</div>
 

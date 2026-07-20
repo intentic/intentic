@@ -8,6 +8,7 @@ export { type DagEdge, type DagNode } from "./components/dagLayout.js";
 export { default as Icon } from "./components/Icon.vue";
 export { default as InfoHint } from "./components/InfoHint.vue";
 export { default as Page } from "./components/Page.vue";
+export { default as PageHeader } from "./components/PageHeader.vue";
 export { default as ProgressRing } from "./components/ProgressRing.vue";
 export { default as PullToRefresh } from "./components/PullToRefresh.vue";
 export { default as Segmented } from "./components/Segmented.vue";

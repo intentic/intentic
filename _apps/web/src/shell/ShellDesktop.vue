@@ -9,6 +9,7 @@ import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/
 import { detectActivations, extensionPath } from "../core-views/registry";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
+import { useShellCommands } from "../composables/commands/useShellCommands";
 import { useLayout } from "../composables/useLayout";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useQuickOpen } from "../composables/useQuickOpen";
@@ -107,18 +108,23 @@ const gridStyle = computed(() => ({ "--chat-width": poppedOut.value ? `0px` : `$
 // shells and dev servers stay visible while navigating. Ctrl+` toggles it from anywhere in the shell.
 const terminal = useTerminalPanel();
 const terminalMaximized = ref(false);
-const { isOpen: quickOpen } = useQuickOpen();
-// The desktop shell's single global-shortcut hub (both actions are sandbox-global, so they live here rather than
-// in any one view): Ctrl+` toggles the terminal, Ctrl/Cmd+P opens the Quick Open file palette.
+const { isOpen: quickOpen, mode: quickOpenMode } = useQuickOpen();
+// The core shell's built-in Command Palette commands (navigation, terminal, chat pop-out, Go to File) — registered
+// on mount, disposed on unmount, so the `>` command mode is populated the moment the shell is up.
+useShellCommands();
+// The desktop shell's single global-shortcut hub (all actions are sandbox-global, so they live here rather than in
+// any one view): Ctrl+` toggles the terminal, Ctrl/Cmd+P opens Quick Open on files, Ctrl/Cmd+Shift+P opens it on
+// the Command Palette — the two VSCode/Cursor muscle-memory bindings landing on the two faces of one palette.
 const onShellKey = (event: KeyboardEvent): void => {
     if (event.ctrlKey && event.key === `\``) {
         event.preventDefault();
         terminal.toggle();
         return;
     }
-    // VSCode Ctrl/Cmd+P — !shift keeps Ctrl+Shift+P free; preventDefault overrides the browser's print dialog.
-    if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === `p`) {
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === `p`) {
+        // preventDefault overrides the browser's print dialog. Shift picks the Command Palette face, else files.
         event.preventDefault();
+        quickOpenMode.value = event.shiftKey ? `commands` : `files`;
         quickOpen.value = true;
     }
 };

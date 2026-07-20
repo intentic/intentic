@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { cmp, Code, formatBytes, Icon, InfoHint, Page, Segmented, timeAgo } from "@intentic/extension-ui";
+import { cmp, Code, formatBytes, Icon, InfoHint, Page, PageHeader, Segmented, timeAgo } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { useLogs, useLogTail } from "./useLogs";
 
@@ -57,7 +57,9 @@ const groupTabs = computed(() => [
         badge: queryFiltered.value.filter((file) => groupOf(file) === name).length,
     })),
 ]);
-const visible = computed(() => (groupChoice.value === `all` ? queryFiltered.value : queryFiltered.value.filter((file) => groupOf(file) === groupChoice.value)));
+const visible = computed(() =>
+    groupChoice.value === `all` ? queryFiltered.value : queryFiltered.value.filter((file) => groupOf(file) === groupChoice.value),
+);
 
 // Group the visible list by its top-level dir so the All tab reads as sections; a specific tab renders as
 // one flat list with the redundant group prefix stripped from displayed names.
@@ -80,10 +82,9 @@ watch(tail, () => {
 
 <template>
     <div class="h-full min-h-0 overflow-auto">
-        <Page class="max-w-none">
-            <header class="mb-6">
-                <div class="flex items-center gap-2">
-                    <h1 class="text-2xl font-semibold">Logs</h1>
+        <Page width="wide">
+            <PageHeader title="Logs" description="Terminal sessions, infra runs, and the sandbox daemon — durable and tamper-proof.">
+                <template #info>
                     <InfoHint label="Logs">
                         <span class="block text-sm font-medium text-content">Sandbox logs</span>
                         <span class="mt-1 block text-xs text-muted">
@@ -92,9 +93,8 @@ watch(tail, () => {
                             survives rebuilds.
                         </span>
                     </InfoHint>
-                </div>
-                <p class="mt-1 text-sm text-muted">Terminal sessions, infra runs, and the sandbox daemon — durable and tamper-proof.</p>
-            </header>
+                </template>
+            </PageHeader>
 
             <div v-if="error" :class="cmp.alertDanger('mb-4 px-4 py-3 text-sm')">{{ error }}</div>
 
@@ -148,9 +148,7 @@ watch(tail, () => {
                     <p v-else-if="files.length === 0 && !isLoading" class="py-6 text-center text-sm text-muted">
                         Nothing yet. Logs appear as terminals run, infra commands execute, and the daemon works.
                     </p>
-                    <p v-else-if="files.length > 0" class="py-6 text-center text-sm text-muted">
-                        No files match the current filters.
-                    </p>
+                    <p v-else-if="files.length > 0" class="py-6 text-center text-sm text-muted">No files match the current filters.</p>
                 </section>
 
                 <section v-if="selected" class="rounded-lg border border-line bg-card p-4">

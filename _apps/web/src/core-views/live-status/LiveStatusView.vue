@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ResourceGroupSchema, type Deployment } from "@intentic-app/api-contract";
-import { Card, cmp, CopyButton, InfoHint, Page, StatusBadge } from "@intentic-app/ui";
+import { Card, cmp, CopyButton, InfoHint, Page, PageHeader, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, reactive, ref } from "vue";
 import PlanStepRow from "../../components/PlanStepRow.vue";
@@ -101,26 +101,24 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 
 <template>
     <div class="h-full min-h-0 overflow-auto">
-        <Page class="max-w-none">
-            <header class="mb-6">
-                <div class="flex items-center justify-between gap-3">
-                    <div class="flex items-center gap-2">
-                        <h1 class="text-2xl font-semibold">Live status</h1>
-                        <InfoHint label="Live status">
-                            <span class="block text-sm font-medium text-content">Live status</span>
-                            <span class="mt-1 block text-xs text-muted">
-                                <b>Planned</b> is what your configuration resolves to. <b>Running now</b> is what's really on your server. When they
-                                match, you're <b>up to date</b>.
-                            </span>
-                        </InfoHint>
-                        <StatusBadge v-if="convergence" :variant="convergence.variant" :label="convergence.label" dot />
-                    </div>
+        <Page width="full">
+            <PageHeader title="Live status" description="The realized state of your infrastructure — planned resources and live deployments.">
+                <template #info>
+                    <InfoHint label="Live status">
+                        <span class="block text-sm font-medium text-content">Live status</span>
+                        <span class="mt-1 block text-xs text-muted">
+                            <b>Planned</b> is what your configuration resolves to. <b>Running now</b> is what's really on your server. When they
+                            match, you're <b>up to date</b>.
+                        </span>
+                    </InfoHint>
+                    <StatusBadge v-if="convergence" :variant="convergence.variant" :label="convergence.label" dot />
+                </template>
+                <template #actions>
                     <Button label="Refresh" size="small" severity="secondary" :disabled="loading" @click="refresh">
                         <template #icon><Icon name="refresh" /></template>
                     </Button>
-                </div>
-                <p class="mt-1 text-sm text-muted">The realized state of your infrastructure — planned resources and live deployments.</p>
-            </header>
+                </template>
+            </PageHeader>
 
             <div v-if="wsError" :class="cmp.alertDanger('mb-4 px-4 py-3 text-sm')">{{ wsError }}</div>
 
