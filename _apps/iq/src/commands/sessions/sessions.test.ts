@@ -76,6 +76,24 @@ test("sessions match surfaces the strong match with a fork suggestion", async ()
     expect(out).toContain(`fork it: iq sessions fork ${SESSION_A}`);
 });
 
+test("sessions grab prints asked→answered excerpts with a fork tip; none → 1", async () => {
+    const hit = await invoke(["sessions", "grab", "JWT refresh token rotation"]);
+    expect(hit.exitCode).toBe(0);
+    expect(hit.out).toContain(`${SESSION_A}/0`);
+    expect(hit.out).toContain("asked: Fix the JWT refresh token rotation");
+    expect(hit.out).toContain("answered: The rotation bug is in token refresh.");
+    expect(hit.out).toContain(`iq sessions fork ${SESSION_A} --at 0`);
+    const none = await invoke(["sessions", "grab", "zz_never_zz"]);
+    expect(none.exitCode).toBe(1);
+});
+
+test("sessions grab --json emits a parseable array", async () => {
+    const { out } = await invoke(["sessions", "grab", "rotation bug", "--json"]);
+    const excerpts = JSON.parse(out) as { sessionId: string; fragment: string }[];
+    expect(excerpts[0]?.sessionId).toBe(SESSION_A);
+    expect(excerpts[0]?.fragment).toContain("rotation bug");
+});
+
 test("hook mode emits additionalContext JSON only on a strong first-prompt match", async () => {
     let out = "";
     const write = (chunk: string): void => void (out += chunk);
@@ -91,6 +109,9 @@ test("hook mode emits additionalContext JSON only on a strong first-prompt match
     const output = JSON.parse(out) as { hookSpecificOutput: { hookEventName: string; additionalContext: string } };
     expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
     expect(output.hookSpecificOutput.additionalContext).toContain(`iq sessions fork ${SESSION_A}`);
+    // The context carries the matched turns' asked→answered excerpts, not just the fork pointer.
+    expect(output.hookSpecificOutput.additionalContext).toContain("asked: Fix the JWT refresh token rotation");
+    expect(output.hookSpecificOutput.additionalContext).toContain("answered: The rotation bug is in token refresh.");
 });
 
 test("hook mode stays silent on non-first prompts, weak matches, and garbage input", async () => {

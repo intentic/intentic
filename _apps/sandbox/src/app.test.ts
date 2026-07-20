@@ -186,7 +186,6 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     activity: { append: async () => {}, list: async () => [] },
     sandboxSettings: {
         get: async () => ({
-            searchPastChats: false,
             stableSystemPrompt: false,
             skills: [],
             hashlineEdits: false,

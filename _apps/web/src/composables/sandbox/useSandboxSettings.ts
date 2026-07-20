@@ -6,8 +6,8 @@ import { sandboxKey } from "./useSandbox";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 /* The active sandbox's agent settings (.intentic/settings.json), read/written via the daemon's /settings routes.
- * Currently just `searchPastChats` — whether the agent may search this sandbox's earlier conversations. `save`
- * overwrites the whole object; the next turn's streamAgent reads it to gate the search_past_chats tool. */
+ * All per-sandbox agent toggles (iq search, hashline edits, output cleaning, prompt stability, …). `save`
+ * overwrites the whole object; the next turn's streamAgent reads it to gate each behavior. */
 
 const QUERY_KEY = sandboxKey(`settings`);
 

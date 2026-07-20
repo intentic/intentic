@@ -171,18 +171,10 @@ const finishConnect = async (): Promise<void> => {
     }
 };
 
-// --- Agent behavior: search past chats (per-sandbox, daemon .intentic/settings.json) -----------------------
+// --- Agent behavior toggles (per-sandbox, daemon .intentic/settings.json) ----------------------------------
+// The daemon overwrites the whole settings object, so each toggle spreads the current settings and flips just
+// its flag. Toggles are disabled until settings load, so a defined value is guaranteed by the time one fires.
 const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
-
-// The daemon overwrites the whole settings object, so spread the current settings and flip just this flag. The
-// toggle is disabled until settings load, so a defined value is guaranteed by the time this fires.
-const toggleSearchPastChats = (value: boolean): void => {
-    const current = sandboxSettings.value;
-    if (current === undefined) {
-        return;
-    }
-    saveSandboxSettings.mutate({ ...current, searchPastChats: value });
-};
 
 // Output cleaning is a spec string ("" = all cleaners on, "off" = disabled), not a bool; this toggle covers the
 // common on/off. A finer spec (e.g. "-cap", "git,pnpm") for benchmarking specific cleaners is set via /settings.
@@ -550,23 +542,6 @@ const importMemory = async (): Promise<void> => {
                     </div>
                 </div>
             </div>
-        </Card>
-
-        <!-- Past-chat search — lets the agent look through the active sandbox's earlier conversations. Stored
-             per-sandbox in the daemon, so it's disabled until the active sandbox is reachable. -->
-        <Card class="flex items-center justify-between">
-            <div class="flex min-w-0 items-center gap-2.5">
-                <Icon name="history" class="text-lg text-muted" />
-                <div class="min-w-0">
-                    <h2 class="font-semibold leading-tight">Search past chats</h2>
-                    <p class="text-xs text-muted">Let the assistant search this sandbox's earlier conversations for relevant details.</p>
-                </div>
-            </div>
-            <ToggleSwitch
-                :model-value="sandboxSettings?.searchPastChats ?? false"
-                :disabled="sandboxSettings === undefined"
-                @update:model-value="toggleSearchPastChats"
-            />
         </Card>
 
         <!-- Output cleaning — compresses noisy shell output (installs/builds/tests) before the model sees it,

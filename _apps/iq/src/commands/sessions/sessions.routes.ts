@@ -14,6 +14,10 @@ const rootFromEnv = (): string => {
 
 const dateOf = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
+const collapse = (text: string): string => text.replaceAll(/\s+/gu, " ").trim();
+
+const cap = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
 const ingestCommand = buildCommand({
     docs: { brief: "Index new transcript lines from ~/.claude/projects (incremental, self-managing)" },
     parameters: { flags: {}, positional: { kind: "tuple", parameters: [] } },
@@ -34,7 +38,7 @@ const list = buildCommand({
     docs: { brief: "Recent sessions of this workspace, newest first" },
     parameters: {
         flags: { days: { kind: "parsed", parse: numberParser, default: "45", brief: "Only sessions active in the last N days" } },
-        positional: { kind: "tuple", parameters: [{ parse: String, brief: "Filter by prompt/title words", placeholder: "query", optional: true }] },
+        positional: { kind: "tuple", parameters: [{ parse: String, brief: "Filter by prompt/response/title words", placeholder: "query", optional: true }] },
     },
     async func(this: CommandContext, flags: { days: number }, query?: string) {
         const recall = recallFor(rootFromEnv());
@@ -149,7 +153,17 @@ export const runHookMatch = async (input: string, write: (chunk: string) => void
         if (top === undefined || !top.strong) {
             return;
         }
-        const context = `A related past session exists: "${top.title ?? top.sessionId}" (${dateOf(top.lastTs)}, ${top.promptCount} prompts). If the user seems to be continuing that work, suggest they fork it instead of rebuilding context: ${forkCommandOf(recall, top, prompt)}`;
+        const lead = `A related past session exists: "${top.title ?? top.sessionId}" (${dateOf(top.lastTs)}, ${top.promptCount} prompts). If the user seems to be continuing that work, suggest they fork it instead of rebuilding context: ${forkCommandOf(recall, top, prompt)}`;
+        // Same 45-day window as the strong-match gate; the current session never quotes itself.
+        const excerpts = recall.grab(prompt, { days: 45, limit: 3, ...(payload.session_id === undefined ? {} : { excludeSessionId: payload.session_id }) });
+        const fragments = excerpts.map(
+            (excerpt) =>
+                `- "${excerpt.title ?? excerpt.sessionId}" ${dateOf(excerpt.ts)} · asked: ${cap(collapse(excerpt.prompt), 160)}${excerpt.fragment === "" ? "" : ` · answered: ${cap(collapse(excerpt.fragment), 280)}`}`,
+        );
+        const context =
+            fragments.length === 0
+                ? lead
+                : [lead, "Excerpts from those sessions (statistical recall — verify against the current code before trusting):", ...fragments].join("\n");
         write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: context } })}\n`);
     } finally {
         recall.close();
@@ -201,6 +215,54 @@ const match = buildCommand({
     },
 });
 
+const grab = buildCommand({
+    docs: { brief: "Ranked conversation excerpts from past sessions for a topic (asked → answered fragments)" },
+    parameters: {
+        flags: {
+            days: { kind: "parsed", parse: numberParser, default: "90", brief: "Only turns from the last N days" },
+            limit: { kind: "parsed", parse: numberParser, default: "10", brief: "Max excerpts" },
+            budget: { kind: "parsed", parse: numberParser, default: "1500", brief: "Output token budget (est. 4 chars/token)" },
+            json: { kind: "boolean", default: false, brief: "One JSON array" },
+        },
+        positional: { kind: "tuple", parameters: [{ parse: String, brief: "Topic words", placeholder: "query" }] },
+    },
+    async func(this: CommandContext, flags: { days: number; limit: number; budget: number; json: boolean }, query: string) {
+        const recall = recallFor(rootFromEnv());
+        try {
+            await recall.ingest();
+            const excerpts = recall.grab(query, { days: flags.days, limit: flags.limit });
+            if (flags.json) {
+                this.process.stdout.write(`${JSON.stringify(excerpts, undefined, 4)}\n`);
+            } else {
+                let spent = 0;
+                let shown = 0;
+                for (const excerpt of excerpts) {
+                    const block = [
+                        `${excerpt.score.toFixed(2)}  ${excerpt.sessionId}/${excerpt.ordinal}  ${dateOf(excerpt.ts)}  ${excerpt.title ?? "(untitled)"}`,
+                        `    asked: ${cap(collapse(excerpt.prompt), 240)}`,
+                        ...(excerpt.fragment === "" ? [] : [`    answered: ${cap(collapse(excerpt.fragment), 480)}`]),
+                    ].join("\n");
+                    spent += Math.ceil(block.length / 4);
+                    // Always show the top hit; past the budget, report the remainder instead of printing it.
+                    if (shown > 0 && spent > flags.budget) {
+                        this.process.stdout.write(`… ${excerpts.length - shown} more past --budget ${flags.budget}\n`);
+                        break;
+                    }
+                    this.process.stdout.write(`${block}\n`);
+                    shown += 1;
+                }
+                const top = excerpts[0];
+                if (top !== undefined) {
+                    this.process.stdout.write(`\ncontinue from an excerpt's full context: iq sessions fork ${top.sessionId} --at ${top.ordinal}\n`);
+                }
+            }
+            (this.process as { exitCode?: number | string | null }).exitCode = excerpts.length > 0 ? 0 : 1;
+        } finally {
+            recall.close();
+        }
+    },
+});
+
 const fork = buildCommand({
     docs: { brief: "Copy a session up to a turn into a fresh session id for `claude --resume`" },
     parameters: {
@@ -233,6 +295,6 @@ const fork = buildCommand({
 });
 
 export const sessionsCommand = buildRouteMap({
-    routes: { ingest: ingestCommand, list, files, match, fork },
-    docs: { brief: "Session recall — what past sessions touched, and forking them mid-point" },
+    routes: { ingest: ingestCommand, list, files, match, grab, fork },
+    docs: { brief: "Session recall — what past sessions touched and said, and forking them mid-point" },
 });

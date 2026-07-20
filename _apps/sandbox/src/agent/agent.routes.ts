@@ -11,7 +11,6 @@ import { ensureFreshToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
-import { createSessionSearchServer } from "../sessions/session-search-tool.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { landAgent } from "../agents/land.js";
@@ -417,11 +416,10 @@ async function* runTurn(
         // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities — a same-named
         // external tool overrides, matching mcpServersOf's last-wins merge.
         const tools = [...services.tools, ...mcpToolsOf(capabilities)];
-        // Per-sandbox agent toggles. searchPastChats gives the agent the search_past_chats tool over this
-        // workspace's prior sessions (Claude-only — Codex has no equivalent in-process tool seam).
-        // stableSystemPrompt keeps the preset system prompt byte-stable so the provider prompt cache survives the
-        // turn — the cross-provider delegation note then rides the user message instead of the system prompt.
-        const { searchPastChats, stableSystemPrompt, hashlineEdits, iqSearch, outputCleaners, outputHoldout, filterBackend, terseOutput } =
+        // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the
+        // provider prompt cache survives the turn — the cross-provider delegation note then rides the user
+        // message instead of the system prompt.
+        const { stableSystemPrompt, hashlineEdits, iqSearch, outputCleaners, outputHoldout, filterBackend, terseOutput } =
             await services.sandboxSettings.get();
         // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
         // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle
@@ -436,11 +434,10 @@ async function* runTurn(
         // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join).
         const browserServers = await browserServersOf(capabilities, services.workspace.root);
         // Turn-scoped roots follow the effective cwd: hashline edits must anchor in the worktree an isolated
-        // turn edits, and session search reads that worktree's own session namespace. Browser profiles, plugin
-        // checkouts, and attachments stay on /work — absolute-path inputs, not edit targets.
+        // turn edits. Browser profiles, plugin checkouts, and attachments stay on /work — absolute-path
+        // inputs, not edit targets.
         const sdkServers = {
             ...browserServers,
-            ...(searchPastChats ? { pastChats: createSessionSearchServer(effectiveCwd, input.sessionId) } : {}),
             // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
             ...(hashlineEdits ? { hashline: createHashlineServer(effectiveCwd) } : {}),
         };

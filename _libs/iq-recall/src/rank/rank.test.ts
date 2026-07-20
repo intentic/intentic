@@ -4,6 +4,7 @@ import { makeRecallFixture } from "../testing.js";
 import { openRecallDb, type RecallDb } from "../store/db.js";
 import { ingest } from "../ingest/ingest.js";
 import { rankFilesForTopic } from "./files.js";
+import { grabExcerpts } from "./grab.js";
 import { matchSessions } from "./match.js";
 
 const SESSION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -74,4 +75,34 @@ test("file overlap lifts the score when caller passes known-relevant files", () 
 test("the days window drops old sessions entirely", () => {
     const matches = matchSessions(db, "improve the file icons in the workspace view tabs", { days: 10 });
     expect(matches.every((match) => match.sessionId !== SESSION_B)).toBe(true);
+});
+
+test("grab returns ranked asked→answered excerpts with fork coordinates", () => {
+    const excerpts = grabExcerpts(db, "JWT refresh token rotation");
+    const top = excerpts[0]!;
+    expect(top.sessionId).toBe(SESSION_A);
+    expect(top.ordinal).toBe(0);
+    expect(top.turnUuid).toBe("a-u0");
+    expect(top.title).toBe("Fix JWT refresh rotation");
+    expect(top.prompt).toContain("Fix the JWT refresh token rotation");
+    expect(top.fragment).toContain("token refresh");
+});
+
+test("grab matches vocabulary that only appears in the answer, never the prompt", () => {
+    // "bug" occurs solely in session A's turn-0 response.
+    const excerpts = grabExcerpts(db, "rotation bug");
+    expect(excerpts[0]?.sessionId).toBe(SESSION_A);
+    expect(excerpts[0]?.ordinal).toBe(0);
+    expect(excerpts[0]?.fragment).toContain("rotation bug");
+});
+
+test("grab excludes the current session and honors the days window", () => {
+    expect(grabExcerpts(db, "JWT refresh token rotation", { excludeSessionId: SESSION_A })).toHaveLength(0);
+    expect(grabExcerpts(db, "file icons workspace", { days: 10 })).toHaveLength(0);
+    expect(grabExcerpts(db, "file icons workspace").map((excerpt) => excerpt.sessionId)).toContain(SESSION_B);
+});
+
+test("grab tolerates empty and operator-only queries", () => {
+    expect(grabExcerpts(db, "")).toEqual([]);
+    expect(grabExcerpts(db, '(" OR ')).toEqual([]);
 });

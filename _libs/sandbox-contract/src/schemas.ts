@@ -270,7 +270,6 @@ export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTrans
 // ---- settings: per-sandbox agent settings (.intentic/settings.json) ----
 // Small user-owned config the /settings routes edit and streamAgent reads — all opt-in booleans the owner
 // toggles in the UI (so each can be A/B benchmarked):
-//   searchPastChats   — gates the search_past_chats agent tool (off ⇒ not registered, agent can't read prior chats).
 //   stableSystemPrompt — keeps the system prompt byte-stable across turns (the delegation note rides the user
 //                        message instead of the preset `append`) so the provider prompt cache survives.
 //   skills            — names of baked-tool skills to load into .claude/skills so the agent reaches for them
@@ -297,7 +296,6 @@ export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTrans
 // outputHoldout 0, filterBackend "native" — a fresh sandbox starts with cleaning and iq off until the owner enables them.
 
 export const SandboxSettingsSchema = z.object({
-    searchPastChats: z.boolean(),
     stableSystemPrompt: z.boolean(),
     skills: z.array(z.string()),
     hashlineEdits: z.boolean(),

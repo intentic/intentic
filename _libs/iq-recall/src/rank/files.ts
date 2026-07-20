@@ -52,11 +52,16 @@ export interface MatchingTurn {
     readonly score: number;
 }
 
-// Turns whose prompt matches the query, with bm25 sign-flipped to positive-better.
+// Prompt counts double the response: the typed prompt states intent, the answer adds recall vocabulary.
+// Per-column BM25 stats mean a prompt-only match scores exactly as it did before responses were indexed, so
+// the fixture-tuned strong-match thresholds keep their calibration.
+export const TURN_BM25 = "-bm25(turns_fts, 1.0, 0.5)";
+
+// Turns whose prompt or response matches the query, with bm25 sign-flipped to positive-better.
 export const matchingTurns = (db: RecallDb, fts: string, sinceTs: number): MatchingTurn[] =>
     db
         .all(
-            `SELECT t.id AS id, t.session_id AS session, t.ts AS ts, -bm25(turns_fts) AS score
+            `SELECT t.id AS id, t.session_id AS session, t.ts AS ts, ${TURN_BM25} AS score
              FROM turns_fts JOIN turns t ON t.id = turns_fts.rowid
              WHERE turns_fts MATCH ? AND t.ts >= ?`,
             fts,

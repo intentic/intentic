@@ -1,7 +1,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative } from "node:path";
 import { readLines } from "../transcript/line-reader.js";
-import { aiTitleOf, fileTouchesOf, parseLine, timestampOf, typedPromptOf, uuidOf } from "../transcript/lines.js";
+import { aiTitleOf, assistantTextOf, fileTouchesOf, parseLine, timestampOf, typedPromptOf, uuidOf } from "../transcript/lines.js";
 import type { RecallDb } from "../store/db.js";
 
 export interface IngestStats {
@@ -24,6 +24,9 @@ interface Touch {
     lastTs: number;
 }
 
+// Head-cap on the stored per-turn response — answers lead with their point; the transcript keeps the rest.
+const RESPONSE_CAP = 4000;
+
 const asString = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 
 // Everything one incremental pass over a single transcript produces, applied later in one sync transaction
@@ -39,6 +42,10 @@ interface Delta {
     newTurns: NewTurn[];
     // Keyed by turn ordinal — including the still-open turn restored from a previous pass.
     touches: Map<number, Map<string, Touch>>;
+    // Ordinal → the turn's latest assistant text message so far. Last-write-wins twice over: within a turn the
+    // closing message is the answer (progress narration and dead branches precede it in append order), and a
+    // later incremental pass overwrites the still-open turn's stored response with the newer closing message.
+    responses: Map<number, string>;
 }
 
 const parseDelta = async (path: string, fromByte: number, lastOrdinal: number, root: string): Promise<Delta> => {
@@ -52,6 +59,7 @@ const parseDelta = async (path: string, fromByte: number, lastOrdinal: number, r
         byteOffset: fromByte,
         newTurns: [],
         touches: new Map(),
+        responses: new Map(),
     };
     let ordinal = lastOrdinal;
     let lineStart = fromByte;
@@ -84,6 +92,10 @@ const parseDelta = async (path: string, fromByte: number, lastOrdinal: number, r
         }
         if (ordinal < 0) {
             continue;
+        }
+        const text = assistantTextOf(line);
+        if (text !== undefined) {
+            delta.responses.set(ordinal, text.slice(0, RESPONSE_CAP));
         }
         for (const { path: touched, modified } of fileTouchesOf(line)) {
             const rel = relative(root, touched);
@@ -125,8 +137,23 @@ const applyDelta = (db: RecallDb, transcriptPath: string, sessionId: string, del
         delta.maxTs ?? 0,
     );
     const sessionRowId = db.get("SELECT id FROM sessions WHERE session_id = ?", sessionId)?.["id"] as number;
+    const newOrdinals = new Set(delta.newTurns.map((turn) => turn.ordinal));
     for (const turn of delta.newTurns) {
-        db.run("INSERT INTO turns (session_id, uuid, ordinal, ts, prompt, start_byte) VALUES (?, ?, ?, ?, ?, ?)", sessionRowId, turn.uuid, turn.ordinal, turn.ts, turn.prompt, turn.startByte);
+        db.run(
+            "INSERT INTO turns (session_id, uuid, ordinal, ts, prompt, response, start_byte) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            sessionRowId,
+            turn.uuid,
+            turn.ordinal,
+            turn.ts,
+            turn.prompt,
+            delta.responses.get(turn.ordinal) ?? "",
+            turn.startByte,
+        );
+    }
+    for (const [ordinal, response] of delta.responses) {
+        if (!newOrdinals.has(ordinal)) {
+            db.run("UPDATE turns SET response = ? WHERE session_id = ? AND ordinal = ?", response, sessionRowId, ordinal);
+        }
     }
     for (const [ordinal, byPath] of delta.touches) {
         const turnId = db.get("SELECT id FROM turns WHERE session_id = ? AND ordinal = ?", sessionRowId, ordinal)?.["id"] as number | undefined;

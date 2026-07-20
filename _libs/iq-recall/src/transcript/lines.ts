@@ -66,6 +66,28 @@ export const typedPromptOf = (line: Line): string | undefined => {
     return prompt === "" || isCommandText(prompt) ? undefined : prompt;
 };
 
+// The assistant text of this line, or undefined for tool-use-only lines, sidechains, and non-assistant lines.
+// Sidechains (subagent threads) are excluded — their text answers the subagent's prompt, not the user's turn.
+export const assistantTextOf = (line: Line): string | undefined => {
+    if (typeOf(line) !== "assistant" || line["isSidechain"] === true) {
+        return undefined;
+    }
+    const content = asRecord(line["message"])?.["content"];
+    if (!Array.isArray(content)) {
+        return undefined;
+    }
+    const texts: string[] = [];
+    for (const block of content) {
+        const record = asRecord(block);
+        const text = record?.["type"] === "text" ? asString(record["text"]) : undefined;
+        if (text !== undefined) {
+            texts.push(text);
+        }
+    }
+    const joined = texts.join("\n");
+    return joined === "" ? undefined : joined;
+};
+
 export interface FileTouch {
     readonly path: string;
     readonly modified: boolean;

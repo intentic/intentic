@@ -29,6 +29,11 @@ const turnsOf = (sessionId: string): { ordinal: number; prompt: string }[] =>
         .all("SELECT t.ordinal AS ordinal, t.prompt AS prompt FROM turns t JOIN sessions s ON s.id = t.session_id WHERE s.session_id = ? ORDER BY t.ordinal", sessionId)
         .map((row) => ({ ordinal: Number(row["ordinal"]), prompt: row["prompt"] as string }));
 
+const responseOf = (sessionId: string, ordinal: number): string =>
+    db.get("SELECT t.response AS response FROM turns t JOIN sessions s ON s.id = t.session_id WHERE s.session_id = ? AND t.ordinal = ?", sessionId, ordinal)?.[
+        "response"
+    ] as string;
+
 const touchesOf = (sessionId: string, ordinal: number): { path: string; modified: number }[] =>
     db
         .all(
@@ -57,6 +62,12 @@ test("full ingest indexes sessions, turns, touches, and titles", async () => {
         { path: "src/auth/token.test.ts", modified: 0 },
         { path: "src/auth/token.ts", modified: 1 },
     ]);
+    // The turn's closing assistant message is the stored response — the dead branch is superseded by append
+    // order, and an oversized answer is head-capped.
+    expect(responseOf(SESSION_A, 0)).toBe("The rotation bug is in token refresh.");
+    expect(responseOf(SESSION_A, 1)).toMatch(/^Rotation fixed and tests added\./);
+    expect(responseOf(SESSION_A, 1)).toHaveLength(4000);
+    expect(responseOf(SESSION_B, 0)).toBe("Icons updated.");
 });
 
 test("unchanged transcripts are skipped; re-ingest is idempotent", async () => {
@@ -102,6 +113,25 @@ test("an appended typed prompt opens the next ordinal", async () => {
     expect(turnsOf(SESSION_A).at(-1)).toEqual({ ordinal: 2, prompt: "Also update the changelog" });
     const offset = Number(db.get("SELECT byte_offset FROM transcripts WHERE session_id = ?", SESSION_A)?.["byte_offset"]);
     expect(offset).toBe(statSync(path).size);
+});
+
+test("appended assistant text overwrites the still-open turn's response, FTS included", async () => {
+    const path = join(projectsDir, `${SESSION_A}.jsonl`);
+    const ts = new Date().toISOString();
+    await appendFile(
+        path,
+        `${JSON.stringify({
+            parentUuid: "a-u9",
+            type: "assistant",
+            message: { role: "assistant", content: [{ type: "text", text: "Changelog entry drafted under Unreleased." }] },
+            uuid: "a-a10",
+            timestamp: ts,
+            sessionId: SESSION_A,
+        })}\n`,
+    );
+    await ingest(db, { root, projectsDir });
+    expect(responseOf(SESSION_A, 2)).toBe("Changelog entry drafted under Unreleased.");
+    expect(db.all("SELECT rowid FROM turns_fts WHERE turns_fts MATCH 'drafted'")).toHaveLength(1);
 });
 
 test("a shrunk transcript is reparsed from scratch instead of trusting stale offsets", async () => {

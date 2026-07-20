@@ -3,6 +3,7 @@ import { selectForkPoint } from "./fork/fork-point.js";
 import { materializeFork } from "./fork/fork.js";
 import { ingest } from "./ingest/ingest.js";
 import { ftsQueryOf, rankFilesForTopic } from "./rank/files.js";
+import { grabExcerpts } from "./rank/grab.js";
 import { matchSessions } from "./rank/match.js";
 import { openRecallDb, type RecallDb } from "./store/db.js";
 import { projectsDirOf } from "./transcript/slug.js";
@@ -10,6 +11,7 @@ import { projectsDirOf } from "./transcript/slug.js";
 export type { ForkPoint } from "./fork/fork-point.js";
 export type { ForkResult } from "./fork/fork.js";
 export type { IngestStats } from "./ingest/ingest.js";
+export type { GrabOptions, TurnExcerpt } from "./rank/grab.js";
 export type { MatchOptions, SessionMatch } from "./rank/match.js";
 export type { TopicFile, TopicOptions } from "./rank/files.js";
 export { readLines } from "./transcript/line-reader.js";
@@ -18,6 +20,7 @@ export { projectsDirOf } from "./transcript/slug.js";
 
 import type { IngestStats } from "./ingest/ingest.js";
 import type { TopicFile, TopicOptions } from "./rank/files.js";
+import type { GrabOptions, TurnExcerpt } from "./rank/grab.js";
 import type { MatchOptions, SessionMatch } from "./rank/match.js";
 import type { ForkPoint } from "./fork/fork-point.js";
 import type { ForkResult } from "./fork/fork.js";
@@ -40,6 +43,7 @@ export interface Recall {
     ingest(): Promise<IngestStats>;
     filesForTopic(query: string, options?: TopicOptions): TopicFile[];
     match(prompt: string, options?: MatchOptions): SessionMatch[];
+    grab(query: string, options?: GrabOptions): TurnExcerpt[];
     forkPoint(sessionId: string, prompt?: string): ForkPoint | undefined;
     // `at` is a turn uuid or a turn ordinal (digits); omitted = fork the whole session.
     fork(sessionId: string, options?: { at?: string; dryRun?: boolean }): Promise<ForkResult>;
@@ -61,6 +65,7 @@ export const createRecall = (options: RecallOptions): Recall => {
         ingest: () => ingest(db(), { root: options.root, projectsDir }),
         filesForTopic: (query, topicOptions) => rankFilesForTopic(db(), query, topicOptions),
         match: (prompt, matchOptions) => matchSessions(db(), prompt, matchOptions),
+        grab: (query, grabOptions) => grabExcerpts(db(), query, grabOptions),
         forkPoint: (sessionId, prompt) => selectForkPoint(db(), options.root, sessionId, prompt),
         fork(sessionId, forkOptions = {}) {
             let atTurnUuid = forkOptions.at;

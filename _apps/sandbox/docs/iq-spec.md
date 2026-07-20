@@ -53,7 +53,7 @@ Regex by default; `--literal`, `--word`, `--case` (smart-case is the default: lo
 ```
 $ iq find 'createSdkMcpServer\(' --lang ts
 iq: find — 3 matches in 2 files · showing 3/3
-════ src/sessions/session-search-tool.ts ════
+════ src/sessions/sessions.ts ════
   18: const server = createSdkMcpServer({
 ════ src/capabilities/mcp-tools.ts ════
   44:   createSdkMcpServer({ name, tools }),
@@ -173,7 +173,7 @@ git + mtime blend; `--since 2d`, `--author <a>`. With a pattern, only matching h
 ```
 $ iq recent --since 2d
 iq: recent — 7 files changed in last 2d · showing 7/7
-  src/sessions/session-search-tool.ts   3h ago   +41 -8   (2 commits)
+  src/sessions/sessions.ts   3h ago   +41 -8   (2 commits)
   src/workspace/workspace-search.ts     1d ago   +12 -3
 ```
 

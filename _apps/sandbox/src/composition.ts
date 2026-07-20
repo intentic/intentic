@@ -147,7 +147,7 @@ export interface Services {
     // sniffed outbound provider calls, voice sessions, failures. /activity reads it; only the daemon appends.
     readonly activity: ActivityStore;
     // Per-sandbox agent settings (.intentic/settings.json) — /settings edits it; streamAgent reads it to gate
-    // the search_past_chats tool.
+    // per-turn agent behavior (iq plugin, hashline tools, output cleaning, prompt stability).
     readonly sandboxSettings: SandboxSettingsStore;
     // Claude subscription accounts (one <id>.json per account under .intentic/claude), several per sandbox.
     readonly claudeStore: ClaudeStore;

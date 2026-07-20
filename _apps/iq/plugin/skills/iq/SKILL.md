@@ -44,16 +44,22 @@ self-manages — run `iq index rebuild` only if results look stale.
 
 ## Session recall
 
-Past Claude Code sessions of this workspace are indexed (which files each topic touched, per user turn):
+Past Claude Code sessions of this workspace are indexed (each user turn's prompt, the answer it got, and
+which files it touched):
 
 | I want… | Run |
 |---|---|
+| conversation excerpts on a topic | `iq sessions grab "auth refresh"` — ranked asked→answered fragments from past sessions, budgeted |
 | files past sessions touched for a topic | `iq sessions files "auth refresh"` — complements content search: association, not text match |
 | recent sessions | `iq sessions list [query]` |
 | sessions related to a prompt | `iq sessions match "<prompt>"` |
 | continue from a past session's context | `iq sessions fork <sessionId> [--at <turn>]`, then `claude --resume <printed id>` |
 
-When a hook reports "a related past session exists" on the user's first prompt, relay the suggested
-`iq sessions fork …` command to the user and let THEM decide — never fork on their behalf. A fork copies the
-session up to that turn under a fresh id; its staleness report lists files changed since — re-read those
-before trusting remembered contents.
+When the user references something discussed in a previous chat that isn't in the current conversation,
+reach for `iq sessions grab` before asking them to repeat it. Excerpts are statistical recall over old
+transcripts — verify anything load-bearing against the current code before acting on it.
+
+When a hook reports "a related past session exists" on the user's first prompt (with excerpts from it),
+relay the suggested `iq sessions fork …` command to the user and let THEM decide — never fork on their
+behalf. A fork copies the session up to that turn under a fresh id; its staleness report lists files changed
+since — re-read those before trusting remembered contents.
