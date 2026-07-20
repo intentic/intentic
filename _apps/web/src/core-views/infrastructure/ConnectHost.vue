@@ -11,8 +11,9 @@ import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import { zoneFromUrl } from "@intentic/sandbox-contract";
 import { normalizeHostName } from "./hostName";
 
-/* The connect-a-server requirement, shown by InfraDeclare and the Add dialog when something the user wants
- * needs a deploy target and none is connected yet (it unmounts itself once a host registers). Run a single connect-host
+/* The single add-a-server flow: shown by InfraDeclare and the Add dialog as the requirement card when
+ * something the user wants needs a deploy target (the parent unmounts it once a host registers), and by
+ * InfraDeclare's "What you have" section behind its Add server button. Run a single connect-host
  * command on each host you want to deploy onto — it sets up the host (service user + SSH key + its own
  * Cloudflare tunnel) and self-registers with the sandbox via /enroll (authed by the connection token) — no
  * sandbox recreate, no keys pasted here. On an own-Cloudflare sandbox the command carries the user's CF token;
@@ -187,7 +188,8 @@ onUnmounted(() => clearInterval(timer));
                 </InfoHint>
             </div>
             <p class="mt-0.5 text-xs text-muted">
-                What you want needs a server to run on.
+                <!-- Placement-specific motivation (the requirement cards say why a server is being asked for). -->
+                <slot name="reason"></slot>
                 {{
                     provided
                         ? `One command per machine, run on it as root. No Cloudflare account needed — intentic hosts the tunnel.`
@@ -281,8 +283,8 @@ onUnmounted(() => clearInterval(timer));
                 <Icon name="spinner" class="text-info" spin />
                 <span>{{
                     provided
-                        ? `Waiting for machines to register — they appear above as you connect them. Generate a separate command for each host name you want to add.`
-                        : `Waiting for machines to register — they appear above as you connect them. Re-run the command on each host you want to add.`
+                        ? `Waiting for machines to register — each appears in your server list as you connect it. Generate a separate command for each host name you want to add.`
+                        : `Waiting for machines to register — each appears in your server list as you connect it. Re-run the command on each host you want to add.`
                 }}</span>
             </div>
         </form>

@@ -266,6 +266,65 @@ describe(`Conversation`, () => {
         expect(assistant.usage).toMatchObject({ costUsd: 0.5, numTurns: 1 });
     });
 
+    it(`opens a fresh bubble per turn: a stream carrying several turns splits at each usage boundary`, async () => {
+        const conversation = new Conversation(`c1`);
+        // A steered conversation's stream carries one turn per queued message; usage is each turn's boundary.
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `delta`, text: `first answer` },
+                { kind: `usage`, costUsd: 0.1 },
+                { kind: `thinking`, text: `next` },
+                { kind: `delta`, text: `second answer` },
+                { kind: `usage`, costUsd: 0.2 },
+                { kind: `done` },
+            ]),
+        );
+
+        await conversation.send(`two things`, settings);
+
+        expect(conversation.messages.value).toHaveLength(3);
+        const [, first, second] = conversation.messages.value;
+        expect(first).toMatchObject({ role: `assistant`, text: `first answer`, usage: { costUsd: 0.1 } });
+        expect(second).toMatchObject({ role: `assistant`, text: `second answer`, thinking: `next`, usage: { costUsd: 0.2 } });
+    });
+
+    it(`steers mid-turn: the running answer stays in its bubble above the steered message, the follow-up turn opens below`, async () => {
+        const conversation = new Conversation(`c1`);
+        let controller!: ReadableStreamDefaultController<Uint8Array>;
+        const body = new ReadableStream<Uint8Array>({
+            start(c) {
+                controller = c;
+            },
+        });
+        sandboxRequestMock.mockImplementation((path: string) =>
+            Promise.resolve(path === `/agent/steer` ? ({ ok: true } as Response) : ({ ok: true, body } as Response)),
+        );
+        const encoder = new TextEncoder();
+        const emit = (event: AgentEvent): void => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+
+        const turn = conversation.send(`2+3?`, settings);
+        await conversation.steer(`2+6?`);
+
+        // The first answer streams AFTER the steer landed — still into the bubble ABOVE the steered message.
+        emit({ kind: `delta`, text: `5` });
+        await vi.waitFor(() => expect(conversation.messages.value[1]?.text).toBe(`5`));
+        // Its end-of-turn usage retires that bubble; the queued message's own turn opens a fresh one below.
+        emit({ kind: `usage`, costUsd: 0.1 });
+        emit({ kind: `delta`, text: `8` });
+        await vi.waitFor(() => expect(conversation.messages.value[3]?.text).toBe(`8`));
+        emit({ kind: `done` });
+        controller.close();
+        await turn;
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `2+3?` },
+            { role: `assistant`, text: `5` },
+            { role: `user`, text: `2+6?` },
+            { role: `assistant`, text: `8` },
+        ]);
+        expect(conversation.messages.value[1]!.usage).toMatchObject({ costUsd: 0.1 });
+    });
+
     it(`parks the turn on a plan card and streams the continuation into a fresh bubble`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

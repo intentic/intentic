@@ -293,6 +293,48 @@ test("a steering queue switches the turn to streaming input: initial prompt, the
     expect(steering.push("too late")).toBe(false);
 });
 
+test("a steered stream survives each turn's result: the queued message's own turn keeps streaming", async () => {
+    // The SDK emits one result PER TURN on a streaming input, and a steered message the running turn can't
+    // absorb runs as its own follow-up turn — its frames must reach the client instead of dying at result #1.
+    const steering = new SteeringQueue();
+    steering.push("and 2+6?");
+    const events = await collect(
+        { ...request, steering },
+        fakeQuery(
+            { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "5" } } },
+            { type: "result", subtype: "success", total_cost_usd: 0.1 },
+            { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "8" } } },
+            { type: "result", subtype: "success", total_cost_usd: 0.2 },
+        ),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "delta", text: "5" },
+        { kind: "usage", costUsd: 0.1 },
+        { kind: "delta", text: "8" },
+        { kind: "usage", costUsd: 0.2 },
+        { kind: "done" },
+    ]);
+});
+
+test("after the last result a steered stream settles: the grace window closes the queue so the input ends", async () => {
+    const steering = new SteeringQueue();
+    steering.push("absorbed mid-turn");
+    const drained: string[] = [];
+    // Like the real SDK, the stream stays open after its result, waiting on the input stream; only the input
+    // ending (the grace window closing the queue) lets it finish.
+    const sdkLike: QueryFn = async function* (args) {
+        yield { type: "result", subtype: "success" } as SDKMessage;
+        for await (const message of args.prompt as AsyncIterable<SDKUserMessage>) {
+            drained.push(String(message.message.content));
+        }
+    };
+    const events = await collect({ ...request, steering }, sdkLike);
+    expect(events).toEqual([{ kind: "done" }]);
+    expect(drained).toEqual(["add a /ping route", "absorbed mid-turn"]);
+    expect(steering.push("too late")).toBe(false);
+});
+
 const throwing: QueryFn = async function* () {
     yield { type: "system", session_id: "s" } as SDKMessage;
     throw new Error("stream blew up");

@@ -139,6 +139,71 @@ const todoItems = (input: unknown): TodoItem[] | undefined => {
     });
 };
 
+// In streaming-input mode the SDK emits one `result` per TURN and keeps the stream open for further input: a
+// steered message the running turn could not absorb runs as its own follow-up turn AFTER the result (observed
+// to announce itself within ~2ms), while a steer absorbed mid-turn (injected between tool calls) produces no
+// extra result — so no message count can tell "more coming" from "settled". Instead, after a result on a
+// steered stream, the next SDK message is raced against this grace window: a message means another turn is
+// underway; silence means the turn stream is over.
+const STEER_GRACE_MS = 1000;
+
+const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>): Promise<IteratorResult<SDKMessage, void> | undefined> => {
+    let timer: NodeJS.Timeout | undefined;
+    const expired = new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), STEER_GRACE_MS);
+    });
+    try {
+        return await Promise.race([next, expired]);
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
+// The SDK message stream, ended at the right turn boundary. Unsteered (or never-steered) streams end at the
+// first result, as before. Once a steer was delivered, each result instead arms the grace race above; when it
+// goes silent, closing the input queue ends the SDK's streaming input and the stream drains to its natural
+// end (settling the subprocess) — a turn that slipped in during the race still streams in full.
+async function* sdkTurns(stream: AsyncIterable<SDKMessage>, steering: SteeringQueue | undefined): AsyncGenerator<SDKMessage> {
+    const iterator = stream[Symbol.asyncIterator]();
+    let awaitingNextTurn = false;
+    // A pending next() that lost the grace race is re-awaited on the following pass, never abandoned.
+    let pending: Promise<IteratorResult<SDKMessage, void>> | undefined;
+    try {
+        for (;;) {
+            const nextPromise = pending ?? iterator.next();
+            pending = undefined;
+            let step: IteratorResult<SDKMessage, void>;
+            if (awaitingNextTurn) {
+                awaitingNextTurn = false;
+                const winner = await nextWithinGrace(nextPromise);
+                if (winner === undefined) {
+                    steering?.close();
+                    pending = nextPromise;
+                    continue;
+                }
+                step = winner;
+            } else {
+                step = await nextPromise;
+            }
+            if (step.done === true) {
+                return;
+            }
+            yield step.value;
+            if (step.value.type === "result") {
+                if (steering === undefined || steering.delivered === 0) {
+                    // Close before returning (not just in runAgent's finally) so a steer racing this result
+                    // reports undelivered instead of landing in a queue nothing will ever consume.
+                    steering?.close();
+                    return;
+                }
+                awaitingNextTurn = true;
+            }
+        }
+    } finally {
+        await iterator.return?.();
+    }
+}
+
 // Normalize the SDK's SDKMessage stream onto AgentEvents. High-value block types get a dedicated frame;
 // any SDK message without a mapping is dropped. Shared by the plain and plan paths; does NOT emit the
 // terminal `done` (callers do that once the whole turn settles).
@@ -148,6 +213,7 @@ async function* streamSdk(
     options: Options,
     cwd: string,
     tmuxEnabled: boolean,
+    steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
     let sessionSent = false;
     let terminalSent = false;
@@ -166,7 +232,7 @@ async function* streamSdk(
     // context_usage frame at the result so the UI can warn as the chat nears auto-compaction.
     let contextTokens: number | undefined;
     let contextModel: string | undefined;
-    for await (const message of queryFn({ prompt, options })) {
+    for await (const message of sdkTurns(queryFn({ prompt, options }), steering)) {
         const sessionId = (message as { session_id?: string }).session_id;
         if (!sessionSent && typeof sessionId === "string" && sessionId !== "") {
             sessionSent = true;
@@ -342,7 +408,8 @@ async function* streamSdk(
             if (message.subtype !== "success") {
                 yield { kind: "error", message: `agent did not complete (${message.subtype})` };
             }
-            return;
+            // NOT the end of the stream: sdkTurns owns the turn boundary — a steered stream can carry a
+            // follow-up turn after this result, whose frames keep flowing through the same cases above.
         }
         // Any other SDK message type (hook / task / plugin / status / …) has no UI mapping — dropped, as
         // before. New high-value types earn a dedicated frame above; the rest stay silent rather than noisy.
@@ -473,7 +540,7 @@ export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaul
         ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
     };
     try {
-        yield* streamSdk(queryFn, promptInput(request), options, request.cwd, tmuxEnabled);
+        yield* streamSdk(queryFn, promptInput(request), options, request.cwd, tmuxEnabled, request.steering);
     } catch (error) {
         yield { kind: "error", message: errorMessage(error, stderr) };
     } finally {
@@ -562,7 +629,7 @@ async function* runPlanTurn(request: AgentRequest, queryFn: QueryFn, abortContro
 
     const pump = (async () => {
         try {
-            for await (const event of streamSdk(queryFn, promptInput(request), options, request.cwd, tmuxEnabled)) {
+            for await (const event of streamSdk(queryFn, promptInput(request), options, request.cwd, tmuxEnabled, request.steering)) {
                 push(event);
             }
         } catch (error) {

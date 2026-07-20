@@ -87,6 +87,27 @@ test("walkWorkspaceTree grays .gitignore'd + junk paths (never descending), and 
     expect(result.tree.find((entry) => entry.name === ".pnpm-store")?.ignored).toBe(true);
 });
 
+test("walkWorkspaceTree grays agent worktrees (.claude/worktrees) without descending; sibling .claude config walks normally", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-tree-worktrees-"));
+    await mkdir(join(root, "repo", ".claude", "worktrees", "fix", "_apps", "api"), { recursive: true });
+    await mkdir(join(root, "repo", ".claude", "skills"), { recursive: true });
+    await writeFile(join(root, "repo", ".claude", "worktrees", "fix", "_apps", "api", "vitest.config.ts"), "export default {};");
+    await writeFile(join(root, "repo", ".claude", "skills", "SKILL.md"), "# skill");
+
+    const result = await walkWorkspaceTree(root);
+    const all = paths(result.tree);
+
+    expect(all).toContain("repo/.claude/worktrees");
+    expect(all).not.toContain("repo/.claude/worktrees/fix");
+    expect(all).not.toContain("repo/.claude/worktrees/fix/_apps/api/vitest.config.ts");
+    expect(all).toContain("repo/.claude/skills/SKILL.md");
+
+    const claude = result.tree.find((entry) => entry.name === "repo")?.children?.find((entry) => entry.name === ".claude");
+    expect(claude?.ignored).toBeUndefined();
+    expect(claude?.children?.find((entry) => entry.name === "worktrees")?.ignored).toBe(true);
+    expect(claude?.children?.find((entry) => entry.name === "skills")?.ignored).toBeUndefined();
+});
+
 test("listWorkspaceChildren lazily lists one level under an ignored dir, all grayed, dirs left un-descended", async () => {
     const root = await mkdtemp(join(tmpdir(), "ws-children-"));
     await mkdir(join(root, "node_modules", "dep", "nested"), { recursive: true });

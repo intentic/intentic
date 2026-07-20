@@ -1,32 +1,16 @@
 // Platform UI/product catalogs: the add-form descriptors + card data the web renders. NOT wire contract —
 // moved out of @intentic-app/api-contract so the contract holds only schemas. Daemon enums are imported.
 import type { ConnectorContribution } from "@intentic/extension-api";
-import type { CapabilityKind, InventoryProvider, ServiceKind } from "@intentic/sandbox-contract";
+import type { CapabilityKind, ServiceKind } from "@intentic/sandbox-contract";
 
 // Catalog the web uses to render the add forms. Only the user-provided, non-secret fields appear here.
+// Backends are never added through a bare form: servers register themselves via the connect-host command
+// (ConnectHost), Cloudflare through the CloudflareConnect step.
 export interface InventoryFieldDescriptor {
     readonly key: string;
     readonly label: string;
     readonly kind: "text" | "number";
 }
-export interface InventoryProviderDescriptor {
-    readonly provider: InventoryProvider;
-    readonly label: string;
-    readonly fields: readonly InventoryFieldDescriptor[];
-}
-// The backends addable via the infra operator panel's Configuration form. Cloudflare is NOT here — it needs a
-// token + zone, so it's added through the dedicated CloudflareConnect step (which writes the secret), never this bare form.
-export const INVENTORY_PROVIDERS: readonly InventoryProviderDescriptor[] = [
-    {
-        provider: "host",
-        label: "Server",
-        fields: [
-            { key: "address", label: "Address", kind: "text" },
-            { key: "user", label: "SSH user", kind: "text" },
-            { key: "port", label: "SSH port", kind: "number" },
-        ],
-    },
-];
 // The self-hosted service catalog the infra operator panel's "Add service" dialog renders: one card per deployable service
 // (logo is a simple-icons slug, like CapabilityCatalogEntry.logo), then the per-service fields form.
 export interface InventoryServiceDescriptor {

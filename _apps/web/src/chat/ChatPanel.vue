@@ -154,11 +154,11 @@ watch(connected, (isConnected) => {
     if (!isConnected) providerModel.value?.hide();
 });
 
-// True for the assistant turn currently being streamed (the last message while streaming).
-const isStreaming = (message: ChatMessage): boolean => {
-    const list = messages.value;
-    return streaming.value && list[list.length - 1]?.id === message.id;
-};
+// True for the assistant turn currently being streamed: the last assistant bubble while streaming. Not
+// simply the last message — a steered user message (and trailing notices) land below the bubble the turn
+// is still writing into.
+const isStreaming = (message: ChatMessage): boolean =>
+    streaming.value && message.role === `assistant` && messages.value.findLast((entry) => entry.role === `assistant`)?.id === message.id;
 
 // Track whether the transcript is parked near its bottom (within ~80px), so the auto-follow watcher only snaps
 // down when the user hasn't scrolled up to read.

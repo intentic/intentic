@@ -19,6 +19,9 @@ test("isWatchIgnored skips junk dirs (incl. .git) + browser profiles, but not so
     expect(isWatchIgnored(at("app", "dist", "bundle.js"))).toBe(true);
     // The browser-login profile churns credential files constantly — still never watched (event-spam guard).
     expect(isWatchIgnored(at(".intentic", "browser", "reddit", "Default", "Cookies"))).toBe(true);
+    // Agent worktrees are full checkouts an agent edits at speed — never watched; sibling .claude config is.
+    expect(isWatchIgnored(at("app", ".claude", "worktrees", "fix", "src", "main.ts"))).toBe(true);
+    expect(isWatchIgnored(at("app", ".claude", "settings.json"))).toBe(false);
     // No security floor: secret files are watched now, so a change to .env pushes a refresh like any other file.
     expect(isWatchIgnored(at("app", ".env"))).toBe(false);
     expect(isWatchIgnored(at("app", ".env.example"))).toBe(false);

@@ -349,9 +349,10 @@ export interface SessionRef {
     readonly harness: AgentHarness;
 }
 
-// One in-flight turn's streaming context: which assistant bubble frames write into (`id` is mutable so a plan
-// card can null it mid-turn, redirecting the continuation to a new bubble), plus the provider/account serving
-// the turn — the attribution captured onto the session the stream mints.
+// One in-flight turn's streaming context: which assistant bubble frames write into (`id` is mutable — a plan
+// card nulls it mid-turn, and each `usage` frame nulls it at the turn boundary, so the continuation / the
+// next steered turn on the same stream opens a fresh bubble), plus the provider/account serving the turn —
+// the attribution captured onto the session the stream mints.
 interface TurnContext {
     id: number | null;
     // The turn's user bubble — the checkpoint frame anchors its restore affordance here.
@@ -456,10 +457,6 @@ export class Conversation {
 
     // Aborts the in-flight turn when the user hits Stop / closes the tab; cleared once the turn settles.
     private inflight: AbortController | null = null;
-
-    // The in-flight turn's streaming context, held so a successful steer can redirect the continuation to a
-    // fresh bubble below the injected user message (same mechanism as the plan/question cards).
-    private activeTurn: TurnContext | null = null;
 
     // Typewriter buffer: deltas land here and a rAF loop drains them into the visible message a few characters
     // per frame, so the answer reveals smoothly regardless of how chunky the upstream deltas arrive. `typeId`
@@ -623,7 +620,6 @@ export class Conversation {
         const turn: TurnContext = { id: assistantId, userMessageId, provider: agent, account, harness };
         this.streaming.value = true;
         this.turnStartedAt.value = Date.now();
-        this.activeTurn = turn;
         const controller = new AbortController();
         this.inflight = controller;
 
@@ -685,7 +681,6 @@ export class Conversation {
         } finally {
             this.flushType();
             this.inflight = null;
-            this.activeTurn = null;
             this.streaming.value = false;
             this.turnStartedAt.value = undefined;
         }
@@ -693,7 +688,10 @@ export class Conversation {
 
     // Mid-turn steering: deliver a user message INTO the running turn (the daemon injects it between tool
     // calls — Claude Code's queue-and-steer). On the rare miss (the turn ended before delivery) the bubble is
-    // withdrawn and the text goes back to the draft, so nothing is silently lost.
+    // withdrawn and the text goes back to the draft, so nothing is silently lost. The running turn keeps
+    // streaming into its current bubble (above this message — that output answers what came before); a steer
+    // the turn can't absorb runs as its own follow-up turn on the same stream, and the `usage` frame closing
+    // the current turn retires the bubble, so that answer opens a fresh one below this message.
     async steer(text: string): Promise<void> {
         const trimmed = text.trim();
         if (trimmed.length === 0 || !this.streaming.value) {
@@ -706,13 +704,6 @@ export class Conversation {
             this.messages.value = this.messages.value.filter((message) => message.id !== messageId);
             this.draft.value = this.draft.value.trim().length > 0 ? `${trimmed} ${this.draft.value}` : trimmed;
             this.appendNotice(`The turn ended before your message was delivered — send it again.`);
-            return;
-        }
-        // Redirect the continuation into a fresh bubble below the injected message (plan-card mechanism), so
-        // the reply to the steer doesn't stream into the bubble above it.
-        this.flushType();
-        if (this.activeTurn !== null) {
-            this.activeTurn.id = null;
         }
     }
 
@@ -888,7 +879,13 @@ export class Conversation {
                 this.availableCommands.value = event.items;
                 return;
             case `usage`:
+                // End-of-turn accounting — and the turn boundary: a steered conversation's stream can carry
+                // several turns (a queued message the running turn couldn't absorb runs as its own turn after
+                // this one settles), so retire the current bubble and let the next turn's frames open a fresh
+                // one below the steered user message.
+                this.flushType();
                 this.setUsage(event);
+                turn.id = null;
                 return;
             case `rate_limit_info`:
                 // Account-wide subscription usage (5-hour / weekly window), keyed by the account that served

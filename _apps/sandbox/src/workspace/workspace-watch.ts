@@ -1,7 +1,7 @@
 import { sep } from "node:path";
 import { watch } from "chokidar";
 import type { Logger } from "pino";
-import { IGNORED_DIRS, isBrowserProfilePath, toRelPath } from "@intentic/workspace-ignore";
+import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, toRelPath } from "@intentic/workspace-ignore";
 
 // Live file-change push. The agent edits /work out-of-band (its own Write/Edit/Bash tools — never the daemon's
 // HTTP routes), so nothing else can tell the browser its view went stale. A single filesystem watcher on the
@@ -19,9 +19,9 @@ import { IGNORED_DIRS, isBrowserProfilePath, toRelPath } from "@intentic/workspa
 const IGNORE_SEGMENTS = new Set(IGNORED_DIRS);
 export const isWatchIgnored = (abs: string): boolean => {
     const segments = abs.split(sep);
-    // The browser-login profile churns constantly (Chromium rewrites Cookies etc.) — never watch it, or every
-    // cookie rewrite would fire a tree refetch.
-    return segments.some((segment) => IGNORE_SEGMENTS.has(segment)) || isBrowserProfilePath(abs);
+    // The browser-login profile churns constantly (Chromium rewrites Cookies etc.), and agent worktrees are
+    // whole checkouts an agent edits at full speed — never watch either, or every write fires a tree refetch.
+    return segments.some((segment) => IGNORE_SEGMENTS.has(segment)) || isBrowserProfilePath(abs) || isAgentWorktreePath(abs);
 };
 
 // One batch fires 250ms after the FIRST change of a window (not reset per event), so latency is bounded to

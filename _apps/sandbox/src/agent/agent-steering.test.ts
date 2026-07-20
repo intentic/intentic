@@ -16,12 +16,14 @@ test("pushed messages are yielded in order and close() ends iteration", async ()
     queue.push("second");
     queue.close();
     expect(await drained).toEqual(["first", "second"]);
+    expect(queue.delivered).toBe(2);
 });
 
-test("push after close reports undelivered", () => {
+test("push after close reports undelivered and does not count as delivered", () => {
     const queue = new SteeringQueue();
     queue.close();
     expect(queue.push("late")).toBe(false);
+    expect(queue.delivered).toBe(0);
 });
 
 test("a consumer parked on an empty queue wakes on push", async () => {

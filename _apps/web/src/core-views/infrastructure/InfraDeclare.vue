@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { INVENTORY_PROVIDERS, INVENTORY_SERVICES, type InventoryProviderDescriptor } from "@intentic-app/capability-catalog";
-import { type InventoryEntry, type InventoryProvider } from "@intentic-app/api-contract";
+import { INVENTORY_SERVICES } from "@intentic-app/capability-catalog";
+import { type InventoryEntry } from "@intentic-app/api-contract";
 import { Card, cmp, InfoHint, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import SecretField from "../../components/SecretField.vue";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
@@ -43,8 +43,8 @@ const { deployments, komodoReachable } = useDeployments();
 const preview = usePlanPreview();
 const progress = useApplyProgress();
 
-const providers = [...INVENTORY_PROVIDERS];
-const showAddForm = ref(false);
+// "Add server" in What-you-have opens the same ConnectHost command flow the requirement card uses.
+const showConnect = ref(false);
 const addOpen = ref(false);
 
 // Services — apps (declared i.want.app entries ∪ resolved plan ∪ live deployments) and the declared
@@ -99,19 +99,12 @@ const haveSummary = computed(() => {
     return parts.join(` · `);
 });
 
-const provider = ref<InventoryProvider>(`host`);
-const name = ref(``);
-const values = ref<Record<string, string>>({});
 // Add/remove failures (useInventory.error only covers the read query); surfaced alongside it at the top.
 const actionError = ref<string | null>(null);
 const topError = computed(() => actionError.value ?? queryError.value);
 
-const descriptor = computed<InventoryProviderDescriptor | undefined>(() => providers.find((entry) => entry.provider === provider.value));
-
-const providerLabel = (value: InventoryProvider): string => providers.find((entry) => entry.provider === value)?.label ?? value;
-
-// The display chip for an entry: the service label for an i.want.service, "App" for an i.want.app, else the
-// backend provider label.
+// The display chip for an entry: the service label for an i.want.service, "App" for an i.want.app, else
+// "Server" (the backends list excludes every credential provider, so what remains is hosts).
 const entryLabel = (entry: InventoryEntry): string => {
     if (entry.kind === `service`) {
         return INVENTORY_SERVICES.find((service) => service.service === entry.service)?.label ?? entry.service;
@@ -119,76 +112,13 @@ const entryLabel = (entry: InventoryEntry): string => {
     if (entry.kind === `app`) {
         return `App`;
     }
-    return providerLabel(entry.provider);
+    return `Server`;
 };
 
 const summary = (entry: InventoryEntry): string =>
     Object.entries(entry.values)
         .map(([key, value]) => `${key}=${value}`)
         .join(` · `);
-
-const INFRA_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
-
-const canSubmit = computed(() => {
-    const named = INFRA_NAME_RE.test(name.value.trim());
-    const filled = (descriptor.value?.fields ?? []).every((field) => (values.value[field.key] ?? ``).toString().trim().length > 0);
-    return named && filled;
-});
-
-// --- inline validation (touched-on-blur) ---
-const infraTouched = reactive(new Set<string>());
-const infraShaking = ref(false);
-const markInfraTouched = (key: string): void => {
-    infraTouched.add(key);
-};
-
-const infraNameError = computed<string | undefined>(() => {
-    const trimmed = name.value.trim();
-    if (trimmed.length === 0) return `Name is required.`;
-    if (!INFRA_NAME_RE.test(trimmed)) return `Use letters, digits and underscores; must start with a letter or underscore.`;
-    return undefined;
-});
-
-const infraFieldError = (key: string): string | undefined => {
-    const val = (values.value[key] ?? ``).toString().trim();
-    if (val.length === 0) return `This field is required.`;
-    return undefined;
-};
-
-const cancelAdd = (): void => {
-    name.value = ``;
-    values.value = {};
-    provider.value = `host`;
-    showAddForm.value = false;
-    infraTouched.clear();
-    infraShaking.value = false;
-};
-
-const submit = async (): Promise<void> => {
-    infraTouched.add(`name`);
-    for (const field of descriptor.value?.fields ?? []) {
-        infraTouched.add(field.key);
-    }
-    if (!canSubmit.value) {
-        infraShaking.value = false;
-        void nextTick(() => {
-            infraShaking.value = true;
-        });
-        return;
-    }
-    const payload: Record<string, string | number> = {};
-    for (const field of descriptor.value?.fields ?? []) {
-        const raw = (values.value[field.key] ?? ``).toString();
-        payload[field.key] = field.kind === `number` ? Number(raw) : raw;
-    }
-    actionError.value = null;
-    try {
-        await add.mutateAsync({ kind: `backend`, provider: provider.value, name: name.value.trim(), values: payload });
-        cancelAdd();
-    } catch (err) {
-        actionError.value = errorMessage(err, `Could not add the backend.`);
-    }
-};
 
 const removeEntry = async (entryName: string): Promise<void> => {
     actionError.value = null;
@@ -413,7 +343,9 @@ onUnmounted(progress.stopWatching);
     <!-- REQUIREMENTS — the haves the declared wants pull in, defined inline right where they block the apply. -->
     <section v-if="needsHost || needsCloudflare" class="mb-6 flex flex-col gap-3">
         <Card v-if="needsHost" class="flex flex-col gap-3">
-            <ConnectHost />
+            <ConnectHost>
+                <template #reason>What you want needs a server to run on.</template>
+            </ConnectHost>
         </Card>
         <Card v-if="needsCloudflare" class="flex flex-col gap-3">
             <div class="min-w-0">
@@ -433,7 +365,7 @@ onUnmounted(progress.stopWatching);
         </summary>
         <div class="mt-3">
             <div class="mb-3 flex items-center justify-end">
-                <Button v-if="!showAddForm" label="Add server" size="small" severity="secondary" :outlined="true" @click="showAddForm = true">
+                <Button v-if="!showConnect" label="Add server" size="small" severity="secondary" :outlined="true" @click="showConnect = true">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
             </div>
@@ -590,46 +522,11 @@ onUnmounted(progress.stopWatching);
                 <CloudflareConnect v-if="showCloudflare && !hasCloudflare" @connected="onCloudflareConnected" />
             </Card>
 
-            <Card v-if="showAddForm" class="animate-fade-in-up mb-3 flex flex-col gap-4">
-                <h3 class="font-semibold text-content">Add a server</h3>
-                <form class="flex flex-col gap-4" @submit.prevent="submit">
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <label class="ui-field">
-                            <span class="ui-field-label">Name</span>
-                            <input
-                                v-model="name"
-                                name="name"
-                                placeholder="host"
-                                :class="[cmp.input(), infraTouched.has('name') && infraNameError ? 'ui-field-input-error' : '']"
-                                @blur="markInfraTouched('name')"
-                            />
-                            <span v-if="infraTouched.has('name') && infraNameError" class="ui-field-error">
-                                <Icon name="exclamation-triangle" class="text-2xs" />
-                                {{ infraNameError }}
-                            </span>
-                        </label>
-                        <label v-for="field in descriptor?.fields ?? []" :key="field.key" class="ui-field">
-                            <span class="ui-field-label">{{ field.label }}</span>
-                            <input
-                                v-model="values[field.key]"
-                                :name="field.key"
-                                :type="field.kind === 'number' ? 'number' : 'text'"
-                                :class="[cmp.input(), infraTouched.has(field.key) && infraFieldError(field.key) ? 'ui-field-input-error' : '']"
-                                @blur="markInfraTouched(field.key)"
-                            />
-                            <span v-if="infraTouched.has(field.key) && infraFieldError(field.key)" class="ui-field-error">
-                                <Icon name="exclamation-triangle" class="text-2xs" />
-                                {{ infraFieldError(field.key) }}
-                            </span>
-                        </label>
-                    </div>
-                    <div :class="['flex items-center justify-end gap-2', infraShaking ? 'ui-shake' : '']" @animationend="infraShaking = false">
-                        <Button type="button" label="Cancel" severity="secondary" :text="true" @click="cancelAdd" />
-                        <Button type="submit" label="Add">
-                            <template #icon><Icon name="plus" /></template>
-                        </Button>
-                    </div>
-                </form>
+            <Card v-if="showConnect" class="animate-fade-in-up mb-3 flex flex-col gap-3">
+                <ConnectHost />
+                <div class="flex justify-end">
+                    <Button type="button" label="Close" severity="secondary" :text="true" @click="showConnect = false" />
+                </div>
             </Card>
 
             <div class="flex flex-col gap-2.5">
@@ -648,7 +545,7 @@ onUnmounted(progress.stopWatching);
                 </Card>
 
                 <Card
-                    v-if="backends.length === 0 && !showAddForm && !isLoading"
+                    v-if="backends.length === 0 && !showConnect && !isLoading"
                     :dashed="true"
                     class="flex flex-col items-center gap-3 py-8 text-center"
                 >

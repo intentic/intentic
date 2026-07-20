@@ -14,11 +14,17 @@ export class SteeringQueue implements AsyncIterable<string> {
     private closed = false;
     private wake: (() => void) | undefined;
 
+    // How many messages were accepted into the turn. The SDK stream emits a `result` per turn, and a
+    // delivered steer may run as its own follow-up turn — streamSdk keeps consuming past a result while
+    // this is non-zero (see its grace race) instead of ending the stream at the first one.
+    delivered = 0;
+
     // False once closed — the caller then knows the message was NOT delivered.
     push(text: string): boolean {
         if (this.closed) {
             return false;
         }
+        this.delivered += 1;
         this.buffer.push(text);
         this.wake?.();
         return true;

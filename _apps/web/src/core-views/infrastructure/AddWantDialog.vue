@@ -214,7 +214,9 @@ const submit = async (): Promise<void> => {
             <!-- A want needs Cloudflare for its domain and a server to run on. Rather than send the user off,
                  collect each missing one right here; the created entries then flip this into the form below. -->
             <CloudflareConnect v-if="cloudflareEntries.length === 0" />
-            <ConnectHost v-else-if="hostOptions.length === 0" />
+            <ConnectHost v-else-if="hostOptions.length === 0">
+                <template #reason>What you want needs a server to run on.</template>
+            </ConnectHost>
             <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
                 <label class="ui-field">
                     <span class="ui-field-label">Name</span>

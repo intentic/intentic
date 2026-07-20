@@ -36,3 +36,12 @@ export const isBrowserProfilePath = (path: string): boolean => {
     const i = segments.indexOf(".intentic");
     return i !== -1 && segments[i + 1] === "browser";
 };
+
+// Agent worktrees (<repo>/.claude/worktrees/<name>) are throwaway full checkouts of their repo. Not junk by
+// name — the rest of .claude (skills, settings) is real config — but walking a checkout duplicates every
+// project in the tree, lets vitest-project detection list a stale copy of the whole monorepo, and burns the
+// walk's entry budget. Treated as ignored so the subtree grays + lazy-loads and the watcher skips its churn.
+export const isAgentWorktreePath = (path: string): boolean => {
+    const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
+    return segments.some((segment, i) => segment === ".claude" && segments[i + 1] === "worktrees");
+};
