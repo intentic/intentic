@@ -5,7 +5,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
-import { changedFiles, changesAgainstBase, commitPaths, discardPaths, workingFileDiff } from "./changes.js";
+import {
+    changedFiles,
+    changesAgainstBase,
+    checkoutRef,
+    cherryPick,
+    commitChanges,
+    commitFileDiff,
+    commitLog,
+    commitPaths,
+    createBranchAt,
+    createTagAt,
+    discardPaths,
+    dropCommit,
+    resetTo,
+    revertCommit,
+    workingFileDiff,
+} from "./changes.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -48,6 +64,169 @@ test("changedFiles maps porcelain states, expands untracked dirs, and skips igno
     expect(changes).toContainEqual({ path: "old.txt", status: "deleted" });
     expect(changes).toContainEqual({ path: "new/b.txt", status: "added" });
     expect(changes.some((change) => change.path.includes(".env"))).toBe(false);
+});
+
+test("commitLog returns commits newest-first with parents, refs, and the HEAD flag", async () => {
+    const dir = await tempRepo(); // one commit "init"
+    await writeFile(join(dir, "a.txt"), "two\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "second\n\nwith a body");
+
+    const { branch, commits } = await commitLog(dir, 50);
+    expect(commits).toHaveLength(2);
+    expect(commits[0]?.subject).toBe("second");
+    expect(commits[0]?.body).toBe("with a body");
+    expect(commits[1]?.subject).toBe("init");
+    // The newest commit's parent is the older one; the root commit has none.
+    expect(commits[0]?.parents).toEqual([commits[1]!.sha]);
+    expect(commits[1]?.parents).toEqual([]);
+    // HEAD sits on the newest commit, decorated with the current branch (lifted out of `refs` into `head`).
+    expect(commits[0]?.head).toBe(true);
+    expect(commits[1]?.head).toBe(false);
+    expect(branch).not.toBe(undefined);
+    expect(commits[0]?.refs).toContain(branch);
+    expect(commits[0]?.refs).not.toContain("HEAD");
+});
+
+test("commitLog degrades to an empty list on a repo with no commits", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "intentic-changes-"));
+    tempDirs.push(dir);
+    await sh(dir, "init", "-q");
+    const { commits } = await commitLog(dir, 50);
+    expect(commits).toEqual([]);
+});
+
+test("commitChanges and commitFileDiff describe one commit's file delta", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "a.txt"), "two\n"); // modified
+    await writeFile(join(dir, "new.txt"), "n\n"); // added
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "edit");
+    const head = await sh(dir, "rev-parse", "HEAD");
+
+    const files = await commitChanges(dir, head);
+    // Status (name-status) merged with per-file +/- counts (numstat): a.txt changed one line, new.txt is one add.
+    expect(files).toContainEqual({ path: "a.txt", status: "modified", additions: 1, deletions: 1 });
+    expect(files).toContainEqual({ path: "new.txt", status: "added", additions: 1, deletions: 0 });
+
+    // A modified file has both sides at the commit; a file absent at the parent has no before side.
+    const modified = await commitFileDiff(dir, head, "a.txt");
+    expect(modified.before).toBe("one\n");
+    expect(modified.after).toBe("two\n");
+    const added = await commitFileDiff(dir, head, "new.txt");
+    expect(added.before).toBe(undefined);
+    expect(added.after).toBe("n\n");
+});
+
+test("commitChanges reads a root commit's files as additions (vs the empty tree)", async () => {
+    const dir = await tempRepo(); // "init" IS the root commit
+    const root = await sh(dir, "rev-parse", "HEAD");
+    const files = await commitChanges(dir, root);
+    expect(files).toContainEqual({ path: "a.txt", status: "added", additions: 1, deletions: 0 });
+});
+
+test("createBranchAt points a new branch at a commit without moving HEAD or the worktree", async () => {
+    const dir = await tempRepo();
+    const root = await sh(dir, "rev-parse", "HEAD");
+    const headBefore = await sh(dir, "rev-parse", "HEAD");
+    await createBranchAt(dir, "feature/x", root);
+    expect(await sh(dir, "rev-parse", "feature/x")).toBe(root);
+    expect(await sh(dir, "rev-parse", "HEAD")).toBe(headBefore); // HEAD unmoved
+    expect((await changedFiles(dir)).changes).toEqual([]); // worktree clean
+    // A duplicate name is git's error, surfaced by rejection (the route lets it propagate).
+    await expect(createBranchAt(dir, "feature/x", root)).rejects.toThrow();
+});
+
+test("revertCommit adds an inverse commit that undoes the change", async () => {
+    const dir = await tempRepo(); // a.txt = "one"
+    await writeFile(join(dir, "a.txt"), "two\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "change a");
+    const target = await sh(dir, "rev-parse", "HEAD");
+
+    const result = await revertCommit(dir, target, author);
+    expect(result).toEqual({ ok: true });
+    // A NEW commit (history grew) restored the file, nothing rewritten.
+    expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("one\n");
+    expect(await sh(dir, "rev-list", "--count", "HEAD")).toBe("3");
+    expect(await sh(dir, "rev-parse", "HEAD^")).toBe(target); // the target is still HEAD's parent
+});
+
+test("revertCommit reports a conflict cleanly instead of leaving the worktree mid-revert", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "a.txt"), "two\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "two");
+    const target = await sh(dir, "rev-parse", "HEAD");
+    // A later edit to the same line makes reverting `target` conflict.
+    await writeFile(join(dir, "a.txt"), "three\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "three");
+
+    const result = await revertCommit(dir, target, author);
+    expect(result).toEqual({ ok: false, reason: "conflict" });
+    // Aborted: no revert left in progress, worktree clean at "three".
+    expect(existsSync(join(dir, ".git", "REVERT_HEAD"))).toBe(false);
+    expect((await changedFiles(dir)).changes).toEqual([]);
+});
+
+test("createTagAt tags a commit", async () => {
+    const dir = await tempRepo();
+    const root = await sh(dir, "rev-parse", "HEAD");
+    await createTagAt(dir, "v1", root);
+    expect(await sh(dir, "rev-parse", "v1^{commit}")).toBe(root);
+});
+
+test("checkoutRef detaches HEAD at a commit", async () => {
+    const dir = await tempRepo();
+    const root = await sh(dir, "rev-parse", "HEAD");
+    await checkoutRef(dir, root);
+    expect(await sh(dir, "rev-parse", "HEAD")).toBe(root);
+    expect(await sh(dir, "branch", "--show-current")).toBe(""); // detached
+});
+
+test("cherryPick copies a commit's change onto the current branch", async () => {
+    const dir = await tempRepo();
+    const main = await sh(dir, "rev-parse", "--abbrev-ref", "HEAD");
+    await sh(dir, "checkout", "-q", "-b", "side");
+    await writeFile(join(dir, "s.txt"), "s\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "add s");
+    const pick = await sh(dir, "rev-parse", "HEAD");
+    await sh(dir, "checkout", "-q", main);
+
+    const result = await cherryPick(dir, pick, author);
+    expect(result).toEqual({ ok: true });
+    expect(existsSync(join(dir, "s.txt"))).toBe(true);
+});
+
+test("resetTo --hard moves the branch and discards the worktree change", async () => {
+    const dir = await tempRepo(); // "init", a.txt = "one"
+    const base = await sh(dir, "rev-parse", "HEAD");
+    await writeFile(join(dir, "a.txt"), "two\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "two");
+
+    await resetTo(dir, base, "hard");
+    expect(await sh(dir, "rev-parse", "HEAD")).toBe(base);
+    expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("one\n");
+});
+
+test("dropCommit removes a commit, replaying later ones onto its parent", async () => {
+    const dir = await tempRepo(); // C1 "init" (a.txt)
+    await writeFile(join(dir, "b.txt"), "b\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "add b"); // C2
+    const drop = await sh(dir, "rev-parse", "HEAD");
+    await writeFile(join(dir, "c.txt"), "c\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "add c"); // C3
+
+    const result = await dropCommit(dir, drop, author);
+    expect(result).toEqual({ ok: true });
+    expect(existsSync(join(dir, "b.txt"))).toBe(false); // the dropped commit's file is gone
+    expect(existsSync(join(dir, "c.txt"))).toBe(true); // the later commit survived
+    expect(await sh(dir, "rev-list", "--count", "HEAD")).toBe("2");
 });
 
 test("changedFiles reports a staged rename with its original path", async () => {

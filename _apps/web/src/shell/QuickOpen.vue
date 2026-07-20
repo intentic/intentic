@@ -3,6 +3,8 @@ import Dialog from "primevue/dialog";
 import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { commands, executeCommand, type RegisteredCommand } from "../composables/commands/useCommands";
+import { formatChord, isApplePlatform } from "../composables/commands/keybindings";
+import { effectiveKeybinding } from "../composables/commands/useKeymap";
 import { useQuickOpen } from "../composables/useQuickOpen";
 import { useFuzzyFiles } from "../composables/workspace/useFuzzyFiles";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
@@ -19,6 +21,11 @@ import { iconForEntry, type IconName } from "@intentic-app/ui";
 const { isOpen, mode } = useQuickOpen();
 const router = useRouter();
 const { tabs } = useWorkspaceTabs();
+// Resolve the platform once so command rows can render their shortcut in native form (⇧⌘P vs Ctrl+Shift+P).
+const isMac = isApplePlatform();
+// The chord a row displays is the EFFECTIVE one (user override ?? declared default) — reads keymapOverrides
+// reactively, so a live remap re-renders the hint. undefined when the command has no shortcut / was unbound.
+const chordFor = (entry: RegisteredCommand): string | undefined => effectiveKeybinding(entry.command, entry.keybinding);
 
 const query = ref(``);
 // `>` prefix = command mode; the rest of the text filters registered commands by title or id.
@@ -165,6 +172,11 @@ const onShow = async (): Promise<void> => {
                     <Icon :name="(entry.icon ?? `chevron-right`) as IconName" class="shrink-0 text-2xs text-muted" />
                     <span class="min-w-0 truncate text-sm text-content">{{ entry.title }}</span>
                     <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ entry.command }}</span>
+                    <kbd
+                        v-if="chordFor(entry)"
+                        class="shrink-0 rounded border border-line bg-overlay px-1.5 py-0.5 font-mono text-2xs text-muted"
+                        >{{ formatChord(chordFor(entry)!, isMac) }}</kbd
+                    >
                 </button>
                 <p v-if="commandRows.length === 0 && commands.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
                     No commands registered — extensions contribute them.

@@ -1,16 +1,32 @@
 <script setup lang="ts">
 import { Card, useExplorerStyle, useIconSet, useTheme } from "@intentic-app/ui";
 import { explorerTreatment } from "@intentic-app/ui";
+import { ref } from "vue";
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
+import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 
 /* Appearance: how the workspace looks for this account — color scheme (data-mode), brand style (data-theme),
- * icon set, and file-tree treatment. Each recolors/re-renders the whole UI live, so most of the app is the
- * preview; the Explorer gets a small inline sample because its tree isn't on this page. */
+ * icon set, file-tree treatment, and an imported VSCode/OpenVSX theme. Each recolors/re-renders the whole UI live,
+ * so most of the app is the preview; the Explorer gets a small inline sample because its tree isn't on this page. */
 
 const { scheme, set: setScheme, theme, setTheme, themes } = useTheme();
 const { iconSet, iconSets } = useIconSet();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { fileNesting } = useFileNesting();
+
+// Import a VSCode theme JSON → recolor the app's chrome tokens live (the biggest "familiar for developers" lever).
+const { active: importedTheme, importThemeJson, clearImportedTheme } = useImportedTheme();
+const themeJson = ref(``);
+const importError = ref<string | undefined>(undefined);
+const applyImport = (): void => {
+    importError.value = undefined;
+    try {
+        importThemeJson(themeJson.value);
+        themeJson.value = ``;
+    } catch (caught) {
+        importError.value = caught instanceof Error ? `Couldn't read that theme: ${caught.message}` : `Could not parse the theme JSON.`;
+    }
+};
 
 // A few representative rows so the Explorer setup is visible here without opening the workspace.
 const explorerPreview: { name: string; type: "file" | "dir" }[] = [
@@ -163,6 +179,55 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     @click="fileNesting = false"
                 >
                     Off
+                </button>
+            </div>
+        </Card>
+
+        <!-- Import a VSCode / OpenVSX color theme — paste its JSON and the app's chrome tokens recolor live. The
+             biggest familiarity lever: bring the exact look you use in VSCode. Maps the identity chrome tokens
+             (canvas, text, borders, accent); syntax colors and full ramps are a later pass. -->
+        <Card>
+            <div class="flex items-center justify-between gap-3">
+                <div class="flex min-w-0 items-center gap-2.5">
+                    <Icon name="palette" class="text-lg text-muted" />
+                    <div class="min-w-0">
+                        <h2 class="font-semibold leading-tight">Import a VSCode theme</h2>
+                        <p class="text-xs text-muted">Paste a VSCode / OpenVSX color theme JSON to recolor the workspace.</p>
+                    </div>
+                </div>
+                <button
+                    v-if="importedTheme"
+                    type="button"
+                    class="shrink-0 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-content"
+                    @click="clearImportedTheme()"
+                >
+                    Remove
+                </button>
+            </div>
+
+            <p v-if="importedTheme" class="mt-2 inline-flex items-center gap-1.5 text-xs text-muted">
+                <Icon name="check-circle" class="text-success" />
+                Active: <b class="text-content">{{ importedTheme.name }}</b> · {{ importedTheme.mode }}
+            </p>
+
+            <textarea
+                v-model="themeJson"
+                rows="4"
+                spellcheck="false"
+                placeholder='Paste theme JSON, e.g. { "type": "dark", "colors": { "editor.background": "#1e1e1e", … } }'
+                class="scrollbar-thin mt-3 w-full rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content placeholder:text-subtle focus:outline-none focus:ring-1 focus:ring-primary-500"
+            ></textarea>
+
+            <div v-if="importError" class="mt-2 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">{{ importError }}</div>
+
+            <div class="mt-2 flex justify-end">
+                <button
+                    type="button"
+                    class="rounded-md bg-primary-600/15 px-3 py-1 text-xs font-medium text-link transition-colors hover:bg-primary-600/25 disabled:opacity-40"
+                    :disabled="themeJson.trim().length === 0"
+                    @click="applyImport()"
+                >
+                    Apply theme
                 </button>
             </div>
         </Card>

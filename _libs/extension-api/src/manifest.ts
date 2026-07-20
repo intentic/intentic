@@ -30,6 +30,11 @@ export const CommandContributionSchema = z.object({
     command: z.string().regex(/^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/),
     title: z.string().min(1),
     icon: z.string().optional(),
+    // An optional global keyboard shortcut, in the host's chord notation (`Mod`/`Ctrl`/`Shift`/`Alt` + key, e.g.
+    // "Mod+Shift+K"; `Mod` = ⌘ on Apple, Ctrl elsewhere). It is DECLARED here so it rides the install dialog's
+    // approval surface — a global shortcut is consequential, so like title/icon the manifest value is authoritative
+    // and the host binds only what was approved. Whitespace-free; an unparseable chord simply never fires.
+    keybinding: z.string().regex(/^\S+$/).optional(),
 });
 export type CommandContribution = z.infer<typeof CommandContributionSchema>;
 

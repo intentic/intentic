@@ -107,7 +107,9 @@ export const createExtensionApi = (
                 if (declared === undefined) {
                     throw new Error(`command "${command}" is not declared in the manifest's contributes.commands`);
                 }
-                return track(registerCommand({ owner: extensionId, command, title: declared.title, icon: declared.icon, handler }));
+                // Title/icon/keybinding all come from the approved manifest, never the runtime call — the install
+                // dialog is what the user consented to, so the global shortcut is bound only as declared.
+                return track(registerCommand({ owner: extensionId, command, title: declared.title, icon: declared.icon, keybinding: declared.keybinding, handler }));
             },
             execute: (command, ...args) => executeCommand(command, ...args),
         },

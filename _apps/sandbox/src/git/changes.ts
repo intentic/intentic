@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { FileDiff, GitChange, GitCommit } from "@intentic/sandbox-contract";
+import type { FileDiff, GitChange, GitCommit, GitCommitFile } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { EMPTY_TREE, MAX_FILE_DIFF_BYTES } from "../history/history.js";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../workspace/workspace-files.js";
@@ -37,6 +37,45 @@ const parseNameStatusZ = (stdout: string): GitChange[] => {
         changes.set(path, { path, status: STATUS_OF[status[0] ?? ""] ?? "modified" });
     }
     return [...changes.values()];
+};
+
+// Parse `--numstat -z` into a path → {additions, deletions} map, keyed by the (new) path so it merges onto the
+// name-status list. NUL-separated: a normal record is `add\tdel\tpath\0`; a rename is `add\tdel\t\0old\0new\0`
+// (the counts, an empty path, then the two names). Binary files report `-\t-`, left undefined here.
+const parseNumstatZ = (stdout: string): Map<string, { additions?: number; deletions?: number }> => {
+    const parts = stdout.split("\0");
+    const stats = new Map<string, { additions?: number; deletions?: number }>();
+    let cursor = 0;
+    while (cursor < parts.length) {
+        const segment = parts[cursor];
+        if (segment === undefined || segment === "") {
+            cursor += 1;
+            continue;
+        }
+        const match = /^(\d+|-)\t(\d+|-)\t(.*)$/s.exec(segment);
+        if (match === null) {
+            cursor += 1;
+            continue;
+        }
+        // Omit (not set to undefined) a binary file's counts — the schema's optional fields are exact.
+        const stat: { additions?: number; deletions?: number } = {};
+        if (match[1] !== "-") {
+            stat.additions = Number(match[1]);
+        }
+        if (match[2] !== "-") {
+            stat.deletions = Number(match[2]);
+        }
+        const rest = match[3] ?? "";
+        if (rest === "") {
+            // Rename: the old + new paths are the next two NUL fields; key on the new path.
+            stats.set(parts[cursor + 2] ?? "", stat);
+            cursor += 3;
+        } else {
+            stats.set(rest, stat);
+            cursor += 1;
+        }
+    }
+    return stats;
 };
 
 // HEAD's sha; undefined on an unborn HEAD (a repo initialized but never committed) — everything is "added"
@@ -215,6 +254,72 @@ export const workingFileDiff = async (dir: string, path: string, ref: string, gi
     };
 };
 
+// The commit context-menu actions (VSCode "Git Graph" parity). GitActionResult ok/conflict is the shape the
+// sequence + HEAD-moving ops return; the non-destructive ref ops (branch/tag/checkout/reset) let git's own
+// errors propagate and are wrapped to Ok by the route.
+export type ActionResult = { ok: true } | { ok: false; reason: string };
+type Author = { readonly name: string; readonly email: string };
+
+// Committer identity for the commits a sequence op creates/replays (git preserves original authorship). One
+// source, matching every route commit.
+const identity = (author: Author): string[] => ["-c", `user.name=${author.name}`, "-c", `user.email=${author.email}`];
+
+// A sequence op that may conflict (or be blocked by a dirty tree): run it, and on ANY failure abort cleanly so
+// the worktree is never left mid-operation. `abort` is the op's own `--abort` (a harmless no-op when nothing
+// actually started).
+const runOrAbort = async (dir: string, args: readonly string[], abort: readonly string[], git: GitRunner): Promise<ActionResult> => {
+    try {
+        await git(dir, args);
+        return { ok: true };
+    } catch {
+        await git(dir, abort).catch(() => undefined);
+        return { ok: false, reason: "conflict" };
+    }
+};
+
+// Create a branch at a commit (`git branch <name> <sha>`). Non-destructive: a new ref, HEAD and the worktree
+// untouched — so it needs no safety checkpoint. Git rejects a duplicate name (that error propagates).
+export const createBranchAt = async (dir: string, name: string, sha: string, git: GitRunner = defaultGit): Promise<void> => {
+    await git(dir, ["branch", name, sha]);
+};
+
+// Tag a commit (`git tag <name> <sha>`). Non-destructive, like a branch; a duplicate name is git's error.
+export const createTagAt = async (dir: string, name: string, sha: string, git: GitRunner = defaultGit): Promise<void> => {
+    await git(dir, ["tag", name, sha]);
+};
+
+// Check out a ref/commit (a bare sha detaches HEAD). Git refuses on a dirty tree — that error propagates so the
+// caller surfaces it; nothing is half-applied.
+export const checkoutRef = async (dir: string, ref: string, git: GitRunner = defaultGit): Promise<void> => {
+    await git(dir, ["checkout", ref]);
+};
+
+// Reset the current branch to a commit. --hard discards the worktree (the route checkpoints first); --soft /
+// --mixed keep it. Atomic — no abort needed.
+export const resetTo = async (dir: string, sha: string, mode: "soft" | "mixed" | "hard", git: GitRunner = defaultGit): Promise<void> => {
+    await git(dir, ["reset", `--${mode}`, sha]);
+};
+
+// Revert a commit (`git revert`): a NEW inverse commit — history grows, nothing rewritten.
+export const revertCommit = async (dir: string, sha: string, author: Author, git: GitRunner = defaultGit): Promise<ActionResult> =>
+    runOrAbort(dir, [...identity(author), "revert", "--no-edit", sha], ["revert", "--abort"], git);
+
+// Cherry-pick a commit onto the current branch (a new copy of its change).
+export const cherryPick = async (dir: string, sha: string, author: Author, git: GitRunner = defaultGit): Promise<ActionResult> =>
+    runOrAbort(dir, [...identity(author), "cherry-pick", sha], ["cherry-pick", "--abort"], git);
+
+// Merge a commit into the current branch.
+export const mergeCommit = async (dir: string, sha: string, author: Author, git: GitRunner = defaultGit): Promise<ActionResult> =>
+    runOrAbort(dir, [...identity(author), "merge", "--no-edit", sha], ["merge", "--abort"], git);
+
+// Rebase the current branch onto a commit (replays HEAD's commits on top of it — rewrites history).
+export const rebaseOnto = async (dir: string, sha: string, author: Author, git: GitRunner = defaultGit): Promise<ActionResult> =>
+    runOrAbort(dir, [...identity(author), "rebase", sha], ["rebase", "--abort"], git);
+
+// Drop a commit: replay everything after it onto its parent (`rebase --onto <sha>^ <sha> HEAD`), removing it.
+export const dropCommit = async (dir: string, sha: string, author: Author, git: GitRunner = defaultGit): Promise<ActionResult> =>
+    runOrAbort(dir, [...identity(author), "rebase", "--onto", `${sha}^`, sha, "HEAD"], ["rebase", "--abort"], git);
+
 // The graph/log view: recent commits ACROSS ALL REFS (--all, so branch topology is visible), newest first,
 // capped at `limit`. Fields are delimited with US (\x1f) and records with RS (\x1e) so subjects and multi-line
 // bodies survive intact (a plain -z / newline split can't). `%D` carries the ref decorations; the bare "HEAD"
@@ -224,7 +329,16 @@ const US = "\x1f";
 export const commitLog = async (dir: string, limit: number, git: GitRunner = defaultGit): Promise<{ branch?: string; commits: GitCommit[] }> => {
     const branch = (await git(dir, ["branch", "--show-current"])).stdout.trim();
     const format = `${RS}%H${US}%h${US}%P${US}%an${US}%ae${US}%at${US}%D${US}%s${US}%b`;
-    const { stdout } = await git(dir, ["log", "--all", "--topo-order", `--max-count=${limit}`, `--pretty=format:${format}`]);
+    // A repo with no commits yet (an unborn HEAD across every ref) makes `git log` exit non-zero — that's an
+    // empty graph, not an error, so degrade to no commits (the panel renders its "no commits yet" state).
+    // --decorate forces %D to populate: git only loads ref decorations for a TTY by default, and the daemon
+    // runs git piped (non-TTY), so without it the HEAD marker and branch/tag names would silently vanish.
+    let stdout: string;
+    try {
+        ({ stdout } = await git(dir, ["log", "--all", "--decorate", "--topo-order", `--max-count=${limit}`, `--pretty=format:${format}`]));
+    } catch {
+        return { ...(branch !== "" ? { branch } : {}), commits: [] };
+    }
     const commits: GitCommit[] = [];
     for (const record of stdout.split(RS)) {
         if (record === "") {
@@ -260,9 +374,13 @@ export const commitLog = async (dir: string, limit: number, git: GitRunner = def
 };
 
 // The files one commit changed vs its first parent — `--root` renders a root commit's files as additions
-// (vs the empty tree) instead of nothing. Same GitChange shape the Changes panel renders.
-export const commitChanges = async (dir: string, sha: string, git: GitRunner = defaultGit): Promise<GitChange[]> =>
-    parseNameStatusZ((await git(dir, ["diff-tree", "--no-commit-id", "--name-status", "-r", "-z", "--root", sha])).stdout);
+// (vs the empty tree) instead of nothing. Merges name-status (status + renames) with numstat (per-file
+// +/- line counts) by path, so the graph's detail tree can show both.
+export const commitChanges = async (dir: string, sha: string, git: GitRunner = defaultGit): Promise<GitCommitFile[]> => {
+    const status = parseNameStatusZ((await git(dir, ["diff-tree", "--no-commit-id", "--name-status", "-r", "-z", "--root", sha])).stdout);
+    const stats = parseNumstatZ((await git(dir, ["diff-tree", "--no-commit-id", "--numstat", "-r", "-z", "--root", sha])).stdout);
+    return status.map((change) => ({ ...change, ...(stats.get(change.path) ?? {}) }));
+};
 
 // Both sides of a file AT a commit: the blob at the first parent (`<sha>^`) vs the blob at `<sha>`. A root
 // commit (no parent) or a freshly-added file has no before; a deletion has no after. Same size/binary guards

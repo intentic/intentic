@@ -3,6 +3,7 @@ import Popover from "primevue/popover";
 import { computed, ref } from "vue";
 import { type BackgroundProcessRow, useBackgroundProcesses } from "../composables/terminal/useBackgroundProcesses";
 import type { TerminalTabs } from "../composables/terminal/useTerminal";
+import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 
 /* The terminal panel's background-processes control (pm2-style): managed processes — extension gateways,
  * dockerd — surface HERE with status, read-only log views, and explicit start/stop, not as killable terminal
@@ -12,6 +13,8 @@ import type { TerminalTabs } from "../composables/terminal/useTerminal";
 const { tabs } = defineProps<{ tabs: TerminalTabs }>();
 
 const { rows, start, stop } = useBackgroundProcesses(tabs);
+// The popover must open in the floating window while the panel is popped out there, not the main document.
+const { overlayTarget } = useTerminalPopout();
 const panel = ref<InstanceType<typeof Popover> | null>(null);
 // The row an action is in flight for — its buttons disable so a double-click can't double-restart.
 const busy = ref<string | undefined>(undefined);
@@ -48,7 +51,7 @@ const viewLogs = async (row: BackgroundProcessRow): Promise<void> => {
         <span v-if="runningCount > 0" class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-success"></span>
     </button>
 
-    <Popover ref="panel" append-to="body" @show="void tabs.refresh()">
+    <Popover ref="panel" :append-to="overlayTarget" @show="void tabs.refresh()">
         <div class="flex w-80 flex-col p-1">
             <div class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted">Background processes</div>
             <div v-for="row in rows" :key="row.id" class="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-overlay">

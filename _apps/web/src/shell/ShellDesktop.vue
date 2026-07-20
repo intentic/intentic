@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic-app/ui";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
+import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
 import { detectActivations, extensionPath } from "../core-views/registry";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useShellCommands } from "../composables/commands/useShellCommands";
+import { useKeybindings } from "../composables/commands/useKeybindings";
 import { useLayout } from "../composables/useLayout";
 import { usePanels } from "../composables/extensions/usePanels";
-import { useQuickOpen } from "../composables/useQuickOpen";
 import { useChanges } from "../composables/workspace/useChanges";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import AccountPanel from "./AccountPanel.vue";
@@ -108,35 +109,35 @@ const gridStyle = computed(() => ({ "--chat-width": poppedOut.value ? `0px` : `$
 // shells and dev servers stay visible while navigating. Ctrl+` toggles it from anywhere in the shell.
 const terminal = useTerminalPanel();
 const terminalMaximized = ref(false);
-const { isOpen: quickOpen, mode: quickOpenMode } = useQuickOpen();
-// The core shell's built-in Command Palette commands (navigation, terminal, chat pop-out, Go to File) — registered
-// on mount, disposed on unmount, so the `>` command mode is populated the moment the shell is up.
-useShellCommands();
-// The desktop shell's single global-shortcut hub (all actions are sandbox-global, so they live here rather than in
-// any one view): Ctrl+` toggles the terminal, Ctrl/Cmd+P opens Quick Open on files, Ctrl/Cmd+Shift+P opens it on
-// the Command Palette — the two VSCode/Cursor muscle-memory bindings landing on the two faces of one palette.
-const onShellKey = (event: KeyboardEvent): void => {
-    if (event.ctrlKey && event.key === `\``) {
-        event.preventDefault();
-        terminal.toggle();
-        return;
+// Like the chat, the whole panel can float in its own pip window (right-click its tab strip) — teleported
+// there, docked back on window close. Maximized makes no sense while floating (the panel isn't over the
+// workspace), and a hidden RouterView must not linger, so popping out resets it.
+const { poppedOut: terminalPoppedOut, pipBody: terminalPipBody, dock: dockTerminal } = useTerminalPopout();
+watch(terminalPoppedOut, (out) => {
+    if (out) {
+        terminalMaximized.value = false;
     }
-    if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === `p`) {
-        // preventDefault overrides the browser's print dialog. Shift picks the Command Palette face, else files.
-        event.preventDefault();
-        quickOpenMode.value = event.shiftKey ? `commands` : `files`;
-        quickOpen.value = true;
-    }
-};
-
-onMounted(() => {
-    window.addEventListener(`keydown`, onShellKey);
 });
+// Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pip window.
+watch(terminal.open, (open) => {
+    if (!open) {
+        dockTerminal();
+    }
+});
+// The core shell's built-in Command Palette commands (navigation, terminal, chat pop-out, Go to File / Command
+// Palette) — registered on mount, disposed on unmount, so the `>` command mode is populated the moment the shell
+// is up. Each carries its own `keybinding`, so it is reachable by both the palette and a shortcut.
+useShellCommands();
+// The single global-shortcut dispatcher: it runs whichever registered command's keybinding matches the keystroke
+// (Ctrl+` → terminal, Mod+P → Go to File, Mod+Shift+P → Command Palette, plus any extension-contributed binding),
+// replacing a bespoke per-shortcut hub. All actions are sandbox-global, so it lives at the shell, not in a view.
+useKeybindings();
+
 onUnmounted(() => {
-    window.removeEventListener(`keydown`, onShellKey);
-    // Don't leave a floating chat window orphaned if the desktop chrome tears down (logout, session loss, or
-    // the viewport crossing into the mobile shell).
+    // Don't leave a floating chat or terminal window orphaned if the desktop chrome tears down (logout,
+    // session loss, or the viewport crossing into the mobile shell).
     dock();
+    dockTerminal();
 });
 </script>
 
@@ -222,16 +223,22 @@ onUnmounted(() => {
                 <div class="min-h-0 flex-1 overflow-auto scrollbar-thin" :class="{ hidden: terminalMaximized }">
                     <RouterView />
                 </div>
-                <!-- The ONE terminal panel — sandbox-global (shells + dev servers), persistent across views. -->
-                <TerminalPanel
-                    v-if="terminal.open.value"
-                    v-model:maximized="terminalMaximized"
-                    :source="globalTerminalSource"
-                    storage-key="sandbox"
-                    :initial="terminal.requested.value"
-                    :surfaced="terminal.surfaced.value"
-                    @close="terminal.setOpen(false)"
-                />
+                <!-- The ONE terminal panel — sandbox-global (shells + dev servers), persistent across views.
+                     Docked below the workspace, or teleported into its pip window when popped out — same live
+                     DOM either way, so the session cache and running shells are untouched by the move (the
+                     panel fills the floating window, hence resizable off there). -->
+                <Teleport :to="terminalPipBody" :disabled="!terminalPoppedOut">
+                    <TerminalPanel
+                        v-if="terminal.open.value"
+                        v-model:maximized="terminalMaximized"
+                        :source="globalTerminalSource"
+                        storage-key="sandbox"
+                        :initial="terminal.requested.value"
+                        :surfaced="terminal.surfaced.value"
+                        :resizable="!terminalPoppedOut"
+                        @close="terminal.setOpen(false)"
+                    />
+                </Teleport>
             </SandboxGate>
         </main>
 

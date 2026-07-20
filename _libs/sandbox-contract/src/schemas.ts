@@ -398,11 +398,31 @@ export const GitLogQuerySchema = RepoParamSchema.extend({ limit: z.coerce.number
 export const GitReposSchema = z.object({ repos: z.array(z.string()) });
 export type GitRepos = z.infer<typeof GitReposSchema>;
 export const GitCommitDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema });
-// The files a commit changed vs its first parent (a root commit vs the empty tree) — the same GitChange shape
-// the Changes panel renders, so the graph's detail list reuses the diff UI.
-export const GitCommitDiffSchema = z.object({ files: z.array(GitChangeSchema) });
+// One file a commit changed (vs its first parent; a root commit vs the empty tree), with its line stat — the
+// graph's detail tree renders these and reuses the diff UI on click. `additions`/`deletions` are undefined for
+// a binary file (git's numstat reports "-"/"-").
+export const GitCommitFileSchema = GitChangeSchema.extend({ additions: z.number().optional(), deletions: z.number().optional() });
+export type GitCommitFile = z.infer<typeof GitCommitFileSchema>;
+export const GitCommitDiffSchema = z.object({ files: z.array(GitCommitFileSchema) });
 export type GitCommitDiff = z.infer<typeof GitCommitDiffSchema>;
 export const GitCommitFileDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema, path: z.string().min(1) });
+// Git write actions from the graph's commit context menu (VSCode "Git Graph" parity). Non-destructive: branch
+// and tag just add a ref (HEAD + worktree untouched, no checkpoint). Sequence ops (revert / cherry-pick /
+// merge / rebase / drop) add or replay commits and are auto-checkpointed daemon-side; a conflict aborts and
+// reports `ok:false` (an expected outcome, not a throw). Checkout and reset move HEAD (reset --hard discards
+// the worktree) — also auto-checkpointed. A `{repo, sha}` names the target commit for every commit-scoped
+// action; a ref name (branch/tag) is validated structurally, git enforces the rest of ref-name legality.
+const RefNameSchema = z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/)
+    .max(200);
+export const GitBranchCreateSchema = RepoParamSchema.extend({ sha: ShaSchema, name: RefNameSchema });
+export const GitTagCreateSchema = RepoParamSchema.extend({ sha: ShaSchema, name: RefNameSchema });
+export const GitCheckoutSchema = RepoParamSchema.extend({ ref: RefNameSchema });
+export const GitResetSchema = RepoParamSchema.extend({ sha: ShaSchema, mode: z.enum(["soft", "mixed", "hard"]) });
+export const GitCommitActionSchema = RepoParamSchema.extend({ sha: ShaSchema });
+export const GitActionResultSchema = z.object({ ok: z.boolean(), reason: z.string().optional() });
+export type GitActionResult = z.infer<typeof GitActionResultSchema>;
 
 // ---- history: daemon-owned workspace snapshots (diff + restore) ----
 // The daemon snapshots /work into bare git dirs on /history (outside the agent's reach). A "snapshot" groups

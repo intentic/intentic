@@ -2,6 +2,7 @@
 import { Button, cmp, Icon, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { host } from "./host";
+import SharePreview from "./SharePreview.vue";
 import { usePanels } from "./usePanels";
 
 /* The preview extension's view: a repo's `operator/` (or root) dev server, started in the sandbox and shown
@@ -152,6 +153,9 @@ watch(
                 >
                     <Icon name="external-link" />
                 </a>
+                <!-- Share the live app: its previewUrl is public the moment it's running, so this is the one-click
+                     "send someone your running app" gesture — a demo + an invite in one link. -->
+                <SharePreview v-if="panel.previewUrl && panel.running" :url="panel.previewUrl" />
                 <Button label="Terminal" size="small" severity="secondary" @click="openTerminal(`panel-${repo}`)">
                     <template #icon><Icon name="align-left" /></template>
                 </Button>

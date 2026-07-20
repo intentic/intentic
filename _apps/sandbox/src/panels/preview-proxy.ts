@@ -3,6 +3,25 @@ import https from "node:https";
 import { panelFromHost, portSlotFromHost } from "@intentic/sandbox-contract";
 import type { PortTarget } from "../ports/port-forwards.js";
 
+// Where the interstitial's CTA sends a viewer who just opened someone's shared preview — the "invite" half of the
+// share loop (the "demo" half is the working preview itself). A shared preview is a live demo of an app built on
+// Intentic; these status pages are the ONLY surface Intentic controls end-to-end (they are served by this proxy,
+// never injected into the user's running app), so the attribution lives here and nowhere intrusive.
+const INTENTIC_URL = "https://intentic.dev";
+
+// Only the dynamic bits of a status message (a repo/slot name derived from the attacker-controllable Host) are
+// escaped before landing in HTML; the static sentence around them is author-controlled. DNS labels are already a
+// safe charset, so this is defense-in-depth.
+const escapeHtml = (value: string): string =>
+    value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
+
+// A small, self-contained branded page for the proxy's own status responses (panel not up, nothing forwarded, dead
+// upstream, stray host). Inline everything — this bare http server ships no assets. `message` is embedded as text
+// content (its only dynamic parts are pre-escaped at the call site; literal quotes stay literal, which the proxy
+// tests rely on). Shown at exactly the high-intent moment a viewer clicks a shared link before the server is up.
+const interstitial = (title: string, message: string): string =>
+    `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>:root{color-scheme:dark light}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d10;color:#e6e8eb;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}.card{max-width:26rem;padding:2rem;text-align:center}h1{margin:0 0 .5rem;font-size:1.05rem;font-weight:600}p{margin:0;color:#9aa0a6}a.cta{display:inline-block;margin-top:1.5rem;padding-top:1.2rem;border-top:1px solid #1e2227;color:#8ab4f8;text-decoration:none;font-size:.8rem}a.cta:hover{text-decoration:underline}</style></head><body><div class="card"><h1>${title}</h1><p>${message}</p><a class="cta" href="${INTENTIC_URL}" target="_blank" rel="noopener">Preview powered by <b>Intentic</b> — build &amp; share your own →</a></div></body></html>`;
+
 // Resolves a repo name to the local port its running panel was assigned (undefined when not running) — the
 // process manager's `portOf`, narrowed so the proxy needs nothing else.
 export type PortResolver = (repo: string) => number | undefined;
@@ -16,14 +35,17 @@ export type SlotResolver = (slot: string) => PortTarget | undefined;
 // identified by the port, never the vhost, so the rewrite loses nothing. `dial` is the loopback address the
 // upstream actually answers at: panels bind the daemon-assigned PORT on 127.0.0.1, but a forwarded server that
 // bound `localhost` can sit on ::1 only (Vite) — the forward table records which.
-type Upstream = { dial: string; port: number; scheme: "http" | "https"; headers: http.IncomingHttpHeaders } | { status: number; message: string };
+type Upstream =
+    | { dial: string; port: number; scheme: "http" | "https"; headers: http.IncomingHttpHeaders }
+    | { status: number; title: string; message: string };
 
 const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTargetOf: SlotResolver, sandboxId: string | undefined): Upstream => {
     const repo = panelFromHost(req.headers.host, sandboxId);
     if (repo !== undefined) {
         const port = portOf(repo);
         if (port === undefined) {
-            return { status: 502, message: `panel "${repo}" is not running — start it from the ${repo} entry in the sidebar` };
+            const name = escapeHtml(repo);
+            return { status: 502, title: "Preview isn't running", message: `panel "${name}" is not running — start it from the ${name} entry in the sidebar` };
         }
         return { dial: "127.0.0.1", port, scheme: "http", headers: req.headers };
     }
@@ -31,7 +53,7 @@ const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTa
     if (slot !== undefined) {
         const target = slotTargetOf(slot);
         if (target === undefined) {
-            return { status: 502, message: `nothing is forwarded here — re-open the preview from the Ports view or the terminal link` };
+            return { status: 502, title: "Nothing forwarded here", message: `nothing is forwarded here — re-open the preview from the Ports view or the terminal link` };
         }
         const localhost = `localhost:${target.port}`;
         const headers: http.IncomingHttpHeaders = { ...req.headers, host: localhost };
@@ -40,7 +62,7 @@ const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTa
         }
         return { dial: target.host, port: target.port, scheme: target.scheme, headers };
     }
-    return { status: 404, message: "not a preview host" };
+    return { status: 404, title: "No preview here", message: "This address isn't a live Intentic preview." };
 };
 
 // Dial the upstream — plain http for panels, and for forwarded ports whatever scheme the forward probe
@@ -68,8 +90,8 @@ export const createPreviewProxy = (portOf: PortResolver, slotTargetOf: SlotResol
     const server = http.createServer((req, res) => {
         const upstream = resolveUpstream(req, portOf, slotTargetOf, sandboxId);
         if ("status" in upstream) {
-            res.writeHead(upstream.status, { "content-type": "text/plain" });
-            res.end(upstream.message);
+            res.writeHead(upstream.status, { "content-type": "text/html; charset=utf-8" });
+            res.end(interstitial(upstream.title, upstream.message));
             return;
         }
         const proxyReq = dialUpstream(upstream, req);
@@ -83,8 +105,8 @@ export const createPreviewProxy = (portOf: PortResolver, slotTargetOf: SlotResol
                 res.destroy();
                 return;
             }
-            res.writeHead(502, { "content-type": "text/plain" });
-            res.end(`nothing is answering on port ${upstream.port} — the server may have stopped`);
+            res.writeHead(502, { "content-type": "text/html; charset=utf-8" });
+            res.end(interstitial("Preview unavailable", `nothing is answering on port ${upstream.port} — the server may have stopped`));
         });
         req.pipe(proxyReq);
     });

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button, cmp, Icon, InfoHint, Page, PageHeader, StatusBadge } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
+import SharePreview from "./SharePreview.vue";
 import { usePorts } from "./usePorts";
 
 /* The Ports view: every TCP port listening inside the sandbox (procfs scan), each attributed to its owning
@@ -133,6 +134,8 @@ const displayCwd = (cwd: string): string => cwd.replace(/^\/work\//, ``);
                         >
                             <Icon name="external-link" />
                         </a>
+                        <!-- A forwarded port is public — offer the one-click shareable link right where it's exposed. -->
+                        <SharePreview v-if="entry.previewUrl" :url="entry.previewUrl" />
                         <Button v-if="!entry.forwarded" label="Preview" size="small" :disabled="busy !== undefined" @click="openPreview(entry.port)">
                             <template #icon><Icon name="play" /></template>
                         </Button>

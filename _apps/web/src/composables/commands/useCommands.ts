@@ -11,6 +11,9 @@ export interface RegisteredCommand {
     readonly command: string;
     readonly title: string;
     readonly icon?: string | undefined;
+    // The keyboard chord that runs this command, in the notation `keybindings.ts` parses (e.g. "Mod+Shift+P");
+    // undefined for commands reachable only from the palette. The shell's dispatcher (useKeybindings) reads it.
+    readonly keybinding?: string | undefined;
     readonly handler: (...args: unknown[]) => unknown;
 }
 

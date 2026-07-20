@@ -7,6 +7,7 @@ import type { OrpcContext } from "../context.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
 import { discoverRepos, isValidRepoId } from "../workspace/repo-discovery.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
+import type { ActionResult } from "./changes.js";
 import { AGENT_GIT_AUTHOR } from "./git.js";
 
 const exists = async (path: string): Promise<boolean> => {
@@ -48,6 +49,17 @@ export const createGitRoutes = (services: Services) => {
             }
         }
         throw new ORPCError("NOT_FOUND", { message: "unknown repo" });
+    };
+    // A sequence/HEAD-moving op: checkpoint the pre-action tree FIRST (so even a rewrite stays reversible from
+    // the Checkpoints timeline), run it, and record the resulting tree on the timeline on a clean apply.
+    const guarded = async (repo: string, label: string, run: (dir: string) => Promise<ActionResult>): Promise<ActionResult> => {
+        const dir = await repoDir(repo);
+        await services.history.snapshot("user", label);
+        const result = await run(dir);
+        if (result.ok) {
+            services.history.notifyUserWrite();
+        }
+        return result;
     };
     return {
         changes: i.changes.handler(async () => {
@@ -97,6 +109,47 @@ export const createGitRoutes = (services: Services) => {
             }
             return services.git.commitFileDiff(dir, input.sha, input.path);
         }),
+        // Write actions from the commit context menu (VSCode "Git Graph" parity). Branch/tag are
+        // non-destructive (git rejects a duplicate name — that error propagates). Checkout/reset and every
+        // sequence op (cherry-pick/revert/drop/merge/rebase) are bracketed by an auto-checkpoint via `guarded`
+        // / an inline snapshot, so even a history rewrite or a hard reset stays reversible from Checkpoints.
+        createBranch: i.createBranch.handler(async ({ input }) => {
+            await services.git.createBranchAt(await repoDir(input.repo), input.name, input.sha);
+            return { ok: true } as const;
+        }),
+        createTag: i.createTag.handler(async ({ input }) => {
+            await services.git.createTagAt(await repoDir(input.repo), input.name, input.sha);
+            return { ok: true } as const;
+        }),
+        checkout: i.checkout.handler(async ({ input }) => {
+            const dir = await repoDir(input.repo);
+            await services.history.snapshot("user", `before checkout ${input.ref.slice(0, 12)}`);
+            await services.git.checkoutRef(dir, input.ref);
+            services.history.notifyUserWrite();
+            return { ok: true } as const;
+        }),
+        reset: i.reset.handler(async ({ input }) => {
+            const dir = await repoDir(input.repo);
+            await services.history.snapshot("user", `before reset --${input.mode}`);
+            await services.git.resetTo(dir, input.sha, input.mode);
+            services.history.notifyUserWrite();
+            return { ok: true } as const;
+        }),
+        cherryPick: i.cherryPick.handler(({ input }) =>
+            guarded(input.repo, `before cherry-pick ${input.sha.slice(0, 8)}`, (dir) => services.git.cherryPick(dir, input.sha, AGENT_GIT_AUTHOR)),
+        ),
+        revert: i.revert.handler(({ input }) =>
+            guarded(input.repo, `before revert ${input.sha.slice(0, 8)}`, (dir) => services.git.revertCommit(dir, input.sha, AGENT_GIT_AUTHOR)),
+        ),
+        drop: i.drop.handler(({ input }) =>
+            guarded(input.repo, `before drop ${input.sha.slice(0, 8)}`, (dir) => services.git.dropCommit(dir, input.sha, AGENT_GIT_AUTHOR)),
+        ),
+        merge: i.merge.handler(({ input }) =>
+            guarded(input.repo, `before merge ${input.sha.slice(0, 8)}`, (dir) => services.git.mergeCommit(dir, input.sha, AGENT_GIT_AUTHOR)),
+        ),
+        rebase: i.rebase.handler(({ input }) =>
+            guarded(input.repo, `before rebase ${input.sha.slice(0, 8)}`, (dir) => services.git.rebaseOnto(dir, input.sha, AGENT_GIT_AUTHOR)),
+        ),
         status: i.status.handler(async ({ input }) => services.git.status(await repoDir(input.repo))),
         commit: i.commit.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);

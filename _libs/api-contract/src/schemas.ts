@@ -30,9 +30,11 @@ import {
     SandboxSettingsSchema,
     ServiceKindSchema,
     FileDiffSchema,
+    GitActionResultSchema,
     GitChangeSchema,
     GitChangesSchema,
     GitCommitDiffSchema,
+    GitCommitFileSchema,
     GitCommitSchema,
     GitLogSchema,
     GitReposSchema,
@@ -205,7 +207,9 @@ export type GitChangesResponse = z.infer<typeof GitChangesSchema>;
 export type GitCommit = z.infer<typeof GitCommitSchema>;
 export type GitLogResponse = z.infer<typeof GitLogSchema>;
 export type GitCommitDiffResponse = z.infer<typeof GitCommitDiffSchema>;
+export type GitCommitFile = z.infer<typeof GitCommitFileSchema>;
 export type GitReposResponse = z.infer<typeof GitReposSchema>;
+export type GitActionResult = z.infer<typeof GitActionResultSchema>;
 
 // ---- platform-native (owned by the platform; NOT daemon wire shapes) ----
 

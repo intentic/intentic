@@ -1,6 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import type { AcpAgentConfig, AgentEvent, FileDiff, GitChange, GitCommit, IntenticLine, WorkspaceChildren, WorkspaceTree } from "@intentic/sandbox-contract";
+import type {
+    AcpAgentConfig,
+    AgentEvent,
+    FileDiff,
+    GitChange,
+    GitCommit,
+    GitCommitFile,
+    IntenticLine,
+    WorkspaceChildren,
+    WorkspaceTree,
+} from "@intentic/sandbox-contract";
 import {
     type GitCloneOptions,
     type GitStatus,
@@ -37,7 +47,26 @@ import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
 import { fileAgentsStore } from "./agents/agents-store.js";
 import { createAgentWorktrees, type AgentWorktrees } from "./agents/worktrees.js";
-import { changedFiles, changesAgainstBase, commitChanges, commitFileDiff, commitLog, commitPaths, discardPaths, workingFileDiff } from "./git/changes.js";
+import {
+    type ActionResult,
+    changedFiles,
+    changesAgainstBase,
+    checkoutRef,
+    cherryPick,
+    commitChanges,
+    commitFileDiff,
+    commitLog,
+    commitPaths,
+    createBranchAt,
+    createTagAt,
+    discardPaths,
+    dropCommit,
+    mergeCommit,
+    rebaseOnto,
+    resetTo,
+    revertCommit,
+    workingFileDiff,
+} from "./git/changes.js";
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
@@ -180,8 +209,20 @@ export interface Services {
         // The git-history graph (read-only): one repo's commit log across all refs, and lazy per-commit detail
         // (changed files, then a file's before/after AT the commit).
         readonly commitLog: (dir: string, limit: number) => Promise<{ branch?: string; commits: GitCommit[] }>;
-        readonly commitChanges: (dir: string, sha: string) => Promise<GitChange[]>;
+        readonly commitChanges: (dir: string, sha: string) => Promise<GitCommitFile[]>;
         readonly commitFileDiff: (dir: string, sha: string, path: string) => Promise<FileDiff>;
+        // Graph write actions (VSCode "Git Graph" parity). Non-destructive refs (branch/tag) and the
+        // HEAD-movers (checkout/reset) return void + propagate git errors; the sequence ops return an
+        // ActionResult so a conflict is a value. The route auto-checkpoints every destructive one.
+        readonly createBranchAt: (dir: string, name: string, sha: string) => Promise<void>;
+        readonly createTagAt: (dir: string, name: string, sha: string) => Promise<void>;
+        readonly checkoutRef: (dir: string, ref: string) => Promise<void>;
+        readonly resetTo: (dir: string, sha: string, mode: "soft" | "mixed" | "hard") => Promise<void>;
+        readonly revertCommit: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
+        readonly cherryPick: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
+        readonly mergeCommit: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
+        readonly rebaseOnto: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
+        readonly dropCommit: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
     };
     // The fleet registry (persisted at historyRoot/agents.json + runtime turn state) — one entry per isolated
     // conversation. streamAgent begins/observes/finishes turns; /agents lists, lands, and discards.
@@ -352,6 +393,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
             commitLog,
             commitChanges,
             commitFileDiff,
+            createBranchAt,
+            createTagAt,
+            checkoutRef,
+            resetTo,
+            revertCommit,
+            cherryPick,
+            mergeCommit,
+            rebaseOnto,
+            dropCommit,
         },
         agents: createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json"))),
         agentWorktrees: createAgentWorktrees({ workspace, worktreesRoot: join(config.historyRoot, "worktrees"), logger }),

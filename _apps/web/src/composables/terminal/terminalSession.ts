@@ -386,8 +386,9 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
 };
 
 // Mount a session into a container: xterm must be open()ed against an in-DOM element, so the first mount
-// open()s it there; later mounts just move the persistent host across.
-export const mountTerminalSession = (s: TerminalSession, container: HTMLElement): void => {
+// open()s it there; later mounts just move the persistent host across. `focus: false` mounts without stealing
+// the keyboard — the non-focused cells of a split group.
+export const mountTerminalSession = (s: TerminalSession, container: HTMLElement, focus = true): void => {
     container.append(s.host);
     if (!s.term.element) {
         s.term.open(s.host);
@@ -397,7 +398,9 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement)
     // Unconditional resync: onResize only fires on a dimension CHANGE, so a PTY that drifted while hidden (or
     // fitted off-DOM at 80x24) would never converge otherwise. A same-size resize is a server no-op.
     send(s, { type: `resize`, cols: s.term.cols, rows: s.term.rows });
-    s.term.focus();
+    if (focus) {
+        s.term.focus();
+    }
 };
 
 // Fully dispose one session's client state. Does NOT kill the tmux session server-side.

@@ -350,7 +350,7 @@ const endResize = (event: PointerEvent): void => {
                 <div class="flex h-8 shrink-0 items-center border-b border-line px-1.5">
                     <Segmented v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
                 </div>
-                <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" @open-diff="openDiff" @open-graph="openGraph" />
+                <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" :show-history="true" @open-diff="openDiff" @open-graph="openGraph" />
                 <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" />
                 <!-- Search header: input hero on row 1; mode switch + ignored-scope toggle on row 2. One `filter`
                      ref, two scopes (name = instant client-side tree filter, content = debounced daemon search). The
