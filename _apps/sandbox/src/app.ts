@@ -35,7 +35,7 @@ import { createTerminalRoute } from "./terminal/terminal.js";
 import { createWebchatRoute } from "./webchat/webchat.routes.js";
 import { extractTarToWorkspace, PathEscapeError } from "./workspace/workspace-archive.js";
 import { computeUploadSkip, type UploadManifestEntry } from "./workspace/workspace-diff.js";
-import { contentTypeForPath, MAX_RAW_BYTES, MAX_UPLOAD_BYTES, resolveWithin, UploadTooLargeError } from "./workspace/workspace-files.js";
+import { contentTypeForPath, MAX_RAW_BYTES, MAX_UPLOAD_BYTES, resolveWithin, sha256Text, UploadTooLargeError } from "./workspace/workspace-files.js";
 
 // Only genuine server faults (5xx) are logged; expected ORPCErrors (NOT_FOUND/BAD_REQUEST/…) are the routes'
 // normal control flow and would be noise.
@@ -92,7 +92,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 // boundary — a non-browser client ignores it).
                 origin: (origin, c) => (webchatPath.test(c.req.path) ? (origin ?? "*") : allowOrigin),
                 allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                allowHeaders: ["authorization", "content-type", "x-intentic-connect"],
+                allowHeaders: ["authorization", "content-type", "x-intentic-connect", "x-intentic-base-hash"],
                 maxAge: 600,
             }),
         );
@@ -208,6 +208,20 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         const declared = Number(c.req.header("content-length"));
         if (Number.isFinite(declared) && offset + declared > MAX_UPLOAD_BYTES) {
             return c.json({ error: "file too large" }, 413);
+        }
+        // The editor's guarded save: `x-intentic-base-hash` carries the sha256 of the text the browser last knew
+        // on disk (its baseline), and the write is refused when the file no longer matches — an agent or terminal
+        // write landed since that read, and a blind overwrite would clobber it. 409 keeps the file untouched; the
+        // browser shows its changed-on-disk banner with the user's edits preserved. Drag-drop uploads send no
+        // hash and overwrite as before. Check-then-write, not atomic — the guard shrinks the race window from
+        // the whole edit session to this handler, which is what the agent needs (its writes echo over the SSE in
+        // ~250ms; the guard covers exactly that gap).
+        const baseHash = c.req.header("x-intentic-base-hash");
+        if (baseHash !== undefined) {
+            const current = await services.files.read(target);
+            if (current === undefined || sha256Text(current) !== baseHash) {
+                return c.json({ error: "the file changed on disk since it was read" }, 409);
+            }
         }
         const body = c.req.raw.body;
         // An empty body (a new empty file, or saving an emptied editor buffer) has no stream to pipe. Only at

@@ -20,6 +20,13 @@ export function useDesktopSync() {
     // The machine currently holding sync (the enrolled key's comment), or undefined when none — for the
     // "Syncing from X" line and the takeover prompt.
     const syncingFrom = ref<string | undefined>(undefined);
+    // Machines with a mirror-only enrollment (collaborators forwarding ports to their own localhost) — shown so
+    // an active localhost mirror is never invisible in the card.
+    const mirroredBy = ref<readonly string[]>([]);
+    // Set when the owner just clicked Disable: names the machine that was cut off so the card can point at the
+    // local cleanup — revoking stops the agent's ACCESS (its mirror watcher tears itself down within a few
+    // polls), not its installation.
+    const revokedFrom = ref<string | undefined>(undefined);
     // Whether this sandbox even exposes an SSH tunnel for sync (false ⇒ loopback/preview: sync unavailable).
     const available = ref(false);
     // The one-time pairing token from the last "Enable" click; undefined until minted (or after it's used up).
@@ -38,6 +45,7 @@ export function useDesktopSync() {
             folder.value = defaultFolder.value;
             pairToken.value = undefined;
             takeover.value = false;
+            revokedFrom.value = undefined;
         },
     );
 
@@ -64,6 +72,7 @@ export function useDesktopSync() {
     // session (owner) — sandboxRequest attaches it. The token is single-use and expires (~10 min) server-side.
     const enable = async (): Promise<void> => {
         minting.value = true;
+        revokedFrom.value = undefined;
         try {
             const response = await sandboxRequest(`/system/sync/pair`, { method: `POST` });
             if (!response.ok) {
@@ -88,10 +97,11 @@ export function useDesktopSync() {
             if (!response.ok) {
                 return;
             }
-            const body = (await response.json()) as { enrolled?: boolean; sshHostname?: string; syncingFrom?: string };
+            const body = (await response.json()) as { enrolled?: boolean; sshHostname?: string; syncingFrom?: string; mirroredBy?: string[] };
             enrolled.value = body.enrolled === true;
             available.value = typeof body.sshHostname === `string`;
             syncingFrom.value = body.syncingFrom;
+            mirroredBy.value = body.mirroredBy ?? [];
         } catch {
             // Sandbox not reachable yet — leave the last known state.
         }
@@ -112,9 +122,11 @@ export function useDesktopSync() {
         void refresh();
     };
 
-    // Disable: revoke the enrolled key on the daemon (halts Mutagen's SSH transport). The user still runs
-    // `intentic-sync uninstall` on their machine to stop the local agent.
+    // Disable: revoke EVERY enrollment on the daemon (the owner kill switch) — Mutagen's SSH transport dies and
+    // each machine's mirror watcher notices the rejected token and tears itself down. The installed agent stays
+    // until `intentic-sync uninstall` runs there; revokedFrom lets the card say so.
     const disable = async (): Promise<void> => {
+        revokedFrom.value = syncingFrom.value ?? `the enrolled computer`;
         await sandboxRequest(`/system/authorized-key`, { method: `DELETE` });
         pairToken.value = undefined;
         takeover.value = false;
@@ -124,6 +136,8 @@ export function useDesktopSync() {
     return {
         enrolled,
         syncingFrom,
+        mirroredBy,
+        revokedFrom,
         available,
         folder,
         defaultFolder,

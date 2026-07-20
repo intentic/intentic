@@ -12,7 +12,7 @@ import type { ForwardExecutor } from "./mirror.js";
 process.env.HOME = mkdtempSync(join(tmpdir(), "sync-mirror-"));
 process.env.USERPROFILE = process.env.HOME;
 const { mirrorPidPath } = await import("./config.js");
-const { fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid } = await import("./mirror.js");
+const { fetchWorkspacePorts, reconcileForwards, readLiveWatcherPid, SyncAuthError } = await import("./mirror.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");
 // setup() creates ~/.intentic/sync via writeConfig; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(mirrorPidPath), { recursive: true });
@@ -70,6 +70,18 @@ describe("fetchWorkspacePorts", () => {
     it("maps a rejected token to the re-pair message", async () => {
         vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("unauthorized", { status: 401 })));
         await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toThrow(/re-run setup/);
+    });
+
+    it("types 401/403 as SyncAuthError — what the watcher counts toward revocation self-teardown", async () => {
+        vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("unauthorized", { status: 401 })));
+        await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toBeInstanceOf(SyncAuthError);
+        vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("forbidden", { status: 403 })));
+        await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toBeInstanceOf(SyncAuthError);
+        // A 5xx (tunnel blip) must NOT read as revocation — the watcher retries those forever.
+        vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("bad gateway", { status: 502 })));
+        const blip = await fetchWorkspacePorts("https://s.example.dev", "ist_old").catch((error: unknown) => error);
+        expect(blip).toBeInstanceOf(Error);
+        expect(blip).not.toBeInstanceOf(SyncAuthError);
     });
 });
 

@@ -1,6 +1,8 @@
-# intentic desktop sync (Windows) — install the sync agent on THIS machine and two-way sync a local folder with
-# your sandbox's /work (block-delta, near-real-time, powered by Mutagen). Runs as YOU (no admin): installs into
-# %USERPROFILE%\.intentic\sync and registers a per-user logon task.
+# intentic desktop sync (Windows) — install the sync agent on THIS machine, two-way sync a local folder with
+# your sandbox's /work (block-delta, near-real-time), and mirror the sandbox's dev-server ports onto this
+# machine's localhost (both powered by Mutagen). Runs as YOU (no admin): installs into %USERPROFILE%\.intentic\sync
+# and registers per-user logon tasks (the Mutagen daemon + the port-mirror watcher) so both resume after a
+# reboot. `intentic-sync uninstall` removes everything.
 #
 # Usage (the platform's Desktop sync card hands you this):
 #   $env:SANDBOX_URL='https://sandbox-<id>.<zone>'; $env:PAIR_TOKEN='<token>'; $env:SYNC_DIR="$HOME\intentic\<name>"; irm https://intentic.dev/sync.ps1 | iex

@@ -8,6 +8,7 @@ const viewStates = new Map<string, Monaco.editor.ICodeEditorViewState>();
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { normalizationEdits } from "../../../composables/workspace/normalizeOnSave";
 import { useEditorSelection } from "../../../composables/workspace/useEditorSelection";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
 import type { LineJump } from "../workspaceTabs";
@@ -50,6 +51,34 @@ const jumpTo = (line: number): void => {
     flashTimer = setTimeout(() => marks.clear(), 1500);
 };
 
+// Save = normalize, then emit the normalized text. Normalization (LF EOLs, no trailing whitespace — kept for
+// markdown hard breaks — one final newline) lands as model edits via pushEditOperations, so the cursor stays put
+// and undo works; the emitted value is then exactly what the editor shows AND what lands on disk, keeping the
+// buffer/baseline/disk one shape (the save echo reconciles as a no-op). The point is the agent: its exact-string
+// edits fail on invisible whitespace drift, so every file a user saves is already in the shape the agent expects.
+const doSave = (): void => {
+    if (!editable || monaco === undefined || model === undefined) {
+        return;
+    }
+    const m = monaco;
+    const target = model;
+    if (target.getEOL() !== `\n`) {
+        target.setEOL(m.editor.EndOfLineSequence.LF);
+    }
+    const lines = Array.from({ length: target.getLineCount() }, (_, index) => target.getLineContent(index + 1));
+    const edits = normalizationEdits(lines, lang !== `markdown`);
+    if (edits.length > 0) {
+        target.pushEditOperations(
+            [],
+            edits.map((edit) => ({ range: new m.Range(edit.startLine, edit.startColumn, edit.endLine, edit.endColumn), text: edit.text })),
+            () => null,
+        );
+    }
+    emit(`save`, target.getValue());
+};
+// The toolbar Save button (FileViewer) saves through this too, so both triggers normalize identically.
+defineExpose({ save: doSave });
+
 onMounted(async () => {
     const m = await ensureMonaco();
     await ensureLanguage(m, lang);
@@ -86,7 +115,7 @@ onMounted(async () => {
 
     if (editable) {
         model.onDidChangeContent(() => emit(`change`, model?.getValue() ?? ``));
-        view.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => emit(`save`, model?.getValue() ?? ``));
+        view.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, doSave);
         // Monaco's command binds the key, but Ctrl/Cmd+S still reaches the browser's Save-page dialog — stop it.
         view.onKeyDown((event) => {
             if ((event.ctrlKey || event.metaKey) && event.keyCode === m.KeyCode.KeyS) {

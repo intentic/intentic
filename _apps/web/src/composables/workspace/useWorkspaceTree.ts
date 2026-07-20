@@ -115,8 +115,15 @@ export function useWorkspaceTree() {
     // slow tree walk here loses that race — the echo then compares against a stale baseline and raises a false
     // "changed on disk" warning. The echo's own push invalidates the tree anyway (markWorkspaceChanged), so this
     // kick is latency-only.
-    const saveText = async (path: string, text: string): Promise<void> => {
-        await sandboxJson<{ ok: true }>(`/workspace/upload?path=${encodeURIComponent(path)}`, { method: `POST`, body: text });
+    // `baseHash` (sha256Hex of the text last read from disk) makes the save GUARDED: the daemon refuses it with
+    // a 409 when the file changed since that read, so a save can't clobber a concurrent agent/terminal write.
+    // Omitted for creates (no baseline exists yet) — those overwrite as before.
+    const saveText = async (path: string, text: string, baseHash?: string): Promise<void> => {
+        await sandboxJson<{ ok: true }>(`/workspace/upload?path=${encodeURIComponent(path)}`, {
+            method: `POST`,
+            headers: baseHash === undefined ? undefined : { "x-intentic-base-hash": baseHash },
+            body: text,
+        });
         void invalidate();
     };
     const createDir = async (path: string): Promise<void> => {

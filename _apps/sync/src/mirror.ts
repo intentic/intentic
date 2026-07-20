@@ -4,6 +4,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
+import { unregisterAutostart } from "./autostart.js";
 import { type MirroredPort, mirrorLogPath, mirrorPidPath, readConfig, type SyncConfig, writeConfig } from "./config.js";
 import { ensureMutagen, forwardSessionName, mutagenForwardArgs, runMutagen } from "./mutagen.js";
 import { sshAlias } from "./ssh.js";
@@ -20,13 +21,24 @@ export type Log = (message: string) => void;
 // before the user finishes alt-tabbing to the browser; slow enough to be free.
 const POLL_MS = 5000;
 
+// Consecutive definitive token rejections before the watcher treats the enrollment as revoked ("Disable sync"
+// in the browser, or a recreated sandbox that lost the enrollment) and tears itself down. Revocation never
+// heals on its own, so three polls (~15s) is already generous slack against a freak one-off.
+const REVOKED_POLLS = 3;
+
+// The daemon's definitive "this token is not enrolled" answer (401/403) — distinct from transient failures so
+// the watcher can tell revocation (self-teardown) from a tunnel blip (retry next tick).
+export class SyncAuthError extends Error {}
+
 // The sandbox's currently-listening WORKSPACE ports (dev servers, terminal processes, published containers) —
 // what the reconcile drives from. Authenticated by the enrollment-minted sync token, which the daemon scopes
 // to exactly this read. System ports (the sandbox's own machinery) are filtered out and never mirrored.
 export const fetchWorkspacePorts = async (sandboxUrl: string, syncToken: string): Promise<PortSummary[]> => {
     const response = await fetch(`${sandboxUrl.replace(/\/$/, "")}/ports`, { headers: { "x-intentic-sync": syncToken } });
     if (response.status === 401 || response.status === 403) {
-        throw new Error("the sandbox rejected the sync token — click “Enable desktop sync” in your browser and re-run setup to mint a fresh one.");
+        throw new SyncAuthError(
+            "the sandbox rejected the sync token — click “Enable desktop sync” in your browser and re-run setup to mint a fresh one.",
+        );
     }
     if (!response.ok) {
         throw new Error(`reading the sandbox's ports failed (${response.status}): ${await response.text()}`);
@@ -157,16 +169,29 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     const mutagen = await ensureMutagen();
     log(`mirror watcher started (pid ${process.pid}); polling ${first.sandboxUrl}/ports every ${POLL_MS / 1000}s`);
 
+    let rejectedPolls = 0;
     for (;;) {
         try {
             const config = await readConfig();
             const ports = config.syncToken === undefined ? [] : await fetchWorkspacePorts(config.sandboxUrl, config.syncToken);
+            rejectedPolls = 0;
             const next = await reconcileForwards(mutagenExecutor(mutagen, config), config.mirroredPorts ?? [], ports, log);
             if (!sameMirrorSet(config.mirroredPorts ?? [], next)) {
                 await writeConfig({ ...config, mirroredPorts: next });
             }
         } catch (error) {
-            // A transient tunnel blip or a token hiccup must not kill the loop — log and try again next tick.
+            // Revocation is definitive: after REVOKED_POLLS consecutive rejections, stop for good — drop the
+            // login autostart, tear down the forwards, and exit — instead of polling a dead enrollment forever
+            // (and resurrecting at every login).
+            if (error instanceof SyncAuthError && ++rejectedPolls >= REVOKED_POLLS) {
+                log(`the sandbox rejected the sync token ${REVOKED_POLLS} polls in a row — this machine's enrollment was revoked.`);
+                await unregisterAutostart(log);
+                await teardownForwards(log);
+                await rm(mirrorPidPath, { force: true });
+                log("re-enable from the Desktop sync card, or run `intentic-sync uninstall` to remove the agent entirely.");
+                return;
+            }
+            // A transient tunnel blip must not kill the loop — log and try again next tick.
             log(`  reconcile skipped: ${error instanceof Error ? error.message : String(error)}`);
         }
         await sleep(POLL_MS);
@@ -188,6 +213,21 @@ export const startMirrorWatcher = async (cliPath: string, log: Log): Promise<voi
     log(`mirroring the sandbox's workspace ports onto localhost (pid ${child.pid}). Details: ${mirrorLogPath}`);
 };
 
+// Tear down every forward the last reconcile left alive and clear the recorded baseline. Shared by
+// `--stop`/`uninstall` (via stopMirror) and the watcher's own revocation teardown.
+const teardownForwards = async (log: Log): Promise<void> => {
+    const config = await readConfig();
+    const mirrored = config.mirroredPorts ?? [];
+    if (mirrored.length > 0) {
+        const executor = mutagenExecutor(await ensureMutagen(), config);
+        for (const entry of mirrored) {
+            executor.terminate(entry.port);
+        }
+        await writeConfig({ ...config, mirroredPorts: [] });
+    }
+    log(mirrored.length === 0 ? "port mirroring stopped." : `port mirroring stopped; tore down ${mirrored.length} forward(s).`);
+};
+
 // Stop mirroring: kill the watcher, then tear down every forward it left up.
 export const stopMirror = async (log: Log): Promise<void> => {
     const pid = await readLiveWatcherPid();
@@ -199,14 +239,5 @@ export const stopMirror = async (log: Log): Promise<void> => {
         }
     }
     await rm(mirrorPidPath, { force: true });
-    const config = await readConfig();
-    const mirrored = config.mirroredPorts ?? [];
-    if (mirrored.length > 0) {
-        const executor = mutagenExecutor(await ensureMutagen(), config);
-        for (const entry of mirrored) {
-            executor.terminate(entry.port);
-        }
-        await writeConfig({ ...config, mirroredPorts: [] });
-    }
-    log(mirrored.length === 0 ? "port mirroring stopped." : `port mirroring stopped; tore down ${mirrored.length} forward(s).`);
+    await teardownForwards(log);
 };

@@ -5,6 +5,7 @@ import { computed, ref, shallowRef, watch, type Component } from "vue";
 import { viewerForExtension } from "../../../core-views/viewerRegistry";
 import { sandboxBlob, SandboxHttpError, sandboxJson } from "../../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../../composables/useAsyncAction";
+import { sha256Hex } from "../../../composables/workspace/contentHash";
 import { useEditBuffers } from "../../../composables/workspace/useEditBuffers";
 import { useLayout } from "../../../composables/useLayout";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
@@ -275,6 +276,9 @@ const download = async (): Promise<void> => {
  * persists through the daemon's upload route; the tree refetch then refreshes size + the read view. */
 const layout = useLayout();
 const { saveText, run } = useWorkspaceTree();
+// The editable CodeView instance — the toolbar Save button saves through its exposed save() so the toolbar and
+// Ctrl+S run the same normalize-then-save path.
+const editorView = ref<InstanceType<typeof CodeView>>();
 // Mobile is read-only: touch code editing is error-prone and the agent (chat) is the edit path there, so the
 // global edit mode is ignored and the Edit affordance hidden below 768px.
 const { mobile } = useDevice();
@@ -288,10 +292,22 @@ const editorLang = computed(() => (mode.value === `markdown` ? `markdown` : lang
 const editorSeed = computed(() => edit.bufferOf(path) ?? text.value ?? ``);
 
 const onEditorChange = (value: string): void => edit.setBuffer(path, value);
-// markSaved only runs if the write succeeded (run swallows the throw and shows the error instead).
+// markSaved only runs if the write succeeded (run swallows the throw and shows the error instead). The save is
+// GUARDED by the baseline's hash: the daemon 409s when the file changed on disk since we read it (an agent or
+// terminal write the ~250ms SSE echo hasn't surfaced yet), so the save can't clobber that write — the 409 raises
+// the same changed-on-disk banner the echo would, with the user's edits preserved in the buffer.
 const onEditorSave = (value: string): void =>
     void run(async () => {
-        await saveText(path, value);
+        const base = edit.baselineOf(path);
+        try {
+            await saveText(path, value, base === undefined ? undefined : await sha256Hex(base));
+        } catch (err) {
+            if (err instanceof SandboxHttpError && err.status === 409) {
+                staleOnDisk.value = true;
+                return;
+            }
+            throw err;
+        }
         edit.markSaved(path, value);
     });
 </script>
@@ -311,7 +327,7 @@ const onEditorSave = (value: string): void =>
                         type="button"
                         class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-40"
                         :disabled="!dirtyThis"
-                        @click="onEditorSave(edit.bufferOf(path) ?? text ?? '')"
+                        @click="editorView?.save()"
                         v-tooltip.bottom="'Save (Ctrl+S)'"
                     >
                         <Icon name="save" class="text-[0.7rem]" /> Save
@@ -353,6 +369,7 @@ const onEditorSave = (value: string): void =>
         <div class="relative min-h-0 flex-1">
             <CodeView
                 v-if="editingThis"
+                ref="editorView"
                 :key="`${path}:${reloadNonce}`"
                 editable
                 :path="path"

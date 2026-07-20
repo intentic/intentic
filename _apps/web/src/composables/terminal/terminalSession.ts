@@ -45,6 +45,10 @@ export type TerminalSession = {
     // The fit observer for the WINDOW the host currently lives in — rebuilt when a mount moves the host into
     // another document (the pop-out pip window), since an observer only tracks elements of its own window.
     observer?: ResizeObserver;
+    // The document of the LAST mount — mountTerminalSession's move signal. host.ownerDocument can't be it: the
+    // pop-out Teleport adopts the mounted host (with the whole panel) into the pip document BEFORE the remount
+    // watcher runs, so by then host and container already agree and the move would go undetected.
+    mountedDocument: Document;
     // The session-over handoff: the daemon's `exit` frame, or a dispose. Never called twice. Mutable because a
     // cached session outlives the tabs instance that created it — each instance rebinds it on cache hit, so an
     // exit always updates the LIVE surface's tab state, not a destroyed one's.
@@ -390,7 +394,7 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
             void navigator.clipboard.writeText(selection).catch(() => {});
         }
     });
-    const s: TerminalSession = { name, term, fit, serialize, host, onExit, retryDelay: RETRY_MS, closing: false, down: false };
+    const s: TerminalSession = { name, term, fit, serialize, host, mountedDocument: document, onExit, retryDelay: RETRY_MS, closing: false, down: false };
     observeHost(s);
     // Keystrokes → pty; xterm's resize (from FitAddon) → pty resize. Wired once — send() targets the current
     // socket, so these survive reconnects. A read-only session wires no input path at all (disableStdin already
@@ -417,7 +421,8 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
 // open()s it there; later mounts just move the persistent host across. `focus: false` mounts without stealing
 // the keyboard — the non-focused cells of a split group.
 export const mountTerminalSession = (s: TerminalSession, container: HTMLElement, focus = true): void => {
-    const moved = s.host.ownerDocument !== container.ownerDocument;
+    const moved = s.mountedDocument !== container.ownerDocument;
+    s.mountedDocument = container.ownerDocument;
     container.append(s.host);
     if (!s.term.element) {
         s.term.open(s.host);

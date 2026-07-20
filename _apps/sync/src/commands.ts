@@ -291,8 +291,20 @@ const uninstall = buildCommand<Record<string, never>>({
         if (stripped !== current) {
             await writeFile(userConfig, stripped, { mode: 0o600 });
         }
+        // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely — the login
+        // registration and the resident process both. A system-installed `mutagen` on PATH may hold the user's
+        // own sessions: leave its daemon alone and say so instead.
+        const ownCopy = mutagen !== "mutagen";
+        if (ownCopy) {
+            if (process.platform !== "linux") {
+                spawnSync(mutagen, ["daemon", "unregister"], { stdio: "ignore" });
+            }
+            spawnSync(mutagen, ["daemon", "stop"], { stdio: "ignore" });
+        }
         this.process.stdout.write(
-            "Sync terminated; ssh-config include removed. (The Mutagen daemon stays registered — `mutagen daemon unregister` to remove it.)\n",
+            ownCopy
+                ? "Sync terminated; ssh-config include removed; Mutagen daemon stopped and unregistered. Nothing intentic stays resident on this machine.\n"
+                : "Sync terminated; ssh-config include removed. (Your own Mutagen install is untouched — `mutagen daemon unregister` if you no longer want its daemon at login.)\n",
         );
     },
 });

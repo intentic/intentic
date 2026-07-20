@@ -27,7 +27,7 @@ import { mintPairing } from "./platform/sync.js";
 import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { AgentTool } from "./agent/agent-tools.js";
 import { workspacePaths } from "./workspace/workspace.js";
-import { MAX_RAW_BYTES, UploadTooLargeError } from "./workspace/workspace-files.js";
+import { MAX_RAW_BYTES, sha256Text, UploadTooLargeError } from "./workspace/workspace-files.js";
 
 // An in-memory capabilities store so the capability routes + turn merge are testable without the fs.
 const memoryCapabilitiesStore = (initial: Capability[] = []): CapabilitiesStore => {
@@ -1852,6 +1852,50 @@ test("POST /workspace/upload streams any contained path to disk, 400s escape, 41
         }),
     );
     expect((await capped.request("/workspace/upload?path=app/huge.bin", { method: "POST", body })).status).toBe(413);
+});
+
+test("POST /workspace/upload with x-intentic-base-hash refuses a stale write and passes a matching one", async () => {
+    const writes: string[] = [];
+    const app = createApp(
+        services({
+            files: fakeFiles({
+                read: async (absPath) => (absPath === "/work/app/index.ts" ? "hello" : undefined),
+                writeStream: async (absPath) => {
+                    writes.push(absPath);
+                },
+            }),
+        }),
+    );
+    // sha256 of "hello", hardcoded to pin the wire algorithm (utf8 text → sha256 hex) the browser must speak.
+    const match = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+    const ok = await app.request("/workspace/upload?path=app/index.ts", {
+        method: "POST",
+        body: "edited",
+        headers: { "x-intentic-base-hash": match },
+    });
+    expect(ok.status).toBe(200);
+    expect(writes).toEqual(["/work/app/index.ts"]);
+
+    // The file changed since the browser read it (hash mismatch) → 409, nothing written — the guarded save must
+    // never clobber a concurrent agent/terminal write.
+    const stale = await app.request("/workspace/upload?path=app/index.ts", {
+        method: "POST",
+        body: "edited",
+        headers: { "x-intentic-base-hash": sha256Text("agent rewrote this") },
+    });
+    expect(stale.status).toBe(409);
+    // Deleted since it was read reads as the same conflict.
+    const gone = await app.request("/workspace/upload?path=app/gone.ts", {
+        method: "POST",
+        body: "edited",
+        headers: { "x-intentic-base-hash": match },
+    });
+    expect(gone.status).toBe(409);
+    expect(writes).toHaveLength(1);
+
+    // No hash = the unguarded path (drag-drop upload, new-file create): overwrites like before.
+    expect((await app.request("/workspace/upload?path=app/index.ts", { method: "POST", body: "edited" })).status).toBe(200);
+    expect(writes).toHaveLength(2);
 });
 
 test("POST /workspace/upload threads ?offset to the streaming write and rejects a bad offset", async () => {

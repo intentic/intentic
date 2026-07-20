@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { cp, mkdir, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { dirname, extname, relative, resolve, sep } from "node:path";
@@ -27,6 +28,11 @@ export const readWorkspaceFile = async (absPath: string): Promise<string | undef
         return undefined;
     }
 };
+
+// The content hash the editor's guarded save compares against: sha256 over the text's utf8 bytes. Hashing the
+// DECODED text (not raw file bytes) matches what the browser can compute — it only ever saw the utf8-decoded
+// string from /workspace/file, so both sides hash the same shape by construction.
+export const sha256Text = (text: string): string => createHash("sha256").update(text, "utf8").digest("hex");
 
 // Write a file's contents, auto-creating parent dirs. Accepts bytes too, so the drag-drop upload route and the
 // editor's text save share one write path (uploaded bytes / edited utf8 text are both just a body to persist).

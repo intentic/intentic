@@ -1,7 +1,9 @@
 #!/bin/sh
-# intentic desktop sync — install the sync agent on THIS machine and two-way sync a local folder with your
-# sandbox's /work (block-delta, near-real-time, powered by Mutagen). Runs as YOU (no sudo): it installs into
-# ~/.intentic/sync and registers a per-user login agent.
+# intentic desktop sync — install the sync agent on THIS machine, two-way sync a local folder with your
+# sandbox's /work (block-delta, near-real-time), and mirror the sandbox's dev-server ports onto this machine's
+# localhost (both powered by Mutagen). Runs as YOU (no sudo): it installs into ~/.intentic/sync and registers
+# per-user login agents (the Mutagen daemon + the port-mirror watcher) so both resume after a reboot.
+# `intentic-sync uninstall` removes everything.
 #
 # Usage (the platform's Desktop sync card hands you this):
 #   curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://sandbox-<id>.<zone>' PAIR_TOKEN='<token>' SYNC_DIR="$HOME/intentic/<name>" sh
