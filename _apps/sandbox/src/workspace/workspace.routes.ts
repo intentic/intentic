@@ -184,8 +184,10 @@ export const createWorkspaceRoutes = (services: Services) => {
             if (found === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: `no app "${input.app}" in ${repo}` });
             }
-            // Mint the preview route before the app is observable as running (see panels/preview-route.ts).
-            await services.ensurePreviewRoutes([previewLabel(appPanelKey(repo, input.app))]);
+            // Kick off the preview-route mint fire-and-forget (like addApps/addRepo), NOT awaited: the tmux
+            // session the browser attaches to must not wait on a platform round-trip. The route resolves long
+            // before the dev server is healthy enough for anyone to open its preview URL.
+            void services.ensurePreviewRoutes([previewLabel(appPanelKey(repo, input.app))]);
             await services.processes.start(
                 appPanelKey(repo, input.app),
                 buildAppSpec({ repo, repoDir, pkg: found.pkg, app: input.app, preview: found.preview, zone, sandboxId }),

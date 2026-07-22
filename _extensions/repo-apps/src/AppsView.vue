@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, cmp, Icon, Page, StatusBadge } from "@intentic/extension-ui";
+import { Button, cmp, Icon, type IconName, Page, PageHeader, StatusBadge } from "@intentic/extension-ui";
 import { computed, onMounted, onUnmounted, ref, toRef } from "vue";
 import AddAppDialog from "./AddAppDialog.vue";
 import { groupTests } from "./appTests";
@@ -34,6 +34,38 @@ let addPoll: ReturnType<typeof setInterval> | undefined;
 
 const stopped = computed(() => apps.value.filter((app) => !app.running));
 const running = computed(() => apps.value.filter((app) => app.running));
+
+// The type signal (issue: api/web read identical). An app's `template` is the manifest key it was scaffolded
+// from — a frontend (web/landing) and a backend (api) get a distinct icon + tint + kind pill so they're
+// told apart at a glance. Matched by the canonical keys with a loose contains() so a custom-named instance
+// template (e.g. "storefront-api") still classifies; anything unrecognized falls back to the neutral package
+// glyph and shows its raw template key.
+interface AppKind {
+    readonly icon: IconName;
+    readonly label: string;
+    readonly tint: string;
+    readonly pill: string;
+    readonly known: boolean;
+}
+const BACKEND: AppKind = { icon: `server`, label: `API`, tint: `text-primary-500`, pill: `bg-primary-600/10 text-primary-500`, known: true };
+const FRONTEND: AppKind = { icon: `globe`, label: `Web`, tint: `text-info`, pill: `bg-info/10 text-info`, known: true };
+const kindOf = (template: string): AppKind => {
+    const key = template.toLowerCase();
+    if (/api|server|backend|service|worker|daemon|gateway/.test(key)) {
+        return BACKEND;
+    }
+    if (/web|landing|site|front|client|dashboard|admin|spa/.test(key)) {
+        return FRONTEND;
+    }
+    return { icon: `box`, label: template, tint: `text-muted`, pill: `bg-subtle/10 text-subtle`, known: false };
+};
+// Decorate each app with its resolved kind so the template binds one value per row (no repeated kindOf calls).
+const appRows = computed(() => apps.value.map((app) => ({ ...app, kind: kindOf(app.template) })));
+
+const headerTitle = computed(() => (props.monorepo ? `Apps` : `Tests`));
+const headerDescription = computed(() =>
+    props.monorepo ? `Start your apps, open a live preview, and run their tests.` : `Run this repo’s vitest suites.`,
+);
 
 // Vitest projects split into: this repo's startable apps' own tests, non-app _apps/<x> packages, and libraries.
 const grouped = computed(() =>
@@ -114,16 +146,18 @@ const add = (entries: { template: string; name: string }[]): Promise<void> =>
     });
 
 // Any start opens the global terminal focused on the app — the terminals ARE the launch feedback (install +
-// boot stream live).
+// boot stream live). The panel is shown UP FRONT so its chrome appears instantly; the session is focused the
+// moment the start POST returns (startApp no longer blocks on a refetch), so the terminal pops right away.
 const startOne = (app: string): Promise<void> =>
     act(async () => {
+        host().terminal.setOpen(true);
         await startApp(app);
         openFocused(sessionOf(app));
     });
 const startAll = (): Promise<void> =>
     act(async () => {
-        await Promise.all(stopped.value.map((app) => startApp(app.app)));
         host().terminal.setOpen(true);
+        await Promise.all(stopped.value.map((app) => startApp(app.app)));
     });
 const stopAll = (): Promise<void> => act(async () => Promise.all(running.value.map((app) => stopApp(app.app))).then(() => undefined));
 
@@ -147,16 +181,10 @@ onUnmounted(() => {
 <template>
     <div class="flex h-full min-h-0 flex-col">
         <div class="min-h-0 flex-1 overflow-auto">
-            <Page width="wide" class="flex flex-col gap-6">
-                <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
-                <div v-if="testsError" :class="cmp.alertDanger()">{{ testsError }}</div>
-                <div v-if="actionError" :class="cmp.alertDanger()">{{ actionError }}</div>
-
-                <!-- Apps: startable instances (monorepo only). Each app carries its own Run-tests when it owns projects. -->
-                <section v-if="monorepo" class="flex flex-col gap-2">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-2xs font-medium uppercase tracking-wide text-subtle">Apps</h2>
-                        <div class="flex items-center gap-2">
+            <Page width="wide">
+                <PageHeader :title="headerTitle" :description="headerDescription">
+                    <template #actions>
+                        <template v-if="monorepo">
                             <Button v-if="stopped.length > 0" label="Start all" size="small" :disabled="busy" @click="startAll">
                                 <template #icon><Icon name="play" /></template>
                             </Button>
@@ -173,119 +201,144 @@ onUnmounted(() => {
                             >
                                 <template #icon><Icon name="plus" /></template>
                             </Button>
-                        </div>
-                    </div>
-                    <Card v-if="apps.length === 0 && !isLoading" dashed class="text-center text-sm text-muted">
+                        </template>
+                        <Button v-else-if="projects.length > 1" label="Run all" size="small" @click="runTests('all-tests', projects)">
+                            <template #icon><Icon name="play" /></template>
+                        </Button>
+                    </template>
+                </PageHeader>
+
+                <div v-if="error" :class="cmp.alertDanger('mb-4')">{{ error }}</div>
+                <div v-if="testsError" :class="cmp.alertDanger('mb-4')">{{ testsError }}</div>
+                <div v-if="actionError" :class="cmp.alertDanger('mb-4')">{{ actionError }}</div>
+
+                <!-- Apps: startable instances (monorepo only), one grouped list keyed by type. Each app carries its
+                     own Run-tests when it owns projects; the type icon (globe = frontend, server = backend) is the
+                     at-a-glance signal, backed by a kind pill. -->
+                <section v-if="monorepo">
+                    <div v-if="appRows.length === 0 && !isLoading" :class="cmp.emptyState()">
                         No apps yet — use “Add app” to scaffold one and get a live preview.
-                    </Card>
-                    <Card v-for="app in apps" :key="app.app" class="flex items-center justify-between gap-3">
-                        <div class="flex min-w-0 items-center gap-2.5">
-                            <Icon name="box" class="text-muted" />
-                            <div class="min-w-0">
-                                <span class="font-medium">{{ app.app }}</span>
-                                <span v-if="app.template !== app.app" class="ml-1.5 text-2xs text-muted">({{ app.template }})</span>
+                    </div>
+                    <div v-else class="overflow-hidden rounded-lg border border-line bg-card">
+                        <div class="flex flex-col divide-y divide-line">
+                            <div v-for="app in appRows" :key="app.app" class="flex items-center gap-3 px-4 py-2.5">
+                                <Icon :name="app.kind.icon" class="shrink-0 text-lg" :class="app.kind.tint" />
+                                <div class="flex min-w-0 flex-1 items-center gap-2">
+                                    <span class="truncate font-medium text-content">{{ app.app }}</span>
+                                    <span class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium" :class="app.kind.pill">{{ app.kind.label }}</span>
+                                    <span v-if="app.template !== app.app && app.kind.known" class="shrink-0 truncate text-2xs text-subtle">{{ app.template }}</span>
+                                </div>
+                                <StatusBadge
+                                    :variant="app.healthy ? 'success' : app.running ? 'info' : 'neutral'"
+                                    :label="app.healthy ? 'healthy' : app.running ? 'starting' : 'stopped'"
+                                    size="xs"
+                                    dot
+                                />
                                 <a
                                     v-if="app.previewUrl && app.healthy"
                                     :href="app.previewUrl"
                                     target="_blank"
                                     rel="noopener"
-                                    class="block truncate text-2xs text-link hover:underline"
-                                    >{{ app.previewUrl }}</a
+                                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                                    :aria-label="`Open ${app.app} preview in a new tab`"
+                                    v-tooltip.top="'Open preview'"
                                 >
+                                    <Icon name="external-link" />
+                                </a>
+                                <button
+                                    type="button"
+                                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                                    :aria-label="`Open ${app.app} terminal`"
+                                    v-tooltip.top="'Terminal'"
+                                    @click="openFocused(sessionOf(app.app))"
+                                >
+                                    <Icon name="align-left" />
+                                </button>
+                                <Button
+                                    v-if="testsOf(app.app).length > 0"
+                                    label="Run tests"
+                                    size="small"
+                                    severity="secondary"
+                                    v-tooltip.top="'Run this app’s vitest projects'"
+                                    @click="runTests(`${app.app}__test`, testsOf(app.app))"
+                                >
+                                    <template #icon><Icon name="bolt" /></template>
+                                </Button>
+                                <Button v-if="!app.running" label="Start" size="small" :disabled="busy" @click="startOne(app.app)">
+                                    <template #icon><Icon name="play" /></template>
+                                </Button>
+                                <Button v-else label="Stop" size="small" severity="secondary" :disabled="busy" @click="act(() => stopApp(app.app))">
+                                    <template #icon><Icon name="stop" /></template>
+                                </Button>
                             </div>
                         </div>
-                        <div class="flex shrink-0 items-center gap-2">
-                            <StatusBadge
-                                :variant="app.healthy ? 'success' : app.running ? 'info' : 'neutral'"
-                                :label="app.healthy ? 'healthy' : app.running ? 'starting' : 'stopped'"
-                                size="xs"
-                            />
-                            <Button
-                                v-if="testsOf(app.app).length > 0"
-                                label="Run tests"
-                                size="small"
-                                severity="secondary"
-                                v-tooltip.top="'Run this app’s vitest projects'"
-                                @click="runTests(`${app.app}__test`, testsOf(app.app))"
-                            >
-                                <template #icon><Icon name="bolt" /></template>
-                            </Button>
-                            <button
-                                type="button"
-                                class="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
-                                :aria-label="`Open ${app.app} terminal`"
-                                v-tooltip.top="'Terminal'"
-                                @click="openFocused(sessionOf(app.app))"
-                            >
-                                <Icon name="align-left" />
-                            </button>
-                            <Button v-if="!app.running" label="Start" size="small" :disabled="busy" @click="startOne(app.app)">
-                                <template #icon><Icon name="play" /></template>
-                            </Button>
-                            <Button v-else label="Stop" size="small" severity="secondary" :disabled="busy" @click="act(() => stopApp(app.app))">
-                                <template #icon><Icon name="stop" /></template>
-                            </Button>
-                        </div>
-                    </Card>
-                    <div v-if="adding" class="flex items-center gap-2 text-xs text-muted">
+                    </div>
+                    <div v-if="adding" class="mt-2 flex items-center gap-2 text-xs text-muted">
                         <Icon name="spinner" spin />
                         <span>Adding apps — follow progress in the terminal.</span>
                     </div>
                 </section>
 
-                <!-- Packages: _apps/<x> dirs that carry tests but aren't startable template apps (e.g. cli/sandbox/sync). -->
-                <section v-if="monorepo && packageEntries.length > 0" class="flex flex-col gap-2">
-                    <h2 class="text-2xs font-medium uppercase tracking-wide text-subtle">Packages</h2>
-                    <Card v-for="[name, dirs] in packageEntries" :key="name" class="flex items-center justify-between gap-3">
-                        <div class="flex min-w-0 items-center gap-2.5">
-                            <Icon name="box" class="text-muted" />
-                            <span class="truncate font-mono text-sm">{{ name }}</span>
+                <!-- Packages: _apps/<x> dirs that carry tests but aren't startable template apps (e.g. cli/sandbox/sync).
+                     A secondary group — muted surface + denser rows — so it never competes with the startable apps. -->
+                <section v-if="monorepo && packageEntries.length > 0" class="mt-6">
+                    <h3 :class="cmp.sectionLabel('mb-2')">Packages</h3>
+                    <div class="overflow-hidden rounded-lg border border-line/60 bg-card/40">
+                        <div class="flex flex-col divide-y divide-line/60">
+                            <div v-for="[name, dirs] in packageEntries" :key="name" class="flex items-center gap-3 px-4 py-2">
+                                <Icon name="box" class="shrink-0 text-subtle" />
+                                <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ name }}</span>
+                                <Button label="Run tests" size="small" severity="secondary" @click="runTests(`${name}__test`, dirs)">
+                                    <template #icon><Icon name="bolt" /></template>
+                                </Button>
+                            </div>
                         </div>
-                        <Button label="Run tests" size="small" severity="secondary" @click="runTests(`${name}__test`, dirs)">
-                            <template #icon><Icon name="bolt" /></template>
-                        </Button>
-                    </Card>
+                    </div>
                 </section>
 
-                <!-- Library tests: _libs/* + the repo root (monorepo). -->
-                <section v-if="monorepo && grouped.libraries.length > 0" class="flex flex-col gap-2">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-2xs font-medium uppercase tracking-wide text-subtle">Library tests</h2>
-                        <Button v-if="grouped.libraries.length > 1" label="Run all" size="small" @click="runTests('all-tests', grouped.libraries)">
+                <!-- Library tests: _libs/* + the repo root (monorepo). Also secondary. -->
+                <section v-if="monorepo && grouped.libraries.length > 0" class="mt-6">
+                    <div class="mb-2 flex items-center justify-between">
+                        <h3 :class="cmp.sectionLabel()">Library tests</h3>
+                        <Button
+                            v-if="grouped.libraries.length > 1"
+                            label="Run all"
+                            size="small"
+                            severity="secondary"
+                            @click="runTests('all-tests', grouped.libraries)"
+                        >
                             <template #icon><Icon name="play" /></template>
                         </Button>
                     </div>
-                    <Card v-for="dir in grouped.libraries" :key="dir" class="flex items-center justify-between gap-3">
-                        <div class="flex min-w-0 items-center gap-2.5">
-                            <Icon name="bolt" class="text-muted" />
-                            <span class="truncate font-mono text-sm">{{ label(dir) }}</span>
+                    <div class="overflow-hidden rounded-lg border border-line/60 bg-card/40">
+                        <div class="flex flex-col divide-y divide-line/60">
+                            <div v-for="dir in grouped.libraries" :key="dir" class="flex items-center gap-3 px-4 py-2">
+                                <Icon name="bolt" class="shrink-0 text-subtle" />
+                                <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ label(dir) }}</span>
+                                <Button label="Run" size="small" severity="secondary" @click="runTests(libSuffix(dir), [dir])">
+                                    <template #icon><Icon name="play" /></template>
+                                </Button>
+                            </div>
                         </div>
-                        <Button label="Run" size="small" @click="runTests(libSuffix(dir), [dir])">
-                            <template #icon><Icon name="play" /></template>
-                        </Button>
-                    </Card>
+                    </div>
                 </section>
 
-                <!-- A vitest-only (non-monorepo) repo: a single flat Tests list over every project. -->
-                <section v-if="!monorepo" class="flex flex-col gap-2">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-2xs font-medium uppercase tracking-wide text-subtle">Tests</h2>
-                        <Button v-if="projects.length > 1" label="Run all" size="small" @click="runTests('all-tests', projects)">
-                            <template #icon><Icon name="play" /></template>
-                        </Button>
-                    </div>
-                    <Card v-if="projects.length === 0 && !testsLoading" dashed class="text-center text-sm text-muted">
+                <!-- A vitest-only (non-monorepo) repo: a single flat Tests list over every project (Run-all lives in the header). -->
+                <section v-if="!monorepo">
+                    <div v-if="projects.length === 0 && !testsLoading" :class="cmp.emptyState()">
                         No vitest projects found — nothing here owns a vitest.config.* or *.test.* file.
-                    </Card>
-                    <Card v-for="dir in projects" :key="dir" class="flex items-center justify-between gap-3">
-                        <div class="flex min-w-0 items-center gap-2.5">
-                            <Icon name="bolt" class="text-muted" />
-                            <span class="truncate font-mono text-sm">{{ label(dir) }}</span>
+                    </div>
+                    <div v-else class="overflow-hidden rounded-lg border border-line bg-card">
+                        <div class="flex flex-col divide-y divide-line">
+                            <div v-for="dir in projects" :key="dir" class="flex items-center gap-3 px-4 py-2">
+                                <Icon name="bolt" class="shrink-0 text-subtle" />
+                                <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ label(dir) }}</span>
+                                <Button label="Run" size="small" @click="runTests(libSuffix(dir), [dir])">
+                                    <template #icon><Icon name="play" /></template>
+                                </Button>
+                            </div>
                         </div>
-                        <Button label="Run" size="small" @click="runTests(libSuffix(dir), [dir])">
-                            <template #icon><Icon name="play" /></template>
-                        </Button>
-                    </Card>
+                    </div>
                 </section>
             </Page>
         </div>

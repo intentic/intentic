@@ -1,4 +1,4 @@
-import { AppsListSchema, type RepoApp, TemplatesListSchema, type TemplateSummary } from "@intentic/sandbox-contract";
+import { type AppsList, AppsListSchema, type RepoApp, TemplatesListSchema, type TemplateSummary } from "@intentic/sandbox-contract";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
@@ -38,8 +38,18 @@ export function useApps(repo: Ref<string>) {
         });
     };
     const startApp = async (app: string): Promise<void> => {
-        await api.sandbox.json(`/workspace/repos/${encodeURIComponent(repo.value)}/apps/${encodeURIComponent(app)}/start`, { method: `POST` });
-        await invalidate();
+        // Optimistically flip the row to running so the Start→Stop button + status update instantly AND the
+        // poll kicks in (refetchInterval keys off `running`), instead of gating the terminal open on a refetch.
+        queryClient.setQueryData<AppsList>(appsKey.value, (prev) =>
+            prev === undefined ? prev : { apps: prev.apps.map((entry) => (entry.app === app ? { ...entry, running: true } : entry)) },
+        );
+        try {
+            await api.sandbox.json(`/workspace/repos/${encodeURIComponent(repo.value)}/apps/${encodeURIComponent(app)}/start`, { method: `POST` });
+        } catch (err) {
+            await invalidate(); // the optimistic flip was wrong — reconcile to the daemon's truth
+            throw err;
+        }
+        void invalidate(); // reconcile previewUrl/healthy in the background; never blocks the caller's terminal open
     };
     const stopApp = async (app: string): Promise<void> => {
         await api.sandbox.json(`/workspace/repos/${encodeURIComponent(repo.value)}/apps/${encodeURIComponent(app)}/stop`, { method: `POST` });
