@@ -16,6 +16,8 @@ import { syncFolder } from "../composables/sandbox/syncFolder";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { environment } from "../environments/environment";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
+import SetupCompose from "./SetupCompose.vue";
+import type { ComposeArgs } from "./setupCompose";
 
 /* The setup gate's destination (outside the workspace shell). Step 2 offers two ways to make the sandbox reachable:
  *   • intentic-provided (default): the platform provisions a Cloudflare tunnel under its OWN zone; the user needs no
@@ -294,6 +296,34 @@ const windowsCommand = (): string => {
 
 const selectedCommand = computed(() => (cmdOs.value === `windows` ? windowsCommand() : linuxCommand()));
 const selectedCommandLang = computed(() => (cmdOs.value === `windows` ? `powershell` : `bash`));
+
+// The third Run tab: manage the sandbox with the user's own docker-compose.yml instead of the install
+// script. Local state layered over the persisted OS preference — picking Compose must not overwrite the
+// unix/windows choice other screens share (CommandOs stays a two-value type).
+const composeSelected = ref(false);
+const runTab = computed<`unix` | `windows` | `compose`>({
+    get: () => (composeSelected.value ? `compose` : cmdOs.value),
+    set: (value) => {
+        composeSelected.value = value === `compose`;
+        if (value !== `compose`) {
+            cmdOs.value = value;
+        }
+    },
+});
+const composeArgs = computed<ComposeArgs | undefined>(() => {
+    if (setup.value === null) {
+        return undefined;
+    }
+    return {
+        mode: mode.value,
+        code: setup.value.code,
+        hostname: setup.value.hostname,
+        ...(mode.value === `own` ? { cfToken: cfToken.value.trim() } : {}),
+        image: platformUrlOverride.value ? DEV_SANDBOX_IMAGE : `registry.gitlab.com/radarsu/intentic/sandbox:stable`,
+        googleClientId: environment.auth.googleClientId,
+        ...(platformUrlOverride.value ? { platformUrl: platformUrlOverride.value } : {}),
+    };
+});
 
 // When the gate's "Open setup" carried a sandbox id, resume setup for that sandbox (name + steps 2-4) instead
 // of a blank create form. Owned only — a member can't mint someone else's sandbox, so their id falls through
@@ -639,27 +669,31 @@ watch(
                     <div class="flex flex-col gap-2">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <Segmented
-                                v-model="cmdOs"
+                                v-model="runTab"
                                 :options="[
                                     { label: `Linux / macOS`, value: `unix` },
                                     { label: `Windows (PowerShell)`, value: `windows` },
+                                    { label: `Docker Compose`, value: `compose` },
                                 ]"
                             />
-                            <CopyButton :text="selectedCommand" label="Copy" />
+                            <CopyButton v-if="runTab !== `compose`" :text="selectedCommand" label="Copy" />
                         </div>
-                        <Code :code="selectedCommand" :lang="selectedCommandLang" :wrap="true" :copyable="false" />
-                        <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
-                             rebuilds it from this checkout on every run (layer-cached), so the pasted command is
-                             self-sufficient and never runs a stale image after sandbox edits. -->
-                        <p v-if="platformUrlOverride" class="flex items-center gap-2 text-xs text-warning">
-                            <Icon name="box" class="shrink-0" />
-                            <span
-                                >Local dev: this command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and
-                                runs it — every run rebuilds, so sandbox edits are always picked up (cached when unchanged;
-                                the first build takes a few minutes). For a live edit loop, keep
-                                <code>pnpm dev:sandbox</code> running.</span
-                            >
-                        </p>
+                        <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" :sync-enabled="syncEnabled" />
+                        <template v-else>
+                            <Code :code="selectedCommand" :lang="selectedCommandLang" :wrap="true" :copyable="false" />
+                            <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh
+                                 rebuilds it from this checkout on every run (layer-cached), so the pasted command is
+                                 self-sufficient and never runs a stale image after sandbox edits. -->
+                            <p v-if="platformUrlOverride" class="flex items-center gap-2 text-xs text-warning">
+                                <Icon name="box" class="shrink-0" />
+                                <span
+                                    >Local dev: this command builds <code>{{ DEV_SANDBOX_IMAGE }}</code> from your checkout and
+                                    runs it — every run rebuilds, so sandbox edits are always picked up (cached when unchanged;
+                                    the first build takes a few minutes). For a live edit loop, keep
+                                    <code>pnpm dev:sandbox</code> running.</span
+                                >
+                            </p>
+                        </template>
                     </div>
                 </template>
             </StepSection>

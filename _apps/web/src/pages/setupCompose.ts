@@ -1,0 +1,126 @@
+/* The docker-compose variant of the setup one-liner: instead of `curl … | sh` (connect.sh) imperatively
+ * starting containers, the user adds two services to their own compose file and a one-time bootstrap creates
+ * the `.env` beside it. The claim endpoint already answers KEY=value lines — exactly compose's .env format —
+ * so the intentic-provided path needs no script at all: claim → .env, `docker compose up -d`. The
+ * own-Cloudflare path additionally mints the sandbox tunnel with the bundled CLI (the same `sandbox-tunnel`
+ * call connect.sh makes), appending TUNNEL_TOKEN/SANDBOX_HOSTNAME to the .env.
+ *
+ * Everything here mirrors connect.sh's `docker run` — image, env set, volumes, network alias, dns, logging —
+ * and uses the SAME container/volume/network names (intentic-*-<slug>), so cleanup.sh, the coexistence check,
+ * and the workspace data all stay compatible: a sandbox can move between script-managed and compose-managed
+ * without losing /work. Keep the two in lockstep. */
+
+export interface ComposeArgs {
+    readonly mode: `intentic` | `own`;
+    // The short-lived setup code the platform minted — the only secret-adjacent value in the instructions.
+    readonly code: string;
+    // The sandbox's public hostname (<slug>.<zone>) the chosen target resolved to.
+    readonly hostname: string;
+    // The Cloudflare API token (own path only) — appended to .env, never sent to the platform.
+    readonly cfToken?: string;
+    readonly image: string;
+    readonly googleClientId: string;
+    // LOCAL DEV ONLY: the localhost platform origin; production leaves it undefined (app.intentic.dev).
+    readonly platformUrl?: string;
+}
+
+const PLATFORM_DEFAULT = `https://app.intentic.dev`;
+// Mirrors connect.sh's CLOUDFLARED_IMAGE / PREVIEW_PORT / ORIGIN_HOST.
+const CLOUDFLARED_IMAGE = `cloudflare/cloudflared:2026.6.1`;
+const ORIGIN_HOST = `intentic-sandbox-workspace`;
+
+const slugOf = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
+const isLocal = (url: string): boolean => url.includes(`//localhost`) || url.includes(`//127.0.0.1`);
+
+// The one-time bootstrap, run in the folder holding the compose file. The claim consumes the setup code and
+// writes the per-sandbox values as .env lines; the own path then appends the CF token (compose feeds it to
+// the sandbox) and mints the tunnel — `--env-file .env` hands the CLI the just-claimed CONNECT_TOKEN + ZONE.
+export const composeBootstrap = (args: ComposeArgs): string => {
+    const platform = args.platformUrl ?? PLATFORM_DEFAULT;
+    // LOCAL DEV ONLY: the dev platform's cert is a repo CA the system doesn't trust (same as connect.sh).
+    const claim = `curl -fsS${isLocal(platform) ? `k` : ``} ${platform}/setup/claim -d code=${args.code} > .env`;
+    if (args.mode === `intentic`) {
+        return `${claim}\ndocker compose up -d`;
+    }
+    return [
+        claim,
+        `echo "CLOUDFLARE_API_TOKEN=${args.cfToken ?? ``}" >> .env`,
+        `docker run --rm --env-file .env --entrypoint intentic ${args.image} sandbox-tunnel \\`,
+        `    --service http://${ORIGIN_HOST}:8787 --preview-service http://${ORIGIN_HOST}:5173 \\`,
+        `    --ssh-service ssh://${ORIGIN_HOST}:22 --subdomain '${slugOf(args.hostname)}' >> .env`,
+        `docker compose up -d`,
+    ].join(`\n`);
+};
+
+// The compose services/volumes/networks to add to the user's docker-compose.yml. Secrets stay in the .env
+// (compose interpolates them); non-secret identity (names, hostname, platform) is rendered concretely.
+export const composeFile = (args: ComposeArgs): string => {
+    const slug = slugOf(args.hostname);
+    const dev = args.platformUrl !== undefined;
+    // The platform as seen FROM the container (connect.sh's PLATFORM_URL_CONTAINER rewrite).
+    const platform = (args.platformUrl ?? PLATFORM_DEFAULT).replace(`//localhost`, `//host.docker.internal`).replace(`//127.0.0.1`, `//host.docker.internal`);
+    return [
+        `services:`,
+        `    intentic-sandbox:`,
+        `        image: ${args.image}`,
+        `        container_name: intentic-sandbox-${slug}`,
+        `        init: true`,
+        // What the sandbox's own isolated dockerd needs; the host's Docker socket is never mounted.
+        `        privileged: true`,
+        `        restart: unless-stopped`,
+        // Fresh public resolvers, so just-minted ssh-<id> tunnel hostnames don't hit a stale NXDOMAIN cache.
+        `        dns: [1.1.1.1, 1.0.0.1]`,
+        `        extra_hosts: [host.docker.internal:host-gateway]`,
+        `        networks:`,
+        `            intentic:`,
+        // The stable name the tunnel ingress dials (cloudflared resolves it on this shared network).
+        `                aliases: [${ORIGIN_HOST}]`,
+        `        logging:`,
+        `            driver: json-file`,
+        `            options: { max-size: 10m, max-file: "3" }`,
+        `        volumes:`,
+        `            - work:/work`,
+        `            - history:/history`,
+        `            - docker-engine:/var/lib/docker`,
+        ...(dev ? [`            - agent-auth:/agent-auth`] : []),
+        `        environment:`,
+        `            WORKSPACE_ROOT: /work`,
+        `            HISTORY_ROOT: /history`,
+        `            SANDBOX_HOST: 0.0.0.0`,
+        `            SANDBOX_PORT: "8787"`,
+        `            SANDBOX_NAME: intentic-sandbox-${slug}`,
+        `            SANDBOX_IMAGE: ${args.image}`,
+        `            PREVIEW_PORT: "5173"`,
+        `            GOOGLE_CLIENT_ID: ${args.googleClientId}`,
+        `            CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`,
+        `            OWNER_EMAIL: \${OWNER_EMAIL:-}`,
+        `            SANDBOX_PUBLIC_URL: https://${args.hostname}`,
+        `            PLATFORM_URL: ${platform}`,
+        `            SYNC_PAIR_TOKEN: \${SYNC_PAIR_TOKEN:-}`,
+        // Only the own path carries a Cloudflare token; an empty baked-in var would shadow the workspace
+        // .env the user may write later (a container's env can't change after creation) — so omit otherwise.
+        ...(args.mode === `own` ? [`            CLOUDFLARE_API_TOKEN: \${CLOUDFLARE_API_TOKEN:?run the .env bootstrap first}`] : []),
+        ...(dev ? [`            AGENT_AUTH_DIR: /agent-auth`] : []),
+        `    intentic-sandbox-tunnel:`,
+        `        image: ${CLOUDFLARED_IMAGE}`,
+        `        container_name: intentic-sandbox-tunnel-${slug}`,
+        `        restart: unless-stopped`,
+        `        command: tunnel --no-autoupdate run --token \${TUNNEL_TOKEN:?run the .env bootstrap first}`,
+        `        networks: [intentic]`,
+        `        logging:`,
+        `            driver: json-file`,
+        `            options: { max-size: 10m, max-file: "3" }`,
+        `networks:`,
+        `    intentic:`,
+        `        name: intentic-workspace-${slug}`,
+        `volumes:`,
+        `    work:`,
+        `        name: intentic-workspace-${slug}`,
+        `    history:`,
+        `        name: intentic-history-${slug}`,
+        `    docker-engine:`,
+        `        name: intentic-docker-${slug}`,
+        ...(dev ? [`    agent-auth:`, `        name: intentic-dev-agent-auth`] : []),
+        ``,
+    ].join(`\n`);
+};

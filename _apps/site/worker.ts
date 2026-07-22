@@ -8,6 +8,7 @@ const SCRIPTS: Record<string, string> = {
     "/connect.ps1": "connect.ps1",
     "/connect-host": "connect-host.sh",
     "/connect-host.ps1": "connect-host.ps1",
+    "/cleanup-host": "cleanup-host.sh",
     "/sync": "sync.sh",
     "/sync.ps1": "sync.ps1",
     "/cleanup": "cleanup.sh",

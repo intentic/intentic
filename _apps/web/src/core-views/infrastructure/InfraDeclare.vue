@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { INVENTORY_SERVICES } from "@intentic-app/capability-catalog";
 import { type InventoryEntry } from "@intentic-app/api-contract";
-import { Card, cmp, InfoHint, StatusBadge } from "@intentic-app/ui";
+import { Card, cmp, Code, InfoHint, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
+import Dialog from "primevue/dialog";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import SecretField from "../../components/SecretField.vue";
 import { errorMessage } from "../../composables/useAsyncAction";
+import { bashCommand } from "../../environments/scriptCommand";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { useDeployments } from "../../composables/extensions/useDeployments";
 import { useInventory } from "../../composables/extensions/useInventory";
@@ -131,6 +133,20 @@ const removeEntry = async (entryName: string): Promise<void> => {
     } catch (err) {
         actionError.value = errorMessage(err, `Could not remove the entry.`);
     }
+};
+
+// Removing a SERVER is two distinct acts, communicated before anything happens: forgetting it here (the
+// inventory entry + stored SSH key) vs wiping the machine itself — which only the cleanup one-liner run ON
+// the server can do. The dialog shows both so nobody is left with a machine full of orphaned containers.
+const removingServer = ref<string | undefined>();
+const cleanupHostCommand = bashCommand(`cleanupHost`, `sudo `, ``);
+const confirmRemoveServer = async (): Promise<void> => {
+    const name = removingServer.value;
+    if (name === undefined) {
+        return;
+    }
+    removingServer.value = undefined;
+    await removeEntry(name);
 };
 
 // Source control: link GitHub as an alternative to self-hosted Forgejo. Browser-driven — the PAT goes straight to
@@ -539,7 +555,7 @@ onUnmounted(progress.stopWatching);
                         </div>
                         <p v-if="summary(entry)" class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ summary(entry) }}</p>
                     </div>
-                    <Button size="small" severity="danger" :text="true" :rounded="true" aria-label="Remove backend" @click="removeEntry(entry.name)">
+                    <Button size="small" severity="danger" :text="true" :rounded="true" aria-label="Remove server" @click="removingServer = entry.name">
                         <template #icon><Icon name="trash" /></template>
                     </Button>
                 </Card>
@@ -591,4 +607,34 @@ onUnmounted(progress.stopWatching);
     </div>
 
     <AddWantDialog v-model:visible="addOpen" @added="onAdded" />
+
+    <!-- Server removal: forgetting the server here vs wiping the machine are separate acts — spell out both,
+         with the cleanup one-liner front and center, BEFORE the entry disappears. -->
+    <Dialog
+        :visible="removingServer !== undefined"
+        :modal="true"
+        :draggable="false"
+        :dismissable-mask="true"
+        :style="{ width: '34rem' }"
+        header="Remove server"
+        @update:visible="removingServer = undefined"
+    >
+        <div class="flex flex-col gap-3">
+            <p class="text-sm text-muted">
+                This forgets <b class="text-content">{{ removingServer }}</b> from your inventory — its entry and stored SSH key. The machine
+                itself is not touched: <b>everything already deployed keeps running on it</b> until you clean it up.
+            </p>
+            <Code :code="cleanupHostCommand" lang="bash" label="Run on the server (as root) to wipe everything intentic put there" :wrap="true" />
+            <p class="text-xs text-subtle">
+                The script lists exactly what it found and asks before removing anything: the deployed containers and their volumes (databases
+                included), the deployment state under /opt/intentic — <b>including the on-host backup repo</b> — the tunnel connector service, and
+                the intentic service user. Docker itself stays. This host's Cloudflare tunnel + DNS records are cleaned up from here on the next
+                apply, not by the script.
+            </p>
+        </div>
+        <template #footer>
+            <Button label="Cancel" severity="secondary" :text="true" @click="removingServer = undefined" />
+            <Button label="Remove server" severity="danger" @click="confirmRemoveServer" />
+        </template>
+    </Dialog>
 </template>

@@ -11,6 +11,7 @@ const SCRIPT_URLS = {
     ps1: `https://intentic.dev/connect.ps1`,
     hostSh: `https://intentic.dev/connect-host`,
     hostPs1: `https://intentic.dev/connect-host.ps1`,
+    cleanupHost: `https://intentic.dev/cleanup-host`,
     desktopSh: `https://intentic.dev/sync`,
     desktopPs1: `https://intentic.dev/sync.ps1`,
     rebuild: `https://intentic.dev/rebuild`,
@@ -18,11 +19,12 @@ const SCRIPT_URLS = {
     cleanup: `https://intentic.dev/cleanup`,
 } as const;
 
-const SCRIPT_PATHS = {
+export const SCRIPT_PATHS = {
     sh: `_apps/site/public/scripts/connect.sh`,
     ps1: `_apps/site/public/scripts/connect.ps1`,
     hostSh: `_apps/site/public/scripts/connect-host.sh`,
     hostPs1: `_apps/site/public/scripts/connect-host.ps1`,
+    cleanupHost: `_apps/site/public/scripts/cleanup-host.sh`,
     desktopSh: `_apps/site/public/scripts/sync.sh`,
     desktopPs1: `_apps/site/public/scripts/sync.ps1`,
     rebuild: `_apps/site/public/scripts/rebuild.sh`,
