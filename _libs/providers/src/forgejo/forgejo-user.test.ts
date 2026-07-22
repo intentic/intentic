@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import type { SshExecutor } from "../core/ssh.js";
 import { fakeForgejoApi } from "./forgejo-api.fake.js";
 import { createForgejoUserProvider } from "./forgejo-user.js";
 
@@ -11,8 +12,18 @@ const ctx = (log: (message: string) => void = () => {}) => ({
     },
 });
 
+const sshForward: SshExecutor = {
+    connect: async () => ({
+        exec: async () => ({ stdout: "", stderr: "", code: 0 }),
+        dispose: async () => {},
+        forward: async () => ({ port: 9999, close: async () => {} }),
+    }),
+};
+
 const inputs = {
-    forgejoUrl: "https://git.example.com",
+    address: "203.0.113.10",
+    user: "deploy",
+    sshKey: "key",
     adminUser: "intentic",
     adminPassword: "pw",
     username: "alice",
@@ -20,16 +31,12 @@ const inputs = {
     accountPassword: "generated",
 };
 
-test("read returns undefined when forgejoUrl is PENDING", async () => {
-    expect(await createForgejoUserProvider(fakeForgejoApi({})).read({ ...inputs, forgejoUrl: 42 }, ctx())).toBeUndefined();
-});
-
 test("read returns undefined when the user does not exist", async () => {
-    expect(await createForgejoUserProvider(fakeForgejoApi({ findUser: async () => false })).read(inputs, ctx())).toBeUndefined();
+    expect(await createForgejoUserProvider(fakeForgejoApi({ findUser: async () => false }), sshForward).read(inputs, ctx())).toBeUndefined();
 });
 
 test("read returns an empty-output observation when the user exists", async () => {
-    expect(await createForgejoUserProvider(fakeForgejoApi({ findUser: async () => true })).read(inputs, ctx())).toEqual({ outputs: {} });
+    expect(await createForgejoUserProvider(fakeForgejoApi({ findUser: async () => true }), sshForward).read(inputs, ctx())).toEqual({ outputs: {} });
 });
 
 test("read returns undefined and logs when forgejo is unreachable", async () => {
@@ -40,6 +47,7 @@ test("read returns undefined and logs when forgejo is unreachable", async () => 
                 throw new Error("ECONNREFUSED");
             },
         }),
+        sshForward,
     );
     expect(
         await provider.read(
@@ -59,6 +67,7 @@ test("apply creates the account when absent, with must-change-password disabled"
                 created = args;
             },
         }),
+        sshForward,
     );
     expect(await provider.apply(inputs, undefined, ctx())).toEqual({});
     expect(created).toMatchObject({ username: "alice", email: "alice@example.com", accountPassword: "generated" });
@@ -73,17 +82,18 @@ test("apply does not create when the account already exists", async () => {
                 createCalled = true;
             },
         }),
+        sshForward,
     );
     await provider.apply(inputs, undefined, ctx());
     expect(createCalled).toBe(false);
 });
 
 test("diff is always noop", () => {
-    expect(createForgejoUserProvider(fakeForgejoApi({})).diff(inputs, { outputs: {} })).toEqual({ action: "noop" });
+    expect(createForgejoUserProvider(fakeForgejoApi({}), sshForward).diff(inputs, { outputs: {} })).toEqual({ action: "noop" });
 });
 
 test("malformed inputs are rejected", async () => {
-    await expect(createForgejoUserProvider(fakeForgejoApi({})).read({ ...inputs, username: 5 }, ctx())).rejects.toThrow(
+    await expect(createForgejoUserProvider(fakeForgejoApi({}), sshForward).read({ ...inputs, username: 5 }, ctx())).rejects.toThrow(
         /forgejo-user inputs malformed/,
     );
 });

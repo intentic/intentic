@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import type { SshExecutor } from "../core/ssh.js";
 import { fakeForgejoApi } from "./forgejo-api.fake.js";
 import type { ForgejoHook } from "./forgejo-api.js";
 import { createForgejoNotifyProvider } from "./forgejo-notify.js";
@@ -12,8 +13,18 @@ const ctx = () => ({
     },
 });
 
+const sshForward: SshExecutor = {
+    connect: async () => ({
+        exec: async () => ({ stdout: "", stderr: "", code: 0 }),
+        dispose: async () => {},
+        forward: async () => ({ port: 9999, close: async () => {} }),
+    }),
+};
+
 const inputs = {
-    forgejoUrl: "https://git.example.com",
+    address: "203.0.113.10",
+    user: "deploy",
+    sshKey: "key",
     adminUser: "admin",
     adminPassword: "pw",
     owner: "admin",
@@ -30,34 +41,33 @@ const discordHook = (over: Partial<ForgejoHook> = {}): ForgejoHook => ({
     ...over,
 });
 
-test("read returns undefined when forgejoUrl is PENDING", async () => {
-    expect(await createForgejoNotifyProvider(fakeForgejoApi({})).read({ ...inputs, forgejoUrl: 42 }, ctx())).toBeUndefined();
-});
-
 test("read returns undefined when no discord hook matches the webhook url", async () => {
-    expect(await createForgejoNotifyProvider(fakeForgejoApi({ listHooks: async () => [] })).read(inputs, ctx())).toBeUndefined();
+    expect(await createForgejoNotifyProvider(fakeForgejoApi({ listHooks: async () => [] }), sshForward).read(inputs, ctx())).toBeUndefined();
 });
 
 test("read returns the matched discord hook detail", async () => {
-    const observed = await createForgejoNotifyProvider(fakeForgejoApi({ listHooks: async () => [discordHook()] })).read(inputs, ctx());
+    const observed = await createForgejoNotifyProvider(fakeForgejoApi({ listHooks: async () => [discordHook()] }), sshForward).read(inputs, ctx());
     expect(observed).toEqual({ outputs: {}, detail: { events: ["push"], active: true } });
 });
 
 test("diff is noop when active and events match", () => {
-    expect(createForgejoNotifyProvider(fakeForgejoApi({})).diff(inputs, { outputs: {}, detail: { events: ["push"], active: true } })).toEqual({
+    expect(
+        createForgejoNotifyProvider(fakeForgejoApi({}), sshForward).diff(inputs, { outputs: {}, detail: { events: ["push"], active: true } }),
+    ).toEqual({
         action: "noop",
     });
 });
 
 test("diff is update when the hook is disabled", () => {
-    expect(createForgejoNotifyProvider(fakeForgejoApi({})).diff(inputs, { outputs: {}, detail: { events: ["push"], active: false } }).action).toBe(
-        "update",
-    );
+    expect(
+        createForgejoNotifyProvider(fakeForgejoApi({}), sshForward).diff(inputs, { outputs: {}, detail: { events: ["push"], active: false } }).action,
+    ).toBe("update");
 });
 
 test("diff is update when events differ", () => {
     expect(
-        createForgejoNotifyProvider(fakeForgejoApi({})).diff(inputs, { outputs: {}, detail: { events: ["pull_request"], active: true } }).action,
+        createForgejoNotifyProvider(fakeForgejoApi({}), sshForward).diff(inputs, { outputs: {}, detail: { events: ["pull_request"], active: true } })
+            .action,
     ).toBe("update");
 });
 
@@ -70,6 +80,7 @@ test("apply creates a discord webhook when none matches", async () => {
                 created = args;
             },
         }),
+        sshForward,
     );
     expect(await provider.apply(inputs, undefined, ctx())).toEqual({});
     expect(created).toMatchObject({ type: "discord", config: { url: "https://discord.test/wh", content_type: "json" }, events: ["push"] });
@@ -84,11 +95,14 @@ test("apply updates the existing matching hook rather than creating", async () =
                 updatedId = args.id;
             },
         }),
+        sshForward,
     );
     await provider.apply(inputs, undefined, ctx());
     expect(updatedId).toBe(7);
 });
 
-test("read returns undefined when webhook is not a string (PENDING)", async () => {
-    expect(await createForgejoNotifyProvider(fakeForgejoApi({})).read({ ...inputs, webhook: 5 }, ctx())).toBeUndefined();
+test("read returns undefined when webhook is PENDING", async () => {
+    expect(
+        await createForgejoNotifyProvider(fakeForgejoApi({}), sshForward).read({ ...inputs, webhook: Symbol("PENDING") }, ctx()),
+    ).toBeUndefined();
 });

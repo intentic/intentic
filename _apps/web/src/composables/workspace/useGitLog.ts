@@ -31,10 +31,13 @@ export function useGitLog(repo: Ref<string>) {
     // log, the Changes review, the file tree, and the Checkpoints timeline (destructive ops auto-checkpoint) so
     // every surface reconverges.
     const invalidate = async (): Promise<void> => {
-        await queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `log`, repo.value) });
-        await queryClient.invalidateQueries({ queryKey: [`git`, `changes`] });
-        await queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
-        await queryClient.invalidateQueries({ queryKey: [`history`, `snapshots`] });
+        // Four disjoint caches, no ordering — refetch them concurrently so the action waits one round-trip.
+        await Promise.all([
+            queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `log`, repo.value) }),
+            queryClient.invalidateQueries({ queryKey: [`git`, `changes`] }),
+            queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }),
+            queryClient.invalidateQueries({ queryKey: [`history`, `snapshots`] }),
+        ]);
     };
     // Every commit-context-menu action is a POST that then invalidates. Non-destructive refs (branch/tag) throw
     // on a git error (duplicate name) — the caller catches. The sequence + HEAD-moving ops return a

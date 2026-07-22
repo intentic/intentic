@@ -60,19 +60,20 @@ export const listStampedContainers = async (
         tables = new Map();
         tablesByScan.set(sources, tables);
     }
+    // Kick off every host's fetch before awaiting any, so the connects (the plan's longest silent stretch,
+    // ~1s each over cloudflared) run concurrently across hosts instead of serially.
+    const hostSources = sources.filter((source) => source.type === "host");
+    for (const source of hostSources) {
+        if (!tables.has(source.id)) {
+            tables.set(source.id, fetchHostTable(executor, source, log));
+        }
+    }
+    const fetched = await Promise.all(hostSources.map((source) => tables.get(source.id) ?? []));
     const entries: ListedResource[] = [];
-    for (const source of sources) {
-        if (source.type !== "host") {
-            continue;
-        }
-        let table = tables.get(source.id);
-        if (table === undefined) {
-            table = fetchHostTable(executor, source, log);
-            tables.set(source.id, table);
-        }
+    for (const [index, source] of hostSources.entries()) {
         // One entry per (stamp, host): the same stamp on two hosts is two resources to tear down.
         const seen = new Set<string>();
-        for (const row of await table) {
+        for (const row of fetched[index] ?? []) {
             if (row.type !== kind || seen.has(row.id)) {
                 continue;
             }

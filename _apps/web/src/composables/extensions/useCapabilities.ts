@@ -42,8 +42,10 @@ export function useCapabilitySecret() {
                 body: JSON.stringify({ value }),
             }),
         onSuccess: async () => {
-            await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-            await queryClient.invalidateQueries({ queryKey: sandboxKey(`secrets`, `inventory`) });
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+                queryClient.invalidateQueries({ queryKey: sandboxKey(`secrets`, `inventory`) }),
+            ]);
         },
     });
 }
@@ -56,9 +58,12 @@ export function useCapabilities() {
     // Environment card alongside the list so "Pending rebuild" shows up immediately. A platform capability
     // (devops/monorepo) also scaffolds repos that appear as rail panels, so refresh the panels list too.
     const invalidate = async (): Promise<void> => {
-        await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-        await queryClient.invalidateQueries({ queryKey: sandboxKey(`environment`) });
-        await queryClient.invalidateQueries({ queryKey: sandboxKey(`panels`) });
+        // Three disjoint caches, no ordering — refetch them concurrently.
+        await Promise.all([
+            queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+            queryClient.invalidateQueries({ queryKey: sandboxKey(`environment`) }),
+            queryClient.invalidateQueries({ queryKey: sandboxKey(`panels`) }),
+        ]);
     };
 
     // POST + read the streamed apply, calling onLine per ndjson frame; throws on an error frame. Refreshes the

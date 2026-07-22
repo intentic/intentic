@@ -68,8 +68,10 @@ export const createPanelsRoutes = (services: Services) => {
             if (runDir === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no runnable panel — add an operator/ dev server or a dev script` });
             }
-            // Mint the preview route before the panel is observable as running (see preview-route.ts).
-            await services.ensurePreviewRoutes([previewLabel(key)]);
+            // Kick off the preview-route mint fire-and-forget (never rejects; see preview-route.ts) — the tmux
+            // session the browser attaches to must not wait on a platform round-trip. The route resolves long
+            // before the dev server (behind a possibly minutes-long install) is healthy enough to preview.
+            void services.ensurePreviewRoutes([previewLabel(key)]);
             await services.processes.start(key, {
                 // Install deps on first start (async — the terminal + "starting" badge cover it), then run the dev
                 // server; skipped once installed. No --ignore-workspace: an app repo IS its own pnpm monorepo (its

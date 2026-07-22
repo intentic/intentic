@@ -24,11 +24,13 @@ export function usePanels() {
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
     const start = async (repo: string): Promise<void> => {
         await api.sandbox.json(`/panels/${encodeURIComponent(repo)}/start`, { method: `POST` });
-        await invalidate();
+        // Fire-and-forget: the refetch (which also kicks the running-panel poll) needn't gate the caller's
+        // busy state — panel health flows through the reactive query either way.
+        void invalidate();
     };
     const stop = async (repo: string): Promise<void> => {
         await api.sandbox.json(`/panels/${encodeURIComponent(repo)}/stop`, { method: `POST` });
-        await invalidate();
+        void invalidate();
     };
 
     return {

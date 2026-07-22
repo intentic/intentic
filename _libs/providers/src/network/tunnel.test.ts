@@ -12,6 +12,7 @@ const api = (overrides: Partial<CloudflareApi>): CloudflareApi => ({
     findTunnel: NOT_USED,
     createTunnel: NOT_USED,
     getTunnelToken: NOT_USED,
+    getTunnelStatus: NOT_USED,
     getTunnelIngress: NOT_USED,
     putTunnelIngress: NOT_USED,
     findDnsRecord: NOT_USED,
@@ -127,6 +128,7 @@ test("apply creates the tunnel, runs the connector with the token, and puts ingr
                 return { id: "tunnel-new" };
             },
             getTunnelToken: async () => "tok-123",
+            getTunnelStatus: async () => "healthy",
             putTunnelIngress: async ({ ingress }) => {
                 putIngress = ingress;
             },
@@ -150,6 +152,7 @@ test("apply reuses an existing tunnel rather than creating a new one", async () 
                 return { id: "should-not-happen" };
             },
             getTunnelToken: async () => "tok",
+            getTunnelStatus: async () => "healthy",
             putTunnelIngress: async () => {},
         }),
         fakeSsh().executor,
@@ -157,6 +160,64 @@ test("apply reuses an existing tunnel rather than creating a new one", async () 
 
     expect((await provider.apply(inputs, undefined, ctx())).tunnelId).toBe("tunnel-existing");
     expect(created).toBe(false);
+});
+
+test("apply on an ingress-only change puts the config without restarting the running connector", async () => {
+    let putIngress: readonly IngressRule[] | undefined;
+    const ssh = fakeSsh("intentic-tunnel-tunnel-abc");
+    // getTunnelToken/getTunnelStatus stay NOT_USED: a running, image-current connector must be left alone —
+    // the ingress PUT reaches it as a live config push, so a restart (and its 1033 outage window) is a bug.
+    const provider = createTunnelProvider(
+        api({
+            findTunnel: async () => ({ id: "tunnel-abc" }),
+            putTunnelIngress: async ({ ingress }) => {
+                putIngress = ingress;
+            },
+        }),
+        ssh.executor,
+    );
+
+    const observed = { outputs: {}, detail: { ingress: [catchAll], connectorRunning: true, image: IMAGE } };
+    expect(await provider.apply(inputs, observed, ctx())).toEqual({ tunnelId: "tunnel-abc", cname: "tunnel-abc.cfargotunnel.com" });
+    expect(putIngress).toEqual([appRule, catchAll]);
+    expect(ssh.commands.some((command) => command.includes("docker run") || command.includes("docker rm"))).toBe(false);
+});
+
+test("apply restarts the connector when its image drifted and waits until the edge reports serving", { timeout: 10_000 }, async () => {
+    const statuses = ["down", "healthy"];
+    let polls = 0;
+    const ssh = fakeSsh("intentic-tunnel-tunnel-abc");
+    const provider = createTunnelProvider(
+        api({
+            findTunnel: async () => ({ id: "tunnel-abc" }),
+            getTunnelToken: async () => "tok-123",
+            getTunnelStatus: async () => statuses[Math.min(polls++, statuses.length - 1)] ?? "healthy",
+            putTunnelIngress: async () => {},
+        }),
+        ssh.executor,
+    );
+
+    const observed = { outputs: {}, detail: { ingress: [appRule, catchAll], connectorRunning: true, image: "cloudflare/cloudflared:old@sha256:bbbb" } };
+    await provider.apply(inputs, observed, ctx());
+    expect(ssh.commands.some((command) => command.includes("docker run") && command.includes("--token tok-123"))).toBe(true);
+    expect(polls).toBe(2);
+});
+
+test("apply restarts the connector when it is not running", async () => {
+    const ssh = fakeSsh();
+    const provider = createTunnelProvider(
+        api({
+            findTunnel: async () => ({ id: "tunnel-abc" }),
+            getTunnelToken: async () => "tok-123",
+            getTunnelStatus: async () => "healthy",
+            putTunnelIngress: async () => {},
+        }),
+        ssh.executor,
+    );
+
+    const observed = { outputs: {}, detail: { ingress: [appRule, catchAll], connectorRunning: false } };
+    await provider.apply(inputs, observed, ctx());
+    expect(ssh.commands.some((command) => command.includes("docker run"))).toBe(true);
 });
 
 test("malformed inputs are rejected", async () => {

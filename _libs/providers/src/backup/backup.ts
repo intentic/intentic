@@ -138,10 +138,12 @@ export const createBackupProvider = (executor: SshExecutor = sshExecutor): Provi
             return undefined;
         }
         try {
-            if (!(await running(session))) {
+            // observe is a single `|| true`'d inspect, safe on a stopped/absent container — issue it alongside
+            // the running() gate and discard it when the container isn't up, saving a round-trip when it is.
+            const [up, observed] = await Promise.all([running(session), observe(session)]);
+            if (!up) {
                 return undefined;
             }
-            const observed = await observe(session);
             return { outputs: {}, detail: observed };
         } finally {
             await session.dispose();

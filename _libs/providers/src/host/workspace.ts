@@ -127,7 +127,9 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
             if (!(await running(session))) {
                 return undefined;
             }
-            return { outputs: outputsFor(parsed), detail: { image: await runningImage(session), tools: await runningToolsDigest(session) } };
+            // Two independent `|| true`'d inspects — concurrent, one round-trip instead of two.
+            const [image, tools] = await Promise.all([runningImage(session), runningToolsDigest(session)]);
+            return { outputs: outputsFor(parsed), detail: { image, tools } };
         } finally {
             await session.dispose();
         }

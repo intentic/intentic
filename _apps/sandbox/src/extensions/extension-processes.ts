@@ -16,8 +16,9 @@ export const extensionProcessKey = (id: string, name: string): string => `${EXTE
 export const startExtensionProcess = async (services: Services, extension: InstalledExtension, process: ProcessContribution): Promise<void> => {
     const key = extensionProcessKey(extension.id, process.name);
     if (process.preview === true) {
-        // Mint the tunneled preview hostname BEFORE the process binds (the panels-start pattern); never rejects.
-        await services.ensurePreviewRoutes([previewLabel(key)]);
+        // Mint the tunneled preview hostname fire-and-forget (the panels-start pattern); never rejects, and the
+        // process bind doesn't need the route — only a later browser load does.
+        void services.ensurePreviewRoutes([previewLabel(key)]);
     }
     await services.processes.start(key, {
         command: process.command,

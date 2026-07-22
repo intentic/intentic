@@ -361,7 +361,7 @@ test("an app without observe carries no OTLP env and no service dependency", () 
 
     const deployment = emit(intent, assign(intent), "example.com").find((node) => node.id === "app.prod");
     expect(deployment?.inputs["env"]).toBeUndefined();
-    expect(deployment?.explicitDependsOn).toEqual(["app.prod-ci", "cf-deploy-example-com"]);
+    expect(deployment?.explicitDependsOn).toEqual(["app.prod-ci", "host-deploy"]);
 });
 
 test("observing an undeclared service throws", () => {
@@ -439,7 +439,7 @@ test("a team-less app stays admin-owned (identical to the single-admin default)"
 
     const repo = emit(intent, assign(intent), "example.com").find((node) => node.id === "app-repo");
     expect(repo?.inputs["owner"]).toBe("intentic");
-    expect(repo?.explicitDependsOn).toEqual(["host-git", "cf-git-example-com"]);
+    expect(repo?.explicitDependsOn).toEqual(["host-git"]);
 });
 
 test("a team referencing an undeclared user throws", () => {

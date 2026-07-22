@@ -33,9 +33,12 @@ export function useAgentChanges(agentId: Ref<string>) {
     // After a land or discard the agent's diff changed AND the landed work now shows in the MAIN review +
     // history — invalidate all three so every surface converges.
     const invalidateAfterAction = async (): Promise<void> => {
-        await queryClient.invalidateQueries({ queryKey: sandboxKey(`agents`, agentId.value, `diff`) });
-        await queryClient.invalidateQueries({ queryKey: [`git`, `changes`] });
-        await queryClient.invalidateQueries({ queryKey: [`history`, `snapshots`] });
+        // Three disjoint caches, no ordering — refetch them concurrently.
+        await Promise.all([
+            queryClient.invalidateQueries({ queryKey: sandboxKey(`agents`, agentId.value, `diff`) }),
+            queryClient.invalidateQueries({ queryKey: [`git`, `changes`] }),
+            queryClient.invalidateQueries({ queryKey: [`history`, `snapshots`] }),
+        ]);
     };
 
     // Land: merge the worktree branches into the main tree. A partial result reports per-repo conflicts —

@@ -158,8 +158,8 @@ is asymmetric:
 
 | Reached over | Who / what |
 | --- | --- |
-| **SSH** (internal `:3000`) | Forgejo — the engine runs its git/CI API calls *through the host's SSH session*, so no tunnel is needed for it. |
-| **Cloudflare tunnel** (public `*.<zone>`) | Komodo (`deploy.<zone>`), the container registry (`git.<zone>`), and every worker host's Komodo Periphery dialing Core — all cross-host. |
+| **SSH** (loopback port-forward to `:3000` / `:9120`) | The **engine's entire control path**: every Forgejo API call (repo/ci/users/orgs/teams/hooks) and every Komodo API call (deployments/users/alerters/servers), plus `intentic adopt`'s REST calls and git pushes. The engine never dials a public route it may itself be reconciling — apply and adopt work with the tunnel down, or before DNS exists at all. |
+| **Cloudflare tunnel** (public `*.<zone>`) | Everything genuinely cross-host or external: browsers/operators, every worker host's Komodo Periphery dialing Core (`deploy.<zone>`), registry pulls (`git.<zone>`), and hosted-forge CI runners' notify step. |
 
 Why a tunnel, rather than "just use SSH and make Cloudflare optional":
 
@@ -593,8 +593,9 @@ docker state, the node's logs, listeners, addresses, one verbose probe) before t
 Run it locally with `pnpm e2e:hermetic` (privileged local Docker, Linux/WSL2). In GitLab CI it runs on
 every merge request as a **non-blocking** sidecar (`e2e:hermetic` job, `allow_failure: true`), pulling
 the published `dind-host:latest` image (falling back to building [_tools/dind-host](_tools/dind-host)) and uploading
-the CLI run logs as artifacts on failure. `adopt --baseUrl` is also the field escape hatch for adopting
-before public DNS is live.
+the CLI run logs as artifacts on failure. In the field `adopt` needs no flag at all — its default
+transport is an SSH port-forward to Forgejo on the host (public DNS never enters the path); `--baseUrl`
+remains an explicit transport override for reaching Forgejo over an already-mapped address like this test's.
 
 ## Demo
 

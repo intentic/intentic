@@ -1,11 +1,15 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
-import { parseInputs } from "../core/inputs.js";
+import { parseInputs, sshSchema } from "../core/inputs.js";
+import { overSsh } from "../core/over-ssh.js";
+import type { SshExecutor } from "../core/ssh.js";
+import { sshExecutor } from "../core/ssh.js";
 import type { KomodoApi } from "./komodo-api.js";
 import { komodoApi } from "./komodo-api.js";
+import { KOMODO_CORE_PORT } from "./komodo.js";
 
-const komodoUserSchema = z.object({
-    komodoUrl: z.string(),
+// The ssh block is the control-plane host's — Komodo's API is reached over an SSH port-forward to Core.
+const komodoUserSchema = sshSchema.extend({
     adminUser: z.string(),
     adminPassword: z.string(),
     username: z.string(),
@@ -20,17 +24,17 @@ const parse = (inputs: ResolvedInputs): KomodoUserInputs => parseInputs(komodoUs
 // A declared person's Komodo UI account + its per-deployment permissions. CreateLocalUser is admin-only and
 // lands the user disabled, so apply creates (when absent), enables, then grants each scoped deployment. read
 // keys on existence + enabled (so a freshly-created-but-not-yet-enabled user re-applies); grants are idempotent
-// re-asserts. Depends (via refs) on Komodo + each scoped deployment existing. A pure sink — no outputs.
-export const createKomodoUserProvider = (api: KomodoApi = komodoApi): Provider => ({
+// re-asserts. Depends (via the resolver's explicit deps) on Komodo + each scoped deployment existing. A pure
+// sink — no outputs.
+export const createKomodoUserProvider = (api: KomodoApi = komodoApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        if (typeof inputs["komodoUrl"] !== "string") {
-            return undefined;
-        }
         const parsed = parse(inputs);
         try {
-            const jwt = await api.login({ baseUrl: parsed.komodoUrl, username: parsed.adminUser, password: parsed.adminPassword });
-            const user = (await api.listUsers({ baseUrl: parsed.komodoUrl, jwt })).find((candidate) => candidate.username === parsed.username);
-            return user === undefined ? undefined : { outputs: {}, detail: { enabled: user.enabled } };
+            return await overSsh(executor, parsed, KOMODO_CORE_PORT, async (baseUrl) => {
+                const jwt = await api.login({ baseUrl, username: parsed.adminUser, password: parsed.adminPassword });
+                const user = (await api.listUsers({ baseUrl, jwt })).find((candidate) => candidate.username === parsed.username);
+                return user === undefined ? undefined : { outputs: {}, detail: { enabled: user.enabled } };
+            });
         } catch (error) {
             ctx.log(`komodo-user "${ctx.id}": komodo not reachable yet, treating as not-yet-created: ${String(error)}`);
             return undefined;
@@ -44,33 +48,34 @@ export const createKomodoUserProvider = (api: KomodoApi = komodoApi): Provider =
     },
     apply: async (inputs) => {
         const parsed = parse(inputs);
-        const jwt = await api.login({ baseUrl: parsed.komodoUrl, username: parsed.adminUser, password: parsed.adminPassword });
-        const find = async (): Promise<string | undefined> =>
-            (await api.listUsers({ baseUrl: parsed.komodoUrl, jwt })).find((candidate) => candidate.username === parsed.username)?.id;
-        let userId = await find();
-        if (userId === undefined) {
-            await api.createUser({ baseUrl: parsed.komodoUrl, jwt, username: parsed.username, password: parsed.password });
-            userId = await find();
-        }
-        if (userId === undefined) {
-            throw new Error(`komodo user "${parsed.username}" was not found after creation`);
-        }
-        await api.enableUser({ baseUrl: parsed.komodoUrl, jwt, userId });
-        for (const grant of parsed.grants) {
-            await api.setPermissionOnTarget({ baseUrl: parsed.komodoUrl, jwt, userId, deployment: grant.deployment, level: grant.level });
-        }
-        return {};
+        return overSsh(executor, parsed, KOMODO_CORE_PORT, async (baseUrl) => {
+            const jwt = await api.login({ baseUrl, username: parsed.adminUser, password: parsed.adminPassword });
+            const find = async (): Promise<string | undefined> =>
+                (await api.listUsers({ baseUrl, jwt })).find((candidate) => candidate.username === parsed.username)?.id;
+            let userId = await find();
+            if (userId === undefined) {
+                await api.createUser({ baseUrl, jwt, username: parsed.username, password: parsed.password });
+                userId = await find();
+            }
+            if (userId === undefined) {
+                throw new Error(`komodo user "${parsed.username}" was not found after creation`);
+            }
+            await api.enableUser({ baseUrl, jwt, userId });
+            for (const grant of parsed.grants) {
+                await api.setPermissionOnTarget({ baseUrl, jwt, userId, deployment: grant.deployment, level: grant.level });
+            }
+            return {};
+        });
     },
     delete: async (inputs) => {
-        if (typeof inputs["komodoUrl"] !== "string") {
-            return;
-        }
         const parsed = parse(inputs);
-        const jwt = await api.login({ baseUrl: parsed.komodoUrl, username: parsed.adminUser, password: parsed.adminPassword });
-        const user = (await api.listUsers({ baseUrl: parsed.komodoUrl, jwt })).find((candidate) => candidate.username === parsed.username);
-        if (user === undefined) {
-            return;
-        }
-        await api.deleteUser({ baseUrl: parsed.komodoUrl, jwt, userId: user.id });
+        await overSsh(executor, parsed, KOMODO_CORE_PORT, async (baseUrl) => {
+            const jwt = await api.login({ baseUrl, username: parsed.adminUser, password: parsed.adminPassword });
+            const user = (await api.listUsers({ baseUrl, jwt })).find((candidate) => candidate.username === parsed.username);
+            if (user === undefined) {
+                return;
+            }
+            await api.deleteUser({ baseUrl, jwt, userId: user.id });
+        });
     },
 });

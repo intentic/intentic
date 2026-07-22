@@ -17,6 +17,7 @@ import {
     registryAuthority,
     repoId,
 } from "../lib/ids.js";
+import { sshOf } from "../lib/ssh.js";
 import { bindingEnv, resolveBinding } from "./backing.js";
 import type { DeployRefs, PlatformRefs } from "./platform.js";
 import type { IngressPair } from "./route.js";
@@ -58,11 +59,17 @@ export const resolveApp = (
     apiToken: SecretRef,
     zone: string,
     controlPlaneHost: string,
+    // The control-plane host's connection block: the engine-side Forgejo/Komodo API nodes (repo, ci,
+    // deployment, notify) reach their services over an SSH port-forward to this host, never the public routes.
+    cpHost: HostInput,
     // The backing instances this app may consume, keyed by instance id, each with the host it runs on (the
     // binding nodes deploy onto that host over SSH). emit builds this from intent.backings + the host map.
     backings: ReadonlyMap<string, { readonly intent: BackingIntent; readonly host: HostInput }>,
 ): { nodes: ResolvedNode[]; ingress: IngressPair[] } => {
     const repo = repoId(intent.id);
+    const cpSsh = sshOf(cpHost);
+    // The PUBLIC Komodo url — content for the hosted forges' CI only (their notify step runs on a hosted
+    // runner, off the host); the engine itself never dials it.
     const komodoUrl = makeRef<string>(deploy.deploy, "url");
     const komodoAdmin = { adminUser: adminUsername, adminPassword: generated("KOMODO_ADMIN_PASSWORD") };
     const registry = forgeRegistry(forge, zone);
@@ -118,13 +125,13 @@ export const resolveApp = (
                       name: intent.id,
                       owner,
                       private: true,
-                      forgejoUrl: makeRef<string>(forge.platform.forgejo, "url"),
+                      ...cpSsh,
                       domain: gitDomain(zone),
                       ...forgejoAdmin,
                   },
-                  // Calls the public git URL, so it must run after git's DNS + tunnel route is live; and after
+                  // Reaches Forgejo over the CP host's SSH, so only Forgejo itself must be up; and after
                   // the owning org exists when the app is team-owned.
-                  explicitDependsOn: [forge.platform.forgejo, forge.platform.gitRoute, ...ownerDeps],
+                  explicitDependsOn: [forge.platform.forgejo, ...ownerDeps],
               }
             : forge.kind === "github"
               ? {
@@ -185,7 +192,7 @@ export const resolveApp = (
                 id: ciDep,
                 type: "ci",
                 inputs: {
-                    forgejoUrl: makeRef<string>(forge.platform.forgejo, "url"),
+                    ...cpSsh,
                     ...forgejoAdmin,
                     komodoPassword: komodoAdmin.adminPassword,
                     owner,
@@ -199,9 +206,9 @@ export const resolveApp = (
                     komodoUrl: makeRef<string>(deploy.deploy, "internalUrl"),
                     deployment: id,
                 },
-                // Commits via the public git URL (waits on git's route) and bakes Komodo's internal url into
-                // the workflow (waits on Komodo being up); the repo it commits into is owned by the org.
-                explicitDependsOn: [forge.platform.forgejo, forge.platform.gitRoute, deploy.deploy, repo, ...ownerDeps],
+                // Commits over the CP host's SSH and bakes Komodo's internal url into the workflow (waits on
+                // Komodo being up); the repo it commits into is owned by the org.
+                explicitDependsOn: [forge.platform.forgejo, deploy.deploy, repo, ...ownerDeps],
             });
         } else if (forge.kind === "github") {
             ciDep = ghCiId(intent.id, name);
@@ -241,15 +248,16 @@ export const resolveApp = (
                 domain: environment.domain,
                 internalIp: makeRef<string>(intent.on, "internalIp"),
                 port,
-                komodoUrl,
+                ...cpSsh,
                 ...komodoAdmin,
                 ...(env !== undefined ? { env } : {}),
             },
-            // Depends on ci so the workflow + secrets exist first; the route gates Komodo reachability; and on
-            // each backing binding so the app's credentials exist before it registers. No default readyWhen:
-            // apply only registers the deployment (it does not go live until CI pushes an image), so an httpOk
-            // gate would hang forever — honour only an author-supplied one.
-            explicitDependsOn: [ciDep, deploy.deployRoute, ...(intent.observe !== undefined ? [intent.observe] : []), ...bindingDeps],
+            // Depends on ci so the workflow + secrets exist first; on Komodo being up (registered over the CP
+            // host's SSH — no public route in the path); and on each backing binding so the app's credentials
+            // exist before it registers. No default readyWhen: apply only registers the deployment (it does
+            // not go live until CI pushes an image), so an httpOk gate would hang forever — honour only an
+            // author-supplied one.
+            explicitDependsOn: [ciDep, deploy.deploy, ...(intent.observe !== undefined ? [intent.observe] : []), ...bindingDeps],
             ...(environment.readyWhen !== undefined ? { readyWhen: environment.readyWhen } : {}),
         });
         const exposure = exposeRoute(intent.expose, intent.on, environment.domain, port, apiToken);
@@ -267,22 +275,22 @@ export const resolveApp = (
                 id: forgejoNotifyId(intent.id),
                 type: "forgejo-notify",
                 inputs: {
-                    forgejoUrl: makeRef<string>(forge.platform.forgejo, "url"),
+                    ...cpSsh,
                     ...forgejoAdmin,
                     owner,
                     repoName: intent.id,
                     webhook,
                     events: ["build"],
                 },
-                explicitDependsOn: [forge.platform.forgejo, forge.platform.gitRoute, repo, intent.notify, ...ownerDeps],
+                explicitDependsOn: [forge.platform.forgejo, repo, intent.notify, ...ownerDeps],
             });
         }
         const targets = Object.keys(intent.environments).map((environment) => deploymentId(intent.id, environment));
         nodes.push({
             id: komodoNotifyId(intent.id),
             type: "komodo-notify",
-            inputs: { komodoUrl, ...komodoAdmin, targets, webhook, events: ["deploy"] },
-            explicitDependsOn: [deploy.deploy, deploy.deployRoute, intent.notify, ...targets],
+            inputs: { ...cpSsh, ...komodoAdmin, targets, webhook, events: ["deploy"] },
+            explicitDependsOn: [deploy.deploy, intent.notify, ...targets],
         });
     }
 

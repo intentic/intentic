@@ -1,17 +1,22 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
-import { parseInputs, registryImage } from "../core/inputs.js";
+import { hasPendingRef, parseInputs, registryImage, sshSchema } from "../core/inputs.js";
+import { overSsh } from "../core/over-ssh.js";
+import type { SshExecutor } from "../core/ssh.js";
+import { sshExecutor } from "../core/ssh.js";
 import type { DeploymentConfig, KomodoApi } from "./komodo-api.js";
 import { komodoApi } from "./komodo-api.js";
+import { KOMODO_CORE_PORT } from "./komodo.js";
 
 // The Komodo server for control-plane-local deployments (auto-registered by KOMODO_FIRST_SERVER_NAME in
 // komodo.ts). Worker-host deployments use the host id as server name, registered by komodo-server.
 const LOCAL_SERVER = "Local";
 
-const deploymentSchema = z.object({
+// The ssh block is the CONTROL-PLANE host's (where Komodo Core runs) — the engine registers the deployment
+// against Core over an SSH port-forward, even when the deployment itself targets a worker host's Server.
+const deploymentSchema = sshSchema.extend({
     // The Komodo Server the deployment targets: "Local" for the CP host, the host id for workers.
     server: z.string().default(LOCAL_SERVER),
-    komodoUrl: z.string(),
     adminUser: z.string(),
     adminPassword: z.string(),
     // The repo + registry namespace (a team's org, or the admin user when team-less) — matches CI's owner.
@@ -85,24 +90,27 @@ const desiredKey = (parsed: DeploymentInputs): string =>
 const observedKey = (config: DeploymentConfig): string => JSON.stringify(normalizeEnv(config.environment));
 
 // One Komodo Deployment per environment (named <app>.<env> = ctx.id), pulled from the registry image CI
-// pushes and exposed on a deterministic host port. read returns undefined until Komodo is up (komodoUrl
-// PENDING) or unreachable, otherwise it surfaces the deployment's current config. diff converges on that
+// pushes and exposed on a deterministic host port. All Komodo API calls go over an SSH port-forward to Core
+// on the CP host — never the public route. read returns undefined until the host's internalIp resolves or
+// while Komodo is unreachable, otherwise it surfaces the deployment's current config. diff converges on that
 // config alone. apply ONLY registers the desired Komodo deployment (create-or-update) — it does NOT build or
 // deploy: the image is produced by CI and rolled out by Komodo's poll/auto_update + the workflow's notify.
-export const createDeploymentProvider = (api: KomodoApi = komodoApi): Provider => ({
+export const createDeploymentProvider = (api: KomodoApi = komodoApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        if (typeof inputs["komodoUrl"] !== "string") {
+        if (hasPendingRef(inputs, "internalIp")) {
             return undefined;
         }
         const parsed = parse(inputs);
         try {
-            const jwt = await api.login({ baseUrl: parsed.komodoUrl, username: parsed.adminUser, password: parsed.adminPassword });
-            const deployment = (await api.listDeployments({ baseUrl: parsed.komodoUrl, jwt })).find((item) => item.name === ctx.id);
-            if (deployment === undefined) {
-                return undefined;
-            }
-            const config = await api.getDeployment({ baseUrl: parsed.komodoUrl, jwt, deployment: ctx.id });
-            return { outputs: outputsFor(parsed), detail: { config } };
+            return await overSsh(executor, parsed, KOMODO_CORE_PORT, async (baseUrl) => {
+                const jwt = await api.login({ baseUrl, username: parsed.adminUser, password: parsed.adminPassword });
+                const deployment = (await api.listDeployments({ baseUrl, jwt })).find((item) => item.name === ctx.id);
+                if (deployment === undefined) {
+                    return undefined;
+                }
+                const config = await api.getDeployment({ baseUrl, jwt, deployment: ctx.id });
+                return { outputs: outputsFor(parsed), detail: { config } };
+            });
         } catch (error) {
             ctx.log(`deployment "${ctx.id}": komodo not reachable yet, treating as not-yet-created: ${String(error)}`);
             return undefined;
@@ -117,27 +125,28 @@ export const createDeploymentProvider = (api: KomodoApi = komodoApi): Provider =
     },
     apply: async (inputs, _observed, ctx) => {
         const parsed = parse(inputs);
-        const jwt = await api.login({ baseUrl: parsed.komodoUrl, username: parsed.adminUser, password: parsed.adminPassword });
-        const existing = (await api.listDeployments({ baseUrl: parsed.komodoUrl, jwt })).find((item) => item.name === ctx.id);
-        if (existing === undefined) {
-            await api.createDeployment({ baseUrl: parsed.komodoUrl, jwt, name: ctx.id, config: deploymentConfig(parsed) });
-        } else {
-            await api.updateDeployment({ baseUrl: parsed.komodoUrl, jwt, id: existing.id, config: deploymentConfig(parsed) });
-        }
+        await overSsh(executor, parsed, KOMODO_CORE_PORT, async (baseUrl) => {
+            const jwt = await api.login({ baseUrl, username: parsed.adminUser, password: parsed.adminPassword });
+            const existing = (await api.listDeployments({ baseUrl, jwt })).find((item) => item.name === ctx.id);
+            if (existing === undefined) {
+                await api.createDeployment({ baseUrl, jwt, name: ctx.id, config: deploymentConfig(parsed) });
+            } else {
+                await api.updateDeployment({ baseUrl, jwt, id: existing.id, config: deploymentConfig(parsed) });
+            }
+        });
         // No build, no deploy: CI pushes the image and Komodo's poll/auto_update (and the workflow's notify)
         // roll it out. apply only registers the desired deployment.
         return outputsFor(parsed);
     },
     delete: async (inputs, ctx) => {
-        if (typeof inputs["komodoUrl"] !== "string") {
-            return;
-        }
         const parsed = parse(inputs);
-        const jwt = await api.login({ baseUrl: parsed.komodoUrl, username: parsed.adminUser, password: parsed.adminPassword });
-        const existing = (await api.listDeployments({ baseUrl: parsed.komodoUrl, jwt })).find((item) => item.name === ctx.id);
-        if (existing === undefined) {
-            return;
-        }
-        await api.deleteDeployment({ baseUrl: parsed.komodoUrl, jwt, id: existing.id });
+        await overSsh(executor, parsed, KOMODO_CORE_PORT, async (baseUrl) => {
+            const jwt = await api.login({ baseUrl, username: parsed.adminUser, password: parsed.adminPassword });
+            const existing = (await api.listDeployments({ baseUrl, jwt })).find((item) => item.name === ctx.id);
+            if (existing === undefined) {
+                return;
+            }
+            await api.deleteDeployment({ baseUrl, jwt, id: existing.id });
+        });
     },
 });

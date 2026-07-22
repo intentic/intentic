@@ -26,7 +26,8 @@ type ForgejoInputs = z.infer<typeof forgejoSchema>;
 const parse = (inputs: ResolvedInputs): ForgejoInputs => parseInputs(forgejoSchema, inputs, "forgejo");
 
 const CONTAINER = "intentic-forgejo";
-const HTTP_PORT = 3000;
+// The fixed host port Forgejo publishes — the port every engine-side Forgejo consumer forwards to over SSH.
+export const FORGEJO_HTTP_PORT = 3000;
 // The runner registration token + a scoped git access token + a packages access token are minted once and
 // persisted on the host, then read back every run, so they are STABLE outputs (re-minting would rotate them,
 // breaking the stateless contract). The git token is what Komodo authenticates with to clone the admin's
@@ -38,7 +39,7 @@ const PKG_TOKEN_FILE = `${STATE_DIR}/packages-token`;
 const READY_TIMEOUT_MS = 120_000;
 const READY_INTERVAL_MS = 3_000;
 
-const internalUrl = (parsed: ForgejoInputs): string => `http://${parsed.internalIp}:${HTTP_PORT}`;
+const internalUrl = (parsed: ForgejoInputs): string => `http://${parsed.internalIp}:${FORGEJO_HTTP_PORT}`;
 const outputsFor = (parsed: ForgejoInputs, runnerToken: string, gitToken: string, packagesToken: string): Record<string, unknown> => ({
     url: `https://${parsed.domain}`,
     internalUrl: internalUrl(parsed),
@@ -60,7 +61,7 @@ const runningImage = async (session: SshSession): Promise<string> => {
 };
 
 const healthy = async (session: SshSession): Promise<boolean> => {
-    const result = await session.exec(`docker exec ${CONTAINER} wget -q -T 10 --spider http://localhost:${HTTP_PORT}/api/healthz`);
+    const result = await session.exec(`docker exec ${CONTAINER} wget -q -T 10 --spider http://localhost:${FORGEJO_HTTP_PORT}/api/healthz`);
     return result.code === 0;
 };
 

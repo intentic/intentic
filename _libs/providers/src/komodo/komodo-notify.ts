@@ -1,11 +1,15 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
-import { parseInputs } from "../core/inputs.js";
+import { hasPendingRef, parseInputs, sshSchema } from "../core/inputs.js";
+import { overSsh } from "../core/over-ssh.js";
+import type { SshExecutor } from "../core/ssh.js";
+import { sshExecutor } from "../core/ssh.js";
 import type { AlerterConfig, KomodoApi, ResourceTarget } from "./komodo-api.js";
 import { komodoApi } from "./komodo-api.js";
+import { KOMODO_CORE_PORT } from "./komodo.js";
 
-const komodoNotifySchema = z.object({
-    komodoUrl: z.string(),
+// The ssh block is the control-plane host's — Komodo's API is reached over an SSH port-forward to Core.
+const komodoNotifySchema = sshSchema.extend({
     adminUser: z.string(),
     adminPassword: z.string(),
     targets: z.array(z.string()),
@@ -37,22 +41,25 @@ const sameTargets = (a: readonly ResourceTarget[], b: readonly ResourceTarget[])
 };
 
 // CD notifications: a native Komodo Discord Alerter named <app>-notify (= ctx.id), scoped to the app's
-// deployments. read returns undefined until Komodo is up (komodoUrl PENDING) or unreachable; diff detects
-// drift in the webhook url, scope, or enabled flag.
-export const createKomodoNotifyProvider = (api: KomodoApi = komodoApi): Provider => ({
+// deployments. Reached over an SSH port-forward to Core. read returns undefined until the Discord webhook
+// resolves (its ref is PENDING) or while Komodo is unreachable; diff detects drift in the webhook url,
+// scope, or enabled flag.
+export const createKomodoNotifyProvider = (api: KomodoApi = komodoApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        if (typeof inputs["komodoUrl"] !== "string" || typeof inputs["webhook"] !== "string") {
+        if (hasPendingRef(inputs, "webhook")) {
             return undefined;
         }
         const parsed = parse(inputs);
         try {
-            const jwt = await api.login({ baseUrl: parsed.komodoUrl, username: parsed.adminUser, password: parsed.adminPassword });
-            const alerter = (await api.listAlerters({ baseUrl: parsed.komodoUrl, jwt })).find((item) => item.name === ctx.id);
-            if (alerter === undefined) {
-                return undefined;
-            }
-            const config = await api.getAlerter({ baseUrl: parsed.komodoUrl, jwt, id: alerter.id });
-            return { outputs: {}, detail: { config } };
+            return await overSsh(executor, parsed, KOMODO_CORE_PORT, async (baseUrl) => {
+                const jwt = await api.login({ baseUrl, username: parsed.adminUser, password: parsed.adminPassword });
+                const alerter = (await api.listAlerters({ baseUrl, jwt })).find((item) => item.name === ctx.id);
+                if (alerter === undefined) {
+                    return undefined;
+                }
+                const config = await api.getAlerter({ baseUrl, jwt, id: alerter.id });
+                return { outputs: {}, detail: { config } };
+            });
         } catch (error) {
             ctx.log(`komodo-notify "${ctx.id}": komodo not reachable yet, treating as not-yet-created: ${String(error)}`);
             return undefined;
@@ -75,25 +82,26 @@ export const createKomodoNotifyProvider = (api: KomodoApi = komodoApi): Provider
     },
     apply: async (inputs, _observed, ctx) => {
         const parsed = parse(inputs);
-        const jwt = await api.login({ baseUrl: parsed.komodoUrl, username: parsed.adminUser, password: parsed.adminPassword });
-        const existing = (await api.listAlerters({ baseUrl: parsed.komodoUrl, jwt })).find((item) => item.name === ctx.id);
-        if (existing === undefined) {
-            await api.createAlerter({ baseUrl: parsed.komodoUrl, jwt, name: ctx.id, config: desiredConfig(parsed) });
-        } else {
-            await api.updateAlerter({ baseUrl: parsed.komodoUrl, jwt, id: existing.id, config: desiredConfig(parsed) });
-        }
-        return {};
+        return overSsh(executor, parsed, KOMODO_CORE_PORT, async (baseUrl) => {
+            const jwt = await api.login({ baseUrl, username: parsed.adminUser, password: parsed.adminPassword });
+            const existing = (await api.listAlerters({ baseUrl, jwt })).find((item) => item.name === ctx.id);
+            if (existing === undefined) {
+                await api.createAlerter({ baseUrl, jwt, name: ctx.id, config: desiredConfig(parsed) });
+            } else {
+                await api.updateAlerter({ baseUrl, jwt, id: existing.id, config: desiredConfig(parsed) });
+            }
+            return {};
+        });
     },
     delete: async (inputs, ctx) => {
-        if (typeof inputs["komodoUrl"] !== "string") {
-            return;
-        }
         const parsed = parse(inputs);
-        const jwt = await api.login({ baseUrl: parsed.komodoUrl, username: parsed.adminUser, password: parsed.adminPassword });
-        const existing = (await api.listAlerters({ baseUrl: parsed.komodoUrl, jwt })).find((item) => item.name === ctx.id);
-        if (existing === undefined) {
-            return;
-        }
-        await api.deleteAlerter({ baseUrl: parsed.komodoUrl, jwt, id: existing.id });
+        await overSsh(executor, parsed, KOMODO_CORE_PORT, async (baseUrl) => {
+            const jwt = await api.login({ baseUrl, username: parsed.adminUser, password: parsed.adminPassword });
+            const existing = (await api.listAlerters({ baseUrl, jwt })).find((item) => item.name === ctx.id);
+            if (existing === undefined) {
+                return;
+            }
+            await api.deleteAlerter({ baseUrl, jwt, id: existing.id });
+        });
     },
 });

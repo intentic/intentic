@@ -1,6 +1,15 @@
 import { expect, test } from "vitest";
+import type { SshExecutor } from "../core/ssh.js";
 import type { KomodoApi } from "./komodo-api.js";
 import { createKomodoUserProvider } from "./komodo-user.js";
+
+const sshForward: SshExecutor = {
+    connect: async () => ({
+        exec: async () => ({ stdout: "", stderr: "", code: 0 }),
+        dispose: async () => {},
+        forward: async () => ({ port: 9999, close: async () => {} }),
+    }),
+};
 
 const NOT_USED = async (): Promise<never> => {
     throw new Error("unused by the komodo-user provider");
@@ -35,7 +44,9 @@ const ctx = (log: (message: string) => void = () => {}) => ({
 });
 
 const inputs = {
-    komodoUrl: "https://deploy.example.com",
+    address: "203.0.113.10",
+    user: "deploy",
+    sshKey: "key",
     adminUser: "intentic",
     adminPassword: "pw",
     username: "alice",
@@ -43,19 +54,15 @@ const inputs = {
     grants: [{ deployment: "my-app.production", level: "Execute" as const }],
 };
 
-test("read returns undefined when komodoUrl is PENDING", async () => {
-    expect(await createKomodoUserProvider(api({})).read({ ...inputs, komodoUrl: 42 }, ctx())).toBeUndefined();
-});
-
 test("read returns undefined when the user does not exist", async () => {
-    expect(await createKomodoUserProvider(api({ listUsers: async () => [] })).read(inputs, ctx())).toBeUndefined();
+    expect(await createKomodoUserProvider(api({ listUsers: async () => [] }), sshForward).read(inputs, ctx())).toBeUndefined();
 });
 
 test("read surfaces enabled state as detail when the user exists", async () => {
-    const observed = await createKomodoUserProvider(api({ listUsers: async () => [{ id: "u1", username: "alice", enabled: true }] })).read(
-        inputs,
-        ctx(),
-    );
+    const observed = await createKomodoUserProvider(
+        api({ listUsers: async () => [{ id: "u1", username: "alice", enabled: true }] }),
+        sshForward,
+    ).read(inputs, ctx());
     expect(observed).toEqual({ outputs: {}, detail: { enabled: true } });
 });
 
@@ -67,6 +74,7 @@ test("read returns undefined and logs when komodo is unreachable", async () => {
                 throw new Error("ECONNREFUSED");
             },
         }),
+        sshForward,
     );
     expect(
         await provider.read(
@@ -78,7 +86,7 @@ test("read returns undefined and logs when komodo is unreachable", async () => {
 });
 
 test("diff is update when the user is not enabled, noop when enabled", () => {
-    const provider = createKomodoUserProvider(api({}));
+    const provider = createKomodoUserProvider(api({}), sshForward);
     expect(provider.diff(inputs, { outputs: {}, detail: { enabled: false } })).toMatchObject({ action: "update" });
     expect(provider.diff(inputs, { outputs: {}, detail: { enabled: true } })).toEqual({ action: "noop" });
 });
@@ -103,6 +111,7 @@ test("apply creates the user when absent, enables it, then grants each deploymen
                 events.push(`grant:${userId}:${deployment}:${level}`);
             },
         }),
+        sshForward,
     );
     expect(await provider.apply(inputs, undefined, ctx())).toEqual({});
     expect(events).toEqual(["create:alice", "enable:u1", "grant:u1:my-app.production:Execute"]);
@@ -123,11 +132,12 @@ test("apply does not recreate an existing user, but still enables and grants", a
                 events.push(`grant:${deployment}`);
             },
         }),
+        sshForward,
     );
     await provider.apply(inputs, undefined, ctx());
     expect(events).toEqual(["enable:u1", "grant:my-app.production"]);
 });
 
 test("malformed inputs are rejected", async () => {
-    await expect(createKomodoUserProvider(api({})).read({ ...inputs, username: 5 }, ctx())).rejects.toThrow(/komodo-user inputs malformed/);
+    await expect(createKomodoUserProvider(api({}), sshForward).read({ ...inputs, username: 5 }, ctx())).rejects.toThrow(/komodo-user inputs malformed/);
 });

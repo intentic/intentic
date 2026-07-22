@@ -21,6 +21,9 @@ const graph = (secrets: { readonly generated?: readonly string[]; readonly env?:
                 type: "forgejo",
                 dependsOn: [],
                 inputs: {
+                    address: "203.0.113.10",
+                    user: "deploy",
+                    sshKey: secretInput("env", "HOST_SSH_KEY"),
                     domain: "git.example.com",
                     adminUser: "intentic",
                     adminPassword: secretInput("generated", "FORGEJO_ADMIN_PASSWORD"),

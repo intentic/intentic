@@ -302,17 +302,34 @@ const EST_CELL_H = 17;
 export const createTerminalSession = (name: string, onExit: (name: string) => void, readOnly = false, spawnWithin?: HTMLElement): TerminalSession => {
     const host = document.createElement(`div`);
     host.className = `h-full w-full`;
-    // tmux runs with `mouse on` (so the wheel scrolls its scrollback), which makes plain gestures ambiguous: a
-    // drag reported to tmux is copy-mode selection (cleared the instant the button is released — useless in a
-    // browser), while a CLICK must reach tmux so mouse-driven TUIs (turbo's task list, vim, htop) get it, like
-    // VSCode's terminal. Disambiguate by drag distance: swallow the plain primary-button mousedown (capture
-    // phase beats xterm's screen listener; preventDefault keeps the browser from blurring xterm's textarea,
-    // which xterm's own suppressed handler would have done) and hold it. If the pointer wanders ≥ DRAG_PX it's
-    // a drag — replay the held press with shiftKey forced, which xterm's shouldForceSelection honours: it
-    // selects locally, anchored at the original press cell, and never reports to tmux. If the button releases
-    // in place it's a click — swallow the real mouseup too and replay press then release, so xterm runs its
-    // full pipeline (focus, report press to tmux, arm its document-level release listener, report release).
-    // Replays are synthetic (isTrusted false), which is what stops this gate from re-capturing them.
+    const term = new Terminal({
+        cursorBlink: !readOnly,
+        disableStdin: readOnly,
+        fontFamily: `'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace`,
+        fontSize: 13,
+        // OSC 8 hyperlinks (CLIs that emit explicit link escapes) — without this, xterm falls back to a
+        // blocking confirm() dialog on activation.
+        linkHandler: { activate: openLink },
+        // The wheel scrolls THIS buffer (tmux runs with mouse off), so it is the terminal's whole visible
+        // history — xterm's default 1000 lines evaporate under one flooding build.
+        scrollback: 10_000,
+        // Snapshotted at creation; fine while --color-terminal is constant across themes/modes.
+        theme: { background: getComputedStyle(document.documentElement).getPropertyValue(`--color-terminal`).trim() || `#0a0a0a` },
+    });
+    // tmux runs with mouse OFF, so a plain shell is mouse-native: the wheel scrolls xterm's local scrollback
+    // and a drag is a plain local selection — the two compose, so a selection survives scrolling and can span
+    // more than a screenful. Mouse reporting turns on only when a program INSIDE tmux requests it (vim, htop,
+    // turbo's task list — tmux forwards the active pane's mouse mode to the client), and only then are plain
+    // gestures ambiguous: a drag reported to the app is the app's (useless for copying in a browser), while a
+    // CLICK must reach it, like VSCode's terminal. The gate below engages only in that mode and disambiguates
+    // by drag distance: swallow the plain primary-button mousedown (capture phase beats xterm's screen
+    // listener; preventDefault keeps the browser from blurring xterm's textarea, which xterm's own suppressed
+    // handler would have done) and hold it. If the pointer wanders ≥ DRAG_PX it's a drag — replay the held
+    // press with shiftKey forced, which xterm's shouldForceSelection honours: it selects locally, anchored at
+    // the original press cell, and never reports to the app. If the button releases in place it's a click —
+    // swallow the real mouseup too and replay press then release, so xterm runs its full pipeline (focus,
+    // report press, arm its document-level release listener, report release). Replays are synthetic
+    // (isTrusted false), which is what stops this gate from re-capturing them.
     const replayMouse = (event: MouseEvent, forceShift: boolean): void => {
         // The constructor reads coords, button, buttons, detail and modifiers off the source instance.
         const clone = new MouseEvent(event.type, event);
@@ -325,7 +342,7 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     host.addEventListener(
         `mousedown`,
         (event) => {
-            if (!event.isTrusted || event.button !== 0 || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
+            if (term.modes.mouseTrackingMode === `none` || !event.isTrusted || event.button !== 0 || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
                 return;
             }
             // Only gate presses on the character grid — a press on the viewport's native scrollbar (or any
@@ -372,17 +389,6 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         },
         true,
     );
-    const term = new Terminal({
-        cursorBlink: !readOnly,
-        disableStdin: readOnly,
-        fontFamily: `'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace`,
-        fontSize: 13,
-        // OSC 8 hyperlinks (CLIs that emit explicit link escapes) — without this, xterm falls back to a
-        // blocking confirm() dialog on activation.
-        linkHandler: { activate: openLink },
-        // Snapshotted at creation; fine while --color-terminal is constant across themes/modes.
-        theme: { background: getComputedStyle(document.documentElement).getPropertyValue(`--color-terminal`).trim() || `#0a0a0a` },
-    });
     // Shell keybindings beat the shell-in-the-terminal: a chord bound to a registered command (Ctrl+`, the
     // terminal split/kill/new shortcuts, anything the user remapped) must reach the global dispatcher, not the
     // PTY — without this, xterm feeds tmux the raw keystroke FIRST and the command fires on top of it (VSCode
@@ -399,7 +405,7 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     // in the workspace editor at the referenced line. Registered after the URL addon so a URL's path tail stays
     // owned by the URL provider.
     registerFilePathLinks(term);
-    // tmux runs with `set-clipboard on`, so a copy (mouse drag in copy-mode, `y`, …) arrives here as OSC 52
+    // tmux runs with `set-clipboard on`, so a copy in copy-mode (`y`, …) arrives here as OSC 52
     // with a base64 payload — land it in the browser clipboard, which xterm otherwise ignores. `?` asks to
     // READ the clipboard; that stays unanswered. Guarded: the payload is arbitrary program output.
     term.parser.registerOscHandler(52, (data) => {

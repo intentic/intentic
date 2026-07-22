@@ -1,6 +1,15 @@
 import { expect, test } from "vitest";
+import type { SshExecutor } from "../core/ssh.js";
 import type { AlerterConfig, KomodoApi } from "./komodo-api.js";
 import { createKomodoNotifyProvider } from "./komodo-notify.js";
+
+const sshForward: SshExecutor = {
+    connect: async () => ({
+        exec: async () => ({ stdout: "", stderr: "", code: 0 }),
+        dispose: async () => {},
+        forward: async () => ({ port: 9999, close: async () => {} }),
+    }),
+};
 
 const NOT_USED = async (): Promise<never> => {
     throw new Error("unused by the komodo-notify provider");
@@ -35,7 +44,9 @@ const ctx = () => ({
 });
 
 const inputs = {
-    komodoUrl: "https://deploy.example.com",
+    address: "203.0.113.10",
+    user: "deploy",
+    sshKey: "key",
     adminUser: "admin",
     adminPassword: "pw",
     targets: ["my-app.staging", "my-app.production"],
@@ -55,23 +66,24 @@ const config = (over: Partial<AlerterConfig> = {}): AlerterConfig => ({
     ...over,
 });
 
-test("read returns undefined when komodoUrl is PENDING", async () => {
-    expect(await createKomodoNotifyProvider(api({})).read({ ...inputs, komodoUrl: 42 }, ctx())).toBeUndefined();
+test("read returns undefined when webhook is PENDING", async () => {
+    expect(await createKomodoNotifyProvider(api({}), sshForward).read({ ...inputs, webhook: Symbol("PENDING") }, ctx())).toBeUndefined();
 });
 
 test("read returns undefined when the alerter does not exist", async () => {
-    expect(await createKomodoNotifyProvider(api({ listAlerters: async () => [] })).read(inputs, ctx())).toBeUndefined();
+    expect(await createKomodoNotifyProvider(api({ listAlerters: async () => [] }), sshForward).read(inputs, ctx())).toBeUndefined();
 });
 
 test("read returns the alerter config detail when it exists", async () => {
     const provider = createKomodoNotifyProvider(
         api({ listAlerters: async () => [{ id: "a1", name: "my-app-notify" }], getAlerter: async () => config() }),
+        sshForward,
     );
     expect(await provider.read(inputs, ctx())).toEqual({ outputs: {}, detail: { config: config() } });
 });
 
 test("diff is noop when url + scope match, update otherwise", () => {
-    const provider = createKomodoNotifyProvider(api({}));
+    const provider = createKomodoNotifyProvider(api({}), sshForward);
     expect(provider.diff(inputs, { outputs: {}, detail: { config: config() } })).toEqual({ action: "noop" });
     expect(provider.diff(inputs, { outputs: {}, detail: { config: config({ enabled: false }) } }).action).toBe("update");
     expect(
@@ -92,6 +104,7 @@ test("apply creates a Discord alerter scoped to the app's deployments", async ()
                 created = args;
             },
         }),
+        sshForward,
     );
     expect(await provider.apply(inputs, undefined, ctx())).toEqual({});
     expect(created?.name).toBe("my-app-notify");
@@ -111,11 +124,12 @@ test("apply updates the existing alerter rather than creating", async () => {
                 updatedId = args.id;
             },
         }),
+        sshForward,
     );
     await provider.apply(inputs, undefined, ctx());
     expect(updatedId).toBe("a9");
 });
 
 test("malformed inputs are rejected", async () => {
-    await expect(createKomodoNotifyProvider(api({})).read({ ...inputs, targets: "nope" }, ctx())).rejects.toThrow(/targets.*array/);
+    await expect(createKomodoNotifyProvider(api({}), sshForward).read({ ...inputs, targets: "nope" }, ctx())).rejects.toThrow(/targets.*array/);
 });

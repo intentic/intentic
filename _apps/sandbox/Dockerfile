@@ -105,6 +105,11 @@ RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /root/.oh-my-zsh 
 # tmux backs each terminal tab (system/terminal.ts attaches one session per tab). The web UI draws the tab bar,
 # so the tmux status bar is off; default-command launches the oh-my-zsh zsh above (not /bin/sh); destroy-unattached
 # off keeps a session alive when its web client detaches on reload/drop — the whole point of tmux-backed persistence.
+# Mouse stays OFF: on, tmux grabs the wheel into copy-mode and every scroll redraws the screen under the
+# browser's local selection, so a selection could never survive scrolling or span more than one screenful. Off,
+# xterm scrolls its own scrollback and selection is native; full-screen apps that request mouse tracking still
+# get it (tmux forwards the active pane's mouse mode to the client), and the deep history stays reachable via
+# prefix copy-mode, whose `y` lands in the browser clipboard through set-clipboard/OSC 52 below.
 # The set-hook pipe-pane trio logs every pane (web tabs, panels, agent-run tmux, windows, splits) to
 # /history/logs/terminals — the crashed-session post-mortem the /logs routes serve (logs/log-files.ts keeps
 # the same hooks for re-arming a server that outlived a daemon restart). The stream is replayed through
@@ -116,7 +121,6 @@ RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /root/.oh-my-zsh 
 RUN printf '%s\n' \
         'set -g status off' \
         'set -g history-limit 100000' \
-        'set -g mouse on' \
         'setw -g aggressive-resize on' \
         'set -g default-terminal "tmux-256color"' \
         'set -g default-command zsh' \

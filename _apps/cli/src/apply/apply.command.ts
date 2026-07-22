@@ -121,10 +121,13 @@ export const apply = buildCommand<ApplyFlags>({
         // forwarder is warm when reconcile reuses it. A host that never comes up fails here after the deadline
         // with the same actionable error. Only current-graph hosts are gated — a migrated-away old machine may
         // legitimately be gone.
-        for (const target of targets) {
-            const session = await connectWithRetry(ssh, target, { log: out.log });
-            await session.dispose();
-        }
+        // Warm every host concurrently — the worst case is one slow host's tunnel warm-up, not the sum of all.
+        await Promise.all(
+            targets.map(async (target) => {
+                const session = await connectWithRetry(ssh, target, { log: out.log });
+                await session.dispose();
+            }),
+        );
         // Serialize this apply (and the prune that follows) against every host the graph touches, so a
         // concurrent run cannot interleave mutations. Released in `finally`; a hard crash leaves the lock to
         // free via its TTL. A SIGINT/SIGTERM handler releases on Ctrl-C before exiting.

@@ -12,11 +12,15 @@ const parse = (inputs: ResolvedInputs): HostInputs => parseInputs(sshSchema, inp
 // and Docker-ready and reads its addresses; it does not provision anything. internalIp is the default
 // route's source address; publicIp is the address we connect to (no third-party egress).
 const gather = async (session: SshSession, address: string): Promise<Record<string, unknown>> => {
-    const docker = await session.exec("docker version --format '{{.Server.Version}}'");
+    // Two independent read-only execs — concurrent channels on the one connection, so a plan pays one SSH
+    // round-trip per host instead of two. Docker's code is checked first to keep the error priority.
+    const [docker, route] = await Promise.all([
+        session.exec("docker version --format '{{.Server.Version}}'"),
+        session.exec("ip -4 -o route get 1.1.1.1 | awk '{print $7; exit}'"),
+    ]);
     if (docker.code !== 0) {
         throw new Error(`host is not Docker-ready: \`docker version\` exited ${docker.code}: ${docker.stderr.trim()}`);
     }
-    const route = await session.exec("ip -4 -o route get 1.1.1.1 | awk '{print $7; exit}'");
     if (route.code !== 0) {
         throw new Error(`failed to read host internal ip: exited ${route.code}: ${route.stderr.trim()}`);
     }

@@ -38,11 +38,16 @@ export const writeSyncState = async (dir: string, state: SyncState): Promise<voi
 // — the user put them there, so they must be visible and removable. Capability/provider entries are the
 // daemon's to add — they live in its stores, not in this repo.
 export const collectSecretInventory = async (dir: string): Promise<SecretInventoryEntry[]> => {
-    const graph = await readJson<DesiredStateGraph>(join(dir, ARTIFACT_FILE));
+    // Four independent reads (each already degrades to a default on absence) — resolve them concurrently.
+    const [graph, envRaw, generated, sync] = await Promise.all([
+        readJson<DesiredStateGraph>(join(dir, ARTIFACT_FILE)),
+        readFile(join(dir, ENV_FILE), "utf8").catch(() => ""),
+        readJson<Record<string, string>>(join(dir, SECRETS_FILE)),
+        readSyncState(dir),
+    ]);
     const usage = graph === undefined ? [] : collectSecretUsage(graph);
-    const envValues = parseEnv(await readFile(join(dir, ENV_FILE), "utf8").catch(() => ""));
-    const generatedValues = (await readJson<Record<string, string>>(join(dir, SECRETS_FILE))) ?? {};
-    const sync = await readSyncState(dir);
+    const envValues = parseEnv(envRaw);
+    const generatedValues = generated ?? {};
     const adopted = Object.keys(sync).length > 0;
 
     const entry = (key: string, kind: "env" | "generated", requiredBy: SecretInventoryEntry["requiredBy"]): SecretInventoryEntry => {

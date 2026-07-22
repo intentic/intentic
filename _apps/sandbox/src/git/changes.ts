@@ -327,18 +327,21 @@ export const dropCommit = async (dir: string, sha: string, author: Author, git: 
 const RS = "\x1e";
 const US = "\x1f";
 export const commitLog = async (dir: string, limit: number, git: GitRunner = defaultGit): Promise<{ branch?: string; commits: GitCommit[] }> => {
-    const branch = (await git(dir, ["branch", "--show-current"])).stdout.trim();
     const format = `${RS}%H${US}%h${US}%P${US}%an${US}%ae${US}%at${US}%D${US}%s${US}%b`;
-    // A repo with no commits yet (an unborn HEAD across every ref) makes `git log` exit non-zero — that's an
-    // empty graph, not an error, so degrade to no commits (the panel renders its "no commits yet" state).
+    // Branch and log are independent read-only spawns — run them concurrently. A repo with no commits yet (an
+    // unborn HEAD across every ref) makes `git log` exit non-zero — that's an empty graph, not an error, so
+    // degrade to no commits (the panel renders its "no commits yet" state).
     // --decorate forces %D to populate: git only loads ref decorations for a TTY by default, and the daemon
     // runs git piped (non-TTY), so without it the HEAD marker and branch/tag names would silently vanish.
-    let stdout: string;
-    try {
-        ({ stdout } = await git(dir, ["log", "--all", "--decorate", "--topo-order", `--max-count=${limit}`, `--pretty=format:${format}`]));
-    } catch {
+    const [branchOut, logOut] = await Promise.all([
+        git(dir, ["branch", "--show-current"]),
+        git(dir, ["log", "--all", "--decorate", "--topo-order", `--max-count=${limit}`, `--pretty=format:${format}`]).catch(() => undefined),
+    ]);
+    const branch = branchOut.stdout.trim();
+    if (logOut === undefined) {
         return { ...(branch !== "" ? { branch } : {}), commits: [] };
     }
+    const { stdout } = logOut;
     const commits: GitCommit[] = [];
     for (const record of stdout.split(RS)) {
         if (record === "") {
@@ -377,8 +380,13 @@ export const commitLog = async (dir: string, limit: number, git: GitRunner = def
 // (vs the empty tree) instead of nothing. Merges name-status (status + renames) with numstat (per-file
 // +/- line counts) by path, so the graph's detail tree can show both.
 export const commitChanges = async (dir: string, sha: string, git: GitRunner = defaultGit): Promise<GitCommitFile[]> => {
-    const status = parseNameStatusZ((await git(dir, ["diff-tree", "--no-commit-id", "--name-status", "-r", "-z", "--root", sha])).stdout);
-    const stats = parseNumstatZ((await git(dir, ["diff-tree", "--no-commit-id", "--numstat", "-r", "-z", "--root", sha])).stdout);
+    // Two independent read-only diff-tree spawns on the same commit — run them concurrently.
+    const [statusOut, statsOut] = await Promise.all([
+        git(dir, ["diff-tree", "--no-commit-id", "--name-status", "-r", "-z", "--root", sha]),
+        git(dir, ["diff-tree", "--no-commit-id", "--numstat", "-r", "-z", "--root", sha]),
+    ]);
+    const status = parseNameStatusZ(statusOut.stdout);
+    const stats = parseNumstatZ(statsOut.stdout);
     return status.map((change) => ({ ...change, ...(stats.get(change.path) ?? {}) }));
 };
 
@@ -398,8 +406,8 @@ export const commitFileDiff = async (dir: string, sha: string, path: string, git
             return { binary: false, truncated: false }; // absent at this ref (added / deleted / root commit)
         }
     };
-    const before = await side(`${sha}^`);
-    const after = await side(sha);
+    // The two sides read different refs, entirely read-only — resolve them concurrently.
+    const [before, after] = await Promise.all([side(`${sha}^`), side(sha)]);
     const binary = before.binary || after.binary;
     const truncated = before.truncated || after.truncated;
     return {

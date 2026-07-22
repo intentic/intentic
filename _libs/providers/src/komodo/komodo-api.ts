@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
+import { responseDetail } from "../core/response-detail.js";
 
 // A Komodo Core resource summary (id + unique name) and the typed Alerter config the CD-notify provider
 // reconciles. Komodo's API is POST /{auth|read|write|execute}/{Operation} with a {type, params} body; it
@@ -150,7 +151,7 @@ const post = async (args: PostArgs): Promise<Response> => {
         signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) {
-        throw new Error(`Komodo ${args.module}/${args.type} failed (HTTP ${response.status}): ${await response.text()}`);
+        throw new Error(`Komodo ${args.module}/${args.type} failed (HTTP ${response.status}): ${await responseDetail(response)}`);
     }
     return response;
 };
@@ -172,7 +173,7 @@ export const komodoApi: KomodoApi = {
             signal: AbortSignal.timeout(30_000),
         });
         if (!response.ok) {
-            throw new Error(`Komodo auth/login/LoginLocalUser failed (HTTP ${response.status}): ${await response.text()}`);
+            throw new Error(`Komodo auth/login/LoginLocalUser failed (HTTP ${response.status}): ${await responseDetail(response)}`);
         }
         const result = parseResponse(loginSchema, await response.json(), "Komodo auth/login/LoginLocalUser");
         if (result.type !== "Jwt" || result.data === undefined) {

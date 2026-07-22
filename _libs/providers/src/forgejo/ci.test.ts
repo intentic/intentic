@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import type { SshExecutor } from "../core/ssh.js";
 import { createCiProvider } from "./ci.js";
 import { fakeForgejoApi } from "./forgejo-api.fake.js";
 
@@ -11,8 +12,18 @@ const ctx = (log: (message: string) => void = () => {}) => ({
     },
 });
 
+const sshForward: SshExecutor = {
+    connect: async () => ({
+        exec: async () => ({ stdout: "", stderr: "", code: 0 }),
+        dispose: async () => {},
+        forward: async () => ({ port: 9999, close: async () => {} }),
+    }),
+};
+
 const inputs = {
-    forgejoUrl: "https://git.example.com",
+    address: "203.0.113.10",
+    user: "deploy",
+    sshKey: "key",
     adminUser: "intentic",
     adminPassword: "fpw",
     komodoPassword: "kpw",
@@ -28,20 +39,16 @@ const inputs = {
 
 const WORKFLOW_PATH = ".forgejo/workflows/build-production.yaml";
 
-test("read returns undefined when forgejoUrl is PENDING", async () => {
-    expect(await createCiProvider(fakeForgejoApi({})).read({ ...inputs, forgejoUrl: 42 }, ctx())).toBeUndefined();
-});
-
 test("read returns undefined when komodoUrl is PENDING", async () => {
-    expect(await createCiProvider(fakeForgejoApi({})).read({ ...inputs, komodoUrl: 42 }, ctx())).toBeUndefined();
+    expect(await createCiProvider(fakeForgejoApi({}), sshForward).read({ ...inputs, komodoUrl: Symbol("PENDING") }, ctx())).toBeUndefined();
 });
 
 test("read returns undefined when the workflow file is absent (not wired yet)", async () => {
-    expect(await createCiProvider(fakeForgejoApi({ readFile: async () => undefined })).read(inputs, ctx())).toBeUndefined();
+    expect(await createCiProvider(fakeForgejoApi({ readFile: async () => undefined }), sshForward).read(inputs, ctx())).toBeUndefined();
 });
 
 test("read returns the workflow contents when present", async () => {
-    const observed = await createCiProvider(fakeForgejoApi({ readFile: async () => "on: push" })).read(inputs, ctx());
+    const observed = await createCiProvider(fakeForgejoApi({ readFile: async () => "on: push" }), sshForward).read(inputs, ctx());
     expect(observed).toEqual({ outputs: {}, detail: { workflow: "on: push" } });
 });
 
@@ -53,6 +60,7 @@ test("read returns undefined and logs when forgejo is unreachable", async () => 
                 throw new Error("ECONNREFUSED");
             },
         }),
+        sshForward,
     );
     expect(
         await provider.read(
@@ -76,6 +84,7 @@ test("apply sets both repo secrets, seeds a Dockerfile when absent, and commits 
                 commits[path] = content;
             },
         }),
+        sshForward,
     );
     await provider.apply(inputs, undefined, ctx());
     // REGISTRY_TOKEN is the packages token (registry push); KOMODO_PASSWORD is the Komodo admin pw (notify login).
@@ -96,6 +105,7 @@ test("apply does not clobber an existing Dockerfile", async () => {
                 commits[path] = content;
             },
         }),
+        sshForward,
     );
     await provider.apply(inputs, undefined, ctx());
     expect(commits["Dockerfile"]).toBeUndefined();
@@ -114,6 +124,7 @@ test("diff is noop when the committed workflow matches desired, update when it d
                 }
             },
         }),
+        sshForward,
     );
     await provider.apply(inputs, undefined, ctx());
     expect(provider.diff(inputs, { outputs: {}, detail: { workflow: committed } })).toEqual({ action: "noop" });
@@ -121,9 +132,11 @@ test("diff is noop when the committed workflow matches desired, update when it d
 });
 
 test("diff is update when no workflow was observed", () => {
-    expect(createCiProvider(fakeForgejoApi({})).diff(inputs, { outputs: {} }).action).toBe("update");
+    expect(createCiProvider(fakeForgejoApi({}), sshForward).diff(inputs, { outputs: {} }).action).toBe("update");
 });
 
 test("malformed inputs are rejected", async () => {
-    await expect(createCiProvider(fakeForgejoApi({})).read({ ...inputs, packagesToken: 5 }, ctx())).rejects.toThrow(/ci inputs malformed/);
+    await expect(createCiProvider(fakeForgejoApi({}), sshForward).read({ ...inputs, packagesToken: 5 }, ctx())).rejects.toThrow(
+        /ci inputs malformed/,
+    );
 });

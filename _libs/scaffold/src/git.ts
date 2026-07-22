@@ -64,8 +64,10 @@ export interface GitStatus {
 }
 
 export const gitStatus = async (dir: string, git: GitRunner = defaultGit): Promise<GitStatus> => {
-    const branch = (await git(dir, ["rev-parse", "--abbrev-ref", "HEAD"])).stdout.trim();
-    const files = porcelainFiles((await git(dir, ["status", "--porcelain"])).stdout);
+    // Two independent read-only spawns — run them concurrently (this backs the daemon's polled status route).
+    const [branchOut, statusOut] = await Promise.all([git(dir, ["rev-parse", "--abbrev-ref", "HEAD"]), git(dir, ["status", "--porcelain"])]);
+    const branch = branchOut.stdout.trim();
+    const files = porcelainFiles(statusOut.stdout);
     return { branch, dirty: files.length > 0, files };
 };
 

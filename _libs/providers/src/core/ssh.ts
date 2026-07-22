@@ -21,6 +21,10 @@ export interface SshSession {
     // multi-GB repo never buffers in memory the way `exec`'s string-collected stdout would.
     readonly download?: (remotePath: string, localPath: string) => Promise<void>;
     readonly upload?: (localPath: string, remotePath: string) => Promise<void>;
+    // A local loopback listener whose every connection is piped to remoteHost:remotePort dialed FROM the
+    // host (ssh2 direct-tcpip) — how the engine reaches the control-plane HTTP services (Forgejo :3000,
+    // Komodo :9120) without touching their public Cloudflare routes. Real executor only; fakes may omit.
+    readonly forward?: (remoteHost: string, remotePort: number) => Promise<{ readonly port: number; readonly close: () => Promise<void> }>;
 }
 
 export interface SshTarget {
@@ -355,6 +359,28 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
                                         return;
                                     }
                                     sftp.fastPut(localPath, remotePath, (putError) => (putError ? rejectTransfer(putError) : resolveTransfer()));
+                                });
+                            }),
+                        forward: (remoteHost, remotePort) =>
+                            new Promise((resolveForward, rejectForward) => {
+                                const server = createServer((socket) => {
+                                    client.forwardOut(socket.localAddress ?? "127.0.0.1", socket.localPort ?? 0, remoteHost, remotePort, (error, stream) => {
+                                        if (error) {
+                                            socket.destroy(error);
+                                            return;
+                                        }
+                                        socket.pipe(stream).pipe(socket);
+                                        stream.on("error", () => socket.destroy());
+                                        socket.on("error", () => stream.destroy());
+                                    });
+                                });
+                                server.once("error", rejectForward);
+                                server.listen(0, "127.0.0.1", () => {
+                                    const address = server.address();
+                                    resolveForward({
+                                        port: typeof address === "object" && address !== null ? address.port : 0,
+                                        close: () => new Promise((resolveClose) => server.close(() => resolveClose())),
+                                    });
                                 });
                             }),
                     });

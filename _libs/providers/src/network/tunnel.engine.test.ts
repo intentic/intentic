@@ -28,6 +28,7 @@ const fakeCloudflare = (): CloudflareApi => {
             return { id };
         },
         getTunnelToken: async () => "connector-token",
+        getTunnelStatus: async () => "healthy",
         getTunnelIngress: async () => ingress,
         putTunnelIngress: async ({ ingress: next }) => {
             ingress = [...next];

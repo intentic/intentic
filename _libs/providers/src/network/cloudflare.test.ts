@@ -12,6 +12,7 @@ const api = (overrides: Partial<CloudflareApi>): CloudflareApi => ({
     findTunnel: NOT_USED,
     createTunnel: NOT_USED,
     getTunnelToken: NOT_USED,
+    getTunnelStatus: NOT_USED,
     getTunnelIngress: NOT_USED,
     putTunnelIngress: NOT_USED,
     findDnsRecord: NOT_USED,

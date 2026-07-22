@@ -39,6 +39,10 @@ export interface CloudflareApi {
     }) => Promise<{ readonly id: string }>;
     // The connector token used to run cloudflared on the host.
     readonly getTunnelToken: (args: { readonly accountId: string; readonly apiToken: string; readonly tunnelId: string }) => Promise<string>;
+    // The tunnel's connectivity as Cloudflare's edge sees it: "healthy"/"degraded" when a connector is
+    // serving, "inactive" when none ever registered, "down" when the last one dropped. The tunnel provider
+    // polls this after (re)starting cloudflared so apply returns only once the tunnel actually serves.
+    readonly getTunnelStatus: (args: { readonly accountId: string; readonly apiToken: string; readonly tunnelId: string }) => Promise<string>;
     // The tunnel's current ingress; undefined if no configuration has been set yet.
     readonly getTunnelIngress: (args: {
         readonly accountId: string;
@@ -190,6 +194,14 @@ export const cloudflareApi: CloudflareApi = {
         }),
     getTunnelToken: ({ accountId, apiToken, tunnelId }) =>
         call(apiToken, `/accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/token`, z.string()),
+    getTunnelStatus: async ({ accountId, apiToken, tunnelId }) => {
+        const tunnel = await call(
+            apiToken,
+            `/accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}`,
+            z.object({ status: z.string() }),
+        );
+        return tunnel.status;
+    },
     getTunnelIngress: async ({ accountId, apiToken, tunnelId }) => {
         const config = await call(
             apiToken,

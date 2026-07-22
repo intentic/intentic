@@ -104,12 +104,16 @@ const setup = buildCommand<SetupFlags>({
     async func(this: CommandContext, flags: SetupFlags) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
         const publicKey = await ensureSshKey();
-        const { sshHostname, syncToken, mode } = await enrollKey(flags.url, flags.pair, publicKey, { takeover: flags.takeover });
+        // Enrollment can retry for ~30s while the sandbox tunnel warms — overlap it with the two binary
+        // downloads (independent: distinct endpoints, distinct install paths).
+        const [{ sshHostname, syncToken, mode }, cloudflaredPath, mutagen] = await Promise.all([
+            enrollKey(flags.url, flags.pair, publicKey, { takeover: flags.takeover }),
+            ensureCloudflared(),
+            ensureMutagen(),
+        ]);
         out(`enrolled SSH key; sandbox reachable at ${sshHostname}`);
 
         const sandboxId = flags.sandboxId ?? sanitizeId(new URL(flags.url).host);
-        const cloudflaredPath = await ensureCloudflared();
-        const mutagen = await ensureMutagen();
         await writeManagedSshConfig(
             sshConfigBlock({
                 alias: sshAlias(sandboxId),

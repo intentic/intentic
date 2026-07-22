@@ -10,6 +10,7 @@ const fakeApi = (overrides: Partial<CloudflareApi> = {}): CloudflareApi => ({
     findTunnel: async () => undefined,
     createTunnel: async () => ({ id: "tunnel-1" }),
     getTunnelToken: async () => "connector-token",
+    getTunnelStatus: async () => "healthy",
     getTunnelIngress: async () => undefined,
     putTunnelIngress: async () => {},
     findDnsRecord: async () => undefined,

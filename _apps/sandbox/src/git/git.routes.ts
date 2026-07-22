@@ -71,20 +71,24 @@ export const createGitRoutes = (services: Services) => {
                 { repo: "root", dir: services.workspace.root },
                 ...repoIds.map((id) => ({ repo: id, dir: join(services.workspace.root, id) })),
             ];
-            const repos: RepoChanges[] = [];
-            for (const candidate of candidates) {
-                try {
-                    await healPointer(candidate.repo, candidate.dir);
-                    const { branch, changes } = await services.git.changedFiles(candidate.dir);
-                    if (changes.length > 0) {
-                        repos.push({ repo: candidate.repo, ...(branch !== undefined ? { branch } : {}), changes });
+            // Each candidate is its own repo dir (own .git, no shared index.lock), so the scans run
+            // concurrently — the panel waits for the slowest repo, not the sum of all of them.
+            const scanned = await Promise.all(
+                candidates.map(async (candidate): Promise<RepoChanges | undefined> => {
+                    try {
+                        await healPointer(candidate.repo, candidate.dir);
+                        const { branch, changes } = await services.git.changedFiles(candidate.dir);
+                        if (changes.length > 0) {
+                            return { repo: candidate.repo, ...(branch !== undefined ? { branch } : {}), changes };
+                        }
+                    } catch (error) {
+                        // One broken repo (a deleted .git with no heal source, a mid-clone dir) must not 500 the panel.
+                        services.logger.warn({ err: error, repo: candidate.repo }, "git changes: repo skipped");
                     }
-                } catch (error) {
-                    // One broken repo (a deleted .git with no heal source, a mid-clone dir) must not 500 the panel.
-                    services.logger.warn({ err: error, repo: candidate.repo }, "git changes: repo skipped");
-                }
-            }
-            return { repos };
+                    return undefined;
+                }),
+            );
+            return { repos: scanned.filter((repo) => repo !== undefined) };
         }),
         fileDiff: i.fileDiff.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);

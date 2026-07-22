@@ -27,12 +27,14 @@ export function usePorts() {
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
     const forward = async (port: number): Promise<string | undefined> => {
         const result = await api.sandbox.json<PortForwardResult>(`/ports/forward`, jsonPost({ port }));
-        await invalidate();
+        // The caller navigates on the returned previewUrl — the list refresh must not gate it (the poll
+        // reconverges anyway), so fire-and-forget.
+        void invalidate();
         return result.previewUrl;
     };
     const unforward = async (port: number): Promise<void> => {
         await api.sandbox.json(`/ports/unforward`, jsonPost({ port }));
-        await invalidate();
+        void invalidate();
     };
 
     return {

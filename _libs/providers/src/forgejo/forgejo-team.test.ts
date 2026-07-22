@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import type { SshExecutor } from "../core/ssh.js";
 import { fakeForgejoApi } from "./forgejo-api.fake.js";
 import { createForgejoTeamProvider } from "./forgejo-team.js";
 
@@ -11,8 +12,18 @@ const ctx = (log: (message: string) => void = () => {}) => ({
     },
 });
 
+const sshForward: SshExecutor = {
+    connect: async () => ({
+        exec: async () => ({ stdout: "", stderr: "", code: 0 }),
+        dispose: async () => {},
+        forward: async () => ({ port: 9999, close: async () => {} }),
+    }),
+};
+
 const inputs = {
-    forgejoUrl: "https://git.example.com",
+    address: "203.0.113.10",
+    user: "deploy",
+    sshKey: "key",
     adminUser: "intentic",
     adminPassword: "pw",
     org: "squad",
@@ -22,21 +33,20 @@ const inputs = {
     repos: [{ owner: "squad", name: "my-app" }],
 };
 
-test("read returns undefined when forgejoUrl is PENDING", async () => {
-    expect(await createForgejoTeamProvider(fakeForgejoApi({})).read({ ...inputs, forgejoUrl: 42 }, ctx())).toBeUndefined();
-});
-
 test("read returns undefined when the team does not exist", async () => {
-    expect(await createForgejoTeamProvider(fakeForgejoApi({ findTeam: async () => undefined })).read(inputs, ctx())).toBeUndefined();
+    expect(await createForgejoTeamProvider(fakeForgejoApi({ findTeam: async () => undefined }), sshForward).read(inputs, ctx())).toBeUndefined();
 });
 
 test("read surfaces the team's current permission as detail", async () => {
-    const observed = await createForgejoTeamProvider(fakeForgejoApi({ findTeam: async () => ({ id: 7, permission: "write" }) })).read(inputs, ctx());
+    const observed = await createForgejoTeamProvider(fakeForgejoApi({ findTeam: async () => ({ id: 7, permission: "write" }) }), sshForward).read(
+        inputs,
+        ctx(),
+    );
     expect(observed).toEqual({ outputs: {}, detail: { permission: "write" } });
 });
 
 test("diff is noop when the permission matches, update when it differs", () => {
-    const provider = createForgejoTeamProvider(fakeForgejoApi({}));
+    const provider = createForgejoTeamProvider(fakeForgejoApi({}), sshForward);
     expect(provider.diff(inputs, { outputs: {}, detail: { permission: "write" } })).toEqual({ action: "noop" });
     expect(provider.diff(inputs, { outputs: {}, detail: { permission: "read" } })).toMatchObject({ action: "update" });
 });
@@ -59,6 +69,7 @@ test("apply creates the team when absent, then adds members and attaches repos",
                 repos.push(`${teamId}:${org}/${name}`);
             },
         }),
+        sshForward,
     );
     expect(await provider.apply(inputs, undefined, ctx())).toEqual({});
     expect(createdPermission).toBe("write");
@@ -81,6 +92,7 @@ test("apply reuses an existing team's id without recreating it", async () => {
             },
             addTeamRepo: async () => {},
         }),
+        sshForward,
     );
     await provider.apply(inputs, undefined, ctx());
     expect(createCalled).toBe(false);

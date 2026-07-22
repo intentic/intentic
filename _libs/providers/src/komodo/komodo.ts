@@ -44,12 +44,13 @@ type KomodoInputs = z.infer<typeof komodoSchema>;
 const parse = (inputs: ResolvedInputs): KomodoInputs => parseInputs(komodoSchema, inputs, "komodo");
 
 const CORE = "intentic-komodo-core";
-const CORE_PORT = 9120;
+// The fixed host port Core publishes — the port every engine-side Komodo consumer forwards to over SSH.
+export const KOMODO_CORE_PORT = 9120;
 const STATE_DIR = "/opt/intentic/komodo";
 const READY_TIMEOUT_MS = 90_000;
 const READY_INTERVAL_MS = 3_000;
 
-const internalUrl = (parsed: KomodoInputs): string => `http://${parsed.internalIp}:${CORE_PORT}`;
+const internalUrl = (parsed: KomodoInputs): string => `http://${parsed.internalIp}:${KOMODO_CORE_PORT}`;
 const outputsFor = (parsed: KomodoInputs): Record<string, unknown> => ({ url: `https://${parsed.domain}`, internalUrl: internalUrl(parsed) });
 
 // docker compose names the core container "<project>-core-1", not CORE, so match it by the intentic.id
@@ -108,7 +109,7 @@ const composeYaml = (images: Record<string, string>, id: string, hash: string): 
         `    image: ${images["core"]}`,
         "    restart: unless-stopped",
         "    depends_on: [ ferretdb ]",
-        `    ports: [ "${CORE_PORT}:9120" ]`,
+        `    ports: [ "${KOMODO_CORE_PORT}:9120" ]`,
         "    env_file: ./.env",
         // config.toml carries the git-provider account (Komodo clones private app repos with it); bind it in
         // read-only. Relative to --project-directory (STATE_DIR), so it resolves to the file ensureFiles writes.

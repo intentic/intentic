@@ -62,13 +62,20 @@ export const recentFiles = async (root: string, entries: readonly FileEntry[], o
     const allowed = new Set(entries.map((entry) => entry.path));
     const activity = new Map<string, FileActivity>();
 
-    for (const repo of reposOf(entries)) {
-        const args = ["log", `--since=${Math.floor((now - windowMs) / 1000)}`, "--numstat", "--format=commit:%ct"];
-        if (options.author !== undefined) {
-            args.push(`--author=${options.author}`);
-        }
+    // One read-only `git log` per repo — spawn them concurrently (repos are few), fold in repo order.
+    const repos = reposOf(entries);
+    const logs = await Promise.all(
+        repos.map((repo) => {
+            const args = ["log", `--since=${Math.floor((now - windowMs) / 1000)}`, "--numstat", "--format=commit:%ct"];
+            if (options.author !== undefined) {
+                args.push(`--author=${options.author}`);
+            }
+            return git(root, repo, args);
+        }),
+    );
+    for (const [index, repo] of repos.entries()) {
         let commitMs = 0;
-        for (const line of (await git(root, repo, args)).split("\n")) {
+        for (const line of logs[index]!.split("\n")) {
             if (line.startsWith("commit:")) {
                 commitMs = Number(line.slice(7)) * 1000;
                 continue;
@@ -117,21 +124,27 @@ export interface LogOptions {
 // `iq log "<pattern>"` — pickaxe across repos: commits whose diffs add/remove the pattern. Commit metadata only,
 // never patch bodies (a denied file's content can't leak through here).
 export const logSearch = async (root: string, entries: readonly FileEntry[], pattern: string, options: LogOptions): Promise<RankedGroup[]> => {
+    // One pickaxe spawn per repo — concurrent (repos are few); groups fold in repo order so ranks stay stable.
+    const repos = reposOf(entries);
+    const outputs = await Promise.all(
+        repos.map((repo) => {
+            const args = ["log", options.regex === true ? `-G${pattern}` : `-S${pattern}`, "--format=%h%x09%as%x09%an%x09%s"];
+            if (options.since !== undefined) {
+                args.push(`--since=${Math.floor((Date.now() - parseSince(options.since)) / 1000)}`);
+            }
+            if (options.author !== undefined) {
+                args.push(`--author=${options.author}`);
+            }
+            if (options.path !== undefined) {
+                const inRepo = options.path.startsWith(`${repo}/`) ? options.path.slice(repo.length + 1) : options.path;
+                args.push("--", inRepo);
+            }
+            return git(root, repo, args);
+        }),
+    );
     const groups: RankedGroup[] = [];
-    for (const repo of reposOf(entries)) {
-        const args = ["log", options.regex === true ? `-G${pattern}` : `-S${pattern}`, "--format=%h%x09%as%x09%an%x09%s"];
-        if (options.since !== undefined) {
-            args.push(`--since=${Math.floor((Date.now() - parseSince(options.since)) / 1000)}`);
-        }
-        if (options.author !== undefined) {
-            args.push(`--author=${options.author}`);
-        }
-        if (options.path !== undefined) {
-            const inRepo = options.path.startsWith(`${repo}/`) ? options.path.slice(repo.length + 1) : options.path;
-            args.push("--", inRepo);
-        }
-        const hits: RankedHit[] = (await git(root, repo, args))
-            .split("\n")
+    for (const [index, repo] of repos.entries()) {
+        const hits: RankedHit[] = outputs[index]!.split("\n")
             .filter((line) => line !== "")
             .map((line, i) => ({ path: repo, line: i + 1, text: line.replaceAll("\t", "  "), tags: [], score: 1 }));
         if (hits.length > 0) {

@@ -255,8 +255,10 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
             nodes.push({
                 id: serverId,
                 type: "komodo-server",
+                // Queries Core over the CP host's SSH; still gated on the deploy route because Periphery's
+                // registration (what it waits for) dials Core's PUBLIC url from the worker host.
                 inputs: {
-                    komodoUrl: makeRef<string>(deployRefs.deploy, "url"),
+                    ...sshOf(cpHost.input),
                     adminUser: adminUsername,
                     adminPassword: generated("KOMODO_ADMIN_PASSWORD"),
                     serverName: hostId,
@@ -273,7 +275,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         // --- Apps: all go through the shared platform ---
 
         for (const app of intent.apps) {
-            const resolved = resolveApp(app, forge, deployRefs, apiToken, zone, cpId, backingById);
+            const resolved = resolveApp(app, forge, deployRefs, apiToken, zone, cpId, cpHost.input, backingById);
             nodes.push(...resolved.nodes);
             // Route ingress goes to the host the app runs ON (its tunnel), not the CP host.
             const hostIngress = ingressByHost.get(app.on) ?? [];
@@ -284,7 +286,7 @@ export const emit = (intent: IntentSet, assignment: Assignment, zone: string | u
         // The declared people + teams and the cross-cutting grant graph. One Forgejo, one Komodo, one set of
         // identity accounts — all scoped to the control-plane host. Forgejo stack only (rejected above).
         if (forge.kind === "forgejo") {
-            nodes.push(...resolveIdentities(intent, forge.platform, cpId));
+            nodes.push(...resolveIdentities(intent, forge.platform, cpId, cpHost.input));
         }
     }
 

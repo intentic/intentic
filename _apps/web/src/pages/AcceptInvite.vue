@@ -25,8 +25,9 @@ const busy = ref(false);
 const error = ref<string>();
 
 onMounted(async () => {
-    await refresh();
-    preview.value = await apiClient.invite.preview({ token }).catch(() => ({ status: `invalid` as const }));
+    // Session refresh and token preview are independent (preview needs no session) — resolve them together.
+    const [, previewed] = await Promise.all([refresh(), apiClient.invite.preview({ token }).catch(() => ({ status: `invalid` as const }))]);
+    preview.value = previewed;
     loading.value = false;
 });
 

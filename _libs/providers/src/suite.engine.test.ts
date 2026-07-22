@@ -132,6 +132,9 @@ const fakeSsh = (): SshExecutor => {
                 return ok();
             },
             dispose: async () => {},
+            // The control-plane API providers (repo/ci/deployment/…) reach their service over a loopback
+            // forward; the fake apis ignore the authority, so any fixed port serves.
+            forward: async () => ({ port: 9999, close: async () => {} }),
         }),
     };
 };
@@ -154,6 +157,7 @@ const fakeCloudflare = (): CloudflareApi => {
             return { id };
         },
         getTunnelToken: async () => "connector-token",
+        getTunnelStatus: async () => "healthy",
         getTunnelIngress: async () => ingress,
         putTunnelIngress: async ({ ingress: next }) => {
             ingress = [...next];

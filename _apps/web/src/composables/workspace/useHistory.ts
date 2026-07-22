@@ -29,11 +29,13 @@ export const restoreSnapshot = (queryClient: QueryClient, id: string): Promise<v
         resetEditBuffers();
         // RAW prefix for the tree — its keys carry an "all"/"filtered" discriminator before the appended sandbox
         // id, so sandboxKey("workspace","tree") would NOT prefix-match them (see useSandbox). Snapshots have no
-        // such discriminator, so the exact sandboxKey match is fine there.
-        await queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
-        await queryClient.invalidateQueries({ queryKey: sandboxKey(`history`, `snapshots`) });
-        // A restore never moves the repos' HEADs, so the restored-vs-HEAD delta IS the new review set.
-        await queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) });
+        // such discriminator, so the exact sandboxKey match is fine there. A restore never moves the repos'
+        // HEADs, so the restored-vs-HEAD delta IS the new review set. Disjoint caches — refetch concurrently.
+        await Promise.all([
+            queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }),
+            queryClient.invalidateQueries({ queryKey: sandboxKey(`history`, `snapshots`) }),
+            queryClient.invalidateQueries({ queryKey: sandboxKey(`git`, `changes`) }),
+        ]);
     }, `Restore failed.`);
 
 export function useHistory() {

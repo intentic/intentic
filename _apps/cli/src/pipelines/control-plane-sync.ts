@@ -4,11 +4,27 @@ import { ARTIFACT_FILE, CONFIG_FILE, INTENT_DIR, TARGET_DIR } from "../lib/artif
 import { collectSecrets } from "../secrets/secrets.js";
 import { APPLY_WORKFLOW_PATH, applyWorkflowYaml, type PipelineInputs, setRepoSecrets, writeWorkflow } from "./adopt-pipelines.js";
 
-// The Forgejo node carries the public git domain + admin identity the control plane authenticates with.
+// The control-plane host's SSH connection block as the forgejo node carries it: literal address/user, the
+// key as a secret ref the caller resolves, and the optional port/via transport selectors.
+export interface ForgejoSsh {
+    readonly address: string;
+    readonly user: string;
+    readonly sshKeyRef: { readonly source: SecretSource; readonly key: string };
+    readonly port?: number;
+    readonly via?: "direct" | "cloudflared";
+}
+
+// The Forgejo node carries the public git domain + admin identity the control plane authenticates with, and
+// the CP host's SSH block — how `adopt` reaches Forgejo (an SSH port-forward, never the public route).
 // Shared by `adopt` (the one-shot push) and the post-adopt resolve sync (this file).
 export const forgejoIdentity = (
     graph: DesiredStateGraph,
-): { readonly domain: string; readonly user: string; readonly adminPasswordRef: { readonly source: SecretSource; readonly key: string } } => {
+): {
+    readonly domain: string;
+    readonly user: string;
+    readonly adminPasswordRef: { readonly source: SecretSource; readonly key: string };
+    readonly ssh: ForgejoSsh;
+} => {
     const forgejo = Object.values(graph.resources).find((node) => node.type === "forgejo");
     if (forgejo === undefined) {
         throw new Error("no forgejo resource in the artifact — run `intentic apply` first");
@@ -22,7 +38,26 @@ export const forgejoIdentity = (
     if (adminPasswordRef === undefined) {
         throw new Error("forgejo resource is missing its adminPassword secret");
     }
-    return { domain, user, adminPasswordRef };
+    const address = forgejo.inputs["address"];
+    const sshUser = forgejo.inputs["user"];
+    const sshKeyRef = secretRef(forgejo.inputs["sshKey"]);
+    if (typeof address !== "string" || typeof sshUser !== "string" || sshKeyRef === undefined) {
+        throw new Error("forgejo resource is missing its ssh connection inputs");
+    }
+    const port = forgejo.inputs["port"];
+    const via = forgejo.inputs["via"];
+    return {
+        domain,
+        user,
+        adminPasswordRef,
+        ssh: {
+            address,
+            user: sshUser,
+            sshKeyRef,
+            ...(typeof port === "number" ? { port } : {}),
+            ...(via === "direct" || via === "cloudflared" ? { via } : {}),
+        },
+    };
 };
 
 // Keep Forgejo the live secret store after `adopt`: when a resolve in the control-plane pipeline introduces a

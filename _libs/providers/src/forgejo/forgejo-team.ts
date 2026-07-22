@@ -1,11 +1,15 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
-import { parseInputs } from "../core/inputs.js";
+import { parseInputs, sshSchema } from "../core/inputs.js";
+import { overSsh } from "../core/over-ssh.js";
+import type { SshExecutor } from "../core/ssh.js";
+import { sshExecutor } from "../core/ssh.js";
 import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
+import { FORGEJO_HTTP_PORT } from "./forgejo.js";
 
-const forgejoTeamSchema = z.object({
-    forgejoUrl: z.string(),
+// The ssh block is the control-plane host's — the admin API is reached over an SSH port-forward.
+const forgejoTeamSchema = sshSchema.extend({
     adminUser: z.string(),
     adminPassword: z.string(),
     org: z.string(),
@@ -24,21 +28,20 @@ const parse = (inputs: ResolvedInputs): ForgejoTeamInputs => parseInputs(forgejo
 // team's existence + its current permission (so a permission change re-applies); membership and repo
 // attachment are idempotent PUTs re-asserted on apply. Depends (via the resolver's refs) on the org, every
 // member's account, and every attached repo, so all exist before apply runs. A pure sink — no outputs.
-export const createForgejoTeamProvider = (api: ForgejoApi = forgejoApi): Provider => ({
+export const createForgejoTeamProvider = (api: ForgejoApi = forgejoApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        if (typeof inputs["forgejoUrl"] !== "string") {
-            return undefined;
-        }
         const parsed = parse(inputs);
         try {
-            const team = await api.findTeam({
-                baseUrl: parsed.forgejoUrl,
-                user: parsed.adminUser,
-                password: parsed.adminPassword,
-                org: parsed.org,
-                name: parsed.name,
+            return await overSsh(executor, parsed, FORGEJO_HTTP_PORT, async (baseUrl) => {
+                const team = await api.findTeam({
+                    baseUrl,
+                    user: parsed.adminUser,
+                    password: parsed.adminPassword,
+                    org: parsed.org,
+                    name: parsed.name,
+                });
+                return team === undefined ? undefined : { outputs: {}, detail: { permission: team.permission } };
             });
-            return team === undefined ? undefined : { outputs: {}, detail: { permission: team.permission } };
         } catch (error) {
             ctx.log(`forgejo-team "${ctx.id}": forgejo not reachable yet, treating as not-yet-created: ${String(error)}`);
             return undefined;
@@ -52,27 +55,28 @@ export const createForgejoTeamProvider = (api: ForgejoApi = forgejoApi): Provide
     },
     apply: async (inputs) => {
         const parsed = parse(inputs);
-        const auth = { baseUrl: parsed.forgejoUrl, user: parsed.adminUser, password: parsed.adminPassword };
-        const existing = await api.findTeam({ ...auth, org: parsed.org, name: parsed.name });
-        const teamId = existing?.id ?? (await api.createTeam({ ...auth, org: parsed.org, name: parsed.name, permission: parsed.permission })).id;
-        for (const username of parsed.members) {
-            await api.addTeamMember({ ...auth, teamId, username });
-        }
-        for (const repo of parsed.repos) {
-            await api.addTeamRepo({ ...auth, teamId, org: repo.owner, name: repo.name });
-        }
-        return {};
+        return overSsh(executor, parsed, FORGEJO_HTTP_PORT, async (baseUrl) => {
+            const auth = { baseUrl, user: parsed.adminUser, password: parsed.adminPassword };
+            const existing = await api.findTeam({ ...auth, org: parsed.org, name: parsed.name });
+            const teamId = existing?.id ?? (await api.createTeam({ ...auth, org: parsed.org, name: parsed.name, permission: parsed.permission })).id;
+            for (const username of parsed.members) {
+                await api.addTeamMember({ ...auth, teamId, username });
+            }
+            for (const repo of parsed.repos) {
+                await api.addTeamRepo({ ...auth, teamId, org: repo.owner, name: repo.name });
+            }
+            return {};
+        });
     },
     delete: async (inputs) => {
-        if (typeof inputs["forgejoUrl"] !== "string") {
-            return;
-        }
         const parsed = parse(inputs);
-        const auth = { baseUrl: parsed.forgejoUrl, user: parsed.adminUser, password: parsed.adminPassword };
-        const existing = await api.findTeam({ ...auth, org: parsed.org, name: parsed.name });
-        if (existing === undefined) {
-            return;
-        }
-        await api.deleteTeam({ ...auth, teamId: existing.id });
+        await overSsh(executor, parsed, FORGEJO_HTTP_PORT, async (baseUrl) => {
+            const auth = { baseUrl, user: parsed.adminUser, password: parsed.adminPassword };
+            const existing = await api.findTeam({ ...auth, org: parsed.org, name: parsed.name });
+            if (existing === undefined) {
+                return;
+            }
+            await api.deleteTeam({ ...auth, teamId: existing.id });
+        });
     },
 });

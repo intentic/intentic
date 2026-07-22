@@ -30,36 +30,27 @@ export const revalidate = async (db: IndexDb, entries: readonly FileEntry[], par
     const seen = new Set<string>();
     const reparseAll = parse !== undefined && getMeta(db, "parser_version") !== PARSER_VERSION;
     let changed = 0;
-    for (const entry of entries) {
-        seen.add(entry.path);
-        const previous = stored.get(entry.path);
-        if (!reparseAll && previous !== undefined && Math.round(entry.mtimeMs) === previous.mtimeMs && entry.size === previous.size) {
-            continue;
-        }
-        // Oversized/binary/unreadable files keep a bare row (hash "-", no symbols/chunks) so the mtime+size diff
-        // short-circuits them on the next sweep instead of re-reading every time.
-        const skip = (): void => {
-            db.transaction(() =>
-                replaceFile(db, { path: entry.path, repo: entry.repo, lang: undefined, mtimeMs: entry.mtimeMs, size: entry.size, hash: "-" }, [], []),
-            );
-            changed++;
-        };
-        if (entry.size > MAX_FILE_BYTES) {
-            skip();
-            continue;
-        }
-        const buf = await readFile(entry.abs).catch(() => undefined);
+    // Oversized/binary/unreadable files keep a bare row (hash "-", no symbols/chunks) so the mtime+size diff
+    // short-circuits them on the next sweep instead of re-reading every time.
+    const skipEntry = (entry: FileEntry): void => {
+        db.transaction(() =>
+            replaceFile(db, { path: entry.path, repo: entry.repo, lang: undefined, mtimeMs: entry.mtimeMs, size: entry.size, hash: "-" }, [], []),
+        );
+        changed++;
+    };
+    // Apply one read file — hash/parse/sqlite are all synchronous, so results land strictly in entry order.
+    const applyRead = (entry: FileEntry, previous: ReturnType<(typeof stored)["get"]>, buf: Buffer | undefined): void => {
         const lang = buf === undefined ? undefined : langOf(entry.path);
         // A recognized source file is text with a stray NUL, not a binary — skipping it would make the file
         // invisible to def/ask/find alike (ripgrep already goes blind on it; the index must not).
         if (buf === undefined || (isBinary(buf) && lang === undefined)) {
-            skip();
-            continue;
+            skipEntry(entry);
+            return;
         }
         const hash = createHash("sha256").update(buf).digest("hex");
         if (!reparseAll && previous !== undefined && previous.hash === hash) {
             touchFile(db, previous.id, entry.mtimeMs, entry.size);
-            continue;
+            return;
         }
         const content = buf.includes(0) ? buf.toString("utf8").replaceAll("\0", "�") : buf.toString("utf8");
         const parsed = parse?.(entry.path, lang, content) ?? { symbols: [], chunks: [] };
@@ -72,6 +63,34 @@ export const revalidate = async (db: IndexDb, entries: readonly FileEntry[], par
             ),
         );
         changed++;
+    };
+    // Partition first: unchanged files short-circuit on mtime+size exactly as before; the rest need a read.
+    const toRead: { entry: FileEntry; previous: ReturnType<(typeof stored)["get"]>; read: Promise<Buffer | undefined> | undefined }[] = [];
+    for (const entry of entries) {
+        seen.add(entry.path);
+        const previous = stored.get(entry.path);
+        if (!reparseAll && previous !== undefined && Math.round(entry.mtimeMs) === previous.mtimeMs && entry.size === previous.size) {
+            continue;
+        }
+        toRead.push({ entry, previous, read: undefined });
+    }
+    // Bounded read-ahead: keep up to READ_AHEAD readFile()s in flight while results are consumed in order. On a
+    // cold build (or a PARSER_VERSION bump) this reads the entire workspace — serial reads dominate that path,
+    // while an unbounded fan-out would hold every file buffer in memory at once.
+    const READ_AHEAD = 16;
+    for (const [index, item] of toRead.entries()) {
+        for (let ahead = index; ahead < Math.min(index + READ_AHEAD, toRead.length); ahead++) {
+            const upcoming = toRead[ahead]!;
+            if (upcoming.read === undefined && upcoming.entry.size <= MAX_FILE_BYTES) {
+                upcoming.read = readFile(upcoming.entry.abs).catch(() => undefined);
+            }
+        }
+        if (item.entry.size > MAX_FILE_BYTES) {
+            skipEntry(item.entry);
+            continue;
+        }
+        applyRead(item.entry, item.previous, await item.read);
+        item.read = undefined; // release the buffer — memory stays bounded by the window
     }
     for (const [path, file] of stored) {
         if (!seen.has(path)) {

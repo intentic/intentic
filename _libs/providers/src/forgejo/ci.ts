@@ -1,13 +1,17 @@
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { normalize, starterDockerfile } from "../core/ci-yaml.js";
-import { parseInputs } from "../core/inputs.js";
+import { hasPendingRef, parseInputs, sshSchema } from "../core/inputs.js";
+import { overSsh } from "../core/over-ssh.js";
+import type { SshExecutor } from "../core/ssh.js";
+import { sshExecutor } from "../core/ssh.js";
 import type { ForgejoApi } from "./forgejo-api.js";
 import { forgejoApi } from "./forgejo-api.js";
+import { FORGEJO_HTTP_PORT } from "./forgejo.js";
 
-const ciSchema = z.object({
-    // The PUBLIC git url: commitFile + setRepoSecret go through the public route, like repo/forgejo-notify.
-    forgejoUrl: z.string(),
+// The ssh block is the control-plane host's — commitFile + setRepoSecret go over an SSH port-forward to
+// Forgejo, like repo/forgejo-notify.
+const ciSchema = sshSchema.extend({
     // The shared admin username (Forgejo + Komodo). adminPassword is the FORGEJO one this provider authes with;
     // komodoPassword is the KOMODO one the workflow's notify step logs in with (stored as a repo secret).
     adminUser: z.string(),
@@ -81,27 +85,29 @@ const workflowYaml = (parsed: CiInputs): string => {
 // Komodo-login secrets it consumes. Replaces the old Komodo Build — intentic no longer builds or deploys; a
 // developer push triggers this workflow which builds, pushes, and tells Komodo to redeploy. read keys off the
 // committed workflow file (the secrets cannot be read back, so they are re-set every apply, idempotently);
-// PENDING-guards on both Forgejo + Komodo urls so a plan proceeds before the platform is up.
-export const createCiProvider = (api: ForgejoApi = forgejoApi): Provider => ({
+// PENDING-guards on the ref'd Komodo url + packages token so a plan proceeds before the platform is up.
+export const createCiProvider = (api: ForgejoApi = forgejoApi, executor: SshExecutor = sshExecutor): Provider => ({
     read: async (inputs, ctx) => {
-        if (typeof inputs["forgejoUrl"] !== "string" || typeof inputs["komodoUrl"] !== "string") {
+        if (hasPendingRef(inputs, "komodoUrl", "packagesToken")) {
             return undefined;
         }
         const parsed = parse(inputs);
         try {
-            const workflow = await api.readFile({
-                baseUrl: parsed.forgejoUrl,
-                user: parsed.adminUser,
-                password: parsed.adminPassword,
-                owner: parsed.owner,
-                name: parsed.repoName,
-                branch: parsed.branch,
-                path: workflowPath(parsed.tag),
+            return await overSsh(executor, parsed, FORGEJO_HTTP_PORT, async (baseUrl) => {
+                const workflow = await api.readFile({
+                    baseUrl,
+                    user: parsed.adminUser,
+                    password: parsed.adminPassword,
+                    owner: parsed.owner,
+                    name: parsed.repoName,
+                    branch: parsed.branch,
+                    path: workflowPath(parsed.tag),
+                });
+                if (workflow === undefined) {
+                    return undefined;
+                }
+                return { outputs: {}, detail: { workflow } };
             });
-            if (workflow === undefined) {
-                return undefined;
-            }
-            return { outputs: {}, detail: { workflow } };
         } catch (error) {
             ctx.log(`ci "${ctx.id}": forgejo not reachable yet, treating as not-yet-created: ${String(error)}`);
             return undefined;
@@ -116,54 +122,55 @@ export const createCiProvider = (api: ForgejoApi = forgejoApi): Provider => ({
     },
     apply: async (inputs) => {
         const parsed = parse(inputs);
-        const repo = {
-            baseUrl: parsed.forgejoUrl,
-            user: parsed.adminUser,
-            password: parsed.adminPassword,
-            owner: parsed.owner,
-            name: parsed.repoName,
-        };
-        // The packages token the Action pushes with, and the Komodo admin password the notify step logs in with.
-        await api.setRepoSecret({ ...repo, secretName: SECRET_REGISTRY, data: parsed.packagesToken });
-        await api.setRepoSecret({ ...repo, secretName: SECRET_KOMODO, data: parsed.komodoPassword });
-        // Seed a starter Dockerfile only when the repo has none, so the workflow's first run always has one to
-        // build; never clobber the author's real Dockerfile.
-        const dockerfile = await api.readFile({ ...repo, branch: parsed.branch, path: DOCKERFILE_PATH });
-        if (dockerfile === undefined) {
+        return overSsh(executor, parsed, FORGEJO_HTTP_PORT, async (baseUrl) => {
+            const repo = {
+                baseUrl,
+                user: parsed.adminUser,
+                password: parsed.adminPassword,
+                owner: parsed.owner,
+                name: parsed.repoName,
+            };
+            // The packages token the Action pushes with, and the Komodo admin password the notify step logs in with.
+            await api.setRepoSecret({ ...repo, secretName: SECRET_REGISTRY, data: parsed.packagesToken });
+            await api.setRepoSecret({ ...repo, secretName: SECRET_KOMODO, data: parsed.komodoPassword });
+            // Seed a starter Dockerfile only when the repo has none, so the workflow's first run always has one to
+            // build; never clobber the author's real Dockerfile.
+            const dockerfile = await api.readFile({ ...repo, branch: parsed.branch, path: DOCKERFILE_PATH });
+            if (dockerfile === undefined) {
+                await api.commitFile({
+                    ...repo,
+                    branch: parsed.branch,
+                    path: DOCKERFILE_PATH,
+                    content: starterDockerfile(),
+                    message: "intentic: starter Dockerfile",
+                });
+            }
+            // Commit the workflow LAST so its first run already sees the Dockerfile + secrets.
             await api.commitFile({
                 ...repo,
                 branch: parsed.branch,
-                path: DOCKERFILE_PATH,
-                content: starterDockerfile(),
-                message: "intentic: starter Dockerfile",
+                path: workflowPath(parsed.tag),
+                content: workflowYaml(parsed),
+                message: "intentic: ci workflow",
             });
-        }
-        // Commit the workflow LAST so its first run already sees the Dockerfile + secrets.
-        await api.commitFile({
-            ...repo,
-            branch: parsed.branch,
-            path: workflowPath(parsed.tag),
-            content: workflowYaml(parsed),
-            message: "intentic: ci workflow",
+            return {};
         });
-        return {};
     },
     delete: async (inputs) => {
-        if (typeof inputs["forgejoUrl"] !== "string") {
-            return;
-        }
         const parsed = parse(inputs);
-        const repo = {
-            baseUrl: parsed.forgejoUrl,
-            user: parsed.adminUser,
-            password: parsed.adminPassword,
-            owner: parsed.owner,
-            name: parsed.repoName,
-        };
-        // Drop the workflow file and the secrets it consumed. The repo itself may be pruned separately (its
-        // own provider), so every call here is idempotent on a 404.
-        await api.deleteFile({ ...repo, branch: parsed.branch, path: workflowPath(parsed.tag), message: "intentic: remove ci workflow" });
-        await api.deleteRepoSecret({ ...repo, secretName: SECRET_REGISTRY });
-        await api.deleteRepoSecret({ ...repo, secretName: SECRET_KOMODO });
+        await overSsh(executor, parsed, FORGEJO_HTTP_PORT, async (baseUrl) => {
+            const repo = {
+                baseUrl,
+                user: parsed.adminUser,
+                password: parsed.adminPassword,
+                owner: parsed.owner,
+                name: parsed.repoName,
+            };
+            // Drop the workflow file and the secrets it consumed. The repo itself may be pruned separately (its
+            // own provider), so every call here is idempotent on a 404.
+            await api.deleteFile({ ...repo, branch: parsed.branch, path: workflowPath(parsed.tag), message: "intentic: remove ci workflow" });
+            await api.deleteRepoSecret({ ...repo, secretName: SECRET_REGISTRY });
+            await api.deleteRepoSecret({ ...repo, secretName: SECRET_KOMODO });
+        });
     },
 });

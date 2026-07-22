@@ -70,8 +70,7 @@ const discardGroups = (groups: readonly RepoPaths[]): Promise<void> =>
         // carry an "all"/"filtered" discriminator before the appended sandbox id, so sandboxKey("workspace",
         // "tree") would NOT prefix-match them (see useSandbox).
         resetEditBuffers();
-        await queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
-        await invalidateChanges();
+        await Promise.all([queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }), invalidateChanges()]);
     }, `Discard failed.`);
 
 export function useChanges() {

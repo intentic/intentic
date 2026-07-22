@@ -7,12 +7,13 @@ export { managedContainers, quiesceHost, snapshotNow, streamRepoVolume } from ".
 export { parseInputs, sshSchema, sshTarget } from "./core/inputs.js";
 export type { HostKeyStore, SshExecutor, SshResult, SshSession, SshTarget } from "./core/ssh.js";
 export { connectWithRetry, createSshExecutor, inMemoryHostKeyStore, sshExecutor, verifyHostKey } from "./core/ssh.js";
+export { overSsh } from "./core/over-ssh.js";
 export { readinessDiagnostics } from "./core/ssh-diagnostics.js";
 export { createSshProbe, hostTarget } from "./core/ssh-probe.js";
 export { createGarageProvider } from "./backings/garage.js";
 export { createGarageBucketProvider } from "./backings/garage-bucket.js";
 export { createCiProvider } from "./forgejo/ci.js";
-export { createForgejoProvider } from "./forgejo/forgejo.js";
+export { createForgejoProvider, FORGEJO_HTTP_PORT } from "./forgejo/forgejo.js";
 export { fakeForgejoApi } from "./forgejo/forgejo-api.fake.js";
 export type { ForgejoApi, ForgejoHook, ForgejoRepo } from "./forgejo/forgejo-api.js";
 export { forgejoApi } from "./forgejo/forgejo-api.js";

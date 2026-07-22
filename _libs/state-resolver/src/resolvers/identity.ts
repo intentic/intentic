@@ -1,5 +1,5 @@
-import { generated, makeRef } from "@intentic/graph";
-import type { ForgejoRole, IntentSet, KomodoRole } from "@intentic/need-resolver";
+import { generated } from "@intentic/graph";
+import type { ForgejoRole, HostInput, IntentSet, KomodoRole } from "@intentic/need-resolver";
 import type { ResolvedNode } from "@intentic/resources";
 import {
     adminUsername,
@@ -12,6 +12,7 @@ import {
     repoId,
     userPasswordKey,
 } from "../lib/ids.js";
+import { sshOf } from "../lib/ssh.js";
 import type { PlatformRefs } from "./platform.js";
 
 // The people + teams resolver: a Forgejo git account and a Komodo UI user per declared user, and a Forgejo
@@ -40,9 +41,10 @@ interface RepoGrant {
     readonly name: string;
 }
 
-export const resolveIdentities = (intent: IntentSet, platform: PlatformRefs, hostId: string): ResolvedNode[] => {
-    const forgejoUrl = makeRef<string>(platform.forgejo, "url");
-    const komodoUrl = makeRef<string>(platform.deploy, "url");
+export const resolveIdentities = (intent: IntentSet, platform: PlatformRefs, hostId: string, host: HostInput): ResolvedNode[] => {
+    // The identity nodes drive the Forgejo/Komodo admin APIs over an SSH port-forward to the CP host — the
+    // public routes stay out of the engine's control path.
+    const ssh = sshOf(host);
     const forgejoAdmin = { adminUser: adminUsername, adminPassword: generated("FORGEJO_ADMIN_PASSWORD") };
     const komodoAdmin = { adminUser: adminUsername, adminPassword: generated("KOMODO_ADMIN_PASSWORD") };
 
@@ -111,20 +113,20 @@ export const resolveIdentities = (intent: IntentSet, platform: PlatformRefs, hos
             id: forgejoUserId(hostId, user.id),
             type: "forgejo-user",
             inputs: {
-                forgejoUrl,
+                ...ssh,
                 ...forgejoAdmin,
                 username: user.input.username,
                 email: user.input.email,
                 accountPassword: generated(userPasswordKey(user.id)),
             },
-            explicitDependsOn: [platform.forgejo, platform.gitRoute],
+            explicitDependsOn: [platform.forgejo],
         });
         nodes.push({
             id: komodoUserId(hostId, user.id),
             type: "komodo-user",
-            inputs: { komodoUrl, ...komodoAdmin, username: user.input.username, password: generated(userPasswordKey(user.id)), grants },
+            inputs: { ...ssh, ...komodoAdmin, username: user.input.username, password: generated(userPasswordKey(user.id)), grants },
             // The Komodo account + its per-deployment permissions; depends on each scoped deployment existing.
-            explicitDependsOn: [platform.deploy, platform.deployRoute, ...grants.map((grant) => grant.deployment)],
+            explicitDependsOn: [platform.deploy, ...grants.map((grant) => grant.deployment)],
         });
     }
 
@@ -134,14 +136,14 @@ export const resolveIdentities = (intent: IntentSet, platform: PlatformRefs, hos
         nodes.push({
             id: forgejoOrgId(hostId, team.id),
             type: "forgejo-org",
-            inputs: { forgejoUrl, ...forgejoAdmin, org },
-            explicitDependsOn: [platform.forgejo, platform.gitRoute],
+            inputs: { ...ssh, ...forgejoAdmin, org },
+            explicitDependsOn: [platform.forgejo],
         });
         nodes.push({
             id: forgejoTeamId(hostId, team.id),
             type: "forgejo-team",
             inputs: {
-                forgejoUrl,
+                ...ssh,
                 ...forgejoAdmin,
                 org,
                 name: TEAM_NAME,

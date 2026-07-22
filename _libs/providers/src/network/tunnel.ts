@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import type { Provider, ProviderContext, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -77,6 +78,26 @@ const checkConnector = async (
     }
 };
 
+// A freshly-run connector registers with the edge asynchronously; until it does, every public hostname on
+// the host answers Cloudflare error 1033 — including control-plane urls a later node in the SAME apply may
+// dial. Poll the tunnel's edge-side status so apply returns only once the tunnel actually serves.
+const CONNECT_TIMEOUT_MS = 120_000;
+const CONNECT_INTERVAL_MS = 3_000;
+const waitConnected = async (api: CloudflareApi, parsed: TunnelInputs, tunnelId: string, log: (message: string) => void): Promise<void> => {
+    const deadline = Date.now() + CONNECT_TIMEOUT_MS;
+    for (;;) {
+        const status = await api.getTunnelStatus({ accountId: parsed.accountId, apiToken: parsed.apiToken, tunnelId });
+        if (status === "healthy" || status === "degraded") {
+            return;
+        }
+        if (Date.now() >= deadline) {
+            throw new Error(`cloudflared connector did not register with Cloudflare within ${CONNECT_TIMEOUT_MS}ms (tunnel status "${status}")`);
+        }
+        log(`tunnel "${parsed.name}": waiting for the connector to register with Cloudflare (status "${status}")…`);
+        await sleep(CONNECT_INTERVAL_MS);
+    }
+};
+
 // (Re)start the cloudflared connector on the host. Idempotent: remove any prior container, then run a
 // fresh one — the connector is stateless (its ingress lives in Cloudflare). --network host lets it dial
 // the services' internal urls. Waits out a booting host's tunnel warm-up, then propagates the connection
@@ -142,21 +163,30 @@ export const createTunnelProvider = (api: CloudflareApi = cloudflareApi, executo
         }
         return { action: "noop" };
     },
-    apply: async (inputs, _observed, ctx) => {
+    apply: async (inputs, observed, ctx) => {
         const parsed = parse(inputs);
         const existing = await api.findTunnel({ accountId: parsed.accountId, apiToken: parsed.apiToken, name: parsed.name });
         const tunnel = existing ?? (await api.createTunnel({ accountId: parsed.accountId, apiToken: parsed.apiToken, name: parsed.name }));
-        const token = await api.getTunnelToken({ accountId: parsed.accountId, apiToken: parsed.apiToken, tunnelId: tunnel.id });
-        // Set the ingress in Cloudflare BEFORE (re)starting the connector: a remotely-managed cloudflared
-        // fetches its config on startup, so a connector started before the ingress exists serves only the
-        // catch-all 404. runConnector always recreates the container, so it picks up the ingress just PUT.
+        // Set the ingress in Cloudflare BEFORE any connector (re)start: a remotely-managed cloudflared
+        // fetches its config on startup and receives later edits as live pushes from the edge.
         await api.putTunnelIngress({
             accountId: parsed.accountId,
             apiToken: parsed.apiToken,
             tunnelId: tunnel.id,
             ingress: desiredRules(parsed),
         });
-        await runConnector(executor, parsed, tunnel.id, token, ctx.log);
+        // A running connector on the desired image needs no restart — the ingress PUT above reaches it as a
+        // live config push, with zero downtime. Restarting here would blackhole every public hostname on the
+        // host (Cloudflare 1033) for the re-registration window — including control-plane urls later nodes in
+        // this same apply dial. Restart only when the connector is missing or its image drifted, and then
+        // wait until the edge reports the tunnel serving before letting dependents proceed.
+        const detail = observed?.detail;
+        const connectorCurrent = detail?.["connectorRunning"] === true && detail["image"] === parsed.image;
+        if (!connectorCurrent) {
+            const token = await api.getTunnelToken({ accountId: parsed.accountId, apiToken: parsed.apiToken, tunnelId: tunnel.id });
+            await runConnector(executor, parsed, tunnel.id, token, ctx.log);
+            await waitConnected(api, parsed, tunnel.id, ctx.log);
+        }
         return { tunnelId: tunnel.id, cname: cname(tunnel.id) };
     },
     delete: async (inputs) => {
