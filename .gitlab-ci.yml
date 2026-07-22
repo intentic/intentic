@@ -163,6 +163,11 @@ release:
     - if: '$CI_COMMIT_BRANCH == "main"'
   before_script:
     - !reference [.pnpm-setup, script]
+    # TEMP diagnostics for the OIDC 401: print the id-token claims npm validates (runner_environment must be
+    # gitlab-hosted; project_path/ci_config_ref_uri must match the trusted publisher) and replay the token
+    # exchange with curl to surface npm's real rejection body, which pnpm swallows as "Unknown error".
+    - node -e 'const p=JSON.parse(Buffer.from(process.env.NPM_ID_TOKEN.split(".")[1],"base64url").toString());console.log(JSON.stringify({iss:p.iss,aud:p.aud,sub:p.sub,project_path:p.project_path,ci_config_ref_uri:p.ci_config_ref_uri,runner_environment:p.runner_environment,ref:p.ref,ref_type:p.ref_type,ref_protected:p.ref_protected,environment:p.environment,pipeline_source:p.pipeline_source},null,2))'
+    - 'curl -sS -w "\nexchange HTTP status: %{http_code}\n" -X POST -H "Authorization: Bearer ${NPM_ID_TOKEN}" -H "Content-Type: application/json" "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@intentic%2fconstants" | head -c 2000'
     - install -m 0755 -d /etc/apt/keyrings
     - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
     - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
