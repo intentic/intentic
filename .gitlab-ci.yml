@@ -153,7 +153,9 @@ release:
     DOCKER_TLS_VERIFY: "1"
     DOCKER_CERT_PATH: "/certs/client"
   # npm trusted publishing (OIDC): GitLab must be a registered trusted publisher for each @intentic/* package
-  # on npmjs.org. The aud must be exactly npm:<registry-host>.
+  # on npmjs.org. The aud must be exactly npm:<registry-host>. CAUTION: pnpm's GitLab token exchange regressed
+  # somewhere in 11.10-11.13.1 (ERR_PNPM_AUTH_TOKEN_EXCHANGE 401 -> "Skipped OIDC" -> unauthenticated E404);
+  # 11.9.0 works, which is why the repo pins it. Re-test a release before any future pnpm bump.
   id_tokens:
     NPM_ID_TOKEN:
       aud: npm:registry.npmjs.org
