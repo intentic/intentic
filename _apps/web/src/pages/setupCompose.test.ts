@@ -47,6 +47,24 @@ test("the compose file mirrors connect.sh: slugged names, origin alias, .env gua
     expect(yaml).not.toContain(`agent-auth`);
 });
 
+test("a local-only dev image is marked pull_policy: never so `compose pull` skips it instead of failing", () => {
+    expect(composeFile({ ...base, image: `intentic-sandbox:dev`, platformUrl: `https://localhost:6480` })).toContain(`pull_policy: never`);
+});
+
+test("the production registry image is pull_policy: always so it tracks the moving :stable release", () => {
+    const yaml = composeFile(base);
+    expect(yaml).toContain(`image: registry.gitlab.com/radarsu/intentic/sandbox:stable`);
+    expect(yaml).toContain(`pull_policy: always`);
+    expect(yaml).not.toContain(`pull_policy: never`);
+});
+
+test("daemon-defaulted vars are omitted — the environment block stays minimal", () => {
+    const yaml = composeFile(base);
+    for (const noise of [`WORKSPACE_ROOT`, `HISTORY_ROOT`, `SANDBOX_HOST`, `SANDBOX_PORT`, `PREVIEW_PORT`, `SANDBOX_NAME:`, `SANDBOX_IMAGE`, `SYNC_PAIR_TOKEN`]) {
+        expect(yaml, `${noise} should ride the daemon default`).not.toContain(noise);
+    }
+});
+
 test("the own path feeds the sandbox its Cloudflare token from the .env", () => {
     expect(composeFile({ ...base, mode: `own`, cfToken: `cf-tok` })).toContain(
         `CLOUDFLARE_API_TOKEN: \${CLOUDFLARE_API_TOKEN:?run the .env bootstrap first}`,

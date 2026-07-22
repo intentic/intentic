@@ -1771,7 +1771,7 @@ test("workspace.search round-trips the WorkspaceSearchResult from the resident e
         expect(empty.total).toBe(0);
         expect(await errorCode(client.workspace.search({ query: "x" }))).toBe("BAD_REQUEST");
     } finally {
-        iq.close();
+        await iq.close();
         await rm(root, { recursive: true, force: true });
     }
 });

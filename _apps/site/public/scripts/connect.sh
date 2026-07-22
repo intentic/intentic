@@ -809,6 +809,9 @@ PLATFORM_URL_CONTAINER="$(printf '%s' "$PLATFORM_URL" | sed -e 's#//localhost#//
 # daemon will TOFU-bind (the account that created this sandbox); SANDBOX_PUBLIC_URL tells the daemon its own
 # public address; PLATFORM_URL is where it announces that address + its liveness; CLOUDFLARE_API_TOKEN/HOST_SSH_KEY/
 # SELF_HOST_USER are the infra secrets the in-sandbox `intentic apply` reads (they never touch the platform).
+# The volume mounts target the daemon's DEFAULT roots (/work, /history), and the bind host/port ride its
+# defaults too (0.0.0.0:8787) — only identity, reachability, and secrets are set explicitly here; keep the
+# compose rendering (setupCompose.ts) in lockstep.
 # NOTE: rebuild.sh replays this env set when recreating the sandbox from an approved overlay image — keep its
 # allowlist in lockstep with the -e list here.
 # The infra secrets ride in only when non-empty: a baked-in `CLOUDFLARE_API_TOKEN=""` would shadow the value
@@ -829,10 +832,6 @@ if ! docker run -d --init --privileged --restart unless-stopped --name "$CONTAIN
     -v "${WORKSPACE_VOLUME}:/work" \
     -v "${HISTORY_VOLUME}:/history" \
     -v "${DOCKER_VOLUME}:/var/lib/docker" \
-    -e WORKSPACE_ROOT="/work" \
-    -e HISTORY_ROOT="/history" \
-    -e SANDBOX_HOST="0.0.0.0" \
-    -e SANDBOX_PORT="8787" \
     -e SANDBOX_NAME="$CONTAINER" \
     -e SANDBOX_IMAGE="$SANDBOX_IMAGE" \
     -e PREVIEW_PORT="$PREVIEW_PORT" \

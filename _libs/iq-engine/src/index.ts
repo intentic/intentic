@@ -63,7 +63,9 @@ export interface ResidentEngine {
     markDirty(): void;
     // Boot warmup: first refresh + the full embedding backlog. Queries may run concurrently throughout.
     warm(): Promise<IndexStatus>;
-    close(): void;
+    // Releases the SQLite handle. Async because it must first drain any in-flight refresh: a fire-and-forget
+    // revalidate writes to the db, and closing it mid-write throws ERR_INVALID_STATE ("database is not open").
+    close(): Promise<void>;
 }
 
 const parseEntry: ParseFile = (path, lang, content) => {
@@ -272,8 +274,11 @@ export const createResidentEngine = (options: EngineOptions): ResidentEngine => 
             }
             return status(db, generation);
         },
-        close() {
+        async close() {
             clearTimeout(timer);
+            // A refresh started by run()/markDirty is fire-and-forget and may still be revalidating into the db.
+            // Closing the handle out from under that write throws "database is not open" — drain it first.
+            await refreshing;
             db.close();
         },
     };

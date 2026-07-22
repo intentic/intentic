@@ -86,7 +86,7 @@ fi
 # to exactly the vars connect.sh sets (keep this list in lockstep with connect.sh's docker run) so an overlay's
 # own ENV (e.g. PATH) isn't clobbered by image-baked values. SANDBOX_IMAGE is overridden with the new tag below.
 set --
-for var in WORKSPACE_ROOT HISTORY_ROOT AGENT_AUTH_DIR SANDBOX_HOST SANDBOX_PORT SANDBOX_NAME PREVIEW_PORT \
+for var in AGENT_AUTH_DIR SANDBOX_NAME PREVIEW_PORT \
     GOOGLE_CLIENT_ID CONNECT_TOKEN OWNER_EMAIL WEB_ORIGIN SANDBOX_PUBLIC_URL PLATFORM_URL CLOUDFLARE_API_TOKEN \
     HOST_SSH_KEY SELF_HOST_USER SYNC_PAIR_TOKEN SELF_HOST_ADDRESS SELF_HOST_VIA; do
     # Empty values are dropped, not replayed (lockstep with connect.sh): an empty secret var would shadow the

@@ -14,7 +14,7 @@ beforeAll(async () => {
     engine = createResidentEngine({ root });
 });
 afterAll(async () => {
-    engine.close();
+    await engine.close();
     await cleanup();
 });
 

@@ -32,6 +32,15 @@ const ORIGIN_HOST = `intentic-sandbox-workspace`;
 const slugOf = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
 const isLocal = (url: string): boolean => url.includes(`//localhost`) || url.includes(`//127.0.0.1`);
 
+// True when the image reference carries an explicit registry host (the part before the first `/` looks like a
+// hostname). Mirrors connect.sh's image_has_registry: a bare `intentic-sandbox:dev` has none, so it can only
+// resolve to Docker Hub — where it does not exist. Drives pull_policy so an orchestrator's `docker compose
+// pull` stage (Komodo Stacks run one before `up`) SKIPS a local-only image instead of failing on it.
+const imageHasRegistry = (image: string): boolean => {
+    const firstSegment = image.split(`/`)[0];
+    return image.includes(`/`) && firstSegment !== undefined && /[.:]/.test(firstSegment);
+};
+
 // The one-time bootstrap, run in the folder holding the compose file. The claim consumes the setup code and
 // writes the per-sandbox values as .env lines; the own path then appends the CF token (compose feeds it to
 // the sandbox) and mints the tunnel — `--env-file .env` hands the CLI the just-claimed CONNECT_TOKEN + ZONE.
@@ -63,6 +72,10 @@ export const composeFile = (args: ComposeArgs): string => {
         `services:`,
         `    intentic-sandbox:`,
         `        image: ${args.image}`,
+        // A registry-less local tag (intentic-sandbox:dev, built by connect.sh from the checkout) must NEVER
+        // be pulled — a `compose pull` would get "denied" from Docker Hub. The moving `:stable` release IS
+        // pulled every time so the sandbox tracks the newest release (matching connect.sh's always-pull).
+        `        pull_policy: ${imageHasRegistry(args.image) ? `always` : `never`}`,
         `        container_name: intentic-sandbox-${slug}`,
         `        init: true`,
         // What the sandbox's own isolated dockerd needs; the host's Docker socket is never mounted.
@@ -83,20 +96,14 @@ export const composeFile = (args: ComposeArgs): string => {
         `            - history:/history`,
         `            - docker-engine:/var/lib/docker`,
         ...(dev ? [`            - agent-auth:/agent-auth`] : []),
+        // Ports, roots, and the bind host all ride the daemon's own defaults (see env.config.ts) — only
+        // identity, reachability, and secrets appear here.
         `        environment:`,
-        `            WORKSPACE_ROOT: /work`,
-        `            HISTORY_ROOT: /history`,
-        `            SANDBOX_HOST: 0.0.0.0`,
-        `            SANDBOX_PORT: "8787"`,
-        `            SANDBOX_NAME: intentic-sandbox-${slug}`,
-        `            SANDBOX_IMAGE: ${args.image}`,
-        `            PREVIEW_PORT: "5173"`,
-        `            GOOGLE_CLIENT_ID: ${args.googleClientId}`,
         `            CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`,
         `            OWNER_EMAIL: \${OWNER_EMAIL:-}`,
         `            SANDBOX_PUBLIC_URL: https://${args.hostname}`,
         `            PLATFORM_URL: ${platform}`,
-        `            SYNC_PAIR_TOKEN: \${SYNC_PAIR_TOKEN:-}`,
+        `            GOOGLE_CLIENT_ID: ${args.googleClientId}`,
         // Only the own path carries a Cloudflare token; an empty baked-in var would shadow the workspace
         // .env the user may write later (a container's env can't change after creation) — so omit otherwise.
         ...(args.mode === `own` ? [`            CLOUDFLARE_API_TOKEN: \${CLOUDFLARE_API_TOKEN:?run the .env bootstrap first}`] : []),
