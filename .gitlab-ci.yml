@@ -144,11 +144,11 @@ release:
   stage: release
   needs: ["release:verify"]
   resource_group: release
-  # npm trusted publishing supports GitLab.com-HOSTED runners only (the id token carries
-  # runner_environment, and npm rejects self-hosted intermittently-to-always). Every release before the
-  # self-hosted runner existed succeeded on shared runners; the 401 flapping started with it. Requires
-  # "Instance runners" to stay enabled for the project.
-  tags: [saas-linux-small-amd64]
+  # npm's trusted-publishing token exchange officially supports GitLab.com-hosted runners only; from this
+  # project's self-hosted runner it 401s intermittently ("OIDC token exchange error - unauthorized").
+  # Mitigation: publish-npm.sh retries the exchange in-job, and npm publish runs in semantic-release's
+  # prepareCmd — BEFORE the version tag is created — so a failed exchange leaves no ghost tag and the job's
+  # Retry button re-runs the release with a freshly minted id token.
   services:
     - docker:27-dind
   variables:

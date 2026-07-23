@@ -30,7 +30,7 @@ exchange_token() {
       return 0
     fi
     echo "  token exchange for $1 attempt $attempt failed (HTTP $code): $body" >&2
-    sleep 10
+    sleep 20
   done
   return 1
 }
