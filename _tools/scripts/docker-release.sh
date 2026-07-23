@@ -39,10 +39,14 @@ if [ -n "${TURBO_HASH:-}" ]; then
     fi
 fi
 
+# The context is the prepared tree: the pruned ./deploy when --prune (the whole tree enters the image, so no
+# .dockerignore exists to drift), the app dir otherwise (its .dockerignore keeps only the served artifacts).
+CONTEXT="."
 if [ "${1:-}" = "--prune" ]; then
     rm -rf ./deploy
     name="$(node -p "require('./package.json').name")"
     pnpm --filter="$name" deploy --prod ./deploy
+    CONTEXT="./deploy"
 fi
 
 tag_args=()
@@ -50,8 +54,8 @@ for tag in $TAGS ${TURBO_HASH:+turbo-$TURBO_HASH}; do
     tag_args+=(-t "$IMAGE:$tag")
 done
 # --provenance=false keeps a plain manifest (not an attestation-bearing OCI index) so the hash-tag alias
-# above stays a straight retag. The app dir is the context; its Dockerfile.dockerignore trims it.
-docker build --provenance=false "${tag_args[@]}" .
+# above stays a straight retag. -f is explicit because a pruned context carries its own copy of the Dockerfile.
+docker build --provenance=false -f Dockerfile "${tag_args[@]}" "$CONTEXT"
 
 for tag in $TAGS ${TURBO_HASH:+turbo-$TURBO_HASH}; do
     docker push "$IMAGE:$tag"
