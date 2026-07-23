@@ -10,7 +10,10 @@ ENV PATH=$PNPM_HOME:$PATH
 # The image build itself must not phone home: turbo reports usage to Vercel unless opted out, and
 # Scarf-instrumented packages ping from their postinstall during pnpm install.
 ENV DO_NOT_TRACK=1 TURBO_TELEMETRY_DISABLED=1 SCARF_ANALYTICS=false
-RUN corepack enable
+# Download+activate pnpm in this cache-stable layer (before COPY), like the runtime stage does, so `pnpm` at
+# build time never re-fetches it from npm on a source change — that lazy fetch is what a transient npm 504
+# killed the build on. Keep the version in sync with package.json's packageManager and the runtime stage.
+RUN corepack enable && corepack prepare pnpm@11.13.1 --activate
 # Fetch the cloudflared binary (copied into the runtime image below) so the in-sandbox `intentic apply` can
 # run `cloudflared access tcp` to reach a NAT'd self-host's SSH over its Cloudflare tunnel (via:"cloudflared").
 # Pinned to the same version connect.sh runs as the tunnel sidecar.
