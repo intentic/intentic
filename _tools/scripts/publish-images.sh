@@ -18,27 +18,50 @@ REGISTRY="registry.gitlab.com/radarsu/intentic"
 # `pnpm install --frozen-lockfile` resolves the root lockfile; `pnpm deploy` prunes the final image to core.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 
-# A docker-container buildx builder is required to export a full (mode=max) registry layer cache — the default
-# docker driver can only do inline (final-stage) cache, which misses this multi-stage build's heavy build stage
-# (pnpm install + turbo build + model fetch). The cache lives in the registry, so it survives the ephemeral
-# dind daemon and is shared across the images + release jobs and across pipelines — turning the cold rebuild
-# (and the second, redundant build in the release job) into near-instant cache hits. No-op when already set up.
-if command -v docker >/dev/null && ! docker buildx inspect intentic-cache >/dev/null 2>&1; then
-    docker buildx create --name intentic-cache --driver docker-container --bootstrap --use
-fi
+# Layer caching. A docker-container buildx builder lets us export a full (mode=max) registry cache — the
+# default docker driver only does inline (final-stage) cache, which misses this multi-stage build's heavy
+# build stage (pnpm install + turbo build + model fetch). The cache lives in the registry, so it survives the
+# ephemeral dind daemon and is shared across the images + release jobs and across pipelines. If the container
+# builder can't be set up we fall back to the default builder + inline cache so a build NEVER fails over this.
+REGISTRY_CACHE=0
+setup_builder() {
+    command -v docker >/dev/null || return 0
+    if docker buildx inspect intentic-cache >/dev/null 2>&1; then
+        docker buildx use intentic-cache && REGISTRY_CACHE=1
+        return 0
+    fi
+    # dind serves docker over TLS; the docker-container driver can't read those certs from env vars, only from
+    # a named context (that's the "could not create a builder instance with TLS data" error). Build one.
+    local ctx=default
+    if [ -n "${DOCKER_CERT_PATH:-}" ] && [ -n "${DOCKER_HOST:-}" ]; then
+        docker context create intentic-dind \
+            --docker "host=${DOCKER_HOST},ca=${DOCKER_CERT_PATH}/ca.pem,cert=${DOCKER_CERT_PATH}/cert.pem,key=${DOCKER_CERT_PATH}/key.pem" >/dev/null 2>&1 || true
+        docker context inspect intentic-dind >/dev/null 2>&1 && ctx=intentic-dind
+    fi
+    if docker buildx create --name intentic-cache --driver docker-container --bootstrap --use "$ctx" >/dev/null 2>&1; then
+        REGISTRY_CACHE=1
+    else
+        echo "  note: docker-container builder unavailable; using default builder + inline cache" >&2
+    fi
+}
+setup_builder
 
 # Build + push one image under every requested tag. The Dockerfile + build context differ per image: the
 # sandbox builds from the monorepo root; the dind-host from its self-contained _tools/dind-host package.
+# A missing cache ref (first ever build) is a non-fatal warning, so this is safe on a cold registry.
 publish() {
     local image="$1" dockerfile="$2" context="$3"
-    local tag_args=()
+    local tag_args=() cache_args=()
     for tag in $TAGS; do
         tag_args+=(-t "$REGISTRY/$image:$tag")
     done
-    docker buildx build -f "$dockerfile" "${tag_args[@]}" \
-        --cache-from "type=registry,ref=$REGISTRY/$image:buildcache" \
-        --cache-to "type=registry,ref=$REGISTRY/$image:buildcache,mode=max,image-manifest=true" \
-        --push "$context"
+    if [ "$REGISTRY_CACHE" = 1 ]; then
+        cache_args=(--cache-from "type=registry,ref=$REGISTRY/$image:buildcache"
+                    --cache-to "type=registry,ref=$REGISTRY/$image:buildcache,mode=max,image-manifest=true")
+    else
+        cache_args=(--cache-from "$REGISTRY/$image:latest" --cache-to "type=inline")
+    fi
+    docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" --push "$context"
 }
 
 publish sandbox "$root/_apps/sandbox/Dockerfile" "$root"
