@@ -97,6 +97,10 @@ const configSchema = z.object({
         .object({
             url: z.string().url().default(`http://localhost:6480`),
             port: z.coerce.number().int().positive().default(6480),
+            // Bind address. Loopback in dev — localhost is the origin the dev cert, CORS, and Better Auth all
+            // trust — so a container must set API_HOST=0.0.0.0 for the reverse proxy / tunnel (a separate
+            // container or host) to reach it. TLS is still terminated by that proxy in prod.
+            host: z.string().default(`127.0.0.1`),
             // Dev TLS: paths to a cert/key (the @intentic-app/localhost-https package) so the API serves https,
             // matching the https SPA — Google's FedCM One Tap needs https and won't run on http://localhost.
             // Empty in prod, where TLS is terminated by the proxy in front of the API.

@@ -1,0 +1,6 @@
+# The api image context is this app dir, but only two things enter the image: the job-side-pruned ./deploy
+# tree and the entrypoint (see Dockerfile). Everything else — src (already inside deploy), node_modules
+# (workspace symlinks), tests — never reaches the daemon.
+*
+!deploy
+!docker-entrypoint.sh

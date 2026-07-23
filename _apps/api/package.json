@@ -9,7 +9,7 @@
         "start": "bun ./src/main.ts",
         "typecheck": "tsgo --noEmit",
         "build": "tsgo --noEmit",
-        "bundle": "rm -rf ./deploy && pnpm deploy --filter=@intentic-app/api --prod ./deploy",
+        "docker:release": "bash ../../_tools/scripts/docker-release.sh api --prune",
         "test": "vitest run"
     },
     "dependencies": {
@@ -37,6 +37,7 @@
         "pg": "catalog:",
         "pino": "catalog:",
         "pino-pretty": "catalog:",
+        "prisma": "catalog:",
         "stripe": "catalog:",
         "tslib": "catalog:",
         "zod": "catalog:"

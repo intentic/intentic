@@ -42,7 +42,7 @@ const tls =
 
 const server = Bun.serve({
     port: config.api.port,
-    hostname: `127.0.0.1`,
+    hostname: config.api.host,
     fetch: app.fetch,
     ...(tls && { tls }),
 });

@@ -17,7 +17,7 @@ const config = {
     email: { apiKey: ``, from: `` },
     permanentPremiumEmails: [],
     intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapAfterDays: 7, reapDryRun: false, poolSize: 0 },
-    api: { url: `http://localhost:6480`, port: 6480, httpsKey: ``, httpsCert: `` },
+    api: { url: `http://localhost:6480`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
     log: { level: `silent`, pretty: false },
 } as Config;
 

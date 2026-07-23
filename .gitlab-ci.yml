@@ -191,6 +191,59 @@ images:
     - bash _tools/scripts/prepare-image-trees.sh
     - TAGS="latest sha-${CI_COMMIT_SHORT_SHA}" bash _tools/scripts/publish-images.sh
 
+# Platform image publishing: build + push web + api to the GitLab Container Registry on every push to main
+# that touches the platform (moving `latest` + the commit SHA). Separate from `images` (the OSS core: trees
+# payload, semantic-release tags) but the SAME philosophy: apps build job-side under turbo (warm pnpm/turbo
+# caches from release:verify — hence policy: pull), and the Dockerfiles are pure COPY. docker:release's
+# TURBO_HASH tag makes the release content-addressed: when a push didn't change an app's inputs (the changes:
+# globs are deliberately coarse — most _libs edits are engine-side), the existing image is re-tagged
+# registry-side and nothing builds. The optional deploy hook (deploy-platform.sh) then rolls the Komodo stack;
+# it self-skips until its CI vars are configured.
+images:platform:
+  stage: images
+  services:
+    - docker:27-dind
+  interruptible: true
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "/certs/client"
+  cache:
+    - key:
+        files:
+          - pnpm-lock.yaml
+        prefix: pnpm-store
+      paths:
+        - .pnpm-store/
+      policy: pull
+    - key: turbo-$CI_COMMIT_REF_SLUG
+      fallback_keys:
+        - turbo-main
+      paths:
+        - .turbo
+        - "_*/*/.turbo"
+      policy: pull
+  before_script:
+    - !reference [.pnpm-setup, script]
+    - install -m 0755 -d /etc/apt/keyrings
+    - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
+    - apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - _apps/api/**/*
+        - _apps/web/**/*
+        - _libs/**/*
+        - _tools/scripts/docker-release.sh
+        - turbo.json
+        - pnpm-lock.yaml
+  script:
+    - pnpm turbo run docker:release --filter=@intentic-app/api --filter=@intentic-app/web
+    - bash _tools/scripts/deploy-platform.sh
+
 # Release: build + test, then semantic-release (npm publish via OIDC, GitLab Release with the cross-compiled
 # intentic-sync binaries, and the sandbox/dind-host image at the release version + moving `stable` tag).
 release:verify:
