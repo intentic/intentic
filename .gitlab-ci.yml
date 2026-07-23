@@ -173,6 +173,27 @@ release:
   stage: release
   needs: ["release:verify"]
   resource_group: release
+  # The publish is heavy (cold image builds + registry cache export). Give it room beyond the 1h default so a
+  # cold first-build can't fail the job AFTER the release already succeeded. NOTE: if the job still stops at
+  # exactly 1h, that's the runner's maximum_timeout — raise it in the runner config, this can't override it.
+  timeout: 2h
+  # Restore-only caches here: release:verify already populated them, and re-archiving the ~60k-file pnpm store
+  # at the end is what pushed this job past its time limit (after the release itself had fully succeeded).
+  cache:
+    - key:
+        files:
+          - pnpm-lock.yaml
+        prefix: pnpm-store
+      paths:
+        - .pnpm-store/
+      policy: pull
+    - key: turbo-$CI_COMMIT_REF_SLUG
+      fallback_keys:
+        - turbo-main
+      paths:
+        - .turbo
+        - "_*/*/.turbo"
+      policy: pull
   services:
     - docker:27-dind
   variables:
