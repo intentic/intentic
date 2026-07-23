@@ -11,7 +11,7 @@
         "directory": "_apps/sandbox"
     },
     "scripts": {
-        "build": "tsc",
+        "build": "tsgo",
         "watch": "tsc --build --watch",
         "dev": "tsx watch ./src/main.ts",
         "test": "vitest run",
@@ -68,6 +68,7 @@
         "ssh2": "catalog:",
         "testcontainers": "catalog:",
         "tsx": "catalog:",
+        "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:"
     }

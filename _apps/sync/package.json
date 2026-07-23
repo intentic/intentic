@@ -20,7 +20,7 @@
         "intentic-sync": "./dist/cli.js"
     },
     "scripts": {
-        "build": "tsc",
+        "build": "tsgo",
         "watch": "tsc --build --watch",
         "test": "vitest run",
         "test:watch": "vitest"
@@ -33,6 +33,7 @@
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:"
     }

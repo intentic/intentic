@@ -19,7 +19,7 @@
         }
     },
     "scripts": {
-        "build": "rm -rf ./generated ./dist ./.cache && DATABASE_URL=postgresql://placeholder prisma generate --no-hints && tsc",
+        "build": "rm -rf ./generated ./dist ./.cache && DATABASE_URL=postgresql://placeholder prisma generate --no-hints && tsgo",
         "generate": "DATABASE_URL=postgresql://placeholder prisma generate --no-hints",
         "migrate:dev": "prisma migrate dev",
         "migrate:deploy": "prisma migrate deploy",
@@ -40,6 +40,8 @@
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "prisma": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
         "typescript": "catalog:"
     }
 }

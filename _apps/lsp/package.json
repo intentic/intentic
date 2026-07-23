@@ -16,13 +16,14 @@
         "lsp": "./dist/cli.js"
     },
     "scripts": {
-        "build": "tsc",
+        "build": "tsgo",
         "watch": "tsc --build --watch",
         "test": "vitest run",
         "test:watch": "vitest"
     },
     "dependencies": {
         "tslib": "catalog:",
+        "@typescript/native-preview": "catalog:",
         "typescript": "catalog:"
     },
     "devDependencies": {

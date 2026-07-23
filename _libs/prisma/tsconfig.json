@@ -1,6 +1,6 @@
 {
     "compilerOptions": {
-        "baseUrl": "./",
+        "types": ["node"],
         "outDir": "./dist",
         "rootDir": "./",
         "tsBuildInfoFile": "./.cache/tsbuildinfo",
