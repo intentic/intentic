@@ -7,8 +7,8 @@
         [
             "@semantic-release/exec",
             {
-                "prepareCmd": "bash _tools/scripts/set-versions.sh ${nextRelease.version} && pnpm turbo run build && bash _apps/sync/scripts/build-binaries.sh && bash _tools/scripts/publish-npm.sh ${nextRelease.version}",
-                "publishCmd": "TAGS=\"${nextRelease.version} stable\" bash _tools/scripts/publish-images.sh",
+                "prepareCmd": "bash _tools/scripts/release-prepare.sh ${nextRelease.version}",
+                "publishCmd": "bash _tools/scripts/prepare-image-trees.sh && TAGS=\"${nextRelease.version} stable\" bash _tools/scripts/publish-images.sh",
                 "successCmd": "git tag -f stable && git push -f origin stable"
             }
         ],

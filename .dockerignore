@@ -1,7 +1,8 @@
-# Build context for the sandbox image is the MONOREPO ROOT (docker build -f _apps/sandbox/Dockerfile .).
-# Keep every workspace member's source — `pnpm install --frozen-lockfile` inside the image validates the whole
-# workspace against the root lockfile, and `pnpm --filter @intentic/{sandbox,cli,iq} deploy` prunes the final
-# image to the core packages. Exclude only artifacts, vcs, secrets, and things the core image never needs.
+# Build context for the sandbox image is the MONOREPO ROOT (for the source-copied bits: iq plugin, skills,
+# bin scripts, entrypoint, connectors). The compiled payload does NOT ride this context — prepare-image-trees.sh
+# assembles it in .image-out/, which enters the build as the separate named context `trees` (its node_modules
+# and dist are needed there; the excludes below don't apply to a named context).
+.image-out
 **/node_modules
 **/.git
 **/.turbo

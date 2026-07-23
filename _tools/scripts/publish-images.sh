@@ -47,10 +47,12 @@ setup_builder() {
 setup_builder
 
 # Build + push one image under every requested tag. The Dockerfile + build context differ per image: the
-# sandbox builds from the monorepo root; the dind-host from its self-contained _tools/dind-host package.
+# sandbox builds from the monorepo root plus the pre-built `trees` context; the dind-host from its
+# self-contained _tools/dind-host package. Extra args after the context pass through to buildx.
 # A missing cache ref (first ever build) is a non-fatal warning, so this is safe on a cold registry.
 publish() {
     local image="$1" dockerfile="$2" context="$3"
+    shift 3
     local tag_args=() cache_args=()
     for tag in $TAGS; do
         tag_args+=(-t "$REGISTRY/$image:$tag")
@@ -61,8 +63,10 @@ publish() {
     else
         cache_args=(--cache-from "$REGISTRY/$image:latest" --cache-to "type=inline")
     fi
-    docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" --push "$context"
+    docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" "$@" --push "$context"
 }
 
-publish sandbox "$root/_apps/sandbox/Dockerfile" "$root"
+# The sandbox image COPYs its compiled payload from .image-out — prepare-image-trees.sh must have run first.
+[ -d "$root/.image-out/sandbox" ] || { echo "missing $root/.image-out — run _tools/scripts/prepare-image-trees.sh first" >&2; exit 1; }
+publish sandbox "$root/_apps/sandbox/Dockerfile" "$root" --build-context "trees=$root/.image-out"
 publish dind-host "$root/_tools/dind-host/Dockerfile" "$root/_tools/dind-host"

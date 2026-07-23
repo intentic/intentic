@@ -1,53 +1,14 @@
-# The per-project AI-agent sandbox image (published as registry.gitlab.com/radarsu/intentic/sandbox). Build from the REPO
-# ROOT so the monorepo workspace resolves:
-#   docker build -f _apps/sandbox/Dockerfile -t registry.gitlab.com/radarsu/intentic/sandbox .
+# The per-project AI-agent sandbox image (published as registry.gitlab.com/radarsu/intentic/sandbox). The
+# monorepo is compiled OUTSIDE Docker: _tools/scripts/prepare-image-trees.sh builds the six baked packages
+# (turbo, warm cache) and prunes their production trees + the iq models into .image-out/, which enters this
+# build as the named context `trees`. Every layer here is a pinned tool install (registry-cache-stable) or a
+# cheap tree COPY, so a source change rebuilds in seconds — no pnpm install / turbo run inside a cacheless
+# container. Build from the REPO ROOT (the main context still carries the source-copied bits — iq plugin,
+# skills, bin scripts, entrypoint, connectors):
+#   bash _tools/scripts/prepare-image-trees.sh
+#   docker build --build-context trees=.image-out -f _apps/sandbox/Dockerfile -t registry.gitlab.com/radarsu/intentic/sandbox .
 # At run time connect.sh / the workspace provider inject agent credentials (ANTHROPIC_API_KEY or
 # CLAUDE_CODE_OAUTH_TOKEN) and mount the workspace volume at /work — neither is baked into the image.
-
-FROM node:24.18.0-bookworm@sha256:fdddfb3e688158251943d52eba361de991548f6814007acba4917ae6b512d6be AS build
-ENV PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-# The image build itself must not phone home: turbo reports usage to Vercel unless opted out, and
-# Scarf-instrumented packages ping from their postinstall during pnpm install.
-ENV DO_NOT_TRACK=1 TURBO_TELEMETRY_DISABLED=1 SCARF_ANALYTICS=false
-# Download+activate pnpm in this cache-stable layer (before COPY), like the runtime stage does, so `pnpm` at
-# build time never re-fetches it from npm on a source change — that lazy fetch is what a transient npm 504
-# killed the build on. Keep the version in sync with package.json's packageManager and the runtime stage.
-RUN corepack enable && corepack prepare pnpm@11.13.1 --activate
-# Fetch the cloudflared binary (copied into the runtime image below) so the in-sandbox `intentic apply` can
-# run `cloudflared access tcp` to reach a NAT'd self-host's SSH over its Cloudflare tunnel (via:"cloudflared").
-# Pinned to the same version connect.sh runs as the tunnel sidecar.
-ARG CLOUDFLARED_VERSION=2026.7.2
-RUN arch="$(dpkg --print-architecture)" \
-    && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
-    && chmod +x /usr/local/bin/cloudflared \
-    && /usr/local/bin/cloudflared --version
-WORKDIR /repo
-COPY . .
-# Restore the exec bit corepack strips off its bundled node-gyp gyp_main.py before installing — node-pty
-# (no linux prebuild) compiles from source and make invokes gyp_main.py directly, else Error 126.
-RUN pnpm --version \
-    && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} + \
-    && pnpm install --frozen-lockfile
-# turbo builds each package after its workspace deps (^build), so the CLI's libs are built before it.
-# Scope to the core deploy targets (+ their deps via ^build) so the image build never pulls the platform/site
-# toolchains — the monorepo now holds them too, but the sandbox image needs only @intentic/*.
-# ext-discord/ext-imap build here too: .dockerignore excludes **/dist, so their gateway bundles must be built in-image.
-RUN pnpm turbo run build --filter=@intentic/sandbox --filter=@intentic/cli --filter=@intentic/iq --filter=@intentic/lsp --filter=@intentic/ext-discord --filter=@intentic/ext-imap
-# Prune each package to a standalone, production-only tree (workspace deps bundled into node_modules).
-RUN pnpm --filter @intentic/sandbox deploy --prod /out/sandbox
-RUN pnpm --filter @intentic/cli deploy --prod /out/cli
-RUN pnpm --filter @intentic/iq deploy --prod /out/iq
-RUN pnpm --filter @intentic/lsp deploy --prod /out/lsp
-# ext-discord runs a real gateway process (node dist/gateway.js) — deploy it standalone so discord.js and the
-# compiled @discordjs/opus land in its own node_modules, ready to bake below.
-RUN pnpm --filter @intentic/ext-discord deploy --prod /out/extensions/discord
-# ext-imap likewise: its gateway ships imapflow + mailparser in its own node_modules.
-RUN pnpm --filter @intentic/ext-imap deploy --prod /out/extensions/imap
-# Bake the iq models so `iq ask` works fully offline from first boot: bge-small embedder (~34MB) + ms-marco
-# cross-encoder reranker (~23MB), both int8. The script downloads over HF's Xet protocol (@huggingface/hub) —
-# the CAS bridge 403s anonymous plain-HTTP fetches — then validates the layout offline with Transformers.js.
-RUN node _libs/iq-engine/scripts/fetch-model.mjs /opt/iq-models
 
 FROM node:24.18.0-bookworm-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc AS runtime
 # Links the GitLab Container Registry package to the repo (inherits its visibility/permissions, shows under its Packages).
@@ -173,47 +134,71 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
     && install -m 0755 "$(find /tmp/cliproxy -type f -name cli-proxy-api | head -n1)" /usr/local/bin/cli-proxy-api \
     && test -x /usr/local/bin/cli-proxy-api \
     && rm -rf /tmp/cliproxy /var/lib/apt/lists/*
+# cloudflared on PATH — `intentic apply` shells out to `cloudflared access tcp` to reach a self-host's SSH
+# through its Cloudflare tunnel when the host is registered with via:"cloudflared" (a NAT'd local machine).
+# Pinned to the same version connect.sh runs as the tunnel sidecar. Placed HERE, before the tree COPYs below,
+# so the layer stays cache-stable across source changes.
+ARG CLOUDFLARED_VERSION=2026.7.2
+RUN arch="$(dpkg --print-architecture)" \
+    && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
+    && chmod +x /usr/local/bin/cloudflared \
+    && /usr/local/bin/cloudflared --version
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
 # connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
 # runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as
 # "executable file not found in $PATH".
-COPY --from=build /out/cli /opt/intentic-cli
+COPY --from=trees cli /opt/intentic-cli
 RUN chmod +x /opt/intentic-cli/dist/cli.js \
     && ln -s /opt/intentic-cli/dist/cli.js /usr/local/bin/intentic
 # The iq search CLI on PATH — the agent's primary code-search tool (every backend's Bash tool inherits PATH)
 # and the daemon's /workspace/search backend (execFile `iq --json`). Same chmod rationale as intentic above.
-COPY --from=build /out/iq /opt/iq
+COPY --from=trees iq /opt/iq
 RUN chmod +x /opt/iq/dist/cli.js \
     && ln -s /opt/iq/dist/cli.js /usr/local/bin/iq
 # The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
 # daemon writes/removes its skill at /work/.claude/skills/lsp). Standalone: it drives the TS language service
 # (its own bundled typescript) over whatever tsconfig project the agent points it at in /work. Same chmod +
 # symlink rationale as iq/intentic — tsc keeps the file's shebang, so the linked cli.js runs directly.
-COPY --from=build /out/lsp /opt/lsp
+COPY --from=trees lsp /opt/lsp
 RUN chmod +x /opt/lsp/dist/cli.js \
     && ln -s /opt/lsp/dist/cli.js /usr/local/bin/lsp
 # The baked embedding model behind `iq ask` (IQ_MODEL_DIR below); absent → iq degrades to lexical, never fetches.
-COPY --from=build /opt/iq-models /opt/iq-models
+COPY --from=trees iq-models /opt/iq-models
 # The iq Claude Code plugin (skill + SessionStart nudge) — the single source that teaches every agent to prefer
 # iq over grep/find/Glob. Baked here and always loaded via IQ_PLUGIN_DIR (agent.routes.ts prepends it to the SDK
 # `plugins` option), so iq is the default in the sandbox exactly as external users get it from the marketplace.
 # Copied from the build context (not /out/iq — the npm package ships only dist/, the plugin lives beside it).
 COPY _apps/iq/plugin /opt/iq-plugin
-# cloudflared on PATH — `intentic apply` shells out to `cloudflared access tcp` to reach a self-host's SSH
-# through its Cloudflare tunnel when the host is registered with via:"cloudflared" (a NAT'd local machine).
-COPY --from=build /usr/local/bin/cloudflared /usr/local/bin/cloudflared
 # The sandbox daemon.
-COPY --from=build /out/sandbox /opt/sandbox
+COPY --from=trees sandbox /opt/sandbox
+# Native modules without portable prebuilds (node-pty always; @discordjs/opus has none for this Node major)
+# get source-compiled by whatever host ran pnpm deploy — linked against THAT host's glibc. Rebuild them against
+# this image's glibc with the baked toolchain (python3/make/g++ above; the node image ships its own headers, so
+# node-gyp compiles offline). Without this, a tree deployed on a newer-glibc dev box ships binaries this
+# runtime can't load. Driven directly, not via `npm rebuild`: node-pty's npm install script wants tsc (its lib/
+# is already compiled in the tarball — only the .node needs building), and opus's loader requires the exact
+# glibc-tagged prebuild dir its node-pre-gyp install lays down after the stale tags are removed.
+# The registry-prebuilt natives (sharp, ast-grep, onnxruntime, davey) are manylinux — safe as copied.
+RUN npm install -g node-gyp \
+    && cd /opt/sandbox/node_modules/.pnpm/node-pty@*/node_modules/node-pty \
+    && node-gyp rebuild \
+    && cd /opt/sandbox/node_modules/.pnpm/@discordjs+opus@*/node_modules/@discordjs/opus \
+    && rm -rf prebuild build-tmp-napi-v3 \
+    && npm run install
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors is data-only (manifest + connector skills + client image fragments) so it copies straight
-# from context; discord and imap ship their deployed gateway trees from the build stage (node_modules included).
+# from context; discord and imap ship their deployed gateway trees from the trees context (node_modules included).
 # The web-builtin UI extensions (automations, logs, …) are NOT baked — they compile into the web bundle and
 # contribute nothing daemon-side; rtk stays a git-install (its environment fragment only composes for
 # extension-kind capability entries, so baking it would be inert).
 COPY _extensions/connectors /opt/extensions/connectors
-COPY --from=build /out/extensions/discord /opt/extensions/discord
-COPY --from=build /out/extensions/imap /opt/extensions/imap
+COPY --from=trees extensions/discord /opt/extensions/discord
+# Same glibc rationale as the sandbox rebuild above — the discord gateway's voice stack compiles opus from source.
+RUN cd /opt/extensions/discord/node_modules/.pnpm/@discordjs+opus@*/node_modules/@discordjs/opus \
+    && rm -rf prebuild build-tmp-napi-v3 \
+    && npm run install
+COPY --from=trees extensions/imap /opt/extensions/imap
 # pane-log-clean on PATH — the tmux pipe-pane hooks (above / logs/log-files.ts) replay each pane's byte
 # stream through it (a headless VT emulator using @xterm/headless from the daemon's node_modules) to keep
 # the terminal logs readable. Symlinked like intentic/iq: node resolves @xterm/headless from the target's

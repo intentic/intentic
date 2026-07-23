@@ -9,6 +9,10 @@ stages:
 
 variables:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  # CI builds the site but never deploys it, so IndexNow submission is pure waste here — it polls the LIVE
+  # site for the key file (90s timeout) and then retries a 403 five times, ~2 min per build. Submit from
+  # wherever the site actually deploys.
+  INDEXNOW_ENABLED: "0"
 
 # pnpm store + turbo cache, reused by every pnpm-based job. The store MUST live inside $CI_PROJECT_DIR
 # (GitLab only caches paths under the project) and is selected with `pnpm install --store-dir` — pnpm ignores
@@ -132,10 +136,8 @@ e2e:nightly:
 # to main that touches the core (moving `latest` + the commit SHA). The version-tagged image is the release job.
 images:
   stage: images
-  image: docker:27
-  # No pnpm here — the build happens inside the Dockerfile. Opt out of the default pnpm-store/turbo cache
-  # so this job doesn't pull ~2GB of store it never uses; image layers are cached in the registry instead.
-  cache: []
+  # node image (not docker:27): prepare-image-trees.sh compiles the payload JOB-side — with the warm pnpm
+  # store + turbo cache from release:verify it's a cache replay, and the Dockerfile is left with pure COPYs.
   services:
     - docker:27-dind
   interruptible: true
@@ -144,8 +146,36 @@ images:
     DOCKER_TLS_CERTDIR: "/certs"
     DOCKER_TLS_VERIFY: "1"
     DOCKER_CERT_PATH: "/certs/client"
+  cache:
+    - key:
+        files:
+          - pnpm-lock.yaml
+        prefix: pnpm-store
+      paths:
+        - .pnpm-store/
+      policy: pull
+    - key: turbo-$CI_COMMIT_REF_SLUG
+      fallback_keys:
+        - turbo-main
+      paths:
+        - .turbo
+        - "_*/*/.turbo"
+      policy: pull
+    # The baked iq models (~57MB), keyed on the fetch script — prepare-image-trees.sh skips the HF download
+    # when this cache restores the completed dir.
+    - key:
+        files:
+          - _libs/iq-engine/scripts/fetch-model.mjs
+        prefix: iq-models
+      paths:
+        - .image-out/iq-models
+        - .image-out/.iq-models-complete
   before_script:
-    - apk add --no-cache bash
+    - !reference [.pnpm-setup, script]
+    - install -m 0755 -d /etc/apt/keyrings
+    - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
+    - apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -155,8 +185,10 @@ images:
         - _libs/**/*
         - _tools/dind-host/**/*
         - _tools/scripts/publish-images.sh
+        - _tools/scripts/prepare-image-trees.sh
         - pnpm-lock.yaml
   script:
+    - bash _tools/scripts/prepare-image-trees.sh
     - TAGS="latest sha-${CI_COMMIT_SHORT_SHA}" bash _tools/scripts/publish-images.sh
 
 # Release: build + test, then semantic-release (npm publish via OIDC, GitLab Release with the cross-compiled
@@ -194,6 +226,14 @@ release:
         - .turbo
         - "_*/*/.turbo"
       policy: pull
+    # iq models for publishCmd's prepare-image-trees.sh (same key as the images job).
+    - key:
+        files:
+          - _libs/iq-engine/scripts/fetch-model.mjs
+        prefix: iq-models
+      paths:
+        - .image-out/iq-models
+        - .image-out/.iq-models-complete
   services:
     - docker:27-dind
   variables:
