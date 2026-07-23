@@ -144,11 +144,6 @@ release:
   stage: release
   needs: ["release:verify"]
   resource_group: release
-  # npm's trusted-publishing token exchange officially supports GitLab.com-hosted runners only; from this
-  # project's self-hosted runner it 401s intermittently ("OIDC token exchange error - unauthorized").
-  # Mitigation: publish-npm.sh retries the exchange in-job, and npm publish runs in semantic-release's
-  # prepareCmd — BEFORE the version tag is created — so a failed exchange leaves no ghost tag and the job's
-  # Retry button re-runs the release with a freshly minted id token.
   services:
     - docker:27-dind
   variables:
@@ -157,17 +152,15 @@ release:
     DOCKER_TLS_CERTDIR: "/certs"
     DOCKER_TLS_VERIFY: "1"
     DOCKER_CERT_PATH: "/certs/client"
-  # npm trusted publishing (OIDC): GitLab must be a registered trusted publisher for each @intentic/* package
-  # on npmjs.org. The aud must be exactly npm:<registry-host>. The id token minted here is exchanged for
-  # short-lived registry tokens by publish-npm.sh itself — pnpm's built-in exchange is broken (401 with an
-  # empty body) while the raw endpoint accepts the same token, self-hosted runner included.
-  id_tokens:
-    NPM_ID_TOKEN:
-      aud: npm:registry.npmjs.org
+  # npm auth for publishing: a granular access token (masked CI var NPM_TOKEN, write access to @intentic/*)
+  # written to ~/.npmrc. Tokenless OIDC trusted publishing is not an option — npm's token exchange rejects
+  # this project's self-hosted runner. NPM_TOKEN is a granular token (classic tokens were removed 2025-12);
+  # it expires (≤90 days), so rotate it on npmjs.org and update the CI var before it lapses.
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   before_script:
     - !reference [.pnpm-setup, script]
+    - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
     - install -m 0755 -d /etc/apt/keyrings
     - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
     - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
