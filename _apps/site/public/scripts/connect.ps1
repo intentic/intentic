@@ -40,10 +40,11 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
 # Prefer explicit params (direct file invocation); fall back to env vars (the `irm | iex` one-liner path).
-# The central platform is a single static domain (never self-hosted), so PlatformUrl defaults to it; it is only
-# used to redeem the setup code. LOCAL DEV ONLY: to test against a platform on your own machine, pass
-# -PlatformUrl http://localhost:<apiPort> — never shown in the product UI.
-if (-not $PlatformUrl) { $PlatformUrl = if ($env:PLATFORM_URL) { $env:PLATFORM_URL } else { 'https://app.intentic.dev' } }
+# PlatformUrl is the platform's API origin where the setup code is redeemed (POST /setup/claim) — NOT the web-app
+# origin (app.*), which serves only static files. A single hosted domain (never self-hosted), so it defaults to
+# the API host. LOCAL DEV ONLY: to test against a platform on your own machine, pass -PlatformUrl
+# http://localhost:<apiPort> — never shown in the product UI.
+if (-not $PlatformUrl) { $PlatformUrl = if ($env:PLATFORM_URL) { $env:PLATFORM_URL } else { 'https://api.intentic.dev' } }
 if (-not $ConnectToken) { $ConnectToken = $env:CONNECT_TOKEN }
 if (-not $SetupCode) { $SetupCode = $env:SETUP_CODE }
 # The latest RELEASE image via the moving `stable` tag (pulled fresh below), never :latest — see connect.sh for

@@ -23,7 +23,7 @@
 #                  NEVER sent to the platform and rides into the sandbox as CLOUDFLARE_API_TOKEN
 #
 # Platform statics (defaulted below — overridden only for local dev against a non-prod platform):
-#   PLATFORM_URL         the platform base the setup code is redeemed against (default: https://app.intentic.dev)
+#   PLATFORM_URL         the platform's API origin the setup code is redeemed against (default: https://api.intentic.dev)
 #   GOOGLE_CLIENT_ID     the platform's PUBLIC Google web client id the daemon verifies sign-in against (default: hardcoded below)
 #
 # Optional env:
@@ -79,11 +79,12 @@ SETUP_CODE="${SETUP_CODE:-$_pos}"
 # own picker handles the selection). Local ./connect.sh runs still hit the published cleanup, exactly as the sync
 # bootstrap below defaults SYNC_SCRIPT_URL to the published sync.sh.
 CLEANUP_SCRIPT_URL="${CLEANUP_SCRIPT_URL:-https://intentic.dev/cleanup}"
-# The central platform is a single static domain (never self-hosted), so PLATFORM_URL defaults to it. It is only
-# used to redeem the setup code at ${PLATFORM_URL}/setup/claim below. LOCAL DEV ONLY: to test against a platform
-# running on your own machine, prepend PLATFORM_URL=http://localhost:<apiPort> — this is never shown in the
-# product UI.
-PLATFORM_URL="${PLATFORM_URL:-https://app.intentic.dev}"
+# The platform's API origin, where the setup code is redeemed (POST ${PLATFORM_URL}/setup/claim) and where the
+# daemon later announces itself — NOT the web-app origin (app.*), which serves only static files and would 405 a
+# POST. A single hosted domain (never self-hosted), so it defaults to the API host. LOCAL DEV ONLY: to test
+# against a platform running on your own machine, prepend PLATFORM_URL=http://localhost:<apiPort> — never shown in
+# the product UI.
+PLATFORM_URL="${PLATFORM_URL:-https://api.intentic.dev}"
 CONNECT_TOKEN="${CONNECT_TOKEN:-}"
 # The latest RELEASE image via the moving `stable` tag (pulled fresh below), never :latest: the release pipeline
 # bumps every @intentic/* package to the release version, publishes them to npm, THEN builds this image and moves
@@ -503,13 +504,16 @@ if [ -n "$SETUP_CODE" ]; then
         *//localhost* | *//127.0.0.1*) claim_opts="-k" ;;
     esac
     claim="$(curl -fsS $claim_opts "$PLATFORM_URL/setup/claim" -d "code=$SETUP_CODE")" || {
-        status=$?
-        # Under -f, exit 22 is an HTTP error (the platform answered: bad/expired code); anything else is transport.
-        if [ "$status" -eq 22 ]; then
-            echo "error: the setup code is invalid or expired — refresh the platform's setup page and copy a fresh command." >&2
-        else
-            echo "error: could not reach the platform at $PLATFORM_URL to redeem the setup code (curl exit $status)." >&2
-        fi
+        # curl -f exits 22 on any HTTP >=400 without saying which — re-probe for the status so the message names the
+        # real cause instead of always blaming the code. A 405 means PLATFORM_URL hit the static web app (app.*)
+        # instead of the API (api.*); a 4xx-code status means the setup code really is bad/expired.
+        status="$(curl -sS -o /dev/null -w '%{http_code}' $claim_opts "$PLATFORM_URL/setup/claim" -d "code=$SETUP_CODE" 2>/dev/null || echo 000)"
+        case "$status" in
+            405) echo "error: $PLATFORM_URL/setup/claim returned HTTP 405 — PLATFORM_URL must be the platform's API origin (e.g. https://api.intentic.dev), not the web app." >&2 ;;
+            400 | 401 | 403 | 404 | 410) echo "error: the setup code is invalid or expired — refresh the platform's setup page and copy a fresh command." >&2 ;;
+            000) echo "error: could not reach the platform at $PLATFORM_URL to redeem the setup code." >&2 ;;
+            *) echo "error: the platform returned HTTP $status redeeming the setup code — refresh the setup page and try again." >&2 ;;
+        esac
         exit 1
     }
     CONNECT_TOKEN="$(printf '%s\n' "$claim" | sed -n 's/^CONNECT_TOKEN=//p')"

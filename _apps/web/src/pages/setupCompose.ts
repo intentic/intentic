@@ -20,11 +20,13 @@ export interface ComposeArgs {
     readonly cfToken?: string;
     readonly image: string;
     readonly googleClientId: string;
-    // LOCAL DEV ONLY: the localhost platform origin; production leaves it undefined (app.intentic.dev).
+    // LOCAL DEV ONLY: the localhost platform origin; production leaves it undefined (api.intentic.dev).
     readonly platformUrl?: string;
 }
 
-const PLATFORM_DEFAULT = `https://app.intentic.dev`;
+// The platform's API origin — where the claim (POST /setup/claim) and the daemon's announce land. NOT the
+// web-app origin (app.*), which serves only static files and 405s a POST. Mirrors connect.sh's PLATFORM_URL.
+const PLATFORM_DEFAULT = `https://api.intentic.dev`;
 // Mirrors connect.sh's CLOUDFLARED_IMAGE / PREVIEW_PORT / ORIGIN_HOST.
 const CLOUDFLARED_IMAGE = `cloudflare/cloudflared:2026.7.2`;
 const ORIGIN_HOST = `intentic-sandbox-workspace`;

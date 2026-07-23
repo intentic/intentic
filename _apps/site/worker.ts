@@ -1,8 +1,9 @@
 // Vanity install-script URLs: https://intentic.dev/connect etc. The monorepo has no public git mirror to
 // redirect to, so the connect scripts live in this package's public/scripts/ (tracked site assets) and the
-// worker serves them as text/plain so `curl … | sh` gets the raw script. With an assets binding, requests
-// matching a built asset are served directly and never reach this worker; everything else lands here and
-// falls through to the 404-page via ASSETS.
+// worker serves them as text/plain so `curl … | sh` gets the raw script. run_worker_first (wrangler.jsonc) sends
+// EVERY request here first — otherwise Cloudflare's asset layer answers browser navigations to /connect with the
+// 404 page before the worker runs. Non-vanity paths fall through to env.ASSETS.fetch(): the built asset, or the
+// 404 page for a real miss.
 const SCRIPTS: Record<string, string> = {
     "/connect": "connect.sh",
     "/connect.ps1": "connect.ps1",
@@ -20,7 +21,12 @@ const SCRIPTS: Record<string, string> = {
 export default {
     async fetch(request: Request, env: { ASSETS: { fetch: typeof fetch } }): Promise<Response> {
         const url = new URL(request.url);
-        const file = SCRIPTS[url.pathname];
+        // Match vanity paths slash-insensitively: /connect and /connect/ both serve the script. The site's Astro
+        // pages use trailingSlash: "always", so a browser visit can arrive with a slash — but these worker routes
+        // aren't Astro pages, so without this a trailing slash would fall through to the 404 page. Non-vanity
+        // requests still fall through with the ORIGINAL request, keeping Astro's own slash canonicalization intact.
+        const vanity = url.pathname !== "/" && url.pathname.endsWith("/") ? url.pathname.slice(0, -1) : url.pathname;
+        const file = SCRIPTS[vanity];
         if (file === undefined) {
             return env.ASSETS.fetch(request);
         }

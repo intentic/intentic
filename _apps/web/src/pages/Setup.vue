@@ -145,7 +145,7 @@ const lockedReason = computed(() => {
 
 // LOCAL DEV ONLY: connect.{sh,ps1} redeems the setup code against PLATFORM_URL (host-side; the container never
 // reads it), so when the platform is served locally we ride the localhost origin into the command. For the
-// hosted platform this is undefined and the command is unchanged (the scripts default to app.intentic.dev).
+// hosted platform this is undefined and the command is unchanged (the scripts default to api.intentic.dev).
 const platformUrlOverride = computed<string | undefined>(() => {
     const api = new URL(environment.api.url);
     if (api.hostname !== `localhost` && api.hostname !== `127.0.0.1`) {

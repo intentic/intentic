@@ -38,9 +38,6 @@ services:
                 condition: service_healthy
         environment:
             DATABASE_URL: postgresql://intentic:${POSTGRES_PASSWORD:?}@postgres:5432/intentic
-            # Bind all interfaces so cloudflared (a sibling container) can reach it; TLS is terminated at the edge.
-            API_HOST: 0.0.0.0
-            API_PORT: "6480"
             # The api's own public origin (Better-Auth baseURL + the origin the SPA calls). Same-site with WEB_ORIGIN.
             API_URL: ${API_URL:?e.g. https://api.intentic.dev}
             # The SPA's origin — the CORS allow-origin and Better-Auth trusted origin. MUST be exactly this.
@@ -64,7 +61,6 @@ services:
             # Comma-separated emails always entitled to `pro` without Stripe (comp/test accounts).
             PERMANENT_PREMIUM_EMAILS: ${PERMANENT_PREMIUM_EMAILS:-}
             LOG_LEVEL: ${LOG_LEVEL:-info}
-            LOG_PRETTY: "false"
         healthcheck:
             test: ["CMD", "bun", "--eval", "fetch('http://127.0.0.1:6480/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
             interval: 10s

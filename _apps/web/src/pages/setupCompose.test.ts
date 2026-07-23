@@ -11,7 +11,7 @@ const base: ComposeArgs = {
 };
 
 test("intentic path: the bootstrap is claim → up, against the production platform, no -k", () => {
-    expect(composeBootstrap(base)).toBe(`curl -fsS https://app.intentic.dev/setup/claim -d code=abc123 > .env\ndocker compose up -d`);
+    expect(composeBootstrap(base)).toBe(`curl -fsS https://api.intentic.dev/setup/claim -d code=abc123 > .env\ndocker compose up -d`);
 });
 
 test("own path: the bootstrap appends the CF token and mints the tunnel through the .env before up", () => {
@@ -41,7 +41,7 @@ test("the compose file mirrors connect.sh: slugged names, origin alias, .env gua
     expect(yaml).toContain(`CONNECT_TOKEN: \${CONNECT_TOKEN:?run the .env bootstrap first}`);
     expect(yaml).toContain(`--token \${TUNNEL_TOKEN:?run the .env bootstrap first}`);
     expect(yaml).toContain(`SANDBOX_PUBLIC_URL: https://sandbox-0f00ba4dd12b.intentic.dev`);
-    expect(yaml).toContain(`PLATFORM_URL: https://app.intentic.dev`);
+    expect(yaml).toContain(`PLATFORM_URL: https://api.intentic.dev`);
     // The intentic path bakes NO Cloudflare token env — an empty one would shadow the workspace .env later.
     expect(yaml).not.toContain(`CLOUDFLARE_API_TOKEN`);
     expect(yaml).not.toContain(`agent-auth`);
