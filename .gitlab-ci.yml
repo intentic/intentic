@@ -144,6 +144,11 @@ release:
   stage: release
   needs: ["release:verify"]
   resource_group: release
+  # npm trusted publishing supports GitLab.com-HOSTED runners only (the id token carries
+  # runner_environment, and npm rejects self-hosted intermittently-to-always). Every release before the
+  # self-hosted runner existed succeeded on shared runners; the 401 flapping started with it. Requires
+  # "Instance runners" to stay enabled for the project.
+  tags: [saas-linux-small-amd64]
   services:
     - docker:27-dind
   variables:

@@ -13,21 +13,26 @@ PUB=(_tools/constants _apps/sync _libs/graph _libs/resources _libs/engine _libs/
      _libs/extension-api _libs/sandbox-contract _apps/acp-bridge _libs/scaffold _libs/state-resolver _apps/cli \
      _libs/workspace-ignore _libs/iq-engine _libs/iq-recall _apps/iq _libs/sdk)
 
-# npm trusted publishing, exchanged by hand: pnpm's built-in OIDC exchange 401s with an empty body on the
-# project's runner while the raw exchange endpoint accepts the same id token (HTTP 201), so swap the GitLab
-# id token (NPM_ID_TOKEN) for a 15-minute registry token per package and hand it to pnpm via ~/.npmrc.
-# A non-201 prints npm's actual response — typically a missing trusted publisher for that package on npmjs.org.
+# npm trusted publishing, exchanged by hand (pnpm's own OIDC path is bypassed — see the publish loop): swap
+# the GitLab id token (NPM_ID_TOKEN) for a 15-minute registry token per package and hand it to pnpm via
+# ~/.npmrc. npm's exchange endpoint intermittently 401s valid tokens ("OIDC token exchange error -
+# unauthorized"), so retry before giving up; a persistent non-201 prints npm's actual response — typically a
+# missing trusted publisher for that package on npmjs.org, or npm rejecting the self-hosted runner claim.
 exchange_token() {
-  local pkg="${1/\//%2f}" resp code body
-  resp=$(curl -sS -w $'\n%{http_code}' -X POST -H "Authorization: Bearer $NPM_ID_TOKEN" \
-    "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/$pkg")
-  code="${resp##*$'\n'}"
-  body="${resp%$'\n'*}"
-  if [ "$code" != "201" ]; then
-    echo "  token exchange for $1 failed (HTTP $code): $body" >&2
-    return 1
-  fi
-  printf '%s' "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).token))'
+  local pkg="${1/\//%2f}" resp code body attempt
+  for attempt in 1 2 3 4 5; do
+    resp=$(curl -sS -w $'\n%{http_code}' -X POST -H "Authorization: Bearer $NPM_ID_TOKEN" \
+      "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/$pkg")
+    code="${resp##*$'\n'}"
+    body="${resp%$'\n'*}"
+    if [ "$code" = "201" ]; then
+      printf '%s' "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).token))'
+      return 0
+    fi
+    echo "  token exchange for $1 attempt $attempt failed (HTTP $code): $body" >&2
+    sleep 10
+  done
+  return 1
 }
 
 for d in "${PUB[@]}"; do
@@ -37,10 +42,13 @@ for d in "${PUB[@]}"; do
   else
     echo "  publish  $name@$VERSION"
     if [ -n "${NPM_ID_TOKEN:-}" ]; then
-      echo "//registry.npmjs.org/:_authToken=$(exchange_token "$name")" > "$HOME/.npmrc"
+      # Plain assignment so a failed exchange aborts the release here (set -e) instead of letting pnpm
+      # attempt an unauthenticated PUT (the registry answers those with a misleading E404).
+      token=$(exchange_token "$name")
+      echo "//registry.npmjs.org/:_authToken=$token" > "$HOME/.npmrc"
     fi
-    # NPM_ID_TOKEN must be hidden from pnpm: seeing it, pnpm ≥11.10 runs its own broken OIDC exchange and on
-    # failure publishes unauthenticated (E404) instead of falling back to the ~/.npmrc token written above.
+    # NPM_ID_TOKEN must be hidden from pnpm: seeing it, pnpm runs its own OIDC exchange and on failure
+    # publishes unauthenticated instead of falling back to the ~/.npmrc token written above.
     env -u NPM_ID_TOKEN pnpm --dir "$d" publish --access public --no-git-checks
   fi
 done
