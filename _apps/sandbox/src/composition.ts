@@ -40,8 +40,7 @@ import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.
 import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
 import { createCodexAgent } from "./codex/codex-agent.js";
 import { type CodexCatalog, createCodexCatalog } from "./codex/codex-catalog.js";
-import { type CodexReauthNeeded, type CodexStore, fileCodexStore, probeCodexHealth } from "./codex/codex-credentials.js";
-import { locateCodexThread } from "./sessions/codex-sessions.js";
+import { codexThreadExists } from "./sessions/codex-sessions.js";
 import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
@@ -153,24 +152,21 @@ export interface Services {
     // Claude's live model catalog from the Agent SDK's supportedModels() (alias fallback, never empty). Serves
     // /claude/models for the picker so new tiers + effort levels need no code change.
     readonly claudeModels: ClaudeCatalog;
-    // ChatGPT (Codex) accounts, each in Codex's native auth.json under its own CODEX_HOME (.intentic/codex/<id>).
-    readonly codexStore: CodexStore;
-    // OpenAI/Codex's live model catalog (discovery → persisted → seed floor, never empty). A native Codex turn
-    // resolves its model here so it never sends the SDK's rejected gpt-5-codex default; /codex/models serves the
-    // picker; a turn's self-heal `record`s the ids OpenAI proved valid.
+    // OpenAI/Codex's live model catalog (discovery → persisted → seed floor, never empty). A Codex turn resolves
+    // its model here so it never sends the SDK's rejected gpt-5-codex default; /codex/models serves the picker;
+    // a turn's self-heal `record`s the ids the subscription proved valid.
     readonly codexModels: CodexCatalog;
     // The bundled translator (CLIProxyAPI): connects/lists/disconnects the routed providers' SUBSCRIPTION OAuth
-    // (codex → ChatGPT, grok → SuperGrok) that the Claude Code harness runs non-Claude models on. /translator
-    // drives the device-login connect; streamAgent reads `accounts` to gate a routed turn.
+    // (codex → ChatGPT, grok → SuperGrok). Codex has no other credential — every Codex turn (native provider +
+    // the Claude agent's shell delegation) authenticates through this on the ChatGPT subscription. /translator
+    // drives the device-login connect; streamAgent reads `accounts` to gate a Codex turn.
     readonly cliProxy: CliProxyClient;
-    // Proactive Codex credential health: undefined ⇒ healthy/unknown, else the "needs reconnect" verdict. Cached
-    // briefly so back-to-back account-list loads don't re-hit OpenAI's token endpoint on a revoked account.
-    // /codex/accounts and the turn gate read it to surface a revoked sign-in before an opaque mid-turn failure.
-    readonly codexHealth: (id: string) => Promise<CodexReauthNeeded | undefined>;
-    // Locate which CODEX_HOME minted a thread so a resume runs under the home that holds its rollout — the
-    // connected-account set can change between turns (a thread minted under the OPENAI_API_KEY fallback home, then
-    // the user signs into ChatGPT). undefined ⇒ no home owns it ⇒ the turn emits session-not-found.
-    readonly locateCodexThread: (threadId: string) => Promise<{ home: string; accountId?: string } | undefined>;
+    // The sandbox-wide CODEX_HOME (sessions + the config.toml selecting the translator provider). The codex
+    // adapter defaults to it, and the Claude agent's shell delegation points `codex` at it.
+    readonly codexHome: string;
+    // Whether a Codex thread's rollout still exists in the sandbox-wide CODEX_HOME, so a resume of a
+    // deleted/lost thread surfaces session-not-found instead of an opaque mid-turn failure.
+    readonly codexThreadExists: (threadId: string) => Promise<boolean>;
     // The shared OpenCode runtime backing the Grok provider: the warm server/client plus xAI OAuth
     // connect/disconnect. OpenCode owns the xAI credential, so there's no GrokStore twin.
     readonly openCode: OpenCodeService;
@@ -312,22 +308,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
           }
         : undefined;
 
-    const codexStore = fileCodexStore(codexBase);
     const claudeStore = fileClaudeStore(join(authRoot, "claude"));
-    // Short-lived verdict cache: the offline gate already makes healthy probes network-free, so this only spares
-    // OpenAI's token endpoint from repeated failing refreshes on a revoked account across back-to-back /accounts
-    // loads. A fresh probe on daemon restart is fine (cheap, offline-gated).
-    const codexHealthCache = new Map<string, { verdict: CodexReauthNeeded | undefined; expiresAt: number }>();
-    const CODEX_HEALTH_TTL_MS = 60_000;
-    const codexHealth = async (id: string): Promise<CodexReauthNeeded | undefined> => {
-        const cached = codexHealthCache.get(id);
-        if (cached !== undefined && Date.now() < cached.expiresAt) {
-            return cached.verdict;
-        }
-        const verdict = await probeCodexHealth(codexStore, id);
-        codexHealthCache.set(id, { verdict, expiresAt: Date.now() + CODEX_HEALTH_TTL_MS });
-        return verdict;
-    };
 
     // Hoisted (not inline in the literal below): the ACP connection pool implements ACP terminal/* over the
     // same runner, so both must share one instance (and its `visible` gate).
@@ -354,20 +335,14 @@ export const createServices = (config: Config, logger: Logger): Services => {
         sandboxSettings: fileSandboxSettingsStore(join(workspace.root, ".intentic", "settings.json")),
         claudeStore,
         claudeModels: createClaudeCatalog(claudeStore, config, workspace.root),
-        codexStore,
-        codexModels: createCodexCatalog(codexStore, config, join(codexBase, "models.json")),
+        codexModels: createCodexCatalog(config, join(codexBase, "models.json")),
         cliProxy: createCliProxyClient({
             managementUrl: cliProxyManagementUrl(config),
             token: config.translator.token,
             configPath: cliProxyConfigPath(config),
         }),
-        codexHealth,
-        locateCodexThread: async (threadId) =>
-            locateCodexThread(
-                codexBase,
-                (await codexStore.list()).map((account) => ({ home: codexStore.home(account.id), accountId: account.id })),
-                threadId,
-            ),
+        codexHome: codexBase,
+        codexThreadExists: (threadId) => codexThreadExists(codexBase, threadId),
         openCode,
         authRoot,
         history: createWorkspaceHistory({ workspace, historyRoot: config.historyRoot, logger }),

@@ -248,15 +248,6 @@ export const OauthExchangeSchema = z.object({
     label: z.string().optional(),
 });
 export const AuthorizeChallengeSchema = z.object({ authorizeUrl: z.string(), verifier: z.string(), state: z.string() });
-export const CodexDeviceStartSchema = z.object({
-    userCode: z.string(),
-    deviceAuthId: z.string(),
-    interval: z.number(),
-    verificationUri: z.string(),
-});
-export const CodexDevicePollSchema = z.object({ deviceAuthId: z.string().min(1), userCode: z.string().min(1), label: z.string().optional() });
-// The poll answer: `pending` while the user is still signing in; the created account once done.
-export const CodexPollResultSchema = z.object({ pending: z.boolean(), account: OauthAccountSchema.optional() });
 // xAI Grok (via OpenCode) uses subscription OAuth via the headless device-code method. `start` returns the
 // `url` the user opens (xAI's verification_uri_complete, which pre-fills the code) and `code` — the same
 // one-time code, surfaced so the card matches x.ai exactly. There is no paste-back: OpenCode polls to

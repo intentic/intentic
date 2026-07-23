@@ -233,7 +233,7 @@ ENV TRANSLATOR_URL=http://127.0.0.1:8788 TRANSLATOR_TOKEN=intentic-translator-lo
 # Privacy hardening for every agent CLI the daemon spawns (they all inherit process.env): telemetry, error
 # reporting, feedback uploads, and update checks off — the CLIs are version-pinned in this image, so an update
 # probe is pure phone-home. DO_NOT_TRACK covers Claude Code and anything else honoring the convention; Codex
-# reads no env switches at all (its equivalents live in CODEX_HOME/config.toml — codex/codex-credentials.ts).
+# reads no env switches at all (its equivalents live in CODEX_HOME/config.toml — codex/codex-config.ts).
 ENV DO_NOT_TRACK=1 \
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
     DISABLE_TELEMETRY=1 \

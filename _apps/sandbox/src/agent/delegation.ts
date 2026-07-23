@@ -6,8 +6,8 @@
  * Bash can do — the container is the isolation boundary, same as every other agent command. */
 
 export interface DelegationTargets {
-    // The first connected Codex account's CODEX_HOME — streamAgent also injects it into the shell env, so
-    // the codex CLI is pre-authenticated without the note naming any path.
+    // The sandbox-wide CODEX_HOME — streamAgent also injects it (with the translator bearer) into the shell env,
+    // so the codex CLI is pre-authenticated on the ChatGPT subscription without the note naming any path.
     readonly codexHome?: string;
     // OpenCode's XDG_DATA_HOME (the credential root) when xAI/Grok is connected. Inlined per command in the
     // note — exporting XDG_DATA_HOME globally would redirect unrelated tools' data dirs.

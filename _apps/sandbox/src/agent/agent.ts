@@ -44,6 +44,11 @@ export interface AgentRequest {
     // The selected Codex account's CODEX_HOME for this turn (Codex path only). Absent ⇒ the adapter's default
     // base dir, which resolves the container's OPENAI_API_KEY fallback.
     readonly codexHome?: string;
+    // Serve this NATIVE Codex turn through the sandbox translator's OpenAI-compatible endpoint on the connected
+    // ChatGPT SUBSCRIPTION (Codex path only): the adapter points Codex's own Responses wire format at baseUrl
+    // and authenticates with the fixed local bearer — no per-account OAuth auth.json. codexHome then holds only
+    // sessions/rollouts, never a credential.
+    readonly codexEndpoint?: { readonly baseUrl: string; readonly authToken: string };
     // Defaults to the autonomous sandbox posture; the container's isolation is what makes this safe.
     readonly permissionMode?: PermissionMode;
     // When true, run the always-plan flow: propose an approach via ExitPlanMode and wait for approval

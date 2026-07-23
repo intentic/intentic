@@ -382,11 +382,12 @@ const setManagedProvider = (target: AgentProvider): void => {
         return;
     }
     managedProvider.value = target;
-    // No up-front native handshake when the active conversation runs this provider ROUTED (under the Claude
-    // Code harness): that selection is served by the translator subscription — its own row in the card — and a
-    // native device code would only compete with the connect the user actually came for.
-    const routedActive = target === provider.value && (target === `codex` || target === `grok`) && harness.value === `claude-code`;
-    if (accountManageOpen.value && accountsOf(target).length === 0 && !routedActive) {
+    // Codex has no native account handshake — it connects through the translator subscription (connectTranslator),
+    // its own control in the card. And no up-front handshake when the active conversation runs this provider
+    // ROUTED (under the Claude Code harness): that too is the translator subscription. Otherwise, when the card is
+    // open on an account-less provider, prep the native handshake so the open-URL anchor is a real user gesture.
+    const routedActive = target === provider.value && target === `grok` && harness.value === `claude-code`;
+    if (accountManageOpen.value && target !== `codex` && accountsOf(target).length === 0 && !routedActive) {
         void startConnect(); // startConnect drops any prior handshake first
         return;
     }
@@ -480,13 +481,22 @@ const disconnectTranslator = async (target: KeyedProvider): Promise<void> => {
 const error = ref<string | null>(null);
 const hasAccount = (target: AgentProvider): boolean => accountsOf(target).length > 0;
 // Whether a provider+harness selection can actually send — the composer gate, mirroring the daemon's own gate
-// (agent.routes): a codex/grok turn under the Claude Code harness is served by the translator subscription, so
-// only that connection matters; anything else needs a provider account. An ACP provider is its own credential
-// store — installed means chat-ready, so it never gates the composer.
-const chatReady = (target: AgentProvider, loop: AgentHarness): boolean =>
-    (target === `codex` || target === `grok`) && loop === `claude-code`
-        ? translatorAccounts.value[target]
-        : hasAccount(target) || acpProviders.value.some((agent) => agent.id === target);
+// (agent.routes). Codex has no native account: it always authenticates through the translator's ChatGPT
+// SUBSCRIPTION (native or under the Claude Code harness), so only that connection matters. Grok under the Claude
+// Code harness likewise rides the translator subscription. Everything else needs the provider's account; an ACP
+// provider is its own credential store — installed means chat-ready, so it never gates the composer.
+const chatReady = (target: AgentProvider, loop: AgentHarness): boolean => {
+    if (target === `codex`) {
+        return translatorAccounts.value.codex;
+    }
+    if (target === `grok` && loop === `claude-code`) {
+        return translatorAccounts.value.grok;
+    }
+    return hasAccount(target) || acpProviders.value.some((agent) => agent.id === target);
+};
+// Whether a provider can serve a fresh conversation at all (for auto-repointing an account-less tab): Codex via
+// the subscription, the rest via a connected account.
+const providerConnectable = (target: AgentProvider): boolean => (target === `codex` ? translatorAccounts.value.codex : hasAccount(target));
 const connected = computed(() => chatReady(provider.value, harness.value));
 const claudeConnected = computed(() => hasAccount(`claude`));
 
@@ -503,7 +513,7 @@ watch([providerAccounts, translatorAccounts], () => {
         ) {
             continue;
         }
-        const fallback = ([`claude`, `codex`, `grok`] as const).find((p) => hasAccount(p));
+        const fallback = ([`claude`, `codex`, `grok`] as const).find((p) => providerConnectable(p));
         if (fallback) {
             conversation.selectProvider(fallback);
         }
@@ -515,16 +525,12 @@ const authorizeUrl = ref<string | null>(null);
 const accountManageOpen = ref(false);
 
 // In-progress connect handshake, held only between start and completion. Claude round-trips PKCE
-// verifier/state to `completeConnect`; Codex holds the device-code identity the poll loop keeps sending; Grok
-// (xAI OAuth via OpenCode) just tracks whether the method needs a pasted code — OpenCode owns the tokens.
-type PendingAuth =
-    | { provider: "claude"; verifier: string; state: string }
-    | { provider: "codex"; deviceAuthId: string; userCode: string; interval: number }
-    | { provider: "grok" };
+// verifier/state to `completeConnect`; Grok (xAI OAuth via OpenCode) just tracks the poll — OpenCode owns the
+// tokens. (Codex has no native connect: it authenticates through the translator subscription, whose device
+// login is a separate flow — connectTranslator above.)
+type PendingAuth = { provider: "claude"; verifier: string; state: string } | { provider: "grok" };
 let pendingAuth: PendingAuth | null = null;
-// The one-time device code the user types into ChatGPT (codex only); shown in the account panel.
-// Codex's device code and Grok's xAI device code both surface here — the one-time code shown in the card
-// (Grok's is pre-filled at x.ai; the user just approves).
+// Grok's xAI device code, surfaced in the card (pre-filled at x.ai; the user just approves).
 const userCode = ref<string | null>(null);
 // The display label the user typed for the account being connected (blank ⇒ the daemon derives one from the
 // sign-in identity or a provider default). Bound by the account panel; read when a connect completes.
@@ -616,15 +622,10 @@ export const loadAllProviderModels = async (): Promise<void> => {
 
 // Device-code sign-in expires after 15 minutes; stop polling past it.
 const CODEX_POLL_DEADLINE_MS = 15 * 60 * 1000;
-let codexPollTimer: ReturnType<typeof setTimeout> | undefined;
 let grokPollTimer: ReturnType<typeof setTimeout> | undefined;
 
-// Drop any in-progress handshake: clear the poll timers and the connect UI state. Safe to call repeatedly.
+// Drop any in-progress handshake: clear the poll timer and the connect UI state. Safe to call repeatedly.
 const cancelConnect = (): void => {
-    if (codexPollTimer !== undefined) {
-        clearTimeout(codexPollTimer);
-        codexPollTimer = undefined;
-    }
     if (grokPollTimer !== undefined) {
         clearTimeout(grokPollTimer);
         grokPollTimer = undefined;
@@ -669,47 +670,6 @@ const pollGrokOnce = async (deadline: number): Promise<void> => {
         return;
     }
     grokPollTimer = setTimeout(() => void pollGrokOnce(deadline), 3000);
-};
-
-// One tick of the Codex device-code poll: ask the sandbox whether sign-in finished, flip to connected on
-// success, else re-arm on the server-advised interval until the 15-minute deadline. Bails if the handshake
-// was cancelled/replaced mid-await (identity check against the captured `auth`).
-const pollCodexOnce = async (deadline: number): Promise<void> => {
-    const auth = pendingAuth;
-    if (auth?.provider !== `codex`) {
-        return;
-    }
-    if (Date.now() > deadline) {
-        error.value = `The ChatGPT sign-in code expired — start the connection again.`;
-        cancelConnect();
-        return;
-    }
-    try {
-        const response = await sandboxRequest(`/codex/oauth/poll`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ deviceAuthId: auth.deviceAuthId, userCode: auth.userCode, label: connectLabel.value.trim() || undefined }),
-        });
-        if (pendingAuth !== auth) {
-            return;
-        }
-        const body = response.ok ? ((await response.json()) as { pending: boolean; account?: OauthAccount }) : undefined;
-        if (body !== undefined && !body.pending && body.account !== undefined) {
-            addAccount(`codex`, body.account);
-            cancelConnect();
-            error.value = null;
-            accountManageOpen.value = false;
-            // The account just connected — its OAuth token may unlock model discovery, so refresh the catalog.
-            void loadProviderModels(`codex`);
-            return;
-        }
-    } catch {
-        // Transient (sandbox blip); keep polling until the deadline.
-    }
-    if (pendingAuth !== auth) {
-        return;
-    }
-    codexPollTimer = setTimeout(() => void pollCodexOnce(deadline), auth.interval * 1000);
 };
 
 // Reset the whole chat singleton when the active sandbox changes (see sandboxScope). Conversations, history,
@@ -952,14 +912,6 @@ const startConnect = async (): Promise<void> => {
         error.value = body?.error ?? `Could not start the ${providerLabel(target)} connection — is your sandbox online?`;
         return;
     }
-    if (target === `codex`) {
-        const body = (await response.json()) as { userCode: string; deviceAuthId: string; interval: number; verificationUri: string };
-        pendingAuth = { provider: `codex`, deviceAuthId: body.deviceAuthId, userCode: body.userCode, interval: body.interval };
-        authorizeUrl.value = body.verificationUri;
-        userCode.value = body.userCode;
-        codexPollTimer = setTimeout(() => void pollCodexOnce(Date.now() + CODEX_POLL_DEADLINE_MS), body.interval * 1000);
-        return;
-    }
     if (target === `grok`) {
         // xAI's headless device-code flow: the URL is x.ai's verification page with the code pre-filled, so the
         // user just opens it and approves (no paste-back). `code` is that same pre-filled code, shown for
@@ -994,22 +946,22 @@ const openAccountManage = (): void => {
     setManagedProvider(provider.value);
 };
 
-// Closing the card is a pure UI action — it must NOT abort an in-flight connect. The device flows (Grok/Codex)
-// complete out-of-band (the user approves at x.ai / ChatGPT and the daemon exchanges tokens server-side later),
-// so their poll has to outlive both this close and the reachable-flash that unmounts SandboxAgent. cancelConnect
-// stays the sole handshake teardown, driven only by genuine invalidation: completion (pollGrokOnce/pollCodexOnce),
-// the 15-min deadline, a fresh startConnect, a deliberate provider switch, or resetChat (sandbox switch).
+// Closing the card is a pure UI action — it must NOT abort an in-flight connect. The Grok device flow completes
+// out-of-band (the user approves at x.ai and the daemon exchanges tokens server-side later), so its poll has to
+// outlive both this close and the reachable-flash that unmounts SandboxAgent. cancelConnect stays the sole
+// handshake teardown, driven only by genuine invalidation: completion (pollGrokOnce), the 15-min deadline, a
+// fresh startConnect, a deliberate provider switch, or resetChat (sandbox switch).
 const closeAccountManage = (): void => {
     accountManageOpen.value = false;
 };
 
-// Reflects the server's view of both providers' connections so the UI shows the right control on load and
-// when the user switches provider. Module-exported (like resetChat) for sandboxScope, which re-runs it
-// whenever the active daemon becomes reachable — connections live on the daemon, so reachability is the
-// moment the status can actually be read.
+// Reflects the server's view of provider connections so the UI shows the right control on load and when the
+// user switches provider. Module-exported (like resetChat) for sandboxScope, which re-runs it whenever the
+// active daemon becomes reachable — connections live on the daemon, so reachability is the moment the status
+// can actually be read. Codex has no account list (it rides the translator subscription, loaded below).
 export const loadAccountStatus = async (): Promise<void> => {
     await Promise.all([
-        ...([`claude`, `codex`, `grok`] as const).map(async (target) => {
+        ...([`claude`, `grok`] as const).map(async (target) => {
             try {
                 await refreshAccounts(target);
             } catch {

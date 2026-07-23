@@ -36,25 +36,20 @@ afterEach(() => {
 });
 
 describe(`useChat provider reconciliation`, () => {
-    it(`points a GPT-only user's chat at Codex instead of gating on Claude`, async () => {
+    it(`points a GPT-only user's chat at Codex (served by the translator subscription) instead of gating on Claude`, async () => {
         const chat = useChat();
         // A fresh conversation defaults to Claude and reads as disconnected (the gate would show).
         expect(chat.provider.value).toBe(`claude`);
         expect(chat.connected.value).toBe(false);
 
-        // The sandbox reports only ChatGPT/codex has an account.
-        sandboxRequestMock.mockImplementation((path: string) =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({ accounts: path.startsWith(`/codex`) ? [{ id: `c1`, label: `ChatGPT`, connectedAt: 0 }] : [] }),
-            } as Response),
-        );
-        sandboxJsonMock.mockResolvedValue({ codex: false, grok: false });
+        // No native accounts anywhere; only the ChatGPT subscription is connected in the translator.
+        sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ accounts: [] }) } as Response));
+        sandboxJsonMock.mockResolvedValue({ codex: true, grok: false });
         await loadAccountStatus();
         await nextTick();
 
-        // The untouched fresh conversation follows the connected provider, so the composer is reachable — no
-        // Claude wall.
+        // The untouched fresh conversation follows Codex (subscription-connected), so the composer is reachable —
+        // no Claude wall, and no separate ChatGPT account was ever needed.
         expect(chat.provider.value).toBe(`codex`);
         expect(chat.connected.value).toBe(true);
     });

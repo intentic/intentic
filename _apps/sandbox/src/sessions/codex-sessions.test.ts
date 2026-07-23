@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { locateCodexThread } from "./codex-sessions.js";
+import { codexThreadExists } from "./codex-sessions.js";
 
 const roots: string[] = [];
 const scratch = async (): Promise<string> => {
@@ -22,32 +22,15 @@ afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-test("locates a thread minted under the fallback home (no accountId)", async () => {
-    const base = join(await scratch(), "codex");
-    await writeRollout(base, "thr-1");
-    expect(await locateCodexThread(base, [{ home: join(base, "acc-1"), accountId: "acc-1" }], "thr-1")).toEqual({ home: base });
+test("finds a thread whose rollout lives in the home's sessions tree", async () => {
+    const home = join(await scratch(), "codex");
+    await writeRollout(home, "thr-1");
+    expect(await codexThreadExists(home, "thr-1")).toBe(true);
 });
 
-test("locates a thread minted under an account home (carries the accountId)", async () => {
-    const base = join(await scratch(), "codex");
-    const accountHome = join(base, "acc-1");
-    await writeRollout(accountHome, "thr-2");
-    expect(await locateCodexThread(base, [{ home: accountHome, accountId: "acc-1" }], "thr-2")).toEqual({ home: accountHome, accountId: "acc-1" });
-});
-
-test("returns undefined when no home owns the thread", async () => {
-    const base = join(await scratch(), "codex");
-    await writeRollout(base, "thr-1");
-    expect(await locateCodexThread(base, [{ home: join(base, "acc-1"), accountId: "acc-1" }], "missing")).toBeUndefined();
-});
-
-test("the fallback scan does not match an account-home rollout (account homes nest under the fallback)", async () => {
-    const base = join(await scratch(), "codex");
-    // Only the account home holds the rollout; scanning the fallback's own sessions/ must not reach into it.
-    await writeRollout(join(base, "acc-1"), "thr-3");
-    expect(await locateCodexThread(base, [], "thr-3")).toBeUndefined();
-    expect(await locateCodexThread(base, [{ home: join(base, "acc-1"), accountId: "acc-1" }], "thr-3")).toEqual({
-        home: join(base, "acc-1"),
-        accountId: "acc-1",
-    });
+test("reports a missing thread and an empty home as not existing", async () => {
+    const home = join(await scratch(), "codex");
+    expect(await codexThreadExists(home, "nope")).toBe(false);
+    await writeRollout(home, "thr-2");
+    expect(await codexThreadExists(home, "thr-3")).toBe(false);
 });

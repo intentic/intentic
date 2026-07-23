@@ -108,12 +108,12 @@ export const createSecretsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         inventory: i.inventory.handler(async () => {
-            const [repoEntries, capabilities, connectors, claudeAccounts, codexAccounts, grokConnected] = await Promise.all([
+            const [repoEntries, capabilities, connectors, claudeAccounts, translatorAccounts, grokConnected] = await Promise.all([
                 existsSync(desiredState()) ? collectSecretInventory(desiredState()) : [],
                 services.capabilities.list(),
                 connectorRegistry(services),
                 services.claudeStore.list(),
-                services.codexStore.list(),
+                services.cliProxy.accounts(),
                 services.openCode.connected("xai"),
             ]);
             const capabilityEntries: SecretInventoryEntry[] = capabilities
@@ -129,7 +129,9 @@ export const createSecretsRoutes = (services: Services) => {
             // One entry per connected account.
             const providerEntries: SecretInventoryEntry[] = [
                 ...claudeAccounts.map((a) => providerAccountEntry("claude", "Claude", a.id, a.label, `.intentic/claude/${a.id}.json`)),
-                ...codexAccounts.map((a) => providerAccountEntry("codex", "ChatGPT", a.id, a.label, `.intentic/codex/${a.id}`)),
+                // Codex authenticates through the translator on the ChatGPT subscription — one credential, in the
+                // cliproxy auth-dir, not per-account stores.
+                ...(translatorAccounts.codex ? [providerAccountEntry("codex", "ChatGPT", "subscription", "ChatGPT subscription", ".intentic/cliproxy")] : []),
                 ...(grokConnected ? [providerAccountEntry("grok", "Grok", "xai", "Grok", ".intentic/opencode")] : []),
             ];
             return { entries: [...repoEntries, ...capabilityEntries, ...providerEntries] };

@@ -1,5 +1,6 @@
 import {
     Codex,
+    type CodexOptions,
     type Input,
     type ModelReasoningEffort,
     type SandboxMode,
@@ -32,6 +33,9 @@ export interface CodexTurn {
     readonly images?: readonly string[];
     readonly sessionId?: string;
     readonly env: Record<string, string>;
+    // `--config` overrides for the CLI (the SDK flattens them to dotted TOML paths) — carries the translator
+    // provider block on a subscription-served turn; absent ⇒ Codex's own defaults (ChatGPT OAuth / API key).
+    readonly config?: NonNullable<CodexOptions["config"]>;
     readonly options: ThreadOptions;
     readonly signal: AbortSignal;
 }
@@ -39,7 +43,7 @@ export type CodexRunner = (turn: CodexTurn) => AsyncIterable<ThreadEvent>;
 
 // The SDK does NOT inherit process.env when `env` is passed, so the runner receives the full environment.
 const defaultRunner: CodexRunner = async function* (turn) {
-    const codex = new Codex({ env: turn.env });
+    const codex = new Codex({ env: turn.env, ...(turn.config !== undefined ? { config: turn.config } : {}) });
     const thread = turn.sessionId !== undefined ? codex.resumeThread(turn.sessionId, turn.options) : codex.startThread(turn.options);
     const input: Input =
         turn.images !== undefined && turn.images.length > 0
@@ -69,6 +73,24 @@ const codexEnv = (codexHome: string, cliEnv: Record<string, string> | undefined)
     }
     return { ...env, ...cliEnv, CODEX_HOME: codexHome };
 };
+
+// The subscription-served provider block: Codex speaks its own Responses wire format to the translator
+// (CLIProxyAPI), which serves it on the connected ChatGPT subscription; auth is the fixed local bearer via
+// env_key (never a rotating OAuth token, so nothing races the translator's own refresh loop).
+// supports_websockets=false is load-bearing: the translator's inbound is plain POST SSE, and without it Codex
+// burns five WebSocket connect retries per turn before falling back.
+const translatorProvider = (baseUrl: string): NonNullable<CodexOptions["config"]> => ({
+    model_provider: "translator",
+    model_providers: {
+        translator: {
+            name: "translator",
+            base_url: `${baseUrl.replace(/\/$/, "")}/v1`,
+            wire_api: "responses",
+            env_key: "CODEX_API_KEY",
+            supports_websockets: false,
+        },
+    },
+});
 
 const threadOptions = (request: AgentRequest, sandboxMode: SandboxMode): ThreadOptions => {
     const effort = request.effort !== undefined ? reasoningEffort(request.effort) : undefined;
@@ -231,7 +253,11 @@ const CODEX_PLAN_PREAMBLE =
 // Always-plan flow over the shared skeleton (the exec surface has no ExitPlanMode hook): a read-only planning
 // turn whose trailing message becomes the plan, then a full-access execution turn resumed on the same thread.
 // ponytail: no `question` frames on Codex (no AskUserQuestion analog in exec mode); app-server adds one.
-async function* runCodexPlanTurn(request: AgentRequest, runner: CodexRunner, env: Record<string, string>): AsyncGenerator<AgentEvent> {
+async function* runCodexPlanTurn(
+    request: AgentRequest,
+    runner: CodexRunner,
+    turnBase: Pick<CodexTurn, "env" | "config">,
+): AsyncGenerator<AgentEvent> {
     const { images: firstTurnImages, others } = splitAttachments(request.attachments);
     // Images ride the first planning turn only — revision and execute turns resume the same thread, whose
     // context already holds them.
@@ -243,7 +269,7 @@ async function* runCodexPlanTurn(request: AgentRequest, runner: CodexRunner, env
                 prompt,
                 ...(images.length > 0 ? { images } : {}),
                 ...(sessionId !== undefined ? { sessionId } : {}),
-                env,
+                ...turnBase,
                 options: threadOptions(request, "read-only"),
                 signal: request.signal,
             }),
@@ -258,7 +284,7 @@ async function* runCodexPlanTurn(request: AgentRequest, runner: CodexRunner, env
             runner({
                 prompt: EXECUTE_PROMPT,
                 ...(sessionId !== undefined ? { sessionId } : {}),
-                env,
+                ...turnBase,
                 options: threadOptions(request, "danger-full-access"),
                 signal: request.signal,
             }),
@@ -274,8 +300,14 @@ async function* runCodexPlanTurn(request: AgentRequest, runner: CodexRunner, env
 export const createCodexAgent = (codexHome: string, runner: CodexRunner = defaultRunner) =>
     async function* runCodexAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
         // Per-account CODEX_HOME when the turn resolved one; the constructor's base dir is the OPENAI_API_KEY
-        // fallback path only.
+        // fallback path only. A subscription-served turn (codexEndpoint) layers the translator provider block
+        // on top: the bearer rides CODEX_API_KEY and the home holds only sessions — whatever auth.json it may
+        // carry is ignored by the custom provider.
         const env = codexEnv(request.codexHome ?? codexHome, request.cliEnv);
+        const turnBase: Pick<CodexTurn, "env" | "config"> =
+            request.codexEndpoint !== undefined
+                ? { env: { ...env, CODEX_API_KEY: request.codexEndpoint.authToken }, config: translatorProvider(request.codexEndpoint.baseUrl) }
+                : { env };
         // Codex reports a real failure (out of credits, usage limits, a bad model) as a turn.failed/error frame
         // on its JSON stream and THEN exits non-zero — which makes the SDK throw a generic "Codex Exec exited
         // with code N: <stderr>" whose stderr is only codex's benign "Reading prompt from stdin..." line.
@@ -284,13 +316,13 @@ export const createCodexAgent = (codexHome: string, runner: CodexRunner = defaul
         const { images, others } = splitAttachments(request.attachments);
         const turn =
             request.plan === true
-                ? runCodexPlanTurn(request, runner, env)
+                ? runCodexPlanTurn(request, runner, turnBase)
                 : streamTurn(
                       runner({
                           prompt: withFileNote(request.prompt, others),
                           ...(images.length > 0 ? { images } : {}),
                           ...(request.sessionId !== undefined ? { sessionId: request.sessionId } : {}),
-                          env,
+                          ...turnBase,
                           options: threadOptions(request, "danger-full-access"),
                           signal: request.signal,
                       }),

@@ -97,6 +97,38 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
     expect(turn.env["DISCORD_BOT_TOKEN"]).toBe("tok");
 });
 
+test("a subscription-served turn (codexEndpoint) rides the translator provider block on the local bearer, no auth.json", async () => {
+    const { runner, calls } = fakeRunner([]);
+    await collect(createCodexAgent("/work/.intentic/codex", runner), {
+        ...request,
+        model: "gpt-5.5",
+        codexEndpoint: { baseUrl: "http://127.0.0.1:8788", authToken: "intentic-translator-local" },
+    });
+    const turn = calls[0]!;
+    // The bearer rides CODEX_API_KEY (env_key), not an OAuth token in a home.
+    expect(turn.env["CODEX_API_KEY"]).toBe("intentic-translator-local");
+    // A full model_providers block pinned to the translator's /v1, Responses wire format, WS disabled.
+    expect(turn.config).toEqual({
+        model_provider: "translator",
+        model_providers: {
+            translator: {
+                name: "translator",
+                base_url: "http://127.0.0.1:8788/v1",
+                wire_api: "responses",
+                env_key: "CODEX_API_KEY",
+                supports_websockets: false,
+            },
+        },
+    });
+});
+
+test("a native (account) turn carries no provider config — Codex uses its own credential resolution", async () => {
+    const { runner, calls } = fakeRunner([]);
+    await collect(createCodexAgent("/work/.intentic/codex", runner), { ...request, model: "gpt-5-codex" });
+    expect(calls[0]!.config).toBeUndefined();
+    expect(calls[0]!.env["CODEX_API_KEY"]).toBeUndefined();
+});
+
 test("a failed command surfaces its output as a failed update", async () => {
     const { runner } = fakeRunner([
         {

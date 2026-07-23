@@ -9,7 +9,7 @@ import { capabilityCtx } from "./capabilities/capability.js";
 import { startTranslator } from "./agent/translator.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
 import { reconnectVpns } from "./capabilities/handlers/vpn.js";
-import { writeCodexConfig } from "./codex/codex-credentials.js";
+import { writeCodexConfig } from "./codex/codex-config.js";
 import { createServices } from "./composition.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
@@ -53,10 +53,11 @@ const main = async (): Promise<void> => {
     process.on("uncaughtException", (err) => logger.error({ err }, "uncaught exception"));
     const services = createServices(config, logger);
 
-    // Privacy defaults for the OPENAI_API_KEY-fallback CODEX_HOME (per-account homes get theirs at connect time,
-    // codex-credentials.ts writeTokens). Best-effort: a Codex turn works without it, just unhardened.
-    void writeCodexConfig(join(services.authRoot, "codex")).catch((error: unknown) =>
-        logger.warn({ err: error }, "codex privacy config not written"),
+    // The sandbox-wide CODEX_HOME's config.toml: privacy hardening plus, when a translator is baked, the
+    // `translator` model_provider on the ChatGPT subscription — the default that serves the Claude agent's shell
+    // delegation (its freeform `codex exec` can't pass per-turn overrides). Best-effort; authoritative overwrite.
+    void writeCodexConfig(join(services.authRoot, "codex"), config.translator.url).catch((error: unknown) =>
+        logger.warn({ err: error }, "codex config not written"),
     );
 
     // Setup-time desktop sync: arm the platform-minted pairing token so the connect script can enroll its agent.

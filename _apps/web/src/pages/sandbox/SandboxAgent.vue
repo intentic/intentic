@@ -75,19 +75,22 @@ onMounted(() => {
 watch(() => route.query[`connect`], focusConnect);
 onUnmounted(closeAccountManage);
 
-// The "Under Claude Code" row shown on the codex/grok tabs: the sandbox's translator (CLIProxyAPI) serves those
-// models to the Claude Code harness on a subscription credential of its own — a separate sign-in from the
-// native account above it (each program owns and refreshes its own OAuth grant). Claude has no row: it IS the
-// Claude Code harness.
+// The subscription connection, served by the sandbox's translator (CLIProxyAPI). For ChatGPT (codex) it is the
+// ONE connection — Codex authenticates through it everywhere (native and under the Claude Code harness), so
+// there's no separate account. For Grok it's a secondary row beneath the native account (the account runs
+// Grok's own harness; the subscription runs Grok models UNDER the Claude Code harness). Claude has no row: it
+// IS the Claude Code harness.
 const routedProvider = computed<KeyedProvider | undefined>(() =>
     managedProvider.value === `codex` || managedProvider.value === `grok` ? managedProvider.value : undefined,
 );
-const ROUTED_ROW: Record<KeyedProvider, { hint: string; loginHint: string }> = {
+const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; loginHint: string }> = {
     codex: {
-        hint: `Runs Codex models under the Claude Code harness on your ChatGPT subscription — a separate sign-in from the account above.`,
+        title: `ChatGPT subscription`,
+        hint: `Runs Codex on your ChatGPT subscription — everywhere: on its own and under the Claude Code harness.`,
         loginHint: `Open ChatGPT, sign in, and enter this one-time code.`,
     },
     grok: {
+        title: `Under Claude Code`,
         hint: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription — a separate sign-in from the account above.`,
         loginHint: `Open x.ai with your SuperGrok / X Premium account and enter this code.`,
     },
@@ -111,20 +114,16 @@ const usageLine = (id: string): string | undefined => {
     return `${usage.turns} turns · ${shortTokens(usage.inputTokens)} in / ${shortTokens(usage.outputTokens)} out${cache}${cost}`;
 };
 
-// The flows differ: Anthropic shows a code on its hosted page to paste back; ChatGPT uses a device code (the
-// user enters it on OpenAI's page and this panel connects on its own); Grok (xAI OAuth) opens x.ai on any
-// device and connects on approval (a paste-back code only for the non-device method).
+// The native flows differ (codex has no native account — it connects via the subscription row below): Anthropic
+// shows a code on its hosted page to paste back; Grok (xAI OAuth) opens x.ai on any device and connects on
+// approval (a paste-back code only for the non-device method).
 const connectHint = computed(() =>
-    managedProvider.value === `codex`
-        ? `Open ChatGPT, sign in, and enter this one-time code — the app connects automatically.`
-        : managedProvider.value === `grok`
-          ? `Open x.ai on any device with your SuperGrok / X Premium account and approve — this connects on its own.`
-          : `Open Anthropic to authorize, then paste the code it shows you.`,
+    managedProvider.value === `grok`
+        ? `Open x.ai on any device with your SuperGrok / X Premium account and approve — this connects on its own.`
+        : `Open Anthropic to authorize, then paste the code it shows you.`,
 );
-const openLabel = computed(() =>
-    managedProvider.value === `codex` ? `Open ChatGPT` : managedProvider.value === `grok` ? `Open x.ai` : `Open Anthropic`,
-);
-const pastePlaceholder = computed(() => (managedProvider.value === `codex` ? `Paste localhost URL…` : `Paste code…`));
+const openLabel = computed(() => (managedProvider.value === `grok` ? `Open x.ai` : `Open Anthropic`));
+const pastePlaceholder = computed(() => `Paste code…`);
 // Grok holds a single account (OpenCode owns the xAI credential), so hide "connect another" once it's linked.
 const canConnectMore = computed(() => managedProvider.value !== `grok` || managedAccounts.value.length === 0);
 // A connect handshake is live once startConnect has produced its authorize URL / device code.
@@ -326,6 +325,9 @@ const importMemory = async (): Promise<void> => {
 
             <p v-if="chatError" class="text-2xs text-danger">{{ chatError }}</p>
 
+            <!-- Native accounts (Claude, Grok). ChatGPT/Codex has no native account — it connects only through the
+                 subscription row below — so its whole native section is hidden. -->
+            <template v-if="managedProvider !== `codex`">
             <!-- Connected accounts for the managed provider; each can be disconnected independently. -->
             <ul v-if="managedAccounts.length > 0" class="flex flex-col gap-1">
                 <li
@@ -371,31 +373,7 @@ const importMemory = async (): Promise<void> => {
                         placeholder="Account name (optional)"
                         class="min-w-0 rounded-md border border-line bg-card px-3 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
                     />
-                    <template v-if="managedProvider === `codex`">
-                        <div v-if="userCode" class="flex flex-col items-center gap-1 rounded-md border border-line bg-card py-2">
-                            <span class="text-2xs text-subtle">Your one-time code</span>
-                            <span class="font-mono text-lg font-semibold tracking-[0.2em] text-content">{{ userCode }}</span>
-                            <CopyButton :text="userCode ?? ``" label="Copy" />
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <Button
-                                v-if="authorizeUrl"
-                                as="a"
-                                :label="openLabel"
-                                size="small"
-                                severity="secondary"
-                                :href="authorizeUrl"
-                                target="_blank"
-                                rel="noopener"
-                            >
-                                <template #icon><Icon name="external-link" /></template>
-                            </Button>
-                            <span v-if="userCode" class="text-2xs text-subtle"
-                                ><Icon name="spinner" class="mr-1" spin />Waiting for you to finish signing in…</span
-                            >
-                        </div>
-                    </template>
-                    <template v-else-if="managedProvider === `grok`">
+                    <template v-if="managedProvider === `grok`">
                         <div v-if="userCode" class="flex flex-col items-center gap-1 rounded-md border border-line bg-card py-2">
                             <span class="text-2xs text-subtle">Code (already filled in at x.ai — just approve)</span>
                             <span class="font-mono text-lg font-semibold tracking-[0.2em] text-content">{{ userCode }}</span>
@@ -447,11 +425,13 @@ const importMemory = async (): Promise<void> => {
                     </div>
                 </template>
             </div>
+            </template>
 
-            <!-- "Under Claude Code" (codex/grok tabs only): the translator's subscription connection for running
-                 this provider's models inside the Claude Code harness — a device-code login; the translator
-                 connects on its own and the shared poll flips the row to "connected". -->
-            <div v-if="routedProvider" class="flex flex-col gap-1.5 border-t border-line pt-2">
+            <!-- The subscription connection (translator). ChatGPT/Codex: the ONE connection, so it's the card's
+                 primary control. Grok: a secondary row beneath the native account, for running Grok UNDER the
+                 Claude Code harness. A device-code login; the translator connects on its own and the shared poll
+                 flips the row to "connected". -->
+            <div v-if="routedProvider" class="flex flex-col gap-1.5" :class="routedProvider === `grok` ? 'border-t border-line pt-2' : ''">
                 <div class="flex items-start justify-between gap-2">
                     <span class="flex min-w-0 flex-col gap-0.5">
                         <span class="flex items-center gap-2 text-sm text-content">
@@ -460,7 +440,7 @@ const importMemory = async (): Promise<void> => {
                                 class="text-[0.5rem]"
                                 :class="translatorAccounts[routedProvider] ? 'text-success' : 'text-subtle'"
                             />
-                            Under Claude Code
+                            {{ ROUTED_ROW[routedProvider].title }}
                             <span class="text-2xs text-subtle">{{ translatorAccounts[routedProvider] ? "connected" : "not connected" }}</span>
                         </span>
                         <span class="pl-3.5 text-2xs text-muted">{{ ROUTED_ROW[routedProvider].hint }}</span>

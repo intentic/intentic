@@ -157,6 +157,7 @@ const baseConfig: Config = {
     anthropicApiKey: "",
     openaiApiKey: "",
     cloudflareApiToken: "",
+    translator: { url: "", token: "" },
     sandbox: { port: 8787, host: "0.0.0.0", publicUrl: "", name: "", image: "", environmentHash: "" },
     preview: { port: 5173 },
     google: { clientId: "" },
@@ -205,17 +206,15 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         clear: async () => {},
         list: async () => [{ id: "default", label: "Claude", connectedAt: 0 }],
     },
-    codexStore: {
-        home: (id) => `/work/.intentic/codex/${id}`,
-        connected: async () => false,
-        read: async () => undefined,
-        writeTokens: async () => {},
-        write: async () => {},
-        clear: async () => {},
-        list: async () => [],
+    // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
+    cliProxy: {
+        accounts: async () => ({ codex: false, grok: false }),
+        connectGrok: async () => ({ url: "", code: "" }),
+        connectCodex: async () => ({ url: "", code: "" }),
+        disconnect: async () => {},
     },
-    codexHealth: async () => undefined,
-    locateCodexThread: async () => undefined,
+    codexHome: "/work/.intentic/codex",
+    codexThreadExists: async () => true,
     // Never-empty catalog fakes matching the daemon's contract, so a native turn always resolves a model.
     claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
     codexModels: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }), record: async () => {} },
@@ -1064,20 +1063,21 @@ test("agent.run selects the Claude account named on the turn and forwards its to
     expect(seen?.oauthToken).toBe("tok-b");
 });
 
-test("agent.run points a Codex turn at the selected account's CODEX_HOME", async () => {
-    let seen: { codexHome?: string } | undefined;
+const withTranslator = { ...baseConfig, translator: { url: "http://127.0.0.1:8788", token: "local-bearer" } };
+const codexConnectedProxy = {
+    accounts: async () => ({ codex: true, grok: false }),
+    connectGrok: async () => ({ url: "", code: "" }),
+    connectCodex: async () => ({ url: "", code: "" }),
+    disconnect: async () => {},
+};
+
+test("agent.run serves a Codex turn on the translator subscription over the local bearer, no per-turn home", async () => {
+    let seen: { codexEndpoint?: { baseUrl: string; authToken: string }; codexHome?: string } | undefined;
     const client = clientFor(
         createApp(
             services({
-                codexStore: {
-                    home: (id) => `/work/.intentic/codex/${id}`,
-                    connected: async () => true,
-                    read: async () => undefined,
-                    writeTokens: async () => {},
-                    write: async () => {},
-                    clear: async () => {},
-                    list: async () => [{ id: "acc-1", label: "x", connectedAt: 0 }],
-                },
+                config: withTranslator,
+                cliProxy: codexConnectedProxy,
                 codexAgent: async function* (request) {
                     seen = request;
                     yield { kind: "done" };
@@ -1085,44 +1085,39 @@ test("agent.run points a Codex turn at the selected account's CODEX_HOME", async
             }),
         ),
     );
-    await runAgentTurn(client, { prompt: "hi", agent: "codex", account: "acc-1" });
-    expect(seen?.codexHome).toBe("/work/.intentic/codex/acc-1");
+    const events = await runAgentTurn(client, { prompt: "hi", agent: "codex" });
+    expect(events.some((event) => event.kind === "error")).toBe(false);
+    // Served over the translator's OpenAI endpoint on the fixed local bearer; the adapter's default home serves.
+    expect(seen?.codexEndpoint).toEqual({ baseUrl: "http://127.0.0.1:8788", authToken: "local-bearer" });
+    expect(seen?.codexHome).toBeUndefined();
 });
 
-test("agent.run resumes a Codex turn under the CODEX_HOME that owns the thread, not the first account", async () => {
-    let seen: { codexHome?: string } | undefined;
-    const client = clientFor(
-        createApp(
-            services({
-                // A different account is "first" now, but the thread was minted under acc-1 — the resume must
-                // follow the owner the locator returns, not whichever account list() puts first.
-                codexStore: {
-                    home: (id) => `/work/.intentic/codex/${id}`,
-                    connected: async () => true,
-                    read: async () => undefined,
-                    writeTokens: async () => {},
-                    write: async () => {},
-                    clear: async () => {},
-                    list: async () => [{ id: "acc-2", label: "y", connectedAt: 0 }],
-                },
-                locateCodexThread: async () => ({ home: "/work/.intentic/codex/acc-1", accountId: "acc-1" }),
-                codexAgent: async function* (request) {
-                    seen = request;
-                    yield { kind: "done" };
-                },
-            }),
-        ),
-    );
-    await runAgentTurn(client, { prompt: "hi", agent: "codex", sessionId: "thr-x" });
-    expect(seen?.codexHome).toBe("/work/.intentic/codex/acc-1");
-});
-
-test("agent.run pre-flights a Codex resume with no owning home as session-not-found", async () => {
+test("agent.run gates a Codex turn with no subscription and no api key as subscription-required", async () => {
     let codexCalled = false;
     const client = clientFor(
         createApp(
             services({
-                locateCodexThread: async () => undefined,
+                config: withTranslator,
+                codexAgent: async function* () {
+                    codexCalled = true;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    const events = await runAgentTurn(client, { prompt: "hi", agent: "codex" });
+    expect(codexCalled).toBe(false);
+    expect(events.some((event) => event.kind === "error" && event.code === "subscription-required")).toBe(true);
+});
+
+test("agent.run pre-flights a Codex resume whose thread no longer exists as session-not-found", async () => {
+    let codexCalled = false;
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                cliProxy: codexConnectedProxy,
+                codexThreadExists: async () => false,
                 codexAgent: async function* () {
                     codexCalled = true;
                     yield { kind: "done" };

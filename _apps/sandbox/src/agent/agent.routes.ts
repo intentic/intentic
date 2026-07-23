@@ -249,15 +249,12 @@ async function* runTurn(
     // claude branch below, which serves them by pointing the harness at the sandbox's translator.
     const harness = input.harness ?? "native";
     if (input.agent === "codex" && harness === "native") {
-        // Codex reads its credential itself from the account's CODEX_HOME/auth.json (and refreshes it in place);
-        // the gate only checks something is there. Claude-only fields (plugins, MCP, thinking) don't apply.
-        // A resume must run under the CODEX_HOME that MINTED the thread — its rollout lives under exactly one home
-        // and the connected-account set can change between turns (turn 1 served by OPENAI_API_KEY's fallback home,
-        // then the user signs into ChatGPT and the "first" account changes). Locate the owner and pin the turn to
-        // it so the resume finds its rollout and the conversation continues; no owner ⇒ the same self-healing
-        // coded error the Claude path uses below. A fresh turn (no sessionId) keeps the default resolution.
-        const located = input.sessionId !== undefined ? await services.locateCodexThread(input.sessionId) : undefined;
-        if (input.sessionId !== undefined && located === undefined) {
+        // Codex has no sandbox-owned OAuth: it authenticates through the translator on the user's ChatGPT
+        // SUBSCRIPTION (the same connection the claude-code harness rides), or the container OPENAI_API_KEY on a
+        // bare dev run with no translator. There's a single sandbox-wide CODEX_HOME (the adapter's default), so a
+        // resume is a plain existence check against it; a missing thread self-heals like the Claude path below.
+        // Claude-only fields (plugins, MCP, thinking) don't apply here.
+        if (input.sessionId !== undefined && !(await services.codexThreadExists(input.sessionId))) {
             yield {
                 kind: "error",
                 code: "session-not-found",
@@ -267,48 +264,38 @@ async function* runTurn(
             yield { kind: "done" };
             return;
         }
-        // The home + account serving the turn: the located owner on a resume (undefined accountId ⇒ the
-        // OPENAI_API_KEY fallback home), else the selected/first account (fallback home when none is connected).
-        let codexHome: string | undefined;
-        let accountId: string | undefined;
-        let servedByFallback: boolean;
-        if (located !== undefined) {
-            codexHome = located.home;
-            accountId = located.accountId;
-            servedByFallback = located.accountId === undefined;
-        } else {
-            accountId = input.account ?? (await services.codexStore.list())[0]?.id;
-            const connected = accountId !== undefined && (await services.codexStore.connected(accountId));
-            codexHome = accountId !== undefined && connected ? services.codexStore.home(accountId) : undefined;
-            servedByFallback = !connected;
-        }
-        if (servedByFallback && services.config.openaiApiKey === "") {
-            yield { kind: "error", message: "No ChatGPT account connected — connect it in Setup before chatting." };
-            yield { kind: "done" };
-            return;
-        }
-        // Surface a revoked/expired sign-in as a clean, coded error BEFORE spawning the CLI (which would otherwise
-        // fail opaquely mid-turn). Only for an account-served turn with no OPENAI_API_KEY fallback to save it.
-        const health =
-            accountId !== undefined && !servedByFallback && services.config.openaiApiKey === "" ? await services.codexHealth(accountId) : undefined;
-        if (health?.needsReauth) {
-            yield { kind: "error", code: "codex-reauth", message: health.detail };
+        // The subscription (via the translator) is the credential; the container OPENAI_API_KEY is the only
+        // fallback (a bare dev run with no translator baked).
+        const translatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex;
+        if (!translatorReady && services.config.openaiApiKey === "") {
+            yield {
+                kind: "error",
+                code: "subscription-required",
+                message:
+                    services.config.translator.url === ""
+                        ? "This sandbox has no model translator, so Codex can't run here. Run a sandbox built from the published image."
+                        : "Connect your ChatGPT subscription in Sandbox ▸ Agent to run Codex.",
+            };
             yield { kind: "done" };
             return;
         }
         run = services.codexAgent;
-        resolvedAccount = servedByFallback ? undefined : accountId;
+        // Attribution key: the shared subscription serving all Codex turns, else undefined for the api-key fallback.
+        resolvedAccount = translatorReady ? "codex-subscription" : undefined;
         // Resolve a concrete model so the turn never falls back to @openai/codex-sdk's built-in default
-        // (gpt-5-codex), which a ChatGPT account can reject ("model not supported when using Codex with a ChatGPT
-        // account"). An explicit selection rides through (a stale one self-heals via codex-model-invalid); an empty
-        // one resolves the catalog default (discovery → persisted → seed floor, never empty — see codex-catalog).
-        const model = input.model !== undefined && input.model !== "" ? input.model : (await services.codexModels.models(accountId)).default;
+        // (gpt-5-codex), which the subscription can reject. An explicit selection rides through (a stale one
+        // self-heals via codex-model-invalid); an empty one resolves the catalog default (discovery → persisted →
+        // seed floor, never empty — see codex-catalog).
+        const model = input.model !== undefined && input.model !== "" ? input.model : (await services.codexModels.models()).default;
         const withModel = { ...base, model };
-        // Pin CODEX_HOME to the resolved home; absent ⇒ the adapter's OPENAI_API_KEY fallback home. Codex takes
-        // attachments structurally: images ride as native local_image inputs, the rest as a file list in the
-        // prompt (split in the adapter).
-        const withHome = codexHome !== undefined ? { ...withModel, codexHome } : withModel;
-        request = attachmentPaths.length > 0 ? { ...withHome, attachments: attachmentPaths } : withHome;
+        // A subscription-served turn rides the translator's OpenAI-compatible endpoint on the fixed local bearer
+        // (the adapter builds the provider block); the dev api-key path uses Codex's own OPENAI_API_KEY default.
+        // The default CODEX_HOME (createCodexAgent) serves every turn — no per-turn home. Codex takes attachments
+        // structurally: images ride as native local_image inputs, the rest as a file list in the prompt.
+        const withAuth = translatorReady
+            ? { ...withModel, codexEndpoint: { baseUrl: services.config.translator.url, authToken: services.config.translator.token } }
+            : withModel;
+        request = attachmentPaths.length > 0 ? { ...withAuth, attachments: attachmentPaths } : withAuth;
     } else if (input.agent === "grok" && harness === "native") {
         // Grok rides OpenCode with xAI subscription OAuth (OpenCode owns the credential). Gate on OpenCode's own
         // connection view. Claude-only fields (plugins, MCP tools, thinking) don't apply.
@@ -442,14 +429,13 @@ async function* runTurn(
             // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
             ...(hashlineEdits ? { hashline: createHashlineServer(effectiveCwd) } : {}),
         };
-        // Cross-provider delegation via the shell: when a Codex/Grok account is connected, the agent's Bash
-        // gets the codex CLI's CODEX_HOME (first connected account, same resolution as a primary turn) and the
-        // system prompt a short how-to note. Nothing connected ⇒ no env, no note — delegation isn't offered.
-        const codexAccountId = (await services.codexStore.list())[0]?.id;
-        const codexHome =
-            codexAccountId !== undefined && (await services.codexStore.connected(codexAccountId))
-                ? services.codexStore.home(codexAccountId)
-                : undefined;
+        // Cross-provider delegation via the shell: when Codex is reachable, the agent's Bash gets the shared
+        // CODEX_HOME (whose config.toml selects the translator subscription) plus the local bearer, and the
+        // system prompt a short how-to note. Codex is reachable when the translator holds the ChatGPT
+        // subscription, or a dev OPENAI_API_KEY is set; nothing ⇒ no env, no note — delegation isn't offered.
+        const codexTranslatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex;
+        const codexDelegable = codexTranslatorReady || services.config.openaiApiKey !== "";
+        const codexHome = codexDelegable ? services.codexHome : undefined;
         // Resolve the xAI model the delegation note names from xAI's live catalog (default, else first), so the
         // note never hardcodes a since-renamed id. Tolerate a transient xAI blip — a Claude turn must not fail on
         // this lookup; the note then omits the model and tells the agent to list xAI's models itself.
@@ -468,7 +454,13 @@ async function* runTurn(
             ...(grokConnected ? { openCodeXdg: services.authRoot } : {}),
             ...(grokModel !== undefined ? { grokModel } : {}),
         });
-        const shellEnv = { ...cliEnv, ...(codexHome !== undefined ? { CODEX_HOME: codexHome } : {}) };
+        const shellEnv = {
+            ...cliEnv,
+            ...(codexHome !== undefined ? { CODEX_HOME: codexHome } : {}),
+            // The translator provider (config.toml) reads the bearer from CODEX_API_KEY; the dev api-key path
+            // uses the container's own OPENAI_API_KEY, already in the shell env.
+            ...(codexTranslatorReady ? { CODEX_API_KEY: services.config.translator.token } : {}),
+        };
         // The turn's user message: attachment note folded in as before. With stableSystemPrompt on, the delegation
         // note is prepended HERE (a user-message preamble) instead of appended to the preset system prompt, so the
         // cached system+tools prefix stays byte-stable and the provider prompt cache is reused across the session.
