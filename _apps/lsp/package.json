@@ -17,7 +17,7 @@
     },
     "scripts": {
         "build": "tsgo",
-        "watch": "tsc --build --watch",
+        "watch": "tsgo --build --watch",
         "test": "vitest run",
         "test:watch": "vitest"
     },

@@ -21,11 +21,10 @@
     },
     "scripts": {
         "build": "tsgo",
-        "watch": "tsc --build --watch"
+        "watch": "tsgo --build --watch"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
-        "@typescript/native-preview": "catalog:",
-        "typescript": "catalog:"
+        "@typescript/native-preview": "catalog:"
     }
 }

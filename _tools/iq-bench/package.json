@@ -7,7 +7,7 @@
     "type": "module",
     "scripts": {
         "build": "tsgo",
-        "watch": "tsc --build --watch",
+        "watch": "tsgo --build --watch",
         "test": "vitest run",
         "test:watch": "vitest",
         "bench:retrieval": "node dist/cli.js retrieval",
@@ -22,7 +22,6 @@
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
-        "typescript": "catalog:",
         "vitest": "catalog:"
     }
 }

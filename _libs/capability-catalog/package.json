@@ -21,7 +21,7 @@
     },
     "scripts": {
         "build": "tsgo",
-        "watch": "tsc --build --watch",
+        "watch": "tsgo --build --watch",
         "test": "vitest run",
         "test:watch": "vitest"
     },
@@ -33,7 +33,6 @@
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
         "@typescript/native-preview": "catalog:",
-        "typescript": "catalog:",
         "vitest": "catalog:"
     }
 }

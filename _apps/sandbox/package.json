@@ -12,7 +12,7 @@
     },
     "scripts": {
         "build": "tsgo",
-        "watch": "tsc --build --watch",
+        "watch": "tsgo --build --watch",
         "dev": "tsx watch ./src/main.ts",
         "test": "vitest run",
         "test:watch": "vitest",
@@ -69,7 +69,6 @@
         "testcontainers": "catalog:",
         "tsx": "catalog:",
         "@typescript/native-preview": "catalog:",
-        "typescript": "catalog:",
         "vitest": "catalog:"
     }
 }

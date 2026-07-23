@@ -319,7 +319,11 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
         code: setup.value.code,
         hostname: setup.value.hostname,
         ...(mode.value === `own` ? { cfToken: cfToken.value.trim() } : {}),
-        image: platformUrlOverride.value ? DEV_SANDBOX_IMAGE : `registry.gitlab.com/radarsu/intentic/sandbox:stable`,
+        // Compose has NO build step and is deployed to a host that must PULL the image — so it always
+        // references the published registry image, never the local `:dev` tag connect.sh rebuilds from the
+        // checkout (a local-only tag can't be pulled and won't exist on a deploy target). The rendered file
+        // gets pull_policy: always, tracking the moving `:stable` release.
+        image: `registry.gitlab.com/radarsu/intentic/sandbox:stable`,
         googleClientId: environment.auth.googleClientId,
         ...(platformUrlOverride.value ? { platformUrl: platformUrlOverride.value } : {}),
     };

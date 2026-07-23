@@ -39,8 +39,9 @@ const bootstrap = computed(() => composeBootstrap(props.args));
         <p v-if="args.platformUrl" class="flex items-center gap-2 text-xs text-warning">
             <Icon name="box" class="shrink-0" />
             <span
-                >Local dev: compose runs <code>{{ args.image }}</code> as-is and won't rebuild it from your checkout — build it first (run the
-                Linux/macOS command once, or <code>pnpm dev:sandbox</code>).</span
+                >Local dev: compose pulls the <b>published</b> <code>{{ args.image }}</code> (not your local checkout — compose can't rebuild), and
+                its <code>PLATFORM_URL</code> points at your machine, so run it here on the same machine as your dev platform. To deploy to a real
+                environment, generate this from that environment's platform instead.</span
             >
         </p>
     </div>
