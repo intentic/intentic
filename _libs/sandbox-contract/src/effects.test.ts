@@ -114,6 +114,14 @@ describe("capabilityEffects", () => {
         expect(capabilityEffects({ kind: "vpn", config: {} })).toContainEqual({ kind: "runtime", level: "net-admin" });
     });
 
+    it("marks docker as a fully privileged runtime rebuild running dockerd", () => {
+        expect(capabilityEffects({ kind: "docker", config: {} })).toEqual([
+            { kind: "image" },
+            { kind: "runtime", level: "privileged" },
+            { kind: "process", names: ["dockerd"] },
+        ]);
+    });
+
     it("keeps a browser profile per platform", () => {
         expect(capabilityEffects({ kind: "browser", id: "reddit", config: { platform: "reddit" } })).toEqual([
             { kind: "skill", name: "reddit" },

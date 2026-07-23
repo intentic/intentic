@@ -112,6 +112,7 @@ export const secretField = (capability: Capability, connectors: Map<string, Reso
         case "monorepo":
         case "service":
         case "integration":
+        case "docker":
         // The browser session lives in a Chromium profile (managed by the guided-login flow), not a manifest field.
         case "browser":
             return undefined;
@@ -170,6 +171,8 @@ export const echoConfig = (capability: Capability, connectors: Map<string, Resol
         case "devops":
             return {};
         case "monorepo":
+            return {};
+        case "docker":
             return {};
         case "browser":
             return { platform: capability.config.platform };

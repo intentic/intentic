@@ -52,13 +52,14 @@ const environmentDigest = (dockerfile: string): string => createHash("sha256").u
 const desiredImage = (parsed: WorkspaceInputs): string =>
     parsed.dockerfile === undefined ? parsed.image : `intentic-sandbox-env:${environmentDigest(parsed.dockerfile).slice(0, 12)}`;
 
-const RUNTIME_ALLOWLIST = new Set(["--device=/dev/net/tun", "--cap-add=NET_ADMIN"]);
+const RUNTIME_ALLOWLIST = new Set(["--device=/dev/net/tun", "--cap-add=NET_ADMIN", "--privileged"]);
 const RUNTIME_DIRECTIVE = "# intentic:runtime ";
 
-// Container devices/caps come ONLY from "# intentic:runtime" directive lines in the owner-approved overlay —
-// emitted by capability fragments (the vpn's WireGuard needs tun + NET_ADMIN) — allowlisted hard so an overlay
-// can't smuggle arbitrary docker flags. "" when no overlay or no directives; a trailing space otherwise, so it
-// splices into the run command cleanly.
+// Container privileges come ONLY from "# intentic:runtime" directive lines in the owner-approved overlay —
+// emitted by capability fragments (the vpn's WireGuard needs tun + NET_ADMIN; the docker capability's nested
+// engine needs --privileged) — allowlisted hard so an overlay can't smuggle arbitrary docker flags. The base
+// run is unprivileged. "" when no overlay or no directives; a trailing space otherwise, so it splices into the
+// run command cleanly.
 const runtimeFlags = (dockerfile: string | undefined): string => {
     if (dockerfile === undefined) {
         return "";
@@ -188,9 +189,10 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
             const run = await session.exec(
                 // rm + run in ONE exec: when `intentic apply` runs INSIDE the sandbox being recreated, the rm
                 // kills the CLI — two separate execs would never reach the run.
-                // Privileged with its own ISOLATED Docker Engine (dockerd inside; the host's docker socket is
-                // never mounted) — the vpn overlay's runtime directives (runtimeFlags above) are subsumed by
-                // it but still validated, like rebuild.sh's local path.
+                // Unprivileged by default — container privileges (the docker capability's --privileged for its
+                // ISOLATED nested engine, the vpn's tun + NET_ADMIN) ride in solely through the overlay's
+                // allowlisted runtime directives (runtimeFlags above), like rebuild.sh's local path. The host's
+                // docker socket is never mounted.
                 // Both ports bind the host's INTERNAL ip — cloudflared
                 // (--network host) reaches the preview proxy there for the wildcard preview route, and the engine
                 // health-probes the daemon, without exposing either on the host's public interface. The tools
@@ -203,7 +205,7 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 // avoids the operator resolver's negatively-cached NXDOMAIN that otherwise fails the dial (ECONNRESET).
                 `(docker logs --tail 2000 ${CONTAINER} > /opt/intentic/workspace-previous.log 2>&1 || true) && ` +
                     `(docker rm -f ${CONTAINER} 2>/dev/null || true) && ` +
-                    `docker run -d --privileged --restart unless-stopped --name ${CONTAINER} --label intentic.id=${ctx.id} --label intentic.type=workspace --label intentic.tools=${digest} ` +
+                    `docker run -d --restart unless-stopped --name ${CONTAINER} --label intentic.id=${ctx.id} --label intentic.type=workspace --label intentic.tools=${digest} ` +
                     `--network ${parsed.network} --add-host host.docker.internal:host-gateway --dns 1.1.1.1 --dns 1.0.0.1 ` +
                     `--log-opt max-size=10m --log-opt max-file=3 ` +
                     runtime +

@@ -7,6 +7,7 @@ import { createApp } from "./app.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { startTranslator } from "./agent/translator.js";
+import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
 import { reconnectVpns } from "./capabilities/handlers/vpn.js";
 import { writeCodexConfig } from "./codex/codex-credentials.js";
 import { createServices } from "./composition.js";
@@ -21,7 +22,6 @@ import { applyTmuxLogHooks, logsRoot, pruneLogFiles, terminalLogsDir } from "./l
 import { applyEventsPath, applyRunLive } from "./intentic/apply-events.js";
 import { checkEventsDir } from "./intentic/check-run.js";
 import { INFRA_APPLY_KEY } from "./intentic/infra-apply.js";
-import { DOCKER_PANEL_KEY, startDockerd } from "./processes/dockerd.js";
 import { killStaleManagedSessions, panelSession } from "./processes/managed-processes.js";
 import { createPreviewProxy } from "./panels/preview-proxy.js";
 import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
@@ -142,10 +142,12 @@ const main = async (): Promise<void> => {
     void rm(checkEventsDir(config.historyRoot), { recursive: true, force: true });
 
     // Enabled VPN tunnels die with the container while the manifest survives on /work — bring them back up
-    // AFTER the sweep; dockerd (part of the base sandbox) starts the same way. Both best-effort: a failure
-    // lands in the vpn capability's status / the daemon log, not the boot path.
-    void reconnectVpns(capabilityCtx(services));
-    void startDockerd(services);
+    // AFTER the sweep; dockerd starts the same way when a docker capability is enabled (the engine is baked
+    // into every image but dormant without it). Both best-effort: a failure lands in the capability's status /
+    // the daemon log, not the boot path.
+    const bootCtx = capabilityCtx(services);
+    void reconnectVpns(bootCtx);
+    void startDockerdIfEnabled(bootCtx);
     // The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": starts when TRANSLATOR_URL
     // is baked (no-op on a bare dev run) and serves those providers on their connected subscription OAuth.
     // Best-effort — a routed turn that finds it down surfaces its own error, and a native-harness turn never touches it.
@@ -218,9 +220,7 @@ const main = async (): Promise<void> => {
     // Warm the resident search engine (sweep + symbols + the embedding backlog) so the first search hits a
     // ready index. In-process and incremental — a valid on-disk index survives boot instead of being dropped
     // and rebuilt. Best-effort: on failure the first query triggers its own refresh.
-    void services.iq
-        .warm()
-        .catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed — first query builds incrementally"));
+    void services.iq.warm().catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed — first query builds incrementally"));
 
     // Warm the Grok provider's OpenCode server at boot instead of lazily on the first /grok/oauth/start. The cold
     // `opencode serve` spawn is CPU-heavy; in a constrained container it can deschedule the daemon long enough to

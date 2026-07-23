@@ -743,6 +743,7 @@ export const CapabilityKindSchema = z.enum([
     "extension",
     "ssh",
     "vpn",
+    "docker",
     "browser",
     "agent",
 ]);
@@ -875,6 +876,10 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("extension"), config: ExtensionConfigSchema }),
     z.object({ id: entryId, kind: z.literal("ssh"), config: SshConfigSchema }),
     z.object({ id: entryId.max(15), kind: z.literal("vpn"), config: VpnConfigSchema }),
+    // The in-sandbox Docker Engine (baked into the base image, dormant by default). No config: the capability's
+    // whole effect is its fragment's `--privileged` runtime directive + running dockerd. No remove — the engine's
+    // state (/var/lib/docker) and whatever runs on it make a silent de-privilege more destructive than useful.
+    z.object({ id: entryId, kind: z.literal("docker"), config: z.object({}) }),
     z.object({ id: entryId, kind: z.literal("browser"), config: BrowserConfigSchema }),
     z.object({ id: entryId, kind: z.literal("agent"), config: AcpAgentConfigSchema }),
 ]);

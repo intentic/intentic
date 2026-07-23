@@ -49,10 +49,12 @@ flowchart TB
   by the **daemon** on boot), member invites (a discovery mirror — the daemon is the enforcer), and
   a pool of pre-provisioned tunnels (`ReservedSandbox`) so setup pays no Cloudflare round-trips
   inline. It never probes the sandbox, owns no infrastructure, and sits **off the command path**.
-- **Sandbox** — one per user, run **privileged with its own isolated Docker Engine** (the image bakes
-  Docker + Compose and the daemon starts dockerd at boot, so `pnpm db:up` / `docker compose` work in the
-  workspace out of the box; the HOST's Docker socket is never mounted, so the agent's containers live inside
-  the sandbox's engine, not on the host daemon; its cloudflared runs as a separate sidecar container). Runs the coding agents (Claude via the agent
+- **Sandbox** — one per user, run **unprivileged by default**; container privileges come only from
+  `# intentic:runtime` directives in the owner-approved overlay, applied by the allowlisted rebuild executors
+  (the `docker` capability's `--privileged` wakes the image-baked, otherwise-dormant isolated Docker Engine so
+  `pnpm db:up` / `docker compose` work in the workspace; the HOST's Docker socket is never mounted, so the
+  agent's containers can only live inside the sandbox's own engine; its cloudflared runs as a separate sidecar
+  container). Runs the coding agents (Claude via the agent
   SDK, Codex, Grok — spawned per turn, not resident) and the `intentic` CLI over the three repos
   (`intent` = `deploy.config.ts`, the IaC; `desired-state` = resolved artifact + status; `app` =
   the application code), and exposes its daemon over its **own Cloudflare tunnel**. SSH keys,
@@ -428,7 +430,7 @@ on connected instances, and as grid badges for the consequential ones (image / r
 | `secret` | `agent-env`: injected into the agent's environment each turn, never written to disk (`cli`). `disk`: a `0600` file or a denylisted manifest field (ssh key/password, WireGuard conf, git token). |
 | `clone` | Git checkout into `.intentic/plugins/<id>` or `.intentic/extensions/<id>` (staged → pinned detached checkout → swap; tokens ride `GIT_CONFIG_*`, never the URL). |
 | `image` | A Dockerfile fragment composed into the environment overlay — needs a one-time owner-run rebuild. |
-| `runtime` | Privileged directives riding a core fragment: `vpn` → `NET_ADMIN` + `/dev/net/tun` (subsumed by the sandbox's `--privileged` base run, still declared as intent). |
+| `runtime` | Privileged directives riding a core fragment — the ONLY source of container privileges (the base run is unprivileged): `vpn` → `NET_ADMIN` + `/dev/net/tun`, `docker` → `--privileged`. |
 | `process` | Long-lived tmux-managed background processes (an extension's declared `processes`), restored on boot. |
 | `mcp` | The manifest entry itself becomes an `mcp__<id>__` server the agent connects to next turn. |
 | `scaffold` | Repos created in the workspace: `devops` → the intent + desired-state repos; `monorepo` → an empty pnpm+turbo repo named after the instance. |
@@ -460,7 +462,7 @@ Per-kind mechanics ([handlers/](_apps/sandbox/src/capabilities/handlers/)):
 | `extension` | Owner-only, sha-pinned clone into `.intentic/extensions/<id>`, validated before swap (manifest parses, prebuilt entry exists, fragment RUN/ENV-only); starts declared `autoStart` processes. |
 | `ssh` | Writes a per-machine Host block + `0600` key/password under `~/.ssh/intentic-hosts` + the shared ssh skill; the instance id is the alias the agent uses (`ssh <id>`). |
 | `vpn` | Stores the WireGuard conf `0600`, brings the tunnel up (`wg-quick`), shared vpn skill; its fragment bakes wireguard-tools + `NET_ADMIN`. The id doubles as the interface name (15-char cap). |
-| `docker` | Fragment bakes Docker Engine + Compose with `--privileged`; runs `dockerd` in a persistent tmux session, restarted on boot — so `pnpm db:up` works like a local dev machine. |
+| `docker` | The engine is baked into the base image, dormant; the fragment is a lone `--privileged` runtime directive (a cache-hit rebuild, not an install). Once privileged, runs `dockerd` in a persistent tmux session, restored on boot — so `pnpm db:up` works like a local dev machine. Not removable. |
 | `browser` | Per-instance platform skill + the Chromium fragment; connecting is a guided live login (screencast over WebSocket) that persists the profile the agent's `@playwright/mcp` drives. |
 
 ### Dependency islands: iq & lsp

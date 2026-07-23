@@ -69,12 +69,14 @@ LABEL org.opencontainers.image.source=https://gitlab.com/radarsu/intentic
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 make g++ ripgrep \
     && rm -rf /var/lib/apt/lists/*
-# Docker Engine + Compose + buildx are part of the base sandbox: a full-stack app's `pnpm db:up` runs its dev
-# Postgres in-sandbox exactly like a local dev machine, with no capability toggle or overlay rebuild. main.ts
-# starts dockerd at boot as the visible panel-docker tmux session; every runner (connect.sh/.ps1, dev-sandbox.sh,
-# rebuild.sh, update.sh, the workspace provider) runs this container --privileged (dockerd needs it) and mounts a
-# named volume at /var/lib/docker so images and dev-DB volumes survive recreates — and layers land on a real
-# filesystem (overlay2), not the container's own overlayfs.
+# Docker Engine + Compose + buildx are baked into the base sandbox but stay DORMANT: every runner
+# (connect.sh/.ps1, dev-sandbox.sh, rebuild.sh, update.sh, the workspace provider) starts this container
+# unprivileged, and dockerd (which needs --privileged) only runs once the docker CAPABILITY is added — its
+# fragment's "# intentic:runtime --privileged" directive rides the owner-approved overlay into an allowlisted
+# rebuild, after which the daemon runs dockerd as the visible panel-docker tmux session. Baking the engine
+# anyway keeps that grant a near-instant rebuild (a cache-hit FROM + directive overlay), not an engine install.
+# Every runner mounts a named volume at /var/lib/docker (empty until the grant) so images and dev-DB volumes
+# survive recreates — and layers land on a real filesystem (overlay2), not the container's own overlayfs.
 RUN install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod a+r /etc/apt/keyrings/docker.asc \

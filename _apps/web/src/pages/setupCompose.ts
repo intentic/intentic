@@ -67,7 +67,9 @@ export const composeFile = (args: ComposeArgs): string => {
     const slug = slugOf(args.hostname);
     const dev = args.platformUrl !== undefined;
     // The platform as seen FROM the container (connect.sh's PLATFORM_URL_CONTAINER rewrite).
-    const platform = (args.platformUrl ?? PLATFORM_DEFAULT).replace(`//localhost`, `//host.docker.internal`).replace(`//127.0.0.1`, `//host.docker.internal`);
+    const platform = (args.platformUrl ?? PLATFORM_DEFAULT)
+        .replace(`//localhost`, `//host.docker.internal`)
+        .replace(`//127.0.0.1`, `//host.docker.internal`);
     return [
         `services:`,
         `    intentic-sandbox:`,
@@ -78,8 +80,9 @@ export const composeFile = (args: ComposeArgs): string => {
         `        pull_policy: ${imageHasRegistry(args.image) ? `always` : `never`}`,
         `        container_name: intentic-sandbox-${slug}`,
         `        init: true`,
-        // What the sandbox's own isolated dockerd needs; the host's Docker socket is never mounted.
-        `        privileged: true`,
+        // Unprivileged, matching connect.sh's default run. The docker capability's `privileged: true` (its
+        // isolated nested engine; the host's Docker socket is never mounted) is the user's own compose edit —
+        // the rebuild flow recreates containers with `docker run`, which would fight a compose-managed one.
         `        restart: unless-stopped`,
         // Fresh public resolvers, so just-minted ssh-<id> tunnel hostnames don't hit a stale NXDOMAIN cache.
         `        dns: [1.1.1.1, 1.0.0.1]`,

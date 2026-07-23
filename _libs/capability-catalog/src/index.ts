@@ -182,6 +182,16 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         hint: "The API key is read from your sandbox env (STRIPE_API_KEY) on the next provision.",
     },
     {
+        id: "docker",
+        name: "Docker",
+        kind: "docker",
+        category: "platform",
+        logo: "docker",
+        description: "Run containers inside your sandbox — its own isolated Docker Engine + Compose for dev databases, stacks and builds.",
+        fields: [],
+        hint: "One-time rebuild required — the sandbox restarts privileged with its own isolated Docker Engine (your machine's Docker is never shared).",
+    },
+    {
         id: "ssh",
         name: "SSH",
         kind: "ssh",

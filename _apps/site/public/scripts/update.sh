@@ -125,16 +125,16 @@ if [ -n "$ENV_HASH" ]; then
     set -- "$@" -e "SANDBOX_ENVIRONMENT_HASH=${ENV_HASH}"
 fi
 
-# Runtime flags (container devices/caps) come ONLY from "# intentic:runtime" directives in the approved overlay
-# — same hard allowlist as rebuild.sh (a plain base update has none). The base run below is already --privileged
-# (the in-sandbox Docker Engine needs it), which subsumes these.
+# Container privileges come ONLY from "# intentic:runtime" directives in the approved overlay — same hard
+# allowlist as rebuild.sh (a plain base update has none, and runs unprivileged): the vpn's tun + NET_ADMIN,
+# the docker capability's --privileged.
 if [ -s "$overlay" ]; then
     while IFS= read -r line; do
         case "$line" in
             "# intentic:runtime "*)
                 for tok in ${line#"# intentic:runtime "}; do
                     case "$tok" in
-                        --device=/dev/net/tun | --cap-add=NET_ADMIN) set -- "$@" "$tok" ;;
+                        --device=/dev/net/tun | --cap-add=NET_ADMIN | --privileged) set -- "$@" "$tok" ;;
                         *)
                             echo "error: unsupported runtime directive '$tok' in the approved overlay." >&2
                             exit 1
@@ -151,11 +151,11 @@ echo "intentic: recreating the sandbox from ${TARGET_IMAGE}…"
 echo "== previous container logs (${CONTAINER}) ==" >>"$LOG"
 docker logs --tail 5000 "$CONTAINER" >>"$LOG" 2>&1 || true
 docker rm -f "$CONTAINER" >/dev/null
-# Same shape as connect.sh's run: privileged (the sandbox carries its own isolated Docker Engine), the
+# Same shape as connect.sh's run: unprivileged unless the overlay's directives grant privileges, the
 # per-sandbox network + stable tunnel-origin alias, the persistent /work + /history + /var/lib/docker volumes,
 # bounded json-file logs. The tunnel sidecar keeps running and reconnects to the alias.
 echo "== docker run ${TARGET_IMAGE} ==" >>"$LOG"
-if ! docker run -d --init --privileged --restart unless-stopped --name "$CONTAINER" \
+if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
     --network "$NETWORK" \
     --network-alias "$ORIGIN_HOST" \
     --add-host host.docker.internal:host-gateway \

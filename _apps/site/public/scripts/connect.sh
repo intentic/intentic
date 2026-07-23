@@ -4,8 +4,9 @@
 #
 # How: the platform mints a per-project connection token and hands you this one-liner. The script creates the
 # sandbox's OWN Cloudflare tunnel (sandbox-<id>.<zone> → the daemon, plus the *.<zone> wildcard → the panel previews),
-# starts the published sandbox image as a long-lived privileged container carrying its own ISOLATED Docker
-# Engine (dockerd inside the sandbox — never the host's Docker socket), and runs a cloudflared sidecar. The browser then talks to the sandbox DIRECTLY over that tunnel — the daemon verifies
+# starts the published sandbox image as a long-lived UNPRIVILEGED container (the docker capability's overlay
+# rebuild is what later grants --privileged for its ISOLATED nested engine — never the host's Docker socket),
+# and runs a cloudflared sidecar. The browser then talks to the sandbox DIRECTLY over that tunnel — the daemon verifies
 # your Google sign-in, and the platform stays off the command path (it never reaches into your machine). The
 # setup screen binds the sandbox's public URL itself and probes it until the daemon answers.
 #
@@ -798,11 +799,12 @@ self_host_addr_env=""
 # dev platform is reachable from the container at host.docker.internal (mapped by --add-host below).
 PLATFORM_URL_CONTAINER="$(printf '%s' "$PLATFORM_URL" | sed -e 's#//localhost#//host.docker.internal#' -e 's#//127\.0\.0\.1#//host.docker.internal#')"
 
-# Runs PRIVILEGED with its own ISOLATED Docker Engine: the image bakes Docker + Compose and the daemon starts
-# dockerd at boot, so `pnpm db:up` and `docker compose` work in the workspace out of the box. --privileged is
-# what dockerd needs; the host's Docker socket is never mounted, so the agent's containers live inside the
-# sandbox's own engine, not on the host daemon. (The vpn capability's /dev/net/tun + NET_ADMIN directives are
-# subsumed by it.) --add-host lets the sandbox reach the host it runs on at host.docker.internal (SSH
+# Runs UNPRIVILEGED: container privileges come only from "# intentic:runtime" directives in an owner-approved
+# overlay, applied by rebuild.sh/update.sh on a recreate (the docker capability's --privileged for its ISOLATED
+# nested engine, the vpn's /dev/net/tun + NET_ADMIN). The image bakes Docker + Compose but the engine stays
+# dormant until that grant; the host's Docker socket is never mounted, so the agent's containers can only ever
+# live inside the sandbox's own engine. The /var/lib/docker volume is mounted regardless (empty until then).
+# --add-host lets the sandbox reach the host it runs on at host.docker.internal (SSH
 # self-host deploys target it). The workspace volume persists the cloned repos across re-runs. The daemon binds
 # 0.0.0.0:8787 on the private network; only the Cloudflare tunnel exposes it (no host port is published).
 # GOOGLE_CLIENT_ID/CONNECT_TOKEN/WEB_ORIGIN activate the browser-facing auth; OWNER_EMAIL pins the owner the
@@ -824,7 +826,7 @@ for _dns in $SANDBOX_DNS; do set -- "$@" --dns "$_dns"; done
 [ -n "$SELF_HOST_USER" ] && set -- "$@" -e SELF_HOST_USER="$SELF_HOST_USER"
 [ -n "$INTENTIC_AGENT_AUTH_VOLUME" ] && set -- "$@" -v "${INTENTIC_AGENT_AUTH_VOLUME}:/agent-auth" -e AGENT_AUTH_DIR=/agent-auth
 echo "== docker run ${SANDBOX_IMAGE} ==" >>"$LOG"
-if ! docker run -d --init --privileged --restart unless-stopped --name "$CONTAINER" \
+if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
     --network "$NETWORK" \
     --network-alias "$ORIGIN_HOST" \
     --add-host host.docker.internal:host-gateway \

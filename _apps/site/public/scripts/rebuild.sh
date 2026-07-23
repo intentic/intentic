@@ -101,18 +101,18 @@ done
 auth_src="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/agent-auth"}}{{if eq .Type "volume"}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null || true)"
 [ -n "$auth_src" ] && set -- "$@" -v "${auth_src}:/agent-auth"
 
-# Runtime flags (container devices/caps) come ONLY from "# intentic:runtime" directive lines in the
-# hash-verified overlay — emitted by capability fragments (the vpn's WireGuard needs tun + NET_ADMIN) —
-# allowlisted hard so an overlay can't smuggle arbitrary docker flags. The base run below is already
-# --privileged (the in-sandbox Docker Engine needs it), which subsumes these; they stay declared so the
-# overlay still records each capability's own privilege intent. The hosted workspace provider keeps its own
-# matching allowlist.
+# Container privileges come ONLY from "# intentic:runtime" directive lines in the hash-verified overlay —
+# emitted by capability fragments (the vpn's WireGuard needs tun + NET_ADMIN; the docker capability's nested
+# engine needs --privileged) — allowlisted hard so an overlay can't smuggle arbitrary docker flags. The base
+# run below is unprivileged: this replay is the one path to a privileged sandbox, and it only ever executes
+# content the owner reviewed (the hash check above). The hosted workspace provider keeps its own matching
+# allowlist.
 while IFS= read -r line; do
     case "$line" in
         "# intentic:runtime "*)
             for tok in ${line#"# intentic:runtime "}; do
                 case "$tok" in
-                    --device=/dev/net/tun | --cap-add=NET_ADMIN) set -- "$@" "$tok" ;;
+                    --device=/dev/net/tun | --cap-add=NET_ADMIN | --privileged) set -- "$@" "$tok" ;;
                     *)
                         echo "error: unsupported runtime directive '$tok' in the approved overlay." >&2
                         exit 1
@@ -129,11 +129,11 @@ echo "intentic: recreating the sandbox from ${TAG}…"
 echo "== previous container logs (${CONTAINER}) ==" >>"$LOG"
 docker logs --tail 5000 "$CONTAINER" >>"$LOG" 2>&1 || true
 docker rm -f "$CONTAINER" >/dev/null
-# Same shape as connect.sh's run: privileged (the sandbox carries its own isolated Docker Engine), per-sandbox
+# Same shape as connect.sh's run: unprivileged unless the overlay's directives grant privileges, per-sandbox
 # network + the stable tunnel-origin alias, the persistent /work + /history + /var/lib/docker volumes, bounded
 # json-file logs. The tunnel sidecar keeps running and reconnects to the alias.
 echo "== docker run ${TAG} ==" >>"$LOG"
-if ! docker run -d --init --privileged --restart unless-stopped --name "$CONTAINER" \
+if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
     --network "$NETWORK" \
     --network-alias "$ORIGIN_HOST" \
     --add-host host.docker.internal:host-gateway \

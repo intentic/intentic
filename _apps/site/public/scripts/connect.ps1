@@ -388,16 +388,16 @@ if ($SelfHost) {
     Write-Host "intentic: deploy target '$DindContainer' is ready (the sandbox reaches it over SSH on the shared network)."
 }
 
-# Runs PRIVILEGED with its own ISOLATED Docker Engine: the image bakes Docker + Compose and the daemon starts
-# dockerd at boot, so `pnpm db:up` and `docker compose` work in the workspace out of the box. --privileged is
-# what dockerd needs; the host's Docker socket is never mounted, so the agent's containers live inside the
-# sandbox's own engine, not on the host daemon. --add-host lets it reach the host it runs on at
+# Runs UNPRIVILEGED: container privileges come only from "# intentic:runtime" directives in an owner-approved
+# overlay, applied by rebuild.sh on a recreate (the docker capability's --privileged for its ISOLATED nested
+# engine, the vpn's tun + NET_ADMIN). The image bakes Docker + Compose but the engine stays dormant until that
+# grant; the host's Docker socket is never mounted. --add-host lets it reach the host it runs on at
 # host.docker.internal. The workspace volume persists the cloned repos across re-runs. The daemon binds
 # 0.0.0.0:8787 on the private network; only the Cloudflare tunnel exposes it (no host port is published).
 # SELF_HOST_* (when self-host is on) point the sandbox's `self` deploy target at the Docker-in-Docker host
 # above. Every -e value is quoted so spaces and the multi-line HOST_SSH_KEY pass as single arguments.
 $AgentAuthArgs = if ($AgentAuthVolume) { @('-v', "${AgentAuthVolume}:/agent-auth", '-e', 'AGENT_AUTH_DIR=/agent-auth') } else { @() }
-docker run -d --privileged --restart unless-stopped --name $Container `
+docker run -d --restart unless-stopped --name $Container `
     --network $Network `
     --network-alias $OriginHost `
     --add-host host.docker.internal:host-gateway `

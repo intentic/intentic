@@ -127,15 +127,15 @@ test("diff updates when the agent tools change (digest drift), and is noop again
     expect(provider.diff(withTools, { outputs: {}, detail: { image: IMAGE, tools: digest as string } })).toEqual({ action: "noop" });
 });
 
-test("apply ensures the network, then runs the sandbox privileged with internalIp-bound ports + the env", async () => {
+test("apply ensures the network, then runs the sandbox unprivileged with internalIp-bound ports + the env", async () => {
     const ssh = fakeSsh();
     const outputs = await createWorkspaceProvider(ssh.executor).apply(inputs, undefined, ctx());
     expect(outputs).toEqual(OUTPUTS);
     expect(ssh.commands.some((c) => c.includes("docker network") && c.includes("intentic-workspace"))).toBe(true);
     const run = ssh.commands.find((c) => c.includes("docker run")) ?? "";
-    // Privileged with its own isolated Docker Engine — the HOST's docker socket is never mounted, no root
-    // override, and no devices/caps without an overlay carrying runtime directives.
-    expect(run).toContain("--privileged");
+    // Unprivileged by default — the HOST's docker socket is never mounted, no root override, and no
+    // privileges/devices/caps without an overlay carrying runtime directives.
+    expect(run).not.toContain("--privileged");
     expect(run).not.toContain("--user root");
     expect(run).not.toContain("/var/run/docker.sock");
     expect(run).not.toContain("--device=");
@@ -189,10 +189,17 @@ test("apply with an overlay dockerfile builds it (base64 → stdin) BEFORE recre
     expect(run).toContain(`docker rm -f ${CONTAINER}`);
 });
 
+test("apply splices --privileged from a docker-capability overlay (the only source of a privileged run)", async () => {
+    const ssh = fakeSsh();
+    const dockerfile = "FROM registry.gitlab.com/radarsu/intentic/sandbox:stable\n# intentic:runtime --privileged\n";
+    await createWorkspaceProvider(ssh.executor).apply({ ...inputs, dockerfile }, undefined, ctx());
+    expect(ssh.commands.find((c) => c.includes("docker run"))).toContain("--privileged");
+});
+
 test("apply rejects a runtime directive outside the allowlist before touching the host", async () => {
     const ssh = fakeSsh();
     await expect(
-        createWorkspaceProvider(ssh.executor).apply({ ...inputs, dockerfile: `${DOCKERFILE}# intentic:runtime --privileged\n` }, undefined, ctx()),
+        createWorkspaceProvider(ssh.executor).apply({ ...inputs, dockerfile: `${DOCKERFILE}# intentic:runtime --pid=host\n` }, undefined, ctx()),
     ).rejects.toThrow("unsupported runtime directive");
     // Validation runs before the build — the host was never touched.
     expect(ssh.commands).toHaveLength(0);

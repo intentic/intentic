@@ -70,12 +70,33 @@ done
 auth_src="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/agent-auth"}}{{if eq .Type "volume"}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null || true)"
 [ -n "$auth_src" ] && set -- "$@" -v "${auth_src}:/agent-auth"
 
+# Replay allowlisted "# intentic:runtime" directives from the composed overlay on /work (rebuild.sh's list),
+# so dev sandboxes with the docker/vpn capability keep their privileges across a swap. No hash check: the dev
+# recreate has no owner-approval step (the whole point of this script), and it's the developer's own machine.
+overlay="$(docker exec "$CONTAINER" cat /work/.intentic/environment.approved.Dockerfile 2>/dev/null || true)"
+if [ -n "$overlay" ]; then
+    while IFS= read -r line; do
+        case "$line" in
+            "# intentic:runtime "*)
+                for tok in ${line#"# intentic:runtime "}; do
+                    case "$tok" in
+                        --device=/dev/net/tun | --cap-add=NET_ADMIN | --privileged) set -- "$@" "$tok" ;;
+                        *) echo "warning: skipping unsupported runtime directive '$tok' in the overlay." >&2 ;;
+                    esac
+                done
+                ;;
+        esac
+    done <<EOF
+$overlay
+EOF
+fi
+
 echo "intentic: recreating ${CONTAINER} from ${TAG}…"
 docker rm -f "$CONTAINER" >/dev/null
-# Same shape as connect.sh's run: privileged (the sandbox carries its own isolated Docker Engine), per-sandbox
+# Same shape as connect.sh's run: unprivileged unless the overlay's directives grant privileges, per-sandbox
 # network + the stable tunnel-origin alias, the persistent /work + /history + /var/lib/docker volumes, bounded
 # json-file logs.
-if ! docker run -d --init --privileged --restart unless-stopped --name "$CONTAINER" \
+if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
     --network "$NETWORK" \
     --network-alias "$ORIGIN_HOST" \
     --add-host host.docker.internal:host-gateway \
