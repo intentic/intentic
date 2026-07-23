@@ -10,6 +10,26 @@ stages:
 variables:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
 
+# pnpm store + turbo cache, reused by every pnpm-based job. The store MUST live inside $CI_PROJECT_DIR
+# (GitLab only caches paths under the project) and is selected with `pnpm install --store-dir` — pnpm ignores
+# PNPM_STORE_PATH/PNPM_STORE_DIR, only the flag/config works. Keyed on the lockfile so it re-uploads only when
+# deps change; a warm store turns cold multi-minute installs into fast hardlink installs.
+.cache-pnpm-turbo:
+  cache:
+    - key:
+        files:
+          - pnpm-lock.yaml
+        prefix: pnpm-store
+      paths:
+        - .pnpm-store/
+    # turbo task cache: per-branch, warm-started from main so a fresh MR isn't cold.
+    - key: turbo-$CI_COMMIT_REF_SLUG
+      fallback_keys:
+        - turbo-main
+      paths:
+        - .turbo
+        - "_*/*/.turbo"
+
 .pnpm-setup:
   script:
     - corepack enable
@@ -17,15 +37,13 @@ variables:
     # compiles from source and make invokes gyp_main.py directly, otherwise dying with "Permission denied".
     - pnpm --version
     - find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
-    - pnpm install --frozen-lockfile
+    - pnpm install --frozen-lockfile --store-dir "$CI_PROJECT_DIR/.pnpm-store"
+    # Keep the cached .turbo archive bounded: drop entries untouched for 14 days (rebuilt + re-cached if needed).
+    - find .turbo/cache -type f -mtime +14 -delete 2>/dev/null || true
 
 default:
   image: node:24.18.0
-  cache:
-    key: turbo-$CI_COMMIT_REF_SLUG
-    paths:
-      - .turbo
-      - "_*/*/.turbo"
+  cache: !reference [.cache-pnpm-turbo, cache]
   before_script:
     - !reference [.pnpm-setup, script]
     # The iq engine's lexical tier shells into ripgrep (test + release:verify run the iq test suites).
@@ -85,7 +103,15 @@ e2e:nightly:
     SANDBOX_E2E_IMAGE: "$CI_REGISTRY_IMAGE/sandbox:latest"
   timeout: 3h
   cache:
+    - key:
+        files:
+          - pnpm-lock.yaml
+        prefix: pnpm-store
+      paths:
+        - .pnpm-store/
     - key: turbo-$CI_COMMIT_REF_SLUG
+      fallback_keys:
+        - turbo-main
       paths:
         - .turbo
         - "_*/*/.turbo"
@@ -107,6 +133,9 @@ e2e:nightly:
 images:
   stage: images
   image: docker:27
+  # No pnpm here — the build happens inside the Dockerfile. Opt out of the default pnpm-store/turbo cache
+  # so this job doesn't pull ~2GB of store it never uses; image layers are cached in the registry instead.
+  cache: []
   services:
     - docker:27-dind
   interruptible: true

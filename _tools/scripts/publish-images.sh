@@ -18,6 +18,15 @@ REGISTRY="registry.gitlab.com/radarsu/intentic"
 # `pnpm install --frozen-lockfile` resolves the root lockfile; `pnpm deploy` prunes the final image to core.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 
+# A docker-container buildx builder is required to export a full (mode=max) registry layer cache — the default
+# docker driver can only do inline (final-stage) cache, which misses this multi-stage build's heavy build stage
+# (pnpm install + turbo build + model fetch). The cache lives in the registry, so it survives the ephemeral
+# dind daemon and is shared across the images + release jobs and across pipelines — turning the cold rebuild
+# (and the second, redundant build in the release job) into near-instant cache hits. No-op when already set up.
+if command -v docker >/dev/null && ! docker buildx inspect intentic-cache >/dev/null 2>&1; then
+    docker buildx create --name intentic-cache --driver docker-container --bootstrap --use
+fi
+
 # Build + push one image under every requested tag. The Dockerfile + build context differ per image: the
 # sandbox builds from the monorepo root; the dind-host from its self-contained _tools/dind-host package.
 publish() {
@@ -26,7 +35,10 @@ publish() {
     for tag in $TAGS; do
         tag_args+=(-t "$REGISTRY/$image:$tag")
     done
-    docker buildx build -f "$dockerfile" "${tag_args[@]}" --push "$context"
+    docker buildx build -f "$dockerfile" "${tag_args[@]}" \
+        --cache-from "type=registry,ref=$REGISTRY/$image:buildcache" \
+        --cache-to "type=registry,ref=$REGISTRY/$image:buildcache,mode=max,image-manifest=true" \
+        --push "$context"
 }
 
 publish sandbox "$root/_apps/sandbox/Dockerfile" "$root"
