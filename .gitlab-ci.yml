@@ -1,6 +1,7 @@
 # GitLab CI/CD for the consolidated intentic monorepo (intentic/ = OSS core, platform/ = proprietary, site/).
-# One pipeline: turbo build/test covers every product; images + release cover the core's published artifacts.
-# Node + pnpm pinned to package.json engines; corepack reads packageManager to pick pnpm 11.9.0.
+# One pipeline: turbo build/test covers every product; images + release cover the published artifacts.
+# Node + pnpm are pinned by package.json engines/packageManager — corepack reads packageManager, so no
+# version is repeated here.
 
 stages:
   - test
@@ -14,25 +15,56 @@ variables:
   # wherever the site actually deploys.
   INDEXNOW_ENABLED: "0"
 
-# pnpm store + turbo cache, reused by every pnpm-based job. The store MUST live inside $CI_PROJECT_DIR
-# (GitLab only caches paths under the project) and is selected with `pnpm install --store-dir` — pnpm ignores
-# PNPM_STORE_PATH/PNPM_STORE_DIR, only the flag/config works. Keyed on the lockfile so it re-uploads only when
-# deps change; a warm store turns cold multi-minute installs into fast hardlink installs.
-.cache-pnpm-turbo:
-  cache:
-    - key:
-        files:
-          - pnpm-lock.yaml
-        prefix: pnpm-store
-      paths:
-        - .pnpm-store/
-    # turbo task cache: per-branch, warm-started from main so a fresh MR isn't cold.
-    - key: turbo-$CI_COMMIT_REF_SLUG
-      fallback_keys:
-        - turbo-main
-      paths:
-        - .turbo
-        - "_*/*/.turbo"
+# Named cache entries, composed per job with !reference — a job's `cache:` list can't splice another job's
+# whole list, so each entry is named and jobs pick the set they need. The *-pull variants restore without the
+# end-of-job re-archive (pushing the ~60k-file pnpm store back is what once blew the release job's timeout).
+# The pnpm store MUST live inside $CI_PROJECT_DIR (GitLab only caches paths under the project) and is selected
+# with `pnpm install --store-dir` — pnpm ignores PNPM_STORE_PATH/PNPM_STORE_DIR, only the flag/config works.
+# Keyed on the lockfile so it re-uploads only when deps change; a warm store turns cold multi-minute installs
+# into fast hardlink installs.
+.cache-defs:
+  pnpm: &cache-pnpm
+    key:
+      files:
+        - pnpm-lock.yaml
+      prefix: pnpm-store
+    paths:
+      - .pnpm-store/
+  # turbo task cache: per-branch, warm-started from main so a fresh MR isn't cold.
+  turbo: &cache-turbo
+    key: turbo-$CI_COMMIT_REF_SLUG
+    fallback_keys:
+      - turbo-main
+    paths:
+      - .turbo
+      - "_*/*/.turbo"
+  pnpm-pull:
+    <<: *cache-pnpm
+    policy: pull
+  turbo-pull:
+    <<: *cache-turbo
+    policy: pull
+  # The baked iq models (~57MB), keyed on the fetch script — prepare-image-trees.sh skips the HF download
+  # when this cache restores the completed dir.
+  iq-models:
+    key:
+      files:
+        - _libs/iq-engine/scripts/fetch-model.mjs
+      prefix: iq-models
+    paths:
+      - .image-out/iq-models
+      - .image-out/.iq-models-complete
+
+# Docker-in-Docker plumbing for every job that talks to a docker daemon. `extends` merges the variables map,
+# so jobs stack their own variables on top.
+.dind:
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "/certs/client"
 
 .pnpm-setup:
   script:
@@ -45,20 +77,35 @@ variables:
     # Keep the cached .turbo archive bounded: drop entries untouched for 14 days (rebuilt + re-cached if needed).
     - find .turbo/cache -type f -mtime +14 -delete 2>/dev/null || true
 
+# The docker CLI + buildx on the node image, for jobs that drive the dind service. Registry login stays
+# per-job — only the jobs that push need it.
+.docker-cli-setup:
+  script:
+    - install -m 0755 -d /etc/apt/keyrings
+    - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
+    - apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin
+
 default:
   image: node:24.18.0
-  cache: !reference [.cache-pnpm-turbo, cache]
+  cache:
+    - !reference [.cache-defs, pnpm]
+    - !reference [.cache-defs, turbo]
   before_script:
     - !reference [.pnpm-setup, script]
-    # The iq engine's lexical tier shells into ripgrep (test + release:verify run the iq test suites).
+    # The iq engine's lexical tier shells into ripgrep (the test job runs the iq test suites).
     - apt-get update && apt-get install -y --no-install-recommends ripgrep
 
-# Build + test every product on merge requests (turbo runs across intentic/, platform/, site/).
+# Build + test every product (turbo runs across intentic/, platform/, site/): the MR gate, and on main the
+# verify step the images + release stages wait on via stage ordering — a red build publishes nothing.
+# Interruptible on main too: a superseded pipeline's verify is safely canceled (the release job itself is not
+# interruptible and its resource_group serializes releases; the newest pipeline releases the newest commit).
 test:
   stage: test
   interruptible: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
   script:
     - pnpm turbo run build
     - pnpm turbo run test
@@ -67,18 +114,13 @@ test:
 # via testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no
 # external services or secrets. turbo scopes e2e:hermetic to @intentic/cli.
 e2e:hermetic:
+  extends: .dind
   stage: test
   interruptible: true
   allow_failure: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-  services:
-    - docker:27-dind
   variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: "1"
-    DOCKER_CERT_PATH: "/certs/client"
     INTENTIC_HOST_IMAGE: "$CI_REGISTRY_IMAGE/dind-host:latest"
     INTENTIC_LOG_DIR: "$CI_PROJECT_DIR/.e2e-hermetic-logs"
   timeout: 45m
@@ -94,142 +136,81 @@ e2e:hermetic:
 # CLOUDFLARE_API_TOKEN/CLOUDFLARE_ZONE). Each suite self-skips without its secrets. Runs the freshly published
 # :latest sandbox image (SANDBOX_E2E_IMAGE) rather than rebuilding from source.
 e2e:nightly:
+  extends: .dind
   stage: test
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
-  services:
-    - docker:27-dind
   variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: "1"
-    DOCKER_CERT_PATH: "/certs/client"
     SANDBOX_E2E_IMAGE: "$CI_REGISTRY_IMAGE/sandbox:latest"
   timeout: 3h
   cache:
-    - key:
-        files:
-          - pnpm-lock.yaml
-        prefix: pnpm-store
-      paths:
-        - .pnpm-store/
-    - key: turbo-$CI_COMMIT_REF_SLUG
-      fallback_keys:
-        - turbo-main
-      paths:
-        - .turbo
-        - "_*/*/.turbo"
+    - !reference [.cache-defs, pnpm]
+    - !reference [.cache-defs, turbo]
     - key: intentic-e2e-whisper
       paths:
         - .cache/intentic-e2e
   before_script:
     - !reference [.pnpm-setup, script]
-    - install -m 0755 -d /etc/apt/keyrings
-    - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
-    - apt-get update && apt-get install -y --no-install-recommends docker-ce-cli
+    - !reference [.docker-cli-setup, script]
     - mkdir -p "$HOME/.cache" "$CI_PROJECT_DIR/.cache/intentic-e2e" && ln -sfn "$CI_PROJECT_DIR/.cache/intentic-e2e" "$HOME/.cache/intentic-e2e"
   script:
     - pnpm e2e
 
 # Continuous image publishing: build + push sandbox + dind-host to the GitLab Container Registry on every push
-# to main that touches the core (moving `latest` + the commit SHA). The version-tagged image is the release job.
+# to main that touches the core (moving `latest` + the commit SHA). The version-tagged image is the release
+# job. The changes: globs must cover the image's WHOLE input closure — the baked trees (sandbox, cli, iq, lsp,
+# the discord/imap extension gateways) plus the context COPYs and the workspace packages they depend on
+# (@intentic/constants and @intentic/tsconfig live under _tools) — so _extensions and _tools are matched
+# wholesale: hand-enumerating subdirs is how iq/lsp/_extensions silently fell out of the trigger last time.
 images:
+  extends: .dind
   stage: images
   # node image (not docker:27): prepare-image-trees.sh compiles the payload JOB-side — with the warm pnpm
-  # store + turbo cache from release:verify it's a cache replay, and the Dockerfile is left with pure COPYs.
-  services:
-    - docker:27-dind
+  # store + turbo cache from the test job it's a cache replay, and the Dockerfile is left with pure COPYs.
   interruptible: true
-  variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: "1"
-    DOCKER_CERT_PATH: "/certs/client"
   cache:
-    - key:
-        files:
-          - pnpm-lock.yaml
-        prefix: pnpm-store
-      paths:
-        - .pnpm-store/
-      policy: pull
-    - key: turbo-$CI_COMMIT_REF_SLUG
-      fallback_keys:
-        - turbo-main
-      paths:
-        - .turbo
-        - "_*/*/.turbo"
-      policy: pull
-    # The baked iq models (~57MB), keyed on the fetch script — prepare-image-trees.sh skips the HF download
-    # when this cache restores the completed dir.
-    - key:
-        files:
-          - _libs/iq-engine/scripts/fetch-model.mjs
-        prefix: iq-models
-      paths:
-        - .image-out/iq-models
-        - .image-out/.iq-models-complete
+    - !reference [.cache-defs, pnpm-pull]
+    - !reference [.cache-defs, turbo-pull]
+    - !reference [.cache-defs, iq-models]
   before_script:
     - !reference [.pnpm-setup, script]
-    - install -m 0755 -d /etc/apt/keyrings
-    - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
-    - apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin
+    - !reference [.docker-cli-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
         - _apps/sandbox/**/*
         - _apps/cli/**/*
+        - _apps/iq/**/*
+        - _apps/lsp/**/*
         - _libs/**/*
-        - _tools/dind-host/**/*
-        - _tools/scripts/publish-images.sh
-        - _tools/scripts/prepare-image-trees.sh
+        - _extensions/**/*
+        - _tools/**/*
+        - turbo.json
         - pnpm-lock.yaml
   script:
     - bash _tools/scripts/prepare-image-trees.sh
     - TAGS="latest sha-${CI_COMMIT_SHORT_SHA}" bash _tools/scripts/publish-images.sh
 
-# Platform image publishing: build + push web + api to the GitLab Container Registry on every push to main
-# that touches the platform (moving `latest` + the commit SHA). Separate from `images` (the OSS core: trees
-# payload, semantic-release tags) but the SAME philosophy: apps build job-side under turbo (warm pnpm/turbo
-# caches from release:verify — hence policy: pull), and the Dockerfiles are pure COPY. docker:release's
-# TURBO_HASH tag makes the release content-addressed: when a push didn't change an app's inputs (the changes:
-# globs are deliberately coarse — most _libs edits are engine-side), the existing image is re-tagged
-# registry-side and nothing builds. The optional deploy hook (deploy-platform.sh) then rolls the Komodo stack;
-# it self-skips until its CI vars are configured.
+# Platform image publishing: build + push web + api on every push to main that touches the platform (moving
+# `latest` + the commit SHA). Separate from `images` (the OSS core: trees payload, semantic-release tags) but
+# the SAME philosophy: apps build job-side under turbo (warm caches from the test job — hence policy: pull),
+# and the Dockerfiles are pure COPY. docker:release's TURBO_HASH tag makes the release content-addressed, so
+# the changes: globs are deliberately COARSE — anything in the workspace dirs the platform's dependency
+# closure can reach (web compiles in _extensions UI bundles; @intentic/constants et al live under _tools) —
+# and a push that didn't change an app's actual inputs just re-tags the existing image registry-side. The
+# optional deploy hook (deploy-platform.sh) then rolls the Komodo stack; it self-skips until its CI vars are
+# configured.
 images:platform:
+  extends: .dind
   stage: images
-  services:
-    - docker:27-dind
   interruptible: true
-  variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: "1"
-    DOCKER_CERT_PATH: "/certs/client"
   cache:
-    - key:
-        files:
-          - pnpm-lock.yaml
-        prefix: pnpm-store
-      paths:
-        - .pnpm-store/
-      policy: pull
-    - key: turbo-$CI_COMMIT_REF_SLUG
-      fallback_keys:
-        - turbo-main
-      paths:
-        - .turbo
-        - "_*/*/.turbo"
-      policy: pull
+    - !reference [.cache-defs, pnpm-pull]
+    - !reference [.cache-defs, turbo-pull]
   before_script:
     - !reference [.pnpm-setup, script]
-    - install -m 0755 -d /etc/apt/keyrings
-    - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
-    - apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin
+    - !reference [.docker-cli-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -237,64 +218,33 @@ images:platform:
         - _apps/api/**/*
         - _apps/web/**/*
         - _libs/**/*
-        - _tools/scripts/docker-release.sh
+        - _extensions/**/*
+        - _tools/**/*
         - turbo.json
         - pnpm-lock.yaml
   script:
     - pnpm turbo run docker:release --filter=@intentic-app/api --filter=@intentic-app/web
     - bash _tools/scripts/deploy-platform.sh
 
-# Release: build + test, then semantic-release (npm publish via OIDC, GitLab Release with the cross-compiled
-# intentic-sync binaries, and the sandbox/dind-host image at the release version + moving `stable` tag).
-release:verify:
-  stage: test
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-  script:
-    - pnpm turbo run build
-    - pnpm turbo run test
-
+# Release: semantic-release over the test job's verified build (npm publish, GitLab Release with the
+# cross-compiled intentic-sync binaries, and the sandbox/dind-host images at the release version + moving
+# `stable` tag).
 release:
+  extends: .dind
   stage: release
-  needs: ["release:verify"]
+  needs: ["test"]
   resource_group: release
   # The publish is heavy (cold image builds + registry cache export). Give it room beyond the 1h default so a
   # cold first-build can't fail the job AFTER the release already succeeded. NOTE: if the job still stops at
   # exactly 1h, that's the runner's maximum_timeout — raise it in the runner config, this can't override it.
   timeout: 2h
-  # Restore-only caches here: release:verify already populated them, and re-archiving the ~60k-file pnpm store
-  # at the end is what pushed this job past its time limit (after the release itself had fully succeeded).
   cache:
-    - key:
-        files:
-          - pnpm-lock.yaml
-        prefix: pnpm-store
-      paths:
-        - .pnpm-store/
-      policy: pull
-    - key: turbo-$CI_COMMIT_REF_SLUG
-      fallback_keys:
-        - turbo-main
-      paths:
-        - .turbo
-        - "_*/*/.turbo"
-      policy: pull
+    - !reference [.cache-defs, pnpm-pull]
+    - !reference [.cache-defs, turbo-pull]
     # iq models for publishCmd's prepare-image-trees.sh (same key as the images job).
-    - key:
-        files:
-          - _libs/iq-engine/scripts/fetch-model.mjs
-        prefix: iq-models
-      paths:
-        - .image-out/iq-models
-        - .image-out/.iq-models-complete
-  services:
-    - docker:27-dind
+    - !reference [.cache-defs, iq-models]
   variables:
     GIT_DEPTH: 0
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: "1"
-    DOCKER_CERT_PATH: "/certs/client"
   # npm auth for publishing: a granular access token (masked CI var NPM_TOKEN, write access to @intentic/*)
   # written to ~/.npmrc. Tokenless OIDC trusted publishing is not an option — npm's token exchange rejects
   # this project's self-hosted runner. NPM_TOKEN is a granular token (classic tokens were removed 2025-12);
@@ -304,10 +254,7 @@ release:
   before_script:
     - !reference [.pnpm-setup, script]
     - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
-    - install -m 0755 -d /etc/apt/keyrings
-    - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
-    - apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin
+    - !reference [.docker-cli-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - curl -fsSL https://bun.sh/install | bash
     - export PATH="$HOME/.bun/bin:$PATH"
