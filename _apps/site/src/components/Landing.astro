@@ -1,7 +1,6 @@
 ---
 import { faqItems } from "@intentic-dev/site-content/faq";
 import type { LandingContent } from "@intentic-dev/site-content/landing";
-import { landingVariants } from "@intentic-dev/site-content/landing";
 import { APP_URL, githubIssuesUrl, githubUrl } from "@intentic-dev/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic-dev/site-content/structured-data";
 import BaseLayout from "../layouts/BaseLayout.astro";
@@ -11,10 +10,9 @@ import Nav from "./Nav.astro";
 interface Props {
     content: LandingContent;
     noindex?: boolean;
-    showVariantSwitcher?: boolean;
 }
 
-const { content, noindex, showVariantSwitcher } = Astro.props;
+const { content, noindex } = Astro.props;
 
 const faqQuestions = faqItems.map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
 
@@ -28,22 +26,25 @@ const permissionModes = [
 const icon = (paths: string) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">${paths}</svg>`;
 
-// Per-index glyphs for the three-part sections; content stays pure copy.
-const momentIcons = [
-    icon('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'),
-    icon('<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18.5h2"/>'),
-    icon('<circle cx="12" cy="12" r="3.5"/><path d="M12 2v6.5M12 15.5V22"/>'),
+// Per-index glyphs; content stays pure copy.
+const anatomyIcons = [
+    icon('<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/>'),
+    icon('<path d="M12 3 3 7.5 12 12l9-4.5z"/><path d="m3 12 9 4.5L21 12M3 16.5 12 21l9-4.5"/>'),
+    icon('<path d="M9.5 17H8A5 5 0 0 1 8 7h1.5"/><path d="M14.5 7H16a5 5 0 0 1 0 10h-1.5"/><path d="M8.5 12h7"/>'),
+    icon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'),
+];
+const workforceIcons = [
+    icon('<rect x="5" y="8.5" width="14" height="10.5" rx="2"/><path d="M12 8.5V5M12 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M9.5 13v1.5M14.5 13v1.5"/>'),
+    icon('<path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/>'),
+    icon('<circle cx="5" cy="12" r="2.4"/><circle cx="12" cy="12" r="2.4"/><circle cx="19" cy="12" r="2.4"/><path d="M7.4 12h2.2M14.4 12h2.2"/>'),
 ];
 const factIcons = [
     icon('<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V21h13V9.5"/>'),
     icon('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>'),
     icon('<path d="M12 2.5 20 6v5.5c0 4.8-3.4 8.2-8 9.5-4.6-1.3-8-4.7-8-9.5V6z"/>'),
 ];
-const moreIcons = [
-    icon('<path d="M9 2.5V8M15 2.5V8"/><path d="M6.5 8h11v3.5a5.5 5.5 0 0 1-11 0z"/><path d="M12 17v4.5"/>'),
-    icon('<path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/>'),
-    icon('<rect x="3" y="4" width="18" height="6.5" rx="1.5"/><rect x="3" y="13.5" width="18" height="6.5" rx="1.5"/><path d="M6.5 7.25h.01M6.5 16.75h.01"/>'),
-];
+const checkIcon = icon('<path d="M20 6 9 17l-5-5"/>');
+const minusIcon = icon('<path d="M6 12h12"/>');
 ---
 
 <BaseLayout
@@ -88,7 +89,7 @@ const moreIcons = [
                     <h1 class="text-4xl leading-tight font-semibold tracking-tight xl:text-5xl">
                         {content.hero.headlineLines.map((line, i) => (i === 0 ? line : <><br />{line}</>))}
                     </h1>
-                    <p class="mt-4 max-w-md text-base leading-relaxed text-muted">
+                    <p class="mt-4 max-w-lg text-base leading-relaxed text-muted">
                         {content.hero.subhead}
                     </p>
 
@@ -109,40 +110,38 @@ const moreIcons = [
                     </ul>
                 </div>
 
-                <!-- Workspace mock (swap for a real product screenshot when the UI settles) -->
-                <div class="animate-fade-in-up max-lg:hidden" style="animation-delay: 60ms">
+                <!-- Specialized-agent card: an agent as a configured worker, not a chat window -->
+                <div class="animate-fade-in-up" style="animation-delay: 60ms">
                     <div class="card overflow-hidden shadow-2xl shadow-black/40">
-                        <div class="flex items-center gap-2 border-b border-line px-4 py-2.5">
-                            <span class="h-2.5 w-2.5 rounded-full bg-overlay"></span>
-                            <span class="h-2.5 w-2.5 rounded-full bg-overlay"></span>
-                            <span class="h-2.5 w-2.5 rounded-full bg-overlay"></span>
-                            <span class="ml-2 text-2xs text-subtle">{content.hero.mock.workspaceName}</span>
-                        </div>
-                        <div class="grid grid-cols-[9rem_1fr]">
-                            <div class="border-r border-line p-3 text-2xs leading-6 text-subtle">
-                                {
-                                    content.hero.mock.tree.map((entry) => (
-                                        <div class:list={[entry.nested ? "pl-3" : "text-muted"]}>{entry.name}</div>
-                                    ))
-                                }
+                        <div class="flex items-center justify-between border-b border-line px-4 py-2.5">
+                            <div class="flex items-center gap-2">
+                                <span class="h-2 w-2 rounded-full bg-success"></span>
+                                <span class="font-mono text-xs text-content">{content.hero.spec.name}</span>
                             </div>
-                            <div class="flex flex-col gap-3 p-4">
-                                <div class="ml-auto max-w-[85%] rounded-lg bg-overlay px-3 py-2 text-xs text-content">
-                                    {content.hero.mock.userMessage}
-                                </div>
-                                <div class="rounded-lg border border-line bg-canvas p-3">
-                                    <div class="eyebrow">Plan · awaiting your approval</div>
-                                    <ul class="mt-2 space-y-1 text-xs text-muted">
-                                        {content.hero.mock.planSteps.map((step) => <li>{step}</li>)}
-                                    </ul>
-                                    <div class="mt-3 flex gap-2">
-                                        <span class="btn btn-primary px-3 py-1 text-xs">Approve</span>
-                                        <span class="btn btn-secondary px-3 py-1 text-xs">Keep planning</span>
+                            <span class="text-2xs text-subtle">{content.hero.spec.role}</span>
+                        </div>
+                        <div class="space-y-3.5 p-4">
+                            {
+                                content.hero.spec.rows.map((row) => (
+                                    <div class="flex flex-col gap-1.5">
+                                        <div class="eyebrow">{row.label}</div>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            {row.items.map((item) => (
+                                                <span class="rounded-md border border-line bg-overlay/50 px-2 py-0.5 font-mono text-2xs text-muted">
+                                                    {item}
+                                                </span>
+                                            ))}
+                                        </div>
                                     </div>
+                                ))
+                            }
+                            <div class="mt-1 border-t border-line pt-3.5">
+                                <div class="ml-auto max-w-[90%] rounded-lg bg-overlay px-3 py-2 text-xs text-content">
+                                    {content.hero.spec.task}
                                 </div>
-                                <div class="flex items-center gap-2 text-2xs text-subtle">
+                                <div class="mt-3 flex items-center gap-2 text-2xs text-subtle">
                                     <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-                                    {content.hero.mock.status}
+                                    {content.hero.spec.outcome}
                                 </div>
                             </div>
                         </div>
@@ -151,43 +150,86 @@ const moreIcons = [
             </div>
         </section>
 
-        <!-- 2 · Get connected — ghost-numeral steps, no boxes -->
-        <section class="border-t border-line" id="connect">
+        <!-- 2 · Why specialized — prompt vs agent -->
+        <section class="border-t border-line" id="contrast">
             <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.connect.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.connect.heading}</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.connect.sub}</p>
+                <div class="eyebrow">{content.contrast.eyebrow}</div>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.contrast.heading}</h2>
+                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.contrast.sub}</p>
 
-                <div class="mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
+                <div class="mt-12 grid items-start gap-6 md:grid-cols-2">
+                    <div class="card p-6">
+                        <div class="flex items-baseline justify-between gap-3">
+                            <h3 class="text-sm font-medium text-muted">{content.contrast.prompt.label}</h3>
+                            <span class="text-2xs text-subtle">{content.contrast.prompt.caption}</span>
+                        </div>
+                        <ul class="mt-5 space-y-3">
+                            {
+                                content.contrast.prompt.points.map((point) => (
+                                    <li class="flex items-start gap-3 text-sm leading-relaxed text-subtle">
+                                        <span class="mt-0.5 shrink-0 text-line-strong">
+                                            <Fragment set:html={minusIcon} />
+                                        </span>
+                                        {point}
+                                    </li>
+                                ))
+                            }
+                        </ul>
+                    </div>
+
+                    <div class="card border-primary-600/30 bg-primary-600/[0.03] p-6">
+                        <div class="flex items-baseline justify-between gap-3">
+                            <h3 class="text-sm font-medium text-content">{content.contrast.agent.label}</h3>
+                            <span class="text-2xs text-link">{content.contrast.agent.caption}</span>
+                        </div>
+                        <ul class="mt-5 space-y-3">
+                            {
+                                content.contrast.agent.points.map((point) => (
+                                    <li class="flex items-start gap-3 text-sm leading-relaxed text-content">
+                                        <span class="mt-0.5 shrink-0 text-link">
+                                            <Fragment set:html={checkIcon} />
+                                        </span>
+                                        {point}
+                                    </li>
+                                ))
+                            }
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3 · Anatomy — the four things a prompt can't give -->
+        <section class="border-t border-line" id="anatomy">
+            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+                <div class="eyebrow">{content.anatomy.eyebrow}</div>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.anatomy.heading}</h2>
+                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.anatomy.sub}</p>
+
+                <div class="mt-12 grid gap-10 sm:grid-cols-2 sm:gap-8 lg:gap-12">
                     {
-                        content.connect.steps.map((step, i) => (
-                            <div>
-                                <div class="text-5xl font-semibold tracking-tight text-primary-500/25 select-none" aria-hidden="true">
-                                    0{i + 1}
+                        content.anatomy.pillars.map((pillar, i) => (
+                            <div class="flex gap-4">
+                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-600/10 text-link">
+                                    <Fragment set:html={anatomyIcons[i] ?? ""} />
                                 </div>
-                                <h3 class="mt-3 text-sm font-medium text-content">{step.title}</h3>
-                                <p class="mt-2 text-sm leading-relaxed text-muted">{step.body}</p>
+                                <div>
+                                    <h3 class="mt-1 text-sm font-medium text-content">{pillar.title}</h3>
+                                    <p class="mt-2 text-sm leading-relaxed text-muted">{pillar.body}</p>
+                                </div>
                             </div>
                         ))
                     }
                 </div>
-
-                <div class="code-window mt-10">
-                    <div class="flex items-center justify-between border-b border-line px-4 py-2">
-                        <span class="eyebrow">Step 3 · your machine</span>
-                    </div>
-                    <pre class="px-4 py-3 text-content"><code><span class="text-subtle">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
-                </div>
-                <p class="mt-3 text-xs text-subtle">{content.connect.commandNote}</p>
             </div>
         </section>
 
-        <!-- 3 · Anywhere — the use case as a storyline -->
-        <section class="border-t border-line" id="anywhere">
+        <!-- 4 · Workforce — one agent to a graph of them -->
+        <section class="border-t border-line" id="workforce">
             <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.anywhere.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.anywhere.heading}</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.anywhere.sub}</p>
+                <div class="eyebrow">{content.workforce.eyebrow}</div>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.workforce.heading}</h2>
+                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.workforce.sub}</p>
 
                 <div class="relative mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
                     <div
@@ -196,10 +238,10 @@ const moreIcons = [
                     >
                     </div>
                     {
-                        content.anywhere.moments.map((moment, i) => (
+                        content.workforce.moments.map((moment, i) => (
                             <div class="relative">
                                 <div class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-line-strong bg-canvas text-link">
-                                    <Fragment set:html={momentIcons[i] ?? ""} />
+                                    <Fragment set:html={workforceIcons[i] ?? ""} />
                                 </div>
                                 <h3 class="mt-4 text-sm font-medium text-content">{moment.title}</h3>
                                 <p class="mt-2 max-w-xs text-sm leading-relaxed text-muted">{moment.body}</p>
@@ -210,7 +252,7 @@ const moreIcons = [
             </div>
         </section>
 
-        <!-- 4 · Ownership — diagram + definition rows -->
+        <!-- 5 · Ownership — diagram + definition rows -->
         <section class="border-t border-line" id="ownership">
             <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.ownership.eyebrow}</div>
@@ -226,8 +268,8 @@ const moreIcons = [
                         private tunnel, direct <span aria-hidden="true">→</span>
                     </div>
                     <div class="card flex-1 border-primary-600/30 p-5 text-center">
-                        <div class="eyebrow text-link">Your sandbox · your machine</div>
-                        <p class="mt-2 text-sm text-muted">Agent, repos, credentials, capabilities</p>
+                        <div class="eyebrow text-link">Your agents · your machine</div>
+                        <p class="mt-2 text-sm text-muted">Sandboxes, repos, credentials, capabilities</p>
                     </div>
                     <div class="flex-1 rounded-2xl border border-dashed border-line p-5 text-center">
                         <div class="eyebrow">intentic platform</div>
@@ -253,7 +295,7 @@ const moreIcons = [
             </div>
         </section>
 
-        <!-- 5 · Agent in control — two product vignettes -->
+        <!-- 6 · Control — two product vignettes -->
         <section class="border-t border-line" id="control">
             <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
                 <div class="eyebrow">{content.control.eyebrow}</div>
@@ -313,37 +355,38 @@ const moreIcons = [
             </div>
         </section>
 
-        <!-- 6 · Included — icon columns, no boxes -->
-        <section class="border-t border-line" id="more">
+        <!-- 7 · Get connected — ghost-numeral steps, no boxes -->
+        <section class="border-t border-line" id="connect">
             <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
-                <div class="eyebrow">{content.more.eyebrow}</div>
-                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.more.heading}</h2>
-                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.more.sub}</p>
+                <div class="eyebrow">{content.connect.eyebrow}</div>
+                <h2 class="mt-3 max-w-xl text-3xl font-semibold tracking-tight">{content.connect.heading}</h2>
+                <p class="mt-3 max-w-xl text-base leading-relaxed text-muted">{content.connect.sub}</p>
 
                 <div class="mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
                     {
-                        content.more.items.map((item, i) => (
+                        content.connect.steps.map((step, i) => (
                             <div>
-                                <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600/10 text-link">
-                                    <Fragment set:html={moreIcons[i] ?? ""} />
+                                <div class="text-5xl font-semibold tracking-tight text-primary-500/25 select-none" aria-hidden="true">
+                                    0{i + 1}
                                 </div>
-                                <h3 class="mt-4 text-sm font-medium text-content">{item.title}</h3>
-                                <p class="mt-2 text-sm leading-relaxed text-muted">{item.body}</p>
+                                <h3 class="mt-3 text-sm font-medium text-content">{step.title}</h3>
+                                <p class="mt-2 text-sm leading-relaxed text-muted">{step.body}</p>
                             </div>
                         ))
                     }
                 </div>
 
-                <div class="mt-10 flex flex-wrap items-center gap-4 border-t border-line pt-6">
-                    <p class="text-xs text-subtle">"Credentials are stored securely inside your sandbox and never shown in Files."</p>
-                    <a href={githubUrl} target="_blank" rel="noopener" class="ml-auto text-sm text-link hover:underline">
-                        Engine source on GitHub →
-                    </a>
+                <div class="code-window mt-10">
+                    <div class="flex items-center justify-between border-b border-line px-4 py-2">
+                        <span class="eyebrow">Step 3 · your machine</span>
+                    </div>
+                    <pre class="px-4 py-3 text-content"><code><span class="text-subtle">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
                 </div>
+                <p class="mt-3 text-xs text-subtle">{content.connect.commandNote}</p>
             </div>
         </section>
 
-        <!-- 7 · FAQ — sticky intro + hairline rows -->
+        <!-- 8 · FAQ — sticky intro + hairline rows -->
         <section class="border-t border-line" id="faq">
             <div class="fade-in mx-auto grid max-w-6xl gap-12 px-6 py-20 lg:grid-cols-[1fr_1.6fr] lg:py-24">
                 <div class="self-start lg:sticky lg:top-28">
@@ -389,7 +432,7 @@ const moreIcons = [
             </div>
         </section>
 
-        <!-- 8 · Final CTA -->
+        <!-- 9 · Final CTA -->
         <section class="relative overflow-hidden border-t border-line">
             <div class="absolute inset-0 bg-linear-to-br from-primary-600/15 via-canvas to-canvas" aria-hidden="true"></div>
             <div class="fade-in relative mx-auto max-w-6xl px-6 py-20 text-center lg:py-28">
@@ -404,27 +447,6 @@ const moreIcons = [
         </section>
     </main>
     <Footer />
-
-    {
-        showVariantSwitcher && (
-            <div class="fixed right-4 bottom-4 z-100 flex items-center gap-2 rounded-full border border-line bg-canvas/90 px-4 py-2 text-xs shadow-2xl shadow-black/40 backdrop-blur-lg">
-                <span class="text-subtle">
-                    {content.name} ({content.id})
-                </span>
-                {Object.values(landingVariants).map((variant) => (
-                    <a
-                        href={`/preview/${variant.id}/`}
-                        class:list={[
-                            "rounded-full px-2.5 py-1 font-semibold uppercase",
-                            variant.id === content.id ? "bg-primary-600/20 text-link" : "text-muted hover:text-content",
-                        ]}
-                    >
-                        {variant.id}
-                    </a>
-                ))}
-            </div>
-        )
-    }
 
     <script>
         // Fade-in observer

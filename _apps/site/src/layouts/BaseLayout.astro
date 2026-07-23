@@ -17,7 +17,7 @@ interface Props {
 const path = Astro.url.pathname.endsWith("/") ? Astro.url.pathname : `${Astro.url.pathname}/`;
 const meta = getPageMeta(path);
 
-const title = Astro.props.title ?? meta?.title ?? `${ORG_NAME} — Build software with intent`;
+const title = Astro.props.title ?? meta?.title ?? `${ORG_NAME} — Specialized agents that own their workspace`;
 const description = Astro.props.description ?? meta?.description ?? ORG_DESCRIPTION;
 const datePublished = meta?.datePublished;
 const dateModified = lastModForUrl(`${SITE_URL}${path}`) ?? undefined;

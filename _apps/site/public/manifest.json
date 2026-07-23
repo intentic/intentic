@@ -1,7 +1,7 @@
 {
     "name": "intentic",
     "short_name": "intentic",
-    "description": "Build software with intent. An AI-native workspace for infra, data, apps, and code.",
+    "description": "Specialized coding agents, each with its own sandbox — the libraries, dev-tools, integrations, and context its job needs, on hardware you own.",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#181614",

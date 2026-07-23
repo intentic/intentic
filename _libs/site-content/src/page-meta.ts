@@ -8,9 +8,9 @@ export const pageMeta: Record<string, PageMeta> = {
     // The landing page's real title/description come from the selected variant in landing.ts;
     // this entry is the fallback and the datePublished source.
     "/": {
-        title: "intentic — Your coding agent, on your machine, in any browser",
+        title: "intentic — Specialized agents that own their workspace",
         description:
-            "Your coding agent — Claude Code or Codex — running on your own machine, driven from any browser. Your code and secrets never leave your hardware. Capabilities, automations, and an open-source deploy engine included. Free to start.",
+            "A specialized agent is more than a prompt. intentic gives each coding agent — Claude Code, Codex, or Grok — its own sandbox: the libraries, dev-tools, and integrations its job needs, plus curated context, on hardware you own. Run one, or a whole team. Free to start.",
         datePublished: "2026-07-06",
     },
     "/privacy/": {

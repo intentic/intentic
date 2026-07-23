@@ -8,6 +8,22 @@ export interface FaqItem {
 // The objection bank from docs/marketing/messaging.md — answers verified against intentic-app and the engine repo.
 export const faqItems: FaqItem[] = [
     {
+        id: "how-is-this-different",
+        question: "How is this different from a custom GPT or a .md instructions file?",
+        answer: [
+            "Those are a prompt: instructions on top of a generic assistant. It can describe your stack, but nothing is installed, it can't reach your code or services, and it starts from a blank context every time.",
+            "A specialized agent here owns a sandbox. Its dev-tools and libraries are really installed (an environment overlay), it's wired to your repos, databases, and services (capabilities), and its skills and house style load every run — so it does the job end to end and shows its work as diffs.",
+        ],
+    },
+    {
+        id: "run-a-fleet",
+        question: "Can I run a separate agent for each job?",
+        answer: [
+            "Yes — that's the intended shape. Give each role its own sandbox (a migrations agent, a release captain, a support triager), each with the environment, access, and context its job needs. The free plan includes one sandbox; Pro runs as many as you have roles.",
+            "Automations wake them on a schedule or an event, and one agent's run can fire the webhook that wakes another — so a whole workflow moves through specialized hands.",
+        ],
+    },
+    {
         id: "where-does-my-code-live",
         question: "Where does my code live?",
         answer: [

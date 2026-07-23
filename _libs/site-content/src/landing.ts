@@ -1,5 +1,3 @@
-export type LandingVariantId = "a" | "b" | "c";
-
 export interface LandingFact {
     title: string;
     body: string;
@@ -11,398 +9,186 @@ export interface LandingSectionIntro {
     sub: string;
 }
 
-export interface LandingTreeEntry {
+/** A labeled row of tags in the hero's specialized-agent card (e.g. "Environment" → toolchain). */
+export interface AgentSpecRow {
+    label: string;
+    items: string[];
+}
+
+/** The hero visual: a specialized agent as a configured worker, not a chat window. */
+export interface AgentSpec {
     name: string;
-    nested?: boolean;
+    role: string;
+    rows: AgentSpecRow[];
+    task: string;
+    outcome: string;
+}
+
+/** One side of the "prompt vs specialized agent" comparison. */
+export interface LandingContrastColumn {
+    label: string;
+    caption: string;
+    points: string[];
 }
 
 export interface LandingContent {
-    id: LandingVariantId;
-    /** Short label shown on the dev preview switcher to tell variants apart. */
-    name: string;
     meta: { title: string; description: string };
     hero: {
         headlineLines: string[];
         subhead: string;
         chips: string[];
-        mock: {
-            workspaceName: string;
-            tree: LandingTreeEntry[];
-            userMessage: string;
-            planSteps: string[];
-            status: string;
-        };
+        spec: AgentSpec;
     };
-    connect: LandingSectionIntro & { steps: LandingFact[]; commandNote: string };
-    anywhere: LandingSectionIntro & { moments: LandingFact[] };
+    contrast: LandingSectionIntro & { prompt: LandingContrastColumn; agent: LandingContrastColumn };
+    anatomy: LandingSectionIntro & { pillars: LandingFact[] };
+    workforce: LandingSectionIntro & { moments: LandingFact[] };
     ownership: LandingSectionIntro & { facts: LandingFact[] };
     control: LandingSectionIntro;
-    more: LandingSectionIntro & { items: LandingFact[] };
+    connect: LandingSectionIntro & { steps: LandingFact[]; commandNote: string };
     finalCta: { heading: string; sub: string };
 }
 
-// One use case, three angles. Every variant sells the same thing — the coding agent you already
-// use, running on your own machine, driven from any browser — and differs only in which door it
-// walks the reader through: the agent (a), ownership (b), or the moment of use (c).
-export const landingVariants: Record<LandingVariantId, LandingContent> = {
-    a: {
-        id: "a",
-        name: "Agent-led",
-        meta: {
-            title: "intentic — A real workspace for your coding agent",
-            description:
-                "Take the coding agent you already run out of the terminal: chat, files, diffs, and terminals in any browser, served from your own machine. Works with Claude Code, Codex, and whatever ships next. Free to start.",
-        },
-        hero: {
-            headlineLines: ["Your coding agent.", "Out of the terminal."],
-            subhead:
-                "intentic gives the agent you already run — Claude Code, Codex, whichever comes next — a real workspace: chat, file tree, editor, diffs, and terminals, served from your own hardware to any screen you're near.",
-            chips: ["Free plan", "Bring your own agent", "Your machine, your keys", "No open inbound ports"],
-            mock: {
-                workspaceName: "workspace / api",
-                tree: [
-                    { name: "src/" },
-                    { name: "server.ts", nested: true },
-                    { name: "middleware/", nested: true },
-                    { name: "test/" },
-                    { name: "rate-limit.test.ts", nested: true },
-                ],
-                userMessage: "Add rate limiting to the public API and cover it with tests.",
-                planSteps: [
-                    "1. Read the middleware stack in src/server",
-                    "2. Add a token-bucket limiter with config",
-                    "3. Test burst, refill, and per-key limits",
-                ],
-                status: "9 files changed · tests green · diff ready to review",
-            },
-        },
-        connect: {
-            eyebrow: "Get connected",
-            heading: "One command to a live workspace.",
-            sub: "Sign in, name your sandbox, paste one command into a terminal. The workspace opens the moment your sandbox reports in.",
-            steps: [
-                {
-                    title: "Sign in with Google",
-                    body: "No forms, no card. The platform stores your identity and your sandbox's URL — nothing else.",
-                },
-                {
-                    title: "Name your sandbox",
-                    body: "intentic prepares a private tunnel under its own domain — no Cloudflare account required.",
-                },
-                {
-                    title: "Paste one command",
-                    body: "A personalized one-liner starts the sandbox on your machine. Docker is installed if missing — you're asked first.",
-                },
+// One thesis, told once: a specialized agent is more than a prompt — it owns an environment (a
+// sandbox, real dev-tools, access to your systems, curated context), which is why it beats a
+// generic assistant, and why you can hand it real work and compose a team of them. Every claim maps
+// to a shipping mechanism: environment overlays, capabilities/connectors, agent plugins/skills,
+// sandboxes (Pro = many), and automations.
+export const landingContent: LandingContent = {
+    meta: {
+        title: "intentic — Specialized agents that own their workspace",
+        description:
+            "A specialized agent is more than a prompt. intentic gives each coding agent its own sandbox — the libraries, dev-tools, and integrations its job needs, plus curated context — on hardware you own. Works with Claude Code, Codex, and Grok. Free to start.",
+    },
+    hero: {
+        headlineLines: ["A specialized agent is", "more than a prompt."],
+        subhead:
+            "Give each agent its own sandbox — your libraries, your dev-tools, the systems you already run on, and the context only its job needs. Specialized agents beat generic ones. Run one, or a whole team, on hardware you own.",
+        chips: ["Free plan", "Bring your own agent", "Runs on your hardware", "No inbound ports"],
+        spec: {
+            name: "release-captain",
+            role: "Owns the weekly release",
+            rows: [
+                { label: "Environment", items: ["node 22", "pnpm", "docker", "gh cli"] },
+                { label: "Connected", items: ["GitHub", "Sentry", "Slack", "prod db · read"] },
+                { label: "Context", items: ["repo: platform", "6 skills", "release runbook", "house style"] },
             ],
-            commandNote: "No open inbound ports, nothing deployed — just your workspace, reachable.",
-        },
-        anywhere: {
-            eyebrow: "Anywhere",
-            heading: "One session, every screen.",
-            sub: "The session lives on your machine, not in a browser tab. Close the laptop, open your phone — the same chat, files, and terminals are waiting.",
-            moments: [
-                {
-                    title: "Start at your desk",
-                    body: "Hand the agent real work in the browser — full file tree, editor, and terminals alongside the chat.",
-                },
-                {
-                    title: "Check in from your phone",
-                    body: "Plan mode means the agent proposes and waits. Approve, redirect, or stop it from wherever you are.",
-                },
-                {
-                    title: "Come back to diffs",
-                    body: "Everything it changed since you last looked, as diffs you commit or discard — never a mystery working tree.",
-                },
-            ],
-        },
-        ownership: {
-            eyebrow: "Ownership",
-            heading: "Your code never moves out.",
-            sub: "The sandbox is a container on hardware you control — a laptop, a workstation, a VPS. Your browser reaches it directly over a private tunnel; the platform stores your identity and a URL, and can't reach anything else.",
-            facts: [
-                {
-                    title: "Files stay on your machine",
-                    body: "Repos, credentials, and history live where the sandbox runs. The platform never relays or stores your code.",
-                },
-                {
-                    title: "Keys stay in the sandbox",
-                    body: "Capability tokens and API keys are stored inside the sandbox; secret files are denylisted from the file relay.",
-                },
-                {
-                    title: "The platform can't reach in",
-                    body: "Your browser holds the token that drives the sandbox — the platform never does. A platform breach can't touch your machine.",
-                },
-            ],
-        },
-        control: {
-            eyebrow: "Control",
-            heading: "Autonomy with a steering wheel.",
-            sub: "Plan mode by default: the agent proposes, you approve. Review every change as a diff — discard or commit. Environment changes ship only with your sign-off.",
-        },
-        more: {
-            eyebrow: "Included",
-            heading: "More than a chat window.",
-            sub: "The workspace grows with the work — everything below is included in the free plan.",
-            items: [
-                {
-                    title: "Capabilities",
-                    body: "GitHub, databases, Sentry, Discord, Stripe, SSH, MCP servers — added in a click, operated from chat, credentials kept in the sandbox.",
-                },
-                {
-                    title: "Automations",
-                    body: "Wake the agent on a schedule, a webhook, or a live event — a push, an alert, a payment, an email. Each run leaves a transcript.",
-                },
-                {
-                    title: "Deploys, when you're ready",
-                    body: "The built-in open-source engine turns one config file into git, CI, and a deployment on your own server — a nice sidecar, not homework.",
-                },
-            ],
-        },
-        finalCta: {
-            heading: "Give your agent a workspace.",
-            sub: "One command from a live session. Free to start.",
+            task: "Cut the 2.4 release and post the changelog.",
+            outcome: "tag pushed · changelog drafted · deploy watched",
         },
     },
-    b: {
-        id: "b",
-        name: "Ownership-led",
-        meta: {
-            title: "intentic — The AI workspace you own",
-            description:
-                "Agent autonomy without shipping your code to a vendor's cloud. The sandbox runs on your machine; the platform stores your identity and a URL and can't reach anything else. Your coding agent, from any browser. Free to start.",
-        },
-        hero: {
-            headlineLines: ["The AI workspace", "you own."],
-            subhead:
-                "Cloud agent platforms run your code on their machines. intentic runs the agent on yours — the same browser workspace, chat to terminals, with nothing to hand over.",
-            chips: ["Free plan", "Runs on your hardware", "Platform can't read your code", "Open-source MIT engine"],
-            mock: {
-                workspaceName: "workspace / platform",
-                tree: [
-                    { name: "src/" },
-                    { name: "config.ts", nested: true },
-                    { name: "ci/" },
-                    { name: "deploy.yml", nested: true },
-                    { name: "reports/" },
-                    { name: "audit.md", nested: true },
-                ],
-                userMessage: "Rotate the staging credentials and audit everywhere they were used.",
-                planSteps: [
-                    "1. Find every use across configs and CI",
-                    "2. Rotate the keys via the provider CLI",
-                    "3. Write the exposure report to audit.md",
-                ],
-                status: "keys rotated · audit.md written · nothing left this machine",
-            },
-        },
-        connect: {
-            eyebrow: "Get connected",
-            heading: "Your hardware, minutes to live.",
-            sub: "Sign in, name your sandbox, paste one command on whichever machine should hold your code — a laptop, a workstation, a VPS.",
-            steps: [
-                {
-                    title: "Sign in with Google",
-                    body: "An identity, nothing more. No card, no code upload, no repo permissions.",
-                },
-                {
-                    title: "Name your sandbox",
-                    body: "A private tunnel is prepared under intentic's domain — or bring your own Cloudflare zone; your token is used once and never stored.",
-                },
-                {
-                    title: "Paste one command",
-                    body: "The sandbox starts where you run it. Docker is installed if missing — you're asked first.",
-                },
-            ],
-            commandNote: "No open inbound ports, nothing deployed — the machine is yours to pick, and the code never has to leave it.",
-        },
-        anywhere: {
-            eyebrow: "The workspace",
-            heading: "The cloud UX, without the custody.",
-            sub: "You keep the part cloud platforms got right — a workspace in any browser, sessions that survive the tab — served from your machine instead of theirs.",
-            moments: [
-                {
-                    title: "Any browser",
-                    body: "Chat, file tree, editor, diffs, and terminals — from your desk, your laptop, your phone.",
-                },
-                {
-                    title: "Direct connection",
-                    body: "The browser talks to your sandbox over a private tunnel. Your files and prompts never route through intentic's servers.",
-                },
-                {
-                    title: "Sessions persist",
-                    body: "Terminals and agent runs live on your machine and survive reconnects — pick up exactly where you left off.",
-                },
+    contrast: {
+        eyebrow: "Why specialized",
+        heading: "A markdown file is not an agent.",
+        sub: "The usual “custom agent” is a paragraph of instructions bolted onto a generic assistant. It can describe your stack; it can't run it. A specialized agent owns the whole environment the work happens in.",
+        prompt: {
+            label: "A prompt",
+            caption: "a system prompt and a few .md files",
+            points: [
+                "Describes your tools — none are installed.",
+                "No reach into your codebase, data, or services.",
+                "Starts from the same blank context every run.",
+                "Hands you generic output you finish by hand.",
             ],
         },
-        ownership: {
-            eyebrow: "Ownership",
-            heading: "Built to be unable to betray you.",
-            sub: "This is architecture, not policy: the platform stores your identity and your sandbox's URL. It never holds the token your browser signs in with — so it cannot drive your sandbox, even breached.",
-            facts: [
-                {
-                    title: "Your code never leaves your machine",
-                    body: "Repos, files, and history live where the sandbox runs. The platform never relays or stores them.",
-                },
-                {
-                    title: "Credentials stay inside your sandbox",
-                    body: "Capability tokens live in the sandbox; secret files are denylisted from the file relay. The little the platform stores is AES-256-GCM encrypted.",
-                },
-                {
-                    title: "Read the code that claims this",
-                    body: "The engine is MIT on GitHub, tests included. Verify the architecture instead of trusting the pitch.",
-                },
+        agent: {
+            label: "A specialized agent",
+            caption: "a sandbox of its own",
+            points: [
+                "Its dev-tools and libraries are really installed.",
+                "Wired to your repos, databases, and services.",
+                "Curated context loads every single run.",
+                "Does the job end to end, shows its work as diffs.",
             ],
-        },
-        control: {
-            eyebrow: "Control",
-            heading: "You approve every consequential step.",
-            sub: "Plan mode by default: the agent proposes, you approve. Every file change is a diff you commit or discard; environment changes ship only with your sign-off.",
-        },
-        more: {
-            eyebrow: "Included",
-            heading: "Grows without giving anything up.",
-            sub: "Everything you add stays under the same rule: it runs on your machine, and its credentials never leave the sandbox.",
-            items: [
-                {
-                    title: "Capabilities",
-                    body: "GitHub, databases, Sentry, Discord, Stripe, SSH, MCP servers — added in a click, secrets stored sandbox-side only.",
-                },
-                {
-                    title: "Automations",
-                    body: "Wake the agent on a schedule, a webhook, or a live event. It works on your hardware even while you're away.",
-                },
-                {
-                    title: "Self-hosted deploys",
-                    body: "The open-source engine deploys your apps to your own server — git, CI, registry, and DNS derived from one config.",
-                },
-            ],
-        },
-        finalCta: {
-            heading: "Own the workspace, not just the repo.",
-            sub: "One command, on your hardware. Free to start.",
         },
     },
-    c: {
-        id: "c",
-        name: "Moment-led",
-        meta: {
-            title: "intentic — Your coding agent, from anywhere",
-            description:
-                "Give the agent real work at your desk, approve its plan from your phone, come back to reviewed diffs. Your coding agent, running on your own machine, in any browser. Free to start.",
-        },
-        hero: {
-            headlineLines: ["Start at your desk.", "Approve from your phone."],
-            subhead:
-                "Your coding agent shouldn't stop when you stand up. intentic runs it on your machine and hands you the live session in any browser — the work continues; only your screen changes.",
-            chips: ["Free plan", "Sessions survive the tab", "One session, every device", "Your machine, your keys"],
-            mock: {
-                workspaceName: "workspace / web",
-                tree: [
-                    { name: "src/" },
-                    { name: "app.css", nested: true },
-                    { name: "components/", nested: true },
-                    { name: "pages/", nested: true },
-                    { name: "package.json" },
-                ],
-                userMessage: "Migrate the app to Tailwind 4 — flag anything that changes visually.",
-                planSteps: [
-                    "1. Upgrade the deps and the Vite plugin",
-                    "2. Move the config to CSS-first",
-                    "3. Screenshot-diff every page, list changes",
-                ],
-                status: "approved from your phone · 23 files changed · 2 visual changes flagged",
+    anatomy: {
+        eyebrow: "Anatomy",
+        heading: "Four things a prompt can't give it.",
+        sub: "Specializing an agent isn't writing a longer prompt — it's giving it an environment. The same four things you'd give a new hire on day one.",
+        pillars: [
+            {
+                title: "Its own sandbox",
+                body: "A full workspace in a container on hardware you control — one per agent, so a whole team never steps on itself. Not a chat window: a machine the agent actually works on.",
             },
-        },
-        connect: {
-            eyebrow: "Get connected",
-            heading: "From sign-in to a live session.",
-            sub: "Three steps, one of them a paste. Your workspace opens on its own the moment the sandbox reports in.",
-            steps: [
-                {
-                    title: "Sign in with Google",
-                    body: "No forms, no card. The platform stores your identity and your sandbox's URL — nothing else.",
-                },
-                {
-                    title: "Name your sandbox",
-                    body: "intentic prepares a private tunnel under its own domain — no Cloudflare account required.",
-                },
-                {
-                    title: "Paste one command",
-                    body: "One-liner in a terminal, Docker installed if missing (you're asked first), and the session is live.",
-                },
-            ],
-            commandNote: "Run it on the machine that should do the work — your laptop, a desktop that stays on, a VPS.",
-        },
-        anywhere: {
-            eyebrow: "A day with it",
-            heading: "A workday with the agent.",
-            sub: "The session is one URL. What you do with it depends on where you are.",
-            moments: [
-                {
-                    title: "09:00 — at your desk",
-                    body: "Full workspace: chat beside the file tree, editor, and terminals. Hand over the task, shape the plan.",
-                },
-                {
-                    title: "12:40 — in line for lunch",
-                    body: "The agent finished and proposed the next step. Approve it from your phone; it gets back to work.",
-                },
-                {
-                    title: "17:00 — back at your desk",
-                    body: "Read the diff of everything that happened, commit what's right, discard what isn't.",
-                },
-            ],
-        },
-        ownership: {
-            eyebrow: "Ownership",
-            heading: "Anywhere, because it's yours.",
-            sub: "The session travels because your browser connects to your machine — not because your code moved to someone's cloud. The platform stores your identity and a URL; everything else stays home.",
-            facts: [
-                {
-                    title: "Home is your machine",
-                    body: "The sandbox runs where you started it. Repos, credentials, and history never leave it.",
-                },
-                {
-                    title: "Secrets don't travel",
-                    body: "Capability tokens live in the sandbox; secret files are denylisted from the file relay.",
-                },
-                {
-                    title: "No vendor in the loop",
-                    body: "Browser → tunnel → sandbox. The platform is off the command path and can't reach your daemon.",
-                },
-            ],
-        },
-        control: {
-            eyebrow: "Control",
-            heading: "It waits for you — not the reverse.",
-            sub: "Plan mode by default: proposals wait for your approval wherever you are. Every change is a diff you commit or discard; environment changes need your explicit sign-off.",
-        },
-        more: {
-            eyebrow: "Included",
-            heading: "When one task becomes a system.",
-            sub: "The same session picks up more reach as you need it — all of it included in the free plan.",
-            items: [
-                {
-                    title: "Capabilities",
-                    body: "GitHub, databases, Sentry, Discord, Stripe, SSH, MCP servers — added in a click, operated from chat.",
-                },
-                {
-                    title: "Automations",
-                    body: "Why wake it by hand? Schedules, webhooks, and live events keep the agent working between your check-ins.",
-                },
-                {
-                    title: "Deploys",
-                    body: "When something's ready to ship, the built-in open-source engine deploys it to your own server from one config file.",
-                },
-            ],
-        },
-        finalCta: {
-            heading: "Your next session is one command away.",
-            sub: "Works with the agent you already use. Free to start.",
-        },
+            {
+                title: "A curated environment",
+                body: "The libraries and dev-tools the job needs, baked into the image and really installed — psql, ffmpeg, your language toolchain, a browser. The agent proposes the layer; it ships on your approval.",
+            },
+            {
+                title: "Access to your systems",
+                body: "GitHub, databases, Sentry, Stripe, SSH hosts, MCP servers, your own internal tools — added in a click. Credentials stay in the sandbox; the agent operates them from chat.",
+            },
+            {
+                title: "Curated context",
+                body: "Skills, runbooks, repos, and house style scoped to this one job, loaded every turn. Not a generic dump — the context that makes the output yours instead of the model's average.",
+            },
+        ],
+    },
+    workforce: {
+        eyebrow: "Workforce",
+        heading: "One agent, or a team that works while you don't.",
+        sub: "Once an agent is specialized, it's cheap to run more. Give each role its own sandbox, wake them on the events that matter, and let them hand work down the line.",
+        moments: [
+            {
+                title: "One sandbox per role",
+                body: "A migrations agent, a release captain, a support triager — each with the environment, access, and context its job needs. Pro runs as many sandboxes as you have roles.",
+            },
+            {
+                title: "Woken by events",
+                body: "A push, a Sentry alert, a Stripe payment, an inbound email, or a schedule starts a fresh specialized run and leaves a transcript. They keep working between your check-ins.",
+            },
+            {
+                title: "Chained into a graph",
+                body: "One agent's run can fire the webhook that wakes the next — triage hands to fix, fix hands to review — so work moves through specialized hands instead of one generalist's.",
+            },
+        ],
+    },
+    ownership: {
+        eyebrow: "Ownership",
+        heading: "Real access is only safe if you own where it runs.",
+        sub: "A specialized agent holds your keys and touches your systems — so it runs in a sandbox on hardware you control, reached by your browser over a private tunnel. The platform stores your identity and a URL, and can't reach in.",
+        facts: [
+            {
+                title: "The workspace never leaves your machine",
+                body: "Repos, credentials, and history live where the sandbox runs — a laptop, a workstation, a server. The platform never relays or stores your code.",
+            },
+            {
+                title: "Keys stay in the sandbox",
+                body: "Every capability's tokens are stored sandbox-side and denylisted from the file relay, so the agent uses them without them ever being shown or shipped out.",
+            },
+            {
+                title: "The platform can't drive your agents",
+                body: "Your browser holds the token that commands the sandbox — the platform never does. A breach reads a URL and reaches nothing. The engine is MIT on GitHub; verify it.",
+            },
+        ],
+    },
+    control: {
+        eyebrow: "Control",
+        heading: "Autonomy you can hand out safely.",
+        sub: "Every agent starts in plan mode — it proposes, you approve. Each run's changes are diffs you commit or discard, and an agent can never rebuild its own environment without your explicit sign-off.",
+    },
+    connect: {
+        eyebrow: "Get connected",
+        heading: "One command, and an agent has a home.",
+        sub: "Sign in, name the sandbox, paste one command on the machine that should host it. The workspace opens the moment the sandbox reports in — then you specialize the agent.",
+        steps: [
+            {
+                title: "Sign in with Google",
+                body: "No forms, no card. The platform stores your identity and the sandbox's URL — nothing else.",
+            },
+            {
+                title: "Name the sandbox",
+                body: "intentic prepares a private tunnel under its own domain — no Cloudflare account required. Bring your own zone if you'd rather.",
+            },
+            {
+                title: "Paste one command",
+                body: "A personalized one-liner starts the sandbox on your machine. Docker is installed if missing — you're asked first.",
+            },
+        ],
+        commandNote: "No open inbound ports, nothing deployed — just a workspace your agent can call home.",
+    },
+    finalCta: {
+        heading: "Stop writing prompts. Start building agents.",
+        sub: "One command to a live sandbox. Free to start, on your hardware.",
     },
 };
-
-export function resolveLandingVariant(value: string | undefined): LandingContent {
-    if (value && value in landingVariants) return landingVariants[value as LandingVariantId];
-    return landingVariants.a;
-}

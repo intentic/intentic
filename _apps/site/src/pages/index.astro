@@ -1,8 +1,6 @@
 ---
-import { resolveLandingVariant } from "@intentic-dev/site-content/landing";
+import { landingContent } from "@intentic-dev/site-content/landing";
 import Landing from "../components/Landing.astro";
-
-const content = resolveLandingVariant(import.meta.env.SITE_VARIANT);
 ---
 
-<Landing content={content} />
+<Landing content={landingContent} />

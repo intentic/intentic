@@ -12,8 +12,8 @@ const projectRoot = fileURLToPath(new URL("./", import.meta.url));
 const hasOgFonts =
     existsSync(path.join(projectRoot, "scripts/fonts/Inter-Regular.ttf")) && existsSync(path.join(projectRoot, "scripts/fonts/Inter-Bold.ttf"));
 
-// Dev serves paths with or without the trailing slash (typing /preview/a must not 404);
-// builds keep "always" so canonical URLs stay slashed and hosting normalizes requests.
+// Dev serves paths with or without the trailing slash; builds keep "always" so canonical URLs
+// stay slashed and hosting normalizes requests.
 const isDev = process.argv.includes("dev");
 
 export default defineConfig({
@@ -26,7 +26,6 @@ export default defineConfig({
         plugins: [tailwindcss()],
         define: {
             "import.meta.env.PUBLIC_OG_PER_PAGE": JSON.stringify(hasOgFonts),
-            "import.meta.env.SITE_VARIANT": JSON.stringify(process.env.SITE_VARIANT ?? "a"),
         },
     },
     integrations: [
