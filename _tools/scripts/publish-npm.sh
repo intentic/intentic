@@ -39,6 +39,8 @@ for d in "${PUB[@]}"; do
     if [ -n "${NPM_ID_TOKEN:-}" ]; then
       echo "//registry.npmjs.org/:_authToken=$(exchange_token "$name")" > "$HOME/.npmrc"
     fi
-    pnpm --dir "$d" publish --access public --no-git-checks
+    # NPM_ID_TOKEN must be hidden from pnpm: seeing it, pnpm ≥11.10 runs its own broken OIDC exchange and on
+    # failure publishes unauthenticated (E404) instead of falling back to the ~/.npmrc token written above.
+    env -u NPM_ID_TOKEN pnpm --dir "$d" publish --access public --no-git-checks
   fi
 done
