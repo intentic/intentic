@@ -4,6 +4,7 @@ import { Card, cmp, CopyButton } from "@intentic-app/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRoute } from "vue-router";
 import { providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
 import { sandboxJson, sandboxRequest } from "../../composables/sandbox/sandboxClient";
@@ -65,9 +66,22 @@ const stopAccountsPoll = (): void => {
     }
 };
 
+// Arriving from a chat's "Connect account" gate carries `?connect=<provider>`: open that provider's card and
+// flash it, so the user lands looking straight at the inputs they need (mirrors SandboxSync's desktop-sync jump).
+const route = useRoute();
+const ringing = ref(false);
+
 onMounted(() => {
     openAccountManage();
     void loadTranslatorAccounts();
+    const requested = providerTabs.find((tab) => tab.value === route.query[`connect`]);
+    if (requested !== undefined) {
+        setManagedProvider(requested.value);
+        ringing.value = true;
+        setTimeout(() => (ringing.value = false), 2500);
+        // Let the card render, then bring it into view.
+        setTimeout(() => document.getElementById(`ai-account`)?.scrollIntoView({ behavior: `smooth`, block: `center` }), 50);
+    }
 });
 onUnmounted(() => {
     closeAccountManage();
@@ -329,7 +343,7 @@ const importMemory = async (): Promise<void> => {
 <template>
     <div class="flex flex-col gap-2.5">
         <!-- AI provider accounts the agent runs as. -->
-        <Card class="flex flex-col gap-3">
+        <Card id="ai-account" class="flex flex-col gap-3 transition-shadow" :class="ringing ? 'ring-2 ring-info' : ''">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div class="flex items-center gap-2.5">
                     <Icon name="sparkles" class="text-lg text-link" />

@@ -697,7 +697,7 @@ watch(keyboardInset, () => {
                     v-if="activeAccountReauth"
                     type="button"
                     class="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
-                    @click="router.push('/sandbox/agent')"
+                    @click="router.push({ path: '/sandbox/agent', query: { connect: provider } })"
                 >
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
                     <span

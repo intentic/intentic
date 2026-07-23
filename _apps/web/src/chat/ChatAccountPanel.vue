@@ -6,7 +6,8 @@ import { useChat } from "../composables/chat/useChat";
 
 /* The connect gate above the composer: shown when the active conversation's provider has no account yet. It
  * offers a provider pick and a "Connect account" button that deep-links to the Sandbox ▸ Agent tab — the
- * account's home, where the connect handshake and per-account management live. */
+ * account's home, where the connect handshake and per-account management live. The picked provider rides along
+ * as `?connect=<provider>` so the Agent tab opens on that provider's card and flashes it into view. */
 
 const { connected, provider, selectProvider } = useChat();
 const router = useRouter();
@@ -33,7 +34,7 @@ const router = useRouter();
                 {{ tab.label }}
             </button>
         </div>
-        <Button label="Connect account" size="small" @click="router.push('/sandbox/agent')">
+        <Button label="Connect account" size="small" @click="router.push({ path: '/sandbox/agent', query: { connect: provider } })">
             <template #icon><Icon name="link" /></template>
         </Button>
     </div>
