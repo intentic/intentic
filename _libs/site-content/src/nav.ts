@@ -28,17 +28,17 @@ export const navEntries: NavEntry[] = [
         items: [
             {
                 label: "Getting Started",
-                href: "https://github.com/radarsu/intentic#getting-started",
+                href: "https://gitlab.com/radarsu/intentic#getting-started",
                 external: true,
             },
             {
                 label: "CLI Reference",
-                href: "https://github.com/radarsu/intentic#capabilities",
+                href: "https://gitlab.com/radarsu/intentic#capabilities",
                 external: true,
             },
             {
                 label: "Architecture",
-                href: "https://github.com/radarsu/intentic/blob/main/ARCHITECTURE.md",
+                href: "https://gitlab.com/radarsu/intentic/-/blob/main/ARCHITECTURE.md",
                 external: true,
             },
         ],
@@ -46,7 +46,7 @@ export const navEntries: NavEntry[] = [
     {
         type: "link",
         label: "Release Notes",
-        href: "https://github.com/radarsu/intentic/releases",
+        href: "https://gitlab.com/radarsu/intentic/-/releases",
         prefix: "/release-notes",
         external: true,
     },

@@ -12,7 +12,7 @@ export const faqItems: FaqItem[] = [
         question: "How is this different from a custom GPT or a .md instructions file?",
         answer: [
             "Those are a prompt: instructions on top of a generic assistant. It can describe your stack, but nothing is installed, it can't reach your code or services, and it starts from a blank context every time.",
-            "A specialized agent here owns a sandbox. Its dev-tools and libraries are really installed (an environment overlay), it's wired to your repos, databases, and services (capabilities), and its skills and house style load every run — so it does the job end to end and shows its work as diffs.",
+            "A specialized agent here gets a sandbox of its own. Its dev-tools and libraries are really installed (an environment overlay), it's wired to your repos, databases, and services (capabilities), and its skills and house style load every run — so it does the job end to end and shows its work as diffs.",
         ],
     },
     {
@@ -95,7 +95,7 @@ export const faqItems: FaqItem[] = [
         id: "open-source",
         question: "Is it open source? Can I use it without the app?",
         answer: [
-            "The engine is MIT-licensed on GitHub and works standalone as a CLI. The hosted app adds the workspace, capabilities, automations, and teams.",
+            "The engine is MIT-licensed on GitLab and works standalone as a CLI. The hosted app adds the workspace, capabilities, automations, and teams.",
         ],
     },
     {

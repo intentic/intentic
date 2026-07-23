@@ -1,5 +1,5 @@
 ---
-import { APP_URL, githubIssuesUrl, githubUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
+import { APP_URL, gitlabIssuesUrl, gitlabUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
 
 const year = 2026;
 
@@ -12,20 +12,20 @@ const featureLinks = [
 ];
 
 const docsLinks = [
-    { href: "https://github.com/radarsu/intentic#getting-started", label: "Getting Started", external: true },
-    { href: "https://github.com/radarsu/intentic#capabilities", label: "CLI Reference", external: true },
+    { href: "https://gitlab.com/radarsu/intentic#getting-started", label: "Getting Started", external: true },
+    { href: "https://gitlab.com/radarsu/intentic#capabilities", label: "CLI Reference", external: true },
     {
-        href: "https://github.com/radarsu/intentic/blob/main/ARCHITECTURE.md",
+        href: "https://gitlab.com/radarsu/intentic/-/blob/main/ARCHITECTURE.md",
         label: "Architecture",
         external: true,
     },
-    { href: "https://github.com/radarsu/intentic/releases", label: "Release Notes", external: true },
+    { href: "https://gitlab.com/radarsu/intentic/-/releases", label: "Release Notes", external: true },
 ];
 
 const productLinks = [
     { href: APP_URL, label: "Open the app", external: true },
-    { href: githubUrl, label: "GitHub", external: true },
-    { href: githubIssuesUrl, label: "Issues", external: true },
+    { href: gitlabUrl, label: "GitLab", external: true },
+    { href: gitlabIssuesUrl, label: "Issues", external: true },
     { href: "/#faq", label: "FAQ", external: false },
 ];
 
@@ -106,8 +106,8 @@ const legalLinks = [
             {legalLinks.map((link) => <a href={link.href} class="transition-colors hover:text-link">{link.label}</a>)}
         </span>
         <span>
-            Open source on <a href={githubUrl} target="_blank" rel="noopener" class="transition-colors hover:text-link">
-                GitHub
+            Open source on <a href={gitlabUrl} target="_blank" rel="noopener" class="transition-colors hover:text-link">
+                GitLab
             </a>
         </span>
     </div>

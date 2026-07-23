@@ -43,7 +43,7 @@ export interface LandingContent {
     anatomy: LandingSectionIntro & { pillars: LandingFact[] };
     workforce: LandingSectionIntro & { moments: LandingFact[] };
     ownership: LandingSectionIntro & { facts: LandingFact[] };
-    control: LandingSectionIntro;
+    economics: LandingSectionIntro & { accounts: { name: string; detail: string }[]; points: string[] };
     connect: LandingSectionIntro & { steps: LandingFact[]; commandNote: string };
     finalCta: { heading: string; sub: string };
 }
@@ -68,8 +68,8 @@ export const landingContent: LandingContent = {
             name: "release-captain",
             role: "Owns the weekly release",
             rows: [
-                { label: "Environment", items: ["node 22", "pnpm", "docker", "gh cli"] },
-                { label: "Connected", items: ["GitHub", "Sentry", "Slack", "prod db · read"] },
+                { label: "Environment", items: ["node 24", "pnpm", "docker", "psql"] },
+                { label: "Connected", items: ["GitHub", "Sentry", "Discord", "prod db · read"] },
                 { label: "Context", items: ["repo: platform", "6 skills", "release runbook", "house style"] },
             ],
             task: "Cut the 2.4 release and post the changelog.",
@@ -112,7 +112,7 @@ export const landingContent: LandingContent = {
             },
             {
                 title: "A curated environment",
-                body: "The libraries and dev-tools the job needs, baked into the image and really installed — psql, ffmpeg, your language toolchain, a browser. The agent proposes the layer; it ships on your approval.",
+                body: "The libraries and dev-tools the job needs, baked into the image and really installed — a database client, a headless browser, your language toolchain. The agent proposes the layer; it ships on your approval.",
             },
             {
                 title: "Access to your systems",
@@ -158,14 +158,24 @@ export const landingContent: LandingContent = {
             },
             {
                 title: "The platform can't drive your agents",
-                body: "Your browser holds the token that commands the sandbox — the platform never does. A breach reads a URL and reaches nothing. The engine is MIT on GitHub; verify it.",
+                body: "Your browser holds the token that commands the sandbox — the platform never does. A breach reads a URL and reaches nothing. The engine is MIT on GitLab; verify it.",
             },
         ],
     },
-    control: {
-        eyebrow: "Control",
-        heading: "Autonomy you can hand out safely.",
-        sub: "Every agent starts in plan mode — it proposes, you approve. Each run's changes are diffs you commit or discard, and an agent can never rebuild its own environment without your explicit sign-off.",
+    economics: {
+        eyebrow: "Economics",
+        heading: "A whole team, on the subscriptions you already pay for.",
+        sub: "A fleet of agents sounds expensive. It isn't. Each one runs on your own Claude, ChatGPT, or xAI subscription — connected once with a sign-in code — on hardware you already own. intentic is a flat subscription, never a meter on your model usage.",
+        accounts: [
+            { name: "Claude", detail: "Opus, Sonnet, Haiku — on your Claude plan" },
+            { name: "Codex", detail: "on your ChatGPT plan" },
+            { name: "Grok", detail: "on your xAI plan" },
+        ],
+        points: [
+            "No per-token metering, and no markup on your model usage.",
+            "No rented cloud compute — agents run where you run them.",
+            "Free for one sandbox; Pro unlocks the fleet and sharing.",
+        ],
     },
     connect: {
         eyebrow: "Get connected",
