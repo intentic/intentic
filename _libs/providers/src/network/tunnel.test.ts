@@ -23,7 +23,7 @@ const api = (overrides: Partial<CloudflareApi>): CloudflareApi => ({
     ...overrides,
 });
 
-const IMAGE = "cloudflare/cloudflared:2026.6.1@sha256:aaaa";
+const IMAGE = "cloudflare/cloudflared:2026.7.2@sha256:aaaa";
 
 // A fake host: records commands and reports the connector container running once a matching `docker run`
 // has executed (or from an initial name, to drive read without an apply). `docker inspect` reports the

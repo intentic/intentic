@@ -14,7 +14,7 @@ RUN corepack enable
 # Fetch the cloudflared binary (copied into the runtime image below) so the in-sandbox `intentic apply` can
 # run `cloudflared access tcp` to reach a NAT'd self-host's SSH over its Cloudflare tunnel (via:"cloudflared").
 # Pinned to the same version connect.sh runs as the tunnel sidecar.
-ARG CLOUDFLARED_VERSION=2026.6.1
+ARG CLOUDFLARED_VERSION=2026.7.2
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \

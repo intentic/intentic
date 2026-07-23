@@ -6,7 +6,7 @@ import { IGNORES, sanitizeId } from "./ssh.js";
 
 // Pinned tool versions. cloudflared matches the sandbox image's pin so both ends speak the same tunnel protocol.
 const MUTAGEN_VERSION = "0.18.1";
-const CLOUDFLARED_VERSION = "2026.6.1";
+const CLOUDFLARED_VERSION = "2026.7.2";
 
 // The Mutagen session name (letters/digits/dashes) so `mutagen sync {list,pause,resume,terminate}` can target it.
 export const sessionName = (sandboxId: string): string => `intentic-${sanitizeId(sandboxId)}`;

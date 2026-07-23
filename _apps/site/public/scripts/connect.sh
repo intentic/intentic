@@ -123,11 +123,11 @@ GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-481795963975-cq9msl6higcd91joidrfp8mjlkuq5
 OWNER_EMAIL="${OWNER_EMAIL:-}"
 WEB_ORIGIN="${WEB_ORIGIN:-}"
 ZONE="${ZONE:-}"
-CLOUDFLARED_IMAGE="${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2026.6.1}"
+CLOUDFLARED_IMAGE="${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2026.7.2}"
 # The cloudflared binary version installed natively on a self-host to run its SSH-tunnel connector (matches
 # the sidecar image tag). The connector must be native, not a container: under Docker Desktop a container's
 # localhost is the VM, not this machine, so it could not reach the host's sshd at localhost:22.
-CLOUDFLARED_VERSION="${CLOUDFLARED_VERSION:-2026.6.1}"
+CLOUDFLARED_VERSION="${CLOUDFLARED_VERSION:-2026.7.2}"
 # Public DNS the sandbox resolves through. `intentic apply` runs `cloudflared access tcp` inside the sandbox to
 # reach enrolled hosts by their ssh-<id>.<zone> tunnel hostname; those records are minted moments before use, so
 # the operator's own resolver often still has the pre-creation NXDOMAIN negatively cached (SOA min TTL) and the

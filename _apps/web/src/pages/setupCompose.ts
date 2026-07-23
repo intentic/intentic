@@ -26,7 +26,7 @@ export interface ComposeArgs {
 
 const PLATFORM_DEFAULT = `https://app.intentic.dev`;
 // Mirrors connect.sh's CLOUDFLARED_IMAGE / PREVIEW_PORT / ORIGIN_HOST.
-const CLOUDFLARED_IMAGE = `cloudflare/cloudflared:2026.6.1`;
+const CLOUDFLARED_IMAGE = `cloudflare/cloudflared:2026.7.2`;
 const ORIGIN_HOST = `intentic-sandbox-workspace`;
 
 const slugOf = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
