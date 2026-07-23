@@ -7,8 +7,8 @@
     "scripts": {
         "dev": "bun --watch --env-file=../../.env ./src/main.ts",
         "start": "bun ./src/main.ts",
-        "typecheck": "tsc --noEmit",
-        "build": "tsc --noEmit",
+        "typecheck": "tsgo --noEmit",
+        "build": "tsgo --noEmit",
         "bundle": "rm -rf ./deploy && pnpm deploy --filter=@intentic-app/api --prod ./deploy",
         "test": "vitest run"
     },
@@ -45,8 +45,8 @@
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
         "@types/pg": "catalog:",
+        "@typescript/native-preview": "catalog:",
         "bun": "catalog:",
-        "typescript": "catalog:",
         "vitest": "catalog:"
     }
 }

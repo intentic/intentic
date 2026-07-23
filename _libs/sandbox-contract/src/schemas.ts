@@ -50,6 +50,10 @@ export const EditorContextSchema = z.object({
 });
 export type EditorContext = z.infer<typeof EditorContextSchema>;
 
+// The client-minted stable conversation identity. Constrained because it lands in branch names (agent/<id>)
+// and filesystem paths — the regex is the injection guard. Shared by the turn input and the attach input.
+const ConversationIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
+
 export const AgentTurnSchema = z
     .object({
         prompt: z.string(),
@@ -74,12 +78,8 @@ export const AgentTurnSchema = z
         account: z.string().optional(),
         sessionId: z.string().optional(),
         // The client-minted stable conversation identity (survives provider/account/harness switches, which
-        // retire sessions). Keys the fleet registry entry and the conversation's worktree. Constrained because
-        // it lands in branch names (agent/<id>) and filesystem paths — the regex is the injection guard.
-        conversationId: z
-            .string()
-            .regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/)
-            .optional(),
+        // retire sessions). Keys the fleet registry entry, the conversation's worktree, and the turn run.
+        conversationId: ConversationIdSchema.optional(),
         // When true, the turn runs in the conversation's isolated git worktree (created lazily on first use)
         // instead of the shared /work tree — the parallel-agents mode. Requires conversationId.
         isolated: z.boolean().optional(),
@@ -107,6 +107,21 @@ export const AgentTurnSchema = z
         message: "isolated requires conversationId",
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
+
+// POST /agent's ack: the daemon-minted id of the detached turn run it started. The turn executes daemon-side
+// regardless of any client connection; every window — the initiator included — renders it via /agent/attach.
+export const StartedTurnSchema = z.object({ run: z.string() });
+export type StartedTurn = z.infer<typeof StartedTurnSchema>;
+
+// Attach to a conversation's turn run (live, or finished within the retention window). `run`+`after` is the
+// resume cursor of a client whose stream dropped: frames after `after` replay when `run` still names the
+// current run; a mismatch (a newer turn started meanwhile) replays that run from its first frame instead.
+export const AttachTurnSchema = z.object({
+    conversationId: ConversationIdSchema,
+    run: z.string().optional(),
+    after: z.number().int().min(0).optional(),
+});
+export type AttachTurn = z.infer<typeof AttachTurnSchema>;
 
 // ---- agents: the parallel-conversation fleet ----
 // A "fleet agent" is a conversation with a registry entry — every isolated conversation, keyed by its

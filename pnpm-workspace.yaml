@@ -113,6 +113,7 @@ catalog:
   "@types/ssh2": 1.15.5
   "@types/tar-stream": 3.1.4
   "@types/ws": 8.18.1
+  "@typescript/native-preview": 7.0.0-dev.20260707.2
   "@vitejs/plugin-vue": 6.0.7
   "@vue-flow/core": 1.48.2
   "@xterm/addon-fit": 0.11.0

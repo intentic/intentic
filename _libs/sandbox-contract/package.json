@@ -10,7 +10,8 @@
         "directory": "_libs/sandbox-contract"
     },
     "files": [
-        "dist"
+        "dist",
+        "src"
     ],
     "publishConfig": {
         "access": "public",

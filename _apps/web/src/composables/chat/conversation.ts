@@ -4,6 +4,7 @@ import {
     type AgentHarness,
     type AgentProvider,
     type AskQuestion,
+    type AttachFrame,
     type CatalogOption,
     type ContextUsage,
     type EditorContext,
@@ -362,10 +363,18 @@ interface TurnContext {
     readonly harness: AgentHarness;
 }
 
+// The head frame of an /agent/attach stream — the run's identity plus what a non-initiating window needs to
+// synthesize the turn locally (user bubble from the prompt, elapsed readout from the start time).
+type AttachHead = Extract<AttachFrame, { kind: "attached" }>;
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 /* One chat conversation: its transcript, the resumed sandbox session, and the streaming machinery for a
  * turn. Self-contained so the manager can run several at once — each instance owns its AbortController and
- * typewriter loop, so tabs stream independently. Every turn streams from POST /agent on the sandbox daemon
- * directly (Bearer Google ID token) — the platform is not in the path. */
+ * typewriter loop, so tabs stream independently. A turn EXECUTES as a detached run on the sandbox daemon
+ * (POST /agent starts it; the platform is not in the path) and this tab merely renders it via /agent/attach
+ * — the same stream a reload, a second window, or another device attaches, resumable by seq cursor when the
+ * connection drops. */
 export class Conversation {
     readonly messages = ref<ChatMessage[]>([]);
     readonly streaming = ref(false);
@@ -375,7 +384,7 @@ export class Conversation {
     readonly availableCommands = ref<readonly AgentCommand[]>([]);
 
     // True while a turn is paused on a card awaiting the user's input (a pending plan or question). The
-    // /agent fetch stays open during this, so `streaming` is still true — but the agent isn't generating, so
+    // attach stream stays open during this, so `streaming` is still true — but the agent isn't generating, so
     // the composer should drop the Stop spinner and show a ready Send (Claude Code style).
     readonly awaitingDecision = computed(() =>
         this.messages.value.some((message) => message.plan?.status === `pending` || message.question?.status === `pending`),
@@ -455,8 +464,12 @@ export class Conversation {
     // permanent by the next send (the segment cut).
     private pendingSwitchNoticeId: number | undefined;
 
-    // Aborts the in-flight turn when the user hits Stop / closes the tab; cleared once the turn settles.
+    // Aborts the in-flight ATTACH STREAM when the user hits Stop / closes the tab; cleared once the stream
+    // settles. The turn itself runs detached on the daemon — only /agent/stop cancels it.
     private inflight: AbortController | null = null;
+
+    // The in-flight reattach probe (see reattach), aborted by a send so the two never race one run.
+    private probe: AbortController | undefined;
 
     // Typewriter buffer: deltas land here and a rAF loop drains them into the visible message a few characters
     // per frame, so the answer reveals smoothly regardless of how chunky the upstream deltas arrive. `typeId`
@@ -589,6 +602,8 @@ export class Conversation {
         if ((text.length === 0 && attachments.length === 0) || this.streaming.value) {
             return;
         }
+        // A pending reattach probe must not race this send's own stream over the same run.
+        this.probe?.abort();
 
         this.error.value = null;
         // The session is resumed only while the selection still matches the runtime/account that minted it — a
@@ -669,10 +684,17 @@ export class Conversation {
                     ...(editorContext !== undefined ? { editorContext } : {}),
                 }),
             });
-            if (!response.ok || !response.body) {
-                throw new Error(`Chat request failed (${response.status}).`);
+            if (!response.ok) {
+                throw new Error(
+                    response.status === 409
+                        ? `This agent is already running a turn in another window — wait for it to finish.`
+                        : `Chat request failed (${response.status}).`,
+                );
             }
-            await this.consume(response.body, turn);
+            // The ack means the turn is running daemon-side regardless of what happens to this tab; from here
+            // on this window is just one renderer of the run.
+            const { run } = (await response.json()) as { run: string };
+            await this.follow({ run, after: 0 }, () => turn, controller);
         } catch (err) {
             // A user-initiated Stop aborts the fetch; that's expected, not an error to surface.
             if (!(err instanceof DOMException && err.name === `AbortError`)) {
@@ -749,13 +771,54 @@ export class Conversation {
         this.abort();
     }
 
-    // Aborts the in-flight browser stream; whatever streamed so far stays in the transcript. Closing the
-    // `/agent` fetch has no cancel frame, so this alone does not hard-cancel the sandbox agent — stop() above
-    // pairs it with the /agent/stop route. Called bare by the manager when its tab is closed (deliberately
-    // soft: a closed tab's turn may finish and land its work).
+    // Aborts this tab's attach stream; whatever streamed so far stays in the transcript. The run itself is
+    // detached daemon-side, so this is soft BY DESIGN — stop() above pairs it with /agent/stop to hard-cancel.
+    // Called bare by the manager when its tab is closed: the turn finishes and lands its work, and reopening
+    // the conversation reattaches to it.
     abort(): void {
         this.flushType();
+        this.probe?.abort();
         this.inflight?.abort();
+    }
+
+    // Attach to a turn already running daemon-side — started before a reload, or by another window/device on
+    // the same conversation. False when nothing is live (or recently finished): the caller falls back to
+    // transcript hydration. The attach head synthesizes what the initiating window appended locally: the
+    // user bubble from the run's prompt and the elapsed readout from its start time.
+    async reattach(): Promise<boolean> {
+        if (this.streaming.value) {
+            return true;
+        }
+        const controller = new AbortController();
+        this.probe = controller;
+        let engaged = false;
+        const ensureTurn = (head: AttachHead): TurnContext | undefined => {
+            // A send that started between this probe's entry check and the daemon's reply owns the stream.
+            if (this.streaming.value) {
+                return undefined;
+            }
+            engaged = true;
+            this.inflight = controller;
+            this.streaming.value = true;
+            this.error.value = null;
+            this.turnStartedAt.value = head.startedAt;
+            const userMessageId = this.nextId++;
+            this.append({ id: userMessageId, role: `user`, text: head.prompt });
+            const assistantId = this.nextId++;
+            this.append({ id: assistantId, role: `assistant`, text: ``, thinking: `` });
+            return { id: assistantId, userMessageId, provider: this.provider.value, account: this.account.value, harness: this.harness.value };
+        };
+        try {
+            return await this.follow({ run: undefined, after: 0 }, ensureTurn, controller);
+        } finally {
+            this.probe = undefined;
+            if (engaged) {
+                this.flushType();
+                this.inflight = null;
+                this.streaming.value = false;
+                this.turnStartedAt.value = undefined;
+            }
+        }
     }
 
     // Answers a pending plan card. The /agent request is still open, so on approval the agent exits plan mode
@@ -829,18 +892,86 @@ export class Conversation {
         return clean.length > 40 ? `${clean.slice(0, 40).trimEnd()}…` : clean;
     }
 
-    private async consume(body: ReadableStream<Uint8Array>, turn: TurnContext): Promise<void> {
-        for await (const frame of sseFrames(body)) {
-            this.handleFrame(frame, turn);
+    /* Render a run by attaching to it, re-attaching from the seq cursor whenever the stream drops, until the
+     * daemon says `end` (the run settled — every frame delivered) or the run disappears (404: finished past
+     * retention, stopped, or never started). `ensureTurn` runs once, at the first attach head: the send path
+     * already appended its bubbles and returns its prepared context; the reattach path synthesizes bubbles
+     * from the head — or returns undefined to stand down when a send won the race. Returns whether the
+     * stream ever engaged (a head arrived and ensureTurn produced a context). */
+    private async follow(
+        cursor: { run: string | undefined; after: number },
+        ensureTurn: (head: AttachHead) => TurnContext | undefined,
+        controller: AbortController,
+    ): Promise<boolean> {
+        let attached = false;
+        let retryMs = 500;
+        let turn: TurnContext | undefined;
+        for (;;) {
+            if (controller.signal.aborted) {
+                return attached;
+            }
+            let response: Response;
+            try {
+                response = await sandboxRequest(`/agent/attach`, {
+                    method: `POST`,
+                    headers: { "content-type": `application/json` },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        conversationId: this.conversationId,
+                        ...(cursor.run !== undefined ? { run: cursor.run } : {}),
+                        after: cursor.after,
+                    }),
+                });
+            } catch {
+                // Network drop between attaches. A probe that never engaged gives up (its caller retries on
+                // the next reachability flip); an engaged stream backs off and retries — the turn may well
+                // still be running, and the cursor resumes it exactly where this tab left off.
+                if (controller.signal.aborted || !attached) {
+                    return attached;
+                }
+                await delay(retryMs);
+                retryMs = Math.min(retryMs * 2, 5_000);
+                continue;
+            }
+            if (!response.ok || !response.body) {
+                return attached;
+            }
+            retryMs = 500;
+            try {
+                for await (const frame of sseFrames(response.body)) {
+                    const parsed = sseData(frame) as AttachFrame | undefined;
+                    if (parsed === undefined || typeof parsed !== `object`) {
+                        continue;
+                    }
+                    if (parsed.kind === `attached`) {
+                        // A head naming a different run than the cursor's means a newer turn started while
+                        // this tab was disconnected — that turn belongs at a different transcript position
+                        // (after ITS user message), so this stream settles rather than misrendering it here.
+                        if (cursor.run !== undefined && parsed.run !== cursor.run) {
+                            return attached;
+                        }
+                        cursor.run = parsed.run;
+                        turn ??= ensureTurn(parsed);
+                        if (turn === undefined) {
+                            return false;
+                        }
+                        attached = true;
+                    } else if (parsed.kind === `frame`) {
+                        cursor.after = parsed.seq;
+                        if (turn !== undefined) {
+                            this.handleEvent(parsed.event, turn);
+                        }
+                    } else if (parsed.kind === `end`) {
+                        return attached;
+                    }
+                }
+            } catch {
+                // The stream broke mid-read — fall through and re-attach from the cursor.
+            }
         }
     }
 
-    private handleFrame(frame: string, turn: TurnContext): void {
-        const event = sseData(frame) as AgentEvent | undefined;
-        if (event === undefined) {
-            return;
-        }
-
+    private handleEvent(event: AgentEvent, turn: TurnContext): void {
         switch (event.kind) {
             case `delta`:
                 if (event.text) {

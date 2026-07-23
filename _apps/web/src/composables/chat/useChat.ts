@@ -779,6 +779,11 @@ export const openAgentConversation = (agent: {
     }
     conversations.value = [...conversations.value, conversation];
     activeId.value = conversation.id;
+    // The agent may be mid-turn right now — attach and render it live (the head synthesizes the prompt
+    // bubble). Marked as hydrating so the restore watch above doesn't race a second attach; an idle agent's
+    // probe just 404s and the tab stays the accepted visually-empty restore shape.
+    hydrating.add(conversation);
+    void conversation.reattach();
     return conversation;
 };
 
@@ -795,26 +800,33 @@ const openConversation = async (id: string): Promise<void> => {
     await loadRemoteTranscript(conversation, id, sessions.value.find((session) => session.id === id)?.title ?? null);
 };
 
-// Restored tabs persist as session + title only — re-fetch their transcripts once their daemon is
-// reachable. `conversations` is in the source so tabs restored by a sandbox switch (when reachability may
-// already be true and never flip) are still picked up; the WeakSet keeps unrelated tab churn from re-firing a
-// fetch already in flight. ponytail: /sessions/:id is Claude-only, so codex/grok tabs restore their draft,
-// title, and session but not the visible transcript — the next turn still resumes the server thread.
+// Restored tabs persist as session + title only — once their daemon is reachable, first try to ATTACH: a
+// turn may be running for the conversation daemon-side (started before the reload, or by another window or
+// device), and attaching renders it live mid-stream. Only when nothing is running does the flat transcript
+// hydrate from the session store. `conversations` is in the source so tabs restored by a sandbox switch
+// (when reachability may already be true and never flip) are still picked up; the WeakSet keeps unrelated
+// tab churn from re-firing work already in flight. ponytail: /sessions/:id is Claude-only, so codex/grok
+// tabs restore their draft, title, and session but not the visible transcript — the next turn still resumes
+// the server thread.
 const hydrating = new WeakSet<Conversation>();
 watch([reachable, conversations], ([isReachable]) => {
     if (!isReachable) {
         return;
     }
     for (const conversation of conversations.value) {
-        const session = conversation.session.value;
-        if (session === undefined || session.provider !== `claude`) {
-            continue;
-        }
-        if (conversation.messages.value.length > 0 || hydrating.has(conversation)) {
+        if (conversation.messages.value.length > 0 || conversation.streaming.value || hydrating.has(conversation)) {
             continue;
         }
         hydrating.add(conversation);
-        void loadRemoteTranscript(conversation, session.id, conversation.title.value);
+        void (async () => {
+            if (await conversation.reattach()) {
+                return;
+            }
+            const session = conversation.session.value;
+            if (session !== undefined && session.provider === `claude`) {
+                await loadRemoteTranscript(conversation, session.id, conversation.title.value);
+            }
+        })();
     }
 });
 

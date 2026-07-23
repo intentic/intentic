@@ -97,7 +97,11 @@ survive reconnects. Its subsystems:
 
 - **Agent backends** — Claude (agent SDK, spawned per turn), Codex, and Grok/opencode
   ([agent/](_apps/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE
-  ([webchat/](_apps/sandbox/src/webchat/)).
+  ([webchat/](_apps/sandbox/src/webchat/)). A chat turn executes as a **detached run**
+  ([agent/turn-runs.ts](_apps/sandbox/src/agent/turn-runs.ts)): `POST /agent` acks with a run id and the
+  frames land in a seq-stamped log, which any number of clients render via `/agent/attach`
+  (replay-from-cursor, then live) — so a turn survives reloads and dropped connections, and every window or
+  device on the conversation streams it concurrently. Only `/agent/stop` cancels it.
 - **Terminals** — interactive PTYs over WebSocket ([terminal/terminal.ts](_apps/sandbox/src/terminal/terminal.ts)).
 - **Panels & previews** — per-repo dev servers behind `preview-<panel>-<id>.<zone>` hostnames
   ([panels/](_apps/sandbox/src/panels/)); plus generic **port forwarding** for anything run in a terminal

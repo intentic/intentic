@@ -30,17 +30,35 @@ afterEach(() => {
     turnDefaults.provider.value = `claude`;
 });
 
-// An SSE body streaming one `data:` frame per event, closed at the end (as the daemon's /agent responds).
-// Aborting the request errors the stream, mirroring fetch cancellation.
+// One `data:` SSE frame, as the daemon's attach stream emits envelopes.
+const encoder = new TextEncoder();
+const sseFrame = (payload: unknown): Uint8Array => encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+
+// The attach head for a run — tests that don't care about the identity fields use the defaults.
+const head = (overrides?: Partial<{ run: string; prompt: string; startedAt: number; seq: number }>): Record<string, unknown> => ({
+    kind: `attached`,
+    run: `r1`,
+    prompt: `hi`,
+    startedAt: 0,
+    seq: 0,
+    ...overrides,
+});
+
+// Serve the detached-run protocol: POST /agent acks `{ run }` (the turn executes daemon-side), POST
+// /agent/attach streams the head, the given events as seq-stamped frames, then `end`; control posts ack ok.
+// stayOpen leaves the attach stream open after the frames; aborting the request then errors it, mirroring
+// fetch cancellation.
 const sseResponse = (events: AgentEvent[], options?: { stayOpen?: boolean }): ((path: string, init?: RequestInit) => Promise<Response>) => {
     return (path, init) => {
+        if (path !== `/agent/attach`) {
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        }
         const body = new ReadableStream<Uint8Array>({
             start(controller) {
-                const encoder = new TextEncoder();
-                for (const event of events) {
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-                }
+                controller.enqueue(sseFrame(head()));
+                events.forEach((event, index) => controller.enqueue(sseFrame({ kind: `frame`, seq: index + 1, event })));
                 if (!options?.stayOpen) {
+                    controller.enqueue(sseFrame({ kind: `end` }));
                     controller.close();
                     return;
                 }
@@ -52,6 +70,31 @@ const sseResponse = (events: AgentEvent[], options?: { stayOpen?: boolean }): ((
         return Promise.resolve({ ok: true, body } as Response);
     };
 };
+
+// A body delivering one chunk per pull, then closing — or erroring, which models a connection that drops
+// AFTER the chunks arrived (controller.error inside start() would discard still-queued chunks instead).
+const chunkStream = (chunks: unknown[], end: `close` | `error`): ReadableStream<Uint8Array> => {
+    let next = 0;
+    return new ReadableStream<Uint8Array>({
+        pull(controller) {
+            if (next < chunks.length) {
+                controller.enqueue(sseFrame(chunks[next]));
+                next += 1;
+                return;
+            }
+            if (end === `close`) {
+                controller.close();
+            } else {
+                controller.error(new TypeError(`network error`));
+            }
+        },
+    });
+};
+
+// The parsed bodies of the turn STARTS among the mock's calls — attach/control posts interleave, so tests
+// assert on turn inputs through this instead of raw call indexes.
+const turnBodies = (): Record<string, unknown>[] =>
+    sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent`).map(([, init]) => JSON.parse(init!.body as string) as Record<string, unknown>);
 
 const settings = { agent: `claude`, harness: `native`, account: undefined, model: `opus`, effort: `high`, thinking: false } as const;
 
@@ -85,10 +128,9 @@ describe(`Conversation`, () => {
         await conversation.send(`first`, settings);
         await conversation.send(`second`, settings);
 
-        const firstBody = JSON.parse(sandboxRequestMock.mock.calls[0]![1]!.body as string) as Record<string, unknown>;
-        const secondBody = JSON.parse(sandboxRequestMock.mock.calls[1]![1]!.body as string) as Record<string, unknown>;
-        expect(`sessionId` in firstBody).toBe(false);
-        expect(secondBody[`sessionId`]).toBe(`s-1`);
+        const [firstBody, secondBody] = turnBodies();
+        expect(`sessionId` in firstBody!).toBe(false);
+        expect(secondBody![`sessionId`]).toBe(`s-1`);
     });
 
     it(`switches provider mid-conversation: retires the session and seeds the new runtime with the transcript`, async () => {
@@ -102,7 +144,7 @@ describe(`Conversation`, () => {
             ]),
         );
         await conversation.send(`first`, { ...settings, agent: `codex`, model: `` });
-        const firstBody = JSON.parse(sandboxRequestMock.mock.calls[0]![1]!.body as string) as Record<string, unknown>;
+        const firstBody = turnBodies()[0]!;
         expect(firstBody[`agent`]).toBe(`codex`);
         // Codex's ChatGPT-account auth rejects a named model — an empty selection is omitted from the wire.
         expect(`model` in firstBody).toBe(false);
@@ -114,7 +156,7 @@ describe(`Conversation`, () => {
         // carries the transcript instead (empty bubbles and the switch notice excluded).
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
         await conversation.send(`second`, settings);
-        const secondBody = JSON.parse(sandboxRequestMock.mock.calls[1]![1]!.body as string) as Record<string, unknown>;
+        const secondBody = turnBodies()[1]!;
         expect(secondBody[`agent`]).toBe(`claude`);
         expect(`sessionId` in secondBody).toBe(false);
         expect(secondBody[`history`]).toEqual([
@@ -125,7 +167,7 @@ describe(`Conversation`, () => {
         // The new runtime's session is captured with its own provider; the next turn resumes it, history-free.
         expect(conversation.session.value).toMatchObject({ id: `s-1`, provider: `claude` });
         await conversation.send(`third`, settings);
-        const thirdBody = JSON.parse(sandboxRequestMock.mock.calls[2]![1]!.body as string) as Record<string, unknown>;
+        const thirdBody = turnBodies()[2]!;
         expect(thirdBody[`sessionId`]).toBe(`s-1`);
         expect(`history` in thirdBody).toBe(false);
     });
@@ -142,7 +184,7 @@ describe(`Conversation`, () => {
 
         // Browsing the picker never destroyed the session — the next send still resumes it.
         await conversation.send(`second`, settings);
-        const secondBody = JSON.parse(sandboxRequestMock.mock.calls[1]![1]!.body as string) as Record<string, unknown>;
+        const secondBody = turnBodies()[1]!;
         expect(secondBody[`sessionId`]).toBe(`s-1`);
         expect(`history` in secondBody).toBe(false);
     });
@@ -196,7 +238,7 @@ describe(`Conversation`, () => {
             effort: conversation.effort.value,
             thinking: false,
         });
-        const body = JSON.parse(sandboxRequestMock.mock.calls[0]![1]!.body as string) as Record<string, unknown>;
+        const body = turnBodies()[0]!;
         expect(body[`agent`]).toBe(`codex`);
         expect(`model` in body).toBe(false);
 
@@ -294,13 +336,17 @@ describe(`Conversation`, () => {
         const body = new ReadableStream<Uint8Array>({
             start(c) {
                 controller = c;
+                controller.enqueue(sseFrame(head()));
             },
         });
-        sandboxRequestMock.mockImplementation((path: string) =>
-            Promise.resolve(path === `/agent/steer` ? ({ ok: true } as Response) : ({ ok: true, body } as Response)),
-        );
-        const encoder = new TextEncoder();
-        const emit = (event: AgentEvent): void => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        sandboxRequestMock.mockImplementation((path: string) => {
+            if (path === `/agent`) {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+            }
+            return Promise.resolve(path === `/agent/attach` ? ({ ok: true, body } as Response) : ({ ok: true } as Response));
+        });
+        let seq = 0;
+        const emit = (event: AgentEvent): void => controller.enqueue(sseFrame({ kind: `frame`, seq: (seq += 1), event }));
 
         const turn = conversation.send(`2+3?`, settings);
         await conversation.steer(`2+6?`);
@@ -313,6 +359,7 @@ describe(`Conversation`, () => {
         emit({ kind: `delta`, text: `8` });
         await vi.waitFor(() => expect(conversation.messages.value[3]?.text).toBe(`8`));
         emit({ kind: `done` });
+        controller.enqueue(sseFrame({ kind: `end` }));
         controller.close();
         await turn;
 
@@ -397,7 +444,7 @@ describe(`Conversation`, () => {
         // client transcript (empty assistant bubbles and the notice excluded).
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
         await conversation.send(`third`, settings);
-        const thirdBody = JSON.parse(sandboxRequestMock.mock.calls[2]![1]!.body as string) as Record<string, unknown>;
+        const thirdBody = turnBodies()[2]!;
         expect(`sessionId` in thirdBody).toBe(false);
         expect(thirdBody[`history`]).toEqual([
             { role: `user`, text: `first` },
@@ -507,7 +554,7 @@ describe(`Conversation`, () => {
         // Everything from the edited message onward is gone; the edited text is the new turn.
         expect(conversation.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second, revised`, `redone`]);
         // The retired session never rides the wire — the fresh session is seeded from the pre-cut transcript.
-        const body = JSON.parse(sandboxRequestMock.mock.calls[2]![1]!.body as string) as Record<string, unknown>;
+        const body = turnBodies()[2]!;
         expect(`sessionId` in body).toBe(false);
         expect(body[`history`]).toEqual([
             { role: `user`, text: `first` },
@@ -536,7 +583,7 @@ describe(`Conversation`, () => {
 
         expect(conversation.title.value).toBe(`new topic`);
         // Nothing preceded the cut, so the fresh session starts with neither a session id nor a history seed.
-        const body = JSON.parse(sandboxRequestMock.mock.calls[1]![1]!.body as string) as Record<string, unknown>;
+        const body = turnBodies()[1]!;
         expect(`sessionId` in body).toBe(false);
         expect(`history` in body).toBe(false);
     });
@@ -550,7 +597,7 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
         await conversation.editAndResend(conversation.messages.value[0]!.id, `look again`, settings);
 
-        const body = JSON.parse(sandboxRequestMock.mock.calls[1]![1]!.body as string) as Record<string, unknown>;
+        const body = turnBodies()[1]!;
         expect(body[`attachments`]).toEqual([`.intentic/attachments/u1/spec.md`]);
         expect(conversation.messages.value[0]).toMatchObject({ role: `user`, text: `look again`, attachments });
     });
@@ -572,7 +619,7 @@ describe(`Conversation`, () => {
         await conversation.editAndResend(conversation.messages.value[0]!.id, `first, revised`, { ...settings, agent: `codex`, model: `` });
 
         expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
-        const body = JSON.parse(sandboxRequestMock.mock.calls[1]![1]!.body as string) as Record<string, unknown>;
+        const body = turnBodies()[1]!;
         expect(body[`agent`]).toBe(`codex`);
         expect(`sessionId` in body).toBe(false);
     });
@@ -587,7 +634,8 @@ describe(`Conversation`, () => {
         await conversation.editAndResend(before[1]!.id, `x`, settings); // assistant bubble, not a user turn
         await conversation.editAndResend(before[0]!.id, `   `, settings); // empty edit, no attachments — must NOT truncate
         expect(conversation.messages.value).toEqual(before);
-        expect(sandboxRequestMock).toHaveBeenCalledTimes(1);
+        // One send = one start + one attach; the guarded edits added neither.
+        expect(sandboxRequestMock).toHaveBeenCalledTimes(2);
 
         // Mid-stream the rewind is refused outright.
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `x` }], { stayOpen: true }));
@@ -597,6 +645,119 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.filter((message) => message.role === `user`).map((m) => m.text)).toEqual([`hello`, `busy`]);
         conversation.stop();
         await turn;
+    });
+
+    it(`re-attaches from the seq cursor when the stream drops mid-turn and loses nothing`, async () => {
+        const conversation = new Conversation(`c1`);
+        const attachBodies: Record<string, unknown>[] = [];
+        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
+            if (path === `/agent`) {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+            }
+            attachBodies.push(JSON.parse(init!.body as string) as Record<string, unknown>);
+            const body =
+                attachBodies.length === 1
+                    ? // Two frames, then the connection breaks mid-run (no `end`).
+                      chunkStream(
+                          [
+                              head(),
+                              { kind: `frame`, seq: 1, event: { kind: `delta`, text: `Hello ` } },
+                              { kind: `frame`, seq: 2, event: { kind: `delta`, text: `wor` } },
+                          ],
+                          `error`,
+                      )
+                    : // The resumed attach replays only what the client missed.
+                      chunkStream([head({ seq: 3 }), { kind: `frame`, seq: 3, event: { kind: `delta`, text: `ld` } }, { kind: `end` }], `close`);
+            return Promise.resolve({ ok: true, body } as Response);
+        });
+
+        await conversation.send(`Hi`, settings);
+
+        expect(attachBodies).toEqual([
+            { conversationId: conversation.conversationId, run: `r1`, after: 0 },
+            { conversationId: conversation.conversationId, run: `r1`, after: 2 },
+        ]);
+        expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `Hello world` });
+        expect(conversation.error.value).toBeNull();
+    });
+
+    it(`settles instead of misrendering when the resumed attach reports a different run`, async () => {
+        const conversation = new Conversation(`c1`);
+        let attaches = 0;
+        sandboxRequestMock.mockImplementation((path: string) => {
+            if (path === `/agent`) {
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+            }
+            attaches += 1;
+            const body =
+                attaches === 1
+                    ? chunkStream([head(), { kind: `frame`, seq: 1, event: { kind: `delta`, text: `partial` } }], `error`)
+                    : // A NEWER turn is live by the time the tab reconnects — its frames must not land here.
+                      chunkStream(
+                          [
+                              head({ run: `r2`, prompt: `someone else's turn` }),
+                              { kind: `frame`, seq: 1, event: { kind: `delta`, text: `other` } },
+                              { kind: `end` },
+                          ],
+                          `close`,
+                      );
+            return Promise.resolve({ ok: true, body } as Response);
+        });
+
+        await conversation.send(`Hi`, settings);
+
+        expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `partial` });
+        expect(conversation.streaming.value).toBe(false);
+    });
+
+    it(`reattach renders a daemon-side run it never initiated: prompt bubble from the head, frames replayed`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
+            expect(path).toBe(`/agent/attach`);
+            const request = JSON.parse(init!.body as string) as Record<string, unknown>;
+            expect(request).toEqual({ conversationId: conversation.conversationId, after: 0 });
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(sseFrame(head({ prompt: `refactor the parser`, startedAt: 1234, seq: 2 })));
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `session`, sessionId: `s-9` } }));
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 2, event: { kind: `delta`, text: `On it.` } }));
+                    controller.enqueue(sseFrame({ kind: `end` }));
+                    controller.close();
+                },
+            });
+            return Promise.resolve({ ok: true, body } as Response);
+        });
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `refactor the parser` },
+            { role: `assistant`, text: `On it.` },
+        ]);
+        // The run's frames armed the session exactly as they would have for the initiating window.
+        expect(conversation.session.value).toMatchObject({ id: `s-9` });
+        expect(conversation.streaming.value).toBe(false);
+    });
+
+    it(`reattach reports false when nothing is running, leaving the transcript untouched`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockResolvedValue({ ok: false, status: 404 } as Response);
+
+        await expect(conversation.reattach()).resolves.toBe(false);
+
+        expect(conversation.messages.value).toHaveLength(0);
+        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.error.value).toBeNull();
+    });
+
+    it(`surfaces a 409 start (another window mid-turn) as an error without corrupting local state`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockResolvedValue({ ok: false, status: 409 } as Response);
+
+        await conversation.send(`Hi`, settings);
+
+        expect(conversation.error.value).toContain(`already running`);
+        expect(conversation.streaming.value).toBe(false);
     });
 
     it(`ignores empty prompts and re-entrant sends while streaming`, async () => {

@@ -17,6 +17,7 @@ import { landAgent } from "../agents/land.js";
 import type { AgentRequest } from "./agent.js";
 import { resolvePlanDecision, resolveQuestionAnswer } from "./agent-requests.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
+import { startTurnRun, turnRunOf } from "./turn-runs.js";
 import { delegationNote } from "./delegation.js";
 
 // The upstream model id a routed turn (codex/grok under the Claude Code harness) hands the translator, which maps
@@ -606,7 +607,34 @@ async function* runTurn(
 export const createAgentRoutes = (services: Services) => {
     const i = implement(agentContract).$context<OrpcContext>();
     return {
-        run: i.run.handler(({ input, signal }) => streamAgent(services, input, signal)),
+        // Start the conversation's turn as a detached run — the ack carries the run id and the turn executes
+        // regardless of what happens to this request (the request signal is deliberately not wired in; the
+        // only cancel is /agent/stop). CONFLICT = another window/device is mid-turn on this conversation.
+        run: i.run.handler(({ input }) => {
+            if (input.conversationId === undefined) {
+                throw new ORPCError("BAD_REQUEST", { message: "conversationId required" });
+            }
+            const run = startTurnRun((turn, signal) => streamAgent(services, turn, signal), { ...input, conversationId: input.conversationId });
+            if (run === undefined) {
+                throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
+            }
+            return { run: run.id };
+        }),
+        // Render the conversation's run: head (identity + replay/live boundary), frames from the client's
+        // cursor, `end` when the run settles. A cursor naming a superseded run replays the current one from
+        // its first frame — the head's run id tells the client which world it's in.
+        attach: i.attach.handler(async function* ({ input }) {
+            const run = turnRunOf(input.conversationId);
+            if (run === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "no live or recent turn for that conversation" });
+            }
+            yield { kind: "attached" as const, run: run.id, prompt: run.prompt, startedAt: run.startedAt, seq: run.seq };
+            const after = input.run === run.id ? (input.after ?? 0) : 0;
+            for await (const frame of run.follow(after)) {
+                yield { kind: "frame" as const, ...frame };
+            }
+            yield { kind: "end" as const };
+        }),
         // Resolve a turn paused on an ExitPlanMode approval / interactive question; NOT_FOUND when nothing is
         // waiting on that id (already answered, or the turn ended).
         decision: i.decision.handler(({ input }) => {

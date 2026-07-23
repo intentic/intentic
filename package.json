@@ -47,6 +47,7 @@
         "@semantic-release/exec": "catalog:",
         "@semantic-release/gitlab": "catalog:",
         "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
         "knip": "catalog:",
         "oxlint": "catalog:",
         "prettier": "catalog:",

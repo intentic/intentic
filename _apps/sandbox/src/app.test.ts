@@ -322,6 +322,23 @@ const collect = async <T>(stream: AsyncIterable<T>): Promise<T[]> => {
     return events;
 };
 
+// Drive a chat turn over the detached-run protocol exactly as the browser does: start (acked with the run
+// id), attach, unwrap the envelope frames back to raw AgentEvents. Awaiting the attach to its `end` is also
+// the settle barrier the old in-request stream gave these tests. Ids are minted per turn unless the test
+// pins one (the run registry is keyed by conversationId across the whole test process).
+let turnCounter = 0;
+const runAgentTurn = async (
+    client: ContractRouterClient<typeof sandboxContract>,
+    input: Record<string, unknown> & { prompt: string; conversationId?: string },
+): Promise<AgentEvent[]> => {
+    const conversationId = input.conversationId ?? `turn-${(turnCounter += 1)}`;
+    const { run } = await client.agent.run({ ...input, conversationId });
+    const frames = await collect(await client.agent.attach({ conversationId }));
+    expect(frames[0]).toMatchObject({ kind: "attached", run, prompt: input.prompt });
+    expect(frames.at(-1)).toEqual({ kind: "end" });
+    return frames.flatMap((frame) => (frame.kind === "frame" ? [frame.event] : []));
+};
+
 test("GET /health reports ok", async () => {
     const res = await createApp(services()).request("/health");
     expect(res.status).toBe(200);
@@ -982,7 +999,7 @@ test("agent.run streams the agent events, fenced by a user snapshot before and a
             }),
         ),
     );
-    expect(await collect(await client.agent.run({ prompt: "do it" }))).toEqual(events);
+    expect(await runAgentTurn(client, { prompt: "do it" })).toEqual(events);
     // Attribution: pending user changes are captured BEFORE the agent runs, so the turn snapshot is agent-only.
     expect(triggers).toEqual(["user", "turn"]);
 });
@@ -1016,7 +1033,7 @@ test("agent.run resolves the oauth token from the sandbox store (not the body) a
             }),
         ),
     );
-    await collect(await client.agent.run({ prompt: "do it", sessionId: "s1", model: "opus" }));
+    await runAgentTurn(client, { prompt: "do it", sessionId: "s1", model: "opus" });
     expect(seen?.oauthToken).toBe("tok-xyz");
     expect(seen?.model).toBe("opus");
     expect(seen?.sessionId).toBe("s1");
@@ -1043,7 +1060,7 @@ test("agent.run selects the Claude account named on the turn and forwards its to
             }),
         ),
     );
-    await collect(await client.agent.run({ prompt: "hi", account: "b" }));
+    await runAgentTurn(client, { prompt: "hi", account: "b" });
     expect(seen?.oauthToken).toBe("tok-b");
 });
 
@@ -1068,7 +1085,7 @@ test("agent.run points a Codex turn at the selected account's CODEX_HOME", async
             }),
         ),
     );
-    await collect(await client.agent.run({ prompt: "hi", agent: "codex", account: "acc-1" }));
+    await runAgentTurn(client, { prompt: "hi", agent: "codex", account: "acc-1" });
     expect(seen?.codexHome).toBe("/work/.intentic/codex/acc-1");
 });
 
@@ -1096,7 +1113,7 @@ test("agent.run resumes a Codex turn under the CODEX_HOME that owns the thread, 
             }),
         ),
     );
-    await collect(await client.agent.run({ prompt: "hi", agent: "codex", sessionId: "thr-x" }));
+    await runAgentTurn(client, { prompt: "hi", agent: "codex", sessionId: "thr-x" });
     expect(seen?.codexHome).toBe("/work/.intentic/codex/acc-1");
 });
 
@@ -1113,7 +1130,7 @@ test("agent.run pre-flights a Codex resume with no owning home as session-not-fo
             }),
         ),
     );
-    const events = await collect(await client.agent.run({ prompt: "hi", agent: "codex", sessionId: "gone" }));
+    const events = await runAgentTurn(client, { prompt: "hi", agent: "codex", sessionId: "gone" });
     expect(codexCalled).toBe(false);
     expect(events.some((event) => event.kind === "error" && event.code === "session-not-found")).toBe(true);
 });
@@ -1141,9 +1158,9 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
                 }),
             ),
         );
-    await collect(await grokApp().agent.run({ prompt: "hi", agent: "grok", model: "grok-code-fast-1" })); // retired ⇒ live default
-    await collect(await grokApp().agent.run({ prompt: "hi", agent: "grok", model: "grok-4.20-0309-reasoning" })); // still served ⇒ kept
-    await collect(await grokApp().agent.run({ prompt: "hi", agent: "grok" })); // none ⇒ live default
+    await runAgentTurn(grokApp(), { prompt: "hi", agent: "grok", model: "grok-code-fast-1" }); // retired ⇒ live default
+    await runAgentTurn(grokApp(), { prompt: "hi", agent: "grok", model: "grok-4.20-0309-reasoning" }); // still served ⇒ kept
+    await runAgentTurn(grokApp(), { prompt: "hi", agent: "grok" }); // none ⇒ live default
     expect(seen).toEqual(["grok-4.20-0309-reasoning", "grok-4.20-0309-reasoning", "grok-4.20-0309-reasoning"]);
 });
 
@@ -1167,7 +1184,7 @@ test("agent.run merges internal (env) tools with the mcp-kind capabilities for t
             }),
         ),
     );
-    await collect(await client.agent.run({ prompt: "do it" }));
+    await runAgentTurn(client, { prompt: "do it" });
     // Internal first, then external mcp capabilities (last-wins on name collisions).
     expect(seen?.tools).toEqual([
         { name: "obs", url: "https://signoz.example.com/mcp", token: "internal" },
@@ -1324,7 +1341,7 @@ test("agent.run surfaces a connect-your-account error (not an opaque CLI failure
             }),
         ),
     );
-    const events = await collect(await client.agent.run({ prompt: "do it" }));
+    const events = await runAgentTurn(client, { prompt: "do it" });
     // The turn never reaches the agent — the user gets an actionable message instead of exit-code-1.
     expect(agentCalled).toBe(false);
     expect(events.some((event) => event.kind === "error" && event.message.includes("No Claude account connected"))).toBe(true);
@@ -1343,7 +1360,7 @@ test("agent.run pre-flights a dead resume target with a coded error instead of s
             }),
         ),
     );
-    const events = await collect(await client.agent.run({ prompt: "do it", sessionId: "gone" }));
+    const events = await runAgentTurn(client, { prompt: "do it", sessionId: "gone" });
     expect(agentCalled).toBe(false);
     // The `code` field must survive the oRPC eventIterator round-trip — the UI keys its self-heal on it.
     expect(events.some((event) => event.kind === "error" && event.code === "session-not-found")).toBe(true);
@@ -1409,15 +1426,13 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
             }),
         ),
     );
-    await collect(
-        await client.agent.run({
+    await runAgentTurn(client, {
             prompt: "and now?",
             history: [
                 { role: "user", text: "what is 2+2?" },
                 { role: "assistant", text: "4" },
             ],
-        }),
-    );
+        });
     expect(seen?.prompt).toContain("continues from another AI runtime");
     expect(seen?.prompt).toContain("User: what is 2+2?");
     expect(seen?.prompt).toContain("Assistant: 4");
@@ -1442,13 +1457,13 @@ test("agent.run folds attachments into the claude prompt as absolute paths, allo
             }),
         ),
     );
-    await collect(await client.agent.run({ prompt: "", attachments: [".intentic/attachments/x/shot.png"] }));
+    await runAgentTurn(client, { prompt: "", attachments: [".intentic/attachments/x/shot.png"] });
     expect(seen?.prompt).toContain("/work/.intentic/attachments/x/shot.png");
 });
 
 test("agent.run rejects an attachment path escaping the workspace with an error frame", async () => {
     const client = clientFor(createApp(services()));
-    const events = await collect(await client.agent.run({ prompt: "look", attachments: ["../escape.png"] }));
+    const events = await runAgentTurn(client, { prompt: "look", attachments: ["../escape.png"] });
     expect(events).toEqual([{ kind: "error", message: "invalid attachment path: ../escape.png" }, { kind: "done" }]);
 });
 
@@ -1473,7 +1488,7 @@ test("an isolated turn runs in the conversation worktree, leads with the worktre
             }),
         ),
     );
-    const events = await collect(await client.agent.run({ prompt: "fix it", conversationId: "conv1", isolated: true }));
+    const events = await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
     // The worktree identity frame precedes every provider frame; the stub composition's root base is aaaa….
     expect(events[0]).toEqual({ kind: "worktree", branch: "agent/conv1", base: "aaaaaaa" });
     // The single binding point: the turn's cwd is the worktree, not /work.
@@ -1486,7 +1501,7 @@ test("an isolated turn runs in the conversation worktree, leads with the worktre
     expect(agents[0]).toMatchObject({ id: "conv1", status: "idle", branch: "agent/conv1", costUsd: 0.5, sessionId: "sess-iso" });
 });
 
-test("a second concurrent isolated turn for the same conversation is refused with agent-busy", async () => {
+test("a second concurrent turn for the same conversation is refused with CONFLICT until the run settles", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => (release = resolve));
     const client = clientFor(
@@ -1499,17 +1514,21 @@ test("a second concurrent isolated turn for the same conversation is refused wit
             }),
         ),
     );
-    const first = collect(await client.agent.run({ prompt: "long task", conversationId: "conv1", isolated: true }));
-    // Poll until the first turn holds the mutex (its begin ran), then the second send must bounce.
-    await vi.waitFor(async () => {
-        const events = await collect(await client.agent.run({ prompt: "again", conversationId: "conv1", isolated: true }));
-        expect(events[0]).toMatchObject({ kind: "error", code: "agent-busy" });
-    });
+    const { run: first } = await client.agent.run({ prompt: "long task", conversationId: "conv1", isolated: true });
+    // The run is live (parked on the gate) — a second start bounces at the door, before any registry work.
+    expect(await errorCode(client.agent.run({ prompt: "again", conversationId: "conv1", isolated: true }))).toBe("CONFLICT");
     release?.();
-    await first;
-    // The mutex released at finish — the next turn runs.
-    const events = await collect(await client.agent.run({ prompt: "after", conversationId: "conv1", isolated: true }));
+    // Attaching to its end is the settle barrier: the run finished and the registry mutex released.
+    const frames = await collect(await client.agent.attach({ conversationId: "conv1" }));
+    expect(frames[0]).toMatchObject({ kind: "attached", run: first });
+    // The next turn starts — and runs the full isolated path again.
+    const events = await runAgentTurn(client, { prompt: "after", conversationId: "conv1", isolated: true });
     expect(events[0]).toMatchObject({ kind: "worktree" });
+});
+
+test("a chat turn without a conversationId is refused — the run registry has nothing to key it on", async () => {
+    const client = clientFor(createApp(services()));
+    expect(await errorCode(client.agent.run({ prompt: "hi" }))).toBe("BAD_REQUEST");
 });
 
 test("an isolated turn that dies on a provider gate still releases the conversation mutex", async () => {
@@ -1521,10 +1540,10 @@ test("an isolated turn that dies on a provider gate still releases the conversat
             }),
         ),
     );
-    const first = await collect(await client.agent.run({ prompt: "hi", conversationId: "conv1", isolated: true }));
+    const first = await runAgentTurn(client, { prompt: "hi", conversationId: "conv1", isolated: true });
     expect(first.some((event) => event.kind === "error" && event.message.includes("No Claude account"))).toBe(true);
     // The gate exit must not leave the agent stuck "running" — the retry hits the same gate, NOT agent-busy.
-    const second = await collect(await client.agent.run({ prompt: "hi", conversationId: "conv1", isolated: true }));
+    const second = await runAgentTurn(client, { prompt: "hi", conversationId: "conv1", isolated: true });
     expect(second.some((event) => event.kind === "error" && event.code === "agent-busy")).toBe(false);
     const { agents } = await client.agents.list();
     expect(agents[0]?.status).not.toBe("running");
@@ -1546,7 +1565,7 @@ test("a turn's title seeds a fresh entry and agents.rename overwrites it", async
         ),
     );
     // A renamed draft's first turn carries the user-chosen title — it wins over the prompt derivation.
-    await collect(await client.agent.run({ prompt: "fix the login bug", title: "My agent", conversationId: "conv1", isolated: true }));
+    await runAgentTurn(client, { prompt: "fix the login bug", title: "My agent", conversationId: "conv1", isolated: true });
     expect((await client.agents.list()).agents[0]?.title).toBe("My agent");
     const renamed = await client.agents.rename({ id: "conv1", title: "  Login fix  " });
     expect(renamed.title).toBe("Login fix");

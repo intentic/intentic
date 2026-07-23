@@ -186,6 +186,19 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
 ]);
 export type AgentEvent = z.infer<typeof AgentEventSchema>;
 
+// The /agent/attach stream: a head frame identifying the run, then its AgentEvents stamped with their 1-based
+// seq (the client's resume cursor), then `end` when the run is over — every frame delivered, nothing more
+// coming. A stream that closes WITHOUT `end` was dropped mid-run; the client re-attaches with `after` = the
+// last seq it holds. The head's `prompt`/`startedAt` let a window that didn't initiate the turn (a reload, a
+// second window, another device) synthesize the user bubble and the elapsed readout; its `seq` is the log
+// length at attach time — the replay/live boundary.
+export const AttachFrameSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("attached"), run: z.string(), prompt: z.string(), startedAt: z.number(), seq: z.number() }),
+    z.object({ kind: z.literal("frame"), seq: z.number(), event: AgentEventSchema }),
+    z.object({ kind: z.literal("end") }),
+]);
+export type AttachFrame = z.infer<typeof AttachFrameSchema>;
+
 // One parsed line from `intentic … --output ndjson` (engine events, provider `log`, the terminal `result`).
 // Open-ended by design — the sandbox consumes the wire shape, not @intentic/engine's types — so a string
 // `kind` plus arbitrary extra fields pass through. The apply-events tail (intentic.contract `applyEvents`) rides
