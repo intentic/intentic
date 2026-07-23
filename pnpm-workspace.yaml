@@ -47,6 +47,9 @@ allowBuilds:
   sharp: true
   ssh2: false
   vue-demi: true
+  # workerd is wrangler's local `wrangler dev` runtime; `wrangler deploy` uploads to Cloudflare and never
+  # runs it, so its binary-download build script is skipped.
+  workerd: false
 
 # One catalog across all products. Version conflicts resolved to newest compatible:
 # turbo 2.10.5, hono 4.12.27, @types/node 24.13.2 (aligned to Node 24 runtime),
@@ -177,6 +180,7 @@ catalog:
   vue: 3.5.39
   vue-router: 4.6.4
   vue-tsc: 3.3.6
+  wrangler: 4.113.0
   ws: 8.21.0
   xlsx: 0.18.5
   yaml: 2.9.0

@@ -23,6 +23,7 @@
     "devDependencies": {
         "@astrojs/check": "catalog:",
         "typescript": "catalog:",
-        "vite": "catalog:site"
+        "vite": "catalog:site",
+        "wrangler": "catalog:"
     }
 }
