@@ -1,0 +1,65 @@
+---
+import { APP_URL } from "@intentic-dev/site-content/site";
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+
+const connectCmd = `curl -fsSL https://intentic.dev/connect | sh -s -- <CONNECT_CODE>`;
+const connectWin = `# Windows (PowerShell) — Setup shows your exact one-liner
+irm https://intentic.dev/connect.ps1 | iex`;
+---
+
+<DocsLayout
+    pageId="quickstart"
+    heading="Quickstart"
+    lead="From sign-in to a live agent workspace on your own machine: three steps, one of them a paste. No inbound ports, nothing deployed."
+>
+    <h2>Before you start</h2>
+    <ul>
+        <li>A machine that stays on while the agent works — a laptop, a workstation, or a VPS.</li>
+        <li><strong>Docker</strong> — installed automatically if missing (you're asked first). See <a href="/docs/docker/">Docker setup</a>.</li>
+        <li>A <strong>Google account</strong> to sign in. No card, no repo permissions, no code upload.</li>
+    </ul>
+
+    <h2>1 · Sign in</h2>
+    <p>
+        Open <a href={APP_URL}>app.intentic.dev</a> and sign in with Google. The platform stores your identity and, in a moment, your
+        sandbox's URL — nothing else. It never sees your code or your keys.
+    </p>
+
+    <h2>2 · Name your sandbox</h2>
+    <p>
+        Give the sandbox a name and intentic prepares a private tunnel for it under its own domain — no Cloudflare account required. Prefer
+        your own zone? Paste a Cloudflare token; it's used once to list your zones and is never stored.
+    </p>
+
+    <h2>3 · Run the one-liner</h2>
+    <p>
+        Setup shows a personalized command with your connect code. Run it on the machine that should host the sandbox — the connect code
+        binds that machine to your account on first use.
+    </p>
+    <DocsCodeBlock code={connectCmd} lang="bash" title="Your machine — bash" />
+    <DocsCodeBlock code={connectWin} lang="powershell" title="Your machine — Windows" />
+    <p>
+        Docker is installed if it's missing, after it asks. To skip the prompt in an unattended setup, set <code>INSTALL_DOCKER=1</code> in
+        the environment before running the command.
+    </p>
+
+    <h2>What happens next</h2>
+    <p>The one-liner starts two containers on your machine and nothing else:</p>
+    <ul>
+        <li>the <strong>sandbox</strong> — the daemon, your agent, and your workspace;</li>
+        <li>a <strong>cloudflared</strong> sidecar that dials out to establish the private tunnel.</li>
+    </ul>
+    <p>
+        Both are <strong>outbound-only</strong> — no port is opened on your machine. Your browser probes the sandbox directly until it
+        reports healthy, then the workspace opens on its own. From here you're talking to the daemon over its tunnel; the platform is out of
+        the loop.
+    </p>
+
+    <h2>Managing sandboxes</h2>
+    <p>
+        On Pro you can run several sandboxes at once — one per agent — and they coexist on the same machine without stepping on each other.
+        The <a href="/docs/docker/">Docker setup</a> page covers updating, rebuilding, and removing them with the
+        <code>/update</code>, <code>/rebuild</code>, and <code>/cleanup</code> helpers.
+    </p>
+</DocsLayout>

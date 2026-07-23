@@ -1,4 +1,5 @@
 ---
+import { docsHref, docsPages } from "@intentic-dev/site-content/docs";
 import { APP_URL, gitlabIssuesUrl, gitlabUrl, ORG_NAME, ORG_TAGLINE } from "@intentic-dev/site-content/site";
 
 const year = 2026;
@@ -12,13 +13,7 @@ const featureLinks = [
 ];
 
 const docsLinks = [
-    { href: "https://gitlab.com/radarsu/intentic#getting-started", label: "Getting Started", external: true },
-    { href: "https://gitlab.com/radarsu/intentic#capabilities", label: "CLI Reference", external: true },
-    {
-        href: "https://gitlab.com/radarsu/intentic/-/blob/main/ARCHITECTURE.md",
-        label: "Architecture",
-        external: true,
-    },
+    ...docsPages.map((page) => ({ href: docsHref(page.id), label: page.title, external: false })),
     { href: "https://gitlab.com/radarsu/intentic/-/releases", label: "Release Notes", external: true },
 ];
 

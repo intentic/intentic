@@ -1,3 +1,5 @@
+import { docsHref, docsPages } from "./docs";
+
 export interface NavLink {
     label: string;
     href: string;
@@ -25,23 +27,7 @@ export const navEntries: NavEntry[] = [
         type: "dropdown",
         label: "Docs",
         prefix: "/docs",
-        items: [
-            {
-                label: "Getting Started",
-                href: "https://gitlab.com/radarsu/intentic#getting-started",
-                external: true,
-            },
-            {
-                label: "CLI Reference",
-                href: "https://gitlab.com/radarsu/intentic#capabilities",
-                external: true,
-            },
-            {
-                label: "Architecture",
-                href: "https://gitlab.com/radarsu/intentic/-/blob/main/ARCHITECTURE.md",
-                external: true,
-            },
-        ],
+        items: docsPages.map((page) => ({ label: page.title, href: docsHref(page.id) })),
     },
     {
         type: "link",

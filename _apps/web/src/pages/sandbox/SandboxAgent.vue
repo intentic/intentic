@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import type { KeyedProvider, TranslatorAccounts } from "@intentic/sandbox-contract";
+import type { KeyedProvider } from "@intentic/sandbox-contract";
 import { Card, cmp, CopyButton } from "@intentic-app/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
-import { sandboxJson, sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { useCleanerSavings } from "../../composables/sandbox/useCleanerSavings";
@@ -16,15 +15,16 @@ import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 
 /* The Sandbox hub's "Agent" tab — the home for everything about the AI the sandbox runs. The AI provider
- * accounts (Claude / ChatGPT / Grok) it authenticates as, its behavior settings (search past chats), and the
- * import-memory tool. Accounts and memory live INSIDE the sandbox, never on the platform, which is why this is
- * a sandbox tab. The account surface reuses useChat's handshake paths unchanged; opening the tab loads usage
- * and preps the provider (openAccountManage); closing it just hides the card (closeAccountManage) — an in-flight
- * connect keeps running so a device sign-in the user is completing at x.ai / ChatGPT still lands. */
+ * accounts (Claude / ChatGPT / Grok) it authenticates as — each provider's native-harness account plus, for
+ * codex/grok, the "Under Claude Code" subscription the translator serves them on — its behavior settings, and
+ * the import-memory tool. Accounts and memory live INSIDE the sandbox, never on the platform, which is why this
+ * is a sandbox tab. Both connection surfaces reuse useChat's shared state/handshakes unchanged; opening the tab
+ * loads usage and preps the provider (openAccountManage); closing it just hides the card (closeAccountManage) —
+ * an in-flight connect keeps running so a device sign-in the user is completing at x.ai / ChatGPT still lands. */
 
 const sandbox = useSandbox();
 
-// --- AI provider accounts (was the global AccountManageDialog) ---------------------------------------------
+// --- AI provider accounts (native + routed, one card) -------------------------------------------------------
 const {
     managedProvider,
     setManagedProvider,
@@ -39,102 +39,59 @@ const {
     startConnect,
     completeConnect,
     disconnect,
+    translatorAccounts,
+    translatorConnectFlow,
+    translatorBusy,
+    connectTranslator,
+    disconnectTranslator,
 } = useChat();
-
-// --- Routed-provider subscriptions (Codex/Grok UNDER the Claude Code harness) -------------------------------
-// Running Codex or Grok on the Claude Code harness routes their model through the sandbox's translator
-// (CLIProxyAPI), which serves them on the user's SUBSCRIPTION OAuth — connect it here with a device-code login
-// (open a URL, enter the code). The translator finishes the login in the background, so we poll `accounts` until
-// the provider flips connected.
-const translatorAccounts = ref<TranslatorAccounts>({ codex: false, grok: false });
-const connectBusy = ref<KeyedProvider | undefined>(undefined);
-const connectFlow = ref<{ provider: KeyedProvider; url: string; code: string } | undefined>(undefined);
-let accountsPoll: ReturnType<typeof setInterval> | undefined;
-
-const loadTranslatorAccounts = async (): Promise<void> => {
-    try {
-        translatorAccounts.value = await sandboxJson<TranslatorAccounts>(`/translator/accounts`);
-    } catch {
-        // Non-fatal; the card shows "not connected" until the sandbox is reachable.
-    }
-};
-
-const stopAccountsPoll = (): void => {
-    if (accountsPoll !== undefined) {
-        clearInterval(accountsPoll);
-        accountsPoll = undefined;
-    }
-};
 
 // Arriving from a chat's "Connect account" gate carries `?connect=<provider>`: open that provider's card and
 // flash it, so the user lands looking straight at the inputs they need (mirrors SandboxSync's desktop-sync jump).
+// Driven by a watch, not just onMounted: the chat panel lives in the persistent shell, so the gate can deep-link
+// here while this tab is already open — a query-only navigation doesn't remount the component.
 const route = useRoute();
 const ringing = ref(false);
+let ringTimer: ReturnType<typeof setTimeout> | undefined;
+
+const focusConnect = (): void => {
+    const requested = providerTabs.find((tab) => tab.value === route.query[`connect`]);
+    if (requested === undefined) {
+        return;
+    }
+    setManagedProvider(requested.value);
+    // Re-arm the flash cleanly on a repeat jump so a prior timer can't cut the ring short.
+    ringing.value = true;
+    clearTimeout(ringTimer);
+    ringTimer = setTimeout(() => (ringing.value = false), 2500);
+    // Let the card render, then bring it into view.
+    setTimeout(() => document.getElementById(`ai-account`)?.scrollIntoView({ behavior: `smooth`, block: `center` }), 50);
+};
 
 onMounted(() => {
     openAccountManage();
-    void loadTranslatorAccounts();
-    const requested = providerTabs.find((tab) => tab.value === route.query[`connect`]);
-    if (requested !== undefined) {
-        setManagedProvider(requested.value);
-        ringing.value = true;
-        setTimeout(() => (ringing.value = false), 2500);
-        // Let the card render, then bring it into view.
-        setTimeout(() => document.getElementById(`ai-account`)?.scrollIntoView({ behavior: `smooth`, block: `center` }), 50);
-    }
+    focusConnect();
 });
-onUnmounted(() => {
-    closeAccountManage();
-    stopAccountsPoll();
-});
+watch(() => route.query[`connect`], focusConnect);
+onUnmounted(closeAccountManage);
 
-const pollUntilConnected = (provider: KeyedProvider): void => {
-    stopAccountsPoll();
-    accountsPoll = setInterval(() => {
-        void loadTranslatorAccounts().then(() => {
-            if (translatorAccounts.value[provider]) {
-                stopAccountsPoll();
-                if (connectFlow.value?.provider === provider) {
-                    connectFlow.value = undefined;
-                }
-            }
-        });
-    }, 3_000);
+// The "Under Claude Code" row shown on the codex/grok tabs: the sandbox's translator (CLIProxyAPI) serves those
+// models to the Claude Code harness on a subscription credential of its own — a separate sign-in from the
+// native account above it (each program owns and refreshes its own OAuth grant). Claude has no row: it IS the
+// Claude Code harness.
+const routedProvider = computed<KeyedProvider | undefined>(() =>
+    managedProvider.value === `codex` || managedProvider.value === `grok` ? managedProvider.value : undefined,
+);
+const ROUTED_ROW: Record<KeyedProvider, { hint: string; loginHint: string }> = {
+    codex: {
+        hint: `Runs Codex models under the Claude Code harness on your ChatGPT subscription — a separate sign-in from the account above.`,
+        loginHint: `Open ChatGPT, sign in, and enter this one-time code.`,
+    },
+    grok: {
+        hint: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription — a separate sign-in from the account above.`,
+        loginHint: `Open x.ai with your SuperGrok / X Premium account and enter this code.`,
+    },
 };
-
-const connectSubscription = async (provider: KeyedProvider): Promise<void> => {
-    if (connectBusy.value !== undefined) {
-        return;
-    }
-    connectBusy.value = provider;
-    try {
-        connectFlow.value = {
-            provider,
-            ...(await sandboxJson<{ url: string; code: string }>(`/translator/${provider}/connect`, { method: `POST` })),
-        };
-        pollUntilConnected(provider);
-    } finally {
-        connectBusy.value = undefined;
-    }
-};
-
-const disconnectSubscription = async (provider: KeyedProvider): Promise<void> => {
-    connectBusy.value = provider;
-    try {
-        await sandboxRequest(`/translator/${provider}/disconnect`, { method: `POST` });
-        if (connectFlow.value?.provider === provider) {
-            connectFlow.value = undefined;
-        }
-        await loadTranslatorAccounts();
-    } finally {
-        connectBusy.value = undefined;
-    }
-};
-
-const SUBSCRIPTION_FIELDS = [
-    { provider: `codex` as const, label: `ChatGPT (Codex)`, hint: `Open ChatGPT, sign in, and enter this one-time code.` },
-    { provider: `grok` as const, label: `SuperGrok (Grok)`, hint: `Open x.ai with your SuperGrok / X Premium account and enter this code.` },
-];
 
 // Compact "142k" token count and a short usage summary line per account (from /system/usage).
 const shortTokens = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
@@ -349,7 +306,7 @@ const importMemory = async (): Promise<void> => {
                     <Icon name="sparkles" class="text-lg text-link" />
                     <div>
                         <h2 class="font-semibold leading-tight">AI account</h2>
-                        <p class="text-xs text-muted">The account Claude Code signs in as. Stored inside your sandbox, never on the platform.</p>
+                        <p class="text-xs text-muted">The accounts your agent signs in as. Stored inside your sandbox, never on the platform.</p>
                     </div>
                 </div>
                 <div class="flex shrink-0 items-center gap-1">
@@ -490,66 +447,63 @@ const importMemory = async (): Promise<void> => {
                     </div>
                 </template>
             </div>
-        </Card>
 
-        <!-- Run Codex / Grok under Claude Code — connect the ChatGPT / SuperGrok subscription that serves them when
-             they run UNDER the Claude Code harness (their model routes through the sandbox's translator, CLIProxyAPI,
-             on your subscription OAuth — no API key). A device-code login: open the URL, enter the code. -->
-        <Card class="flex flex-col gap-3">
-            <div class="flex items-center gap-2.5">
-                <Icon name="link" class="text-lg text-muted" />
-                <div class="min-w-0">
-                    <h2 class="font-semibold leading-tight">Run Codex / Grok under Claude Code</h2>
-                    <p class="text-xs text-muted">
-                        Connect your <span class="font-medium text-content">ChatGPT / SuperGrok subscription</span> to run these models under the
-                        Claude Code harness — no API key, it uses your subscription.
-                    </p>
-                </div>
-            </div>
-            <div
-                v-for="field in SUBSCRIPTION_FIELDS"
-                :key="field.provider"
-                class="flex flex-col gap-1.5 border-t border-line pt-2 first:border-t-0 first:pt-0"
-            >
-                <div class="flex items-center justify-between gap-2">
-                    <span class="flex items-center gap-2 text-sm text-content">
-                        <Icon name="circle-fill" class="text-[0.5rem]" :class="translatorAccounts[field.provider] ? 'text-success' : 'text-subtle'" />
-                        {{ field.label }}
-                        <span class="text-2xs text-subtle">{{ translatorAccounts[field.provider] ? "connected" : "not connected" }}</span>
+            <!-- "Under Claude Code" (codex/grok tabs only): the translator's subscription connection for running
+                 this provider's models inside the Claude Code harness — a device-code login; the translator
+                 connects on its own and the shared poll flips the row to "connected". -->
+            <div v-if="routedProvider" class="flex flex-col gap-1.5 border-t border-line pt-2">
+                <div class="flex items-start justify-between gap-2">
+                    <span class="flex min-w-0 flex-col gap-0.5">
+                        <span class="flex items-center gap-2 text-sm text-content">
+                            <Icon
+                                name="circle-fill"
+                                class="text-[0.5rem]"
+                                :class="translatorAccounts[routedProvider] ? 'text-success' : 'text-subtle'"
+                            />
+                            Under Claude Code
+                            <span class="text-2xs text-subtle">{{ translatorAccounts[routedProvider] ? "connected" : "not connected" }}</span>
+                        </span>
+                        <span class="pl-3.5 text-2xs text-muted">{{ ROUTED_ROW[routedProvider].hint }}</span>
                     </span>
                     <Button
-                        v-if="translatorAccounts[field.provider]"
+                        v-if="translatorAccounts[routedProvider]"
                         label="Disconnect"
                         size="small"
                         severity="danger"
                         :text="true"
-                        :loading="connectBusy === field.provider"
-                        @click="disconnectSubscription(field.provider)"
+                        :loading="translatorBusy === routedProvider"
+                        @click="disconnectTranslator(routedProvider)"
                     />
                     <Button
-                        v-else-if="!(connectFlow && connectFlow.provider === field.provider)"
+                        v-else-if="translatorConnectFlow?.provider !== routedProvider"
                         label="Connect"
                         size="small"
-                        :loading="connectBusy === field.provider"
-                        @click="connectSubscription(field.provider)"
+                        :loading="translatorBusy === routedProvider"
+                        @click="connectTranslator(routedProvider)"
                     >
                         <template #icon><Icon name="link" /></template>
                     </Button>
                 </div>
-                <!-- Live device-login card: show the verification URL + one-time code; the translator connects on
-                     its own, and the poll flips the row to "connected". -->
                 <div
-                    v-if="connectFlow && connectFlow.provider === field.provider"
+                    v-if="translatorConnectFlow && translatorConnectFlow.provider === routedProvider"
                     class="flex flex-col gap-2 rounded-md border border-line bg-card p-2"
                 >
-                    <p class="text-2xs text-subtle">{{ field.hint }}</p>
+                    <p class="text-2xs text-subtle">{{ ROUTED_ROW[routedProvider].loginHint }}</p>
                     <div class="flex flex-col items-center gap-1">
                         <span class="text-2xs text-subtle">Your one-time code</span>
-                        <span class="font-mono text-lg font-semibold tracking-[0.2em] text-content">{{ connectFlow.code }}</span>
-                        <CopyButton :text="connectFlow.code" label="Copy" />
+                        <span class="font-mono text-lg font-semibold tracking-[0.2em] text-content">{{ translatorConnectFlow.code }}</span>
+                        <CopyButton :text="translatorConnectFlow.code" label="Copy" />
                     </div>
                     <div class="flex items-center gap-2">
-                        <Button as="a" label="Open sign-in" size="small" severity="secondary" :href="connectFlow.url" target="_blank" rel="noopener">
+                        <Button
+                            as="a"
+                            label="Open sign-in"
+                            size="small"
+                            severity="secondary"
+                            :href="translatorConnectFlow.url"
+                            target="_blank"
+                            rel="noopener"
+                        >
                             <template #icon><Icon name="external-link" /></template>
                         </Button>
                         <span class="text-2xs text-subtle"><Icon name="spinner" class="mr-1" spin />Waiting for you to finish signing in…</span>

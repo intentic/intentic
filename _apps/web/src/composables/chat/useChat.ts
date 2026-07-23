@@ -2,8 +2,10 @@ import {
     type AgentHarness,
     type AgentProvider,
     type EditorContext,
+    type KeyedProvider,
     NATIVE_PROVIDERS,
     type OauthAccount,
+    type TranslatorAccounts,
     type UsageAccount,
     usesLiveCatalog,
 } from "@intentic/sandbox-contract";
@@ -380,30 +382,125 @@ const setManagedProvider = (target: AgentProvider): void => {
         return;
     }
     managedProvider.value = target;
-    if (accountManageOpen.value && accountsOf(target).length === 0) {
+    // No up-front native handshake when the active conversation runs this provider ROUTED (under the Claude
+    // Code harness): that selection is served by the translator subscription — its own row in the card — and a
+    // native device code would only compete with the connect the user actually came for.
+    const routedActive = target === provider.value && (target === `codex` || target === `grok`) && harness.value === `claude-code`;
+    if (accountManageOpen.value && accountsOf(target).length === 0 && !routedActive) {
         void startConnect(); // startConnect drops any prior handshake first
         return;
     }
     cancelConnect();
 };
 
+// --- Routed-provider subscriptions (codex/grok UNDER the Claude Code harness) ------------------
+// The sandbox's translator (CLIProxyAPI) serves codex/grok models to the Claude Code harness on the user's
+// ChatGPT / SuperGrok subscription OAuth — a credential of its own, separate from the provider's native-harness
+// account (each program owns and refreshes its own grant; a shared refresh token would rotate out from under
+// one of them). Held here rather than in SandboxAgent so the composer gate reads the same connection state the
+// Agent tab manages, and so a device-login poll survives that tab unmounting.
+const translatorAccounts = ref<TranslatorAccounts>({ codex: false, grok: false });
+// The in-flight device login (verification URL + one-time code) the Agent tab's "Under Claude Code" row shows.
+const translatorConnectFlow = ref<{ provider: KeyedProvider; url: string; code: string } | undefined>(undefined);
+const translatorBusy = ref<KeyedProvider | undefined>(undefined);
+let translatorPollTimer: ReturnType<typeof setTimeout> | undefined;
+
+const refreshTranslatorAccounts = async (): Promise<void> => {
+    try {
+        translatorAccounts.value = await sandboxJson<TranslatorAccounts>(`/translator/accounts`);
+    } catch {
+        // Non-fatal; the UI shows "not connected" until the daemon is reachable.
+    }
+};
+
+// CLIProxyAPI finishes the device login in the background (no paste-back), so poll the connection state until
+// the provider flips connected — bounded by the same deadline as the native device flows.
+const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Promise<void> => {
+    if (translatorConnectFlow.value?.provider !== target) {
+        return;
+    }
+    if (Date.now() > deadline) {
+        error.value = `The ${target === `codex` ? `ChatGPT` : `SuperGrok`} sign-in expired — start the connection again.`;
+        translatorConnectFlow.value = undefined;
+        return;
+    }
+    await refreshTranslatorAccounts();
+    if (translatorConnectFlow.value?.provider !== target) {
+        return;
+    }
+    if (translatorAccounts.value[target]) {
+        translatorConnectFlow.value = undefined;
+        error.value = null;
+        return;
+    }
+    translatorPollTimer = setTimeout(() => void pollTranslatorOnce(target, deadline), 3_000);
+};
+
+// Start a subscription device login for a routed provider: the daemon returns the verification URL + one-time
+// code, the user approves upstream, and the poll flips the row to connected. One flow at a time — a new
+// connect supersedes a prior one (mirroring the daemon, which kills a superseded login subprocess).
+const connectTranslator = async (target: KeyedProvider): Promise<void> => {
+    if (translatorBusy.value !== undefined) {
+        return;
+    }
+    translatorBusy.value = target;
+    error.value = null;
+    clearTimeout(translatorPollTimer);
+    try {
+        translatorConnectFlow.value = {
+            provider: target,
+            ...(await sandboxJson<{ url: string; code: string }>(`/translator/${target}/connect`, { method: `POST` })),
+        };
+        translatorPollTimer = setTimeout(() => void pollTranslatorOnce(target, Date.now() + CODEX_POLL_DEADLINE_MS), 3_000);
+    } catch (caught) {
+        error.value = errorMessage(caught, `Could not start the subscription connection — is your sandbox online?`);
+    } finally {
+        translatorBusy.value = undefined;
+    }
+};
+
+const disconnectTranslator = async (target: KeyedProvider): Promise<void> => {
+    translatorBusy.value = target;
+    try {
+        await sandboxRequest(`/translator/${target}/disconnect`, { method: `POST` });
+        if (translatorConnectFlow.value?.provider === target) {
+            clearTimeout(translatorPollTimer);
+            translatorConnectFlow.value = undefined;
+        }
+        await refreshTranslatorAccounts();
+    } finally {
+        translatorBusy.value = undefined;
+    }
+};
+
 // Account / connection (global; the sandbox owns each provider's credentials). Several accounts per provider
 // live in `providerAccounts` (conversation.ts module state). `error` carries connection / account errors —
-// per-turn chat errors live on each Conversation. `connected` = the ACTIVE conversation's provider has an
-// account; `claudeConnected` = Claude specifically (the Sandbox page's card).
+// per-turn chat errors live on each Conversation. `connected` = the ACTIVE conversation's selection can send;
+// `claudeConnected` = Claude specifically (the Sandbox page's card).
 const error = ref<string | null>(null);
 const hasAccount = (target: AgentProvider): boolean => accountsOf(target).length > 0;
-// An ACP provider is its own credential store — installed means chat-ready, so it never gates the composer.
-const connected = computed(() => hasAccount(provider.value) || acpProviders.value.some((agent) => agent.id === provider.value));
+// Whether a provider+harness selection can actually send — the composer gate, mirroring the daemon's own gate
+// (agent.routes): a codex/grok turn under the Claude Code harness is served by the translator subscription, so
+// only that connection matters; anything else needs a provider account. An ACP provider is its own credential
+// store — installed means chat-ready, so it never gates the composer.
+const chatReady = (target: AgentProvider, loop: AgentHarness): boolean =>
+    (target === `codex` || target === `grok`) && loop === `claude-code`
+        ? translatorAccounts.value[target]
+        : hasAccount(target) || acpProviders.value.some((agent) => agent.id === target);
+const connected = computed(() => chatReady(provider.value, harness.value));
 const claudeConnected = computed(() => hasAccount(`claude`));
 
-// Keep the composer usable whenever ANY provider has an account: when the account lists change (initial load,
-// a connect/disconnect, a sandbox reset), point each untouched fresh conversation sitting on an account-less
-// provider at a connected one. Started conversations (a session or visible messages) are never auto-repointed —
+// Keep the composer usable whenever ANY provider has an account: when the connection state changes (initial
+// load, a connect/disconnect, a sandbox reset), point each untouched fresh conversation whose selection can't
+// send at a connected provider. Started conversations (a session or visible messages) are never auto-repointed —
 // that would retire their session and insert a switch notice the user didn't ask for.
-watch(providerAccounts, () => {
+watch([providerAccounts, translatorAccounts], () => {
     for (const conversation of conversations.value) {
-        if (conversation.session.value !== undefined || conversation.messages.value.length > 0 || hasAccount(conversation.provider.value)) {
+        if (
+            conversation.session.value !== undefined ||
+            conversation.messages.value.length > 0 ||
+            chatReady(conversation.provider.value, conversation.harness.value)
+        ) {
             continue;
         }
         const fallback = ([`claude`, `codex`, `grok`] as const).find((p) => hasAccount(p));
@@ -632,6 +729,10 @@ export const resetChat = (): void => {
     providerModelsState.value = { claude: `idle`, codex: `idle`, grok: `idle` };
     managedProvider.value = turnDefaults.provider.value;
     cancelConnect();
+    clearTimeout(translatorPollTimer);
+    translatorConnectFlow.value = undefined;
+    translatorBusy.value = undefined;
+    translatorAccounts.value = { codex: false, grok: false };
     error.value = null;
     accountManageOpen.value = false;
 };
@@ -878,6 +979,8 @@ const startConnect = async (): Promise<void> => {
 const openAccountManage = (): void => {
     accountManageOpen.value = true;
     void loadUsage();
+    // Another device may have (dis)connected a subscription since the reachable-seam load — show fresh state.
+    void refreshTranslatorAccounts();
     // A connect handshake already in flight (a device poll that outlived a card close / the reachable-flash
     // remount) owns the managed provider — leave it be. Re-running setManagedProvider here would either mint a
     // fresh device code that diverges from the sign-in tab the user already opened, or hit its cancelConnect
@@ -917,6 +1020,8 @@ export const loadAccountStatus = async (): Promise<void> => {
         loadAllProviderModels(),
         // Installed ACP agents are providers too — surface them in the picker on the same seam.
         loadAcpProviders(),
+        // The translator's subscription connections gate routed (claude-code harness) codex/grok chats.
+        refreshTranslatorAccounts(),
     ]);
 };
 
@@ -1034,5 +1139,10 @@ export function useChat() {
         startConnect,
         completeConnect,
         disconnect,
+        translatorAccounts,
+        translatorConnectFlow,
+        translatorBusy,
+        connectTranslator,
+        disconnectTranslator,
     };
 }

@@ -1,0 +1,57 @@
+---
+import { docsHref, docsPages } from "@intentic-dev/site-content/docs";
+import DocsLayout from "../../components/DocsLayout.astro";
+
+// Cards for the "Start here" grid — everything except this overview page.
+const cards = docsPages.filter((page) => page.id);
+---
+
+<DocsLayout
+    pageId=""
+    heading="intentic documentation"
+    lead="intentic gives each coding agent its own sandbox — a specialized workspace on hardware you own. These docs cover getting one running, how the system fits together, and how to turn a sandbox into an autonomous employee."
+>
+    <h2>The mental model</h2>
+    <p>
+        One idea holds the whole product together: <strong>a specialized agent is a purpose-built sandbox.</strong> Not a prompt or a
+        markdown file — a real container, on a machine you control, with the libraries, dev-tools, system access, and curated context a
+        specific job needs. You drive it from any browser; it runs where you started it.
+    </p>
+    <p>Three tiers make that work, and only the middle one holds your code:</p>
+    <ul>
+        <li><strong>The platform</strong> — a thin hub that stores your identity and your sandbox's URL. It sits off the command path and can't reach in.</li>
+        <li><strong>Your sandbox</strong> — one container per agent, on your hardware, reached by your browser over a private Cloudflare tunnel. The agent, repos, credentials, and capabilities live here.</li>
+        <li>
+            <strong>Provisioned infrastructure</strong> — what a sandbox optionally deploys for you (git, CI, a registry, apps) on your own
+            hosts, via the open-source engine.
+        </li>
+    </ul>
+    <p>
+        Read <a href="/docs/architecture/">Architecture</a> for the full picture, or jump straight to bringing one up.
+    </p>
+
+    <h2>Start here</h2>
+    <div class="docs-embed mt-4 grid gap-4 sm:grid-cols-2">
+        {
+            cards.map((card) => (
+                <a
+                    href={docsHref(card.id)}
+                    class="card p-5 no-underline transition-colors hover:border-primary-600/40"
+                >
+                    <h3 class="text-sm font-medium text-content">{card.title}</h3>
+                    <p class="mt-2 text-sm leading-relaxed text-muted">{card.meta.description}</p>
+                </a>
+            ))
+        }
+    </div>
+
+    <h2>What's in a sandbox</h2>
+    <p>Everything an agent needs to do real work, and nothing the platform can see:</p>
+    <ul>
+        <li><strong>An agent</strong> — Claude Code, Codex, or Grok, on your own subscription, chosen per conversation.</li>
+        <li><strong>A workspace</strong> — your repos, a file tree, editors, and terminals that survive reconnects.</li>
+        <li><strong>Capabilities</strong> — GitHub, databases, Sentry, Stripe, SSH hosts, MCP servers, added in a click.</li>
+        <li><strong>An environment</strong> — libraries and dev-tools baked into the image, proposed by the agent and applied on your approval.</li>
+        <li><strong>Automations</strong> — schedules, webhooks, and event listeners that wake the agent while you're away.</li>
+    </ul>
+</DocsLayout>

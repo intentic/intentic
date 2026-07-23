@@ -1,0 +1,24 @@
+---
+import { Code } from "astro:components";
+import { intenticWarm } from "../lib/shiki-theme";
+
+interface Props {
+    code: string;
+    lang?: "bash" | "powershell" | "json" | "typescript" | "yaml" | "docker" | "http";
+    /** Optional caption shown in the window's title bar. */
+    title?: string;
+}
+
+const { code, lang = "bash", title } = Astro.props;
+---
+
+<div class="code-window my-6">
+    {
+        title && (
+            <div class="flex items-center gap-2 border-b border-line px-4 py-2">
+                <span class="eyebrow">{title}</span>
+            </div>
+        )
+    }
+    <Code code={code} lang={lang} theme={intenticWarm} />
+</div>

@@ -1,7 +1,7 @@
 import { nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
+vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
 // The real router pulls the auth/environment chain, which needs window.env; the plan-preview watch only pushes.
 vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 // Same window.env chain via analytics; send() only fires a milestone event through track.
@@ -26,8 +26,9 @@ Object.defineProperty(globalThis, `localStorage`, {
     },
 });
 
-const { sandboxRequest } = await import("../sandbox/sandboxClient");
+const { sandboxJson, sandboxRequest } = await import("../sandbox/sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
+const sandboxJsonMock = vi.mocked(sandboxJson);
 const { loadAccountStatus, resetChat, useChat } = await import("./useChat");
 
 afterEach(() => {
@@ -48,12 +49,39 @@ describe(`useChat provider reconciliation`, () => {
                 json: () => Promise.resolve({ accounts: path.startsWith(`/codex`) ? [{ id: `c1`, label: `ChatGPT`, connectedAt: 0 }] : [] }),
             } as Response),
         );
+        sandboxJsonMock.mockResolvedValue({ codex: false, grok: false });
         await loadAccountStatus();
         await nextTick();
 
         // The untouched fresh conversation follows the connected provider, so the composer is reachable — no
         // Claude wall.
         expect(chat.provider.value).toBe(`codex`);
+        expect(chat.connected.value).toBe(true);
+    });
+
+    it(`gates a routed (claude-code harness) chat on the translator subscription, not the native account`, async () => {
+        storage.clear();
+        resetChat();
+        const chat = useChat();
+        // Grok's native account is connected, but the translator holds no SuperGrok subscription yet.
+        sandboxRequestMock.mockImplementation((path: string) =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ accounts: path.startsWith(`/grok`) ? [{ id: `xai`, label: `Grok`, connectedAt: 0 }] : [] }),
+            } as Response),
+        );
+        sandboxJsonMock.mockResolvedValue({ codex: false, grok: false });
+        await loadAccountStatus();
+        await nextTick();
+
+        chat.selectProvider(`grok`);
+        expect(chat.connected.value).toBe(true); // the native harness is served by the account
+        chat.active.value.selectHarness(`claude-code`);
+        expect(chat.connected.value).toBe(false); // routed: only the translator subscription serves the turn
+
+        // The subscription connects (via the Agent tab's "Under Claude Code" row) — the same gate opens.
+        sandboxJsonMock.mockResolvedValue({ codex: false, grok: true });
+        await loadAccountStatus();
         expect(chat.connected.value).toBe(true);
     });
 });

@@ -1,0 +1,106 @@
+---
+import DocsLayout from "../../components/DocsLayout.astro";
+
+const lifecycle = [
+    { title: "Sign in + open Setup", body: "You authenticate with Google and name a sandbox. The platform reserves a private tunnel and hands you a connect one-liner." },
+    { title: "Connect", body: "You run the one-liner on your machine. It starts the sandbox and a cloudflared sidecar; the daemon announces its URL to the platform on boot." },
+    { title: "Bind on first use", body: "Your browser drives the daemon directly with your Google ID token. The daemon verifies it and binds you as owner on the first authenticated request." },
+    { title: "Work + provision", body: "You chat, edit, and run terminals over the tunnel. If you add the DevOps capability, intentic apply provisions git, CI, and deploys on your hosts." },
+    { title: "Reconcile", body: "The engine applies your desired state and re-reads it until reality matches — then streams topology, plans, and deployments back to your browser." },
+];
+---
+
+<DocsLayout
+    pageId="architecture"
+    heading="Architecture"
+    lead="intentic is three tiers: a thin platform for identity, a per-agent sandbox on your hardware, and the infrastructure a sandbox can provision for you. Only the middle tier ever holds your code."
+>
+    <h2>The three tiers</h2>
+    <div class="docs-embed my-8">
+        <div class="card p-4 text-center">
+            <div class="eyebrow">Operator</div>
+            <div class="mt-1 text-sm font-medium text-content">Your browser</div>
+            <p class="mt-1 text-xs text-muted">chat · files · editor · terminals</p>
+        </div>
+        <div class="py-2 text-center text-2xs text-link">↓&nbsp;&nbsp;Google sign-in · private tunnel, direct</div>
+        <div class="grid gap-3 sm:grid-cols-[1.4fr_1fr]">
+            <div class="card border-primary-600/30 p-4">
+                <div class="eyebrow text-link">Your sandbox · your machine</div>
+                <p class="mt-1 text-sm text-content">Agent · repos · credentials · capabilities</p>
+                <p class="mt-1 text-xs text-muted">one container per agent, on your hardware</p>
+            </div>
+            <div class="rounded-2xl border border-dashed border-line p-4">
+                <div class="eyebrow">intentic platform</div>
+                <p class="mt-1 text-xs text-subtle">Identity + sandbox URL. Off the command path.</p>
+            </div>
+        </div>
+        <div class="py-2 text-center text-2xs text-link">↓&nbsp;&nbsp;intentic apply (optional) · SSH · Docker · Cloudflare API</div>
+        <div class="card p-4">
+            <div class="eyebrow">Provisioned infrastructure · your hosts</div>
+            <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                <div class="rounded-xl border border-line bg-canvas p-3">
+                    <div class="text-sm font-medium text-content">Control plane</div>
+                    <p class="mt-1 text-xs text-muted">Forgejo (git · registry · CI) · Komodo (deploy)</p>
+                </div>
+                <div class="rounded-xl border border-line bg-canvas p-3">
+                    <div class="text-sm font-medium text-content">Application plane</div>
+                    <p class="mt-1 text-xs text-muted">your apps · databases · caches · auth · storage</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h3>The platform</h3>
+    <p>
+        A thin hub — a Vue SPA and a small API. It persists your account, your subscription, and your sandbox's public URL, which the daemon
+        announces on boot. It never probes the sandbox, owns no infrastructure, and sits <strong>off the command path</strong>: a platform
+        breach can read a URL and reaches nothing else.
+    </p>
+
+    <h3>The sandbox</h3>
+    <p>
+        One container per agent, on your PC or your server, run <strong>unprivileged by default</strong>. It runs the coding agent, holds
+        your repos and credentials, and exposes its daemon over its own Cloudflare tunnel. This is the whole product surface — chat,
+        terminals, files, panels, capabilities, and automations all come from here. Your keys ride straight into it and never reach the
+        platform.
+    </p>
+
+    <h3>Provisioned infrastructure</h3>
+    <p>
+        Optional, and only if you add the DevOps capability. The open-source engine turns one config file into a control plane (git, a
+        registry, CI, and a deploy orchestrator) and an application plane (your apps and their databases, caches, auth, and storage) — all
+        on hosts you own.
+    </p>
+
+    <h2>Ownership &amp; trust</h2>
+    <p>
+        The trust root is your browser's Google sign-in. Your browser drives the daemon directly with a Google ID token; the daemon verifies
+        it against Google's keys and binds you as owner on first use. <strong>The platform never holds that token</strong>, so it cannot
+        drive your sandbox even if it were breached. Repos, credentials, and history live where the sandbox runs; capability secrets are
+        stored inside the sandbox and echoed back to the UI only as "set" / "not set" booleans, never as values.
+    </p>
+
+    <h2>Reachability</h2>
+    <p>
+        Every connection is <strong>outbound-only</strong>. <code>cloudflared</code> dials out from your machine, so the sandbox is reachable
+        from any browser with no inbound ports and no firewall changes. Bring your own Cloudflare zone and it absorbs the tunnel under your
+        domain; bring nothing and intentic provisions one under its own domain and hands the sandbox a narrow per-tunnel token.
+    </p>
+
+    <h2>The lifecycle</h2>
+    <ol class="docs-embed my-6 list-none space-y-4 p-0">
+        {
+            lifecycle.map((step, i) => (
+                <li class="flex gap-4">
+                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-primary-500/40 text-sm font-semibold text-link">
+                        {i + 1}
+                    </span>
+                    <div>
+                        <div class="text-sm font-medium text-content">{step.title}</div>
+                        <p class="mt-1 text-sm leading-relaxed text-muted">{step.body}</p>
+                    </div>
+                </li>
+            ))
+        }
+    </ol>
+</DocsLayout>
