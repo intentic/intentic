@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { type DiffRow, diffRows } from "./chatToolDiff";
+import DiffStat from "../components/DiffStat.vue";
+import { type DiffRow, diffRows, diffStat } from "./chatToolDiff";
 
 /* Inline unified diff for one structured diff content entry of a tool card. The header path is clickable
  * (opens the file in the workspace); rows come from the lightweight line differ — Monaco stays the
@@ -17,6 +18,7 @@ const props = defineProps<{
 const emit = defineEmits<{ open: [] }>();
 
 const rows = computed(() => diffRows(props.oldText, props.newText));
+const stat = computed(() => diffStat(props.oldText, props.newText));
 
 const gutterOf = (row: DiffRow): string => (row.type === `add` ? `+` : row.type === `del` ? `-` : ` `);
 const rowClass = (row: DiffRow): string => {
@@ -42,8 +44,9 @@ const rowClass = (row: DiffRow): string => {
             @click="emit('open')"
         >
             <Icon name="file-edit" class="text-2xs text-subtle" />
-            <span class="truncate font-mono">{{ path }}</span>
-            <span v-if="truncated" class="ml-auto shrink-0 text-subtle">truncated</span>
+            <span class="min-w-0 flex-1 truncate font-mono">{{ path }}</span>
+            <DiffStat :additions="stat.additions" :deletions="stat.deletions" />
+            <span v-if="truncated" class="shrink-0 text-subtle">truncated</span>
         </button>
         <pre
             class="scrollbar-thin max-h-56 overflow-auto py-0.5 text-2xs leading-relaxed"

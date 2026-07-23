@@ -30,8 +30,15 @@ const containerRoot = (): string => {
     return ``;
 };
 
+// Git diff output prefixes each side of a file with a one-segment marker: `a/` `b/` by default, `i/` (index)
+// `w/` (working tree) `c/` (commit) `o/` (object) under `diff.mnemonicPrefix`, and `1/` `2/` from
+// `git diff --no-index`. A real workspace path effectively never starts with one of these bare single-char
+// segments, so a copied `a/src/foo.ts` diff path should open the actual src/foo.ts (VS Code 1.130 parity — the
+// prior code opened the literal a/… path and landed on the not-found state).
+const DIFF_PREFIX = /^[abiwco12]\//;
+
 // Split a matched reference into its path and 1-based line: `foo.ts:12:3` and `foo.ts(12,3)` both yield line 12.
-const parseRef = (ref: string): { readonly path: string; readonly line?: number } => {
+export const parseRef = (ref: string): { readonly path: string; readonly line?: number } => {
     const colon = /^(.*?):(\d+)(?::\d+)?$/.exec(ref);
     if (colon?.[1] !== undefined) {
         return { path: colon[1], line: Number(colon[2]) };
@@ -45,9 +52,11 @@ const parseRef = (ref: string): { readonly path: string; readonly line?: number 
 
 // Map a matched path to the root-relative path the editor opens, or undefined if it points outside the workspace
 // (a system path like /usr/lib/…, or an absolute path under some other root the client can't map).
-const toWorkspacePath = (rawPath: string): string | undefined => {
+export const toWorkspacePath = (rawPath: string): string | undefined => {
     if (!rawPath.startsWith(`/`)) {
-        return rawPath.replace(/^\.\//, ``);
+        // An explicit `./` lead is a tool-emitted relative path, never a diff side — strip only the `./`.
+        // Anything else may carry a git-diff prefix (a/ b/ i/ w/ …), which is stripped to the real path.
+        return rawPath.startsWith(`./`) ? rawPath.slice(2) : rawPath.replace(DIFF_PREFIX, ``);
     }
     const root = containerRoot();
     if (root === `` || !rawPath.startsWith(`${root}/`)) {

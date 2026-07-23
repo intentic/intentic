@@ -361,12 +361,16 @@ export const GitStatusSchema = z.object({ branch: z.string(), dirty: z.boolean()
 export const GitFilesSchema = z.object({ files: z.array(z.string()) });
 export const GitFileSchema = z.object({ path: z.string(), content: z.string() });
 export const CommitResultSchema = z.object({ committed: z.boolean() });
-// One uncommitted change in a repo's working tree (status vs HEAD, untracked included).
+// One change to a file — an uncommitted working-tree change (status vs HEAD, untracked included), an agent
+// worktree's delta vs its base, or a file in a commit. `additions`/`deletions` are the numstat line counts,
+// undefined for a binary file (git reports "-"/"-") or an untracked file (no HEAD blob to diff against).
 export const GitChangeSchema = z.object({
     // Repo-relative path with forward slashes; for "renamed" the NEW path (`from` carries the old one).
     path: z.string(),
     status: z.enum(["added", "modified", "deleted", "renamed", "type-changed"]),
     from: z.string().optional(),
+    additions: z.number().optional(),
+    deletions: z.number().optional(),
 });
 export type GitChange = z.infer<typeof GitChangeSchema>;
 export const RepoChangesSchema = z.object({
@@ -411,12 +415,10 @@ export const GitLogQuerySchema = RepoParamSchema.extend({ limit: z.coerce.number
 export const GitReposSchema = z.object({ repos: z.array(z.string()) });
 export type GitRepos = z.infer<typeof GitReposSchema>;
 export const GitCommitDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema });
-// One file a commit changed (vs its first parent; a root commit vs the empty tree), with its line stat — the
-// graph's detail tree renders these and reuses the diff UI on click. `additions`/`deletions` are undefined for
-// a binary file (git's numstat reports "-"/"-").
-export const GitCommitFileSchema = GitChangeSchema.extend({ additions: z.number().optional(), deletions: z.number().optional() });
-export type GitCommitFile = z.infer<typeof GitCommitFileSchema>;
-export const GitCommitDiffSchema = z.object({ files: z.array(GitCommitFileSchema) });
+// A commit's changed files (vs its first parent; a root commit vs the empty tree) — the graph's detail tree
+// renders these (line stats included) and reuses the diff UI on click. Just GitChanges: the line stats live on
+// GitChange now, so working-tree and commit files share one shape.
+export const GitCommitDiffSchema = z.object({ files: z.array(GitChangeSchema) });
 export type GitCommitDiff = z.infer<typeof GitCommitDiffSchema>;
 export const GitCommitFileDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSchema, path: z.string().min(1) });
 // Git write actions from the graph's commit context menu (VSCode "Git Graph" parity). Non-destructive: branch

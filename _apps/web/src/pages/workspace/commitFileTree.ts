@@ -1,4 +1,4 @@
-import type { GitCommitFile } from "@intentic-app/api-contract";
+import type { GitChange } from "@intentic-app/api-contract";
 
 /* Turn a commit's flat changed-file list into a collapsible directory tree (the shape GitGraph.vue's detail
  * renders), with VSCode-style "compact folders": a directory that holds nothing but a single subdirectory is
@@ -8,7 +8,7 @@ import type { GitCommitFile } from "@intentic-app/api-contract";
 interface FileNode {
     readonly type: "file";
     readonly name: string;
-    readonly file: GitCommitFile;
+    readonly file: GitChange;
 }
 interface DirNode {
     readonly type: "dir";
@@ -25,14 +25,14 @@ export type TreeNode = FileNode | DirNode;
 // key) for a dir, or the file path (diff target) for a file.
 export type FileTreeRow =
     | { readonly kind: "dir"; readonly depth: number; readonly name: string; readonly path: string; readonly expanded: boolean }
-    | { readonly kind: "file"; readonly depth: number; readonly name: string; readonly path: string; readonly file: GitCommitFile };
+    | { readonly kind: "file"; readonly depth: number; readonly name: string; readonly path: string; readonly file: GitChange };
 
 interface Raw {
     readonly dirs: Map<string, Raw>;
     readonly files: FileNode[];
 }
 
-export const buildFileTree = (files: readonly GitCommitFile[]): TreeNode[] => {
+export const buildFileTree = (files: readonly GitChange[]): TreeNode[] => {
     const root: Raw = { dirs: new Map(), files: [] };
     for (const file of files) {
         const segments = file.path.split("/");

@@ -2,7 +2,8 @@
     "compilerOptions": {
         "outDir": "./dist",
         "rootDir": "./src",
-        "tsBuildInfoFile": "./.cache/tsbuildinfo"
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "types": ["node"]
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts"],

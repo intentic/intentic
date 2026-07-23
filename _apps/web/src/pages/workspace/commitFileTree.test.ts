@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { GitCommitFile } from "@intentic-app/api-contract";
+import type { GitChange } from "@intentic-app/api-contract";
 import { buildFileTree, flattenFileTree, type TreeNode } from "./commitFileTree";
 
-const file = (path: string): GitCommitFile => ({ path, status: "modified", additions: 1, deletions: 0 });
+const file = (path: string): GitChange => ({ path, status: "modified", additions: 1, deletions: 0 });
 const childrenOf = (node: TreeNode | undefined): readonly TreeNode[] => (node?.type === "dir" ? node.children : []);
 
 describe(`buildFileTree`, () => {

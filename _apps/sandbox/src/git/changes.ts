@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { FileDiff, GitChange, GitCommit, GitCommitFile } from "@intentic/sandbox-contract";
+import type { FileDiff, GitChange, GitCommit } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { EMPTY_TREE, MAX_FILE_DIFF_BYTES } from "../history/history.js";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../workspace/workspace-files.js";
@@ -88,6 +88,21 @@ const headSha = async (dir: string, git: GitRunner): Promise<string | undefined>
     }
 };
 
+// Merge per-file +/- line counts onto a change list from `git diff --numstat -z <target>` (rename detection on,
+// so a rename's counts key on the new path — the shape parseNumstatZ handles). A change with no numstat entry
+// (untracked file with no blob at the target, or a binary file) keeps undefined counts, which the UI omits.
+const withLineStats = async (dir: string, target: string, changes: GitChange[], git: GitRunner): Promise<GitChange[]> => {
+    if (changes.length === 0) {
+        return changes;
+    }
+    const { stdout } = await git(dir, ["diff", "--numstat", "-z", "--find-renames", target]);
+    const stats = parseNumstatZ(stdout);
+    return changes.map((change) => {
+        const stat = stats.get(change.path);
+        return stat === undefined ? change : { ...change, ...stat };
+    });
+};
+
 // One repo's uncommitted work via `git status --porcelain=v1 -z -uall`: -z gives exact NUL-delimited paths
 // (a rename is `R… new\0old`), -uall expands untracked dirs into real file paths (per-path actions need them).
 // info/exclude + .gitignore keep the scan off the repo dirs, .intentic/ and junk in the root repo.
@@ -118,7 +133,11 @@ export const changedFiles = async (dir: string, git: GitRunner = defaultGit): Pr
         const letter = staged === "?" ? "A" : worktree !== " " ? worktree : staged;
         changes.push({ path, status: STATUS_OF[letter] ?? "modified" });
     }
-    return { ...(branch !== "" ? { branch } : {}), changes };
+    // Line counts for tracked changes come from one diff vs HEAD (staged + unstaged in a single pass); on an
+    // unborn HEAD there's nothing to diff against, so every file is a stat-less "added".
+    const head = await headSha(dir, git);
+    const withStats = head === undefined ? changes : await withLineStats(dir, "HEAD", changes, git);
+    return { ...(branch !== "" ? { branch } : {}), changes: withStats };
 };
 
 // A repo's cumulative delta vs a fixed base sha — committed work since the base PLUS staged and unstaged
@@ -134,7 +153,9 @@ export const changesAgainstBase = async (dir: string, base: string, git: GitRunn
             changes.set(path, { path, status: "added" });
         }
     }
-    return [...changes.values()];
+    // Same numstat pass as the working-tree review, keyed to the worktree's base — untracked files (added above)
+    // carry no counts, matching the Changes panel.
+    return withLineStats(dir, base, [...changes.values()], git);
 };
 
 // Commit exactly `paths` — adds, edits AND deletions — leaving everything else uncommitted. The daemon owns
@@ -379,7 +400,7 @@ export const commitLog = async (dir: string, limit: number, git: GitRunner = def
 // The files one commit changed vs its first parent — `--root` renders a root commit's files as additions
 // (vs the empty tree) instead of nothing. Merges name-status (status + renames) with numstat (per-file
 // +/- line counts) by path, so the graph's detail tree can show both.
-export const commitChanges = async (dir: string, sha: string, git: GitRunner = defaultGit): Promise<GitCommitFile[]> => {
+export const commitChanges = async (dir: string, sha: string, git: GitRunner = defaultGit): Promise<GitChange[]> => {
     // Two independent read-only diff-tree spawns on the same commit — run them concurrently.
     const [statusOut, statsOut] = await Promise.all([
         git(dir, ["diff-tree", "--no-commit-id", "--name-status", "-r", "-z", "--root", sha]),

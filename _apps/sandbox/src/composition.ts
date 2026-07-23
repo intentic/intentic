@@ -6,7 +6,6 @@ import type {
     FileDiff,
     GitChange,
     GitCommit,
-    GitCommitFile,
     IntenticLine,
     WorkspaceChildren,
     WorkspaceTree,
@@ -210,7 +209,7 @@ export interface Services {
         // The git-history graph (read-only): one repo's commit log across all refs, and lazy per-commit detail
         // (changed files, then a file's before/after AT the commit).
         readonly commitLog: (dir: string, limit: number) => Promise<{ branch?: string; commits: GitCommit[] }>;
-        readonly commitChanges: (dir: string, sha: string) => Promise<GitCommitFile[]>;
+        readonly commitChanges: (dir: string, sha: string) => Promise<GitChange[]>;
         readonly commitFileDiff: (dir: string, sha: string, path: string) => Promise<FileDiff>;
         // Graph write actions (VSCode "Git Graph" parity). Non-destructive refs (branch/tag) and the
         // HEAD-movers (checkout/reset) return void + propagate git errors; the sequence ops return an

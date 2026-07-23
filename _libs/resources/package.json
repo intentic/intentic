@@ -30,7 +30,7 @@
         }
     },
     "scripts": {
-        "build": "tsc",
+        "build": "tsgo",
         "watch": "tsc --build --watch"
     },
     "dependencies": {
@@ -39,6 +39,7 @@
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
+        "@typescript/native-preview": "catalog:",
         "typescript": "catalog:"
     }
 }

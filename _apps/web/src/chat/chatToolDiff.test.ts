@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffRows } from "./chatToolDiff";
+import { diffRows, diffStat } from "./chatToolDiff";
 
 describe(`diffRows`, () => {
     it(`renders a Write (no oldText) as all-add rows`, () => {
@@ -41,5 +41,20 @@ describe(`diffRows`, () => {
         const rows = diffRows(undefined, Array.from({ length: 500 }, (_, i) => `l${i}`).join(`\n`));
         expect(rows.length).toBe(161);
         expect(rows.at(-1)?.type).toBe(`skip`);
+    });
+});
+
+describe(`diffStat`, () => {
+    it(`counts a replaced line as one add and one del`, () => {
+        expect(diffStat(`keep\nold\ntail`, `keep\nnew\ntail`)).toEqual({ additions: 1, deletions: 1 });
+    });
+
+    it(`counts a whole-file Write as all additions, past the render cap`, () => {
+        // The rendered rows cap at 160, but the stat is exact — every added line counts.
+        expect(diffStat(undefined, Array.from({ length: 500 }, (_, i) => `l${i}`).join(`\n`))).toEqual({ additions: 500, deletions: 0 });
+    });
+
+    it(`counts a pure insertion with no deletions`, () => {
+        expect(diffStat(`a\nc`, `a\nb\nc`)).toEqual({ additions: 1, deletions: 0 });
     });
 });

@@ -623,6 +623,9 @@ importers:
       '@types/ssh2':
         specifier: 'catalog:'
         version: 1.15.5
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       ssh2:
         specifier: 'catalog:'
         version: 1.17.0
@@ -669,6 +672,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1373,6 +1379,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1430,12 +1439,18 @@ importers:
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../../_tools/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(vite@8.1.2(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
   _libs/iq-engine:
     dependencies:
@@ -1479,6 +1494,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1498,6 +1516,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1517,6 +1538,9 @@ importers:
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../../_tools/tsconfig
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1579,6 +1603,9 @@ importers:
       '@types/ssh2':
         specifier: 'catalog:'
         version: 1.15.5
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1598,6 +1625,9 @@ importers:
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../../_tools/tsconfig
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1620,12 +1650,18 @@ importers:
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../../_tools/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.2(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(vite@8.1.2(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
 
   _libs/scaffold:
     dependencies:
@@ -1670,6 +1706,9 @@ importers:
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../../_tools/tsconfig
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1711,6 +1750,9 @@ importers:
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../../_tools/tsconfig
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1800,6 +1842,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

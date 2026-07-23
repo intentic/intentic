@@ -3,6 +3,7 @@ import { useDevice } from "@intentic-app/ui";
 import type { GitChange } from "@intentic-app/api-contract";
 import { computed, ref, toRef } from "vue";
 import { useRouter } from "vue-router";
+import DiffStat from "../components/DiffStat.vue";
 import { useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useChat } from "../composables/chat/useChat";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
@@ -127,7 +128,8 @@ const pendingDiscard = ref(false);
                     <span class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[change.status]">{{
                         STATUS_LETTER[change.status]
                     }}</span>
-                    <span class="truncate text-2xs text-muted max-md:text-xs" dir="rtl">{{ change.path }}</span>
+                    <span class="min-w-0 flex-1 truncate text-2xs text-muted max-md:text-xs" dir="rtl">{{ change.path }}</span>
+                    <DiffStat :additions="change.additions" :deletions="change.deletions" />
                 </button>
             </div>
         </div>

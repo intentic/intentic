@@ -87,11 +87,14 @@ const collapse = (rows: DiffRow[]): DiffRow[] => {
 
 const cap = (rows: DiffRow[]): DiffRow[] => (rows.length <= MAX_ROWS ? rows : [...rows.slice(0, MAX_ROWS), skip(rows.length - MAX_ROWS)]);
 
-export const diffRows = (oldText: string | undefined, newText: string): DiffRow[] => {
+// The full add/del/context rows before display collapse + cap — every changed line is present, so the line
+// counts are exact even for a whole-file Write or a diff the render caps. collapse() only folds context runs,
+// never add/del, so applying it for display never drops a counted line.
+const rawRows = (oldText: string | undefined, newText: string): DiffRow[] => {
     const oldLines = splitLines(oldText ?? "");
     const newLines = splitLines(newText);
     if (oldLines.length === 0) {
-        return cap(newLines.map(add));
+        return newLines.map(add);
     }
     let start = 0;
     while (start < oldLines.length && start < newLines.length && oldLines[start] === newLines[start]) {
@@ -103,10 +106,25 @@ export const diffRows = (oldText: string | undefined, newText: string): DiffRow[
         endOld--;
         endNew--;
     }
-    const rows = [
+    return [
         ...oldLines.slice(0, start).map(context),
         ...lcsRows(oldLines.slice(start, endOld), newLines.slice(start, endNew)),
         ...oldLines.slice(endOld).map(context),
     ];
-    return cap(collapse(rows));
+};
+
+export const diffRows = (oldText: string | undefined, newText: string): DiffRow[] => cap(collapse(rawRows(oldText, newText)));
+
+// Exact +additions / −deletions for the card header, counted from the uncollapsed/uncapped rows.
+export const diffStat = (oldText: string | undefined, newText: string): { additions: number; deletions: number } => {
+    let additions = 0;
+    let deletions = 0;
+    for (const row of rawRows(oldText, newText)) {
+        if (row.type === "add") {
+            additions++;
+        } else if (row.type === "del") {
+            deletions++;
+        }
+    }
+    return { additions, deletions };
 };

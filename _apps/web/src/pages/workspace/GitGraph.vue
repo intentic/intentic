@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { GitActionResult, GitCommit, GitCommitFile } from "@intentic-app/api-contract";
+import type { GitActionResult, GitChange, GitCommit } from "@intentic-app/api-contract";
 import { Segmented, timeAgo } from "@intentic-app/ui";
 import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, watch } from "vue";
+import DiffStat from "../../components/DiffStat.vue";
 import { useGitLog } from "../../composables/workspace/useGitLog";
 import { useRepos } from "../../composables/workspace/useRepos";
 import { buildFileTree, flattenFileTree } from "./commitFileTree";
@@ -45,7 +46,7 @@ const refBadge = (ref: string): { tag: boolean; label: string } =>
 
 // --- inline expandable detail (accordion): one commit open at a time; its changed files load lazily ----------
 const openSha = ref<string | undefined>(undefined);
-const files = ref<readonly GitCommitFile[]>([]);
+const files = ref<readonly GitChange[]>([]);
 const filesLoading = ref(false);
 const filesError = ref<string | undefined>(undefined);
 // Changed files as a collapsible directory tree (compact folders); collapse state resets per opened commit.
@@ -90,7 +91,7 @@ const toggle = (sha: string): void => {
     openSha.value = openSha.value === sha ? undefined : sha;
 };
 
-const openFileDiff = (commit: GitCommit, change: GitCommitFile): void => {
+const openFileDiff = (commit: GitCommit, change: GitChange): void => {
     void commitFileDiff(commit.sha, change.path).then((body) => {
         emit(`open-diff`, {
             key: `commit:${repo}:${commit.sha}`,
@@ -406,15 +407,7 @@ const runAction = (kind: ActionKind, commit: GitCommit, name: string): Promise<u
                                             STATUS_LETTER[row.file.status]
                                         }}</span>
                                         <span class="min-w-0 flex-1 truncate text-content/90">{{ row.name }}</span>
-                                        <span
-                                            v-if="row.file.additions !== undefined || row.file.deletions !== undefined"
-                                            class="shrink-0 font-mono text-[0.65rem]"
-                                        >
-                                            <span v-if="row.file.additions" class="text-success">+{{ row.file.additions }}</span>
-                                            <span v-if="row.file.deletions" class="text-danger" :class="{ 'ml-1': row.file.additions }"
-                                                >−{{ row.file.deletions }}</span
-                                            >
-                                        </span>
+                                        <DiffStat :additions="row.file.additions" :deletions="row.file.deletions" />
                                     </button>
                                 </template>
                             </div>

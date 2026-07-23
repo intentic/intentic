@@ -60,8 +60,9 @@ test("changedFiles maps porcelain states, expands untracked dirs, and skips igno
 
     const { branch, changes } = await changedFiles(dir);
     expect(branch).not.toBe("");
-    expect(changes).toContainEqual({ path: "a.txt", status: "modified" });
-    expect(changes).toContainEqual({ path: "old.txt", status: "deleted" });
+    // Tracked changes carry numstat line counts (one diff vs HEAD); the untracked file has none (no HEAD blob).
+    expect(changes).toContainEqual({ path: "a.txt", status: "modified", additions: 1, deletions: 1 });
+    expect(changes).toContainEqual({ path: "old.txt", status: "deleted", additions: 0, deletions: 1 });
     expect(changes).toContainEqual({ path: "new/b.txt", status: "added" });
     expect(changes.some((change) => change.path.includes(".env"))).toBe(false);
 });
@@ -233,7 +234,17 @@ test("changedFiles reports a staged rename with its original path", async () => 
     const dir = await tempRepo();
     await sh(dir, "mv", "a.txt", "b.txt");
     const { changes } = await changedFiles(dir);
-    expect(changes).toEqual([{ path: "b.txt", status: "renamed", from: "a.txt" }]);
+    // A pure rename moves no lines — numstat reports 0/0 (rename detection on).
+    expect(changes).toEqual([{ path: "b.txt", status: "renamed", from: "a.txt", additions: 0, deletions: 0 }]);
+});
+
+test("changedFiles leaves a binary file's counts undefined", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "blob.bin"), Buffer.from([0, 1, 2, 0, 4]));
+    await sh(dir, "add", "-A");
+    const { changes } = await changedFiles(dir);
+    // Git's numstat prints "-\t-" for a binary file; both counts stay undefined (the UI shows no stat).
+    expect(changes).toEqual([{ path: "blob.bin", status: "added" }]);
 });
 
 test("changedFiles treats everything as added on an unborn HEAD", async () => {
@@ -256,6 +267,7 @@ test("commitPaths commits exactly the requested paths — deletions included —
     expect(await sh(dir, "log", "-1", "--format=%s %an")).toBe("pick two intentic");
     expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).not.toContain("a.txt");
     const { changes } = await changedFiles(dir);
+    // commitPaths reset the index, so the stale staged left.txt is untracked again — no numstat vs HEAD.
     expect(changes).toEqual([{ path: "left.txt", status: "added" }]);
 });
 
@@ -344,8 +356,9 @@ test("changesAgainstBase folds committed + staged + unstaged + untracked into on
     await writeFile(join(dir, ".env"), "SECRET=x\n");
 
     const changes = await changesAgainstBase(dir, base);
-    expect(changes).toContainEqual({ path: "a.txt", status: "modified" });
-    expect(changes).toContainEqual({ path: "staged.txt", status: "added" });
+    // Tracked deltas vs base carry counts (one numstat pass); the untracked file has none.
+    expect(changes).toContainEqual({ path: "a.txt", status: "modified", additions: 1, deletions: 1 });
+    expect(changes).toContainEqual({ path: "staged.txt", status: "added", additions: 1, deletions: 0 });
     expect(changes).toContainEqual({ path: "fresh.txt", status: "added" });
     expect(changes.some((change) => change.path.includes(".env"))).toBe(false);
     expect(changes).toHaveLength(3);
@@ -356,5 +369,5 @@ test("changesAgainstBase reports a committed rename with its original path", asy
     const base = await sh(dir, "rev-parse", "HEAD");
     await sh(dir, "mv", "a.txt", "b.txt");
     await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "rename");
-    expect(await changesAgainstBase(dir, base)).toEqual([{ path: "b.txt", status: "renamed", from: "a.txt" }]);
+    expect(await changesAgainstBase(dir, base)).toEqual([{ path: "b.txt", status: "renamed", from: "a.txt", additions: 0, deletions: 0 }]);
 });

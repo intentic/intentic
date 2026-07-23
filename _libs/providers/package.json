@@ -30,7 +30,7 @@
         }
     },
     "scripts": {
-        "build": "tsc",
+        "build": "tsgo",
         "watch": "tsc --build --watch",
         "test": "vitest run",
         "test:watch": "vitest"
@@ -48,6 +48,7 @@
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
         "@types/ssh2": "catalog:",
+        "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:"
     }
