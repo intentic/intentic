@@ -19,12 +19,9 @@
 set -euo pipefail
 
 VERSION="${1:?usage: publish-catchup.sh <version>   e.g. 2.0.0 (must be > 1.125.1 for a clean set)}"
-cd "$(dirname "$0")/../.."
-
-# Full public dependency-closure, topological (deps first) — mirrors _tools/scripts/publish-npm.sh.
-PUB=(_tools/constants _apps/sync _libs/graph _libs/resources _libs/engine _libs/need-resolver _libs/providers \
-     _libs/extension-api _libs/sandbox-contract _apps/acp-bridge _libs/scaffold _libs/state-resolver _apps/cli \
-     _libs/workspace-ignore _libs/iq-engine _libs/iq-recall _apps/iq _libs/sdk)
+DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$DIR/packages.sh"   # PUB — the shared publish list, so this can't drift from the CI release
+cd "$DIR/../.."
 
 command -v pnpm >/dev/null || { echo "pnpm not found on PATH."; exit 1; }
 command -v node >/dev/null || { echo "node not found on PATH."; exit 1; }
