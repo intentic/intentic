@@ -9,6 +9,7 @@
 **/generated
 **/out-tsc
 **/.astro
+**/.wrangler
 **/*.tsbuildinfo
 **/npm-debug.log*
 **/pnpm-debug.log*
