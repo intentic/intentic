@@ -18,7 +18,6 @@ import {
     type ToolCallLocation,
     type ToolCallStatus,
     type ToolKind,
-    usesLiveCatalog,
 } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
@@ -59,14 +58,11 @@ export const providerDefaultModel = ref<Record<AgentProvider, string>>({ claude:
 export type CatalogLoadState = "idle" | "loading" | "loaded" | "error";
 export const providerModelsState = ref<Record<AgentProvider, CatalogLoadState>>({ claude: `idle`, codex: `idle`, grok: `idle` });
 
-// The model a fresh conversation seeds for a provider+harness. Under the Claude Code harness a non-Claude
-// provider sends the translator's mapped id (the static catalog's entry). Natively every provider names its
-// live daemon default; before the first catalog load Claude falls back to its stable `opus` alias (always
-// valid) and codex/grok send empty (the daemon then resolves its own catalog default).
-const defaultModelFor = (provider: AgentProvider, harness: AgentHarness): string => {
-    if (!usesLiveCatalog(provider, harness)) {
-        return modelsFor(provider, harness)[0]?.value ?? ``;
-    }
+// The model a fresh conversation seeds for a provider. Harness-independent: codex/grok run the SAME subscription
+// model ids natively and under the Claude Code harness (the translator serves them), so the catalog no longer
+// forks by harness. Every provider names its live daemon default; before the first catalog load Claude falls
+// back to its stable `opus` alias (always valid) and codex/grok send empty (the daemon resolves its default).
+const defaultModelFor = (provider: AgentProvider): string => {
     // An unseeded provider key (an ACP agent) has no catalog — the agent owns its own model, so empty rides.
     const live = providerDefaultModel.value[provider] ?? ``;
     if (live !== ``) {
@@ -75,16 +71,12 @@ const defaultModelFor = (provider: AgentProvider, harness: AgentHarness): string
     return provider === `claude` ? `opus` : ``;
 };
 
-// The model options for a provider+harness picker/chip: the provider's live daemon catalog, with the static
-// catalog as the pre-load floor (Claude's tier aliases; codex/grok empty) — except under the Claude Code
-// harness, where a non-Claude provider's list is the translator's static mapping. Shared by the composer pill
-// and the menu bodies so their list + label logic can't drift.
-export const modelOptionsFor = (provider: AgentProvider, harness: AgentHarness): CatalogOption[] => {
-    if (!usesLiveCatalog(provider, harness)) {
-        return modelsFor(provider, harness);
-    }
+// The model options for a provider's picker/chip: the provider's live daemon catalog, with the static catalog
+// as the pre-load floor (Claude's tier aliases; codex/grok empty). Harness-independent (the harness is a
+// separate axis now). Shared by the composer pill and the menu bodies so their list + label logic can't drift.
+export const modelOptionsFor = (provider: AgentProvider): CatalogOption[] => {
     const live = providerModels.value[provider] ?? [];
-    return live.length > 0 ? live : modelsFor(provider, `native`);
+    return live.length > 0 ? live : modelsFor(provider);
 };
 // Installed ACP agent providers (agent-kind capabilities): id + display label, loaded on the same reachable
 // seam as accounts/models (useChat.loadAcpProviders) so the picker lists them. Empty until the first load.
@@ -97,8 +89,8 @@ export const providerDisplayLabel = (provider: AgentProvider): string =>
 
 // The display label for a selected model id — the option's label, else the provider name so the chip is never
 // blank (Grok's catalog can be briefly empty on first load; an ACP agent has no model options at all).
-export const modelLabelFor = (provider: AgentProvider, harness: AgentHarness, modelId: string): string =>
-    modelOptionsFor(provider, harness).find((option) => option.value === modelId)?.label ?? providerDisplayLabel(provider);
+export const modelLabelFor = (provider: AgentProvider, modelId: string): string =>
+    modelOptionsFor(provider).find((option) => option.value === modelId)?.label ?? providerDisplayLabel(provider);
 
 // The provider tabs shown wherever accounts are picked (the account dialog + the composer's connect gate).
 // Labels differ from the internal ids (codex → "ChatGPT").
@@ -246,7 +238,7 @@ interface TurnDefaults {
 const readModels = (stored: unknown): Record<AgentProvider, string> => {
     const raw = (typeof stored === `object` && stored !== null ? stored : {}) as Record<string, unknown>;
     const modelFor = (provider: AgentProvider): string =>
-        typeof raw[provider] === `string` ? (raw[provider] as string) : defaultModelFor(provider, `native`);
+        typeof raw[provider] === `string` ? (raw[provider] as string) : defaultModelFor(provider);
     return { claude: modelFor(`claude`), codex: modelFor(`codex`), grok: modelFor(`grok`) };
 };
 
@@ -303,14 +295,11 @@ watch(
     },
 );
 
-// The model to restore for a provider+harness: under the Claude Code harness a non-Claude provider always uses
-// the translator's deterministic mapped id; natively it's the one the user last picked for that provider
-// (persisted), else the provider's default. The single source every model-reset site routes through, so a
-// per-provider pick survives switching provider/harness away and back.
-export const rememberedModelFor = (provider: AgentProvider, harness: AgentHarness): string =>
-    usesLiveCatalog(provider, harness)
-        ? turnDefaults.models.value[provider] || defaultModelFor(provider, harness)
-        : defaultModelFor(provider, harness);
+// The model to restore for a provider: the one the user last picked for it (persisted), else the provider's
+// default. Harness-independent — the model survives a harness switch (the catalog is shared), so switching
+// Default ↔ Claude Code keeps the chosen model. The single source every model-reset site routes through.
+export const rememberedModelFor = (provider: AgentProvider): string =>
+    turnDefaults.models.value[provider] || defaultModelFor(provider);
 
 // Connected provider accounts and the per-provider selection for new turns. In-memory (NOT persisted like
 // turnDefaults): account ids are daemon-minted per sandbox, so they'd be meaningless across a sandbox switch —
@@ -449,7 +438,7 @@ export class Conversation {
     readonly provider = ref<AgentProvider>(turnDefaults.provider.value);
     readonly harness = ref<AgentHarness>(turnDefaults.harness.value);
     readonly account = ref<string | undefined>(rememberedAccountFor(turnDefaults.provider.value));
-    readonly model = ref<string>(rememberedModelFor(turnDefaults.provider.value, turnDefaults.harness.value));
+    readonly model = ref<string>(rememberedModelFor(turnDefaults.provider.value));
     readonly effort = ref<string>(turnDefaults.effort.value);
     readonly thinking = ref<boolean>(turnDefaults.thinking.value);
 
@@ -505,7 +494,7 @@ export class Conversation {
         this.provider.value = next;
         // Switching back to the session's own runtime restores its account, so the next send resumes it.
         this.account.value = next === this.session.value?.provider ? this.session.value.account : rememberedAccountFor(next);
-        this.model.value = rememberedModelFor(next, this.harness.value);
+        this.model.value = rememberedModelFor(next);
         if (next !== `claude` && this.effort.value === `max`) {
             this.effort.value = `xhigh`;
         }
@@ -527,16 +516,16 @@ export class Conversation {
         this.refreshSwitchNotice();
     }
 
-    // Switch the harness (native runtime vs the Claude Code loop) for the next turn and re-scope the model (the
-    // list diverges by harness for codex/grok). Writes the pick back to the module default so the next new chat
-    // inherits it. Mid-chat this retires the session at the next send, exactly like a provider/account switch —
-    // the runtimes mint incompatible sessions. Meaningful only for codex/grok; claude is always its own loop.
+    // Switch the harness (native runtime vs the Claude Code loop) for the next turn. The model is kept — the
+    // catalog is harness-independent now (codex/grok run the same subscription ids either way). Writes the pick
+    // back to the module default so the next new chat inherits it. Mid-chat this retires the session at the next
+    // send, exactly like a provider/account switch — the runtimes mint incompatible sessions. Meaningful only for
+    // codex/grok; claude is always its own loop.
     selectHarness(next: AgentHarness): void {
         if (this.streaming.value || next === this.harness.value) {
             return;
         }
         this.harness.value = next;
-        this.model.value = rememberedModelFor(this.provider.value, next);
         turnDefaults.harness.value = next;
         this.activeModel.value = null;
         this.contextUsage.value = undefined;
@@ -591,7 +580,7 @@ export class Conversation {
         this.provider.value = `claude`;
         this.harness.value = `native`;
         this.account.value = account;
-        this.model.value = rememberedModelFor(`claude`, `native`);
+        this.model.value = rememberedModelFor(`claude`);
         this.title.value = title;
         this.activeModel.value = null;
         this.error.value = null;

@@ -310,7 +310,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </button>
                 <div
                     v-if="message.text"
-                    class="chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-[0.8125rem] leading-[1.6] text-content/90"
+                    class="chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-[0.75rem] leading-[1.6] text-content/90"
                 >
                     {{ message.text }}
                 </div>

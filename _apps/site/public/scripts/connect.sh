@@ -337,7 +337,12 @@ ensure_image() {
             return 1
         fi
         echo "intentic: building the local sandbox image ${image} from your checkout (cached when unchanged; the first build takes a few minutes)…"
-        if docker build -f "$repo_root/_apps/sandbox/Dockerfile" -t "$image" "$repo_root"; then
+        # The Dockerfile compiles OUTSIDE Docker: prepare-image-trees.sh builds the six baked packages into
+        # .image-out, which the build then consumes as the named context `trees` (COPY --from=trees …). A bare
+        # `docker build` can't resolve that context and fails, so BOTH steps run together, from the repo root —
+        # otherwise every "rebuild" silently falls through to the previous image below and outlives source edits.
+        if (cd "$repo_root" && bash _tools/scripts/prepare-image-trees.sh &&
+            docker build --build-context trees=.image-out -f _apps/sandbox/Dockerfile -t "$image" .); then
             return 0
         fi
         if docker image inspect "$image" >/dev/null 2>&1; then

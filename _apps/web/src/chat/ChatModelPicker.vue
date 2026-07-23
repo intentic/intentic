@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useDevice, useListNavigation } from "@intentic-app/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
-import { type AgentProvider, PROVIDERS } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, PROVIDERS } from "@intentic/sandbox-contract";
 import { BADGE_META } from "../composables/chat/catalog";
 import { acpProviders, providerAccounts, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
 import { filterEntries, type PickerEntry, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
@@ -10,15 +10,24 @@ import ProviderLogo from "./ProviderLogo.vue";
 
 /* The unified model picker (search + provider rail + one grouped list + session-control footer) — width-
  * agnostic so the desktop panel hosts it in a Popover and the mobile panel in a BottomSheet. Rows span every
- * provider: picking one applies provider+harness+model atomically (useChat.selectModel); a mid-chat cross-
- * provider pick just re-points the selection — the fresh session starts lazily at the next send. The rail is
- * a FILTER, never a switcher: it scopes the list without touching the session. Both hosts remount the body
- * per open, so the query/rail reset and the catalogs refresh on every open. */
+ * provider and are MODELS ONLY: picking one applies provider+model (useChat.selectModel), keeping the current
+ * harness. The harness (Default / Claude Code) is a separate axis, chosen via the footer chips — codex/grok run
+ * the same subscription model ids under either harness. A mid-chat cross-provider pick just re-points the
+ * selection — the fresh session starts lazily at the next send. The rail is a FILTER, never a switcher. Both
+ * hosts remount the body per open, so the query/rail reset and the catalogs refresh on every open. */
 
 const emit = defineEmits<{ selected: [] }>();
 
-const { provider, harness, model, thinking, streaming, messages, account, selectAccount, accounts, selectModel } = useChat();
+const { provider, harness, selectHarness, model, thinking, streaming, messages, account, selectAccount, accounts, selectModel } = useChat();
 const { mobile } = useDevice();
+
+// The harness axis, shown as footer chips for codex/grok (claude is always its own loop). "Default" is the
+// provider's native runtime; "Claude Code" runs its model through the Claude Code harness.
+const HARNESS_OPTIONS: readonly { label: string; value: AgentHarness }[] = [
+    { label: `Default`, value: `native` },
+    { label: `Claude Code`, value: `claude-code` },
+];
+const harnessChoosable = computed(() => provider.value === `codex` || provider.value === `grok`);
 
 const query = ref(``);
 const rail = ref<AgentProvider | undefined>();
@@ -45,14 +54,10 @@ const flat = computed<readonly PickerEntry[]>(() => sections.value.flatMap((sect
 
 const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (entry) => entry.key);
 
-// The current selection's row(s): provider+model, and for codex/grok also the harness (claude ignores
-// harness — it is always its own loop, so any leftover harness value doesn't distinguish its rows).
-const sameScope = (entry: PickerEntry): boolean =>
-    entry.provider === provider.value && (entry.provider === `claude` || entry.harness === harness.value);
-const isSelected = (entry: PickerEntry): boolean => sameScope(entry) && entry.value === model.value;
-// Mid-stream, a model-only swap on the current provider/harness is allowed (today's semantics); anything
-// that would switch provider or harness is not.
-const isDisabled = (entry: PickerEntry): boolean => streaming.value && !sameScope(entry);
+// The selected row: the active provider's current model (harness is a separate axis — the footer chips).
+const isSelected = (entry: PickerEntry): boolean => entry.provider === provider.value && entry.value === model.value;
+// Mid-stream, only a same-provider model swap is allowed (a provider switch retires the session).
+const isDisabled = (entry: PickerEntry): boolean => streaming.value && entry.provider !== provider.value;
 
 const pick = (entry: PickerEntry): void => {
     if (isDisabled(entry)) {
@@ -88,8 +93,7 @@ const railTo = (target: AgentProvider | undefined): void => {
     }
 };
 
-const rowAriaLabel = (entry: PickerEntry): string =>
-    `${entry.label}${entry.harness === `claude-code` ? ` via Claude Code` : ``}${isSelected(entry) ? ` — current model` : ``}`;
+const rowAriaLabel = (entry: PickerEntry): string => `${entry.label}${isSelected(entry) ? ` — current model` : ``}`;
 
 // The provider rail: the native three plus every installed ACP agent.
 const railProviders = computed<readonly { label: string; value: AgentProvider }[]>(() => [
@@ -104,10 +108,10 @@ const providerNeedsReauth = (target: AgentProvider): boolean => (providerAccount
 const railTooltip = (target: AgentProvider): string =>
     `${providerDisplayLabel(target)}${target === provider.value ? ` · active` : ``}${providerNeedsReauth(target) ? ` · needs reconnect` : ``}`;
 
-// A group whose native catalog hasn't produced rows yet (only the deterministic translator row, if any) gets
-// a state row: the codex/grok native lists have no static floor, so pre-load/error would otherwise read as
-// "this provider has nothing". Claude's alias floor always renders, so it never qualifies.
-const missingNative = (rows: readonly { entry: PickerEntry }[]): boolean => rows.every((row) => row.entry.harness === `claude-code`);
+// A group with no rows yet gets a state row (loading / error+retry): the codex/grok catalogs have no static
+// floor, so a pre-load/error would otherwise read as "this provider has nothing". Claude's alias floor always
+// renders, so it never qualifies.
+const missingModels = (rows: readonly { entry: PickerEntry }[]): boolean => rows.length === 0;
 const stateFor = (target: AgentProvider) => providerModelsState.value[target];
 
 // The account the turn will use: the explicit pick, else the first (the daemon's default) — so the picker
@@ -115,7 +119,7 @@ const stateFor = (target: AgentProvider) => providerModelsState.value[target];
 const activeAccountId = computed(() => account.value ?? accounts.value[0]?.id);
 
 const footerVisible = computed(
-    () => accounts.value.length > 1 || provider.value === `claude` || harness.value === `claude-code` || messages.value.length > 0,
+    () => accounts.value.length > 1 || provider.value === `claude` || harnessChoosable.value || messages.value.length > 0,
 );
 
 onMounted(() => {
@@ -232,7 +236,6 @@ onMounted(() => {
                         <span class="max-w-[55%] shrink-0 truncate text-sm" :class="isSelected(row.entry) ? 'text-link' : 'text-content'">
                             {{ row.entry.label }}
                         </span>
-                        <span v-if="row.entry.harness === `claude-code`" class="shrink-0 text-2xs text-subtle">via Claude Code</span>
                         <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ row.entry.metadata?.description }}</span>
                         <Icon
                             v-for="badge in (row.entry.metadata?.badges ?? []).slice(0, 3)"
@@ -243,8 +246,8 @@ onMounted(() => {
                         />
                         <Icon v-if="isSelected(row.entry)" name="check" class="shrink-0 text-2xs text-primary-500" aria-hidden="true" />
                     </button>
-                    <!-- Native-catalog state row (loading / error+retry) — searching hides it. -->
-                    <template v-if="!searching && section.provider !== undefined && missingNative(section.rows)">
+                    <!-- Catalog state row (loading / error+retry) — searching hides it. -->
+                    <template v-if="!searching && section.provider !== undefined && missingModels(section.rows)">
                         <div v-if="stateFor(section.provider) === `error`" class="flex items-center gap-2 px-3 py-1.5 text-2xs text-danger">
                             <span>Couldn't load models.</span>
                             <button type="button" class="text-link" @click="void loadProviderModels(section.provider)">Retry</button>
@@ -267,7 +270,7 @@ onMounted(() => {
         <div class="sr-only" aria-live="polite">{{ flat.length }} models</div>
 
         <!-- Session controls that have no T3Chat analogue: which connected account serves the next turn, the
-             harness credential caveat, Claude's extended-thinking knob, and the mid-chat switch hint. -->
+             harness axis (codex/grok), Claude's extended-thinking knob, and the mid-chat switch hint. -->
         <div v-if="footerVisible" class="flex flex-col gap-2 border-t border-line p-2">
             <template v-if="accounts.length > 1">
                 <span class="text-2xs uppercase tracking-wide text-subtle">Account</span>
@@ -292,10 +295,25 @@ onMounted(() => {
                 </div>
             </template>
 
-            <p v-if="provider !== `claude` && harness === `claude-code`" class="text-2xs text-subtle">
-                Runs this model through the Claude Code harness — set an {{ provider === `codex` ? "OpenAI" : "xAI" }} API key in Sandbox ▸ Agent
-                (your subscription sign-in can't be used here).
-            </p>
+            <!-- Harness axis (codex/grok): Default = the provider's own runtime; Claude Code = its model through
+                 the Claude Code harness. Separate from the model — the same subscription ids run under either. -->
+            <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
+                <span class="text-2xs uppercase tracking-wide text-subtle">Harness</span>
+                <div class="flex items-center gap-1">
+                    <button
+                        v-for="h in HARNESS_OPTIONS"
+                        :key="h.value"
+                        type="button"
+                        class="composer-ghost h-7 gap-1 px-2.5 text-xs font-medium max-md:h-10"
+                        :class="{ 'composer-active': harness === h.value }"
+                        :disabled="streaming"
+                        :aria-pressed="harness === h.value"
+                        @click="selectHarness(h.value)"
+                    >
+                        {{ h.label }}
+                    </button>
+                </div>
+            </div>
 
             <!-- Codex reasoning is always on (no toggle); extended thinking is a Claude knob. -->
             <div v-if="provider === `claude`" class="flex items-center justify-between gap-2">

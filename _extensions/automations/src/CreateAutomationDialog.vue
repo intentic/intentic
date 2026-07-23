@@ -1,14 +1,5 @@
 <script setup lang="ts">
-import {
-    type AgentHarness,
-    type AgentProvider,
-    type CatalogOption,
-    HARNESSES,
-    ModelsSchema,
-    modelsFor,
-    PROVIDERS,
-    usesLiveCatalog,
-} from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type CatalogOption, HARNESSES, ModelsSchema, modelsFor, PROVIDERS } from "@intentic/sandbox-contract";
 import { Button, cmp, CopyButton, Dialog, Icon, ToggleSwitch } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { Cron } from "croner";
@@ -74,33 +65,31 @@ const form = reactive({
 });
 const schedule = reactive(defaultSchedule());
 
-// Whether the picked provider+harness reads the live daemon catalog (/{provider}/models — the same source chat
-// uses); the inverse pins the translator's static mapping instead.
-const liveCatalog = computed(() => usesLiveCatalog(form.agent, form.harness));
-
-// The picked provider's live model list — fetched lazily per provider, only while the form reads it.
+// The picked provider's live model list — fetched lazily per provider, only while the form reads it. The
+// catalog is the same under either harness (codex/grok run the same subscription ids via the translator), so
+// it's keyed by provider alone.
 const liveModels = useQuery({
     queryKey: computed(() => host().sandbox.key(`agent-models`, form.agent)),
     queryFn: async (): Promise<CatalogOption[]> =>
         ModelsSchema.parse(await host().sandbox.json(`/${form.agent}/models`)).models.map((model) => ({ value: model.id, label: model.label })),
-    enabled: computed(() => host().sandbox.reachable() && liveCatalog.value),
+    enabled: computed(() => host().sandbox.reachable()),
 });
 
 // The wake's model chips: "Default" (empty — the daemon resolves the provider's own default) plus the pinnable
-// ids for the picked provider+harness.
+// ids for the picked provider (with the static floor before the live load).
 const modelOptions = computed<CatalogOption[]>(() => {
-    const catalog = liveCatalog.value ? (liveModels.data.value ?? []) : modelsFor(form.agent, form.harness);
+    const catalog = liveModels.data.value ?? modelsFor(form.agent);
     return [{ value: ``, label: `Default` }, ...catalog.filter((option) => option.value !== ``)];
 });
 
-// A provider/harness switch invalidates a pinned model — back to that provider's default.
+// A provider switch invalidates a pinned model — back to that provider's default. A harness switch keeps it
+// (the catalog is harness-independent).
 const setAgent = (agent: AgentProvider): void => {
     form.agent = agent;
     form.model = ``;
 };
 const setHarness = (harness: AgentHarness): void => {
     form.harness = harness;
-    form.model = ``;
 };
 
 // Guard/agent/approval fold away by default — revealed on demand or when a recipe prefills a guard.
@@ -581,8 +570,8 @@ const submit = async (): Promise<void> => {
                             </button>
                         </div>
                         <p v-if="form.harness === 'claude-code'" class="text-xs text-muted">
-                            Runs this model through the Claude Code harness — set an {{ form.agent === "codex" ? "OpenAI" : "xAI" }} API key in
-                            Sandbox ▸ Agent (your subscription sign-in can't be used here).
+                            Runs this model through the Claude Code harness on your
+                            {{ form.agent === "codex" ? "ChatGPT" : "SuperGrok" }} subscription (connect it in Sandbox ▸ Agent).
                         </p>
                     </div>
                     <div class="ui-field">

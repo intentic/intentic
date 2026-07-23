@@ -84,7 +84,7 @@ const resizing = ref(false);
 const providerName = computed(() => providerLabel(provider.value));
 // The chip's model name: shared with the picker menu so they can't drift; falls back to the provider name (never
 // blank) while Grok's daemon catalog is still loading.
-const modelLabelText = computed(() => modelLabelFor(provider.value, harness.value, model.value));
+const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
 // An ACP provider owns its own model AND reasoning settings — no effort scale to offer (the segments hide).
 const nativeProvider = computed(() => provider.value === `claude` || provider.value === `codex` || provider.value === `grok`);
 const efforts = computed(() => (nativeProvider.value ? effortsFor(provider.value, model.value) : []));

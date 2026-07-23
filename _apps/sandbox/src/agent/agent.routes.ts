@@ -365,11 +365,15 @@ async function* runTurn(
                 yield { kind: "done" };
                 return;
             }
-            endpoint = {
-                baseUrl: services.config.translator.url,
-                authToken: services.config.translator.token,
-                model: routedModel(input.agent, input.model),
-            };
+            // The upstream model id for the routed turn. `gpt-5-codex` is the Codex CLI's own native id, but the
+            // translator's ChatGPT subscription does NOT serve it — it re-serves the account's real ids
+            // (gpt-5.4, gpt-5.5, gpt-5.6-*), and rejects gpt-5-codex with "unknown provider for model", whose
+            // non-SSE error body then breaks the harness stream. So for codex resolve the live catalog default
+            // whenever the pick is empty OR that dead id; a concrete live pick rides through. Grok keeps its own.
+            const routedCodexDead = input.model === undefined || input.model === "" || input.model === "gpt-5-codex";
+            const model =
+                input.agent === "codex" && routedCodexDead ? (await services.codexModels.models()).default : routedModel(input.agent, input.model);
+            endpoint = { baseUrl: services.config.translator.url, authToken: services.config.translator.token, model };
         } else {
             const accountId = input.account ?? (await services.claudeStore.list())[0]?.id;
             if (accountId !== undefined) {

@@ -1,62 +1,46 @@
-import {
-    type AgentHarness,
-    type AgentProvider,
-    type ModelMetadata,
-    modelMetadataFor,
-    modelsFor,
-    PROVIDERS,
-    providerLabel,
-} from "@intentic/sandbox-contract";
+import { type AgentProvider, type ModelMetadata, modelMetadataFor, PROVIDERS, providerLabel } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { acpProviders, modelOptionsFor } from "./conversation";
 
 /* The unified model-picker list: every provider's models flattened into one searchable entry set. Pure
  * derivation over the live catalogs (conversation.ts) plus the curated metadata (sandbox-contract) — the
- * picker component owns only its transient UI state (query, rail filter, highlight). */
+ * picker component owns only its transient UI state (query, rail filter, highlight). The harness (Default /
+ * Claude Code) is a separate axis, chosen via the picker's footer chips — NOT a row here — because codex/grok
+ * run the same subscription model ids under either harness, so the list no longer forks by harness. */
 
 export interface PickerEntry {
-    // `${provider}:${harness}:${value}` — unique even when an id repeats across harnesses (gpt-5-codex can be
-    // both a native catalog entry and the translator's claude-code mapping).
+    // `${provider}:${value}` — the model id is unique within a provider's (harness-independent) catalog.
     readonly key: string;
     readonly provider: AgentProvider;
-    readonly harness: AgentHarness;
     readonly value: string;
     readonly label: string;
     readonly metadata?: ModelMetadata;
 }
 
-const entryFor = (provider: AgentProvider, harness: AgentHarness, option: { label: string; value: string }): PickerEntry => {
+const entryFor = (provider: AgentProvider, option: { label: string; value: string }): PickerEntry => {
     const metadata = modelMetadataFor(option.value);
     return {
-        key: `${provider}:${harness}:${option.value}`,
+        key: `${provider}:${option.value}`,
         provider,
-        harness,
         value: option.value,
         label: option.label,
         ...(metadata !== undefined ? { metadata } : {}),
     };
 };
 
-// Every pickable model across providers, in PROVIDERS order: each provider's native catalog (live, with the
-// static floor pre-load), then — for codex/grok — its deterministic "via Claude Code" translator row. Claude
-// is always its own Claude Code loop, so it contributes native entries only. Installed ACP agents append one
-// row each: the agent owns its own model, so the row IS the provider (empty model id).
+// Every pickable model across providers, in PROVIDERS order: each provider's catalog (live, with the static
+// floor pre-load). Installed ACP agents append one row each: the agent owns its own model, so the row IS the
+// provider (empty model id).
 export const pickerEntries = computed<readonly PickerEntry[]>(() => [
-    ...PROVIDERS.flatMap(({ value: provider }) => [
-        ...modelOptionsFor(provider, `native`).map((option) => entryFor(provider, `native`, option)),
-        ...(provider === `claude` ? [] : modelsFor(provider, `claude-code`).map((option) => entryFor(provider, `claude-code`, option))),
-    ]),
-    ...acpProviders.value.map((agent) => entryFor(agent.id, `native`, { label: agent.label, value: `` })),
+    ...PROVIDERS.flatMap(({ value: provider }) => modelOptionsFor(provider).map((option) => entryFor(provider, option))),
+    ...acpProviders.value.map((agent) => entryFor(agent.id, { label: agent.label, value: `` })),
 ]);
 
 // Lowercase and strip separators on both sides, so "gpt5" matches "GPT-5" and "45" matches "4.5".
 const normalize = (text: string): string => text.toLowerCase().replace(/[\s.\-_]/g, ``);
 
 const haystackFor = (entry: PickerEntry): string =>
-    normalize(
-        `${entry.label} ${entry.value} ${providerLabel(entry.provider)} ${(entry.metadata?.badges ?? []).join(` `)}` +
-            (entry.harness === `claude-code` ? ` claude code harness` : ``),
-    );
+    normalize(`${entry.label} ${entry.value} ${providerLabel(entry.provider)} ${(entry.metadata?.badges ?? []).join(` `)}`);
 
 // Label-prefix hits outrank label-infix hits, which outrank id/provider/badge-only hits; ties keep the
 // stable provider order (sort is stable).

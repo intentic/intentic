@@ -299,8 +299,15 @@ if (-not $HasRegistry) {
         }
     } else {
         Write-Host "intentic: building the local sandbox image $SandboxImage from your checkout (cached when unchanged; the first build takes a few minutes)..."
-        docker build -f $Dockerfile -t $SandboxImage $RepoRoot
-        if ($LASTEXITCODE -ne 0) {
+        # The Dockerfile compiles OUTSIDE Docker: prepare-image-trees.sh builds the six baked packages into
+        # .image-out, consumed by the build as the named context `trees` (COPY --from=trees). A bare
+        # `docker build` can't resolve that context and fails, so both steps run together from the repo root.
+        Push-Location $RepoRoot
+        bash _tools/scripts/prepare-image-trees.sh
+        if ($LASTEXITCODE -eq 0) { docker build --build-context trees=.image-out -f _apps/sandbox/Dockerfile -t $SandboxImage . }
+        $buildExit = $LASTEXITCODE
+        Pop-Location
+        if ($buildExit -ne 0) {
             docker image inspect $SandboxImage *> $null
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "intentic: building $SandboxImage failed (see the docker output above) - continuing with the PREVIOUS local build, which does NOT include your latest changes."

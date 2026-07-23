@@ -31,7 +31,7 @@ const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
 const model = computed(() =>
-    props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.harness, props.agent.model) : undefined,
+    props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.model) : undefined,
 );
 const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
 

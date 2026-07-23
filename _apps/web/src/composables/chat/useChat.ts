@@ -7,7 +7,6 @@ import {
     type OauthAccount,
     type TranslatorAccounts,
     type UsageAccount,
-    usesLiveCatalog,
 } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
@@ -157,7 +156,7 @@ const restoreTabs = (): Conversation[] => {
         if (tab.provider !== undefined) {
             conversation.provider.value = tab.provider;
             conversation.account.value = rememberedAccountFor(tab.provider);
-            conversation.model.value = rememberedModelFor(tab.provider, conversation.harness.value);
+            conversation.model.value = rememberedModelFor(tab.provider);
         }
         if (tab.session !== undefined) {
             // Account ids are daemon-minted and loaded fresh per sandbox, so a restored session re-derives its
@@ -274,9 +273,13 @@ const selectProvider = (p: AgentProvider): void => {
     // — refetch on landing so the model picker is populated on arrival (the daemon caches, so this is cheap).
     void loadProviderModels(p);
 };
-// The active conversation's harness (native runtime vs the Claude Code loop). Only meaningful for codex/grok;
-// picked through selectModel's "via Claude Code" rows. A switch retires the session at the next send.
+// The active conversation's harness (Default = the provider's native runtime, vs the Claude Code loop). Only
+// meaningful for codex/grok; picked through the model picker's footer chips. A switch retires the session at
+// the next send.
 const harness = computed<AgentHarness>(() => active.value.harness.value);
+// Switch the active conversation's harness — an axis orthogonal to the model now (the catalog is shared, so the
+// chosen model rides across). No-ops on claude (always its own loop) and mid-stream (selectHarness guards both).
+const selectHarness = (next: AgentHarness): void => active.value.selectHarness(next);
 const model = computed<string>({
     get: () => active.value.model.value,
     set: (value) => {
@@ -286,28 +289,19 @@ const model = computed<string>({
         turnDefaults.models.value = { ...turnDefaults.models.value, [active.value.provider.value]: value };
     },
 });
-// One picker row = one atomic selection: provider, harness, and model land together (the unified picker's
-// rows span providers, and a codex/grok "via Claude Code" row is a harness choice too). The provider/harness
-// selectors no-op when unchanged and carry the session-switch bookkeeping; claude ignores harness entirely
-// (it is always its own loop), so its rows never touch it — a leftover claude-code harness on a claude
-// conversation stays put and its session keeps resuming.
-const selectModel = (pick: { provider: AgentProvider; harness: AgentHarness; value: string }): void => {
-    const sameScope = pick.provider === provider.value && (pick.provider === `claude` || pick.harness === harness.value);
-    if (streaming.value && !sameScope) {
+// One picker row = provider + model; the harness is a separate axis (the footer chips), so a model pick keeps
+// the current harness. A cross-provider pick re-points the selection (the fresh session starts lazily at the
+// next send). Mid-stream, only a same-provider model swap is allowed — a provider switch is not.
+const selectModel = (pick: { provider: AgentProvider; value: string }): void => {
+    if (streaming.value && pick.provider !== provider.value) {
         return;
     }
     if (pick.provider !== provider.value) {
         selectProvider(pick.provider);
     }
-    if (pick.provider !== `claude`) {
-        active.value.selectHarness(pick.harness);
-    }
     active.value.model.value = pick.value;
-    // Per-provider memory covers native picks only — claude-code translator ids are deterministic and derived
-    // (rememberedModelFor), never persisted.
-    if (pick.provider === `claude` || pick.harness === `native`) {
-        turnDefaults.models.value = { ...turnDefaults.models.value, [pick.provider]: pick.value };
-    }
+    // Per-provider memory, so switching provider away and back restores the pick (catalog is harness-independent).
+    turnDefaults.models.value = { ...turnDefaults.models.value, [pick.provider]: pick.value };
 };
 
 const effort = computed<string>({
@@ -596,13 +590,13 @@ export const loadProviderModels = async (target: AgentProvider): Promise<void> =
         })),
     };
     providerDefaultModel.value = { ...providerDefaultModel.value, [target]: body.default };
-    // Every native selection should carry a concrete offered id. Repoint anything empty OR no-longer-offered
-    // (a since-renamed/retired id like `grok-code-fast-1`, or a tier alias once the real ids load) to the
-    // default, so the picker highlights a selection and the chip always shows a name, never the bare icon.
+    // Every selection should carry a concrete offered id. Repoint anything empty OR no-longer-offered (a
+    // since-renamed/retired id like `grok-code-fast-1`, or a tier alias once the real ids load) to the default,
+    // so the picker highlights a selection and the chip always shows a name, never the bare icon. Harness-agnostic
+    // now — the catalog is shared, so a claude-code codex/grok selection is validated the same as a native one.
     const valid = new Set(body.models.map((entry) => entry.id));
     for (const conversation of conversations.value) {
-        const routed = !usesLiveCatalog(conversation.provider.value, conversation.harness.value);
-        if (conversation.provider.value === target && !routed && !valid.has(conversation.model.value)) {
+        if (conversation.provider.value === target && !valid.has(conversation.model.value)) {
             conversation.model.value = body.default;
         }
     }
@@ -828,7 +822,7 @@ export const openAgentConversation = (agent: {
     conversation.provider.value = agent.provider;
     conversation.harness.value = agent.harness;
     conversation.account.value = agent.account ?? rememberedAccountFor(agent.provider);
-    conversation.model.value = rememberedModelFor(agent.provider, agent.harness);
+    conversation.model.value = rememberedModelFor(agent.provider);
     conversation.title.value = agent.title ?? null;
     if (agent.sessionId !== undefined) {
         conversation.session.value = {
@@ -1053,6 +1047,7 @@ export function useChat() {
         provider,
         selectProvider,
         harness,
+        selectHarness,
         account,
         selectAccount,
         accounts,
