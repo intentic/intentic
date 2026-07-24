@@ -91,8 +91,8 @@ export interface LandingContent {
     ownership: LandingSectionIntro & { facts: LandingFact[] };
     // The sharing diagram: an owner configures one sandbox; invited teammates share it over their own tunnels.
     sharing: LandingSectionIntro & { people: SharingPerson[]; sandboxLabel: string; sandboxSub: string; note: string };
-    // The company teaser: sandboxes clustered around shared infra — links to the full docs reference architecture.
-    company: LandingSectionIntro & { platform: string[]; sharedInfra: string[]; teams: string[]; cta: string };
+    // The company teaser: a fleet of specialized agents (one per role/team) + the services they share — links to the full docs reference architecture.
+    company: LandingSectionIntro & { teams: string[]; sharedServices: string[]; cta: string };
     economics: LandingSectionIntro & { accounts: { name: string; detail: string }[]; points: string[] };
     connect: LandingSectionIntro & { steps: LandingFact[]; commandNote: string };
     finalCta: { heading: string; sub: string };
@@ -129,7 +129,7 @@ export const landingContent: LandingContent = {
     tour: {
         eyebrow: "The product",
         heading: "This is the actual workspace.",
-        sub: "Not a chat box bolted onto a model — a real IDE for a fleet of agents. Watch every run, drive one, review its diffs, and wire it into the systems you already use. Works with Claude Code, Codex, and Grok.",
+        sub: "Not a chat box bolted onto a model — a real IDE for a fleet of agents. Autonomy still needs a human in the loop: you configure each agent's context, watch every run, drive one, and review its diffs before anything lands. That's what the workspace is for. Works with Claude Code, Codex, and Grok.",
         hero: {
             src: "/assets/product/agents-fleet.png",
             alt: "The intentic agent fleet board — a kanban of running agents grouped into Attention, Active and Finished lanes, each card showing its model, branch, cost and diff stats.",
@@ -150,7 +150,7 @@ export const landingContent: LandingContent = {
             },
             {
                 src: "/assets/product/capabilities.png",
-                alt: "The capability catalog: DevOps, Docker, Stripe, SSH, VPN, Reddit, X, YouTube, MCP and Claude plugins, each with a short description.",
+                alt: "The capability catalog: Docker, Stripe, SSH, VPN, Reddit, X, YouTube, MCP servers and Claude plugins, each with a short description.",
                 title: "Wire in your systems",
                 body: "A catalog of capabilities — GitHub, Postgres, Stripe, SSH, Docker, MCP servers, Claude plugins — added in a click. The credential is stored inside the sandbox and the agent operates the service from chat.",
             },
@@ -302,7 +302,7 @@ export const landingContent: LandingContent = {
             },
             {
                 title: "The platform can't drive your agents",
-                body: "Your browser holds the token that commands the sandbox — the platform never does. A breach reads a URL and reaches nothing. The engine is MIT on GitLab; verify it.",
+                body: "Your browser holds the token that commands the sandbox — the platform never does. A breach reads a URL and reaches nothing. The sandbox is MIT on GitLab; verify it.",
             },
         ],
     },
@@ -321,11 +321,10 @@ export const landingContent: LandingContent = {
     },
     company: {
         eyebrow: "The whole picture",
-        heading: "An entire company, assembled from specialized sandboxes.",
-        sub: "Zoom out and the pattern repeats: a sandbox per role and per team, clustered around shared infrastructure they provision and consume — governance and DevOps included. A topology you assemble from the same primitives, not a template you click.",
-        platform: ["DevOps", "Agent Governance"],
-        sharedInfra: ["Forgejo", "Komodo", "Discord", "Infisical"],
+        heading: "An entire company, assembled from specialized agents.",
+        sub: "Zoom out and the pattern repeats: one co-piloted agent per role and per team, each in its own sandbox on hardware you own, connected to the handful of services they all share. A topology you assemble from the same primitives, not a template you click.",
         teams: ["Operations", "Governance", "Customer & Market", "Product Team A", "Product Team B", "Per-customer"],
+        sharedServices: ["GitHub", "Discord", "Outline", "Infisical"],
         cta: "See the reference architecture",
     },
     economics: {

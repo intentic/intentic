@@ -1,9 +1,10 @@
 # intentic — Messaging
 
-What we say, in which words, everywhere. Pairs with [positioning.md](positioning.md) (P1–P8 pain
-references) and [landing-blueprint.md](landing-blueprint.md) (section placement). The product
-being sold is **intentic-app** (app.intentic.dev); the open-source engine is the trust layer and
-the DevOps capability.
+What we say, in which words, everywhere. Pairs with [positioning.md](positioning.md) (personas +
+pains, P1–P7) and [landing-blueprint.md](landing-blueprint.md) (section placement). The product
+being sold is **intentic-app** (app.intentic.dev): co-piloted **specialized agents** — autonomous
+employees, each a sandbox on hardware you own. The sandbox and CLI that run on your machine are MIT
+open source on GitLab — the trust layer you can read and run yourself.
 
 ## Rules of voice
 
@@ -14,74 +15,93 @@ the DevOps capability.
   The app and the site must sound like one author.
 - Ownership language is the spine: "your machine", "your accounts", "you own every line",
   "stays inside your sandbox". Never "we host your code" — we don't.
-- Provider-agnostic: intentic works with Claude Code, Codex, and whatever ships next. Name
+- Provider-agnostic: intentic works with Claude Code, Codex, Grok, and whatever ships next. Name
   providers as plural examples for credibility, never as the headline or the brand hook — the
-  subject is always "your coding agent".
-- Honesty is a feature: the free tier is stated plainly, the engine's v0 status and limitations are linked.
+  subject is always the **specialized agent** (the autonomous employee), never one provider.
+- Honesty is a feature: the free tier is stated plainly; the app is new and says so.
 
 ## Message hierarchy
 
-**The one thing the page sells (single use-case):** your coding agent — Claude Code or Codex —
-running on a machine you own, driven from any browser. Everything else (capabilities, automations,
-the deploy engine) is support: one card each in the "What's included" row, never a flagship band.
-The deploy engine is a deliberate **sidecar** — it lives in that row and in the FAQ, and its
-vocabulary never leads.
+**The one thing the page sells:** **co-piloted specialized agents — autonomous employees on hardware
+you own.** A specialized agent is more than a prompt: it's a purpose-built sandbox with its dev-tools
+really installed, wired to your systems (capabilities), its context curated for one job, running on
+your own Claude/Codex/Grok subscription. Run one, or a whole team.
 
-Landing copy lives in code: `_libs/site-content/src/landing.ts` defines three complete variants of
-the page — the same skeleton and claims, three doors in:
+An autonomous agent is not fire-and-forget. AI still needs (a) its context configured, (b) its work
+supervised, and (c) a human in the loop for the decisions that matter. So every agent is
+**co-piloted** — and that is exactly why intentic is a full workspace, not a chat box. Two families
+of surfaces earn the "workspace" claim, and every band on the page ladders up to one of them:
 
-| Variant | Angle | H1 |
-|---------|-------|----|
-| `a` (default) | Agent-led — the terminal agent, upgraded | Your coding agent. Out of the terminal. |
-| `b` | Ownership-led — the pain of vendor-cloud custody | The AI workspace you own. |
-| `c` | Moment-led — narrates the use-case itself | Start at your desk. Approve from your phone. |
+- **IDE** — editor, file tree, diff review, terminal: the surfaces that let you *configure* an agent
+  and read its work.
+- **observability** — the fleet board, plan mode, per-edit permission modes, changes review,
+  transcripts: the surfaces that let you *watch and steer* the agents you run.
 
-Switching: `SITE_VARIANT=a|b|c` at build/dev time selects what `/` renders (default `a`);
-`astro dev` additionally serves `/preview/a|b|c` with a floating switcher for side-by-side
-comparison (those routes do not exist in production builds).
+**Ownership** is the trust foundation under both (agent on your own hardware, platform off the
+command path, code and keys never leave your machine). **Automations** make agents event-driven;
+**Pro** runs a whole team of them; the **economics** are BYO subscription + your own hardware + a
+flat fee — never a meter on model usage.
 
-**Hero CTA (all variants):** `Get started free` → app.intentic.dev. Secondary: `See the open-source engine` → GitHub.
+Landing copy lives in code: `_libs/site-content/src/landing.ts` is a single `LandingContent` object
+— **one page, no variants** (there is no `SITE_VARIANT`, no `/preview` route, no a/b/c doors).
+Change copy there, not in the `.astro` files.
 
-Retired hero: "Build software with intent." (stays as the brand tagline in org metadata / fallback
-titles) and the infra-first subhead "An AI-native workspace for infra, data, apps, and code…".
+**Hero CTA:** `Get started free` → app.intentic.dev. Secondary: `See the source` → the GitLab repo
+(gitlab.com/radarsu/intentic) — the trust-through-transparency path.
 
-## Page skeleton (shared by all variants; per-variant copy in landing.ts)
+Retired framing (do not bring back): "Your coding agent. Out of the terminal.", "Build software with
+intent." as the definition, and "An AI-native workspace for infra, data, apps, and code…". The brand
+tagline is now "Specialized agents that own their workspace" (org metadata, `_libs/site-content/src/site.ts`).
 
-| # | Section (id) | Job | Pain |
-|---|--------------|-----|------|
-| 1 | Hero (`#hero`) | The one-sentence what + the workspace mock mid-plan-approval. | P1, P2 |
-| 2 | Get connected (`#connect`) | Speed proof: the 3 wizard steps + the one command. | P3 |
-| 3 | Anywhere (`#anywhere`) | The use-case in action: desk → phone → back to diffs. | P2 |
-| 4 | Ownership (`#ownership`) | The moat: browser → tunnel → sandbox diagram + three facts. | P1 |
-| 5 | Control (`#control`) | Plan mode default, four permission modes, changes review. | P4 |
-| 6 | Included (`#more`) | Capabilities · automations · deploys — one card each. | P5, P6, P7 |
-| 7 | FAQ (`#faq`) | The objection bank (shared across variants). | all |
-| 8 | Final CTA | Variant close + `Get started free`. | close |
+## Section order
+
+The page is a single continuous scroll; the full section-by-section blueprint (ids, jobs, accuracy
+rules) lives in [landing-blueprint.md](landing-blueprint.md). At the message level the order tells
+one story: **state the thesis** (Hero) → **show it's real** (the product tour of screenshots) →
+**argue specialized beats generic** (prompt-vs-agent contrast) → **break one agent down** (anatomy,
+inside a sandbox) → **wire it to your systems** (integrations hub) → **scale to a team** (workforce,
+Discord teammate) → **carry the trust** (ownership, shared safely) → **zoom out to a company**
+(the whole picture) → **the deal** (economics) → **get connected** → **final CTA**. Each pain from
+positioning.md (P1–P7) surfaces where its band lands.
 
 **Free-first, no pricing section (principle, not a section).** There is deliberately no on-page
 pricing block and no "Pricing" nav/footer link — a monetization-forward page reads as slop that
 wants money, when in fact everything is free to explore and users upgrade in-app. The free story is
-carried softly by the hero "Free plan" chip, the final CTA "Free to start.", and the FAQ answer
-"What's free and what's Pro?" (free = one full sandbox; Pro = unlimited sandboxes + team sharing).
-Do not reintroduce a pricing section.
+carried softly by the hero "Free plan" chip, the economics band, the final CTA "Free to start.", and
+the FAQ answer "What's free and what's Pro?" (free = one full sandbox; Pro = unlimited sandboxes +
+team sharing). Do not reintroduce a pricing section.
 
 ## Glossary (use these words, exactly)
 
-- **workspace** — what the user experiences in the browser: chat + files + editor + terminal over a sandbox.
-- **sandbox** — the per-project agent daemon running on the user's machine, reached over its own
-  private tunnel. Never "VM", "container instance", or "environment".
-- **capability** — an installable power for the sandbox (GitHub, SQL database, Discord, DevOps…).
-  Never "integration" or "plugin" (plugins are a specific capability).
+- **specialized agent** (a.k.a. **autonomous employee**) — a coding agent given its own sandbox for
+  one job: dev-tools really installed, wired to your systems, context curated for that role. More
+  than a prompt. This is the subject of the whole page.
+- **co-piloted** — the working stance: the agent runs autonomously, but you configure its context,
+  supervise its work, and stay in the loop for the decisions that matter. Never "fire-and-forget",
+  never "fully autonomous" without this qualifier.
+- **workspace** — what the user experiences in the browser: chat + files + editor + diff review +
+  terminal (the **IDE** surfaces) over a sandbox, plus the **observability** surfaces that watch and
+  steer it. The reason it's a workspace and not a chat box.
+- **fleet board** — the /agents home surface: every running agent as a parallel, isolated
+  conversation — the coworking-space view of your workforce.
+- **sandbox** — the per-agent daemon running on the user's machine, reached over its own private
+  tunnel. Never "VM", "container instance", or "environment".
+- **capability** — an installable power that wires the sandbox to your systems (GitHub, a SQL
+  database, Discord, Stripe, SSH, an MCP server…). Never "integration" or "plugin" (plugins are a
+  specific capability).
 - **automation** — a rule that wakes the agent (schedule / event / listen), optionally gated by a
   **guard command**. Never "cron job" or "workflow".
 - **plan mode** — the default agent permission mode: propose, then wait for approval. Also:
   accept edits / ask before edits / auto.
 - **desktop sync** — two-way near-real-time folder sync between the user's editor and the sandbox.
-- **agent** — the coding agent working inside the sandbox (Claude Code, Codex, …). Name providers
-  as examples; never "our AI", never one provider as the brand.
-- Engine vocabulary — **intent, `i.have`/`i.want`, derive, desired state, reconcile, reads true** —
-  is used only in the FAQ's DevOps answer and engine docs, defined on first use. It never appears
-  in a landing section.
+- **agent** — the coding agent working inside the sandbox (Claude Code, Codex, Grok, …). Name
+  providers as examples; never "our AI", never one provider as the brand.
+- **Deployment is not a landing element.** The monorepo happens to include a deployment engine, but
+  it is just one of the many tools an agent can run (like `psql`, a headless browser, or `docker`) —
+  never a pillar, section, "superpower", card, or FAQ headline. Its vocabulary (intent,
+  `i.have`/`i.want`, derive, reconcile, desired state) belongs to the engine's own docs and never
+  appears in landing or FAQ copy. If deployment comes up at all, it is one unremarkable example of a
+  tool an agent can run, nothing more.
 
 ## Objection bank (FAQ source of truth)
 
@@ -93,40 +113,44 @@ Do not reintroduce a pricing section.
    AES-256-GCM encrypted with no decrypt path in the product. Secret files are denylisted from the
    workspace file relay.
 3. **Which AI models does it use?** — Your choice per conversation: Claude Code (Opus, Sonnet,
-   Haiku) or Codex, with adjustable reasoning effort. Your provider, your account, your usage.
+   Haiku), Codex, or Grok, with adjustable reasoning effort. Your provider, your account, your usage.
 4. **Do I need a Cloudflare account?** — No. By default intentic provisions the tunnel under its
    own domain. Bring your own zone if you prefer — your token is used once to list zones and is
    never stored.
 5. **What do I need to run a sandbox?** — A machine with Docker (installed automatically if
    missing, with your confirmation) and a Google account. No open inbound ports, nothing deployed.
-6. **Can the agent break my stuff?** — It starts in plan mode: it proposes, you approve. Every
-   file change is reviewable as a diff you can discard or commit; environment (Dockerfile) changes
-   require your explicit approval; stricter and looser modes are one click away.
+6. **Can the agent break my stuff?** — No, because it's co-piloted, not fire-and-forget. It starts
+   in plan mode: it proposes, you approve. Every file change is reviewable as a diff you can discard
+   or commit; environment (Dockerfile) changes require your explicit approval; stricter and looser
+   modes are one click away.
 7. **What's free and what's Pro?** — Free: one full sandbox — every capability, the agent, and
    automations included. Pro: unlimited sandboxes and team sharing (invite by email). Pricing at
    checkout via Stripe; cancel anytime. Removing access (revoke, leave) never requires Pro.
 8. **What are automations?** — Scheduled or event-driven agent wake-ups: GitHub/GitLab pushes,
    Sentry alerts, Stripe payments, new email, Discord messages, or plain cron — each run a fresh
    agent session with a transcript, optionally gated by a guard command you define.
-9. **What's the DevOps capability?** — The open-source intentic engine: declare what you have (a
-   host, a Cloudflare account) and what you want (apps); it derives and reconciles git, CI, a
-   registry, deploys, a tunnel, and DNS — zero inbound ports. Also stands up services like
-   Outline, SigNoz, Paperless-ngx, OpenProject, Invoice Ninja, and Infisical.
-10. **Is it open source? Can I use it without the app?** — The engine is MIT on GitHub and works
-    standalone as a CLI. The hosted app adds the workspace, capabilities, automations, and teams.
-11. **What about my data — export, deletion?** — Settings → Export downloads everything the
+9. **Is it open source? Can I run it without the app?** — Yes. The sandbox and CLI that execute on
+   your machine are MIT on GitLab (gitlab.com/radarsu/intentic) — read exactly what runs on your
+   hardware, and drive a sandbox from the CLI without ever signing in. The hosted app adds the
+   browser workspace, the fleet board, capabilities, automations, and teams.
+10. **What about my data — export, deletion?** — Settings → Export downloads everything the
     platform stores about your account as JSON (deliberately excluding credentials). Account
     deletion cancels billing and cascades sandboxes, sessions, and grants.
-12. **Is it production-ready?** — The app is new and says so. The engine is v0, MIT, with 100+
-    tests including a real end-to-end run through a live Cloudflare tunnel; known limitations are
-    documented in the README. Read exactly what it does before pointing it at anything you care about.
+11. **Is it production-ready?** — The app is new and says so. Because the sandbox and CLI are MIT on
+    GitLab, you can read exactly what runs on your machine before you trust it with anything you
+    care about — and because the agent is co-piloted (plan mode, reviewable diffs, owner-approved
+    environment changes), you stay in control of every change. Verify test counts and prices at
+    build time — never hardcode stale numbers.
 
 ## SEO strings
 
-- Landing title/description are **per variant** — see `meta` in `landing.ts`. Fallback (page-meta.ts):
-  `intentic — Your coding agent, on your machine, in any browser`.
-- Org description (site.ts, JSON-LD): `Your coding agent — Claude Code or Codex — running on your
-  own machine, driven from any browser. Your code and secrets never leave your hardware.
-  Capabilities, automations, and an open-source deploy engine included. Free to start.`
-- Keywords to carry naturally: coding agent, Claude Code, run Claude Code remotely, self-hosted AI
-  agent, agent sandbox, AI workspace in the browser, Devin alternative, own your code.
+- The landing is a single page — its title/description are **not** per-variant. Fallback
+  (`_libs/site-content/src/page-meta.ts`): `intentic — Specialized agents that own their workspace`.
+- Org description (`_libs/site-content/src/site.ts`, JSON-LD) — the canonical product sentence; keep
+  the site and these docs in sync with it verbatim: `A specialized agent is more than a prompt.
+  intentic gives each coding agent — Claude Code, Codex, or Grok — its own sandbox: the libraries,
+  dev-tools, and integrations its job needs, plus curated context, on hardware you own. Run one, or
+  a whole team. Free to start.`
+- Keywords to carry naturally: specialized agent, autonomous agent, AI employee, agent workforce,
+  coding agent, Claude Code, Codex, Grok, agent sandbox, AI workspace in the browser, self-hosted AI
+  agent, Devin alternative, own your code.

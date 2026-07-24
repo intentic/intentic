@@ -10,5 +10,6 @@
 - Treat rewriting as cheap - always go for best design, not the least disruptive change.
 
 ---
-For the full architecture — the deployment engine, the app plane (web/api/sandbox), the extension
-system, and the iq/lsp dependency islands — see [ARCHITECTURE.md](./ARCHITECTURE.md).
+For the full architecture — the app plane (web/api/sandbox) that is the product, the extension
+system, the iq/lsp dependency islands, and the bundled deployment-engine tool — see
+[ARCHITECTURE.md](./ARCHITECTURE.md).

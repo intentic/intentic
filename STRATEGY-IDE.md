@@ -1,5 +1,11 @@
 # Strategy: Overtake VSCode / Cursor / Zed as the top-choice IDE
 
+> **Framing note (supersedes the historical runs below):** intentic's product is co-piloted specialized
+> agents / autonomous employees; the IDE and observability surfaces exist to configure, watch, and steer
+> them. The **deployment engine** is a bundled tool an agent can use — one of many — **not part of the
+> product**. Earlier runs below that treat it as a core "wedge" reflect older framing; do not carry it
+> forward.
+
 **Goal:** Devise and execute a strategy for Intentic to become the top-choice, most-popular IDE by
 having better features, a smoother experience, and being familiar to developers migrating from
 VSCode / Cursor / Zed / Windsurf / JetBrains.

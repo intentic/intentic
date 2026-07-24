@@ -5,17 +5,17 @@ const lifecycle = [
     { title: "Sign in + open Setup", body: "You authenticate with Google and name a sandbox. The platform reserves a private tunnel and hands you a connect one-liner." },
     { title: "Connect", body: "You run the one-liner on your machine. It starts the sandbox and a cloudflared sidecar; the daemon announces its URL to the platform on boot." },
     { title: "Bind on first use", body: "Your browser drives the daemon directly with your Google ID token. The daemon verifies it and binds you as owner on the first authenticated request." },
-    { title: "Work + provision", body: "You chat, edit, and run terminals over the tunnel. If you add the DevOps capability, intentic apply provisions git, CI, and deploys on your hosts." },
-    { title: "Reconcile", body: "The engine applies your desired state and re-reads it until reality matches — then streams topology, plans, and deployments back to your browser." },
+    { title: "Chat + plan", body: "You work over the tunnel — chat, files, editor, terminals. The agent runs in plan mode, proposing changes while you watch and steer." },
+    { title: "Review + approve", body: "Every change comes back as a diff you commit or discard, and the agent can operate any connected system or tool from chat. You supervise; it does the work." },
 ];
 ---
 
 <DocsLayout
     pageId="architecture"
     heading="Architecture"
-    lead="intentic is three tiers: a thin platform for identity, a per-agent sandbox on your hardware, and the infrastructure a sandbox can provision for you. Only the middle tier ever holds your code."
+    lead="intentic is two tiers: a thin platform for identity, and a per-agent sandbox on your hardware. Only the sandbox ever holds your code — it's where the agent, your workspace, and everything it can do actually live."
 >
-    <h2>The three tiers</h2>
+    <h2>The two tiers</h2>
     <div class="docs-embed my-8">
         <div class="card p-4 text-center">
             <div class="eyebrow">Operator</div>
@@ -26,26 +26,12 @@ const lifecycle = [
         <div class="grid gap-3 sm:grid-cols-[1.4fr_1fr]">
             <div class="card border-primary-600/30 p-4">
                 <div class="eyebrow text-link">Your sandbox · your machine</div>
-                <p class="mt-1 text-sm text-content">Agent · repos · credentials · capabilities</p>
+                <p class="mt-1 text-sm text-content">Agent · workspace · capabilities · automations</p>
                 <p class="mt-1 text-xs text-muted">one container per agent, on your hardware</p>
             </div>
             <div class="rounded-2xl border border-dashed border-line p-4">
                 <div class="eyebrow">intentic platform</div>
                 <p class="mt-1 text-xs text-subtle">Identity + sandbox URL. Off the command path.</p>
-            </div>
-        </div>
-        <div class="py-2 text-center text-2xs text-link">↓&nbsp;&nbsp;intentic apply (optional) · SSH · Docker · Cloudflare API</div>
-        <div class="card p-4">
-            <div class="eyebrow">Provisioned infrastructure · your hosts</div>
-            <div class="mt-2 grid gap-3 sm:grid-cols-2">
-                <div class="rounded-xl border border-line bg-canvas p-3">
-                    <div class="text-sm font-medium text-content">Control plane</div>
-                    <p class="mt-1 text-xs text-muted">Forgejo (git · registry · CI) · Komodo (deploy)</p>
-                </div>
-                <div class="rounded-xl border border-line bg-canvas p-3">
-                    <div class="text-sm font-medium text-content">Application plane</div>
-                    <p class="mt-1 text-xs text-muted">your apps · databases · caches · auth · storage</p>
-                </div>
             </div>
         </div>
     </div>
@@ -62,14 +48,8 @@ const lifecycle = [
         One container per agent, on your PC or your server, run <strong>unprivileged by default</strong>. It runs the coding agent, holds
         your repos and credentials, and exposes its daemon over its own Cloudflare tunnel. This is the whole product surface — chat,
         terminals, files, panels, capabilities, and automations all come from here. Your keys ride straight into it and never reach the
-        platform.
-    </p>
-
-    <h3>Provisioned infrastructure</h3>
-    <p>
-        Optional, and only if you add the DevOps capability. The open-source engine turns one config file into a control plane (git, a
-        registry, CI, and a deploy orchestrator) and an application plane (your apps and their databases, caches, auth, and storage) — all
-        on hosts you own.
+        platform. Inside it the agent can run whatever a job needs — a database client, a headless browser, even a bundled deployment
+        engine if you add that capability — but those are tools it invokes, not tiers of the product.
     </p>
 
     <h2>Ownership &amp; trust</h2>

@@ -1,6 +1,8 @@
-# Run intentic on your own PC (no server)
+# Run the intentic deployment engine on your own PC (no server)
 
-intentic normally deploys to a remote server. But because each host's Cloudflare Tunnel connects **outbound** (the host opens no inbound ports — see [README](README.md#L94)), the "server" can just as well be **your own laptop or desktop, behind NAT, not exposed to the internet**. Your apps stay reachable through your Cloudflare account exactly as they would from a VPS.
+> The [intentic deployment engine](docs/deploy-engine.md) is a bundled tool, not the intentic product.
+
+The deployment engine normally deploys to a remote server. But because each host's Cloudflare Tunnel connects **outbound** (the host opens no inbound ports — see [docs/deploy-engine.md](docs/deploy-engine.md)), the "server" can just as well be **your own laptop or desktop, behind NAT, not exposed to the internet**. Your apps stay reachable through your Cloudflare account exactly as they would from a VPS.
 
 [_tools/scripts/intentic-local.sh](_tools/scripts/intentic-local.sh) bootstraps this in one shot.
 

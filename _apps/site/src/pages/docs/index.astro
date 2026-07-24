@@ -17,13 +17,13 @@ const cards = docsPages.filter((page) => page.id);
         markdown file — a real container, on a machine you control, with the libraries, dev-tools, system access, and curated context a
         specific job needs. You drive it from any browser; it runs where you started it.
     </p>
-    <p>Three tiers make that work, and only the middle one holds your code:</p>
+    <p>Two tiers make that work, and only your sandbox holds your code:</p>
     <ul>
         <li><strong>The platform</strong> — a thin hub that stores your identity and your sandbox's URL. It sits off the command path and can't reach in.</li>
-        <li><strong>Your sandbox</strong> — one container per agent, on your hardware, reached by your browser over a private Cloudflare tunnel. The agent, repos, credentials, and capabilities live here.</li>
         <li>
-            <strong>Provisioned infrastructure</strong> — what a sandbox optionally deploys for you (git, CI, a registry, apps) on your own
-            hosts, via the open-source engine.
+            <strong>Your sandbox</strong> — one container per agent, on your hardware, reached by your browser over a private Cloudflare
+            tunnel. The agent, repos, credentials, and capabilities live here, along with any tool it runs — a database client, a headless
+            browser, even a deployment engine.
         </li>
     </ul>
     <p>

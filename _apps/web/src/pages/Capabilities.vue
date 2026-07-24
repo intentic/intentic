@@ -680,7 +680,7 @@ const submitLabel = computed(() =>
         <template v-else>
             <PageHeader
                 title="Add a capability"
-                description="Grow your sandbox. DevOps unlocks self-hosting and deployment; the rest give your agent new tools or connect your accounts. Everything is stored only in your sandbox."
+                description="Grow your sandbox — each capability gives your agent new tools or connects your accounts. Everything is stored only in your sandbox."
             />
 
             <div class="flex flex-col gap-8">

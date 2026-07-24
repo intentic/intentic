@@ -1,17 +1,18 @@
 # Architecture
 
-intentic is **intent-driven deployment**: you declare *what you have* (the host apps run on, the Cloudflare
-they're exposed through) and *what you want* (apps); the system computes every valid way to satisfy that,
-picks one, and reconciles infrastructure until reality matches. The have/want split is lifecycle ownership:
-a have is only read — never created or destroyed — while a want is owned end-to-end (created, reconciled,
-pruned, destroyed).
+intentic is a **co-piloted specialized-agent workspace**: each agent runs in its own sandbox on hardware
+you own, and from a browser you configure its context, supervise its work, and approve the calls that
+matter. This document covers the two tiers that *are* the product — a thin **platform** and the per-user
+**sandbox** (and the workspace it serves) — plus, in clearly-marked sections, the **bundled deployment
+engine**: a standalone infra tool that ships in this monorepo and is one of the many tools an agent can run.
+It is not part of the product.
 
 ## System topology & lifecycle
 
-The engine flow below is what runs *inside* one `intentic apply`. At runtime the whole product
-is three tiers: a thin **Platform** (identity + sandbox-URL store), a per-user **Sandbox** (where the
-agent and the CLI actually run, reached by the browser directly), and the **infrastructure** the
-sandbox provisions.
+At runtime the product is two tiers: a thin **Platform** (identity + sandbox-URL store) and a per-user
+**Sandbox** (where the agent runs, reached by the browser directly). A sandbox can *also* stand up real
+**infrastructure** on hosts you own — the third tier below — by running the bundled deployment engine, one
+of its tools; that path is optional. The engine flow shown later is what runs *inside* one `intentic apply`.
 
 ```mermaid
 flowchart TB
@@ -187,6 +188,10 @@ at **provision** time by `intentic apply`. It never reaches the platform except 
 setup — the platform lists the token's zones so the user can pick which one the sandbox tunnel uses (the browser
 can't call Cloudflare directly), then drops the token: never persisted, never logged.
 
+> The sections from here through **Packages** document the **bundled deployment engine** — a standalone
+> infra tool that ships in this monorepo and is one of the many tools an agent can run. It is **not part of
+> the intentic product** (the product is the app plane, covered below).
+
 ## The intent-driven flow
 
 ```
@@ -300,13 +305,13 @@ track releases without a graph change. The registry package is public so tenant 
 unauthenticated; both `connect.sh` (your PC) and the `workspace` provider (a server) run this image
 directly.
 
-## The app plane
+## The app plane — the product
 
-Everything above is the **deployment engine** — the intent→reconcile machinery the CLI runs. Sitting
-alongside it (and consuming it only through shared contracts) is the **app plane**: the product a user
-actually looks at, a VSCode-shaped file editor. Its dependency edges into `@intentic/*` all go through
-`sandbox-contract` (and one type-only reach into `@intentic/resources` from `api-contract`); the engine
-core never depends back on the app.
+The **app plane** is the intentic product: the co-piloted agent workspace a user actually looks at, a
+VSCode-shaped file editor. (The intent→reconcile **deployment engine** documented in the preceding sections
+is a *bundled tool* the sandbox can run — one tool among many — not part of this product.) The app plane's
+dependency edges into `@intentic/*` all go through `sandbox-contract` (and one type-only reach into
+`@intentic/resources` from `api-contract`); the engine core never depends back on the app.
 
 | Package | Role |
 | --- | --- |

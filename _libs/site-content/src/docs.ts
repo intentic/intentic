@@ -52,7 +52,7 @@ export const docsSections: DocsSection[] = [
                 title: "Architecture",
                 meta: {
                     title: "Architecture — intentic docs",
-                    description: "The three tiers — platform, sandbox, provisioned infrastructure — the ownership/trust model, and the Cloudflare reachability fabric.",
+                    description: "How intentic fits together — the thin platform, the per-agent sandbox on your hardware, the ownership and trust model, and the Cloudflare reachability fabric.",
                 },
             },
         ],
@@ -73,7 +73,7 @@ export const docsSections: DocsSection[] = [
                 title: "Reference architecture",
                 meta: {
                     title: "Reference architecture: a company on intentic — intentic docs",
-                    description: "An example of an entire company assembled from intentic sandboxes — one per role and team, clustered around shared infrastructure they provision and consume. Every block maps to a shipping primitive.",
+                    description: "An example of an entire company assembled from intentic sandboxes — one co-piloted agent per role and team, connected to the services they share. Every block maps to a shipping primitive.",
                 },
             },
         ],

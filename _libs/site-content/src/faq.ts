@@ -84,18 +84,11 @@ export const faqItems: FaqItem[] = [
         ],
     },
     {
-        id: "devops-capability",
-        question: "What's the DevOps capability?",
-        answer: [
-            "The open-source intentic engine: declare what you have (a host, a Cloudflare account) and what you want (apps); it derives and reconciles git, CI, a registry, deploys, a tunnel, and DNS — zero inbound ports.",
-            "It also stands up services like Outline, SigNoz, Paperless-ngx, OpenProject, Invoice Ninja, and Infisical.",
-        ],
-    },
-    {
         id: "open-source",
-        question: "Is it open source? Can I use it without the app?",
+        question: "Is it open source?",
         answer: [
-            "The engine is MIT-licensed on GitLab and works standalone as a CLI. The hosted app adds the workspace, capabilities, automations, and teams.",
+            "Yes — the sandbox and CLI that run on your machine are MIT-licensed on GitLab, so you can read exactly what touches your code and credentials before you ever run it.",
+            "The hosted platform adds accounts, billing, and the thin connection layer between your browser and your sandbox — it stays off the command path and never sees your code.",
         ],
     },
     {
@@ -109,8 +102,8 @@ export const faqItems: FaqItem[] = [
         id: "production-ready",
         question: "Is it production-ready?",
         answer: [
-            "The app is new and says so. The engine is v0, MIT, with 100+ tests including a real end-to-end run through a live Cloudflare tunnel; known limitations are documented in the README.",
-            "Read exactly what it does before pointing it at anything you care about.",
+            "The app is new and says so — but it isn't a demo: the free plan is a real, full sandbox. Read exactly what it does before pointing an agent at anything you care about.",
+            "Every agent starts in plan mode and every change lands as a reviewable diff, so you build trust with the wheel in your hands.",
         ],
     },
 ];
