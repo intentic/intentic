@@ -9,7 +9,7 @@ import { sandboxKey } from "../../composables/sandbox/useSandbox";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { describeProvisionError } from "./provisionError";
 
-/* The pre-apply change preview: run `intentic resolve` then `intentic plan` in the sandbox (read + diff, nothing
+/* The pre-apply change preview: run `intentic deploy resolve` then `intentic deploy plan` in the sandbox (read + diff, nothing
  * mutated) and expose what the next apply WOULD do — per-resource create/update/remove + orphans — so adding a
  * want stages a reviewable pending change instead of silently deploying. Owns the missing-secrets gate lifted
  * out of InfraDeclare: resolve names the env secrets the intent requires, and any unset one pauses BEFORE plan
@@ -66,7 +66,7 @@ export function usePlanPreview() {
         const response = await sandboxRequest(`/intentic`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
-            body: JSON.stringify({ args: [`resolve`] }),
+            body: JSON.stringify({ args: [`deploy`, `resolve`] }),
             signal,
         });
         if (!response.ok || !response.body) {
@@ -104,7 +104,7 @@ export function usePlanPreview() {
         const response = await sandboxRequest(`/intentic`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
-            body: JSON.stringify({ args: [`plan`] }),
+            body: JSON.stringify({ args: [`deploy`, `plan`] }),
             signal,
         });
         if (!response.ok || !response.body) {

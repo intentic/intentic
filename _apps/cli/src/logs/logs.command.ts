@@ -54,19 +54,19 @@ export const logsCommand = buildCommand({
         const graph = await readArtifact(artifact);
         // A resource has host logs iff it was deployed over SSH — its inputs carry the copied ssh block
         // (state-resolver's sshOf). Komodo-managed app deployments keep runtime logs in Komodo by design:
-        // `intentic deployments` deep-links there.
+        // `intentic deploy deployments` deep-links there.
         const loggable = Object.values(graph.resources).filter((node) => node.inputs["address"] !== undefined && node.inputs["sshKey"] !== undefined);
         if (id === undefined) {
             for (const node of loggable) {
                 out.text(`${node.id} (type "${node.type}")`);
             }
-            out.text(`\nintentic logs <id> fetches that resource's container logs; app deployments live in Komodo (intentic deployments).`);
+            out.text(`\nintentic deploy logs <id> fetches that resource's container logs; app deployments live in Komodo (intentic deploy deployments).`);
             out.result({ resources: loggable.map((node) => ({ id: node.id, type: node.type })) });
             return;
         }
         const node = graph.resources[id];
         if (node === undefined) {
-            throw new Error(`no resource "${id}" in the artifact — run \`intentic logs\` to list them`);
+            throw new Error(`no resource "${id}" in the artifact — run \`intentic deploy logs\` to list them`);
         }
         if (!SAFE_NAME.test(node.id) || !SAFE_NAME.test(node.type)) {
             throw new Error(`resource id/type contains characters unsafe for a remote shell: "${node.id}" (type "${node.type}")`);

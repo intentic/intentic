@@ -6,8 +6,8 @@ import { panelSession } from "../../processes/managed-processes.js";
 import type { CapabilityHandler } from "../capability.js";
 
 // A self-hosted service (e.g. SigNoz): declare it as i.want.service in deploy.config.ts, then provision it via
-// the ONE infra apply pipeline — the shared panel-infra-apply one-shot job (`intentic resolve && intentic apply
-// --yes && intentic adopt` with the durable events file), the same job InfraDeclare's Apply launches. That
+// the ONE infra apply pipeline — the shared panel-infra-apply one-shot job (`intentic deploy resolve && intentic deploy apply
+// --yes && intentic deploy adopt` with the durable events file), the same job InfraDeclare's Apply launches. That
 // buys the visible terminal, serialization with a concurrent InfraDeclare apply, restart adoption, and the
 // ApplyProgress tail — this handler just relays the job's events into the add stream and fails on its terminal
 // non-zero exit. Requires DevOps (the intent repo). SigNoz's MCP is auto-wired by the resolver's service

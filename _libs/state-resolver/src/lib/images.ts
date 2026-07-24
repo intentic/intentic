@@ -97,7 +97,7 @@ export const IMAGES = Object.freeze({
     // moving `stable` tag, which ONLY the release moves (semantic-release's successCmd pushes `<version> stable`),
     // so it always resolves to the newest RELEASE image — our own component, always current, with no pin to bump.
     // Never `:latest`: that tag is the continuous push-to-main build carrying internal version 0.0.0 (unpublished),
-    // so a scaffolded intent repo's `pnpm install` of ~0.0.0 deps fails and `intentic init` can't resolve
+    // so a scaffolded intent repo's `pnpm install` of ~0.0.0 deps fails and `intentic deploy init` can't resolve
     // @intentic/graph. `stable` only ever points at a published release, so init resolves. The GitLab Container Registry package must be
     // public so tenant hosts can pull it. (Trade-off of unpinning: a `stable` move is not a desired-state input
     // change, so the graph-deployed workspace won't auto-recreate on it — connect.sh/ps1 pull `stable` fresh.)

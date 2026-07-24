@@ -27,7 +27,7 @@ export const forgejoIdentity = (
 } => {
     const forgejo = Object.values(graph.resources).find((node) => node.type === "forgejo");
     if (forgejo === undefined) {
-        throw new Error("no forgejo resource in the artifact — run `intentic apply` first");
+        throw new Error("no forgejo resource in the artifact — run `intentic deploy apply` first");
     }
     const domain = forgejo.inputs["domain"];
     const user = forgejo.inputs["adminUser"];
@@ -125,7 +125,7 @@ export const syncControlPlaneSecrets = async (args: {
 
     if (newEnv.length > 0) {
         args.log(
-            `sync-control-plane: set these user secret(s) in the app's Secrets page (or \`intentic secrets push\` after setting .env) — apply fails until they reach ${user}/${TARGET_DIR}: ${newEnv.join(", ")}`,
+            `sync-control-plane: set these user secret(s) in the app's Secrets page (or \`intentic deploy secrets push\` after setting .env) — apply fails until they reach ${user}/${TARGET_DIR}: ${newEnv.join(", ")}`,
         );
     }
     return { pushed: addedGenerated, newEnv };

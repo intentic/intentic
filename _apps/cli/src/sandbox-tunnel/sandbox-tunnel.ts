@@ -14,7 +14,7 @@ export interface SandboxTunnelResult {
 // Create (or refresh, idempotently) the per-sandbox Cloudflare tunnel + proxied DNS record that exposes the
 // sandbox daemon at `sandbox-<id>.<zone>`, and return the connector token connect.sh runs cloudflared with.
 // `<id>` is a stable, unguessable digest of the connection token, so re-runs reuse the same tunnel/hostname.
-// Reuses the providers' Cloudflare client — the same REST surface `intentic apply` uses for platform tunnels.
+// Reuses the providers' Cloudflare client — the same REST surface `intentic deploy apply` uses for platform tunnels.
 export const createSandboxTunnel = async (args: {
     readonly apiToken: string;
     readonly connectToken: string;

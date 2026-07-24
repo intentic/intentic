@@ -26,7 +26,7 @@ const inputs: PipelineInputs = {
 test("the intent workflow resolves and pushes to the desired-state repo with the pinned CLI version", () => {
     const yaml = intentWorkflowYaml(inputs);
     // The post-adopt resolve syncs newly-required secrets into Forgejo and regenerates apply.yaml.
-    expect(yaml).toContain("pnpm dlx @intentic/cli@1.2.3 resolve --config deploy.config.ts --out /tmp/ds/desired-state.json --sync-control-plane");
+    expect(yaml).toContain("pnpm dlx @intentic/cli@1.2.3 deploy resolve --config deploy.config.ts --out /tmp/ds/desired-state.json --sync-control-plane");
     expect(yaml).toContain("clone https://git.example.com/intentic/desired-state.git /tmp/ds");
     // The git-push credential rides on the INTENTIC_GIT_* secrets, mapped to env.
     expect(yaml).toContain(`GIT_USER: \${{ secrets.${GIT_USER_SECRET} }}`);
@@ -42,7 +42,7 @@ test("the apply workflow injects every secret, diffs against the applied tag, an
         expect(yaml).toContain(`${key}: \${{ secrets.${forgejoSecretName(key)} }}`);
     }
     expect(yaml).toContain(`FORGEJO_ADMIN_PASSWORD: \${{ secrets.INTENTIC_FORGEJO_ADMIN_PASSWORD }}`);
-    expect(yaml).toContain("pnpm dlx @intentic/cli@1.2.3 apply --yes --artifact desired-state.json $PREV");
+    expect(yaml).toContain("pnpm dlx @intentic/cli@1.2.3 deploy apply --yes --artifact desired-state.json $PREV");
     // The prune baseline is the last successfully-applied commit, read from the intentic-applied tag.
     expect(yaml).toContain("git show intentic-applied:desired-state.json > /tmp/previous.json");
     expect(yaml).toContain("git tag -f intentic-applied HEAD");

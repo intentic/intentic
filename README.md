@@ -14,7 +14,7 @@ An autonomous agent still needs a human in the loop. AI has to have its context 
 - **Capabilities** — wire an agent into GitHub, databases, Sentry, Stripe, SSH hosts, MCP servers, Claude plugins, and more, a click each. Credentials stay inside the sandbox.
 - **Automations** — wake an agent on a schedule, a webhook, or a live event (a push, an alert, a payment, an email), each run leaving a transcript.
 - **Ownership by construction** — code and credentials never leave your machine; the platform stores only your identity and the sandbox's URL and sits off the command path. What runs on your machine is MIT on GitLab, so you can verify it.
-- **Your subscriptions, your hardware, a flat fee** — each agent runs on your own Claude, ChatGPT, or xAI plan; intentic never meters your model usage.
+- **Your subscriptions, your hardware, a flat fee** — each agent runs on your own Claude, ChatGPT, or SuperGrok plan; intentic never meters your model usage.
 
 ## How it runs
 
@@ -48,7 +48,7 @@ Dev serves over HTTPS via the committed `@intentic-app/localhost-https` cert (Go
 
 ## Bundled deployment engine (a tool, not the product)
 
-This monorepo also contains a standalone **deployment engine** — a declarative, reconciling infrastructure tool driven by the `intentic` CLI (`init` · `resolve` · `plan` · `apply` · `destroy` · `adopt` · `restore` · …). It turns `i.have` / `i.want` intent into real self-hosted infrastructure on hosts you own.
+This monorepo also contains a standalone **deployment engine** — a declarative, reconciling infrastructure tool driven by the `intentic deploy` command group (`init` · `resolve` · `plan` · `apply` · `destroy` · `adopt` · `restore` · …). It turns `i.have` / `i.want` intent into real self-hosted infrastructure on hosts you own.
 
 It is **not part of the intentic product.** It is one of the many tools a specialized agent can reach for — no more a "feature" than `psql` or `docker` — and it lives in this repo only for convenience. Its walkthrough, capabilities, and known limits are documented separately in **[docs/deploy-engine.md](docs/deploy-engine.md)** (and [LOCAL.md](LOCAL.md) for running it against your own PC).
 

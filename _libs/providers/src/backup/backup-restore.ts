@@ -42,7 +42,7 @@ const restoreVolume = (args: RestoreArgs, volume: string, sub: string): string =
 
 const wants = (scope: RestoreScope, part: "forgejo" | "komodo"): boolean => scope === "all" || scope === part;
 
-// Restore the control plane from a restic snapshot, then leave the operator to `intentic apply` so the
+// Restore the control plane from a restic snapshot, then leave the operator to `intentic deploy apply` so the
 // services are recreated on top of the recovered volumes. This is a deliberate one-shot recovery action, not
 // a reconcile step: it stops the affected containers, overwrites their data volumes from the snapshot, and
 // (for `all`) restores the /opt/intentic host state — none of which is idempotent or convergent. It NEVER
@@ -86,7 +86,7 @@ export const restoreBackup = async (args: RestoreArgs): Promise<void> => {
         }
         // Drop the scratch restore volume; the repo + snapshots are untouched.
         await session.exec(`docker volume rm ${RESTORE_VOLUME} 2>/dev/null || true`);
-        args.log('restore complete — run "intentic apply" to bring the services back up on the restored data');
+        args.log('restore complete — run "intentic deploy apply" to bring the services back up on the restored data');
     } finally {
         await session.dispose();
     }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { InviteRecord } from "@intentic-app/api-contract";
-import { Card, cmp } from "@intentic-app/ui";
+import { cmp, RowGroup } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
@@ -138,114 +138,93 @@ const revoke = async (target: string): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-2.5">
+    <div class="flex flex-col gap-6">
         <!-- Members + invites (owner) / read-only note (member). -->
-        <Card class="flex flex-col gap-3">
-            <div class="flex items-center gap-2.5">
-                <Icon name="users" class="text-lg text-muted" />
-                <div>
-                    <h2 class="font-semibold leading-tight">Access</h2>
-                    <p class="text-xs text-muted">Who can reach this sandbox and everything inside it.</p>
-                </div>
-            </div>
-
+        <RowGroup label="Access">
             <template v-if="isOwner">
-                <p class="text-sm text-muted">
-                    People you invite get an email with a link to open
-                    <span class="font-medium text-content">{{ sandbox.active.value?.name }}</span> — they accept and sign in with their own Google
-                    account.
-                </p>
-
-                <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
-
-                <div class="flex flex-col gap-2">
-                    <div class="flex items-center gap-2.5 rounded-lg border border-line bg-card px-3 py-2">
-                        <Icon name="user" class="text-muted" />
-                        <span class="min-w-0 flex-1 truncate text-sm text-content">{{ user?.email }}</span>
-                        <span class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link">Owner</span>
-                    </div>
-                    <div
-                        v-for="member in members"
-                        :key="member.email"
-                        class="flex items-center gap-2.5 rounded-lg border border-line bg-card px-3 py-2"
+                <div class="flex items-center gap-2.5 px-4 py-3">
+                    <Icon name="user" class="text-muted" />
+                    <span class="min-w-0 flex-1 truncate text-sm text-content">{{ user?.email }}</span>
+                    <span class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link">Owner</span>
+                </div>
+                <div v-for="member in members" :key="member.email" class="flex items-center gap-2.5 px-4 py-3">
+                    <Icon name="user" class="text-muted" />
+                    <span class="min-w-0 flex-1 truncate text-sm text-content">{{ member.email }}</span>
+                    <span class="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold" :class="badge(member.status).class">{{
+                        badge(member.status).label
+                    }}</span>
+                    <Button
+                        v-if="member.status !== 'accepted'"
+                        label="Resend"
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        :disabled="busy"
+                        @click="resend(member.email)"
+                    />
+                    <Button
+                        size="small"
+                        severity="danger"
+                        :text="true"
+                        :rounded="true"
+                        :disabled="busy"
+                        aria-label="Revoke access"
+                        @click="revoke(member.email)"
                     >
-                        <Icon name="user" class="text-muted" />
-                        <span class="min-w-0 flex-1 truncate text-sm text-content">{{ member.email }}</span>
-                        <span class="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold" :class="badge(member.status).class">{{
-                            badge(member.status).label
-                        }}</span>
-                        <Button
-                            v-if="member.status !== 'accepted'"
-                            label="Resend"
-                            size="small"
-                            severity="secondary"
-                            :text="true"
-                            :disabled="busy"
-                            @click="resend(member.email)"
-                        />
-                        <Button
-                            size="small"
-                            severity="danger"
-                            :text="true"
-                            :rounded="true"
-                            :disabled="busy"
-                            aria-label="Revoke access"
-                            @click="revoke(member.email)"
-                        >
-                            <template #icon><Icon name="times" /></template>
-                        </Button>
-                    </div>
+                        <template #icon><Icon name="times" /></template>
+                    </Button>
                 </div>
 
-                <form class="flex flex-col gap-2" @submit.prevent="invite">
-                    <div class="flex items-center gap-2">
-                        <input
-                            v-model="email"
-                            type="email"
-                            autocomplete="off"
-                            placeholder="teammate@example.com"
-                            :class="[
-                                cmp.input('w-full'),
-                                emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase()) ? 'ui-field-input-error' : '',
-                            ]"
-                            @blur="emailTouched = true"
-                        />
-                        <Button type="submit" label="Invite" :loading="busy" :disabled="busy || !validEmail(email.trim().toLowerCase())">
-                            <template #icon><Icon name="send" /></template>
-                        </Button>
-                    </div>
-                    <span v-if="emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())" class="ui-field-error">
-                        <Icon name="exclamation-triangle" class="text-2xs" />
-                        Enter a valid email address.
-                    </span>
-                </form>
+                <!-- Invite affordance as the group's footer row (mirrors the Secrets "add" pattern). -->
+                <div class="flex flex-col gap-2 px-4 py-3">
+                    <p class="text-xs text-muted">
+                        People you invite get an email to open
+                        <span class="font-medium text-content">{{ sandbox.active.value?.name }}</span> and sign in with their own Google account.
+                    </p>
+                    <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
+                    <form class="flex flex-col gap-2" @submit.prevent="invite">
+                        <div class="flex items-center gap-2">
+                            <input
+                                v-model="email"
+                                type="email"
+                                autocomplete="off"
+                                placeholder="teammate@example.com"
+                                :class="[
+                                    cmp.input('w-full'),
+                                    emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase()) ? 'ui-field-input-error' : '',
+                                ]"
+                                @blur="emailTouched = true"
+                            />
+                            <Button type="submit" label="Invite" :loading="busy" :disabled="busy || !validEmail(email.trim().toLowerCase())">
+                                <template #icon><Icon name="send" /></template>
+                            </Button>
+                        </div>
+                        <span v-if="emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())" class="ui-field-error">
+                            <Icon name="exclamation-triangle" class="text-2xs" />
+                            Enter a valid email address.
+                        </span>
+                    </form>
+                </div>
             </template>
 
             <template v-else>
-                <div class="flex items-center gap-2.5 rounded-lg border border-line bg-card px-3 py-2">
+                <div class="flex items-center gap-2.5 px-4 py-3">
                     <Icon name="user" class="text-muted" />
                     <span class="min-w-0 flex-1 truncate text-sm text-content">{{ user?.email }}</span>
                     <span class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-semibold text-subtle">You</span>
                 </div>
-                <p class="text-xs text-muted">Only the sandbox owner can invite or remove people.</p>
+                <div class="px-4 py-3 text-xs text-muted">Only the sandbox owner can invite or remove people.</div>
             </template>
-        </Card>
+        </RowGroup>
 
         <!-- Live presence: who else is connected right now (everyone sees this). -->
-        <Card class="flex flex-col gap-3">
-            <div class="flex items-center gap-2.5">
-                <Icon name="wave-pulse" class="text-lg text-muted" />
-                <div>
-                    <h2 class="font-semibold leading-tight">Here now</h2>
-                    <p class="text-xs text-muted">Other members connected to this sandbox right now.</p>
-                </div>
-            </div>
-            <div v-if="presenceOthers.length === 0" :class="cmp.emptyState('py-6')">No one else is connected right now.</div>
-            <div v-else class="flex flex-col gap-2">
+        <RowGroup label="Here now">
+            <div v-if="presenceOthers.length === 0" class="px-4 py-6 text-center text-xs text-muted">No one else is connected right now.</div>
+            <template v-else>
                 <div
                     v-for="member in presenceOthers"
                     :key="member.email"
-                    class="flex items-center gap-2.5 rounded-lg border border-line bg-canvas px-3 py-2"
+                    class="flex items-center gap-2.5 px-4 py-3"
                     :class="member.idle ? 'opacity-60' : ''"
                 >
                     <span
@@ -258,13 +237,13 @@ const revoke = async (target: string): Promise<void> => {
                         <img v-if="member.picture" :src="member.picture" alt="" referrerpolicy="no-referrer" class="h-full w-full object-cover" />
                         <span v-else>{{ presenceInitials(member) }}</span>
                     </span>
-                    <div class="min-w-0">
+                    <div class="min-w-0 flex-1">
                         <div class="truncate text-sm font-medium text-content">{{ member.name ?? member.email }}</div>
                         <div class="truncate text-xs text-muted">{{ presenceActivity(member) }}</div>
                     </div>
-                    <span v-if="member.idle" class="ml-auto shrink-0 text-2xs text-subtle">idle</span>
+                    <span v-if="member.idle" class="shrink-0 text-2xs text-subtle">idle</span>
                 </div>
-            </div>
-        </Card>
+            </template>
+        </RowGroup>
     </div>
 </template>

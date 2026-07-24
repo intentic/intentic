@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { KeyedProvider } from "@intentic/sandbox-contract";
-import { Card, cmp, CopyButton } from "@intentic-app/ui";
+import { Card, cmp, CopyButton, Row, RowGroup, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
@@ -264,6 +264,10 @@ const setFilterBackend = (backend: `native` | `rtk`): void => {
     }
     saveSandboxSettings.mutate({ ...current, filterBackend: backend });
 };
+const backendOptions = [
+    { label: `Native`, value: `native` as const },
+    { label: `rtk`, value: `rtk` as const },
+];
 
 // The savings report (rtk-`gain` surface) over the live filter-stats ledger.
 const { savings } = useCleanerSavings();
@@ -297,7 +301,7 @@ const importMemory = async (): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-2.5">
+    <div class="flex flex-col gap-6">
         <!-- AI provider accounts the agent runs as. -->
         <Card id="ai-account" class="flex flex-col gap-3 transition-shadow" :class="ringing ? 'ring-2 ring-info' : ''">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -492,153 +496,122 @@ const importMemory = async (): Promise<void> => {
             </div>
         </Card>
 
-        <!-- Output cleaning — compresses noisy shell output (installs/builds/tests) before the model sees it,
-             invisible to the agent. Off = raw output. The master toggle flips the whole filter; the per-cleaner
-             checklist + holdout below let each cleaner be turned on/off and A/B benchmarked individually. -->
-        <Card class="flex flex-col gap-3">
-            <div class="flex items-center justify-between">
-                <div class="flex min-w-0 items-center gap-2.5">
-                    <Icon name="bolt" class="text-lg text-muted" />
-                    <div class="min-w-0">
-                        <h2 class="font-semibold leading-tight">Clean command output</h2>
-                        <p class="text-xs text-muted">
-                            Trim noisy shell output before it reaches the assistant — fewer tokens, same signal (errors always kept).
+        <!-- Command output — the shell-output filter (master toggle + per-cleaner checklist + holdout), its A/B
+             backend, and the realized-savings report. One grouped section instead of a card per toggle. -->
+        <RowGroup label="Command output">
+            <Row
+                icon="bolt"
+                title="Clean command output"
+                description="Trim noisy shell output before it reaches the assistant — fewer tokens, same signal (errors always kept)."
+            >
+                <template #control>
+                    <ToggleSwitch :model-value="cleaningOn" :disabled="sandboxSettings === undefined" @update:model-value="toggleOutputCleaning" />
+                </template>
+                <!-- Per-cleaner switches (the spec, as a checklist) — only meaningful while cleaning is on. -->
+                <template v-if="cleaningOn && sandboxSettings !== undefined" #below>
+                    <div class="flex flex-col gap-2">
+                        <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Cleaners</p>
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                            <label v-for="cleaner in CLEANER_OPTIONS" :key="cleaner.id" class="flex items-center justify-between gap-2">
+                                <span class="truncate text-xs text-content">{{ cleaner.label }}</span>
+                                <ToggleSwitch
+                                    :model-value="enabledCleaners.has(cleaner.id)"
+                                    @update:model-value="(value: boolean) => toggleCleaner(cleaner.id, value)"
+                                />
+                            </label>
+                        </div>
+
+                        <!-- Holdout: measurement control — a % of commands left raw so the savings report has a real
+                             cleaned-vs-raw baseline instead of an estimate. -->
+                        <label class="mt-1 flex items-center justify-between gap-3 border-t border-line pt-3">
+                            <span class="flex min-w-0 flex-col">
+                                <span class="text-xs text-content">Holdout control</span>
+                                <span class="text-2xs text-muted">Leave this % of commands uncleaned to measure real savings.</span>
+                            </span>
+                            <span class="flex shrink-0 items-center gap-1">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    :value="holdoutPercent"
+                                    :class="cmp.input('w-16 text-right text-xs')"
+                                    @change="(event: Event) => setHoldoutPercent(Number((event.target as HTMLInputElement).value))"
+                                />
+                                <span class="text-xs text-muted">%</span>
+                            </span>
+                        </label>
+                    </div>
+                </template>
+            </Row>
+
+            <Row
+                icon="arrows-h"
+                title="Cleaner backend"
+                description="Which tool compresses shell output. rtk requires the rtk extension installed + rebuilt."
+            >
+                <template #control>
+                    <Segmented
+                        :model-value="sandboxSettings?.filterBackend ?? `native`"
+                        :options="backendOptions"
+                        @update:model-value="setFilterBackend"
+                    />
+                </template>
+            </Row>
+
+            <!-- Savings report (rtk-`gain`) — realized token savings from the live filter-stats ledger, so the owner
+                 can see what each cleaner is worth and where to add the next handler. -->
+            <Row v-if="savings !== undefined && savings.commands > 0" icon="wave-pulse" title="Output savings">
+                <template #description>
+                    {{ savings.commands }} commands · ~{{ shortTokens(savings.rawTokens) }} → ~{{ shortTokens(savings.emittedTokens) }} tokens ·
+                    <span class="font-medium text-success">{{ savings.savedPct }}% saved</span>
+                    <span v-if="savings.holdout.measuredSavedPct !== undefined"> · {{ savings.holdout.measuredSavedPct }}% measured (holdout)</span>
+                </template>
+                <template #below>
+                    <div v-if="savings.perCleaner.length > 0" class="flex flex-wrap gap-1.5">
+                        <span v-for="entry in savings.perCleaner" :key="entry.id" class="rounded-md bg-canvas px-1.5 py-0.5 text-2xs text-subtle">
+                            {{ entry.id }} ×{{ entry.commands }}
+                        </span>
+                    </div>
+                    <div v-if="savings.gaps.length > 0" class="mt-2 flex flex-col gap-1 border-t border-line pt-2">
+                        <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Un-cleaned (add a handler)</p>
+                        <p v-for="gap in savings.gaps.slice(0, 5)" :key="gap.command" class="truncate font-mono text-2xs text-muted">
+                            ~{{ shortTokens(gap.tokens) }} · {{ gap.command }}
                         </p>
                     </div>
-                </div>
-                <ToggleSwitch :model-value="cleaningOn" :disabled="sandboxSettings === undefined" @update:model-value="toggleOutputCleaning" />
-            </div>
+                </template>
+            </Row>
+        </RowGroup>
 
-            <!-- Per-cleaner switches (the spec, as a checklist) — only meaningful while cleaning is on. -->
-            <div v-if="cleaningOn && sandboxSettings !== undefined" class="flex flex-col gap-2 border-t border-line pt-3">
-                <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Cleaners</p>
-                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
-                    <label v-for="cleaner in CLEANER_OPTIONS" :key="cleaner.id" class="flex items-center justify-between gap-2">
-                        <span class="truncate text-xs text-content">{{ cleaner.label }}</span>
-                        <ToggleSwitch
-                            :model-value="enabledCleaners.has(cleaner.id)"
-                            @update:model-value="(value: boolean) => toggleCleaner(cleaner.id, value)"
-                        />
-                    </label>
-                </div>
+        <!-- Assistant — behavior-steering toggles (concise output, search backend). -->
+        <RowGroup label="Assistant">
+            <!-- Terse responses — steers the assistant to answer concisely (no restating context/tool output),
+                 cutting its own output tokens. A stable system-prompt suffix, so it doesn't hurt prompt-cache hits. -->
+            <Row
+                icon="align-left"
+                title="Terse responses"
+                description="Ask the assistant to answer concisely without restating context — fewer output tokens per reply."
+            >
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="sandboxSettings?.terseOutput ?? false"
+                        :disabled="sandboxSettings === undefined"
+                        @update:model-value="toggleTerseOutput"
+                    />
+                </template>
+            </Row>
 
-                <!-- Holdout: measurement control — a % of commands left raw so the savings report has a real
-                     cleaned-vs-raw baseline instead of an estimate. -->
-                <label class="mt-1 flex items-center justify-between gap-3 border-t border-line pt-3">
-                    <span class="flex min-w-0 flex-col">
-                        <span class="text-xs text-content">Holdout control</span>
-                        <span class="text-2xs text-muted">Leave this % of commands uncleaned to measure real savings.</span>
-                    </span>
-                    <span class="flex shrink-0 items-center gap-1">
-                        <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            :value="holdoutPercent"
-                            :class="cmp.input('w-16 text-right text-xs')"
-                            @change="(event: Event) => setHoldoutPercent(Number((event.target as HTMLInputElement).value))"
-                        />
-                        <span class="text-xs text-muted">%</span>
-                    </span>
-                </label>
-            </div>
-        </Card>
-
-        <!-- Cleaner backend — native filter vs the rtk extension binary, an A/B switch (rtk needs the rtk
-             extension installed + a sandbox rebuild first). -->
-        <Card class="flex items-center justify-between">
-            <div class="flex min-w-0 items-center gap-2.5">
-                <Icon name="arrows-h" class="text-lg text-muted" />
-                <div class="min-w-0">
-                    <h2 class="font-semibold leading-tight">Cleaner backend</h2>
-                    <p class="text-xs text-muted">Which tool compresses shell output. rtk requires the rtk extension installed + rebuilt.</p>
-                </div>
-            </div>
-            <div class="flex shrink-0 items-center gap-1">
-                <button
-                    v-for="backend in [
-                        { value: 'native' as const, label: 'Native' },
-                        { value: 'rtk' as const, label: 'rtk' },
-                    ]"
-                    :key="backend.value"
-                    type="button"
-                    class="composer-ghost h-6 px-2 text-2xs font-medium"
-                    :class="{ 'composer-active': (sandboxSettings?.filterBackend ?? 'native') === backend.value }"
-                    :disabled="sandboxSettings === undefined"
-                    :aria-pressed="(sandboxSettings?.filterBackend ?? 'native') === backend.value"
-                    @click="setFilterBackend(backend.value)"
-                >
-                    {{ backend.label }}
-                </button>
-            </div>
-        </Card>
-
-        <!-- Savings report (rtk-`gain`) — realized token savings from the live filter-stats ledger, so the owner
-             can see what each cleaner is worth and where to add the next handler. -->
-        <Card v-if="savings !== undefined && savings.commands > 0" class="flex flex-col gap-2.5">
-            <div class="flex items-center gap-2.5">
-                <Icon name="wave-pulse" class="text-lg text-muted" />
-                <div class="min-w-0">
-                    <h2 class="font-semibold leading-tight">Output savings</h2>
-                    <p class="text-xs text-muted">
-                        {{ savings.commands }} commands · ~{{ shortTokens(savings.rawTokens) }} → ~{{ shortTokens(savings.emittedTokens) }} tokens ·
-                        <span class="font-medium text-success">{{ savings.savedPct }}% saved</span>
-                        <span v-if="savings.holdout.measuredSavedPct !== undefined">
-                            · {{ savings.holdout.measuredSavedPct }}% measured (holdout)</span
-                        >
-                    </p>
-                </div>
-            </div>
-            <div v-if="savings.perCleaner.length > 0" class="flex flex-wrap gap-1.5">
-                <span
-                    v-for="entry in savings.perCleaner"
-                    :key="entry.id"
-                    class="rounded-md border border-line bg-card px-1.5 py-0.5 text-2xs text-subtle"
-                >
-                    {{ entry.id }} ×{{ entry.commands }}
-                </span>
-            </div>
-            <div v-if="savings.gaps.length > 0" class="flex flex-col gap-1 border-t border-line pt-2">
-                <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Un-cleaned (add a handler)</p>
-                <p v-for="gap in savings.gaps.slice(0, 5)" :key="gap.command" class="truncate font-mono text-2xs text-muted">
-                    ~{{ shortTokens(gap.tokens) }} · {{ gap.command }}
-                </p>
-            </div>
-        </Card>
-
-        <!-- Terse responses — steers the assistant to answer concisely (no restating context/tool output),
-             cutting its own output tokens. A stable system-prompt suffix, so it doesn't hurt prompt-cache hits. -->
-        <Card class="flex items-center justify-between">
-            <div class="flex min-w-0 items-center gap-2.5">
-                <Icon name="align-left" class="text-lg text-muted" />
-                <div class="min-w-0">
-                    <h2 class="font-semibold leading-tight">Terse responses</h2>
-                    <p class="text-xs text-muted">Ask the assistant to answer concisely without restating context — fewer output tokens per reply.</p>
-                </div>
-            </div>
-            <ToggleSwitch
-                :model-value="sandboxSettings?.terseOutput ?? false"
-                :disabled="sandboxSettings === undefined"
-                @update:model-value="toggleTerseOutput"
-            />
-        </Card>
-
-        <!-- iq code search — loads the iq plugin (skill + nudge) so the assistant reaches for the iq CLI instead
-             of grep/find/glob. Opt-in per sandbox; the browser Search box uses iq regardless. -->
-        <Card class="flex items-center justify-between">
-            <div class="flex min-w-0 items-center gap-2.5">
-                <Icon name="search" class="text-lg text-muted" />
-                <div class="min-w-0">
-                    <h2 class="font-semibold leading-tight">iq code search</h2>
-                    <p class="text-xs text-muted">Let the assistant use the iq search CLI instead of grep / find / glob.</p>
-                </div>
-            </div>
-            <ToggleSwitch
-                :model-value="sandboxSettings?.iqSearch ?? false"
-                :disabled="sandboxSettings === undefined"
-                @update:model-value="toggleIqSearch"
-            />
-        </Card>
+            <!-- iq code search — loads the iq plugin (skill + nudge) so the assistant reaches for the iq CLI instead
+                 of grep/find/glob. Opt-in per sandbox; the browser Search box uses iq regardless. -->
+            <Row icon="search" title="iq code search" description="Let the assistant use the iq search CLI instead of grep / find / glob.">
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="sandboxSettings?.iqSearch ?? false"
+                        :disabled="sandboxSettings === undefined"
+                        @update:model-value="toggleIqSearch"
+                    />
+                </template>
+            </Row>
+        </RowGroup>
 
         <!-- Import memory: bring context from another AI assistant into this sandbox's agent memory files. -->
         <Card class="flex flex-col gap-3">

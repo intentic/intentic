@@ -33,7 +33,7 @@ export function useEnvironment() {
         return current?.approved !== undefined && current.approved.hash === current.appliedHash ? current.approved : undefined;
     });
 
-    // Server-managed sandboxes use the provider's fixed container name; their rebuild rides `intentic apply`
+    // Server-managed sandboxes use the provider's fixed container name; their rebuild rides `intentic deploy apply`
     // (the overlay content is git-reviewed in desired-state), not a local one-liner.
     const serverManaged = computed(() => state.value?.container === `intentic-sandbox-workspace`);
     const rebuildCommand = computed(() => {

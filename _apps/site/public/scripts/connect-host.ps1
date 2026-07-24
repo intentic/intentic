@@ -203,7 +203,7 @@ if ($ProvidedTunnel) {
     Write-Host "intentic: creating this host's SSH tunnel..."
     $tunnelArgs = @('run', '--rm', '--entrypoint', 'intentic', '-e', "CLOUDFLARE_API_TOKEN=$CfToken", '-e', "CONNECT_TOKEN=$ConnectToken", '-e', "HOST_NAME=$HostName")
     if ($Zone) { $tunnelArgs += @('-e', "ZONE=$Zone") }
-    $tunnelArgs += @($SandboxImage, 'host-ssh-tunnel')
+    $tunnelArgs += @($SandboxImage, 'tunnel', 'host')
     $hostSshOut = & docker $tunnelArgs
     $HostSshTunnelToken = ($hostSshOut | Where-Object { $_ -like 'HOST_SSH_TUNNEL_TOKEN=*' } | Select-Object -First 1) -replace '^HOST_SSH_TUNNEL_TOKEN=', ''
     $HostAddress = ($hostSshOut | Where-Object { $_ -like 'HOST_SSH_HOSTNAME=*' } | Select-Object -First 1) -replace '^HOST_SSH_HOSTNAME=', ''

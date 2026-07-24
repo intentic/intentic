@@ -137,7 +137,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
     && install -m 0755 "$(find /tmp/cliproxy -type f -name cli-proxy-api | head -n1)" /usr/local/bin/cli-proxy-api \
     && test -x /usr/local/bin/cli-proxy-api \
     && rm -rf /tmp/cliproxy /var/lib/apt/lists/*
-# cloudflared on PATH — `intentic apply` shells out to `cloudflared access tcp` to reach a self-host's SSH
+# cloudflared on PATH — `intentic deploy apply` shells out to `cloudflared access tcp` to reach a self-host's SSH
 # through its Cloudflare tunnel when the host is registered with via:"cloudflared" (a NAT'd local machine).
 # Pinned to the same version connect.sh runs as the tunnel sidecar. Placed HERE, before the tree COPYs below,
 # so the layer stays cache-stable across source changes.

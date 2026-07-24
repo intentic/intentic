@@ -8,7 +8,7 @@ import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
 const ARTIFACT_FILE = "desired-state.json";
 const ENV_FILE = ".env";
 const SECRETS_FILE = ".secrets.json";
-// Digests of the secret values last pushed to Forgejo Actions (`adopt` / `intentic secrets push`). Forgejo
+// Digests of the secret values last pushed to Forgejo Actions (`adopt` / `intentic deploy secrets push`). Forgejo
 // cannot read secrets back, so this local record is the only way to tell "CI has the current value" from
 // "CI is stale". Gitignored and on the daemon's file denylist, like the value files beside it.
 export const SYNC_FILE = ".secrets-sync.json";

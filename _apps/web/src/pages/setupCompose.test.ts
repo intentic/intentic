@@ -17,7 +17,7 @@ test("intentic path: the bootstrap is claim → up, against the production platf
 test("own path: the bootstrap appends the CF token and mints the tunnel through the .env before up", () => {
     const bootstrap = composeBootstrap({ ...base, mode: `own`, hostname: `dev.example.com`, cfToken: `cf-tok` });
     expect(bootstrap).toContain(`echo "CLOUDFLARE_API_TOKEN=cf-tok" >> .env`);
-    expect(bootstrap).toContain(`docker run --rm --env-file .env --entrypoint intentic ${base.image} sandbox-tunnel`);
+    expect(bootstrap).toContain(`docker run --rm --env-file .env --entrypoint intentic ${base.image} tunnel sandbox`);
     expect(bootstrap).toContain(`--subdomain 'dev' >> .env`);
     expect(bootstrap.endsWith(`docker compose up -d`)).toBe(true);
 });

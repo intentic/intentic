@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp, StatusBadge, type StatusVariant } from "@intentic-app/ui";
+import { Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic-app/ui";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
 import { useRunning } from "../../composables/sandbox/useRunning";
@@ -24,36 +24,24 @@ const stateVariant = (state: string): StatusVariant =>
 </script>
 
 <template>
-    <Card class="flex flex-col gap-3">
-        <div class="flex items-center gap-2.5">
-            <Icon name="bolt" class="text-lg text-muted" />
-            <div>
-                <h2 class="font-semibold leading-tight">Running in this sandbox</h2>
-                <p class="text-xs text-muted">Live operator panels and active services — where they are and whether they're healthy.</p>
-            </div>
-        </div>
-        <div v-if="runningPanels.length === 0 && activeServices.length === 0" :class="cmp.emptyState('py-6')">
+    <RowGroup label="Running now">
+        <div v-if="runningPanels.length === 0 && activeServices.length === 0" class="px-4 py-6 text-center text-xs text-muted">
             Nothing running — open a panel from the sidebar.
         </div>
         <template v-else>
             <!-- Operator-panel dev servers that are up: link to the panel page for controls; port + preview here. -->
-            <div
-                v-for="panel in runningPanels"
-                :key="panel.repo"
-                class="flex items-center justify-between gap-3 rounded-lg border border-line bg-canvas px-3 py-2"
-            >
-                <div class="flex min-w-0 items-center gap-2.5">
-                    <Icon name="window-maximize" class="text-muted" />
+            <Row v-for="panel in runningPanels" :key="panel.repo" icon="window-maximize">
+                <template #title>
                     <router-link
                         v-if="activationRoute(panel.repo) !== undefined"
                         :to="activationRoute(panel.repo)!"
-                        class="truncate font-medium text-content hover:text-link hover:underline"
+                        class="hover:text-link hover:underline"
                         >{{ panel.repo }}</router-link
                     >
-                    <span v-else class="truncate font-medium text-content">{{ panel.repo }}</span>
-                    <span v-if="panel.port" class="font-mono text-2xs text-subtle">:{{ panel.port }}</span>
-                </div>
-                <div class="flex shrink-0 items-center gap-2">
+                    <span v-else>{{ panel.repo }}</span>
+                    <span v-if="panel.port" class="ml-1 font-mono text-2xs font-normal text-subtle">:{{ panel.port }}</span>
+                </template>
+                <template #control>
                     <a
                         v-if="panel.previewUrl && panel.healthy"
                         :href="panel.previewUrl"
@@ -64,26 +52,23 @@ const stateVariant = (state: string): StatusVariant =>
                         Preview<Icon name="external-link" class="text-2xs" />
                     </a>
                     <StatusBadge :variant="panel.healthy ? 'success' : 'warning'" :label="panel.healthy ? 'Healthy' : 'Starting'" size="xs" dot />
-                </div>
-            </div>
+                </template>
+            </Row>
             <!-- Service-type capabilities reporting active (self-hosted stacks, vpn, ssh). URLs live in Live status. -->
-            <div
-                v-for="service in activeServices"
-                :key="service.id"
-                class="flex items-center justify-between gap-3 rounded-lg border border-line bg-canvas px-3 py-2"
-            >
-                <div class="min-w-0">
-                    <span class="truncate font-medium text-content">{{ service.id }}</span>
-                    <span class="ml-2 text-2xs text-subtle">{{ service.kind }}</span>
-                </div>
-                <StatusBadge
-                    :variant="stateVariant(service.status.state)"
-                    :label="service.status.state"
-                    size="xs"
-                    dot
-                    v-tooltip.top="service.status.detail"
-                />
-            </div>
+            <Row v-for="service in activeServices" :key="service.id" icon="server">
+                <template #title>
+                    {{ service.id }}<span class="ml-2 text-2xs font-normal text-subtle">{{ service.kind }}</span>
+                </template>
+                <template #control>
+                    <StatusBadge
+                        :variant="stateVariant(service.status.state)"
+                        :label="service.status.state"
+                        size="xs"
+                        dot
+                        v-tooltip.top="service.status.detail"
+                    />
+                </template>
+            </Row>
         </template>
-    </Card>
+    </RowGroup>
 </template>

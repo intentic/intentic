@@ -7,7 +7,7 @@ import type { CapabilityHandler } from "../capability.js";
 // Monorepo: scaffold an empty pnpm+turbo monorepo as its own repo at /work/<id> (the `id` is the repo
 // name), with a control operator panel — so the user can then add apps (API/Web/Landing) into it from that panel.
 // Mirrors devops (a platform capability that scaffolds a repo); idempotent via the existence gate, and no
-// `remove` — deleting the repo would destroy the user's work. The scaffold is one visible `intentic monorepo`
+// `remove` — deleting the repo would destroy the user's work. The scaffold is one visible `intentic scaffold monorepo`
 // command in the job session the first frame surfaces (the add-apps pattern).
 export const monorepoHandler: CapabilityHandler = {
     apply: async function* (ctx, id) {

@@ -1,27 +1,29 @@
 # @intentic/cli
 
-The **runnable product** — the `intentic` CLI (`bin: intentic`). It turns a local intent file into a
-desired-state artifact and executes it, with no remote control plane required. Depends on
-`@intentic/engine`, `@intentic/providers`, `@intentic/need-resolver`, `@intentic/state-resolver`, `@intentic/graph`.
+The `intentic` CLI (`bin: intentic`) — a toolbox of three command groups: **`tunnel`** (the sandbox's own
+Cloudflare tunnels, used by connect.sh), **`deploy`** (the bundled deployment engine — turn a local intent
+file into a desired-state artifact and reconcile it, no remote control plane required), and **`scaffold`**
+(seed app repos). The `deploy` group depends on `@intentic/engine`, `@intentic/providers`,
+`@intentic/need-resolver`, `@intentic/state-resolver`, `@intentic/graph`.
 
 ## Local control plane
 
 The "control plane" is two local git repos: an **intent** repo holding `deploy.config.ts`, and a
 **desired-state** repo holding the generated artifact (`desired-state.json`) and the
-execution record (`status.json`). `intentic init` scaffolds both.
+execution record (`status.json`). `intentic deploy init` scaffolds both.
 
 ## Commands
 
 Built on [stricli](https://github.com/bloomberg/stricli) with generated `--help` / `--version`.
 
-- `intentic init [--dir .]` — scaffold the `intent` and `desired-state` git repos (intent seeded
+- `intentic deploy init [--dir .]` — scaffold the `intent` and `desired-state` git repos (intent seeded
   with a starter `deploy.config.ts`).
-- `intentic resolve [--config deploy.config.ts] [--out desired-state.json]` —
+- `intentic deploy resolve [--config deploy.config.ts] [--out desired-state.json]` —
   load the intent, resolve it to a `DesiredStateGraph`, and write it, along with `.env.example` (the
   user-supplied secrets) and `.secrets.json` (the intentic-generated ones). No infra access.
-- `intentic plan [--artifact desired-state.json]` — read-only preview of what `apply` would
+- `intentic deploy plan [--artifact desired-state.json]` — read-only preview of what `apply` would
   create/update.
-- `intentic apply [--artifact desired-state.json] [--max-iterations 5]` — reconcile the artifact
+- `intentic deploy apply [--artifact desired-state.json] [--max-iterations 5]` — reconcile the artifact
   until state reads true, writing `status.json` beside it. Reads user-supplied secrets from `.env`
   beside the artifact (or the environment) and generates the platform admin secrets it owns (see
   below). On success it prints an **Access** summary and writes `access.md` beside the artifact: the
@@ -49,10 +51,10 @@ Both `.env` and `.secrets.json` are gitignored, so no secret lands in the PR-man
 ## Workflow
 
 ```sh
-intentic init
-cd intent && intentic resolve --out ../desired-state/desired-state.json
+intentic deploy init
+cd intent && intentic deploy resolve --out ../desired-state/desired-state.json
 cp ../desired-state/.env.example ../desired-state/.env   # fill in the user-supplied values resolve listed
-cd .. && intentic apply                                  # generates the platform secrets, prints the logins
+cd .. && intentic deploy apply                                  # generates the platform secrets, prints the logins
 ```
 
 > A `deploy.config.ts` imports `@intentic/sdk` + `@intentic/graph`, so the project it lives in must have

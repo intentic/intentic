@@ -17,7 +17,7 @@ import type {
 // The authoring surface. A developer declares the inventory they have — i.have.host / i.have.cloudflare —
 // and what they want — i.want.app (built from source) and i.want.service (an off-the-shelf shared tool).
 // The have/want split is lifecycle ownership, not requirements: intentic reads a have but never creates or
-// destroys it (`intentic destroy` leaves it untouched), while a want it owns end-to-end — created,
+// destroys it (`intentic deploy destroy` leaves it untouched), while a want it owns end-to-end — created,
 // reconciled, pruned, destroyed. Requirements are input fields (`on`/`expose`/`use`/`observe`/`notify`)
 // and may point at haves and wants alike.
 // The support stack each app requires (git+CI, deploy orchestrator, runner, tunnel, routes) is derived by
@@ -193,7 +193,7 @@ export interface WantWorkspaceInput {
     dockerfile?: string;
 }
 
-// Inventory you bring. intentic reads it and never creates or destroys it — `intentic destroy` does not touch it.
+// Inventory you bring. intentic reads it and never creates or destroys it — `intentic deploy destroy` does not touch it.
 export interface Have {
     host(id: string, input: HostInput): Host;
     cloudflare(id: string, input: CloudflareInput): Cloudflare;

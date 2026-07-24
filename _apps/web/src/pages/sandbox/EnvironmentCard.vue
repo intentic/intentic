@@ -14,7 +14,7 @@ import DiffView from "../workspace/viewers/DiffView.vue";
  * from the enabled capabilities' fragments plus the custom section the agent proposes; the OWNER reviews the
  * custom-section diff here and approves/rejects (capability fragments recompose automatically). Approval pins
  * the content's hash; the rebuild itself runs OUTSIDE the container — locally via the copyable one-liner
- * (whose hash argument guarantees only the reviewed content is built), or on the next `intentic apply` for a
+ * (whose hash argument guarantees only the reviewed content is built), or on the next `intentic deploy apply` for a
  * server-managed sandbox. Hidden until there is an overlay or a proposal. */
 
 const queryClient = useQueryClient();
@@ -93,7 +93,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
         <template v-if="pending">
             <Code :code="pending.content" lang="dockerfile" label="Approved overlay (pending rebuild)" />
             <template v-if="serverManaged">
-                <p class="text-2xs text-subtle">Applies on the next <span class="font-mono">intentic apply</span> against this sandbox's host.</p>
+                <p class="text-2xs text-subtle">Applies on the next <span class="font-mono">intentic deploy apply</span> against this sandbox's host.</p>
             </template>
             <template v-else>
                 <p class="text-xs font-medium text-content">To finish, rebuild your sandbox:</p>

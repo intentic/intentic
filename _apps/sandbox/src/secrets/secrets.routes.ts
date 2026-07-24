@@ -51,7 +51,7 @@ export const envKeys = (content: string): string[] => Object.keys(parseEnv(conte
 // secret is picked up with no restart. set/remove/list/reveal refuse until DevOps has scaffolded the
 // desired-state repo; `inventory` always answers (capability/provider entries exist pre-scaffold).
 // `reveal` is the single value-returning route, owner-only. After every set/remove the daemon fires
-// `intentic secrets push` best-effort so an adopted workspace's Forgejo Actions copy never goes silently stale.
+// `intentic deploy secrets push` best-effort so an adopted workspace's Forgejo Actions copy never goes silently stale.
 export const createSecretsRoutes = (services: Services) => {
     const i = implement(secretsContract).$context<OrpcContext>();
     const desiredState = (): string => services.workspace.repos["desired-state"];
@@ -83,7 +83,7 @@ export const createSecretsRoutes = (services: Services) => {
     };
     const pushToCi = (): void => {
         void (async () => {
-            for await (const line of services.intentic({ args: ["secrets", "push"], cwd: services.workspace.root })) {
+            for await (const line of services.intentic({ args: ["deploy", "secrets", "push"], cwd: services.workspace.root })) {
                 void line;
             }
         })().catch((error: unknown) => services.logger.warn({ err: error }, "secrets push after set failed"));

@@ -185,7 +185,7 @@ const REACHABLE_INTERVAL_MS = 3_000;
 // Transport liveness + command ceilings. A connect (TCP + handshake + auth) is bounded by readyTimeout; once
 // connected, keepalive probes every 5s and gives up after 3 misses, so a transport that dies mid-command (the
 // host's tunnel connector restarting, a dropped link) fails the session in ~15s instead of hanging forever —
-// this exact hang wedged `intentic plan` for 8+ minutes when a host tunnel restarted mid-read. The per-exec
+// this exact hang wedged `intentic deploy plan` for 8+ minutes when a host tunnel restarted mid-read. The per-exec
 // ceiling is deliberately generous: image pulls and restic backups legitimately run for many minutes, and
 // nothing in a single exec should outlive the 30-minute apply lock — it exists to bound a genuinely wedged
 // remote command (a stuck dockerd), not to police slow-but-alive work (keepalive already proves liveness).

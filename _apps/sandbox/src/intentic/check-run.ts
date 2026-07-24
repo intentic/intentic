@@ -7,7 +7,7 @@ import { shellQuote } from "../terminal/terminal-run.js";
 import { INFRA_CHECK_SESSION } from "../terminal/terminal-session.js";
 import { resetEventsFile, tailIntenticEvents } from "./apply-events.js";
 
-// The check flow's substrate: run one `intentic resolve` / `intentic plan` VISIBLY in the job-infra-check tmux
+// The check flow's substrate: run one `intentic deploy resolve` / `intentic deploy plan` VISIBLY in the job-infra-check tmux
 // session (human output in the pane the terminals panel attaches) while streaming the same structured events
 // the old invisible runner produced — the CLI mirrors them to a per-run events file (INTENTIC_EVENTS_FILE)
 // this generator tails. Per-run files (not the apply job's fixed durable path) because two browser tabs can
@@ -24,7 +24,7 @@ export async function* runCheckCommand(services: Services, args: readonly string
     if (services.terminalRun.visible) {
         yield { kind: "terminal", session: INFRA_CHECK_SESSION };
     }
-    // Composed abort: the caller's signal (closed tab — a dropped check must not leak a live `intentic plan`
+    // Composed abort: the caller's signal (closed tab — a dropped check must not leak a live `intentic deploy plan`
     // holding SSH connections) plus this generator's own teardown (a consumer that stops iterating without
     // aborting). Either SIGTERMs the wrapper, whose trap kills the tmux window.
     const controller = new AbortController();
@@ -34,7 +34,7 @@ export async function* runCheckCommand(services: Services, args: readonly string
     const done = services.terminalRun
         .tryRun(INFRA_CHECK_SESSION, ["intentic", ...args].map(shellQuote).join(" "), {
             cwd: services.workspace.root,
-            window: args[0] ?? "run",
+            window: args[1] ?? args[0] ?? "run",
             // Rides -e onto the tmux window (pane env ≠ daemon env) AND the wrapper's env for the fallback.
             env: { INTENTIC_EVENTS_FILE: path },
             signal: controller.signal,

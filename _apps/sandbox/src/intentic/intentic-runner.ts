@@ -60,7 +60,7 @@ export interface RunLogger {
 // Run the in-sandbox intentic CLI and stream its ndjson lines as they arrive (so the UI sees live
 // resolve/plan progress). A non-zero exit propagates as an error once the stream ends, with captured stderr.
 // The child is KILLED when the caller aborts (browser tab closed — an abandoned SSE must not leak a live
-// `intentic plan` with its SSH connections), when the generator is torn down, or when the watchdog fires.
+// `intentic deploy plan` with its SSH connections), when the generator is torn down, or when the watchdog fires.
 // Every run's lifecycle (spawn, kill + reason, exit + duration + stderr head) lands in the daemon log — a
 // crashed or killed run must be attributable from daemon.log alone, not reconstructed from absence.
 export async function* runIntentic(run: IntenticRun, signal?: AbortSignal, logger?: RunLogger): AsyncGenerator<IntenticLine> {

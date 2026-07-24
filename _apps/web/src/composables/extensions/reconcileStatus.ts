@@ -2,8 +2,8 @@ import type { StatusVariant } from "@intentic-app/ui";
 import { readIntenticLines } from "../intenticStream";
 
 /* The shared reconcile-action vocabulary, used everywhere the resolve → plan → apply pipeline surfaces a
- * per-resource verdict: the live-status board (status.json statuses + a live `intentic plan`), the infra
- * change preview (a pre-apply `intentic plan`), and the live apply progress (the apply event stream). One
+ * per-resource verdict: the live-status board (status.json statuses + a live `intentic deploy plan`), the infra
+ * change preview (a pre-apply `intentic deploy plan`), and the live apply progress (the apply event stream). One
  * source of truth for the label text, badge variant, and node dot colour so the graph, the details panel, the
  * preview, and the progress list stay in lockstep. Its cross-extension home is here beside useWorkspaceState /
  * useDeployments, the other infra read-model pieces both extensions share. */
@@ -69,7 +69,7 @@ export const statusGerund = (status: string): string => {
     return `Working`;
 };
 
-// One resource's verdict from an `intentic plan` stream (kind:"node"): the resource id + its reconcile action.
+// One resource's verdict from an `intentic deploy plan` stream (kind:"node"): the resource id + its reconcile action.
 export interface PlanStep {
     readonly id: string;
     readonly action: string;
@@ -111,7 +111,7 @@ export interface PlanProgress {
     readonly terminal?: string;
 }
 
-// Reduce a daemon `intentic plan` SSE stream (read + diff, no apply) to its per-resource verdicts + orphan list.
+// Reduce a daemon `intentic deploy plan` SSE stream (read + diff, no apply) to its per-resource verdicts + orphan list.
 // A terminal kind:"error" frame (a non-zero CLI exit, normalized by readIntenticLines) throws so the caller
 // surfaces the reason instead of showing an empty plan.
 export const readPlanSteps = async (

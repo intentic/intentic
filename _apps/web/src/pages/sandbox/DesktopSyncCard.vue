@@ -117,7 +117,7 @@ onUnmounted(stop);
         <template v-if="available">
             <!-- Enabled: a machine holds sync. Show which, how to manage it, and an opt-in to move it here. -->
             <template v-if="enrolled">
-                <dl class="flex flex-col gap-1.5 rounded-lg border border-line bg-overlay/40 px-3 py-2.5 text-2xs">
+                <dl class="flex flex-col gap-1.5 rounded-lg bg-canvas px-3 py-2.5 text-2xs">
                     <div v-if="syncingFrom !== undefined" class="flex items-center justify-between gap-3">
                         <dt class="text-subtle">Syncing from</dt>
                         <dd class="truncate font-mono text-content">{{ syncingFrom }}</dd>
@@ -235,7 +235,7 @@ onUnmounted(stop);
                     </p>
                     <ul
                         v-if="showFootprint"
-                        class="flex list-disc flex-col gap-1 rounded-lg border border-line bg-overlay/40 py-2.5 pl-7 pr-3 text-2xs text-subtle"
+                        class="flex list-disc flex-col gap-1 rounded-lg bg-canvas py-2.5 pl-7 pr-3 text-2xs text-subtle"
                     >
                         <li>The sync agent, Mutagen, and cloudflared under <span class="font-mono">~/.intentic/sync</span>.</li>
                         <li>An SSH key for the sandbox tunnel, plus one include line in <span class="font-mono">~/.ssh/config</span>.</li>

@@ -58,7 +58,7 @@ export const workspaceContract = {
     // Per-monorepo apps, driven by the web app's apps extension (owner-authed; {repo} is validated in the
     // handler): add one or more apps into an existing monorepo, list them with per-app preview URL + status,
     // and start/stop each app's preview dev server. `addApps` kicks off a one-shot tmux job (session
-    // panel-<repo>--add_apps) that runs `intentic add-app` — the attachable terminal is the progress/error
+    // panel-<repo>--add_apps) that runs `intentic scaffold add-app` — the attachable terminal is the progress/error
     // surface; the extension polls the session's `running` for completion. It returns immediately (an ack).
     addApps: oc.route({ method: "POST", path: "/workspace/repos/{repo}/apps" }).input(AddAppsSchema).output(OkSchema),
     appsList: oc.route({ method: "GET", path: "/workspace/repos/{repo}/apps" }).input(RepoAppsParamSchema).output(AppsListSchema),

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp, StatusBadge } from "@intentic-app/ui";
+import { Card, cmp, Row, RowGroup, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { useChat } from "../../composables/chat/useChat";
@@ -100,7 +100,7 @@ const save = async (): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-2.5">
+    <div class="flex flex-col gap-6">
         <!-- Identity: name + logo (owner-editable), self-reported image / version / URL, online status. -->
         <Card class="flex flex-col gap-4">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -163,7 +163,7 @@ const save = async (): Promise<void> => {
             <!-- What the sandbox reports about itself (relayed via /info, never stored by the platform). -->
             <dl
                 v-if="sandbox.reachable.value && (info?.image || installed || agentUrl)"
-                class="flex flex-col gap-1.5 rounded-lg border border-line bg-overlay/40 px-3 py-2.5 text-2xs"
+                class="flex flex-col gap-1.5 rounded-lg bg-canvas px-3 py-2.5 text-2xs"
             >
                 <div v-if="info?.image" class="flex items-start justify-between gap-3">
                     <dt class="text-subtle">Image</dt>
@@ -202,87 +202,45 @@ const save = async (): Promise<void> => {
         <SandboxUpdateCard />
 
         <!-- At a glance: compact deep-links into the detail tabs, so the landing stays calm. -->
-        <Card class="flex flex-col gap-2">
-            <div class="flex items-center gap-2.5">
-                <Icon name="list-check" class="text-lg text-muted" />
-                <div>
-                    <h2 class="font-semibold leading-tight">At a glance</h2>
-                    <p class="text-xs text-muted">Jump to the details for this sandbox.</p>
-                </div>
-            </div>
-
-            <RouterLink
-                to="/sandbox/agent"
-                class="flex items-center justify-between gap-3 rounded-lg border border-line bg-canvas px-3 py-2 transition-colors hover:border-line-strong hover:bg-overlay"
-            >
-                <div class="flex min-w-0 items-center gap-2.5">
-                    <Icon name="sparkles" class="text-lg text-link" />
-                    <div class="min-w-0">
-                        <div class="font-medium text-content">Agent account</div>
-                        <div class="text-xs text-muted">The Claude account Claude Code runs as, stored in your sandbox.</div>
-                    </div>
-                </div>
-                <div class="flex shrink-0 items-center gap-2">
-                    <StatusBadge
-                        :variant="claudeConnected ? 'success' : 'warning'"
-                        :label="claudeConnected ? 'Ready' : 'Needs authorization'"
-                        size="xs"
-                        dot
-                    />
-                    <Icon name="chevron-right" class="text-2xs text-subtle" />
-                </div>
+        <RowGroup label="At a glance">
+            <RouterLink to="/sandbox/agent" class="block">
+                <Row
+                    icon="sparkles"
+                    title="Agent account"
+                    description="The Claude account Claude Code runs as, stored in your sandbox."
+                    interactive
+                    chevron
+                >
+                    <template #control>
+                        <StatusBadge
+                            :variant="claudeConnected ? 'success' : 'warning'"
+                            :label="claudeConnected ? 'Ready' : 'Needs authorization'"
+                            size="xs"
+                            dot
+                        />
+                    </template>
+                </Row>
             </RouterLink>
 
-            <RouterLink
-                to="/capabilities"
-                class="flex items-center justify-between gap-3 rounded-lg border border-line bg-canvas px-3 py-2 transition-colors hover:border-line-strong hover:bg-overlay"
-            >
-                <div class="flex min-w-0 items-center gap-2.5">
-                    <Icon name="th-large" class="text-lg text-muted" />
-                    <div class="min-w-0">
-                        <div class="font-medium text-content">Capabilities</div>
-                        <div class="text-xs text-muted">Tools, services and integrations this sandbox can use.</div>
-                    </div>
-                </div>
-                <div class="flex shrink-0 items-center gap-2">
-                    <span class="text-2xs text-subtle">{{ capabilities.length }}</span>
-                    <Icon name="chevron-right" class="text-2xs text-subtle" />
-                </div>
+            <RouterLink to="/capabilities" class="block">
+                <Row icon="th-large" title="Capabilities" description="Tools, services and integrations this sandbox can use." interactive chevron>
+                    <template #control><span class="text-2xs text-subtle">{{ capabilities.length }}</span></template>
+                </Row>
             </RouterLink>
 
-            <RouterLink
-                to="/sandbox/status"
-                class="flex items-center justify-between gap-3 rounded-lg border border-line bg-canvas px-3 py-2 transition-colors hover:border-line-strong hover:bg-overlay"
-            >
-                <div class="flex min-w-0 items-center gap-2.5">
-                    <Icon name="bolt" class="text-lg text-muted" />
-                    <div class="min-w-0">
-                        <div class="font-medium text-content">Running now</div>
-                        <div class="text-xs text-muted">Live operator panels and active services.</div>
-                    </div>
-                </div>
-                <div class="flex shrink-0 items-center gap-2">
-                    <span class="text-2xs text-subtle">{{ runningCount }}</span>
-                    <Icon name="chevron-right" class="text-2xs text-subtle" />
-                </div>
+            <RouterLink to="/sandbox/status" class="block">
+                <Row icon="bolt" title="Running now" description="Live operator panels and active services." interactive chevron>
+                    <template #control><span class="text-2xs text-subtle">{{ runningCount }}</span></template>
+                </Row>
             </RouterLink>
 
-            <RouterLink
-                to="/sandbox/access"
-                class="flex items-center justify-between gap-3 rounded-lg border border-line bg-canvas px-3 py-2 transition-colors hover:border-line-strong hover:bg-overlay"
-            >
-                <div class="flex min-w-0 items-center gap-2.5">
-                    <Icon name="users" class="text-lg text-muted" />
-                    <div class="min-w-0">
-                        <div class="font-medium text-content">Access</div>
-                        <div class="text-xs text-muted">Who can reach this sandbox.</div>
-                    </div>
-                </div>
-                <div class="flex shrink-0 items-center gap-2">
-                    <span v-if="othersHere > 0" class="text-2xs text-success">{{ othersHere }} here now</span>
-                    <Icon name="chevron-right" class="text-2xs text-subtle" />
-                </div>
+            <RouterLink to="/sandbox/access" class="block">
+                <Row icon="users" title="Access" description="Who can reach this sandbox." interactive chevron>
+                    <template #control>
+                        <span v-if="othersHere > 0" class="text-2xs text-success">{{ othersHere }} here now</span>
+                    </template>
+                </Row>
             </RouterLink>
-        </Card>
+        </RowGroup>
     </div>
 </template>

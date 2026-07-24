@@ -158,11 +158,11 @@ describe.skipIf(!enabled)("intentic CLI hermetic end-to-end (DinD, no external s
     const forgejoPassword = async (): Promise<string> => (await readGeneratedSecrets(targetDir))["FORGEJO_ADMIN_PASSWORD"] ?? "";
 
     it("resolve derives the forgejo/komodo platform offline from the authored zone", async () => {
-        await intentic("init", "--dir", tmp, "--link");
+        await intentic("deploy", "init", "--dir", tmp, "--link");
         await writeFile(configPath, config(host.getHost(), host.getMappedPort(22)));
         await writeFile(join(targetDir, ".env"), envFile(privateKey));
 
-        await intentic("resolve", "--config", configPath, "--out", artifactPath);
+        await intentic("deploy", "resolve", "--config", configPath, "--out", artifactPath);
 
         const artifact = JSON.parse(await readFile(artifactPath, "utf8")) as {
             resources: Record<string, { dependsOn: string[]; readyWhen?: unknown }>;
@@ -179,7 +179,7 @@ describe.skipIf(!enabled)("intentic CLI hermetic end-to-end (DinD, no external s
     }, 120_000);
 
     it("targeted apply stands up the derived platform with no cloudflare access", async () => {
-        await intentic("apply", "--yes", "--artifact", artifactPath, "--maxIterations", "8", "--target", TARGET);
+        await intentic("deploy", "apply", "--yes", "--artifact", artifactPath, "--maxIterations", "8", "--target", TARGET);
 
         const status = await readStatus();
         expect(status.converged).toBe(true);
@@ -206,7 +206,7 @@ describe.skipIf(!enabled)("intentic CLI hermetic end-to-end (DinD, no external s
     }, 900_000);
 
     it("a second targeted apply is all-noop", async () => {
-        await intentic("apply", "--yes", "--artifact", artifactPath, "--target", TARGET);
+        await intentic("deploy", "apply", "--yes", "--artifact", artifactPath, "--target", TARGET);
 
         const status = await readStatus();
         expect(status.converged).toBe(true);
@@ -220,7 +220,7 @@ describe.skipIf(!enabled)("intentic CLI hermetic end-to-end (DinD, no external s
         const baseUrl = forgejoBaseUrl();
         const password = await forgejoPassword();
 
-        await intentic("adopt", "--artifact", artifactPath, "--baseUrl", baseUrl);
+        await intentic("deploy", "adopt", "--artifact", artifactPath, "--baseUrl", baseUrl);
 
         const creds = { baseUrl, user: adminUsername, password };
         expect(await forgejoApi.findRepo({ ...creds, owner: adminUsername, name: "intent" })).toBeDefined();
@@ -253,7 +253,7 @@ describe.skipIf(!enabled)("intentic CLI hermetic end-to-end (DinD, no external s
     }, 180_000);
 
     it("adopt is idempotent", async () => {
-        const output = await intentic("adopt", "--artifact", artifactPath, "--baseUrl", forgejoBaseUrl());
+        const output = await intentic("deploy", "adopt", "--artifact", artifactPath, "--baseUrl", forgejoBaseUrl());
         expect(output).toContain("secret(s)");
     }, 60_000);
 
@@ -280,7 +280,7 @@ describe.skipIf(!enabled)("intentic CLI hermetic end-to-end (DinD, no external s
         expect((await sshRun(`iptables -I INPUT 1 ${spec}`)).code).toBe(0);
         expect((await sshRun("docker rm -f intentic-forgejo")).code).toBe(0);
 
-        const error = await intentic("apply", "--yes", "--artifact", artifactPath, "--target", TARGET).then(
+        const error = await intentic("deploy", "apply", "--yes", "--artifact", artifactPath, "--target", TARGET).then(
             () => undefined,
             (thrown: unknown) => thrown as Error,
         );
@@ -296,7 +296,7 @@ describe.skipIf(!enabled)("intentic CLI hermetic end-to-end (DinD, no external s
         expect((await sshRun(`iptables -D INPUT ${spec}`)).code).toBe(0);
         readyWhen.timeout = "120s";
         await writeFile(artifactPath, JSON.stringify(artifact, undefined, 4));
-        await intentic("apply", "--yes", "--artifact", artifactPath, "--target", TARGET);
+        await intentic("deploy", "apply", "--yes", "--artifact", artifactPath, "--target", TARGET);
         expect((await readStatus()).converged).toBe(true);
     }, 360_000);
 });

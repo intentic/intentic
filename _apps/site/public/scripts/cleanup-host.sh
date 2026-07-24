@@ -1,7 +1,7 @@
 #!/bin/sh
 # intentic cleanup-host — remove EVERYTHING intentic put on THIS machine (a deploy target).
 #
-# The mirror of connect-host.sh plus what `intentic apply` deployed here. It discovers the full local
+# The mirror of connect-host.sh plus what `intentic deploy apply` deployed here. It discovers the full local
 # footprint, prints exactly what it found, asks once, then removes:
 #   • every deployed container — the compose stacks under /opt/intentic (Komodo, SigNoz, backings, …) and
 #     every intentic-stamped or intentic-named container (Forgejo, its runner, the tunnel connector, apps)
@@ -12,7 +12,7 @@
 # It does NOT uninstall shared software (Docker Engine, openssh-server, the cloudflared binary), and it
 # CANNOT reach your Cloudflare account: this host's tunnels + DNS records (ssh-<id>.<zone>, the git/deploy/app
 # hostnames) are owned by your sandbox — remove the server on the Infra screen and apply, or run
-# `intentic destroy` there, and the prune deletes them.
+# `intentic deploy destroy` there, and the prune deletes them.
 #
 #   curl -fsSL https://intentic.dev/cleanup-host | sudo sh
 #
@@ -112,7 +112,7 @@ if [ -n "$user_present" ]; then
 fi
 echo "kept: Docker Engine, openssh-server, the cloudflared binary, pulled docker images."
 echo "not reachable from here: this host's Cloudflare tunnels + DNS records — remove the server on the"
-echo "Infra screen and apply (or run \`intentic destroy\` in your sandbox) so the prune deletes them."
+echo "Infra screen and apply (or run \`intentic deploy destroy\` in your sandbox) so the prune deletes them."
 
 if [ "${CONFIRM:-}" != "1" ]; then
     # `-r /dev/tty` passes even where opening it fails (setsid/cron), so the read itself is the real probe:

@@ -160,11 +160,11 @@ up() {
     done
     [ "$ok" = 1 ] || die "host SSH never came up (see: docker logs $CONTAINER)"
 
-    log "scaffolding the intent (intentic init) …"
+    log "scaffolding the intent (intentic deploy init) …"
     if [ "${INTENTIC_LINK:-}" = 1 ]; then
-        intentic init --dir "$WORKDIR" --link
+        intentic deploy init --dir "$WORKDIR" --link
     else
-        intentic init --dir "$WORKDIR"
+        intentic deploy init --dir "$WORKDIR"
     fi
 
     local config="$WORKDIR/intent/deploy.config.ts"
@@ -182,8 +182,8 @@ up() {
     rm -f "$WORKDIR/desired-state/.known-hosts.json"
 
     log "resolve + apply — Forgejo + Komodo + the workspace sandbox + the Cloudflare tunnel …"
-    intentic resolve --config "$config" --out "$artifact"
-    intentic apply --artifact "$artifact" --maxIterations 8
+    intentic deploy resolve --config "$config" --out "$artifact"
+    intentic deploy apply --artifact "$artifact" --maxIterations 8
 
     # The Forgejo/Komodo admin passwords are intentic-generated into .secrets.json during resolve/apply.
     local secrets="$WORKDIR/desired-state/.secrets.json"

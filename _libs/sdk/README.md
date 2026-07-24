@@ -5,7 +5,7 @@ The **authoring surface** a user writes their `deploy.config.ts` against. A decl
 ## Responsibilities
 
 - Provide the fluent `i.have.*` / `i.want.*` builders and capture them into an `IntentSet`.
-- `defineIntent` — the authoring entry: declaration → `IntentSet` (what `intentic resolve` consumes).
+- `defineIntent` — the authoring entry: declaration → `IntentSet` (what `intentic deploy resolve` consumes).
 - `defineStack` — one-shot convenience: declaration → a single compiled `DesiredStateGraph`.
 - Export the handle types (`Host`, `Cloudflare`, `App`, `Repo`, `Deployment`, …) used to wire declarations.
 

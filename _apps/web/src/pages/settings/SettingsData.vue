@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card } from "@intentic-app/ui";
+import { Row, RowGroup } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
@@ -49,37 +49,31 @@ const confirmDelete = async (): Promise<void> => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-2.5">
-        <Card class="flex items-center justify-between">
-            <div class="flex min-w-0 items-center gap-2.5">
-                <Icon name="download" class="text-lg text-muted" />
-                <div class="min-w-0">
-                    <h2 class="font-semibold leading-tight">Export my data</h2>
-                    <p class="text-xs text-muted">Download everything the platform stores about your account as JSON.</p>
-                </div>
-            </div>
-            <Button label="Export" severity="secondary" :outlined="true" size="small" :loading="exporting" @click="exportData" />
-        </Card>
-
-        <Card>
-            <div class="flex items-center justify-between gap-3">
-                <div class="flex min-w-0 items-center gap-2.5">
-                    <Icon name="trash" class="text-lg text-danger" />
-                    <div class="min-w-0">
-                        <h2 class="font-semibold leading-tight">Delete account</h2>
-                        <p class="text-xs text-muted">
-                            Permanently removes your account, sandboxes, shared access and billing data. Cannot be undone.
-                        </p>
+    <div class="flex flex-col gap-6">
+        <RowGroup label="Data &amp; privacy">
+            <Row icon="download" title="Export my data" description="Download everything the platform stores about your account as JSON.">
+                <template #control>
+                    <Button label="Export" severity="secondary" :outlined="true" size="small" :loading="exporting" @click="exportData" />
+                </template>
+            </Row>
+            <Row
+                icon="trash"
+                tone="danger"
+                title="Delete account"
+                description="Permanently removes your account, sandboxes, shared access and billing data. Cannot be undone."
+            >
+                <template #control>
+                    <Button v-if="!confirmingDelete" label="Delete" severity="danger" :outlined="true" size="small" @click="confirmingDelete = true" />
+                </template>
+                <template v-if="confirmingDelete || deleteError" #below>
+                    <div v-if="confirmingDelete" class="flex items-center justify-end gap-2">
+                        <span class="mr-auto text-2xs text-subtle">Are you sure? This deletes everything immediately.</span>
+                        <Button label="Cancel" severity="secondary" text size="small" :disabled="deleting" @click="confirmingDelete = false" />
+                        <Button label="Delete my account" severity="danger" size="small" :loading="deleting" @click="confirmDelete" />
                     </div>
-                </div>
-                <Button v-if="!confirmingDelete" label="Delete" severity="danger" :outlined="true" size="small" @click="confirmingDelete = true" />
-            </div>
-            <div v-if="confirmingDelete" class="mt-3 flex items-center justify-end gap-2 border-t border-line pt-3">
-                <span class="mr-auto text-2xs text-subtle">Are you sure? This deletes everything immediately.</span>
-                <Button label="Cancel" severity="secondary" text size="small" :disabled="deleting" @click="confirmingDelete = false" />
-                <Button label="Delete my account" severity="danger" size="small" :loading="deleting" @click="confirmDelete" />
-            </div>
-            <p v-if="deleteError" class="mt-2 text-2xs text-danger">{{ deleteError }}</p>
-        </Card>
+                    <p v-if="deleteError" class="mt-2 text-2xs text-danger">{{ deleteError }}</p>
+                </template>
+            </Row>
+        </RowGroup>
     </div>
 </template>

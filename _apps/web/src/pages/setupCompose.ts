@@ -2,7 +2,7 @@
  * starting containers, the user adds two services to their own compose file and a one-time bootstrap creates
  * the `.env` beside it. The claim endpoint already answers KEY=value lines — exactly compose's .env format —
  * so the intentic-provided path needs no script at all: claim → .env, `docker compose up -d`. The
- * own-Cloudflare path additionally mints the sandbox tunnel with the bundled CLI (the same `sandbox-tunnel`
+ * own-Cloudflare path additionally mints the sandbox tunnel with the bundled CLI (the same `tunnel sandbox`
  * call connect.sh makes), appending TUNNEL_TOKEN/SANDBOX_HOSTNAME to the .env.
  *
  * Everything here mirrors connect.sh's `docker run` — image, env set, volumes, network alias, dns, logging —
@@ -56,7 +56,7 @@ export const composeBootstrap = (args: ComposeArgs): string => {
     return [
         claim,
         `echo "CLOUDFLARE_API_TOKEN=${args.cfToken ?? ``}" >> .env`,
-        `docker run --rm --env-file .env --entrypoint intentic ${args.image} sandbox-tunnel \\`,
+        `docker run --rm --env-file .env --entrypoint intentic ${args.image} tunnel sandbox \\`,
         `    --service http://${ORIGIN_HOST}:8787 --preview-service http://${ORIGIN_HOST}:5173 \\`,
         `    --ssh-service ssh://${ORIGIN_HOST}:22 --subdomain '${slugOf(args.hostname)}' >> .env`,
         `docker compose up -d`,

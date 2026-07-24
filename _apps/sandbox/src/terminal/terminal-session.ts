@@ -24,7 +24,7 @@ export const JOB_SESSION_PREFIX = "job-";
 // max 60 — is a subset of the session-name guard below, so no sanitizing).
 export const capabilityJobSession = (id: string): string => `${JOB_SESSION_PREFIX}capability-${id}`;
 
-// The infra Check flow's session: `intentic resolve` and `intentic plan` run here as windows.
+// The infra Check flow's session: `intentic deploy resolve` and `intentic deploy plan` run here as windows.
 export const INFRA_CHECK_SESSION = `${JOB_SESSION_PREFIX}infra-check`;
 
 const SESSION_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;

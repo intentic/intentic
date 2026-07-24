@@ -44,7 +44,7 @@ That is the entire input. You never name Forgejo, Komodo, a tunnel, or a DNS rec
 **2. Scaffold, resolve, preview, apply:**
 
 ```sh
-intentic init
+intentic deploy init
 ```
 ```text
 initialized intent (with deploy.config.ts) and desired-state
@@ -53,7 +53,7 @@ initialized intent (with deploy.config.ts) and desired-state
 Put your secrets in `desired-state/.env` (with no authored `zone` on `i.have.cloudflare`, the Cloudflare token is read first, to discover your zone), then:
 
 ```sh
-intentic resolve
+intentic deploy resolve
 ```
 ```text
 resolved desired state (12 resources) → desired-state/desired-state.json
@@ -63,7 +63,7 @@ generated these (stored in .secrets.json): FORGEJO_ADMIN_PASSWORD, KOMODO_ADMIN_
 ```
 
 ```sh
-intentic plan          # read-only preview of what apply will do
+intentic deploy plan          # read-only preview of what apply will do
 ```
 ```text
 create   host            host
@@ -81,7 +81,7 @@ create   deployment      my-app.production
 ```
 
 ```sh
-intentic apply         # execute until state reads true
+intentic deploy apply         # execute until state reads true
 ```
 ```text
 converged in 2 iteration(s)
@@ -105,7 +105,7 @@ Access:
 - **a proxied DNS route per hostname** — `git`, `deploy`, and your app's `app.example.com`
 - **your app** — a repo seeded with CI/CD, built and deployed per environment
 
-Re-run `intentic apply` any time: it reads live state, fixes drift, and converges back to all-noop.
+Re-run `intentic deploy apply` any time: it reads live state, fixes drift, and converges back to all-noop.
 
 ## What you declared vs. what the engine derived
 
@@ -113,13 +113,13 @@ Your `i.have.host` / `i.have.cloudflare` + `i.want.app` expand into the abstract
 
 ## Capabilities
 
-- **Reconcile & self-heal** — `intentic plan` classifies every node create/update/noop against live state; `intentic apply` loops apply→read until the plan reads all-noop ("state reads true"). It is idempotent: drift is detected by reading reality and corrected on the next apply. Every resource is stamped (`intentic.id` + an `intentic.hash` of its authored inputs), so a config edit reads as an update even when the provider's own diff wouldn't see it.
+- **Reconcile & self-heal** — `intentic deploy plan` classifies every node create/update/noop against live state; `intentic deploy apply` loops apply→read until the plan reads all-noop ("state reads true"). It is idempotent: drift is detected by reading reality and corrected on the next apply. Every resource is stamped (`intentic.id` + an `intentic.hash` of its authored inputs), so a config edit reads as an update even when the provider's own diff wouldn't see it.
 
 - **Collection-oriented pruning** — providers enumerate their stamped resources live (`list`), so anything running that the intent no longer declares is detected as an orphan and pruned — even without the `.last-applied.json` baseline. Deletions never run silently: `apply` lists pending deletes and requires `--yes` (the scaffolded CI workflow passes it; the PR review is the confirmation).
 
 - **Protected data** — stateful backings (`i.want.database` / `cache` / `auth` / `objectStorage`) are `protect`-ed by default: removing one from the config never deletes its volume until you author `protect: false` — a reviewed change. Protection is stamped on the container, so it holds even for orphans.
 
-- **Teardown & targeting** — `intentic destroy --yes` tears down everything the artifact declares in reverse dependency order (owned inventory — your host, your Cloudflare zone — is never touched). `--target <id,…>` on plan/apply reconciles just a slice and its dependencies.
+- **Teardown & targeting** — `intentic deploy destroy --yes` tears down everything the artifact declares in reverse dependency order (owned inventory — your host, your Cloudflare zone — is never touched). `--target <id,…>` on plan/apply reconciles just a slice and its dependencies.
 
 - **Teams & people** — declare users and teams; intentic creates a Forgejo org + team and Komodo RBAC, and grants each team its role on the apps it manages:
   ```ts
@@ -142,7 +142,7 @@ Your `i.have.host` / `i.have.cloudflare` + `i.want.app` expand into the abstract
   i.want.app("my-app", { on: host, expose: cf, observe: obs, environments: { /* … */ } });
   ```
 
-- **Backups & restore** — point `i.have.backup` at a restic repo for scheduled, app-consistent snapshots of Forgejo + Komodo state; `intentic restore --snapshot <id>` recovers them and re-applies:
+- **Backups & restore** — point `i.have.backup` at a restic repo for scheduled, app-consistent snapshots of Forgejo + Komodo state; `intentic deploy restore --snapshot <id>` recovers them and re-applies:
   ```ts
   i.have.backup("backup", {
       repo: "s3:s3.amazonaws.com/my-bucket/intentic",
@@ -158,7 +158,7 @@ Your `i.have.host` / `i.have.cloudflare` + `i.want.app` expand into the abstract
 
 - **Strict version locking** — every image the engine deploys is pinned `repo:tag@sha256:…` and recorded in `desired-state.json`. An upstream re-push of a tag cannot change what runs; a version moves only by a reviewed commit (Renovate opens the PR), and rollback is `git revert` + re-apply.
 
-- **GitOps via `adopt`** — `intentic adopt` pushes your `intent` and `desired-state` repos into the Forgejo it just stood up and wires Forgejo Actions, so from then on `git push` → resolve → apply runs in CI.
+- **GitOps via `adopt`** — `intentic deploy adopt` pushes your `intent` and `desired-state` repos into the Forgejo it just stood up and wires Forgejo Actions, so from then on `git push` → resolve → apply runs in CI.
 
 - **Notifications** — declare a Discord bot with `i.have.discord` and wire an app's `notify`; the engine owns the guild, channels, and webhooks, and posts CI/CD and reconcile summaries.
 
@@ -166,8 +166,8 @@ Your `i.have.host` / `i.have.cloudflare` + `i.want.app` expand into the abstract
 
 - **Machine-readable output** — every command honors `INTENTIC_OUTPUT` so a backend can drive the CLI and parse it instead of scraping prose. `text` (default) is the human output unchanged; `json` prints one result document at the end (`plan` → steps + orphans; `apply` → converged/iterations/steps/outputs/pruned/access); `ndjson` streams one JSON event per line as it runs (`node` start/done, `readiness`, `iteration`, `prune`, `orphan`, provider `log`) and closes with a `result` line. Known secret values are masked out of every stream. The `EngineEvent` type is exported from `@intentic/engine` for embedders.
   ```sh
-  INTENTIC_OUTPUT=ndjson intentic apply   # live event stream, then a final {"kind":"result",…}
-  INTENTIC_OUTPUT=json   intentic plan     # one JSON document: { steps, orphans }
+  INTENTIC_OUTPUT=ndjson intentic deploy apply   # live event stream, then a final {"kind":"result",…}
+  INTENTIC_OUTPUT=json   intentic deploy plan     # one JSON document: { steps, orphans }
   ```
 
 ## Getting started
@@ -176,17 +176,17 @@ Your `i.have.host` / `i.have.cloudflare` + `i.want.app` expand into the abstract
 pnpm install
 pnpm build               # turbo build across packages
 
-pnpm intentic --help     # the CLI (bin: intentic) — init · resolve · plan · apply · destroy · adopt · restore
-pnpm intentic init       # scaffold the intent + desired-state repos
+pnpm intentic deploy --help  # the deploy group: init · resolve · plan · apply · destroy · adopt · restore · secrets · deployments · logs
+pnpm intentic deploy init       # scaffold the intent + desired-state repos
 ```
 
-> Requires **Node 24** and **pnpm 11**. From this repo the CLI runs as `pnpm intentic <command>` (the first call builds `dist`, then runs incrementally). The full authoring reference is [_tools/examples/deploy.config.ts](../_tools/examples/deploy.config.ts).
+> Requires **Node 24** and **pnpm 11**. From this repo the CLI runs as `pnpm intentic deploy <command>` (the first call builds `dist`, then runs incrementally). The full authoring reference is [_tools/examples/deploy.config.ts](../_tools/examples/deploy.config.ts).
 
-**Deploy against your own infra.** A filled artifact lives (gitignored) at `intent/` + `desired-state/`; `desired-state/.env` holds your `HOST_SSH_KEY` / `CLOUDFLARE_API_TOKEN` / `DISCORD_BOT_TOKEN` (regenerated as `.env.example` by `intentic resolve`). Install the intent's deps once, then drive it:
+**Deploy against your own infra.** A filled artifact lives (gitignored) at `intent/` + `desired-state/`; `desired-state/.env` holds your `HOST_SSH_KEY` / `CLOUDFLARE_API_TOKEN` / `DISCORD_BOT_TOKEN` (regenerated as `.env.example` by `intentic deploy resolve`). Install the intent's deps once, then drive it:
 
 ```sh
 (cd intent && pnpm install --ignore-workspace)
-pnpm intentic plan        # reads intent/deploy.config.ts + desired-state/ + its .env
+pnpm intentic deploy plan        # reads intent/deploy.config.ts + desired-state/ + its .env
 ```
 
 ## Cloudflare API token

@@ -18,7 +18,7 @@ import ResourceDetails from "./ResourceDetails.vue";
 /* The live-status extension: the outcome half of the infrastructure story, a plan-vs-reality board. LEFT is
  * Planned — the resolved desired-state dependency graph (desired-state.json, each node colored by its last
  * reconcile status). RIGHT is Running now — the realized world: live Komodo deployments (snapshot) plus an
- * on-demand "live check" that streams the in-sandbox `intentic plan` to re-read live infrastructure and report
+ * on-demand "live check" that streams the in-sandbox `intentic deploy plan` to re-read live infrastructure and report
  * per-resource drift. Read-only; everything is relayed THROUGH the sandbox. */
 
 const { state, error: wsError, isLoading: wsLoading, refetch: refetchState } = useWorkspaceState();
@@ -28,7 +28,7 @@ const { deployments, komodoReachable, error: appsError, isLoading: appsLoading, 
 const selectedId = ref<string | undefined>(undefined);
 const selectedNode = computed(() => state.value?.resources.find((r) => r.id === selectedId.value));
 
-// Live `intentic plan` stream state.
+// Live `intentic deploy plan` stream state.
 const checking = ref(false);
 const liveRan = ref(false);
 const liveError = ref<string | null>(null);
@@ -39,7 +39,7 @@ const loading = computed(() => wsLoading.value || appsLoading.value || checking.
 
 const convergence = computed(() => convergedBadge(state.value?.converged));
 
-// Stream the in-sandbox `intentic plan` (read+diff, no apply) and collect per-resource verdicts + orphans via
+// Stream the in-sandbox `intentic deploy plan` (read+diff, no apply) and collect per-resource verdicts + orphans via
 // the shared reducer. A failed run throws a kind:"error" out of readPlanSteps, caught here as liveError.
 const runLiveCheck = async (): Promise<void> => {
     if (checking.value) {
@@ -53,7 +53,7 @@ const runLiveCheck = async (): Promise<void> => {
         const response = await sandboxRequest(`/intentic`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
-            body: JSON.stringify({ args: [`plan`] }),
+            body: JSON.stringify({ args: [`deploy`, `plan`] }),
         });
         if (!response.ok || !response.body) {
             const detail = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -164,7 +164,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                     />
                 </section>
 
-                <!-- BOTTOM — actual state: live Komodo deployments + an on-demand live "intentic plan" read. -->
+                <!-- BOTTOM — actual state: live Komodo deployments + an on-demand live "intentic deploy plan" read. -->
                 <section class="rounded-lg border border-line bg-card p-4">
                     <h3 :class="cmp.sectionLabel('mb-3 flex items-baseline gap-2')">Running now</h3>
 
@@ -234,7 +234,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                         </p>
                     </div>
 
-                    <!-- Live check: streams "intentic plan" to diff the desired graph against live infrastructure. -->
+                    <!-- Live check: streams "intentic deploy plan" to diff the desired graph against live infrastructure. -->
                     <div class="mt-4 border-t border-line pt-3">
                         <div class="mb-2 flex items-center gap-2">
                             <h3 class="text-2xs font-semibold uppercase tracking-wide text-subtle/70">Live check</h3>

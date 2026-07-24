@@ -330,11 +330,11 @@ export const landingContent: LandingContent = {
     economics: {
         eyebrow: "Economics",
         heading: "A whole team, on the subscriptions you already pay for.",
-        sub: "A fleet of agents sounds expensive. It isn't. Each one runs on your own Claude, ChatGPT, or xAI subscription — connected once with a sign-in code — on hardware you already own. intentic is a flat subscription, never a meter on your model usage.",
+        sub: "A fleet of agents sounds expensive. It isn't. Each one runs on your own Claude, ChatGPT, or SuperGrok subscription — connected once with a sign-in code — on hardware you already own. intentic is a flat subscription, never a meter on your model usage.",
         accounts: [
             { name: "Claude", detail: "Opus, Sonnet, Haiku — on your Claude plan" },
             { name: "Codex", detail: "on your ChatGPT plan" },
-            { name: "Grok", detail: "on your xAI plan" },
+            { name: "Grok", detail: "on your SuperGrok plan" },
         ],
         points: [
             "No per-token metering, and no markup on your model usage.",

@@ -18,7 +18,7 @@ export const createIntenticRoutes = (services: Services) => {
         run: i.run.handler(async function* ({ input, signal }) {
             try {
                 // The abort signal reaches the CLI child either way: a closed tab kills the run instead of leaking it.
-                if (input.args[0] === "resolve" || input.args[0] === "plan") {
+                if (input.args[0] === "deploy" && (input.args[1] === "resolve" || input.args[1] === "plan")) {
                     yield* runCheckCommand(services, input.args, signal);
                 } else {
                     yield* services.intentic({ args: input.args, cwd: services.workspace.root }, signal);

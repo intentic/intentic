@@ -32,27 +32,48 @@ const formatException = (exc: unknown): string => {
     return message;
 };
 
-// The stricli application: each command lives in its own src/<command>/<command>.command.ts; this assembles
-// them into the route map. Command names + their kebab flags are unchanged.
+// The bin is a toolbox, not one tool: three command groups, each its own facet. `tunnel` is core sandbox
+// plumbing (used by connect.sh to mint the sandbox's own Cloudflare tunnels); `deploy` is the bundled
+// deployment engine (one of many tools an agent can run, not part of the product); `scaffold` seeds app repos.
+// Leaf command files keep their own names for run-log/events output (e.g. `apply` still emits command:"apply"),
+// so grouping the routes is invisible to the daemon's apply-events tail. Each command lives in its own
+// src/<command>/<command>.command.ts.
+const tunnel = buildRouteMap({
+    routes: {
+        sandbox: sandboxTunnel,
+        host: hostSshTunnel,
+    },
+    docs: { brief: "Sandbox reachability — mint the sandbox's own Cloudflare tunnels (used by connect.sh)" },
+});
+
+const deploy = buildRouteMap({
+    routes: {
+        init,
+        resolve: resolveCommand,
+        plan: planCommand,
+        apply,
+        destroy,
+        adopt,
+        restore,
+        secrets: secretsCommand,
+        deployments: deploymentsCommand,
+        logs: logsCommand,
+    },
+    docs: { brief: "The bundled deployment engine — declare intent, reconcile your own infrastructure" },
+});
+
+const scaffold = buildRouteMap({
+    routes: {
+        monorepo: monorepoCommand,
+        addApp: addAppCommand,
+    },
+    docs: { brief: "Scaffold app repositories — a pnpm+turbo monorepo and its apps" },
+});
+
 export const app = buildApplication(
     buildRouteMap({
-        routes: {
-            init,
-            monorepo: monorepoCommand,
-            addApp: addAppCommand,
-            resolve: resolveCommand,
-            plan: planCommand,
-            apply,
-            destroy,
-            adopt,
-            restore,
-            secrets: secretsCommand,
-            deployments: deploymentsCommand,
-            logs: logsCommand,
-            sandboxTunnel,
-            hostSshTunnel,
-        },
-        docs: { brief: "intentic — intent-driven deployment" },
+        routes: { tunnel, deploy, scaffold },
+        docs: { brief: "intentic — the sandbox toolbox: tunnel · deploy · scaffold" },
     }),
     {
         name: "intentic",

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Card } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { ref } from "vue";
 import { useBridgeTokens } from "../../composables/sandbox/useBridgeTokens";
@@ -22,7 +23,7 @@ const copy = async (key: string, text: string): Promise<void> => {
 </script>
 
 <template>
-    <section class="flex flex-col gap-3 rounded-xl border border-line bg-card p-4">
+    <Card class="flex flex-col gap-3">
         <div class="flex items-center gap-2">
             <Icon name="code" class="text-sm text-link" />
             <h2 class="text-sm font-semibold text-content">Editor bridge (ACP)</h2>
@@ -47,7 +48,7 @@ const copy = async (key: string, text: string): Promise<void> => {
         </div>
         <p v-if="error" class="text-2xs text-danger">{{ error }}</p>
 
-        <div v-if="minted" class="flex flex-col gap-2 rounded-lg border border-line bg-canvas p-3">
+        <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
             <p class="text-2xs text-subtle">Shown once — copy it now. The sandbox stores only a hash.</p>
             <div class="flex items-center gap-2">
                 <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
@@ -59,7 +60,7 @@ const copy = async (key: string, text: string): Promise<void> => {
                 />
             </div>
             <p class="text-2xs text-subtle">Zed → settings.json (JetBrains takes the same command + env):</p>
-            <pre class="scrollbar-thin max-h-48 overflow-auto rounded border border-line bg-card px-2 py-1.5 text-2xs leading-relaxed text-muted">{{ zedSnippet }}</pre>
+            <pre class="scrollbar-thin max-h-48 overflow-auto rounded bg-overlay px-2 py-1.5 text-2xs leading-relaxed text-muted">{{ zedSnippet }}</pre>
             <Button
                 :label="copied === 'snippet' ? 'Copied' : 'Copy snippet'"
                 size="small"
@@ -84,5 +85,5 @@ const copy = async (key: string, text: string): Promise<void> => {
                 />
             </li>
         </ul>
-    </section>
+    </Card>
 </template>

@@ -11,7 +11,7 @@ import { readTemplatesConfig } from "./templates-config.js";
 // extensions — no operator panel is scaffolded into them here. All shell (git bookkeeping, the monorepo CLI)
 // runs through the caller's visible job session so the user watches the actual commands.
 
-// Scaffold an empty pnpm+turbo monorepo as its OWN repo at /work/<name> by running the `intentic monorepo`
+// Scaffold an empty pnpm+turbo monorepo as its OWN repo at /work/<name> by running the `intentic scaffold monorepo`
 // CLI (the same @intentic/scaffold path, add-apps style — one visible command doing the template clone +
 // shell layout + git init). Its UI is the web app's apps extension — no operator panel is scaffolded.
 // The caller (the monorepo capability) gates on existence for idempotency.
@@ -19,7 +19,7 @@ export const scaffoldAppMonorepo = async (services: Services, name: string, sess
     const { source, ref } = await readTemplatesConfig(services);
     await services.terminalRun.run(
         session,
-        `intentic monorepo --dir ${shellQuote(services.workspace.root)} --name ${shellQuote(name)} --source ${shellQuote(source)} --ref ${shellQuote(ref)}`,
+        `intentic scaffold monorepo --dir ${shellQuote(services.workspace.root)} --name ${shellQuote(name)} --source ${shellQuote(source)} --ref ${shellQuote(ref)}`,
         { cwd: services.workspace.root, window: "scaffold" },
     );
     // Mint the preview route NOW, not at first start — the hostname must exist long before a browser resolves
@@ -30,7 +30,7 @@ export const scaffoldAppMonorepo = async (services: Services, name: string, sess
 
 // Scaffold of a NEUTRAL ledger: the intent + desired-state git repos with an empty deploy.config.ts (only the
 // managed `// <intentic>` region) and NO app repo — the sandbox is reachable and its inventory / source-control
-// have something to read, but nothing is provisioned. No host, no app, no `intentic init`. Provisioning
+// have something to read, but nothing is provisioned. No host, no app, no `intentic deploy init`. Provisioning
 // readiness (the intent repo's @intentic deps + install, and an app) is added later by the "Deploy on this
 // machine" flow. Idempotent via the caller's `existsSync(intent)` gate.
 export const scaffoldNeutralLedger = async (services: Services, session: string): Promise<void> => {

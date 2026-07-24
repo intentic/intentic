@@ -5,11 +5,11 @@ import { sandboxRequest } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 
-/* The live Komodo deployments surfaced by the in-sandbox `intentic deployments` subcommand, read DIRECTLY
+/* The live Komodo deployments surfaced by the in-sandbox `intentic deploy deployments` subcommand, read DIRECTLY
  * from the daemon (the sandbox already merges desired-state with live Komodo). Shared by the infrastructure +
  * live-status extensions through the app-wide query cache. */
 
-// Run `intentic deployments` in the sandbox and validate the terminal result line. `komodoReachable` is the
+// Run `intentic deploy deployments` in the sandbox and validate the terminal result line. `komodoReachable` is the
 // CLI's own verdict on the deployment engine, TRI-STATE: undefined = no komodo declared (services-only
 // intents have no deployment engine — nothing to be "down"); false = declared but didn't answer (the list is
 // desired config only, nothing is `live`); true = answered. Surfaced so the UI can say "your deploy engine is
@@ -18,7 +18,7 @@ const fetchDeployments = async (): Promise<{ deployments: Deployment[]; komodoRe
     const response = await sandboxRequest(`/intentic`, {
         method: `POST`,
         headers: { "content-type": `application/json` },
-        body: JSON.stringify({ args: [`deployments`] }),
+        body: JSON.stringify({ args: [`deploy`, `deployments`] }),
     });
     if (!response.ok || !response.body) {
         throw new Error(`Could not load your deployments (${response.status}).`);

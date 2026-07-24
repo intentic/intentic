@@ -24,7 +24,7 @@ export interface CapabilityCtx {
     // Extension-declared background processes ride panel sessions — start/stop via the panel manager.
     readonly panels: ManagedProcesses;
     readonly infraApply: {
-        // Launch `intentic resolve && intentic apply --yes && intentic adopt` (resolveFirst) as the shared
+        // Launch `intentic deploy resolve && intentic deploy apply --yes && intentic deploy adopt` (resolveFirst) as the shared
         // one-shot tmux job; false when one is already running (the caller must not tail a foreign run).
         readonly start: (options?: { readonly resolveFirst?: true }) => Promise<boolean>;
         readonly running: () => boolean;

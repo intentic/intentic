@@ -52,7 +52,7 @@ export interface ComposeServiceSpec<S extends z.ZodType> {
 const READY_INTERVAL_MS = 4_000;
 
 // Bounded json-file logs for every long-running compose service — docker's default json-file log is
-// unbounded and would grow with the host's uptime; `intentic logs` tails these back over SSH. One line per
+// unbounded and would grow with the host's uptime; `intentic deploy logs` tails these back over SSH. One line per
 // service in each template, right under its `restart:`.
 export const SERVICE_LOGGING = `    logging: { driver: json-file, options: { max-size: 10m, max-file: "3" } }`;
 

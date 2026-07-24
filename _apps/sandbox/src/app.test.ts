@@ -1317,8 +1317,8 @@ test("secrets.set / remove rewrite .env and fire a best-effort `secrets push` fo
     expect((await client.secrets.list()).keys.toSorted()).toEqual(["HOST_SSH_KEY", "MyMixed_Key"]);
     await vi.waitFor(() =>
         expect(pushes).toEqual([
-            ["secrets", "push"],
-            ["secrets", "push"],
+            ["deploy", "secrets", "push"],
+            ["deploy", "secrets", "push"],
         ]),
     );
 });
@@ -2010,7 +2010,7 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
     expect(clones).toHaveLength(1);
 });
 
-test("workspace.addApps launches `intentic add-app` as a one-shot tmux job and mints each app's preview route up front", async () => {
+test("workspace.addApps launches `intentic scaffold add-app` as a one-shot tmux job and mints each app's preview route up front", async () => {
     const workspace = tempWorkspace([{ name: "shop" }]);
     const repoDir = join(workspace.root, "shop");
     const jobs: { key: string; spec: ProcessSpec }[] = [];
@@ -2052,7 +2052,7 @@ test("workspace.addApps launches `intentic add-app` as a one-shot tmux job and m
         {
             key: "shop--add_apps",
             spec: {
-                command: `intentic add-app --dir '${repoDir}' --apps 'api,web:shop-web' --source '${DEFAULT_TEMPLATE_SOURCE}' --ref '${DEFAULT_TEMPLATE_REF}'`,
+                command: `intentic scaffold add-app --dir '${repoDir}' --apps 'api,web:shop-web' --source '${DEFAULT_TEMPLATE_SOURCE}' --ref '${DEFAULT_TEMPLATE_REF}'`,
                 cwd: repoDir,
                 oneShot: true,
             },

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readPlanSteps, statusLabel, statusVariant } from "./reconcileStatus";
 
-// Build the SSE body the daemon emits for an `intentic plan` stream: one `data: <json>\n\n` frame per line.
+// Build the SSE body the daemon emits for an `intentic deploy plan` stream: one `data: <json>\n\n` frame per line.
 const sseStream = (frames: Record<string, unknown>[]): ReadableStream<Uint8Array> => {
     const encoder = new TextEncoder();
     return new ReadableStream({

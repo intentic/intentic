@@ -259,7 +259,7 @@ export type RemoveInventoryInput = z.infer<typeof RemoveInventoryInputSchema>;
 
 // ---- live actual-state plan: an on-demand read of the realized infrastructure ----
 //
-// The platform streams the in-sandbox `intentic plan` (the engine's read+diff, no apply) over SSE, mapping each
+// The platform streams the in-sandbox `intentic deploy plan` (the engine's read+diff, no apply) over SSE, mapping each
 // per-resource plan node + the terminal result. Distinct from the cached status.json snapshot: this re-reads
 // live infra. `action` is the reconcile verdict — "noop" (in sync), "create" (absent / would create),
 // "update" (drift, with a reason), "delete"/"prune" (would remove). Relayed (not oRPC) like /sandbox/provision.
@@ -450,7 +450,7 @@ export type AccessEntry = z.infer<typeof AccessEntrySchema>;
 
 export const WorkspaceStateSchema = z.object({
     resources: z.array(ResourceViewSchema),
-    // From status.json (the last `intentic apply`); undefined before the first apply.
+    // From status.json (the last `intentic deploy apply`); undefined before the first apply.
     converged: z.boolean().optional(),
     iterations: z.number().optional(),
     access: z.array(AccessEntrySchema).optional(),
@@ -459,7 +459,7 @@ export type WorkspaceState = z.infer<typeof WorkspaceStateSchema>;
 
 // ---- apps: the live Komodo deployments, contextualized by the desired-state graph ----
 //
-// Surfaced by the in-sandbox `intentic deployments` subcommand: it reads each `deployment` node's configured
+// Surfaced by the in-sandbox `intentic deploy deployments` subcommand: it reads each `deployment` node's configured
 // image/env/url from the graph and confirms liveness against the Komodo API; the browser reads the result
 // from the daemon directly. `env` carries keys with non-secret scalar values; secret/ref values are blanked. Runtime
 // detail (logs, container status) lives in Komodo's own UI — deep-linked via komodoDeploymentUrl (hybrid).

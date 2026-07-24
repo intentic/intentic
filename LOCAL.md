@@ -14,7 +14,7 @@ The script starts a **Docker-in-Docker + sshd container** on your PC and points 
 i.have.host("host", { address: "127.0.0.1", user: "root", sshKey: env("HOST_SSH_KEY"), port: 2222 });
 ```
 
-`intentic apply` then deploys the whole stack — Forgejo, Komodo, the AI-agent workspace, and `cloudflared` — *inside* that host. `cloudflared` dials outbound to Cloudflare's edge, so your apps are public with **no inbound exposure on your machine**. The nested Docker daemon isolates intentic's containers from your own Docker and gives clean teardown. This is the same DinD-over-SSH path intentic's end-to-end test harness exercises — nothing about the deploy is local-only.
+`intentic deploy apply` then deploys the whole stack — Forgejo, Komodo, the AI-agent workspace, and `cloudflared` — *inside* that host. `cloudflared` dials outbound to Cloudflare's edge, so your apps are public with **no inbound exposure on your machine**. The nested Docker daemon isolates intentic's containers from your own Docker and gives clean teardown. This is the same DinD-over-SSH path intentic's end-to-end test harness exercises — nothing about the deploy is local-only.
 
 ## Prerequisites
 
@@ -40,8 +40,8 @@ export INTENTIC_ZONE=example.com    # a domain you own in that account
 
 1. Build the DinD+sshd host image and start it (`--privileged`, SSH on `2222`, Forgejo/Komodo also published to `localhost` for instant browsing). A named Docker volume persists the nested stack across restarts.
 2. Generate an SSH keypair and authorize it on the host.
-3. Scaffold an intent (`intentic init`) with the localhost host + your Cloudflare account + the AI-agent workspace + a sample app.
-4. Run `intentic resolve` + `intentic apply` until it converges.
+3. Scaffold an intent (`intentic deploy init`) with the localhost host + your Cloudflare account + the AI-agent workspace + a sample app.
+4. Run `intentic deploy resolve` + `intentic deploy apply` until it converges.
 5. Print your URLs and the intentic-generated admin logins.
 
 When it finishes you get:

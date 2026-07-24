@@ -49,7 +49,7 @@ if (-not $ConnectToken) { $ConnectToken = $env:CONNECT_TOKEN }
 if (-not $SetupCode) { $SetupCode = $env:SETUP_CODE }
 # The latest RELEASE image via the moving `stable` tag (pulled fresh below), never :latest — see connect.sh for
 # why (the :latest/hand-tagged builds carry internal version 0.0.0, whose @intentic/* deps are unpublished, so
-# `intentic init` can't resolve them; the release only ever moves `stable` onto a published release image).
+# `intentic deploy init` can't resolve them; the release only ever moves `stable` onto a published release image).
 $SandboxImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'registry.gitlab.com/radarsu/intentic/sandbox:stable' }
 # The daemon's preview proxy port, exposed at *.preview.<zone>; apps declare their own ports in apps.json.
 $PreviewPort = if ($env:PREVIEW_PORT) { $env:PREVIEW_PORT } else { '5173' }
@@ -57,7 +57,7 @@ $PreviewPort = if ($env:PREVIEW_PORT) { $env:PREVIEW_PORT } else { '5173' }
 # AGENT_AUTH_DIR, so the AI-provider OAuth stores are shared across sandboxes and survive resets. A localhost
 # platform injects it into the one-liner; empty (production) ⇒ credentials stay in the workspace volume.
 $AgentAuthVolume = $env:INTENTIC_AGENT_AUTH_VOLUME
-# Infra secrets `intentic apply` reads inside the sandbox; they ride into the sandbox container's env and are
+# Infra secrets `intentic deploy apply` reads inside the sandbox; they ride into the sandbox container's env and are
 # never sent to the platform. CF_TOKEN (your Cloudflare API token) is REQUIRED — Cloudflare is intentic's
 # reachability fabric (the tunnel that connects services, exposes them, AND carries browser→sandbox traffic);
 # it is validated below and passed to the sandbox as the Cloudflare-standard CLOUDFLARE_API_TOKEN the CLI reads.
@@ -213,7 +213,7 @@ if ($ProvidedTunnel -and $SelfHost) {
     exit 1
 }
 # Cloudflare is intentic's reachability fabric (the tunnel that connects services and exposes them), so the
-# token is required and validated up front rather than failing later at `intentic apply`. It never reaches the
+# token is required and validated up front rather than failing later at `intentic deploy apply`. It never reaches the
 # platform — it rides into the sandbox below. Verify it against Cloudflare's token-verify endpoint.
 if (-not $ProvidedTunnel -and -not $CfToken) {
     Write-Error 'CF_TOKEN is required — Cloudflare is intentic''s reachability fabric (the tunnel that connects your services and exposes them). Create a token at https://dash.cloudflare.com/profile/api-tokens with Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit.'
@@ -346,7 +346,7 @@ if ($ProvidedTunnel) {
     # --entrypoint intentic: the image's default entrypoint is the daemon; we want the bundled CLI instead.
     $tunnelArgs = @('run', '--rm', '--entrypoint', 'intentic', '-e', "CLOUDFLARE_API_TOKEN=$CfToken", '-e', "CONNECT_TOKEN=$ConnectToken")
     if ($Zone) { $tunnelArgs += @('-e', "ZONE=$Zone") }
-    $tunnelArgs += @($SandboxImage, 'sandbox-tunnel', '--service', "http://${OriginHost}:8787", '--preview-service', "http://${OriginHost}:$PreviewPort", '--ssh-service', "ssh://${OriginHost}:22")
+    $tunnelArgs += @($SandboxImage, 'tunnel', 'sandbox', '--service', "http://${OriginHost}:8787", '--preview-service', "http://${OriginHost}:$PreviewPort", '--ssh-service', "ssh://${OriginHost}:22")
     if ($Subdomain) { $tunnelArgs += @('--subdomain', $Subdomain) }
     $tunnelOut = & docker $tunnelArgs
     $TunnelToken = ($tunnelOut | Where-Object { $_ -like 'TUNNEL_TOKEN=*' } | Select-Object -First 1) -replace '^TUNNEL_TOKEN=', ''

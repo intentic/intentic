@@ -88,7 +88,7 @@ PLATFORM_URL="${PLATFORM_URL:-https://api.intentic.dev}"
 CONNECT_TOKEN="${CONNECT_TOKEN:-}"
 # The latest RELEASE image via the moving `stable` tag (pulled fresh below), never :latest: the release pipeline
 # bumps every @intentic/* package to the release version, publishes them to npm, THEN builds this image and moves
-# `stable` onto it — so its bundled CLI is a published version and the intent repo `intentic init` scaffolds
+# `stable` onto it — so its bundled CLI is a published version and the intent repo `intentic deploy init` scaffolds
 # (~<version>) resolves from npm. The continuous :latest / hand-tagged builds carry internal version 0.0.0
 # (unpublished), so init's `pnpm install` fails and resolve can't find @intentic/graph. Unpinned on purpose — the
 # release always moves `stable` to the newest release, so there's no tag+digest to bump here.
@@ -100,7 +100,7 @@ PREVIEW_PORT="${PREVIEW_PORT:-5173}"
 # platform injects it into the one-liner; cleanup.sh removes it only on explicit --agent-auth or an interactive
 # opt-in, never as part of its default sweep. Empty (production) ⇒ credentials stay in the workspace volume.
 INTENTIC_AGENT_AUTH_VOLUME="${INTENTIC_AGENT_AUTH_VOLUME:-}"
-# Infra secrets `intentic apply` reads INSIDE the sandbox; they ride straight into the sandbox container's env
+# Infra secrets `intentic deploy apply` reads INSIDE the sandbox; they ride straight into the sandbox container's env
 # and are never sent to the platform. CF_TOKEN (your Cloudflare API token) is REQUIRED — Cloudflare is intentic's
 # reachability fabric (the tunnel that connects your services, exposes them, AND carries the browser→sandbox
 # traffic); it is validated below and passed to the sandbox as the Cloudflare-standard CLOUDFLARE_API_TOKEN the
@@ -109,7 +109,7 @@ HOST_SSH_KEY="${HOST_SSH_KEY:-}"
 CF_TOKEN="${CF_TOKEN:-}"
 # Self-host: wire this machine as a deploy target (service user + SSH key + host SSH tunnel; needs root). DEFAULT
 # OFF — setup only makes the sandbox reachable. The platform's "Deploy on this machine" action re-runs this with
-# `SELF_HOST=1` (under `sudo`) to register the host as a deploy target so `intentic apply` can deploy onto it.
+# `SELF_HOST=1` (under `sudo`) to register the host as a deploy target so `intentic deploy apply` can deploy onto it.
 SELF_HOST="${SELF_HOST-}"
 SELF_HOST_USER="${SELF_HOST_USER:-}"
 # Browser-direct access: the sandbox is exposed at sandbox-<id>.<zone> via its OWN Cloudflare tunnel and the
@@ -129,7 +129,7 @@ CLOUDFLARED_IMAGE="${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2026.7.2}"
 # the sidecar image tag). The connector must be native, not a container: under Docker Desktop a container's
 # localhost is the VM, not this machine, so it could not reach the host's sshd at localhost:22.
 CLOUDFLARED_VERSION="${CLOUDFLARED_VERSION:-2026.7.2}"
-# Public DNS the sandbox resolves through. `intentic apply` runs `cloudflared access tcp` inside the sandbox to
+# Public DNS the sandbox resolves through. `intentic deploy apply` runs `cloudflared access tcp` inside the sandbox to
 # reach enrolled hosts by their ssh-<id>.<zone> tunnel hostname; those records are minted moments before use, so
 # the operator's own resolver often still has the pre-creation NXDOMAIN negatively cached (SOA min TTL) and the
 # tunnel dial fails with a bare `read ECONNRESET`. A fresh public resolver (Cloudflare, where the zone lives)
@@ -175,7 +175,7 @@ setup_self_host() {
         exit 1
     fi
     # Ensure an SSH server is installed and running — the sandbox deploys to this host over SSH. (Was a
-    # warn-and-continue; a self-host with no sshd only failed later, deep inside `intentic apply`.)
+    # warn-and-continue; a self-host with no sshd only failed later, deep inside `intentic deploy apply`.)
     ensure_sshd
 
     if ! id "$user" >/dev/null 2>&1; then
@@ -636,7 +636,7 @@ if [ -n "$PROVIDED_TUNNEL" ] && [ -n "$SELF_HOST" ]; then
 fi
 
 # Cloudflare is intentic's reachability fabric (the tunnel that connects services and exposes them), so the
-# token is required and validated up front rather than failing later at `intentic apply`. The token never
+# token is required and validated up front rather than failing later at `intentic deploy apply`. The token never
 # reaches the platform — it rides into the sandbox below. Verify it against Cloudflare's token-verify endpoint
 # (the same Bearer/api.cloudflare.com auth intentic itself uses). `*: *true` tolerates compact or spaced JSON.
 if [ -z "$PROVIDED_TUNNEL" ] && [ -z "$CF_TOKEN" ]; then
@@ -754,7 +754,7 @@ else
         -e CLOUDFLARE_API_TOKEN="$CF_TOKEN" \
         -e CONNECT_TOKEN="$CONNECT_TOKEN" \
         $zone_env \
-        "$SANDBOX_IMAGE" sandbox-tunnel \
+        "$SANDBOX_IMAGE" tunnel sandbox \
         --service "http://${ORIGIN_HOST}:8787" \
         --preview-service "http://${ORIGIN_HOST}:${PREVIEW_PORT}" \
         --ssh-service "ssh://${ORIGIN_HOST}:22" \
@@ -780,7 +780,7 @@ if [ -n "$SELF_HOST" ]; then
         -e CLOUDFLARE_API_TOKEN="$CF_TOKEN" \
         -e CONNECT_TOKEN="$CONNECT_TOKEN" \
         $zone_env \
-        "$SANDBOX_IMAGE" host-ssh-tunnel)"
+        "$SANDBOX_IMAGE" tunnel host)"
     HOST_SSH_TUNNEL_TOKEN="$(printf '%s\n' "$host_ssh_out" | sed -n 's/^HOST_SSH_TUNNEL_TOKEN=//p')"
     SELF_HOST_ADDRESS="$(printf '%s\n' "$host_ssh_out" | sed -n 's/^HOST_SSH_HOSTNAME=//p')"
     if [ -z "$HOST_SSH_TUNNEL_TOKEN" ] || [ -z "$SELF_HOST_ADDRESS" ]; then
@@ -819,7 +819,7 @@ PLATFORM_URL_CONTAINER="$(printf '%s' "$PLATFORM_URL" | sed -e 's#//localhost#//
 # GOOGLE_CLIENT_ID/CONNECT_TOKEN/WEB_ORIGIN activate the browser-facing auth; OWNER_EMAIL pins the owner the
 # daemon will TOFU-bind (the account that created this sandbox); SANDBOX_PUBLIC_URL tells the daemon its own
 # public address; PLATFORM_URL is where it announces that address + its liveness; CLOUDFLARE_API_TOKEN/HOST_SSH_KEY/
-# SELF_HOST_USER are the infra secrets the in-sandbox `intentic apply` reads (they never touch the platform).
+# SELF_HOST_USER are the infra secrets the in-sandbox `intentic deploy apply` reads (they never touch the platform).
 # The volume mounts target the daemon's DEFAULT roots (/work, /history), and the bind host/port ride its
 # defaults too (0.0.0.0:8787) — only identity, reachability, and secrets are set explicitly here; keep the
 # compose rendering (setupCompose.ts) in lockstep.

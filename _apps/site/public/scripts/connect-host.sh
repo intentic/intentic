@@ -388,7 +388,7 @@ else
         -e CONNECT_TOKEN="$CONNECT_TOKEN" \
         -e HOST_NAME="$HOST_NAME" \
         $zone_env \
-        "$SANDBOX_IMAGE" host-ssh-tunnel)"
+        "$SANDBOX_IMAGE" tunnel host)"
     HOST_SSH_TUNNEL_TOKEN="$(printf '%s\n' "$host_ssh_out" | sed -n 's/^HOST_SSH_TUNNEL_TOKEN=//p')"
     HOST_ADDRESS="$(printf '%s\n' "$host_ssh_out" | sed -n 's/^HOST_SSH_HOSTNAME=//p')"
     if [ -z "$HOST_SSH_TUNNEL_TOKEN" ] || [ -z "$HOST_ADDRESS" ]; then

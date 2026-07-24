@@ -12,7 +12,7 @@ It is not part of the product.
 At runtime the product is two tiers: a thin **Platform** (identity + sandbox-URL store) and a per-user
 **Sandbox** (where the agent runs, reached by the browser directly). A sandbox can *also* stand up real
 **infrastructure** on hosts you own — the third tier below — by running the bundled deployment engine, one
-of its tools; that path is optional. The engine flow shown later is what runs *inside* one `intentic apply`.
+of its tools; that path is optional. The engine flow shown later is what runs *inside* one `intentic deploy apply`.
 
 ```mermaid
 flowchart TB
@@ -40,7 +40,7 @@ flowchart TB
 
     operator -->|"sign in (Google) · load the SPA shell · store the derived sandbox URL (setup.bind)"| web
     operator ==>|"drive the daemon DIRECTLY (Google ID token, over the tunnel):<br/>chat · terminals · files · panels · automations · intentic"| sandbox
-    cli ==>|"intentic apply: SSH · Docker · Cloudflare API"| cp
+    cli ==>|"intentic deploy apply: SSH · Docker · Cloudflare API"| cp
     cli ==>|reconcile| appplane
 ```
 
@@ -84,7 +84,7 @@ sequenceDiagram
     U->>S: curl … | sh   (docker run sandbox + its own Cloudflare tunnel)
     U->>S: probe /health directly until reachable (no platform involved)
     U->>S: drive directly — chat · Provision (Google ID token)
-    S->>I: intentic apply (SSH · Docker · Cloudflare)
+    S->>I: intentic deploy apply (SSH · Docker · Cloudflare)
     I-->>S: reconciled state
     S-->>U: stream events · topology · plan · deployments (direct)
 ```
@@ -140,7 +140,7 @@ survive reconnects. Its subsystems:
 tunnel is named `sandbox-<id>` where `<id> = sha256(connectToken).slice(0, 12)`
 ([tunnel-ids.ts](_libs/sandbox-contract/src/tunnel-ids.ts)), and it is provisioned one of two ways:
 
-- **Own Cloudflare** — `connect.sh` runs `intentic sandbox-tunnel` against the *user's* zone:
+- **Own Cloudflare** — `connect.sh` runs `intentic tunnel sandbox` against the *user's* zone:
   `sandbox-<id>.<zone>` for the daemon, `ssh-<id>.<zone>` for desktop sync, plus the `*.<zone>`
   wildcard for panel previews. The user's Cloudflare account absorbs all of it.
 - **Intentic-provided** — for users with no Cloudflare, the platform provisions the tunnel on
@@ -165,7 +165,7 @@ is asymmetric:
 
 | Reached over | Who / what |
 | --- | --- |
-| **SSH** (loopback port-forward to `:3000` / `:9120`) | The **engine's entire control path**: every Forgejo API call (repo/ci/users/orgs/teams/hooks) and every Komodo API call (deployments/users/alerters/servers), plus `intentic adopt`'s REST calls and git pushes. The engine never dials a public route it may itself be reconciling — apply and adopt work with the tunnel down, or before DNS exists at all. |
+| **SSH** (loopback port-forward to `:3000` / `:9120`) | The **engine's entire control path**: every Forgejo API call (repo/ci/users/orgs/teams/hooks) and every Komodo API call (deployments/users/alerters/servers), plus `intentic deploy adopt`'s REST calls and git pushes. The engine never dials a public route it may itself be reconciling — apply and adopt work with the tunnel down, or before DNS exists at all. |
 | **Cloudflare tunnel** (public `*.<zone>`) | Everything genuinely cross-host or external: browsers/operators, every worker host's Komodo Periphery dialing Core (`deploy.<zone>`), registry pulls (`git.<zone>`), and hosted-forge CI runners' notify step. |
 
 Why a tunnel, rather than "just use SSH and make Cloudflare optional":
@@ -184,7 +184,7 @@ This is enforced in code, not just convention: the SDK types require `expose: Cl
 `resolveNeeds` ([needs.ts](_libs/need-resolver/src/needs.ts)) and `emit`
 ([emit.ts](_libs/state-resolver/src/emit/emit.ts)) throw when it is missing — there is no alternative ingress.
 The Cloudflare API token is supplied at **connect** time (it rides `connect.sh` into the sandbox) and consumed
-at **provision** time by `intentic apply`. It never reaches the platform except for one request-scoped call at
+at **provision** time by `intentic deploy apply`. It never reaches the platform except for one request-scoped call at
 setup — the platform lists the token's zones so the user can pick which one the sandbox tunnel uses (the browser
 can't call Cloudflare directly), then drops the token: never persisted, never logged.
 
@@ -227,7 +227,7 @@ Intent ──► NeedResolver ──► Needs ──► StateResolver ──► 
    `list` enumerates its live stamped resources (`intentic.id` / `intentic.type` labels, stamped DNS-record
    comments) and everything absent from the graph is an orphan, pruned without needing any baseline.
    Deletions require `apply --yes` (pending ones are previewed otherwise), nodes with a `protect: true`
-   input (stateful backings by default) are never deleted, and `intentic destroy --yes` is the same prune
+   input (stateful backings by default) are never deleted, and `intentic deploy destroy --yes` is the same prune
    against the empty graph. Drift detection is also stamp-based: every resource carries an `intentic.hash`
    of its serialized inputs, and a mismatch reads as an update regardless of the provider's own diff.
    (`prune`/`pruneOrphans` in [prune.ts](_libs/engine/src/reconcile/prune.ts), `collectOrphans` in
@@ -256,7 +256,7 @@ Every need carries a `plane` — its role, independent of where it runs ([needs.
   GitHub/GitLab when declared) and `infra-control` (Komodo, on every stack) — git/CI plus the deploy
   orchestrator. The local `intent` repo
   (`deploy.config.ts`) and `desired-state` repo (the artifact + execution status) drive it: `intentic
-  resolve` runs the flow above and writes the artifact, `intentic apply` executes it. A remote, PR-managed
+  resolve` runs the flow above and writes the artifact, `intentic deploy apply` executes it. A remote, PR-managed
   control plane (a standalone Forgejo watching the intent repo) is a planned later evolution of this same
   flow. ([_apps/cli/src/resolve/resolve.ts](_apps/cli/src/resolve/resolve.ts), [artifact.ts](_apps/cli/src/lib/artifact.ts),
   [app.ts](_apps/cli/src/app.ts))
@@ -291,7 +291,7 @@ graph ──► resources ──► engine ──► providers
 | [`@intentic/providers`](_libs/providers) | lib | Real Provider SPI impls: control plane (Forgejo, GitHub, GitLab, Komodo, repo/CI), network (Cloudflare tunnels + routes), hosts (SSH/Docker, deployment, workspace), backings (Postgres, Valkey, Garage, Authentik), services (SigNoz, Outline, Paperless, OpenProject, Invoice Ninja, Infisical), integrations (Discord, Stripe), ops (restic backup). |
 | [`@intentic/sandbox-contract`](_libs/sandbox-contract) | lib | oRPC wire contract for the sandbox daemon — shared by the daemon and its browser client (the platform consumes it from npm). |
 | [`@intentic/scaffold`](_libs/scaffold) | lib | Shared workspace scaffold: the intent-repo skeleton + deploy.config managed-region render/parse, used by the CLI's `init` and the sandbox daemon. |
-| [`@intentic/cli`](_apps/cli) | **app** | The runnable product, `bin: intentic`: `init` · `monorepo` · `addApp` · `resolve` · `plan` · `apply` · `destroy` · `adopt` · `restore` · `secrets` · `deployments` · `logs` · `sandboxTunnel` · `hostSshTunnel` ([app.ts](_apps/cli/src/app.ts)). |
+| [`@intentic/cli`](_apps/cli) | **app** | The `bin: intentic` toolbox — three command groups: `tunnel` (`sandbox`/`host` — the sandbox's own Cloudflare tunnels, used by connect.sh), `deploy` (`init`/`resolve`/`plan`/`apply`/`destroy`/`adopt`/`restore`/`secrets`/`deployments`/`logs` — the bundled deployment engine), and `scaffold` (`monorepo`/`add-app`) ([app.ts](_apps/cli/src/app.ts)). |
 | [`@intentic/sandbox`](_apps/sandbox) | **app** (image) | The per-project multi-agent dev workspace daemon (see [The sandbox daemon](#the-sandbox-daemon)), reached by the browser directly over its own Cloudflare tunnel. |
 | [`@intentic/sync`](_apps/sync) | **app** | Local background agent keeping a directory bidirectionally in sync with a remote sandbox — one HTTP enrollment call, then Mutagen over tunnel SSH. The daemon grants a **mode** at enrollment (file `sync`, or `mirror`-only for collaborators — see the workspace file service above), and the agent adapts: `sync` runs file sync + mirroring, `mirror` skips file sync and only forwards ports. `setup` auto-starts a **port-mirror watcher** (a detached, pidfile-guarded loop) that binds the sandbox's workspace ports onto the desktop's SAME localhost ports via Mutagen TCP forwards, polling the daemon's `/ports` (read with the enrollment-minted, `/ports`-scoped sync token) so newly-started dev servers appear automatically, and **registers it for login autostart** (launchd / Task Scheduler / XDG autostart) so it resumes after a reboot. Revocation is symmetric: after consecutive definitive token rejections (the owner clicked Disable, or the sandbox lost the enrollment) the watcher **tears itself down** — forwards, pidfile, and the autostart entry — instead of polling a dead enrollment forever. Remote dev servers then behave exactly like local ones — localhost URLs, cookies, and CORS included — with no command to run, ever, and **every collaborator can mirror the same sandbox at once**. |
 
@@ -599,7 +599,7 @@ sets the Actions secrets, idempotently; and a reproduced readiness failure (the 
 localhost but its `internalUrl` firewalled — the field failure class) prints the SSH diagnostic sweep
 (`readinessDiagnostics` in [_libs/providers/src/core/ssh-diagnostics.ts](_libs/providers/src/core/ssh-diagnostics.ts):
 docker state, the node's logs, listeners, addresses, one verbose probe) before the
-`ReadinessTimeoutError` propagates. The same sweep runs on any real `intentic apply` readiness timeout.
+`ReadinessTimeoutError` propagates. The same sweep runs on any real `intentic deploy apply` readiness timeout.
 
 Run it locally with `pnpm e2e:hermetic` (privileged local Docker, Linux/WSL2). In GitLab CI it runs on
 every merge request as a **non-blocking** sidecar (`e2e:hermetic` job, `allow_failure: true`), pulling

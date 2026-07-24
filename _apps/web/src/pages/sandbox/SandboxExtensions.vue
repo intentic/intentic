@@ -2,7 +2,7 @@
 import type { SettingContribution, SettingValue } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-api";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { Card, cmp, StatusBadge, type StatusVariant } from "@intentic-app/ui";
+import { cmp, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic-app/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { watch } from "vue";
 import { extensionSettingsStore } from "../../composables/extensions/useExtensionSettings";
@@ -79,71 +79,71 @@ const contributionSummary = (extension: ExtensionSummary): string => {
 <template>
     <div class="flex flex-col gap-2.5">
         <p v-if="error" :class="cmp.alertDanger()">{{ error }}</p>
-        <p v-else-if="!isLoading && extensions.length === 0" class="text-sm text-muted">
-            No extensions installed. Add one from the Capabilities page — install is owner-only and pins an exact commit.
-        </p>
-
-        <Card v-for="extension in extensions" :key="extension.id" class="flex flex-col gap-3">
-            <div class="flex items-start justify-between gap-2">
-                <div class="min-w-0">
-                    <h2 class="flex items-center gap-2 font-semibold leading-tight">
-                        <span class="truncate">{{ extensionIdOf(extension.manifest) }}</span>
-                        <StatusBadge :variant="badge(extension.id).variant" :label="badge(extension.id).label" />
-                    </h2>
-                    <p class="mt-0.5 text-xs text-muted">
-                        v{{ extension.manifest.version }} · {{ extension.commit.slice(0, 12) }} · {{ contributionSummary(extension) }}
-                    </p>
-                    <p v-if="statusOf(extension.id)?.detail" class="mt-1 text-2xs text-danger">{{ statusOf(extension.id)?.detail }}</p>
-                </div>
+        <RowGroup label="Extensions">
+            <div v-if="!isLoading && extensions.length === 0" class="px-4 py-6 text-center text-xs text-muted">
+                No extensions installed. Add one from the Capabilities page — install is owner-only and pins an exact commit.
             </div>
-
-            <div v-if="(extension.manifest.contributes?.settings ?? []).length > 0" class="flex flex-col gap-2 border-t border-line pt-2.5">
-                <div v-for="setting in extension.manifest.contributes?.settings" :key="setting.key" class="flex items-center justify-between gap-3">
-                    <div class="min-w-0">
-                        <p class="text-sm text-content">{{ setting.title }}</p>
-                        <p v-if="setting.description" class="text-2xs text-muted">{{ setting.description }}</p>
+            <Row v-for="extension in extensions" :key="extension.id">
+                <template #title>
+                    <span class="truncate">{{ extensionIdOf(extension.manifest) }}</span>
+                </template>
+                <template #description>
+                    v{{ extension.manifest.version }} · {{ extension.commit.slice(0, 12) }} · {{ contributionSummary(extension) }}
+                    <span v-if="statusOf(extension.id)?.detail" class="mt-1 block text-2xs text-danger">{{ statusOf(extension.id)?.detail }}</span>
+                </template>
+                <template #control>
+                    <StatusBadge :variant="badge(extension.id).variant" :label="badge(extension.id).label" />
+                </template>
+                <template v-if="(extension.manifest.contributes?.settings ?? []).length > 0" #below>
+                    <div class="flex flex-col gap-2">
+                        <div v-for="setting in extension.manifest.contributes?.settings" :key="setting.key" class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="text-sm text-content">{{ setting.title }}</p>
+                                <p v-if="setting.description" class="text-2xs text-muted">{{ setting.description }}</p>
+                            </div>
+                            <!-- Secret settings: write-only. The stored value never reaches the browser; typing a new
+                                 one replaces it, clearing the box and saving clears it. -->
+                            <input
+                                v-if="setting.secret === true"
+                                type="password"
+                                autocomplete="off"
+                                :class="cmp.input(`w-44 shrink-0`)"
+                                :placeholder="secretIsSet(extension, setting) ? `•••••• (set)` : `Enter value`"
+                                @change="(event) => setValue(extension, setting, (event.target as HTMLInputElement).value)"
+                            />
+                            <ToggleSwitch
+                                v-else-if="setting.type === `boolean`"
+                                :model-value="valueOf(extension, setting) === true"
+                                @update:model-value="(value: boolean) => setValue(extension, setting, value)"
+                            />
+                            <select
+                                v-else-if="setting.type === `enum`"
+                                :class="cmp.input(`w-44 shrink-0`)"
+                                :value="String(valueOf(extension, setting) ?? ``)"
+                                @change="(event) => setValue(extension, setting, (event.target as HTMLSelectElement).value)"
+                            >
+                                <option v-for="option in setting.enum ?? []" :key="option" :value="option">{{ option }}</option>
+                            </select>
+                            <input
+                                v-else
+                                :class="cmp.input(`w-44 shrink-0`)"
+                                :type="setting.type === `number` ? `number` : `text`"
+                                :value="String(valueOf(extension, setting) ?? ``)"
+                                @change="
+                                    (event) =>
+                                        setValue(
+                                            extension,
+                                            setting,
+                                            setting.type === `number`
+                                                ? Number((event.target as HTMLInputElement).value)
+                                                : (event.target as HTMLInputElement).value,
+                                        )
+                                "
+                            />
+                        </div>
                     </div>
-                    <!-- Secret settings: write-only. The stored value never reaches the browser; typing a new
-                         one replaces it, clearing the box and saving clears it. -->
-                    <input
-                        v-if="setting.secret === true"
-                        type="password"
-                        autocomplete="off"
-                        :class="cmp.input(`w-44 shrink-0`)"
-                        :placeholder="secretIsSet(extension, setting) ? `•••••• (set)` : `Enter value`"
-                        @change="(event) => setValue(extension, setting, (event.target as HTMLInputElement).value)"
-                    />
-                    <ToggleSwitch
-                        v-else-if="setting.type === `boolean`"
-                        :model-value="valueOf(extension, setting) === true"
-                        @update:model-value="(value: boolean) => setValue(extension, setting, value)"
-                    />
-                    <select
-                        v-else-if="setting.type === `enum`"
-                        :class="cmp.input(`w-44 shrink-0`)"
-                        :value="String(valueOf(extension, setting) ?? ``)"
-                        @change="(event) => setValue(extension, setting, (event.target as HTMLSelectElement).value)"
-                    >
-                        <option v-for="option in setting.enum ?? []" :key="option" :value="option">{{ option }}</option>
-                    </select>
-                    <input
-                        v-else
-                        :class="cmp.input(`w-44 shrink-0`)"
-                        :type="setting.type === `number` ? `number` : `text`"
-                        :value="String(valueOf(extension, setting) ?? ``)"
-                        @change="
-                            (event) =>
-                                setValue(
-                                    extension,
-                                    setting,
-                                    setting.type === `number`
-                                        ? Number((event.target as HTMLInputElement).value)
-                                        : (event.target as HTMLInputElement).value,
-                                )
-                        "
-                    />
-                </div>
-            </div>
-        </Card>
+                </template>
+            </Row>
+        </RowGroup>
     </div>
 </template>

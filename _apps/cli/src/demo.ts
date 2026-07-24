@@ -186,7 +186,7 @@ const up = async (): Promise<void> => {
 
     // Bootstrap into the repo's own gitignored scratch dirs (intent/, desired-state/) instead of a throwaway
     // /tmp workspace, so the generated .secrets.json lands at desired-state/.secrets.json — exactly where
-    // `pnpm intentic adopt` (default repo-root paths) reads the Forgejo admin password from.
+    // `pnpm intentic deploy adopt` (default repo-root paths) reads the Forgejo admin password from.
     const workspace = repoRoot;
     const configPath = join(workspace, "intent", "deploy.config.ts");
     const artifactPath = join(workspace, "desired-state", "desired-state.json");
@@ -209,14 +209,14 @@ const up = async (): Promise<void> => {
         ),
     );
 
-    log("▶ scaffolding the intent (init --link) …");
-    await runCli("init", "--dir", workspace, "--link");
+    log("▶ scaffolding the intent (deploy init --link) …");
+    await runCli("deploy", "init", "--dir", workspace, "--link");
     await writeFile(configPath, deployConfig());
     await writeFile(join(workspace, "desired-state", ".env"), envFile(privateKey, apiToken));
 
     log("▶ resolve + apply — Forgejo + Komodo + tunnel + the app's CI/CD wiring …");
-    await runCli("resolve", "--config", configPath, "--out", artifactPath);
-    await runCli("apply", "--yes", "--artifact", artifactPath, "--maxIterations", "8");
+    await runCli("deploy", "resolve", "--config", configPath, "--out", artifactPath);
+    await runCli("deploy", "apply", "--yes", "--artifact", artifactPath, "--maxIterations", "8");
 
     // Read the admin passwords intentic generated (resolve wrote desired-state/.secrets.json), so the rest of
     // the demo signs in with exactly what bootstrapped Forgejo/Komodo.
@@ -286,7 +286,7 @@ const up = async (): Promise<void> => {
     log(`    Komodo pw : ${komodoPassword}`);
     log(`    (saved in ${join(workspace, "desired-state", ".secrets.json")})`);
     log(`  SSH into the host:  ssh -p ${sshPort} root@127.0.0.1   (key in ${join(workspace, "desired-state", ".env")})`);
-    log("  Push the control-plane repos to Forgejo:  pnpm intentic adopt   (once git DNS is live)");
+    log("  Push the control-plane repos to Forgejo:  pnpm intentic deploy adopt   (once git DNS is live)");
     log("  Stop (reuses tunnel + DNS, fast re-up) :  pnpm demo:down");
     log("  Full teardown (also removes tunnel+DNS):  pnpm demo:clear");
     log("  Note: keep this machine + Docker running; the public URLs share the");
@@ -348,7 +348,7 @@ const clear = async (): Promise<void> => {
     }
 
     // intent/ + desired-state/ are gitignored scratch dirs holding the generated .secrets.json — left in place
-    // so `intentic adopt` can still run after teardown.
+    // so `intentic deploy adopt` can still run after teardown.
     await rm(stateDir, { recursive: true, force: true }).catch(() => {});
     log("✅ demo cleared — host container, tunnel, and DNS records removed (intent/ + desired-state/ kept).");
 };

@@ -149,7 +149,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             const repoDir = join(services.workspace.root, repo);
             const { source, ref } = await readTemplatesConfig(services);
             const apps = input.apps.map((app) => (app.name === app.template ? app.template : `${app.template}:${app.name}`)).join(",");
-            const command = `intentic add-app --dir ${shellQuote(repoDir)} --apps ${shellQuote(apps)} --source ${shellQuote(source)} --ref ${shellQuote(ref)}`;
+            const command = `intentic scaffold add-app --dir ${shellQuote(repoDir)} --apps ${shellQuote(apps)} --source ${shellQuote(source)} --ref ${shellQuote(ref)}`;
             // Mint every app's preview route up front in one batch — idempotent, and hostnames must predate the
             // first browser lookup (an early NXDOMAIN gets negative-cached for the zone's SOA TTL).
             void services.ensurePreviewRoutes(input.apps.map((app) => previewLabel(appPanelKey(repo, app.name))));

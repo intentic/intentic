@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DraftStatus, DraftSummary } from "@intentic-app/api-contract";
-import { Card, cmp, Page, PageHeader, StatusBadge, type StatusVariant } from "@intentic-app/ui";
+import { cmp, Page, PageHeader, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { useAsyncAction } from "../composables/useAsyncAction";
 import { useDrafts } from "../composables/extensions/useDrafts";
@@ -75,92 +75,84 @@ const removeDraft = (id: string): Promise<void> =>
 
         <!-- The section only exists once the agent has proposed a draft; an empty queue shows nothing here (and
              hides its rail tile). The invalid warning above stays, since it's actionable. -->
-        <Card v-if="drafts.length > 0" class="flex flex-col gap-3">
-            <div class="flex items-center gap-2.5">
-                <Icon name="send" class="text-lg text-muted" />
-                <div>
-                    <h2 class="font-semibold leading-tight">Pending posts</h2>
-                    <p class="text-xs text-muted">Drafts live in your sandbox until they post — no platform draft system is used.</p>
-                </div>
-            </div>
-
-            <div class="flex flex-col gap-2">
-                <div v-for="draft in drafts" :key="draft.id" class="rounded-lg border border-line bg-canvas px-3 py-2">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-center gap-2">
-                                <span class="rounded bg-overlay px-1.5 py-0.5 text-2xs font-medium capitalize text-content">{{
-                                    draft.platform
-                                }}</span>
-                                <span v-if="draft.target" class="truncate rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{
-                                    draft.target
-                                }}</span>
-                                <StatusBadge
-                                    :variant="STATUS_VARIANT[draft.status]"
-                                    :label="draft.status"
-                                    size="xs"
-                                    v-tooltip.top="draft.status === 'failed' ? draft.error : undefined"
-                                />
-                                <span
-                                    v-if="draft.media && draft.media.length > 0"
-                                    class="text-2xs text-subtle"
-                                    v-tooltip.top="draft.media.join(', ')"
-                                >
-                                    <Icon name="paperclip" class="text-2xs" />{{ draft.media.length }}
-                                </span>
-                            </div>
-                            <p v-if="draft.title" class="mt-1 truncate text-xs font-medium text-content">{{ draft.title }}</p>
-                            <p class="mt-0.5 whitespace-pre-wrap wrap-break-word text-2xs text-subtle line-clamp-3">{{ draft.content }}</p>
-                        </div>
-                        <div class="flex shrink-0 flex-col items-end gap-2">
-                            <!-- Reschedule: enabled until the draft is handed to the publisher (posting) or already out (posted). -->
-                            <input
-                                type="datetime-local"
-                                :value="toLocalInput(draft.scheduledAt)"
-                                :disabled="draft.status === 'posting' || draft.status === 'posted'"
-                                :class="cmp.input('text-2xs px-2 py-1')"
-                                class="disabled:opacity-50"
-                                :aria-label="`Scheduled time for ${draft.id}`"
-                                @change="reschedule(draft, ($event.target as HTMLInputElement).value)"
-                            />
-                            <div class="flex items-center gap-2">
-                                <span v-if="draft.status === 'posted' && draft.postedAt" class="text-2xs text-subtle"
-                                    >posted {{ formatAt(draft.postedAt) }}</span
-                                >
-                                <Button
-                                    v-if="draft.status === 'proposed'"
-                                    label="Approve"
-                                    size="small"
-                                    :disabled="save.isPending.value"
-                                    @click="patch(draft, { status: 'approved' })"
-                                >
-                                    <template #icon><Icon name="check" /></template>
-                                </Button>
-                                <Button
-                                    v-else-if="draft.status === 'failed'"
-                                    label="Retry"
-                                    size="small"
-                                    severity="secondary"
-                                    :disabled="save.isPending.value"
-                                    @click="patch(draft, { status: 'approved' })"
-                                >
-                                    <template #icon><Icon name="refresh" /></template>
-                                </Button>
-                                <button
-                                    type="button"
-                                    class="text-muted hover:text-danger disabled:opacity-40"
-                                    :disabled="draft.status === 'posting'"
-                                    :aria-label="`Delete ${draft.id}`"
-                                    v-tooltip.top="draft.status === 'posting' ? 'Posting…' : 'Reject'"
-                                    @click="removeDraft(draft.id)"
-                                >
-                                    <Icon name="trash" class="text-sm" />
-                                </button>
-                            </div>
+        <RowGroup v-if="drafts.length > 0" label="Pending posts">
+            <Row v-for="draft in drafts" :key="draft.id" icon="send">
+                <template #title>
+                    <div class="flex items-center gap-2">
+                        <span class="rounded bg-overlay px-1.5 py-0.5 text-2xs font-medium capitalize text-content">{{
+                            draft.platform
+                        }}</span>
+                        <span v-if="draft.target" class="truncate rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{
+                            draft.target
+                        }}</span>
+                        <StatusBadge
+                            :variant="STATUS_VARIANT[draft.status]"
+                            :label="draft.status"
+                            size="xs"
+                            v-tooltip.top="draft.status === 'failed' ? draft.error : undefined"
+                        />
+                        <span
+                            v-if="draft.media && draft.media.length > 0"
+                            class="text-2xs text-subtle"
+                            v-tooltip.top="draft.media.join(', ')"
+                        >
+                            <Icon name="paperclip" class="text-2xs" />{{ draft.media.length }}
+                        </span>
+                    </div>
+                </template>
+                <template #control>
+                    <div class="flex flex-col items-end gap-2">
+                        <!-- Reschedule: enabled until the draft is handed to the publisher (posting) or already out (posted). -->
+                        <input
+                            type="datetime-local"
+                            :value="toLocalInput(draft.scheduledAt)"
+                            :disabled="draft.status === 'posting' || draft.status === 'posted'"
+                            :class="cmp.input('text-2xs px-2 py-1')"
+                            class="disabled:opacity-50"
+                            :aria-label="`Scheduled time for ${draft.id}`"
+                            @change="reschedule(draft, ($event.target as HTMLInputElement).value)"
+                        />
+                        <div class="flex items-center gap-2">
+                            <span v-if="draft.status === 'posted' && draft.postedAt" class="text-2xs text-subtle"
+                                >posted {{ formatAt(draft.postedAt) }}</span
+                            >
+                            <Button
+                                v-if="draft.status === 'proposed'"
+                                label="Approve"
+                                size="small"
+                                :disabled="save.isPending.value"
+                                @click="patch(draft, { status: 'approved' })"
+                            >
+                                <template #icon><Icon name="check" /></template>
+                            </Button>
+                            <Button
+                                v-else-if="draft.status === 'failed'"
+                                label="Retry"
+                                size="small"
+                                severity="secondary"
+                                :disabled="save.isPending.value"
+                                @click="patch(draft, { status: 'approved' })"
+                            >
+                                <template #icon><Icon name="refresh" /></template>
+                            </Button>
+                            <button
+                                type="button"
+                                class="text-muted hover:text-danger disabled:opacity-40"
+                                :disabled="draft.status === 'posting'"
+                                :aria-label="`Delete ${draft.id}`"
+                                v-tooltip.top="draft.status === 'posting' ? 'Posting…' : 'Reject'"
+                                @click="removeDraft(draft.id)"
+                            >
+                                <Icon name="trash" class="text-sm" />
+                            </button>
                         </div>
                     </div>
-                </div>
-            </div>
-        </Card>
+                </template>
+                <template v-if="draft.content || draft.title" #below>
+                    <p v-if="draft.title" class="truncate text-xs font-medium text-content">{{ draft.title }}</p>
+                    <p class="mt-0.5 whitespace-pre-wrap wrap-break-word text-2xs text-subtle line-clamp-3">{{ draft.content }}</p>
+                </template>
+            </Row>
+        </RowGroup>
     </Page>
 </template>

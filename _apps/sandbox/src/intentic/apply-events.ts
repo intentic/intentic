@@ -4,7 +4,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { IntenticLine } from "@intentic/sandbox-contract";
 import { parseIntenticLine } from "./intentic-runner.js";
 
-// The durable per-run apply event log. `intentic apply` mirrors its ndjson lifecycle stream here (via the CLI's
+// The durable per-run apply event log. `intentic deploy apply` mirrors its ndjson lifecycle stream here (via the CLI's
 // INTENTIC_EVENTS_FILE sink) while the human-readable pane runs in the panel-infra-apply tmux session; the web
 // tails this file so per-resource apply progress survives a page refresh. Lives under historyRoot alongside
 // activity.jsonl — daemon-owned, outside the agent's reach and outside the desired-state repo (it is per-run

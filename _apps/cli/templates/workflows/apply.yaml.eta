@@ -20,7 +20,7 @@ jobs:
           PREV=''
           if git rev-parse -q --verify refs/tags/<%= it.appliedTag %> >/dev/null; then \
             git show <%= it.appliedTag %>:<%= it.artifactFile %> > /tmp/previous.json && PREV="--previous /tmp/previous.json"; fi
-          pnpm dlx <%= it.cliPackage %>@<%= it.cliVersion %> apply --yes --artifact <%= it.artifactFile %> $PREV
+          pnpm dlx <%= it.cliPackage %>@<%= it.cliVersion %> deploy apply --yes --artifact <%= it.artifactFile %> $PREV
       - name: mark applied
         run: |
           AUTH="$(printf '%s:%s' '<%= it.user %>' "$<%= it.forgejoPasswordKey %>" | base64 -w0)"

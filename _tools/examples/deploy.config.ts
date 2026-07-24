@@ -1,6 +1,6 @@
-// Canonical intent file. `intentic resolve` imports this module, reads the exported `intent`, computes
+// Canonical intent file. `intentic deploy resolve` imports this module, reads the exported `intent`, computes
 // every valid desired-state artifact (one per option combination that meets the needs), and
-// auto-picks one; `intentic apply` then reconciles that artifact until state reads true.
+// auto-picks one; `intentic deploy apply` then reconciles that artifact until state reads true.
 //
 // `env` comes from its true source, @intentic/graph (the SDK does not re-export it).
 

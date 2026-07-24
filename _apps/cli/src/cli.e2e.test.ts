@@ -221,7 +221,7 @@ describe.skipIf(!enabled)("intentic CLI end-to-end (manual, real Cloudflare + Di
         const port = host.getMappedPort(22);
 
         // 1. Scaffold the two local repos with @intentic/* linked to this monorepo's source.
-        await intentic("init", "--dir", tmp, "--link");
+        await intentic("deploy", "init", "--dir", tmp, "--link");
 
         const configPath = join(tmp, "intent", "deploy.config.ts");
         const artifactPath = join(tmp, "desired-state", "desired-state.json");
@@ -233,8 +233,8 @@ describe.skipIf(!enabled)("intentic CLI end-to-end (manual, real Cloudflare + Di
         // 3. Resolve + apply: brings up Forgejo + its Actions runner + Komodo + the workspace sandbox + the
         // tunnel/routes, and wires the app's CI/CD. The workspace provider PULLS the published sandbox image
         // (registry.gitlab.com/radarsu/intentic/sandbox) from the GitLab Container Registry — it must be published under that nested name + public.
-        await intentic("resolve", "--config", configPath, "--out", artifactPath);
-        await intentic("apply", "--yes", "--artifact", artifactPath, "--maxIterations", "8");
+        await intentic("deploy", "resolve", "--config", configPath, "--out", artifactPath);
+        await intentic("deploy", "apply", "--yes", "--artifact", artifactPath, "--maxIterations", "8");
 
         // The admin password intentic generated (in desired-state/.secrets.json) — what bootstrapped Forgejo.
         const forgejoPassword = (await readGeneratedSecrets(join(tmp, "desired-state")))["FORGEJO_ADMIN_PASSWORD"] ?? "";

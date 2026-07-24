@@ -187,7 +187,7 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                     ? ` -e INTENTIC_AGENT_TOOLS=${Buffer.from(JSON.stringify(parsed.tools)).toString("base64")}`
                     : ``;
             const run = await session.exec(
-                // rm + run in ONE exec: when `intentic apply` runs INSIDE the sandbox being recreated, the rm
+                // rm + run in ONE exec: when `intentic deploy apply` runs INSIDE the sandbox being recreated, the rm
                 // kills the CLI — two separate execs would never reach the run.
                 // Unprivileged by default — container privileges (the docker capability's --privileged for its
                 // ISOLATED nested engine, the vpn's tun + NET_ADMIN) ride in solely through the overlay's
@@ -198,9 +198,9 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 // health-probes the daemon, without exposing either on the host's public interface. The tools
                 // digest label drives recreate-on-change. SANDBOX_NAME/SANDBOX_IMAGE feed the daemon's /info.
                 // The rm destroys the old container's `docker logs` — keep its tail on the host first, so a
-                // failed recreate still has the predecessor's record (fetchable via `intentic logs`). The
+                // failed recreate still has the predecessor's record (fetchable via `intentic deploy logs`). The
                 // json-file caps stop an unbounded log from filling the host disk.
-                // --dns: `intentic apply` runs `cloudflared access tcp` in here to reach enrolled hosts by their
+                // --dns: `intentic deploy apply` runs `cloudflared access tcp` in here to reach enrolled hosts by their
                 // freshly-minted ssh-<id>.<zone> tunnel name; a public resolver (Cloudflare, where the zone lives)
                 // avoids the operator resolver's negatively-cached NXDOMAIN that otherwise fails the dial (ECONNRESET).
                 `(docker logs --tail 2000 ${CONTAINER} > /opt/intentic/workspace-previous.log 2>&1 || true) && ` +

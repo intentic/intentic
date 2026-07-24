@@ -221,7 +221,7 @@ export const apply = buildCommand<ApplyFlags>({
                     for (const entry of pending) {
                         out.text(`pending delete\t${entry.type}\t${entry.id}`);
                     }
-                    out.text(`${pending.length} deletion(s) pending — re-run \`intentic apply --yes\` to prune`);
+                    out.text(`${pending.length} deletion(s) pending — re-run \`intentic deploy apply --yes\` to prune`);
                 } else {
                     if (pending.length > 0) {
                         // The destructive phase: push the takeover deadline out for a long apply, then confirm we
@@ -264,7 +264,7 @@ export const apply = buildCommand<ApplyFlags>({
                 const updates = result.outcome.steps.filter((s) => s.action === "update").length;
                 const noops = result.outcome.steps.filter((s) => s.action === "noop").length;
                 const summary = [
-                    `**intentic apply** — ${result.converged ? "✅ converged" : "⚠️ did not converge"} in ${result.iterations} iteration(s)`,
+                    `**intentic deploy apply** — ${result.converged ? "✅ converged" : "⚠️ did not converge"} in ${result.iterations} iteration(s)`,
                     `📊 ${result.outcome.steps.length} resources: ${creates} created, ${updates} updated, ${noops} unchanged`,
                     ...(pruned.deleted.length > 0 ? [`🗑️ ${pruned.deleted.length} resource(s) pruned`] : []),
                 ].join("\n");

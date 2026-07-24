@@ -18,7 +18,7 @@ jobs:
           pnpm install --ignore-workspace
           AUTH="$(printf '%s:%s' "$GIT_USER" "$GIT_TOKEN" | base64 -w0)"
           git -c http.extraHeader="Authorization: basic $AUTH" clone <%= it.desiredStateCloneUrl %> /tmp/ds
-          pnpm dlx <%= it.cliPackage %>@<%= it.cliVersion %> resolve --config <%= it.configFile %> --out /tmp/ds/<%= it.artifactFile %> --sync-control-plane
+          pnpm dlx <%= it.cliPackage %>@<%= it.cliVersion %> deploy resolve --config <%= it.configFile %> --out /tmp/ds/<%= it.artifactFile %> --sync-control-plane
           cd /tmp/ds
           git add -A
           if git diff --cached --quiet; then echo 'desired-state unchanged'; exit 0; fi

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card } from "@intentic-app/ui";
+import { RowGroup } from "@intentic-app/ui";
 import { computed, onUnmounted, ref } from "vue";
 import { commands } from "../../composables/commands/useCommands";
 import { chordFromEvent, formatChord, isApplePlatform } from "../../composables/commands/keybindings";
@@ -97,12 +97,9 @@ onUnmounted(stopRecording);
 </script>
 
 <template>
-    <div class="flex flex-col gap-2.5">
-        <Card class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-                <h2 class="font-semibold leading-tight">Keyboard shortcuts</h2>
-                <p class="text-xs text-muted">Record a new shortcut for any command, or reset it to the default. Shortcuts are per-browser.</p>
-            </div>
+    <div class="flex flex-col gap-3">
+        <div class="flex items-start justify-between gap-3">
+            <p class="text-sm text-muted">Record a new shortcut for any command, or reset it to the default. Shortcuts are per-browser.</p>
             <button
                 v-if="hasAnyOverride"
                 type="button"
@@ -111,7 +108,7 @@ onUnmounted(stopRecording);
             >
                 Reset all
             </button>
-        </Card>
+        </div>
 
         <div class="relative">
             <Icon class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-subtle" name="search" aria-hidden="true" />
@@ -123,8 +120,8 @@ onUnmounted(stopRecording);
             />
         </div>
 
-        <Card class="!p-0">
-            <div v-for="row in rows" :key="row.command" class="flex items-center gap-3 border-b border-line px-3 py-2 last:border-b-0">
+        <RowGroup>
+            <div v-for="row in rows" :key="row.command" class="flex items-center gap-3 px-4 py-2.5">
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
                         <span class="truncate text-sm text-content">{{ row.title }}</span>
@@ -186,7 +183,7 @@ onUnmounted(stopRecording);
                 </div>
             </div>
 
-            <p v-if="rows.length === 0" class="px-3 py-6 text-center text-xs text-subtle">No commands match “{{ query }}”.</p>
-        </Card>
+            <p v-if="rows.length === 0" class="px-4 py-6 text-center text-xs text-subtle">No commands match “{{ query }}”.</p>
+        </RowGroup>
     </div>
 </template>

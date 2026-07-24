@@ -11,6 +11,8 @@ export { default as Page } from "./components/Page.vue";
 export { default as PageHeader } from "./components/PageHeader.vue";
 export { default as ProgressRing } from "./components/ProgressRing.vue";
 export { default as PullToRefresh } from "./components/PullToRefresh.vue";
+export { default as Row } from "./components/Row.vue";
+export { default as RowGroup } from "./components/RowGroup.vue";
 export { default as Segmented } from "./components/Segmented.vue";
 export { default as StatusBadge, type StatusVariant } from "./components/StatusBadge.vue";
 export { default as StepSection } from "./components/StepSection.vue";

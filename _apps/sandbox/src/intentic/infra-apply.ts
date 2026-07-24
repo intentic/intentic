@@ -22,7 +22,10 @@ export const startInfraApplyJob = async (
     // fresh file, never the previous run's events.
     await resetEventsFile(eventsPath);
     await services.processes.start(INFRA_APPLY_KEY, {
-        command: options?.resolveFirst === true ? "intentic resolve && intentic apply --yes && intentic adopt" : "intentic apply && intentic adopt",
+        command:
+            options?.resolveFirst === true
+                ? "intentic deploy resolve && intentic deploy apply --yes && intentic deploy adopt"
+                : "intentic deploy apply && intentic deploy adopt",
         cwd: services.workspace.root,
         // Every command in the chain mirrors its events (and its {kind:"exit"}) to the same durable file —
         // adopt's exit (or a failed earlier command's) is the whole-job completion signal.

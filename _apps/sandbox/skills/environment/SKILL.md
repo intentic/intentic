@@ -41,12 +41,12 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 Tell the owner to review and approve the change on the platform's **Sandbox page → Environment card**.
 You cannot approve or apply it yourself; the rebuild runs outside this container (the owner pastes a
-rebuild command locally, or it applies on the next `intentic apply` for server-managed sandboxes). Until
+rebuild command locally, or it applies on the next `intentic deploy apply` for server-managed sandboxes). Until
 the rebuild, the new tools are not available — say so instead of retrying. A capability that extends the
 image (VPN, Discord voice) composes its own fragment automatically — never propose an overlay for those,
 just point the owner at the same rebuild.
 
-For a SERVER-managed sandbox, also wire the approved overlay into the intent so `intentic apply` builds it:
+For a SERVER-managed sandbox, also wire the approved overlay into the intent so `intentic deploy apply` builds it:
 in `intent/deploy.config.ts`, pass
 `dockerfile: readFileSync("/work/.intentic/environment.approved.Dockerfile", "utf8")` to the
 `i.want.workspace(…)` input — the content lands in the git-reviewed desired-state, which is the approval
