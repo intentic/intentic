@@ -98,7 +98,7 @@ export const landingContent: LandingContent = {
         headlineLines: ["A specialized agent is", "more than a prompt."],
         subhead:
             "Give each agent its own sandbox — your libraries, your dev-tools, the systems you already run on, and the context only its job needs. Specialized agents beat generic ones. Run one, or a whole team, on hardware you own.",
-        chips: ["Free plan", "Bring your own agent", "Runs on your hardware", "No inbound ports"],
+        chips: ["Free plan", "Bring your own agent", "Runs on your hardware"],
         spec: {
             name: "release-captain",
             role: "Owns the weekly release",
@@ -304,7 +304,7 @@ export const landingContent: LandingContent = {
                 body: "A personalized one-liner starts the sandbox on your machine. Docker is installed if missing — you're asked first.",
             },
         ],
-        commandNote: "No open inbound ports, nothing deployed — just a workspace your agent can call home.",
+        commandNote: "Nothing deployed, nothing exposed — just a workspace your agent can call home.",
     },
     finalCta: {
         heading: "Stop writing prompts. Start building agents.",
