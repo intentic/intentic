@@ -7,6 +7,7 @@ import { type ChatMessage, planParts, type PlanRequest } from "../composables/ch
 import { renderMarkdown } from "../composables/renderMarkdown";
 import { restoreSnapshot } from "../composables/workspace/useHistory";
 import { useChat } from "../composables/chat/useChat";
+import ChatImageThumb from "./ChatImageThumb.vue";
 import ChatToolCard from "./ChatToolCard.vue";
 
 /* One transcript entry: user bubble, notice line, or the assistant turn's stack (thinking, tools, todos,
@@ -242,13 +243,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <!-- The chip/thumbnail row stays visible in edit mode (read-only — the attachments ride the re-run). -->
             <div v-if="message.attachments?.length" class="flex flex-wrap justify-end gap-1.5">
                 <template v-for="attachment in message.attachments" :key="attachment.path">
-                    <img
-                        v-if="attachment.previewUrl"
-                        :src="attachment.previewUrl"
-                        :alt="attachment.name"
-                        v-tooltip.top="attachment.name"
-                        class="max-h-32 rounded-lg border border-line object-cover"
-                    />
+                    <ChatImageThumb v-if="attachment.previewUrl" :src="attachment.previewUrl" :alt="attachment.name" size="h-14 w-14" />
                     <span v-else class="chat-surface flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-content/90">
                         <Icon name="file" class="text-2xs text-subtle" />
                         {{ attachment.name }}

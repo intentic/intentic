@@ -198,7 +198,10 @@ onMounted(() => {
                 </button>
             </div>
 
-            <div id="model-picker-list" class="scrollbar-thin max-h-80 min-w-0 flex-1 overflow-y-auto py-1" role="listbox" aria-label="Models">
+            <!-- Fixed height on desktop so the popover's overall size never changes as the rail filters between
+                 sparse and dense providers — a variable height makes the bottom-anchored popover grow upward and
+                 the rail icons jump under the cursor. Mobile keeps its flexible max-height inside the sheet. -->
+            <div id="model-picker-list" class="scrollbar-thin h-80 min-w-0 flex-1 overflow-y-auto py-1 max-md:h-auto max-md:max-h-80" role="listbox" aria-label="Models">
                 <template v-for="section in sections" :key="section.provider ?? `search`">
                     <p
                         v-if="section.provider !== undefined"

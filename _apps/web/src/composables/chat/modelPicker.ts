@@ -36,6 +36,16 @@ export const pickerEntries = computed<readonly PickerEntry[]>(() => [
     ...acpProviders.value.map((agent) => entryFor(agent.id, { label: agent.label, value: `` })),
 ]);
 
+// Strong→weak ordering within one provider. Primary: the curated capability rank (model-metadata.ts) — an
+// unranked (brand-new) id floors just under BALANCED so it surfaces rather than sinks. Secondary: the version
+// number descending, so within a tier the newest generation leads (GPT 5.6 over 5.5). Full ties keep the
+// catalog's own order (toSorted is stable) — deterministic, never the daemon's arbitrary sequence.
+const UNRANKED = 75;
+const strengthOf = (entry: PickerEntry): number => entry.metadata?.rank ?? UNRANKED;
+// The first number in the label/id: "GPT 5.6 Sol" → 5.6, "Grok 4" → 4, aliased "Opus" → 0 (tier rank leads).
+const versionOf = (entry: PickerEntry): number => Number(`${entry.label} ${entry.value}`.match(/\d+(?:\.\d+)?/)?.[0] ?? 0);
+const byStrength = (a: PickerEntry, b: PickerEntry): number => strengthOf(b) - strengthOf(a) || versionOf(b) - versionOf(a);
+
 // Lowercase and strip separators on both sides, so "gpt5" matches "GPT-5" and "45" matches "4.5".
 const normalize = (text: string): string => text.toLowerCase().replace(/[\s.\-_]/g, ``);
 
@@ -68,7 +78,8 @@ export const filterEntries = (entries: readonly PickerEntry[], query: string, ra
         return scoped;
     }
     const matched = scoped.filter((entry) => tokens.every((token) => haystackFor(entry).includes(token)));
-    return matched.toSorted((a, b) => rankFor(a, tokens) - rankFor(b, tokens));
+    // Match quality leads; equal-quality hits fall back to strongest-first so the ranking is consistent with browse.
+    return matched.toSorted((a, b) => rankFor(a, tokens) - rankFor(b, tokens) || byStrength(a, b));
 };
 
 // Browse-mode grouping: one section per provider (respecting the rail filter), the active provider hoisted
@@ -83,5 +94,6 @@ export const pickerSections = (
         (provider) => rail === undefined || provider === rail,
     );
     const order = providers.includes(activeProvider) ? [activeProvider, ...providers.filter((provider) => provider !== activeProvider)] : providers;
-    return order.map((provider) => ({ provider, entries: entries.filter((entry) => entry.provider === provider) }));
+    // Each provider's rows are sorted strongest-first; the group order (active hoisted, then PROVIDERS) is unchanged.
+    return order.map((provider) => ({ provider, entries: entries.filter((entry) => entry.provider === provider).toSorted(byStrength) }));
 };

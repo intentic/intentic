@@ -21,6 +21,7 @@ import { collectDroppedFiles } from "../pages/workspace/dropEntries";
 import { insertMention, mentionQueryAt } from "../composables/chat/useMentions";
 import ChatAccountPanel from "./ChatAccountPanel.vue";
 import ChatCommandPopover from "./ChatCommandPopover.vue";
+import ChatImageThumb from "./ChatImageThumb.vue";
 import ChatMentionPopover from "./ChatMentionPopover.vue";
 import ChatMessageView from "./ChatMessageView.vue";
 import ChatModelPicker from "./ChatModelPicker.vue";
@@ -743,11 +744,10 @@ watch(keyboardInset, () => {
                                 :key="a.id"
                                 class="relative flex items-center gap-2 overflow-hidden rounded-lg border py-1.5 pl-2 pr-1 text-xs"
                                 :class="a.status === 'failed' ? 'border-danger' : 'border-line bg-card'"
-                                v-tooltip.top="a.error ?? a.name"
                             >
-                                <img v-if="a.previewUrl" :src="a.previewUrl" class="h-9 w-9 rounded object-cover" alt="" />
+                                <ChatImageThumb v-if="a.previewUrl" :src="a.previewUrl" :alt="a.name" size="h-9 w-9" />
                                 <Icon name="file" v-else class="text-sm text-subtle" />
-                                <span class="max-w-36 truncate text-content">{{ a.name }}</span>
+                                <span class="max-w-36 truncate text-content" v-tooltip.top="a.error ?? a.name">{{ a.name }}</span>
                                 <button
                                     type="button"
                                     class="composer-ghost h-5 w-5 shrink-0"
@@ -792,13 +792,13 @@ watch(keyboardInset, () => {
                             </button>
 
                             <div v-if="efforts.length > 0" class="flex shrink-0 items-center gap-1.5" role="group" aria-label="Reasoning effort">
-                                <div class="flex items-center gap-0.5">
+                                <div class="flex items-center">
                                     <button
                                         v-for="(e, i) in efforts"
                                         :key="e.value"
                                         type="button"
                                         class="composer-effort-seg"
-                                        :style="i <= effortIndex ? { background: effortFill(i) } : undefined"
+                                        :style="i <= effortIndex ? { backgroundColor: effortFill(i) } : undefined"
                                         @click="effort = e.value"
                                         :aria-label="e.label"
                                         :aria-pressed="effort === e.value"
@@ -1138,15 +1138,22 @@ watch(keyboardInset, () => {
 .composer-effort-seg {
     height: 0.75rem;
     width: 0.25rem;
+    box-sizing: content-box;
+    background-clip: content-box; /* keep the visible bar thin; the padding-right gap stays transparent */
     border-radius: var(--radius-sm);
     cursor: pointer;
-    background: color-mix(in srgb, var(--color-content) 10%, transparent);
+    background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
     transition:
         background-color 0.15s,
         filter 0.15s;
 }
+/* The gap between two bars is a click target for the lower (left) level — it lives as this bar's
+   right-padding rather than a flex gap, so clicking the empty space snaps down, not up. */
+.composer-effort-seg:not(:last-child) {
+    padding-right: 0.125rem;
+}
 .composer-effort-seg:hover {
-    background: color-mix(in srgb, var(--color-content) 22%, transparent); /* unlit hover */
+    background-color: color-mix(in srgb, var(--color-content) 22%, transparent); /* unlit hover */
     filter: brightness(1.15); /* lit-bar hover feedback (inline bg wins over class bg) */
 }
 .composer-send {
@@ -1212,6 +1219,9 @@ watch(keyboardInset, () => {
     .composer-effort-seg {
         height: 1.1rem;
         width: 0.5rem;
+    }
+    .composer-effort-seg:not(:last-child) {
+        padding-right: 0.3rem; /* chunkier snap-down gap for touch */
     }
 }
 </style>

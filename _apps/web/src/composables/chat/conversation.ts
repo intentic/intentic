@@ -895,6 +895,10 @@ export class Conversation {
         let attached = false;
         let retryMs = 500;
         let turn: TurnContext | undefined;
+        // Consecutive re-attaches that returned no new frames and no `end`. A run that keeps answering empty is
+        // done with nothing left to stream (or never terminates its stream), so give up after a few rounds
+        // rather than tight-looping the daemon at network speed. Reset the moment real progress arrives.
+        let idleRounds = 0;
         for (;;) {
             if (controller.signal.aborted) {
                 return attached;
@@ -926,6 +930,7 @@ export class Conversation {
                 return attached;
             }
             retryMs = 500;
+            const beforeAfter = cursor.after;
             try {
                 for await (const frame of sseFrames(response.body)) {
                     const parsed = sseData(frame) as AttachFrame | undefined;
@@ -956,6 +961,21 @@ export class Conversation {
                 }
             } catch {
                 // The stream broke mid-read — fall through and re-attach from the cursor.
+            }
+            // Reached only when the stream ENDED WITHOUT an `end` frame (a clean `end` returns above). If it also
+            // delivered nothing new (cursor unmoved), the run has no more for us — a done run whose tail we
+            // already hold, or one whose stream never terminates — so an immediate re-attach would spin. Back off,
+            // and after a few empty rounds give up: what we hold is complete, and a live turn would have advanced
+            // the cursor (resetting this). Real progress OR a fresh `end` keep the reconnect loop responsive.
+            if (cursor.after === beforeAfter) {
+                idleRounds += 1;
+                if (idleRounds >= 3) {
+                    return attached;
+                }
+                await delay(retryMs);
+                retryMs = Math.min(retryMs * 2, 5_000);
+            } else {
+                idleRounds = 0;
             }
         }
     }
