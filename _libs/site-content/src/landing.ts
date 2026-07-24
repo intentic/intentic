@@ -76,6 +76,8 @@ export interface LandingContent {
     ownership: LandingSectionIntro & { facts: LandingFact[] };
     // The sharing diagram: an owner configures one sandbox; invited teammates share it over their own tunnels.
     sharing: LandingSectionIntro & { people: SharingPerson[]; sandboxLabel: string; sandboxSub: string; note: string };
+    // The company teaser: sandboxes clustered around shared infra — links to the full docs reference architecture.
+    company: LandingSectionIntro & { platform: string[]; sharedInfra: string[]; teams: string[]; cta: string };
     economics: LandingSectionIntro & { accounts: { name: string; detail: string }[]; points: string[] };
     connect: LandingSectionIntro & { steps: LandingFact[]; commandNote: string };
     finalCta: { heading: string; sub: string };
@@ -259,6 +261,15 @@ export const landingContent: LandingContent = {
         sandboxLabel: "one specialized sandbox",
         sandboxSub: "release-captain · on the owner's machine",
         note: "Setup stays owner-gated and credentials never leave the box. Invite by email; sharing is a Pro feature — revoking or leaving never is.",
+    },
+    company: {
+        eyebrow: "The whole picture",
+        heading: "An entire company, assembled from specialized sandboxes.",
+        sub: "Zoom out and the pattern repeats: a sandbox per role and per team, clustered around shared infrastructure they provision and consume — governance and DevOps included. A topology you assemble from the same primitives, not a template you click.",
+        platform: ["DevOps", "Agent Governance"],
+        sharedInfra: ["Forgejo", "Komodo", "Discord", "Infisical"],
+        teams: ["Operations", "Governance", "Customer & Market", "Product Team A", "Product Team B", "Per-customer"],
+        cta: "See the reference architecture",
     },
     economics: {
         eyebrow: "Economics",

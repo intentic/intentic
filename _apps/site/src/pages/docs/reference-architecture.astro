@@ -1,0 +1,151 @@
+---
+import DocsLayout from "../../components/DocsLayout.astro";
+
+// Small helpers so the tiers stay data-driven. Class strings appear literally in this file, so Tailwind's
+// content scanner still generates them even though the cards are rendered through set:html.
+const icon = (paths: string) =>
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">${paths}</svg>`;
+const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="m3.5 7 8.5 4.5L20.5 7M12 11.5v10"/>');
+
+// Cards render through set:html, so escape the trusted-but-ampersand-bearing data (e.g. "Payroll & approvals").
+const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const chip = (t: string) => `<span class="rounded-md border border-line bg-overlay/50 px-2 py-0.5 text-2xs text-muted">${esc(t)}</span>`;
+const sandboxCard = (c: { title: string; fns: string[] }) => `
+    <div class="rounded-xl border border-line bg-card p-4">
+        <div class="flex items-center gap-2">
+            <span class="text-link">${cubeGlyph}</span>
+            <span class="text-sm font-medium text-content">${esc(c.title)} <span class="font-normal text-subtle">Sandbox</span></span>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-1.5">${c.fns.map(chip).join("")}</div>
+    </div>`;
+
+const platform = [
+    { title: "DevOps", fns: ["Infra access", "IaC · deploy.config.ts", "State reconciliation", "Users + teams"] },
+    { title: "Agent Governance", fns: ["Restricted secrets · Infisical", "Sandbox rules", "AI oversight & evaluation"] },
+];
+const sharedInfra = [
+    "Forgejo · git / registry / CI",
+    "Komodo · deploys",
+    "Discord · collaboration",
+    "Infisical · secrets",
+    "Deployed apps · Sales · Support",
+];
+const business = [
+    { title: "Operations", fns: ["Strategy", "Products", "Finance summaries", "Legal constraints", "Priorities"] },
+    { title: "Governance", fns: ["HR", "Legal", "Finance", "Contracts", "Payroll & approvals"] },
+    { title: "Customer & Market", fns: ["Market analysis", "Promotion", "Content writing", "Sales"] },
+];
+const delivery = [
+    { title: "Product Team A", fns: ["Development", "Dev testing", "QA", "Security"] },
+    { title: "Product Team B", fns: ["Development", "QA"] },
+    { title: "Per-customer", fns: ["A private, dedicated sandbox per customer"] },
+];
+const outputs = ["Email management", "Documents · Outline", "Data visualizations", "Infra visualization"];
+---
+
+<DocsLayout
+    pageId="reference-architecture"
+    heading="Reference architecture: a company on intentic"
+    lead="Zoom out from a single specialized agent and the same shape repeats at every level — a sandbox per role and per team, clustered around shared infrastructure they provision once and then consume. Every block below maps to a shipping primitive; it's a topology you assemble, not a template you click."
+>
+    <h2>The pattern</h2>
+    <p>
+        One specialized agent is a sandbox with tools, system access, and curated context (the
+        <a href="/docs/autonomous-employees/">autonomous-employee recipe</a>). A whole company is that recipe applied org-wide: give
+        <strong>every role and every team its own sandbox</strong>, and point them all at a <strong>shared control plane</strong> that one
+        platform sandbox provisions and the rest consume. Nothing here is a new feature — it's the primitives you already have, wired together.
+    </p>
+
+    <figure class="docs-embed my-8 space-y-5 rounded-2xl border border-line bg-canvas/40 p-5 sm:p-7">
+        <div class="flex justify-center">
+            <div class="rounded-lg border border-success/40 bg-success/10 px-4 py-2 text-center">
+                <div class="text-sm font-medium text-content">intentic app</div>
+                <div class="text-2xs text-subtle">one browser UI · every sandbox</div>
+            </div>
+        </div>
+
+        <div class="eyebrow text-center">Platform sandboxes — provision &amp; guard everything below</div>
+        <div class="grid gap-3 sm:grid-cols-2" set:html={platform.map(sandboxCard).join("")}></div>
+
+        <div class="flex items-center justify-center gap-2 text-2xs text-subtle">
+            <span class="h-px w-8 bg-line-strong"></span>provisions &amp; reconciles<span aria-hidden="true">↓</span>
+        </div>
+
+        <div class="rounded-xl border border-primary-600/30 bg-primary-600/[0.05] p-4">
+            <div class="eyebrow text-link">Shared infrastructure</div>
+            <div class="mt-2 flex flex-wrap gap-2">
+                {
+                    sharedInfra.map((s) => (
+                        <span class="rounded-md border border-primary-600/30 bg-canvas/60 px-2.5 py-1 text-2xs text-content">{s}</span>
+                    ))
+                }
+            </div>
+        </div>
+
+        <div class="flex items-center justify-center gap-2 text-center text-2xs text-subtle">
+            <span aria-hidden="true">↑</span>consumed over each sandbox's own tunnel · scoped via capabilities &amp; members, never an ambient bus
+        </div>
+
+        <div class="eyebrow text-center">Role sandboxes — one per function</div>
+        <div class="grid gap-3 sm:grid-cols-3" set:html={business.map(sandboxCard).join("")}></div>
+
+        <div class="eyebrow text-center">Team sandboxes — one per team, per product, per customer</div>
+        <div class="grid gap-3 sm:grid-cols-3" set:html={delivery.map(sandboxCard).join("")}></div>
+
+        <div class="border-t border-line pt-4">
+            <div class="eyebrow mb-2">Tools &amp; outputs the agents drive</div>
+            <div class="flex flex-wrap gap-2">
+                {outputs.map((o) => <span class="rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-2xs text-success">{o}</span>)}
+            </div>
+        </div>
+    </figure>
+
+    <h2>How it maps to shipping features</h2>
+    <ul>
+        <li>
+            <strong>Platform sandboxes.</strong> The DevOps capability scaffolds the intent + desired-state repos and runs the open-source
+            engine (<code>resolve</code> → <code>apply</code> → reconcile) to stand up and maintain the shared control plane. A separate Agent
+            Governance sandbox holds restricted secrets (Infisical) and the rules other agents operate under.
+        </li>
+        <li>
+            <strong>Shared infrastructure.</strong> Forgejo (git/registry/CI) and Komodo (deploys) are the real control plane every stack
+            builds; Discord is the collaboration surface agents read and post to; the Sales and Support apps are ordinary deployments on that
+            plane. Each sandbox reaches them over its <strong>own</strong> Cloudflare tunnel.
+        </li>
+        <li>
+            <strong>Role &amp; team sandboxes.</strong> One sandbox per function or team — Operations, Governance, Customer &amp; Market, each
+            product team, each customer. Automations (cron, webhooks, listeners) wake them, and one agent's run can fire the webhook that wakes
+            the next, so work moves through specialized hands.
+        </li>
+        <li>
+            <strong>Tools &amp; outputs.</strong> Email, documents (Outline), and dashboards are capabilities the agents operate; every
+            credential stays inside the sandbox that uses it.
+        </li>
+    </ul>
+
+    <aside class="docs-embed my-6 rounded-2xl border border-line bg-card p-5">
+        <div class="eyebrow text-link">Honest about the seams</div>
+        <ul class="mt-2 space-y-1.5 text-sm leading-relaxed text-muted">
+            <li>A company-sized fleet means <strong>many sandboxes — that's Pro</strong> (free is one sandbox).</li>
+            <li>
+                <strong>No ambient cross-sandbox access.</strong> A sandbox reaches shared infra and other services through capabilities,
+                members, and deployed apps — each over its own tunnel, credentials staying per-box. The "shared infra" band is the deployed
+                control plane and apps, not a shared filesystem.
+            </li>
+            <li>
+                <strong>Oversight and governance are patterns you build</strong>, not built-in roles. And an agent "evaluating humans" is
+                framing we deliberately avoid — these sandboxes <em>assist</em> HR, Legal, and Finance; a person stays accountable.
+            </li>
+            <li>
+                <strong>Chaining</strong> is composition of real primitives — one automation firing another's webhook — not a drag-and-drop
+                graph builder.
+            </li>
+        </ul>
+    </aside>
+
+    <p>
+        Start with one sandbox and one role. The org chart above isn't a switch you flip — it's what a company looks like once you've
+        specialized enough agents and wired them to shared infrastructure, one primitive at a time. See <a href="/docs/quickstart/">Quickstart</a>
+        to bring the first one up.
+    </p>
+</DocsLayout>

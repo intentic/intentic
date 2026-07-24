@@ -68,6 +68,14 @@ export const docsSections: DocsSection[] = [
                     description: "Specialize a sandbox into an agent — its tools, systems, and context — give it work, make it event-driven, then scale to a team of them.",
                 },
             },
+            {
+                id: "reference-architecture",
+                title: "Reference architecture",
+                meta: {
+                    title: "Reference architecture: a company on intentic — intentic docs",
+                    description: "An example of an entire company assembled from intentic sandboxes — one per role and team, clustered around shared infrastructure they provision and consume. Every block maps to a shipping primitive.",
+                },
+            },
         ],
     },
 ];
