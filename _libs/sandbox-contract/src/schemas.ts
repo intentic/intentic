@@ -940,12 +940,61 @@ export const SshConfigSchema = z.discriminatedUnion("auth", [
         password: z.string().min(1),
     }),
 ]);
-// A WireGuard tunnel the agent's traffic rides. `config` is the pasted .conf ([Interface] + [Peer]) — it holds
-// the private key, so it's a secret like an mcp token. `enabled` is the on/off toggle (its default is set by
-// the app repo's catalog entry): "on" ⇒ apply brings the tunnel up and the daemon restores it on boot; "off" ⇒
-// the conf is stored but the tunnel stays down. The id doubles as the wg interface name, hence the union arm
-// below caps it at Linux's 15-char IFNAMSIZ limit.
-export const VpnConfigSchema = z.object({ config: z.string().min(1), enabled: z.enum(["on", "off"]).default("on") });
+// ---- vpn ----
+// A VPN the agent's traffic rides. One capability = one tunnel, discriminated by `provider` so a new protocol
+// is a new arm (plus a driver in the daemon's vpn/), never a reinterpretation of an existing field:
+//   wireguard — a pasted .conf, brought up with wg-quick.
+//   fortinet  — a FortiGate SSL-VPN (what FortiClient's <sslvpn> connections speak), dialled with openconnect
+//               --protocol=fortinet. openconnect is the client rather than openfortivpn because it routes over
+//               tun instead of pppd: it needs exactly the tun + NET_ADMIN grant this kind already carries, and
+//               no /dev/ppp device (which the runtime allowlist does not — and should not — include).
+//   ipsec     — an IKEv1/IKEv2 tunnel with a pre-shared key and optional XAuth (FortiClient's <ipsecvpn>
+//               connections), run by strongSwan. `aggressive` mirrors FortiClient's dial-up default.
+// Connecting is NOT a config field: connect/disconnect are live operations (see vpn.contract.ts) that both the
+// user and the agent drive, so a stored tunnel's up/down state is read from the OS, never from the manifest.
+// `autoConnect` is the only persisted intent — whether the daemon dials this tunnel again on boot.
+export const VpnProviderSchema = z.enum(["wireguard", "fortinet", "ipsec"]);
+export type VpnProvider = z.infer<typeof VpnProviderSchema>;
+
+const autoConnect = z.enum(["on", "off"]).default("on");
+
+export const WireguardVpnConfigSchema = z.object({
+    provider: z.literal("wireguard"),
+    // The pasted .conf ([Interface] + [Peer]) — it holds the private key, so it's this arm's secret field.
+    config: z.string().min(1),
+    autoConnect,
+});
+export const FortinetVpnConfigSchema = z.object({
+    provider: z.literal("fortinet"),
+    // Gateway host only; the port is its own field so a pasted "host:port" can be split on import.
+    server: z.string().min(1),
+    port: z.coerce.number().int().min(1).max(65535).default(443),
+    username: z.string().min(1),
+    password: z.string().min(1),
+    // A FortiGate on a self-signed/private-CA certificate: openconnect pins this digest
+    // ("sha256:…", copied from its own refusal message) instead of trusting a CA. Absent ⇒ normal CA validation.
+    trustedCert: z.string().min(1).optional(),
+    // Some gateways scope a login to a realm/group (openconnect --usergroup, FortiClient's tunnel realm).
+    realm: z.string().min(1).optional(),
+    autoConnect,
+});
+export const IpsecVpnConfigSchema = z.object({
+    provider: z.literal("ipsec"),
+    server: z.string().min(1),
+    presharedKey: z.string().min(1),
+    // The local IKE identity (FortiClient's <localid>) — dial-up FortiGates key their phase-1 selection off it.
+    localId: z.string().min(1).optional(),
+    remoteId: z.string().min(1).optional(),
+    // XAuth (FortiClient's <xauth>) — absent for PSK-only tunnels.
+    username: z.string().min(1).optional(),
+    password: z.string().min(1).optional(),
+    ikeVersion: z.enum(["1", "2"]).default("1"),
+    // IKEv1 aggressive mode: insecure by construction, and exactly what FortiGate dial-up with a group PSK
+    // requires — hence opt-in per connection rather than a global strongSwan setting.
+    aggressive: z.enum(["on", "off"]).default("on"),
+    autoConnect,
+});
+export const VpnConfigSchema = z.discriminatedUnion("provider", [WireguardVpnConfigSchema, FortinetVpnConfigSchema, IpsecVpnConfigSchema]);
 // A logged-in browser session the AGENT drives via Playwright MCP tools — for social platforms whose APIs can't
 // cover "all the actions" (X reads are paywalled; X community-join and YouTube community-posts have no API). No
 // secret in the manifest: the session lives in a persisted Chromium profile under .intentic/browser/<platform>,
@@ -973,6 +1022,9 @@ export type CliConfig = z.infer<typeof CliConfigSchema>;
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;
 export type ExtensionConfig = z.infer<typeof ExtensionConfigSchema>;
 export type SshConfig = z.infer<typeof SshConfigSchema>;
+export type WireguardVpnConfig = z.infer<typeof WireguardVpnConfigSchema>;
+export type FortinetVpnConfig = z.infer<typeof FortinetVpnConfigSchema>;
+export type IpsecVpnConfig = z.infer<typeof IpsecVpnConfigSchema>;
 export type VpnConfig = z.infer<typeof VpnConfigSchema>;
 export type BrowserPlatform = z.infer<typeof BrowserPlatformSchema>;
 export type BrowserConfig = z.infer<typeof BrowserConfigSchema>;
@@ -990,7 +1042,9 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("plugin"), config: PluginConfigSchema }),
     z.object({ id: entryId, kind: z.literal("extension"), config: ExtensionConfigSchema }),
     z.object({ id: entryId, kind: z.literal("ssh"), config: SshConfigSchema }),
-    z.object({ id: entryId.max(15), kind: z.literal("vpn"), config: VpnConfigSchema }),
+    // No IFNAMSIZ cap on the id: the tunnel's interface name is DERIVED (see the daemon's vpn/vpn-paths.ts
+    // interfaceName) rather than being the id itself, so a descriptive name is free.
+    z.object({ id: entryId, kind: z.literal("vpn"), config: VpnConfigSchema }),
     // The in-sandbox Docker Engine (baked into the base image, dormant by default). No config: the capability's
     // whole effect is its fragment's `--privileged` runtime directive + running dockerd. No remove — the engine's
     // state (/var/lib/docker) and whatever runs on it make a silent de-privilege more destructive than useful.
@@ -1017,6 +1071,80 @@ export const CapabilitySecretInputSchema = z.object({ id: z.string(), value: z.s
 // POST /capabilities/{id}/login response: the interactive tmux session running the agent's loginCommand,
 // which the web surfaces in the terminal panel for the user to complete the sign-in.
 export const CapabilityLoginSchema = z.object({ session: z.string() });
+
+// ---- vpn: live tunnel state + connect/disconnect ----
+// The manifest says which VPNs EXIST; this says which are UP right now. Every field is read back from the OS
+// (wg show / ip / openconnect's pidfile / swanctl), never remembered by the daemon — so a tunnel the agent
+// dropped from a shell and one the UI dropped read identically, and a daemon restart loses nothing.
+
+export const VpnStateSchema = z.enum([
+    // The tunnel is up and carrying traffic.
+    "connected",
+    // Dialling: openconnect authenticated but the interface has no address yet, or strongSwan is negotiating.
+    "connecting",
+    // Configured and idle — the normal resting state for a tunnel nobody asked for.
+    "disconnected",
+    // The tunnel's client isn't installed yet: the capability's image fragment needs an owner-run rebuild.
+    "unavailable",
+    // The last dial failed; `detail` carries the client's own message.
+    "failed",
+]);
+export type VpnState = z.infer<typeof VpnStateSchema>;
+
+export const VpnLinkSchema = z.object({
+    id: z.string(),
+    provider: VpnProviderSchema,
+    state: VpnStateSchema,
+    // The gateway this tunnel dials — host:port for fortinet, the [Peer] endpoint for wireguard, the IKE peer
+    // for ipsec. Display only; never a secret.
+    gateway: z.string().optional(),
+    // The tun/wg interface carrying the tunnel, once it exists.
+    interface: z.string().optional(),
+    // The address the gateway assigned this sandbox — the single most useful "am I on the VPN?" fact.
+    address: z.string().optional(),
+    // The CIDRs routed into the tunnel ("0.0.0.0/0" = full tunnel). Empty until the link is up.
+    routes: z.array(z.string()).default([]),
+    // DNS servers the tunnel pushed, when it pushed any.
+    dns: z.array(z.string()).default([]),
+    // Epoch ms the link came up — the UI renders "connected 14m ago". Absent unless connected.
+    since: z.number().optional(),
+    // Whether the daemon re-dials this tunnel on boot (the manifest's autoConnect).
+    autoConnect: z.boolean(),
+    // Why it is failed/unavailable, or an extra note on a healthy link. Never carries credentials.
+    detail: z.string().optional(),
+});
+export type VpnLink = z.infer<typeof VpnLinkSchema>;
+export const VpnListSchema = z.object({ links: z.array(VpnLinkSchema) });
+
+// POST /vpn/{id}/connect body. `otp` is a one-time 2FA code, supplied per dial and NEVER stored — a FortiGate
+// with token auth rejects the dial without it, and the daemon surfaces that as a retry-with-a-code error.
+export const VpnConnectInputSchema = z.object({ id: z.string(), otp: z.string().min(1).optional() });
+export const VpnIdParamSchema = z.object({ id: z.string() });
+
+// POST /vpn/import-forticlient: parse an exported FortiClient configuration (the XML FortiClient writes from
+// File → Settings → Backup) into addable connections. Credentials in that file are wrapped in FortiClient's
+// proprietary "EncX …" encryption, which is NOT reversible here — so a parsed connection carries the endpoint
+// and, when it was stored in the clear, the username; the password is always typed by the user afterwards.
+export const ForticlientImportInputSchema = z.object({ xml: z.string().min(1) });
+export const ForticlientConnectionSchema = z.object({
+    // FortiClient's connection name, slugged into a legal capability id.
+    id: z.string(),
+    // The original <name>, shown so the user recognises the connection they picked.
+    label: z.string(),
+    provider: VpnProviderSchema,
+    server: z.string(),
+    port: z.number(),
+    // Present only when FortiClient stored it unencrypted; an EncX-wrapped username is dropped, not guessed.
+    username: z.string().optional(),
+    description: z.string().optional(),
+    // ipsec-only, and only when the file stored them in the clear.
+    localId: z.string().optional(),
+    aggressive: z.boolean().optional(),
+    // What the user still has to supply for this connection to dial (always at least the password).
+    needs: z.array(z.string()),
+});
+export type ForticlientConnection = z.infer<typeof ForticlientConnectionSchema>;
+export const ForticlientImportSchema = z.object({ connections: z.array(ForticlientConnectionSchema) });
 
 // Browse a Claude Code plugin marketplace (a git repo with .claude-plugin/marketplace.json). POST so the
 // optional token for a private marketplace never rides a URL or an access log.

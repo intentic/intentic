@@ -229,14 +229,87 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         name: "VPN",
         kind: "vpn",
         category: "servers",
-        logo: "wireguard",
-        description: "Route the agent's traffic through a WireGuard VPN.",
+        icon: "shield",
+        description: "Put the sandbox on a private network — WireGuard, FortiGate SSL-VPN (FortiClient) or IPsec.",
         fields: [
-            { key: "config", label: "WireGuard config", secret: true, multiline: true, placeholder: "[Interface]\nPrivateKey = …\n\n[Peer]\n…" },
-            // The `default` below is where we set whether a newly added VPN starts connected.
+            // The discriminator: every field below is gated on it, so one card serves all three protocols and
+            // the daemon receives exactly one arm of the config union.
             {
-                key: "enabled",
-                label: "Connection",
+                key: "provider",
+                label: "Type",
+                default: "wireguard",
+                options: [
+                    { value: "wireguard", label: "WireGuard" },
+                    { value: "fortinet", label: "FortiGate SSL-VPN" },
+                    { value: "ipsec", label: "IPsec" },
+                ],
+            },
+            {
+                key: "config",
+                label: "WireGuard config",
+                secret: true,
+                multiline: true,
+                placeholder: "[Interface]\nPrivateKey = …\n\n[Peer]\n…",
+                when: { key: "provider", value: "wireguard" },
+            },
+
+            // FortiGate SSL-VPN — the <sslvpn> connections in a FortiClient export. Import fills these in.
+            { key: "server", label: "Gateway", placeholder: "vpn.example.com", when: { key: "provider", value: "fortinet" } },
+            { key: "port", label: "Port", default: "443", when: { key: "provider", value: "fortinet" } },
+            { key: "username", label: "Username", when: { key: "provider", value: "fortinet" } },
+            { key: "password", label: "Password", secret: true, when: { key: "provider", value: "fortinet" } },
+            {
+                key: "realm",
+                label: "Realm / user group",
+                optional: true,
+                placeholder: "only if your gateway uses one",
+                when: { key: "provider", value: "fortinet" },
+            },
+            {
+                key: "trustedCert",
+                label: "Trusted certificate",
+                optional: true,
+                placeholder: "sha256:… (only for a self-signed gateway)",
+                when: { key: "provider", value: "fortinet" },
+            },
+
+            // IPsec — the <ipsecvpn> connections in a FortiClient export.
+            { key: "server", label: "Gateway", placeholder: "vpn.example.com", when: { key: "provider", value: "ipsec" } },
+            { key: "presharedKey", label: "Pre-shared key", secret: true, when: { key: "provider", value: "ipsec" } },
+            {
+                key: "localId",
+                label: "Local ID",
+                optional: true,
+                placeholder: "the group name your gateway expects",
+                when: { key: "provider", value: "ipsec" },
+            },
+            { key: "username", label: "XAuth username", optional: true, when: { key: "provider", value: "ipsec" } },
+            { key: "password", label: "XAuth password", secret: true, optional: true, when: { key: "provider", value: "ipsec" } },
+            {
+                key: "ikeVersion",
+                label: "IKE version",
+                default: "1",
+                options: [
+                    { value: "1", label: "IKEv1" },
+                    { value: "2", label: "IKEv2" },
+                ],
+                when: { key: "provider", value: "ipsec" },
+            },
+            {
+                key: "aggressive",
+                label: "Aggressive mode",
+                default: "on",
+                options: [
+                    { value: "on", label: "On" },
+                    { value: "off", label: "Off" },
+                ],
+                when: { key: "provider", value: "ipsec" },
+            },
+
+            // Shared: the only persisted connection intent. Connecting itself is a live action on the Status card.
+            {
+                key: "autoConnect",
+                label: "Connect automatically",
                 default: "on",
                 options: [
                     { value: "on", label: "On" },
@@ -244,13 +317,14 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 ],
             },
         ],
-        hint: "Re-add the same name to reconfigure or flip the connection on/off; an enabled tunnel survives restarts.",
+        hint: "Connect and disconnect from Sandbox ▸ Status (the agent can too). Auto-connect re-dials after a sandbox restart.",
         guide: {
             steps: [
-                "Get a WireGuard .conf ([Interface] + [Peer]) from your VPN provider or server.",
-                "Paste its full contents into the field above.",
-                "The name becomes the tunnel interface (max 15 characters).",
-                "Toggle Connection on to start it.",
+                "WireGuard: paste the full .conf ([Interface] + [Peer]) from your provider or server.",
+                "FortiGate SSL-VPN: use the gateway host and port your FortiClient connection uses (e.g. vpn.example.com:10443 → host + 10443).",
+                "IPsec: the pre-shared key, plus your XAuth username and password if the gateway asks for them.",
+                "Have a FortiClient config file? Use “Import from FortiClient” above to fill this in from it.",
+                "If the gateway asks for a 2FA code, connect from the Status card and enter the code there.",
             ],
         },
     },

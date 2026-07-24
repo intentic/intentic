@@ -78,6 +78,10 @@ services:
             API_URL: ${API_URL:?}
             # PostHog project key (optional — analytics stay off when unset).
             POSTHOG_KEY: ${POSTHOG_KEY:-}
+            # Upstreams for the SPA's /wire reverse proxy (nginx serves PostHog from our own origin so ad
+            # blockers can't strip session replay). Override the pair only for a non-US project.
+            POSTHOG_API_HOST: ${POSTHOG_API_HOST:-us.i.posthog.com}
+            POSTHOG_ASSETS_HOST: ${POSTHOG_ASSETS_HOST:-us-assets.i.posthog.com}
         networks: [intentic-platform]
 
     cloudflared:

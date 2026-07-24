@@ -62,6 +62,11 @@ const eventFirePath = /^\/automations\/[^/]+\/fire$/;
 // from the bearer middleware and gated by the automation's origin allowlist + rate limit instead (see the route).
 const webchatPath = /^\/webchat\/[^/]+\/message$/;
 
+// The only routes the in-container agent token opens: the live VPN surface the `vpn` CLI drives. Anchored and
+// path-segment aware so it admits /vpn and /vpn/<id>/connect but never a route that merely starts with those
+// characters — the token must not become a general-purpose daemon key.
+const vpnScoped = (path: string): boolean => path === "/vpn" || path.startsWith("/vpn/");
+
 // The lowercased email in a member-management request body, or undefined when absent/malformed.
 const memberEmail = async (c: Context): Promise<string | undefined> => {
     const body = (await c.req.json().catch(() => undefined)) as { email?: unknown } | undefined;
@@ -134,6 +139,20 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             // panel token instead of a Google bearer — the token never leaves the container (it's injected into
             // panel processes as INTENTIC_PANEL_TOKEN), so it's server-side only and not a browser-exposed path.
             if (tokenEquals(c.req.header("x-intentic-panel") ?? "", services.panelToken)) {
+                return next();
+            }
+            // The `vpn` CLI on the agent's PATH (and in the owner's own terminals) reaches the daemon over
+            // loopback with the per-boot agent token, read from a 0600 file inside the container. Scoped HARD to
+            // /vpn: the agent gets to dial and drop the tunnels the owner configured, and nothing else — in
+            // particular not /secrets or /capabilities, which would hand it the credentials themselves.
+            const agentToken = c.req.header("x-intentic-agent");
+            if (agentToken !== undefined && agentToken !== "") {
+                if (!vpnScoped(c.req.path)) {
+                    return c.json({ error: "agent token not valid for this route" }, 403);
+                }
+                if (!tokenEquals(agentToken, services.agentToken)) {
+                    return c.json({ error: "unauthorized" }, 401);
+                }
                 return next();
             }
             // The ACP editor bridge (Zed/JetBrains spawn it on the user's machine) presents an owner-minted

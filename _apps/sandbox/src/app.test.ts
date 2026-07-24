@@ -2263,7 +2263,13 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
     const client = clientFor(createApp(services({ files: memoryFiles, capabilities: memoryCapabilitiesStore() })));
 
     const events = await collect(
-        await client.capabilities.add({ id: "office", kind: "vpn", config: { config: "[Interface]\nPrivateKey = P\n", enabled: "off" } }),
+        // auto-connect on: with no VPN tooling installed yet, the apply must still land in the manifest and say
+        // a rebuild is what installs the client — the pre-rebuild bootstrap this whole flow depends on.
+        await client.capabilities.add({
+            id: "office",
+            kind: "vpn",
+            config: { provider: "wireguard", config: "[Interface]\nPrivateKey = P\n", autoConnect: "on" },
+        }),
     );
     expect(events.some((event) => "message" in event && (event as { message: string }).message.includes("rebuild"))).toBe(true);
     const approvedFile = disk.get("/work/.intentic/environment.approved.Dockerfile");

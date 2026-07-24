@@ -103,8 +103,18 @@ export const secretField = (capability: Capability, connectors: Map<string, Reso
         case "ssh":
             return capability.config.auth === "key" ? "privateKey" : "password";
         case "vpn":
-            // The whole pasted WireGuard conf — it holds the private key.
-            return "config";
+            // The credential a user ROTATES, one per provider — /secrets reveals and replaces exactly this
+            // field. wireguard's whole conf is secret (it holds the private key); fortinet has one password.
+            // An ipsec tunnel carries two (the group PSK and, when XAuth is on, the per-user password): the
+            // per-user one is the rotatable half, so it wins when present. Rotating the PSK of an XAuth tunnel
+            // is a re-add of the capability (same name ⇒ update), not a /secrets edit.
+            if (capability.config.provider === "wireguard") {
+                return "config";
+            }
+            if (capability.config.provider === "fortinet") {
+                return "password";
+            }
+            return capability.config.username !== undefined && capability.config.password !== undefined ? "password" : "presharedKey";
         case "agent":
             // The whole pasted KEY=VALUE env block — credentials ride in it (the vpn-conf precedent).
             return capability.config.env !== undefined ? "env" : undefined;
@@ -153,7 +163,23 @@ export const echoConfig = (capability: Capability, connectors: Map<string, Resol
         case "ssh":
             return { host: capability.config.host, port: capability.config.port, user: capability.config.user, auth: capability.config.auth };
         case "vpn":
-            return { enabled: capability.config.enabled };
+            // An explicit allowlist per provider — never a spread of config — so neither the wireguard conf nor
+            // either ipsec credential can reach the browser by being forgotten in a new field.
+            return {
+                provider: capability.config.provider,
+                autoConnect: capability.config.autoConnect,
+                ...(capability.config.provider === "wireguard"
+                    ? {}
+                    : capability.config.provider === "fortinet"
+                      ? { server: capability.config.server, port: capability.config.port, username: capability.config.username }
+                      : {
+                            server: capability.config.server,
+                            ikeVersion: capability.config.ikeVersion,
+                            aggressive: capability.config.aggressive,
+                            ...(capability.config.username !== undefined ? { username: capability.config.username } : {}),
+                            ...(capability.config.localId !== undefined ? { localId: capability.config.localId } : {}),
+                        }),
+            };
         case "plugin":
             return {
                 url: capability.config.url,

@@ -128,6 +128,11 @@ export interface Services {
     // A per-boot secret injected into every panel process (INTENTIC_PANEL_TOKEN) so a panel's own backend can
     // call the daemon from inside the sandbox without the browser's Google token. Never leaves the container.
     readonly panelToken: string;
+    // A per-boot secret the in-container `vpn` CLI presents (x-intentic-agent), written to a 0600 file at
+    // AGENT_TOKEN_PATH so the agent's shell and the owner's terminals can both read it. UNLIKE panelToken it is
+    // scoped hard to the /vpn routes (vpnScoped in app.ts): the agent may dial and drop the owner's tunnels,
+    // never read the credentials behind them. Never leaves the container.
+    readonly agentToken: string;
     // Owner-minted, hashed, revocable tokens for the ACP editor bridge (x-intentic-bridge header) — scoped to
     // the agent-conversation routes by bridgeScoped. Persisted in /work/.intentic like owner/members.
     readonly bridgeTokens: BridgeTokens;
@@ -342,6 +347,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         scanPorts: () => scanListeningPorts(),
         terminalRun,
         panelToken: randomBytes(32).toString("hex"),
+        agentToken: randomBytes(32).toString("hex"),
         info,
         tools: internalTools(config.intenticAgentTools),
         capabilities: fileCapabilitiesStore(join(workspace.root, ".intentic", "capabilities.json")),

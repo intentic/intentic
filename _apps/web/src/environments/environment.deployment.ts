@@ -11,6 +11,9 @@ window.env = {
     // the dev origin and app.intentic.dev as authorized JS origins.
     auth: { googleClientId: `481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com` },
     // $POSTHOG_KEY is substituted alongside $API_URL at container start; left literal (analytics stays off)
-    // when the deployment doesn't provide one. The EU host comes from defaultEnv.
-    analytics: { ...defaultEnv.analytics, posthogKey: `$POSTHOG_KEY` },
+    // when the deployment doesn't provide one. PostHog is addressed through our own origin so that privacy
+    // blockers can't strip session replay — nginx.conf proxies /wire to the real hosts, and that prefix is
+    // deliberately not one of the names those blockers already pattern-match (see nginx.conf). Read off
+    // location.origin rather than $API_URL so the proxy follows whatever domain the SPA is served from.
+    analytics: { posthogKey: `$POSTHOG_KEY`, posthogHost: `${window.location.origin}/wire` },
 };

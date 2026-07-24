@@ -7,6 +7,7 @@ export const defaultEnv = {
     api: { url: `` },
     // Public Google web client id for browser-side sign-in (the sandbox-facing ID token); empty by default.
     auth: { googleClientId: `` },
-    // Analytics off by default (empty key). The host is static — one PostHog Cloud EU project for the platform.
+    // Analytics off by default (empty key). PostHog Cloud US, addressed directly — only dev lands on this
+    // default, and there is no nginx there to run the /wire proxy the deployment env points at.
     analytics: { posthogKey: ``, posthogHost: `https://us.i.posthog.com` },
 };

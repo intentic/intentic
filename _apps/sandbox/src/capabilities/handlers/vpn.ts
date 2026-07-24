@@ -1,126 +1,124 @@
-import { execFile } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
-import type { VpnConfig } from "@intentic/sandbox-contract";
-import { shellQuote } from "../../terminal/terminal-run.js";
-import { capabilityJobSession } from "../../terminal/terminal-session.js";
-import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
+import type { CapabilityStatus, VpnConfig } from "@intentic/sandbox-contract";
+import { vpnDrivers } from "../../vpn/vpn-drivers.js";
+import { connectVpn, disconnectVpn, vpnLink } from "../../vpn/vpn-links.js";
+import type { CapabilityHandler } from "../capability.js";
 
-// A VPN capability: route the agent's traffic through a WireGuard tunnel. One capability = one tunnel; the id
-// is the wg interface name (the contract caps it at IFNAMSIZ). `apply` writes the pasted .conf 0600 under
-// ~/.wireguard and — when enabled — brings the tunnel up with `wg-quick up <path>` (wg-quick derives the
-// interface from the filename, so the conf never needs to live in /etc/wireguard). WireGuard tooling and the
-// container privileges it needs (NET_ADMIN + /dev/net/tun) arrive via this capability's environment-overlay
-// fragment + runtime directives, applied by an owner-run rebuild; until then the entry reports "pending".
-// The daemon runs as root, so no sudo is involved.
+// The `vpn` capability: STORE a connection (credentials + whether it dials itself on boot). Everything about
+// dialling lives in the vpn/ subsystem behind a per-protocol driver, and the live surface is the /vpn routes —
+// so this handler is only the manifest's half of the story, and the same connect path serves the operator's
+// Status card, the agent's `vpn` CLI, this apply, and the boot restore.
+//
+// The tooling for all three protocols, and the container privileges they need, arrive via this capability's
+// environment-overlay fragment + runtime directives, applied by an owner-run rebuild; until then a link reads
+// "unavailable". The daemon runs as root, so no sudo is involved.
 
-const exec = promisify(execFile);
-
-// The composed-overlay fragment: WireGuard tooling plus the runtime directives the rebuild executors translate
-// into docker run flags (allowlisted there — see rebuild.sh / the workspace provider).
-const VPN_FRAGMENT = `# vpn capability: WireGuard tooling (wg-quick) + the resolvconf its DNS= handling calls.
-RUN apt-get update && apt-get install -y --no-install-recommends wireguard-tools openresolv \\
+// ONE fragment for every provider rather than one per protocol. Two reasons, both load-bearing: adding a second
+// kind of VPN later must not cost a second container rebuild, and the runtime directives must appear exactly
+// once in the composed overlay — rebuild.sh appends each directive token it reads without deduplicating, and a
+// doubled --device would fail the run. Composition dedupes fragments by exact content, so N vpn capabilities
+// still contribute this one block.
+const VPN_FRAGMENT = `# vpn capability: clients for all three supported protocols, plus the container privileges they share.
+# WireGuard: wg-quick and the resolvconf its DNS= handling shells out to.
+# FortiGate SSL-VPN: openconnect with its vpnc routing script. openconnect routes over tun rather than spawning
+#   pppd, so it needs no /dev/ppp — which is why it, not openfortivpn, is the client here.
+# IPsec: strongSwan and the extra charon plugins carrying xauth-generic.
+RUN apt-get update && apt-get install -y --no-install-recommends \\
+        wireguard-tools openresolv openconnect vpnc-scripts strongswan libcharon-extra-plugins \\
     && rm -rf /var/lib/apt/lists/*
 # intentic:runtime --device=/dev/net/tun
 # intentic:runtime --cap-add=NET_ADMIN`;
 
-// Computed from homedir() at call time (not cached) so a test can point HOME at a temp dir, like the ssh handler.
-const baseDir = (): string => join(homedir(), ".wireguard");
-const confPath = (id: string): string => join(baseDir(), `${id}.conf`);
 const skillDir = (root: string): string => join(root, ".claude", "skills", "vpn");
 const skillPath = (root: string): string => join(skillDir(root), "SKILL.md");
 
-// Tunnel probes tolerate failure: "already down" and a missing wg binary both reduce to the state we can
-// observe, not an error to surface.
-const isUp = async (id: string): Promise<boolean> =>
-    exec("wg", ["show", id]).then(
-        () => true,
-        () => false,
-    );
-// ENOENT on spawn ⇒ the binary isn't on PATH (rebuild not run yet). Any other outcome (including wg-quick's
-// non-zero usage exit) means it exists.
-const wgQuickMissing = async (): Promise<boolean> =>
-    exec("wg-quick", ["--help"]).then(
-        () => false,
-        (error) => (error as NodeJS.ErrnoException).code === "ENOENT",
-    );
-// Visible teardown in the capability's job session; any failure ("already down", missing binary, no conf dir
-// yet) is a tolerated outcome, not an error. cwd is the conf dir — the only path the command touches.
-const down = async (ctx: CapabilityCtx, id: string): Promise<void> => {
-    await ctx.terminalRun
-        .tryRun(capabilityJobSession(id), `wg-quick down ${shellQuote(confPath(id))}`, { cwd: baseDir(), window: "wg-down" })
-        .catch(() => undefined);
-};
-
+// The agent drives VPNs through the `vpn` CLI, never the underlying clients: the CLI calls the daemon, so a
+// tunnel the agent dials shows up in the operator's UI (and vice versa) instead of the two drifting apart.
 const VPN_SKILL = `---
 name: vpn
-description: Check or toggle the connected WireGuard VPN tunnels. Use when the user asks about VPN status, to connect/disconnect the VPN, or when a private/internal host is only reachable through the VPN.
+description: Inspect, connect and disconnect this sandbox's VPN tunnels. Use when the user asks about VPN status, asks to connect or disconnect a VPN, or when a private/internal host, git remote or API is only reachable through a VPN.
 ---
 
-# VPN tunnels (WireGuard)
+# VPN tunnels
 
-Each connected VPN is a WireGuard config in \`~/.wireguard/<name>.conf\`; the tunnel interface is \`<name>\`.
-Routing follows the config's AllowedIPs — while the tunnel is up, matching traffic just works, no per-command setup.
+This sandbox's VPNs are configured by the user (WireGuard, FortiGate SSL-VPN, or IPsec). Use the \`vpn\` command —
+it goes through the daemon, so what you do here is what the user sees in the UI, and vice versa.
 
-- List configured VPNs: \`ls ~/.wireguard/*.conf\`
-- Tunnel status (handshake, transfer): \`wg show <name>\`
-- Bring a tunnel up: \`wg-quick up ~/.wireguard/<name>.conf\` — down: \`wg-quick down ~/.wireguard/<name>.conf\`
+\`\`\`sh
+vpn list                  # every configured VPN, its state, gateway, assigned address and routed networks
+vpn status <name>         # one tunnel, same detail
+vpn connect <name>        # dial it (prints progress; fails loudly with the reason)
+vpn connect <name> --otp 123456   # gateways that ask for a one-time 2FA code
+vpn disconnect <name>     # drop it
+\`\`\`
 
-Note: a tunnel the user enabled comes back up on its own after a sandbox restart — only toggle it when asked.
+While a tunnel is up, routing follows what it pushed — matching traffic just works, with no per-command setup.
+\`vpn list\` shows the routed networks, so \`0.0.0.0/0\` means everything is going through the tunnel.
+
+Notes:
+- You cannot read a VPN's credentials, and you do not need to: \`vpn connect\` uses the stored ones.
+- A one-time code cannot be guessed or stored — if a connect fails asking for one, ask the user for a current code.
+- A tunnel marked \`unavailable\` needs a sandbox rebuild (the user does this from Sandbox ▸ Environment); say so
+  rather than trying to install a VPN client yourself.
+- A tunnel the user set to auto-connect comes back on its own after a sandbox restart — only toggle it when asked.
 `;
+
+// A live VPN link mapped onto the capability grid's four states. "connecting" is deliberately `pending` rather
+// than `active`: a dial in flight is not yet carrying traffic, and the grid's pending affordance already means
+// "not finished".
+const capabilityStatus = (state: string, detail: string | undefined): CapabilityStatus => {
+    if (state === "connected") {
+        return { state: "active" };
+    }
+    if (state === "connecting") {
+        return { state: "pending", detail: "connecting" };
+    }
+    if (state === "unavailable") {
+        return { state: "pending", detail: "rebuild required" };
+    }
+    if (state === "failed") {
+        return { state: "error", ...(detail === undefined ? {} : { detail }) };
+    }
+    return { state: "inactive" };
+};
 
 export const vpnHandler: CapabilityHandler = {
     fragment: () => VPN_FRAGMENT,
     apply: async function* (ctx, id, config) {
         const vpn = config as VpnConfig;
-        const session = capabilityJobSession(id);
-        if (ctx.terminalRun.visible) {
-            yield { kind: "terminal", session };
-        }
-        await mkdir(baseDir(), { recursive: true, mode: 0o700 });
-        await writeFile(confPath(id), vpn.config.endsWith("\n") ? vpn.config : `${vpn.config}\n`, { mode: 0o600 });
+        const entry = { id, config: vpn };
+        const driver = vpnDrivers[vpn.provider];
+        // Persist the connection first: the manifest entry is what puts the fragment into the overlay, so an
+        // add must land even when the tooling isn't installed yet.
+        await driver.write(id, vpn);
         await ctx.files.write(skillPath(ctx.workspace.root), VPN_SKILL);
-        // Re-applying (an edit or an on/off flip) must not leave a stale interface running the old conf.
-        await down(ctx, id);
-        if (vpn.enabled === "off") {
-            yield { kind: "log", message: `Stored ${id} switched off. Re-add it with the connection on to bring the tunnel up.` };
+        // Re-applying (an edited credential, an auto-connect flip) must never leave a tunnel running the old
+        // config — drop it, then re-dial below if it should be up.
+        await disconnectVpn(entry).catch(() => undefined);
+        if (vpn.autoConnect !== "on") {
+            yield { kind: "log", message: `Stored ${id}. Connect it from the Sandbox ▸ Status card, or ask the agent to.` };
             return;
         }
-        // Pre-rebuild bootstrap: the add must still land in the manifest (that's what puts the fragment into
-        // the overlay), so a missing wg-quick is a soft outcome, not a failure. A real `up` failure still throws.
-        if (await wgQuickMissing()) {
+        const missing = await driver.missingTool();
+        if (missing !== undefined) {
+            // Pre-rebuild bootstrap: a missing client is a soft outcome, not a failed add — the overlay this
+            // very add composes is what installs it.
             yield {
                 kind: "log",
-                message: `Stored ${id} — this sandbox doesn't carry WireGuard yet. Rebuild it from the Environment card; the tunnel comes up automatically when it restarts.`,
+                message: `Stored ${id} — this sandbox doesn't carry ${missing} yet. Rebuild it from the Environment card; the tunnel dials itself when it restarts.`,
             };
             return;
         }
-        yield { kind: "log", message: `Bringing up WireGuard tunnel ${id}…` };
-        // The conf path (not its contents — the keys stay in the 0600 file) is all the visible command carries.
-        await ctx.terminalRun.run(session, `wg-quick up ${shellQuote(confPath(id))}`, { cwd: baseDir(), window: "wg-up" });
-        yield { kind: "log", message: `Connected ${id}. The agent's traffic now follows the tunnel's AllowedIPs.` };
+        yield* connectVpn(entry);
     },
     status: async (_ctx, id, config) => {
-        if (await isUp(id)) {
-            return { state: "active" };
-        }
-        if ((await readFile(confPath(id), "utf8").catch(() => undefined)) === undefined) {
-            return { state: "inactive" };
-        }
-        if ((config as VpnConfig).enabled !== "on") {
-            return { state: "inactive" };
-        }
-        // Conf present, enabled, no interface: either the tooling hasn't been rebuilt in yet, or the tunnel died.
-        if (await wgQuickMissing()) {
-            return { state: "pending", detail: "rebuild required" };
-        }
-        return { state: "error", detail: "tunnel down" };
+        const link = await vpnLink({ id, config: config as VpnConfig });
+        return capabilityStatus(link.state, link.detail);
     },
-    remove: async (ctx, id) => {
-        await down(ctx, id);
-        await rm(confPath(id), { force: true });
+    remove: async (ctx, id, config) => {
+        const vpn = config as VpnConfig;
+        await disconnectVpn({ id, config: vpn }).catch(() => undefined);
+        await vpnDrivers[vpn.provider].erase(id, vpn);
         // The skill is shared by every vpn — drop it only when this was the last one. The route removes the
         // manifest entry AFTER this handler, so `id` is still counted here.
         const vpnCount = (await ctx.capabilities.list()).filter((capability) => capability.kind === "vpn").length;
@@ -128,21 +126,4 @@ export const vpnHandler: CapabilityHandler = {
             await ctx.files.remove(skillDir(ctx.workspace.root));
         }
     },
-};
-
-// Boot reconnect: tunnel state dies with the container while the manifest survives on /work, so main.ts calls
-// this once at startup to restore every tunnel the user left enabled. Best-effort — a dead VPN server must not
-// take the daemon down; the failure lands in status ("tunnel down") and the log.
-export const reconnectVpns = async (ctx: CapabilityCtx): Promise<void> => {
-    for (const capability of await ctx.capabilities.list()) {
-        if (capability.kind !== "vpn" || capability.config.enabled !== "on" || (await isUp(capability.id))) {
-            continue;
-        }
-        try {
-            await exec("wg-quick", ["up", confPath(capability.id)]);
-            ctx.logger.info(`vpn ${capability.id}: tunnel restored`);
-        } catch (error) {
-            ctx.logger.warn(`vpn ${capability.id}: could not restore the tunnel: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    }
 };

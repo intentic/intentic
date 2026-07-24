@@ -14,7 +14,7 @@ vi.mock("posthog-js", () => ({
 
 const bootAnalytics = async (posthogKey: string) => {
     vi.resetModules();
-    vi.stubGlobal(`window`, { env: { analytics: { posthogKey, posthogHost: `https://us.i.posthog.com` } } });
+    vi.stubGlobal(`window`, { env: { analytics: { posthogKey, posthogHost: `https://app.intentic.dev/wire` } } });
     const posthog = (await import(`posthog-js`)).default;
     const analytics = await import(`./analytics`);
     analytics.initAnalytics();
@@ -39,7 +39,12 @@ describe(`initAnalytics`, () => {
 
     it(`identifies on session resolve, resets on sign-out, captures upgrade dialog opens`, async () => {
         const { posthog } = await bootAnalytics(`phc_test`);
-        expect(posthog.init).toHaveBeenCalledWith(`phc_test`, expect.objectContaining({ persistence: `memory` }));
+        // The proxied api_host is what keeps replay alive past an ad blocker, and sessionStorage is what keeps
+        // one visit in one recording across reloads — both are load-bearing enough to pin here.
+        expect(posthog.init).toHaveBeenCalledWith(
+            `phc_test`,
+            expect.objectContaining({ api_host: `https://app.intentic.dev/wire`, persistence: `sessionStorage` }),
+        );
 
         user.value = { id: `u1`, email: `a@b.c`, name: `A`, image: null };
         await nextTick();
@@ -56,6 +61,25 @@ describe(`initAnalytics`, () => {
         user.value = null;
         await nextTick();
         expect(posthog.reset).toHaveBeenCalled();
+    });
+
+    // EasyPrivacy carries bare `/posthog-recorder.js` and `/dead-clicks-autocapture.js` rules that match on
+    // any host, so proxying alone still loses replay behind Brave/uBlock — the prefix is what misses them,
+    // and nginx.conf's `rewrite ^/wire/(.*/)sdk\.([^/]+)$` is what puts the name back.
+    it(`prefixes SDK script filenames so filename-anchored blocker rules miss them`, async () => {
+        const { posthog } = await bootAnalytics(`phc_test`);
+        const { prepare_external_dependency_script: prepare } = vi.mocked(posthog.init).mock.calls[0]![1]!;
+
+        const rewrite = (src: string) => {
+            const script = { src } as HTMLScriptElement;
+            return prepare!(script)?.src;
+        };
+        expect(rewrite(`https://app.intentic.dev/wire/static/posthog-recorder.js?v=1.398.2`)).toBe(
+            `https://app.intentic.dev/wire/static/sdk.posthog-recorder.js?v=1.398.2`,
+        );
+        expect(rewrite(`https://app.intentic.dev/wire/array/phc_test/config.js`)).toBe(
+            `https://app.intentic.dev/wire/array/phc_test/sdk.config.js`,
+        );
     });
 });
 

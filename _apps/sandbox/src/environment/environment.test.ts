@@ -33,7 +33,11 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
         capabilities: { list: async () => capabilities },
     }) as unknown as Services;
 
-const vpn = (id: string): Capability => ({ id, kind: "vpn", config: { config: "[Interface]\nPrivateKey = P\n", enabled: "on" } });
+const vpn = (id: string): Capability => ({
+    id,
+    kind: "vpn",
+    config: { provider: "wireguard", config: "[Interface]\nPrivateKey = P\n", autoConnect: "on" },
+});
 const discord: Capability = { id: "discord", kind: "cli", config: { provider: "discord", botToken: "t" } };
 
 test("hasValidBase pins the first instruction to the official sandbox image", () => {

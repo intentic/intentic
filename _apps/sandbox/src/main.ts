@@ -8,7 +8,8 @@ import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { startTranslator } from "./agent/translator.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
-import { reconnectVpns } from "./capabilities/handlers/vpn.js";
+import { writeAgentToken } from "./auth/agent-token.js";
+import { reconnectVpns } from "./vpn/vpn-links.js";
 import { writeCodexConfig } from "./codex/codex-config.js";
 import { createServices } from "./composition.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
@@ -142,12 +143,16 @@ const main = async (): Promise<void> => {
     // A previous boot's check runs left per-run event files behind (their streams died with the daemon).
     void rm(checkEventsDir(config.historyRoot), { recursive: true, force: true });
 
-    // Enabled VPN tunnels die with the container while the manifest survives on /work — bring them back up
+    // The in-container `vpn` CLI reads this to reach the daemon's /vpn routes; written before the restores
+    // below so a tunnel the agent dials during boot already has a token to present.
+    await writeAgentToken(services.agentToken).catch((error: unknown) => services.logger.warn({ err: error }, "agent token: could not write"));
+
+    // Auto-connect VPN tunnels die with the container while the manifest survives on /work — dial them again
     // AFTER the sweep; dockerd starts the same way when a docker capability is enabled (the engine is baked
-    // into every image but dormant without it). Both best-effort: a failure lands in the capability's status /
+    // into every image but dormant without it). Both best-effort: a failure lands in the VPN link's state /
     // the daemon log, not the boot path.
     const bootCtx = capabilityCtx(services);
-    void reconnectVpns(bootCtx);
+    void reconnectVpns(services.capabilities, services.logger);
     void startDockerdIfEnabled(bootCtx);
     // The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": starts when TRANSLATOR_URL
     // is baked (no-op on a bare dev run) and serves those providers on their connected subscription OAuth.

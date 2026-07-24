@@ -22,6 +22,7 @@ import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
 import { systemContract } from "./contracts/system.contract.js";
 import { translatorContract } from "./contracts/translator.contract.js";
+import { vpnContract } from "./contracts/vpn.contract.js";
 import { workspaceContract } from "./contracts/workspace.contract.js";
 
 export { activityContract } from "./contracts/activity.contract.js";
@@ -48,6 +49,7 @@ export { sessionsContract } from "./contracts/sessions.contract.js";
 export { settingsContract } from "./contracts/settings.contract.js";
 export { systemContract } from "./contracts/system.contract.js";
 export { translatorContract } from "./contracts/translator.contract.js";
+export { vpnContract } from "./contracts/vpn.contract.js";
 export { workspaceContract } from "./contracts/workspace.contract.js";
 export * from "./effects.js";
 export * from "./events.js";
@@ -86,4 +88,5 @@ export const sandboxContract = {
     secrets: secretsContract,
     system: systemContract,
     translator: translatorContract,
+    vpn: vpnContract,
 };

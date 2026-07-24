@@ -120,6 +120,7 @@ survive reconnects. Its subsystems:
 - **Capabilities** — everything a user adds to the sandbox (connectors, vpn, mcp, plugins, …),
   one unified model with a per-kind handler ([capabilities/](_apps/sandbox/src/capabilities/)) — see
   [Capabilities](#capabilities).
+- **VPN** — putting the sandbox on a private network ([vpn/](_apps/sandbox/src/vpn/)) — see [VPN](#vpn).
 - **Members** — shared access for invited collaborators, enforced by the daemon
   ([auth.ts](_apps/sandbox/src/auth/auth.ts)).
 - **Workspace file service** — search, tree, watch, diff, and chunked multi-GB uploads
@@ -472,9 +473,51 @@ Per-kind mechanics ([handlers/](_apps/sandbox/src/capabilities/handlers/)):
 | `plugin` | Clones a Claude Code plugin repo into `.intentic/plugins/<id>`; the Agent SDK's loader reads its skills/agents/hooks/`.mcp.json` each turn. A marketplace repo (`.claude-plugin/marketplace.json`) can pre-fill the form. |
 | `extension` | Owner-only, sha-pinned clone into `.intentic/extensions/<id>`, validated before swap (manifest parses, prebuilt entry exists, fragment RUN/ENV-only); starts declared `autoStart` processes. |
 | `ssh` | Writes a per-machine Host block + `0600` key/password under `~/.ssh/intentic-hosts` + the shared ssh skill; the instance id is the alias the agent uses (`ssh <id>`). |
-| `vpn` | Stores the WireGuard conf `0600`, brings the tunnel up (`wg-quick`), shared vpn skill; its fragment bakes wireguard-tools + `NET_ADMIN`. The id doubles as the interface name (15-char cap). |
+| `vpn` | Stores ONE connection, discriminated by `provider` — `wireguard` (pasted `.conf`, `wg-quick`), `fortinet` (FortiGate SSL-VPN via `openconnect --protocol=fortinet`), `ipsec` (IKEv1/IKEv2 PSK + XAuth via strongSwan) — plus the shared vpn skill. Connecting is NOT part of the config: see [VPN](#vpn) below. |
 | `docker` | The engine is baked into the base image, dormant; the fragment is a lone `--privileged` runtime directive (a cache-hit rebuild, not an install). Once privileged, runs `dockerd` in a persistent tmux session, restored on boot — so `pnpm db:up` works like a local dev machine. Not removable. |
 | `browser` | Per-instance platform skill + the Chromium fragment; connecting is a guided live login (screencast over WebSocket) that persists the profile the agent's `@playwright/mcp` drives. |
+
+### VPN
+
+A VPN is the one capability whose *stored* form and *live* form come apart, so it is modelled as two surfaces
+rather than one. **Adding** a VPN is an ordinary capability (`vpn`): credentials plus `autoConnect`, in the
+manifest, per the table above. **Connecting** one is a runtime operation on the `/vpn` routes
+([vpn.contract.ts](_libs/sandbox-contract/src/contracts/vpn.contract.ts),
+[vpn/](_apps/sandbox/src/vpn/)) — because a single stored connection is dialled and dropped many times, its
+result is far richer than a `CapabilityStatus` (assigned address, routed CIDRs, pushed DNS, uptime), and a
+2FA-gated dial needs a per-attempt code that must never be persisted.
+
+The design rule that makes this safe is that **a link's state is always read back from the OS** — `wg show`,
+openconnect's pidfile plus `ip -j addr/route`, `ipsec statusall` — and never remembered by the daemon. So a
+tunnel the agent dropped, one the operator dropped, and one whose gateway died all read identically, and a
+daemon restart observes the truth instead of a stale guess.
+
+Three protocols, one driver each, total over the provider union
+([vpn-drivers.ts](_apps/sandbox/src/vpn/vpn-drivers.ts)) so a new arm on the contract is a compile error until
+it is implemented:
+
+| Provider | Client | Notes |
+| --- | --- | --- |
+| `wireguard` | `wg-quick` | The pasted `.conf` IS the connection; the dial is synchronous, so there is no client process to supervise. |
+| `fortinet` | `openconnect --protocol=fortinet` | FortiGate SSL-VPN — what FortiClient's `<sslvpn>` connections speak. **openconnect, not openfortivpn**: it routes over tun instead of spawning `pppd`, so it needs exactly the `/dev/net/tun` + `NET_ADMIN` grant this capability already carries and no `/dev/ppp` (which the rebuild executors' runtime allowlist deliberately does not include). The password reaches it on **stdin**, never argv, so it is absent from `ps` and from disk. |
+| `ipsec` | strongSwan | IKEv1/IKEv2 with a PSK and optional XAuth — FortiClient's `<ipsecvpn>` connections, aggressive mode included. Each connection is its own pair of files under `/etc/ipsec.d/intentic`, which `/etc/ipsec.conf` and `/etc/ipsec.secrets` `include`, so one tunnel is written and torn down without regenerating the others. |
+
+All three ride **one** environment fragment rather than one per protocol: adding a second kind of VPN later must
+not cost a second container rebuild, and the runtime directives must appear exactly once in the composed
+overlay (rebuild.sh appends each directive token it reads without deduplicating, so a doubled `--device` would
+fail the run).
+
+**The agent drives the same routes the browser does.** `/usr/local/bin/vpn`
+([bin/vpn](_apps/sandbox/bin/vpn)) is a thin client over `/vpn`, taught by the shared `vpn` skill, so a tunnel
+the agent dials appears in the operator's UI with nothing synchronising the two — there is one implementation
+of what connecting means. It authenticates with a per-boot token from `/run/intentic/agent.token`
+([agent-token.ts](_apps/sandbox/src/auth/agent-token.ts)) that `app.ts` admits **only** to `/vpn`: the agent
+may dial and drop the tunnels the owner configured, and can never read the credentials behind them.
+
+A user holding an exported FortiClient configuration imports it rather than re-keying endpoints
+([forticlient-config.ts](_apps/sandbox/src/vpn/forticlient-config.ts)). Credentials in that file are wrapped in
+FortiClient's machine-bound `EncX` encryption and are **not** recoverable, so every encrypted value is dropped
+and reported as a field the user must supply — importing an unusable value would be worse than asking.
 
 ### Dependency islands: iq & lsp
 

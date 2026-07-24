@@ -9,7 +9,7 @@ import {
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace, type MarketplacePlugin } from "@intentic-app/api-contract";
 import { cmp, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic-app/ui";
-import { type CapabilityEffect, capabilityEffects } from "@intentic/sandbox-contract";
+import { type CapabilityEffect, capabilityEffects, type ForticlientConnection } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, nextTick, reactive, ref, watch } from "vue";
@@ -23,6 +23,7 @@ import { errorMessage } from "../composables/useAsyncAction";
 import { browseMarketplace, useCapabilities } from "../composables/extensions/useCapabilities";
 import { useExtensions } from "../composables/extensions/useExtensions";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
+import { importForticlient, useVpn } from "../composables/sandbox/useVpn";
 
 /* The rail's "+" → the /capabilities page. Capabilities give the agent tools (GitHub, MCP servers, SSH hosts,
  * Stripe…), plus a few that scaffold managed repos (DevOps → intent + desired-state, each its own operator
@@ -36,6 +37,9 @@ const URL_RE = /^https?:\/\/.+/i;
 
 const { hasCapability, capabilities, error: listError, add, remove, refetch } = useCapabilities();
 const { connectorOf, extensions, settled: extensionsSettled } = useExtensions();
+// VPN instances get live link state and connect/disconnect here too — the same daemon routes the Sandbox ▸
+// Status card drives, so a tunnel dialled from either place reads identically in both.
+const { links: vpnLinks } = useVpn();
 
 // The full card list: connector cards derived from the installed extensions' contributions (one card per
 // provider, first declaration wins — the daemon connectorRegistry's precedent) + the static core cards.
@@ -294,6 +298,56 @@ const browse = async (): Promise<void> => {
     }
 };
 
+// A connected VPN instance's live facts, compactly: the assigned address and what it routes. Undefined while
+// the tunnel is down — the capability row's own status already says that.
+const vpnFacts = (id: string): string | undefined => {
+    const link = vpnLinks.value.find((candidate) => candidate.id === id);
+    if (link === undefined || link.state !== `connected`) {
+        return undefined;
+    }
+    return [link.address, link.routes.includes(`0.0.0.0/0`) ? `all traffic` : link.routes.join(`, `)].filter((fact) => fact !== undefined && fact !== ``).join(` · `);
+};
+
+// --- FortiClient import (vpn card only) ---
+// A user with an exported FortiClient config pastes it and picks a connection instead of re-keying its host,
+// port and protocol per tunnel. The daemon parses it; nothing is stored until the ordinary add below runs.
+const forticlientXml = ref(``);
+const forticlientConnections = ref<ForticlientConnection[]>([]);
+const importing = ref(false);
+const imported = ref(false);
+
+const importForticlientConfig = async (): Promise<void> => {
+    if (forticlientXml.value.trim().length === 0 || importing.value) {
+        return;
+    }
+    importing.value = true;
+    error.value = null;
+    try {
+        forticlientConnections.value = await importForticlient(forticlientXml.value);
+        imported.value = true;
+    } catch (err) {
+        error.value = errorMessage(err, `Could not read that FortiClient configuration.`);
+    } finally {
+        importing.value = false;
+    }
+};
+
+// Fill the form from a parsed connection. Credentials are never among them (FortiClient encrypts them), so the
+// user still types the secret — `needs` is what tells them which fields are waiting.
+const pickForticlient = (connection: ForticlientConnection): void => {
+    name.value = connection.id;
+    nameEdited.value = true;
+    values[`provider`] = connection.provider;
+    values[`server`] = connection.server;
+    values[`port`] = String(connection.port);
+    values[`username`] = connection.username ?? ``;
+    if (connection.provider === `ipsec`) {
+        values[`localId`] = connection.localId ?? ``;
+        values[`aggressive`] = connection.aggressive === true ? `on` : `off`;
+        values[`ikeVersion`] = `1`;
+    }
+};
+
 const pickPlugin = (plugin: MarketplacePlugin): void => {
     if (plugin.install === undefined) {
         return;
@@ -505,6 +559,11 @@ const submitLabel = computed(() =>
                         <div class="flex items-center gap-2 text-xs">
                             <span class="font-medium text-content">{{ instance.id }}</span>
                             <span class="text-2xs text-muted">{{ instance.status.state }}</span>
+                            <!-- A VPN's live link says more than "active": the address it was assigned and what
+                                 it routes are what tell you whether your internal host is reachable through it. -->
+                            <span v-if="selected.kind === 'vpn' && vpnFacts(instance.id)" class="font-mono text-2xs text-subtle">{{
+                                vpnFacts(instance.id)
+                            }}</span>
                             <div class="ml-auto flex items-center gap-1">
                                 <!-- A browser capability connects via a live login window, not a form — offer it here
                                          (also the way to re-log-in once a session expires). -->
@@ -528,6 +587,16 @@ const submitLabel = computed(() =>
                                 >
                                     <template #icon><Icon name="sign-in" /></template>
                                 </Button>
+                                <!-- A VPN is dialled from the Status card, which owns the whole flow (progress,
+                                     the gateway's own error text, a one-time code field). Linking there beats a
+                                     second, thinner set of controls that would handle 2FA worse. -->
+                                <RouterLink
+                                    v-if="selected.kind === 'vpn'"
+                                    to="/sandbox/status"
+                                    class="inline-flex items-center gap-1 px-2 text-2xs text-link hover:underline"
+                                >
+                                    Connect / disconnect <Icon name="arrow-right" class="text-2xs" />
+                                </RouterLink>
                                 <Button
                                     v-if="selected.kind !== 'devops'"
                                     size="small"
@@ -569,6 +638,53 @@ const submitLabel = computed(() =>
                             <Icon name="exclamation-triangle" />
                             {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
                         </RouterLink>
+                    </div>
+                </RowGroup>
+
+                <!-- FortiClient import (vpn only): paste an exported config and pick a connection to pre-fill
+                     the form. FortiClient encrypts stored credentials with a machine-bound key, so the secret
+                     is never importable — each connection says which fields are still waiting. -->
+                <RowGroup v-if="selected.kind === 'vpn'" label="Import from FortiClient (optional)">
+                    <div class="flex flex-col gap-2 px-4 py-3">
+                        <p class="text-2xs text-muted">
+                            Paste an exported FortiClient configuration (File ▸ Settings ▸ Backup) to fill the form from one of its
+                            connections. Passwords in that file are encrypted by FortiClient and can't be read — you'll still type those.
+                        </p>
+                        <textarea
+                            v-model="forticlientXml"
+                            rows="4"
+                            spellcheck="false"
+                            placeholder="<?xml version=&quot;1.0&quot;?><forticlient_configuration> …"
+                            :class="cmp.input('font-mono resize-y')"
+                        />
+                        <div class="flex justify-end">
+                            <Button
+                                label="Read connections"
+                                size="small"
+                                :disabled="forticlientXml.trim().length === 0 || importing"
+                                :loading="importing"
+                                @click="importForticlientConfig"
+                            />
+                        </div>
+                        <p v-if="imported && forticlientConnections.length === 0" class="text-2xs text-warning">
+                            No VPN connections found in that file.
+                        </p>
+                        <div v-if="forticlientConnections.length > 0" class="scrollbar-thin flex max-h-48 flex-col gap-0.5 overflow-auto">
+                            <button
+                                v-for="connection in forticlientConnections"
+                                :key="`${connection.provider}-${connection.id}`"
+                                type="button"
+                                class="flex flex-col gap-0.5 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
+                                @click="pickForticlient(connection)"
+                            >
+                                <span class="flex items-baseline gap-2">
+                                    <span class="font-medium text-content">{{ connection.label }}</span>
+                                    <span class="text-2xs text-subtle">{{ connection.provider === "fortinet" ? "SSL-VPN" : "IPsec" }}</span>
+                                    <span class="min-w-0 truncate font-mono text-2xs text-muted">{{ connection.server }}:{{ connection.port }}</span>
+                                </span>
+                                <span class="text-2xs text-subtle">You'll need to enter: {{ connection.needs.join(", ") }}</span>
+                            </button>
+                        </div>
                     </div>
                 </RowGroup>
 

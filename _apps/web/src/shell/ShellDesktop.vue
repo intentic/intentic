@@ -16,6 +16,7 @@ import { useLayout } from "../composables/useLayout";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useChanges } from "../composables/workspace/useChanges";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { useVpn } from "../composables/sandbox/useVpn";
 import AccountPanel from "./AccountPanel.vue";
 import ChatPanel from "../chat/ChatPanel.vue";
 import PresenceStack from "../presence/PresenceStack.vue";
@@ -48,6 +49,15 @@ const { attention: agentAttention } = useAgents();
 const layout = useLayout();
 const { poppedOut, pipBody, dock } = useChatPopout();
 const route = useRoute();
+
+// The connected tunnels behind the rail's VPN indicator. Shown only when non-empty: a VPN badge that is always
+// present would say nothing, whereas one that appears exactly while traffic is tunnelled is the whole signal.
+const { connected: connectedVpns } = useVpn();
+const vpnLabel = computed(() =>
+    connectedVpns.value.length === 1
+        ? `VPN connected: ${connectedVpns.value[0]?.id}`
+        : `${connectedVpns.value.length} VPNs connected: ${connectedVpns.value.map((link) => link.id).join(`, `)}`,
+);
 
 // A rail link is active for its route AND any sub-path — `active-class` can't do this: with a splat/optional
 // param (workspace/:path, capabilities/:card) it compares params and drops the highlight the moment one is set
@@ -181,6 +191,22 @@ onUnmounted(() => {
             </RouterLink>
 
             <span class="my-1 h-px w-8 bg-line"></span>
+
+            <!-- The VPN indicator: present ONLY while a tunnel is up, because that is a fact about the sandbox
+                 the operator must be able to see from any view — while it is connected, the agent's traffic,
+                 git and package installs leave through someone else's network. Links to the Status card that
+                 owns the controls. -->
+            <RouterLink
+                v-if="connectedVpns.length > 0"
+                to="/sandbox/status"
+                class="flex h-11 w-11 items-center justify-center rounded-lg text-success transition-colors hover:bg-overlay"
+                :class="{ 'pointer-events-none opacity-40': !reachable }"
+                :tabindex="reachable ? undefined : -1"
+                :aria-label="vpnLabel"
+                v-tooltip.right="vpnLabel"
+            >
+                <Icon name="shield" class="text-lg" />
+            </RouterLink>
 
             <!-- Add a capability (a repo / internal tool / external tool) — the /capabilities page; every "add"
                  is a write to the sandbox's deploy.config.ts or a clone into /work, never platform storage. -->

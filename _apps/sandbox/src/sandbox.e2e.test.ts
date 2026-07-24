@@ -238,12 +238,13 @@ describe.skipIf(!enabled)("sandbox daemon end-to-end (real container, loopback)"
 
     it("capability → composed overlay → a real `docker build` of it against the published base image", async () => {
         // The vpn capability carries a Dockerfile fragment + runtime directives AND supports remove (docker's
-        // deliberately doesn't); enabled=off keeps its apply a pure store (no wg-quick in the stock container).
+        // deliberately doesn't). The stock container carries no VPN client, so the apply reports the rebuild
+        // that installs one rather than dialling — exactly the pre-rebuild path asserted below.
         const events: unknown[] = [];
         for await (const event of await client.capabilities.add({
             id: "office",
             kind: "vpn",
-            config: { config: "[Interface]\nPrivateKey = e2e\n", enabled: "off" },
+            config: { provider: "wireguard", config: "[Interface]\nPrivateKey = e2e\n", autoConnect: "on" },
         })) {
             events.push(event);
         }

@@ -218,6 +218,11 @@ COPY --chmod=755 _apps/sandbox/bin/agent-output-filter.mjs /usr/local/bin/agent-
 COPY --chmod=755 _apps/sandbox/bin/cleaners.mjs /usr/local/bin/cleaners.mjs
 # retrieve-output on PATH — the reversible half of the filter (fetch back elided output; the footer names it).
 COPY --chmod=755 _apps/sandbox/bin/retrieve-output.mjs /usr/local/bin/retrieve-output
+# The VPN command the agent's vpn skill teaches and an owner can run in a terminal. It calls the daemon's /vpn
+# routes (never a VPN client directly), so agent-initiated and UI-initiated connects are the same operation.
+# The clients themselves are NOT baked — they ride the vpn capability's environment fragment, like WireGuard
+# always has, so a sandbox with no VPN carries neither the tooling nor the privileges.
+COPY --chmod=755 _apps/sandbox/bin/vpn /usr/local/bin/vpn
 # Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.
 COPY _apps/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
