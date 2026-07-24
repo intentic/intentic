@@ -99,6 +99,29 @@ export const customEntryFor = (entries: readonly PickerEntry[], query: string, p
     return { key: `${provider}:${value}`, provider, value, label: value, description: `use as custom model id` };
 };
 
+/* Browse-mode truncation. Merging the REST catalog took Claude's group to fifteen rows — four tier aliases plus
+ * every version /v1/models publishes — which pushes the codex/grok/gemini groups below the fold the moment the
+ * picker opens. A collapsed group shows the HEAD of the provider's own order, which is already aliases-then-
+ * newest-first, so "newest" needs no date field and no local ranking: the same no-curation rule the rest of this
+ * module follows delivers it for free. Search never truncates (see the component) — a buried older version is
+ * precisely what someone types to find. */
+export const COLLAPSED_ROWS = 8;
+
+// The rows a collapsed group shows: the head, plus the selected model when truncation would otherwise drop it.
+// That union is why this isn't a bare slice — losing the selected row takes the checkmark with it, so a user
+// pinned to an older version would open the picker to no visible current model at all.
+export const collapseEntries = (entries: readonly PickerEntry[], selected: string | undefined): readonly PickerEntry[] => {
+    if (entries.length <= COLLAPSED_ROWS) {
+        return entries;
+    }
+    const head = entries.slice(0, COLLAPSED_ROWS);
+    if (selected === undefined || head.some((entry) => entry.value === selected)) {
+        return head;
+    }
+    const current = entries.find((entry) => entry.value === selected);
+    return current === undefined ? head : [...head, current];
+};
+
 // Browse-mode grouping: one section per provider (respecting the rail filter), the active provider hoisted
 // first — the models pickable without a session restart sit nearest — and the rest in stable PROVIDERS order.
 // Empty sections are kept: the component renders their loading/error/empty state row under the header.

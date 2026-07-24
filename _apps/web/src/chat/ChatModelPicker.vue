@@ -4,7 +4,7 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import { type AgentHarness, type AgentProvider, PROVIDERS } from "@intentic/sandbox-contract";
 import { BADGE_META } from "../composables/chat/catalog";
 import { acpProviders, providerAccounts, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
-import { customEntryFor, filterEntries, type PickerEntry, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
+import { collapseEntries, customEntryFor, filterEntries, type PickerEntry, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
 import { usageDetail, usagePercent, usageStatusFor } from "../composables/chat/usageStatus";
 import { loadAllProviderModels, loadProviderModels, useChat } from "../composables/chat/useChat";
 import ProviderLogo from "./ProviderLogo.vue";
@@ -43,22 +43,52 @@ const customEntry = computed<PickerEntry | undefined>(() =>
     searching.value ? customEntryFor(pickerEntries.value, query.value, rail.value ?? provider.value) : undefined,
 );
 
+// Which provider groups are showing their full catalog. Browse-only, and reset with the component like query
+// and rail — every open starts at the calm, newest-first view rather than inheriting the last session's sprawl.
+const expanded = ref<ReadonlySet<AgentProvider>>(new Set());
+const toggleExpanded = (target: AgentProvider): void => {
+    const next = new Set(expanded.value);
+    if (!next.delete(target)) {
+        next.add(target);
+    }
+    expanded.value = next;
+};
+
 // The visible list: while searching a single flat ranked section (provider identity rides on every row's
-// logo); browsing, one section per provider with the active provider hoisted first. Rows carry their index in
-// visual order — the keyboard highlight's coordinate system.
-const sections = computed<readonly { provider?: AgentProvider; rows: { entry: PickerEntry; index: number }[] }[]>(() => {
+// logo); browsing, one section per provider with the active provider hoisted first, collapsed to its newest
+// rows. Rows carry their index in visual order — the keyboard highlight's coordinate system.
+const sections = computed<
+    readonly { provider?: AgentProvider; rows: { entry: PickerEntry; index: number }[]; hidden: number; expanded: boolean; collapsible: boolean }[]
+>(() => {
     let index = 0;
     const withRows = (entries: readonly PickerEntry[]): { entry: PickerEntry; index: number }[] =>
         entries.map((entry) => ({ entry, index: index++ }));
     if (searching.value) {
         const matched = filterEntries(pickerEntries.value, query.value, rail.value);
-        // Ranked catalog hits first; the escape hatch sits under them so Enter still takes the real match.
-        return [{ rows: withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]) }];
+        // Ranked catalog hits first; the escape hatch sits under them so Enter still takes the real match. A
+        // search deliberately spans the WHOLE catalog: a version outside the collapsed head is exactly what
+        // someone reaches for the search box to find, so hiding it behind a disclosure would defeat both.
+        return [
+            { rows: withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]), hidden: 0, expanded: false, collapsible: false },
+        ];
     }
-    return pickerSections(pickerEntries.value, provider.value, rail.value).map((section) => ({
-        provider: section.provider,
-        rows: withRows(section.entries),
-    }));
+    return pickerSections(pickerEntries.value, provider.value, rail.value).map((section) => {
+        const isExpanded = expanded.value.has(section.provider);
+        // The selected model survives truncation only for the ACTIVE provider — it's the only group whose
+        // current model is the one a checkmark would be claiming.
+        const visible = isExpanded
+            ? section.entries
+            : collapseEntries(section.entries, section.provider === provider.value ? model.value : undefined);
+        const hidden = section.entries.length - visible.length;
+        return {
+            provider: section.provider,
+            rows: withRows(visible),
+            hidden,
+            expanded: isExpanded,
+            // Offered only when it would actually change the list, so a short group never grows a dead control.
+            collapsible: isExpanded || hidden > 0,
+        };
+    });
 });
 const flat = computed<readonly PickerEntry[]>(() => sections.value.flatMap((section) => section.rows.map((row) => row.entry)));
 
@@ -275,6 +305,23 @@ onMounted(() => {
                         />
                         <Icon v-if="isSelected(row.entry)" name="check" class="shrink-0 text-2xs text-primary-500" aria-hidden="true" />
                     </button>
+                    <!-- Group disclosure: the merged Claude catalog is long enough to bury every other provider's
+                         group below the fold, so a group opens at its newest rows and expands in place. It sits at
+                         the truncation boundary — where the list visibly stops — rather than in the footer, which
+                         is session controls, or the rail, which owns the provider axis. Deliberately NOT a
+                         role=option: it selects nothing, so it stays out of the arrow-key model list, and the
+                         keyboard path to a buried version is the search box, which never truncates. -->
+                    <button
+                        v-if="section.provider !== undefined && section.collapsible"
+                        type="button"
+                        class="mp-row flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-2xs text-subtle max-md:min-h-11"
+                        :aria-expanded="section.expanded"
+                        :aria-label="section.expanded ? `Show fewer ${providerDisplayLabel(section.provider)} models` : `Show ${section.hidden} more ${providerDisplayLabel(section.provider)} models`"
+                        @click="toggleExpanded(section.provider)"
+                    >
+                        <Icon :name="section.expanded ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
+                        <span>{{ section.expanded ? `Show fewer` : `Show ${section.hidden} more` }}</span>
+                    </button>
                     <!-- Catalog state row (loading / error+retry) — searching hides it. -->
                     <template v-if="!searching && section.provider !== undefined && missingModels(section.rows)">
                         <div v-if="stateFor(section.provider) === `error`" class="flex items-center gap-2 px-3 py-1.5 text-2xs text-danger">
@@ -302,7 +349,7 @@ onMounted(() => {
              harness axis (codex/grok), Claude's extended-thinking knob, and the mid-chat switch hint. -->
         <div v-if="footerVisible" class="flex flex-col gap-2 border-t border-line p-2">
             <template v-if="accounts.length > 1">
-                <span class="text-2xs uppercase tracking-wide text-subtle">Account</span>
+                <span class="text-2xs font-medium uppercase tracking-wide text-muted">Account</span>
                 <div class="flex flex-col gap-1">
                     <button
                         v-for="a in accountRows"
@@ -337,7 +384,7 @@ onMounted(() => {
             <!-- Harness axis (codex/grok): Default = the provider's own runtime; Claude Code = its model through
                  the Claude Code harness. Separate from the model — the same subscription ids run under either. -->
             <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
-                <span class="text-2xs uppercase tracking-wide text-subtle">Harness</span>
+                <span class="text-2xs font-medium uppercase tracking-wide text-muted">Harness</span>
                 <div class="flex items-center gap-1">
                     <button
                         v-for="h in HARNESS_OPTIONS"
@@ -356,7 +403,7 @@ onMounted(() => {
 
             <!-- Codex reasoning is always on (no toggle); extended thinking is a Claude knob. -->
             <div v-if="provider === `claude`" class="flex items-center justify-between gap-2">
-                <span class="text-2xs uppercase tracking-wide text-subtle">Extended thinking</span>
+                <span class="text-2xs font-medium uppercase tracking-wide text-muted">Extended thinking</span>
                 <button
                     type="button"
                     class="composer-ghost h-7 gap-1 px-2.5 text-xs font-medium max-md:h-10"
