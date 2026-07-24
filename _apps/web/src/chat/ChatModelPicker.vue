@@ -239,9 +239,9 @@ onMounted(() => {
                         <span class="max-w-[55%] shrink-0 truncate text-sm" :class="isSelected(row.entry) ? 'text-link' : 'text-content'">
                             {{ row.entry.label }}
                         </span>
-                        <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ row.entry.metadata?.description }}</span>
+                        <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ row.entry.description }}</span>
                         <Icon
-                            v-for="badge in (row.entry.metadata?.badges ?? []).slice(0, 3)"
+                            v-for="badge in (row.entry.badges ?? []).slice(0, 3)"
                             :key="badge"
                             :name="BADGE_META[badge].icon"
                             class="shrink-0 text-2xs text-subtle"

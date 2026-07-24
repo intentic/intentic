@@ -8,6 +8,7 @@ import {
     type CatalogOption,
     type ContextUsage,
     type EditorContext,
+    type ModelBadge,
     modelsFor,
     type OauthAccount,
     providerLabel,
@@ -40,10 +41,14 @@ export type ChatMode = "plan" | "acceptEdits" | "default" | "bypassPermissions";
 // runtime that minted it, so a switched turn retires the session and starts a fresh one seeded with the
 // transcript so far (see Conversation.send).
 
-// A live-catalog model option: the picker entry plus the reasoning-effort tiers the model accepts (reported
-// per model by /claude/models; absent ⇒ the provider's default scale — see catalog.ts effortsFor).
+// A live-catalog model option: the picker entry plus whatever the provider published about the model — the
+// reasoning-effort tiers it accepts, its capability description, and capability badges. All optional because
+// only Claude's discovery reports them; the OpenAI-compatible providers send ids alone and render label-only.
+// Nothing here is ever synthesized locally, so a new release carries its own presentation with no code change.
 export interface ModelOption extends CatalogOption {
     readonly efforts?: readonly string[];
+    readonly description?: string;
+    readonly badges?: readonly ModelBadge[];
 }
 
 // Every provider's model catalog is daemon-owned (/claude/models · /codex/models · /grok/models — live
@@ -74,7 +79,7 @@ const defaultModelFor = (provider: AgentProvider): string => {
 // The model options for a provider's picker/chip: the provider's live daemon catalog, with the static catalog
 // as the pre-load floor (Claude's tier aliases; codex/grok empty). Harness-independent (the harness is a
 // separate axis now). Shared by the composer pill and the menu bodies so their list + label logic can't drift.
-export const modelOptionsFor = (provider: AgentProvider): CatalogOption[] => {
+export const modelOptionsFor = (provider: AgentProvider): ModelOption[] => {
     const live = providerModels.value[provider] ?? [];
     return live.length > 0 ? live : modelsFor(provider);
 };

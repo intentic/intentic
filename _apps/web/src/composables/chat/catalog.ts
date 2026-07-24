@@ -27,13 +27,13 @@ export const effortsFor = (provider: AgentProvider, modelId?: string): CatalogOp
     ];
 };
 
-// How a curated capability badge renders in the model picker: icon-only chips, the label carried by the
-// tooltip (three text chips per row would starve the description's space).
+// How a capability badge renders in the model picker: icon-only chips, the label carried by the tooltip (three
+// text chips per row would starve the description's space). The set is exactly the capability flags a provider
+// reports (see ModelBadgeSchema) — vision/agentic badges existed here while badges were hand-assigned by id
+// pattern, but no provider publishes those flags, so claiming them would have been our guess, not the truth.
 export const BADGE_META: Record<ModelBadge, { label: string; icon: IconName }> = {
     reasoning: { label: `Reasoning`, icon: `sparkles` },
-    vision: { label: `Vision`, icon: `eye` },
     fast: { label: `Fast`, icon: `bolt` },
-    agentic: { label: `Agentic coding`, icon: `code` },
 };
 
 // Permission modes for the composer's mode selector; value mirrors the SDK permissionMode. 'plan' is default.

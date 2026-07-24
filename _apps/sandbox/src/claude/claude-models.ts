@@ -1,4 +1,5 @@
 import { type Options, query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { ModelBadge } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 
@@ -7,12 +8,19 @@ import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
  * streaming-input mode and spawns the Claude Code CLI, so it needs valid Claude auth; we cache it aggressively
  * (models change rarely) and fall back to the stable tier aliases (opus/sonnet/haiku) when it can't be reached
  * (offline / dev / no account) — the aliases already resolve to the newest version of each tier, so the fallback
- * is never wrong for a version bump, only missing a brand-new tier until the CLI is reachable. */
+ * is never wrong for a version bump, only missing a brand-new tier until the CLI is reachable.
+ *
+ * Claude is the ONLY provider whose discovery publishes presentation data: ModelInfo carries a versioned id, a
+ * display name ("Claude Opus 4.8"), a capability description, effort tiers, and capability flags. All of it is
+ * forwarded verbatim — the repo curates nothing about any model, so a release or a rename needs no edit here.
+ * The OpenAI-compatible providers report ids only and render label-only; see ModelSchema in the contract. */
 
 export interface ClaudeModel {
     id: string;
     label: string;
     efforts?: string[];
+    description?: string;
+    badges?: ModelBadge[];
 }
 
 // The stable-alias fallback catalog. Aliases track the latest version of each tier, so the picker stays current
@@ -60,6 +68,18 @@ const discoverClaudeModels = async (oauthToken: string | undefined, cwd: string)
             if (model.supportedEffortLevels !== undefined) {
                 entry.efforts = model.supportedEffortLevels;
             }
+            if (model.description !== "") {
+                entry.description = model.description;
+            }
+            // Badges are derived only from capability flags the SDK actually reports, so they can never claim
+            // something about a model that Anthropic didn't. A model reporting neither flag simply has none.
+            const badges: ModelBadge[] = [
+                ...(model.supportsAdaptiveThinking === true ? (["reasoning"] as const) : []),
+                ...(model.supportsFastMode === true ? (["fast"] as const) : []),
+            ];
+            if (badges.length > 0) {
+                entry.badges = badges;
+            }
             return entry;
         });
     } finally {
@@ -77,11 +97,10 @@ export interface ClaudeCatalog {
 // Models change rarely and the discovery spawns the CLI, so cache for the daemon's lifetime (a restart re-probes).
 const MODELS_TTL_MS = 60 * 60_000;
 
-// Prefer the Opus tier as the default (the product default), else the first offered model.
-const withDefault = (models: ClaudeModel[]): { models: ClaudeModel[]; default: string } => ({
-    models,
-    default: (models.find((model) => /opus/i.test(model.id) || /opus/i.test(model.label)) ?? models[0]!).id,
-});
+// The provider's own first-listed model is the default — matching codex/grok/kimi, which all take ids[0]. Naming
+// a tier here (the old /opus/i preference) would silently fall through to models[0] the moment Anthropic renamed
+// its flagship, so the ordering the CLI already reports is both simpler and the one thing that stays correct.
+const withDefault = (models: ClaudeModel[]): { models: ClaudeModel[]; default: string } => ({ models, default: models[0]!.id });
 
 export const createClaudeCatalog = (claudeStore: ClaudeStore, config: Config, cwd: string): ClaudeCatalog => {
     let cache: { value: { models: ClaudeModel[]; default: string }; expiresAt: number } | undefined;

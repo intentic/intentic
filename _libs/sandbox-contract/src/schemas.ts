@@ -268,7 +268,24 @@ export const DeviceStartSchema = z.object({ url: z.string(), code: z.string() })
 // is the model a fresh chat on that provider seeds (always present). Shared by /grok/models, /codex/models,
 // /claude/models. `efforts` is the reasoning-effort tiers the model accepts (Claude reports them per model);
 // empty ⇒ the client's default tiers.
-export const ModelSchema = z.object({ id: z.string(), label: z.string(), efforts: z.array(z.string()).optional() });
+//
+// EVERY field here is provider-reported — nothing about a model is curated in this repo, so a new release or a
+// renamed family flows to the UI with no code change. Providers differ in how much they publish: the Claude
+// Agent SDK reports a display name, a capability description, effort tiers, and capability flags, while the
+// OpenAI-compatible /v1/models endpoints (codex/grok/kimi) report ids only — those rows render label-only, and
+// that absence is the honest answer rather than something to paper over with a hand-written table.
+//
+// ORDER IS MEANINGFUL: `models` arrives in the provider's own preference order, which is what the picker sorts
+// by, and `default` is the provider's own default. Neither is re-ranked locally.
+export const ModelBadgeSchema = z.enum(["reasoning", "fast"]);
+export type ModelBadge = z.infer<typeof ModelBadgeSchema>;
+export const ModelSchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    efforts: z.array(z.string()).optional(),
+    description: z.string().optional(),
+    badges: z.array(ModelBadgeSchema).optional(),
+});
 export const ModelsSchema = z.object({ models: z.array(ModelSchema), default: z.string() });
 
 // ---- sessions ----

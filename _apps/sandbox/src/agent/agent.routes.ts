@@ -24,9 +24,15 @@ import { delegationNote } from "./delegation.js";
 
 // The upstream model id a routed turn (codex/grok under the Claude Code harness) hands the translator, which maps
 // it to its provider. Unlike native Codex (which uses the ChatGPT account default and omits the model), the router
-// requires an explicit id — the UI catalog supplies one per provider under the claude-code harness; this is the floor.
-const routedModel = (provider: "codex" | "grok", model: string | undefined): string =>
-    model !== undefined && model !== "" ? model : provider === "codex" ? "gpt-5-codex" : "grok-4";
+// requires an explicit id, and the only source that stays correct is the provider's own live catalog (discovery →
+// persisted → seed floor, never empty): keep the pinned pick while the catalog still offers it, else take the
+// catalog's default. Validating membership rather than naming a fallback id is what survives a retirement — a pick
+// the provider has dropped simply fails the test and falls to the live default. That covers Codex's own
+// `gpt-5-codex`, which the translator's ChatGPT subscription does not serve (it re-serves the account's real ids)
+// and rejects with a non-SSE error body that breaks the harness stream; it needs no special case now, and neither
+// does Grok, whose routed turns previously pinned a hardcoded `grok-4` that consulted no catalog at all.
+const routedModel = (catalog: { models: readonly { id: string }[]; default: string }, model: string | undefined): string =>
+    model !== undefined && model !== "" && catalog.models.some((entry) => entry.id === model) ? model : catalog.default;
 
 // Fold attached-file paths into the prompt — Claude Code's canonical attachment mechanism (its Read tool
 // handles images and PDFs from disk natively, same as dragging a file into the CLI).
@@ -372,14 +378,10 @@ async function* runTurn(
                 yield { kind: "done" };
                 return;
             }
-            // The upstream model id for the routed turn. `gpt-5-codex` is the Codex CLI's own native id, but the
-            // translator's ChatGPT subscription does NOT serve it — it re-serves the account's real ids
-            // (gpt-5.4, gpt-5.5, gpt-5.6-*), and rejects gpt-5-codex with "unknown provider for model", whose
-            // non-SSE error body then breaks the harness stream. So for codex resolve the live catalog default
-            // whenever the pick is empty OR that dead id; a concrete live pick rides through. Grok keeps its own.
-            const routedCodexDead = input.model === undefined || input.model === "" || input.model === "gpt-5-codex";
-            const model =
-                input.agent === "codex" && routedCodexDead ? (await services.codexModels.models()).default : routedModel(input.agent, input.model);
+            // Both routed providers resolve against their own live catalog — the same catalogs the native paths
+            // use, so a pick is validated identically whichever harness runs it.
+            const catalog = input.agent === "codex" ? await services.codexModels.models() : await services.openCode.xaiModels();
+            const model = routedModel(catalog, input.model);
             endpoint = { baseUrl: services.config.translator.url, authToken: services.config.translator.token, model };
         } else if (input.agent === "kimi") {
             // Kimi (Moonshot) speaks the Anthropic Messages protocol, so it runs on THIS harness with the endpoint

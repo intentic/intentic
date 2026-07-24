@@ -22,17 +22,15 @@ import { modelLabelFor } from "../composables/chat/conversation";
  * elapsed readout advances together without per-card timers. The title renames in place (hover pencil →
  * inline input); the root is a div-button, not a <button>, so the nested pencil/input stay valid HTML. */
 
-const props = defineProps<{ agent: FleetAgent; now: number }>();
-const emit = defineEmits<{ open: [] }>();
+const props = defineProps<{ agent: FleetAgent; now: number; dragging?: boolean; busy?: boolean }>();
+const emit = defineEmits<{ open: []; grab: [event: PointerEvent, card: HTMLElement] }>();
 
 const { mobile } = useDevice();
 const meta = computed(() => agentStatusMeta(props.agent.status));
 const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
-const model = computed(() =>
-    props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.model) : undefined,
-);
+const model = computed(() => (props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.model) : undefined));
 const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
 
 const edit = createTitleEdit(
@@ -46,6 +44,18 @@ const openCard = (): void => {
     }
     emit(`open`);
 };
+
+// Offer the card to the board's drag as long as the press starts on the card BODY — the rename pencil and its
+// input run their own pointer gestures, and a press while renaming belongs to the input's caret.
+const grab = (event: PointerEvent): void => {
+    if (edit.editing || !(event.currentTarget instanceof HTMLElement) || !(event.target instanceof Element)) {
+        return;
+    }
+    if (event.target.closest(`input, button`) !== null) {
+        return;
+    }
+    emit(`grab`, event, event.currentTarget);
+};
 </script>
 
 <template>
@@ -53,8 +63,13 @@ const openCard = (): void => {
         role="button"
         tabindex="0"
         :aria-label="`Open agent: ${displayTitle}`"
-        class="group flex w-full cursor-pointer flex-col gap-1.5 rounded-lg border bg-card p-3 text-left outline-none transition-colors hover:bg-overlay focus-visible:ring-2 focus-visible:ring-primary-500/25"
-        :class="lane === 'attention' ? 'border-warning/50 hover:border-warning/80' : 'border-line hover:border-line-strong'"
+        class="group flex w-full cursor-pointer select-none flex-col gap-1.5 rounded-lg border bg-card p-3 text-left outline-none transition-colors hover:bg-overlay focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        :class="[
+            lane === 'attention' ? 'border-warning/50 hover:border-warning/80' : 'border-line hover:border-line-strong',
+            dragging ? 'opacity-40' : '',
+            busy ? 'pointer-events-none opacity-60' : '',
+        ]"
+        @pointerdown="grab"
         @click="openCard"
         @keydown.enter.self.prevent="openCard"
         @keydown.space.self.prevent="openCard"
@@ -67,7 +82,7 @@ const openCard = (): void => {
                 type="text"
                 maxlength="80"
                 aria-label="Agent title"
-                class="min-w-0 flex-1 rounded bg-overlay px-1 text-xs font-semibold text-content outline-none ring-1 ring-primary-500/50"
+                class="min-w-0 flex-1 select-text rounded bg-overlay px-1 text-xs font-semibold text-content outline-none ring-1 ring-primary-500/50"
                 @click.stop
                 @keydown.enter.stop.prevent="edit.commit()"
                 @keydown.esc.stop.prevent="edit.cancel()"
@@ -87,7 +102,8 @@ const openCard = (): void => {
                     <Icon name="pencil" class="text-2xs" />
                 </button>
             </template>
-            <span v-if="reason !== undefined" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">{{
+            <Icon v-if="busy" name="spinner" spin class="shrink-0 text-xs text-link" />
+            <span v-else-if="reason !== undefined" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">{{
                 reason
             }}</span>
             <span v-else-if="agent.unread" class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link">New</span>

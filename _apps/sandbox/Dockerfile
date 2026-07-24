@@ -50,9 +50,6 @@ RUN install -m 0755 -d /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/*
 # Repos the agent creates by hand default to main, matching gitInit's --initial-branch and Forgejo.
 RUN git config --global init.defaultBranch main
-# The sandbox is a throwaway env where exec bits don't matter; ignoring file-mode stops copied-in
-# scripts (which land as 0644) from showing as spurious mode-only changes across every repo.
-RUN git config --global core.fileMode false
 RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
     && ssh-keygen -A \
     && printf '%s\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' 'PubkeyAuthentication yes' > /etc/ssh/sshd_config.d/intentic.conf
