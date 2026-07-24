@@ -251,8 +251,8 @@ onUnmounted(() => {
 <style scoped>
 .shell {
     grid-template-columns: 4rem minmax(0, 1fr) var(--chat-width, 22rem);
-    /* One real row fills 100vh; an unplaced overlay anchor (e.g. GoogleSigninGate) lands in an implicit row,
-     * which 1fr starves to 0 so it can't split the height (see CLAUDE.md post-mortem). */
+    /* One real row fills 100vh; a stray fixed-position overlay anchor landing in an implicit row would let 1fr
+     * starve it to 0 and split the height (see CLAUDE.md post-mortem). Pin a single explicit row so none can. */
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "rail workspace chat";
 }

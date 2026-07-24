@@ -23,7 +23,7 @@ const props = defineProps<{
 const { decidePlan, answerQuestion, cancelQuestion, openPlanPreview, editAndResend, streaming: conversationStreaming } = useChat();
 const { mobile } = useDevice();
 
-// Whimsical status words cycled while a turn streams before its first token (Claude Code style).
+// Whimsical status words cycled while a turn is streaming (Claude Code style).
 const LOADER_WORDS = [
     `Thinking`,
     `Pondering`,
@@ -67,11 +67,18 @@ const toggleThinking = (): void => {
     thinkingOverride.value = !isThinkingOpen.value;
 };
 
-// Show the typing indicator before any thinking or answer text has arrived for this turn.
-const showTyping = computed(() => props.streaming && props.message.text.length === 0 && (props.message.thinking ?? ``).length === 0);
+// A pending plan/question card is the one case where the turn is still streaming (its fetch stays open) but
+// the user's attention is required — the card itself is the prompt, so the loader must yield to it.
+const awaitingUser = computed(() => props.message.plan?.status === `pending` || props.message.question?.status === `pending`);
 
-// Cycling status-word loader shown while the turn streams before its first token: tick once a second so the
-// word cycles (every ~2s) and the elapsed counter advances; torn down as soon as streaming stops.
+// Keep the loader visible for the whole live turn, not just before the first token. The model streams a
+// preamble sentence and then goes quiet while it runs tools and thinks — text is present but the turn isn't
+// done. Anchored at the bottom of the assistant stack, the loader tells the user work is still in flight;
+// it disappears only when streaming ends or a plan/question card takes over the prompt.
+const showTyping = computed(() => props.streaming && !awaitingUser.value);
+
+// Cycling status-word loader shown while the turn streams: tick once a second so the word cycles (every ~2s)
+// and the elapsed counter advances; torn down as soon as streaming stops.
 let loaderStartedAt = 0;
 const loaderTick = ref(0);
 const loaderWord = computed(() => LOADER_WORDS[Math.floor(loaderTick.value / 2) % LOADER_WORDS.length] ?? `Thinking`);
@@ -450,7 +457,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             </div>
 
             <div
-                v-if="!message.text && !message.plan && !message.question && showTyping"
+                v-if="showTyping"
                 class="flex items-center gap-2 rounded-lg bg-overlay px-3.5 py-2.5 text-sm text-muted"
             >
                 <Icon name="spinner" class="text-xs text-link" spin />

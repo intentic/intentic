@@ -7,7 +7,6 @@ import { useChat } from "../composables/chat/useChat";
 import { reportIdle, reportSessionId, reportView } from "../composables/usePresence";
 import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
-import GoogleSigninGate from "./GoogleSigninGate.vue";
 
 /* The persistent post-login shell, split by form factor: ShellDesktop (rail + chat column + terminal panel)
  * under a pointer, ShellMobile (bottom tab bar + full-screen views) under 768px. Only the device-independent
@@ -75,6 +74,4 @@ onUnmounted(() => {
 <template>
     <ShellMobile v-if="mobile" />
     <ShellDesktop v-else />
-    <!-- The browser→sandbox sign-in fallback (a fixed overlay): shows only when a Google ID token is needed. -->
-    <GoogleSigninGate />
 </template>

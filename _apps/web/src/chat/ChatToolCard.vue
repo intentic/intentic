@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic-app/ui";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { ChatTool } from "../composables/chat/conversation";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
@@ -44,6 +44,18 @@ const text = computed(() =>
 // ponytail: 4k-char cap, raise it if real outputs get clipped.
 const cappedText = computed(() => (text.value.length > 4000 ? `${text.value.slice(0, 4000)}\n… (truncated)` : text.value));
 
+// Whether there's anything to fold — an output-less call (a pending tool, or a command that printed
+// nothing) shows just its header, no chevron.
+const hasContent = computed(() => diffs.value.length > 0 || cappedText.value.length > 0);
+
+// Output fold, mirroring the turn's Thinking block: expanded while the call runs (so live output is
+// visible), collapsed once it settles. A manual toggle overrides and sticks for the session.
+const outputOverride = ref<boolean>();
+const isOpen = computed(() => outputOverride.value ?? running.value);
+const toggleOpen = (): void => {
+    outputOverride.value = !isOpen.value;
+};
+
 // The card's clickable location chip: the first workspace file this call touches.
 const location = computed(() => props.tool.locations?.[0]);
 
@@ -61,9 +73,25 @@ const open = (path: string, line?: number): void => {
 <template>
     <div class="flex flex-col gap-0.5">
         <div class="flex items-center gap-1.5 text-2xs text-subtle">
-            <Icon v-if="running" name="spinner" class="text-2xs text-link" spin />
-            <Icon v-else :name="icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
-            <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
+            <!-- Header doubles as the fold toggle when there's output — same chevron affordance as the
+                 turn's Thinking block. Output-less calls keep a plain, non-clickable header. -->
+            <button
+                v-if="hasContent"
+                type="button"
+                class="flex shrink-0 items-center gap-1.5 transition-colors hover:text-content"
+                :aria-expanded="isOpen"
+                @click="toggleOpen"
+            >
+                <Icon :name="isOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
+                <Icon v-if="running" name="spinner" class="text-2xs text-link" spin />
+                <Icon v-else :name="icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
+                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
+            </button>
+            <template v-else>
+                <Icon v-if="running" name="spinner" class="text-2xs text-link" spin />
+                <Icon v-else :name="icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
+                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
+            </template>
             <button
                 v-if="location"
                 type="button"
@@ -75,19 +103,21 @@ const open = (path: string, line?: number): void => {
             </button>
             <span v-else-if="tool.target" class="truncate font-mono">{{ tool.target }}</span>
         </div>
-        <ChatToolDiff
-            v-for="diff in diffs"
-            :key="diff.path"
-            :path="diff.path"
-            :old-text="diff.oldText"
-            :new-text="diff.newText"
-            :truncated="diff.truncated"
-            @open="open(diff.path)"
-        />
-        <pre
-            v-if="cappedText"
-            class="scrollbar-thin ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs leading-relaxed"
-            :class="failed ? 'text-danger' : 'text-muted'"
-            >{{ cappedText }}</pre>
+        <template v-if="isOpen">
+            <ChatToolDiff
+                v-for="diff in diffs"
+                :key="diff.path"
+                :path="diff.path"
+                :old-text="diff.oldText"
+                :new-text="diff.newText"
+                :truncated="diff.truncated"
+                @open="open(diff.path)"
+            />
+            <pre
+                v-if="cappedText"
+                class="scrollbar-thin ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs leading-relaxed"
+                :class="failed ? 'text-danger' : 'text-muted'"
+                >{{ cappedText }}</pre>
+        </template>
     </div>
 </template>

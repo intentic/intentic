@@ -11,6 +11,7 @@ import { track } from "../composables/analytics";
 import { apiClient, isPaymentRequired } from "../composables/useApi";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
+import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
 import { syncFolder } from "../composables/sandbox/syncFolder";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -37,6 +38,7 @@ const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
 const { upgradeOpen, entitlements, refreshPlan } = useAuth();
+const { getIdToken } = useGoogleIdentity();
 
 // The sandbox created in this setup session (holds its connection token). Null until the user names + creates it.
 const created = ref<SandboxSummary | null>(null);
@@ -405,6 +407,20 @@ watch(
     },
     { immediate: true },
 );
+
+// Warm the browser→sandbox Google credential as soon as the install command is ready — while the user copies and
+// runs it — instead of lazily on the first daemon call after the post-connect redirect. The ID token is a
+// Google-signed JWT the daemon verifies; minting it needs no daemon, so having it cached means the workspace is
+// reachable the instant the daemon reports in (no connecting-gate stall). A returning Google session mints
+// silently; a first sign-in raises the app-level gate here on /setup — the calm setup context — instead of
+// popping over the connecting screen after the redirect. Fired once.
+let credentialWarmed = false;
+watch(commandReady, (ready) => {
+    if (ready && !credentialWarmed) {
+        credentialWarmed = true;
+        void getIdToken();
+    }
+});
 </script>
 
 <template>
