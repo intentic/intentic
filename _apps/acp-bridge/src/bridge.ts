@@ -11,7 +11,7 @@ import { sessionUpdateOf } from "./translate.js";
  * ACP's one interactive primitive, request_permission: a plan frame becomes a "Review plan" tool call with
  * Approve/Keep-planning options (the claude-code-acp ExitPlanMode pattern), an AskUserQuestion frame becomes
  * one permission request per question (multiSelect collapses to a single choice — documented loss). Modes:
- * [code, plan] map to the daemon's per-turn plan boolean, which is exactly what the web sends too. */
+ * [code, plan] map to the daemon's per-turn permissionMode, which is exactly what the web sends too. */
 
 // The daemon constrains conversation ids (branch/filesystem safety); this always satisfies its regex.
 const mintSessionId = (): string => `acp-${randomBytes(9).toString("base64url").replaceAll(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -43,7 +43,7 @@ export interface BridgeOptions {
 
 // A plan frame → a "Review plan" tool call + permission prompt; the outcome rides the decision channel.
 const reviewPlan = async (ctx: AgentContext, sessionId: string, daemon: DaemonClient, event: Extract<AgentEvent, { kind: "plan" }>): Promise<void> => {
-    const toolCallId = `plan-${event.decisionId}`;
+    const toolCallId = `plan-${event.requestId}`;
     await ctx.notify(methods.client.session.update, {
         sessionId,
         update: {
@@ -66,7 +66,14 @@ const reviewPlan = async (ctx: AgentContext, sessionId: string, daemon: DaemonCl
     const approved = response.outcome.outcome === "selected" && response.outcome.optionId === "approve";
     // Rejection feedback is canned — permission prompts carry no free text (documented loss; the daemon
     // loops another planning turn on the same stream).
-    await daemon.postDecision(event.decisionId, approved, approved ? undefined : "Revise the plan.");
+    await daemon.postReply({
+        kind: "plan",
+        requestId: event.requestId,
+        approve: approved,
+        // Approving here means "execute it" — acceptEdits is the posture the web card's primary button picks.
+        mode: approved ? "acceptEdits" : "plan",
+        ...(approved ? {} : { feedback: "Revise the plan." }),
+    });
     await ctx.notify(methods.client.session.update, {
         sessionId,
         update: { sessionUpdate: "tool_call_update", toolCallId, status: approved ? "completed" : "failed" },
@@ -109,12 +116,12 @@ const askQuestions = async (
             update: { sessionUpdate: "tool_call_update", toolCallId, status: picked !== undefined ? "completed" : "failed" },
         });
         if (picked === undefined) {
-            await daemon.postAnswer(event.requestId);
+            await daemon.postReply({ kind: "question", requestId: event.requestId, cancelled: true });
             return;
         }
         answers[question.question] = [picked];
     }
-    await daemon.postAnswer(event.requestId, answers);
+    await daemon.postReply({ kind: "question", requestId: event.requestId, answers });
 };
 
 export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
@@ -262,7 +269,7 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                         conversationId: state.conversationId,
                         ...(state.providerSessionId !== undefined ? { sessionId: state.providerSessionId } : {}),
                         ...(config.model !== undefined ? { model: config.model } : {}),
-                        ...(state.mode === "plan" ? { plan: true } : {}),
+                        permissionMode: state.mode === "plan" ? "plan" : "bypassPermissions",
                     },
                     state.abort.signal,
                 );

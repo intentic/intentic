@@ -205,7 +205,7 @@ describe(`Conversation`, () => {
             { id: 1, role: `user`, text: `hi` },
             { id: 2, role: `assistant`, text: ``, thinking: `` },
             { id: 3, role: `notice`, text: `Stopped.` },
-            { id: 4, role: `assistant`, text: `intro`, plan: { decisionId: `d`, text: `# Plan`, status: `approved` } },
+            { id: 4, role: `assistant`, text: `intro`, plan: { requestId: `d`, text: `# Plan`, status: `approved` } },
         ];
         expect(transcriptOf(messages)).toEqual([
             { role: `user`, text: `hi` },
@@ -377,7 +377,7 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 { kind: `delta`, text: `intro` },
-                { kind: `plan`, decisionId: `d1`, text: `the plan` },
+                { kind: `plan`, requestId: `d1`, text: `the plan` },
                 { kind: `delta`, text: `after approval` },
             ]),
         );
@@ -385,13 +385,13 @@ describe(`Conversation`, () => {
         await conversation.send(`make a plan`, settings);
 
         const [, planMessage, continuation] = conversation.messages.value;
-        expect(planMessage).toMatchObject({ text: `intro`, plan: { decisionId: `d1`, text: `the plan`, status: `pending` } });
+        expect(planMessage).toMatchObject({ text: `intro`, plan: { requestId: `d1`, text: `the plan`, status: `pending` } });
         expect(continuation).toMatchObject({ role: `assistant`, text: `after approval` });
         expect(conversation.awaitingDecision.value).toBe(true);
 
         sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
-        await conversation.decidePlan(planMessage!, true);
-        expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/decision`, expect.objectContaining({ method: `POST` }));
+        await conversation.decidePlan(planMessage!, true, `acceptEdits`);
+        expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
         expect(conversation.messages.value[1]!.plan!.status).toBe(`approved`);
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Plan approved.` });
     });
@@ -408,7 +408,7 @@ describe(`Conversation`, () => {
 
         sandboxRequestMock.mockResolvedValue({ ok: true } as Response);
         await conversation.answerQuestion(questionMessage, { "Which?": [`A`] });
-        expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/answer`, expect.objectContaining({ method: `POST` }));
+        expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
         expect(conversation.messages.value[1]!.question).toMatchObject({ status: `answered`, answers: { "Which?": [`A`] } });
     });
 

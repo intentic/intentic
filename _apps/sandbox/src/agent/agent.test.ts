@@ -98,54 +98,63 @@ test("a custom endpoint points the SDK at ANTHROPIC_BASE_URL and withholds the s
     expect(captured?.model).toBe("gpt-5-codex");
 });
 
-test("systemAppend rides into the preset system prompt only when given", async () => {
+test("the interactive guidance always rides the preset system prompt, with systemAppend after it", async () => {
     let captured: Options | undefined;
     const capture: QueryFn = async function* (args) {
         captured = args.options;
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
+    // The model has to be TOLD the widgets exist, in every mode — otherwise it writes "A) … B) …" as prose.
+    await collect(request, capture);
+    const base = captured?.systemPrompt as { type: string; preset: string; append: string };
+    expect(base).toMatchObject({ type: "preset", preset: "claude_code" });
+    expect(base.append).toContain("AskUserQuestion");
+    expect(base.append).toContain("EnterPlanMode");
+
+    captured = undefined;
     await collect({ ...request, systemAppend: "## Delegating\nUse codex exec." }, capture);
-    expect(captured?.systemPrompt).toEqual({ type: "preset", preset: "claude_code", append: "## Delegating\nUse codex exec." });
-
-    captured = undefined;
-    await collect(request, capture);
-    expect(captured?.systemPrompt).toEqual({ type: "preset", preset: "claude_code" });
+    const withAppend = captured?.systemPrompt as { append: string };
+    expect(withAppend.append).toBe(`${base.append}\n\n## Delegating\nUse codex exec.`);
 });
 
-test("the autonomous turn registers the request's tools as remote http MCP servers", async () => {
+test("every turn wires the ui ask server, the AskUserQuestion alias, and the permission gate", async () => {
     let captured: Options | undefined;
     const capture: QueryFn = async function* (args) {
         captured = args.options;
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    await collect({ ...request, tools: [{ name: "obs", url: "https://signoz.example.com/mcp", token: "tok" }] }, capture);
-    expect(captured?.mcpServers).toEqual({
-        obs: { type: "http", url: "https://signoz.example.com/mcp", alwaysLoad: true, headers: { Authorization: "Bearer tok" } },
-    });
-
-    captured = undefined;
+    // The autonomous posture is the one the composer defaults away from plan mode into — it used to get no
+    // question tool at all, which is why the model fell back to prose options.
     await collect(request, capture);
-    expect(captured?.mcpServers).toBeUndefined();
-});
-
-test("the plan turn keeps the ui server and merges the request's tools alongside it", async () => {
-    let captured: Options | undefined;
-    const capture: QueryFn = async function* (args) {
-        captured = args.options;
-        yield { type: "result", subtype: "success" } as SDKMessage;
-    };
-
-    await collect({ ...request, permissionMode: "plan" as const, tools: [{ name: "obs", url: "https://signoz.example.com/mcp", token: "tok" }] }, capture);
-    // The plan flow's AskUserQuestion server stays; the agent's remote tools are added next to it.
     expect(captured?.mcpServers?.["ui"]).toBeDefined();
-    expect(captured?.mcpServers?.["obs"]).toEqual({
-        type: "http",
-        url: "https://signoz.example.com/mcp",
-        alwaysLoad: true,
-        headers: { Authorization: "Bearer tok" },
-    });
+    expect(captured?.toolAliases).toEqual({ AskUserQuestion: "mcp__ui__ask" });
+    expect(captured?.canUseTool).toBeTypeOf("function");
+    expect(captured?.permissionMode).toBe("bypassPermissions");
+    expect(captured?.allowDangerouslySkipPermissions).toBe(true);
+});
+
+test("the request's tools become remote http MCP servers alongside the ui server, in every mode", async () => {
+    let captured: Options | undefined;
+    const capture: QueryFn = async function* (args) {
+        captured = args.options;
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    const obs = { type: "http", url: "https://signoz.example.com/mcp", alwaysLoad: true, headers: { Authorization: "Bearer tok" } };
+    const tools = [{ name: "obs", url: "https://signoz.example.com/mcp", token: "tok" }];
+
+    await collect({ ...request, tools }, capture);
+    expect(captured?.mcpServers?.["obs"]).toEqual(obs);
+    expect(captured?.mcpServers?.["ui"]).toBeDefined();
+
+    captured = undefined;
+    await collect({ ...request, permissionMode: "plan" as const, tools }, capture);
+    expect(captured?.mcpServers?.["obs"]).toEqual(obs);
+    expect(captured?.mcpServers?.["ui"]).toBeDefined();
+    expect(captured?.permissionMode).toBe("plan");
+    // bypassPermissions is the only mode that skips the SDK's permission machinery — plan must not.
+    expect(captured?.allowDangerouslySkipPermissions).toBe(false);
 });
 
 test("plugin checkout dirs are passed to the SDK as local plugins", async () => {

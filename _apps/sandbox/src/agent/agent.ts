@@ -659,6 +659,7 @@ const permissionGate =
         // The bridge already rendered the prompt sentence, the button noun, and the reason — pass them
         // through rather than re-deriving worse copy from the raw tool name and input.
         const suggestions = options.suggestions ?? [];
+        const path = relativePath(options.blockedPath, request.cwd);
         push({
             kind: "permission",
             requestId: id,
@@ -667,9 +668,7 @@ const permissionGate =
             ...(options.displayName !== undefined ? { displayName: options.displayName } : {}),
             ...(options.description !== undefined ? { description: options.description } : {}),
             ...(options.decisionReason !== undefined ? { reason: options.decisionReason } : {}),
-            ...(relativePath(options.blockedPath, request.cwd) !== undefined
-                ? { path: relativePath(options.blockedPath, request.cwd) as string }
-                : {}),
+            ...(path !== undefined ? { path } : {}),
             // Only offer "always" when the SDK gave us rules to persist — otherwise the button would promise
             // a memory that nothing writes.
             ...(suggestions.length > 0 ? { alwaysLabel: `Don't ask again for ${options.displayName ?? toolName}` } : {}),

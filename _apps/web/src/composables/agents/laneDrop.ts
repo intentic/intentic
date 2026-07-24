@@ -30,7 +30,7 @@ export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction
         return `stop`;
     }
     // Blocked ON THE USER: the agent is mid-task and its work isn't ready to land. Answer it instead.
-    if (agent.attention.plan || agent.attention.question || agent.status === `awaiting`) {
+    if (agent.attention.plan || agent.attention.question || agent.attention.permission || agent.status === `awaiting`) {
         return undefined;
     }
     if (agent.attention.conflict || agent.status === `conflict` || agent.status === `error`) {

@@ -3,6 +3,7 @@ import {
     type AgentEvent,
     type AgentHarness,
     type AgentProvider,
+    type AgentReply,
     type AskQuestion,
     type AttachFrame,
     type CatalogOption,
@@ -13,6 +14,8 @@ import {
     NATIVE_PROVIDERS,
     type NativeProvider,
     type OauthAccount,
+    type PermissionAsk,
+    type PermissionMode,
     providerLabel,
     sseData,
     sseFrames,
@@ -33,10 +36,10 @@ import { formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus
 // stopped) — it keeps the user informed about control actions, Claude Code style.
 export type ChatRole = "user" | "assistant" | "notice";
 
-// The agent permission mode the composer drives (mirrors the SDK's permissionMode). Sent with every
-// turn straight to the daemon's `/agent`. 'plan' proposes a plan the user approves; the others execute
-// directly (accept edits / ask before edits / bypass all prompts).
-export type ChatMode = "plan" | "acceptEdits" | "default" | "bypassPermissions";
+// The permission mode is the contract's PermissionMode — imported, not redeclared. The composer picks the
+// turn's STARTING mode; the agent can then move itself (EnterPlanMode when a request turns out to need
+// thinking through, ExitPlanMode once the user approves), which arrives back as a `mode` frame and drives
+// this same ref. So the selector always shows the live posture, not just what the user last clicked.
 
 // The provider (AgentProvider) and harness (AgentHarness) a turn runs on are the contract's wire enums —
 // see schemas.ts for their semantics. Both are switchable mid-conversation: a session id only resumes on the
@@ -122,7 +125,7 @@ export const providerTabs: readonly { value: AgentProvider; label: string }[] = 
 export type PlanStatus = "pending" | "approved" | "rejected";
 
 export interface PlanRequest {
-    readonly decisionId: string;
+    readonly requestId: string;
     readonly text: string;
     readonly status: PlanStatus;
 }
@@ -147,6 +150,15 @@ export interface QuestionRequest {
     readonly status: QuestionStatus;
     // Selected option label(s) per question text, captured on submit for the static summary.
     readonly answers?: Record<string, string[]>;
+}
+
+// A tool call awaiting the user's approval (the daemon's canUseTool gate). 'pending' shows the buttons; the
+// answer then freezes into the transcript so the turn reads back as a record of what was allowed.
+export type PermissionStatus = "pending" | "allowed" | "always" | "denied";
+
+export interface PermissionRequest extends PermissionAsk {
+    readonly requestId: string;
+    readonly status: PermissionStatus;
 }
 
 // One tool call the sandbox agent made during a turn, built from its tool_call frame and merged-by-id with
@@ -210,6 +222,8 @@ export interface ChatMessage {
     readonly plan?: PlanRequest;
     // Set when this assistant turn asked interactive questions; carries the answer state.
     readonly question?: QuestionRequest;
+    // Set when a tool call on this turn needed the user's approval; carries the decision.
+    readonly permission?: PermissionRequest;
     // Tool actions (Bash/Edit/…) the sandbox agent ran during this turn, newest last.
     readonly tools?: ChatTool[];
     // The agent's live task checklist (TodoWrite), replaced whole each time it updates.
@@ -238,7 +252,7 @@ export interface TurnSettings {
 // boolean for thinking) so a stale or hand-edited entry degrades to the defaults; model/effort stay plain
 // strings — the Conversation constructor does the semantic clamping (codex model/effort scoping).
 const TURN_DEFAULTS_KEY = `intentic.turnDefaults`;
-const MODES: ReadonlySet<ChatMode> = new Set([`plan`, `acceptEdits`, `default`, `bypassPermissions`]);
+const MODES: ReadonlySet<PermissionMode> = new Set([`plan`, `acceptEdits`, `default`, `bypassPermissions`]);
 
 interface TurnDefaults {
     readonly provider: AgentProvider;
@@ -246,7 +260,7 @@ interface TurnDefaults {
     readonly models: Record<AgentProvider, string>;
     readonly effort: string;
     readonly thinking: boolean;
-    readonly mode: ChatMode;
+    readonly mode: PermissionMode;
 }
 
 // Per-provider NATIVE model map: a stored string per provider, each degrading to that provider's native default
@@ -280,7 +294,7 @@ const readTurnDefaults = (): TurnDefaults => {
             models: readModels(stored[`models`]),
             effort: typeof stored[`effort`] === `string` ? stored[`effort`] : fallback.effort,
             thinking: typeof stored[`thinking`] === `boolean` ? stored[`thinking`] : fallback.thinking,
-            mode: MODES.has(stored[`mode`] as ChatMode) ? (stored[`mode`] as ChatMode) : fallback.mode,
+            mode: MODES.has(stored[`mode`] as PermissionMode) ? (stored[`mode`] as PermissionMode) : fallback.mode,
         };
     } catch {
         return fallback;
@@ -298,7 +312,7 @@ export const turnDefaults = {
     models: ref<Record<AgentProvider, string>>(seed.models),
     effort: ref<string>(seed.effort),
     thinking: ref<boolean>(seed.thinking),
-    mode: ref<ChatMode>(seed.mode),
+    mode: ref<PermissionMode>(seed.mode),
 };
 
 watch(
@@ -388,11 +402,14 @@ export class Conversation {
     // replaced whole per `commands` frame, listed by the composer's `/` popover.
     readonly availableCommands = ref<readonly AgentCommand[]>([]);
 
-    // True while a turn is paused on a card awaiting the user's input (a pending plan or question). The
-    // attach stream stays open during this, so `streaming` is still true — but the agent isn't generating, so
-    // the composer should drop the Stop spinner and show a ready Send (Claude Code style).
+    // True while a turn is paused on a card awaiting the user's input (a pending plan, question, or tool
+    // permission). The attach stream stays open during this, so `streaming` is still true — but the agent
+    // isn't generating, so the composer should drop the Stop spinner and show a ready Send (Claude Code style).
     readonly awaitingDecision = computed(() =>
-        this.messages.value.some((message) => message.plan?.status === `pending` || message.question?.status === `pending`),
+        this.messages.value.some(
+            (message) =>
+                message.plan?.status === `pending` || message.question?.status === `pending` || message.permission?.status === `pending`,
+        ),
     );
 
     // The message carrying a plan currently awaiting the user's decision, if any. Lets the composer route
@@ -411,7 +428,7 @@ export class Conversation {
 
     // Agent permission mode for this conversation, sent with each turn. Seeded from the persisted default
     // (plan — propose → approve — until the user picks otherwise).
-    readonly mode = ref<ChatMode>(turnDefaults.mode.value);
+    readonly mode = ref<PermissionMode>(turnDefaults.mode.value);
 
     // What this conversation is doing, for the tab's status icon.
     readonly status = computed<ConversationStatus>(() => {
@@ -682,9 +699,10 @@ export class Conversation {
                     model: settings.model || undefined,
                     effort: settings.effort,
                     thinking: settings.thinking,
-                    // Plan mode → propose-then-approve via /agent/decision (the daemon's gate). The finer
-                    // permission modes aren't a daemon input, so only the `plan` boolean is sent.
-                    plan: this.mode.value === `plan`,
+                    // The turn's STARTING permission posture. The daemon hands it straight to the SDK, so all
+                    // four modes are real: 'plan' proposes-then-executes, 'default' prompts per tool on the
+                    // permission card, 'acceptEdits' auto-accepts edits, 'bypassPermissions' asks nothing.
+                    permissionMode: this.mode.value,
                     // The opt-in editor-context chip: the file (and selection) the user chose to attach.
                     ...(editorContext !== undefined ? { editorContext } : {}),
                 }),
@@ -826,19 +844,20 @@ export class Conversation {
         }
     }
 
-    // Answers a pending plan card. The /agent request is still open, so on approval the agent exits plan mode
-    // and streams a closing turn; on rejection the feedback is fed back and it re-plans.
-    async decidePlan(message: ChatMessage, approve: boolean, feedback?: string): Promise<void> {
+    // Answers a pending plan card. The turn is parked on ExitPlanMode, so on approval it executes in `mode`
+    // (the "auto-accept edits" vs "approve each edit" choice) and streams a closing turn; on rejection the
+    // feedback is fed back and it re-plans.
+    async decidePlan(message: ChatMessage, approve: boolean, mode: PermissionMode, feedback?: string): Promise<void> {
         const plan = message.plan;
         if (plan?.status !== `pending`) {
             return;
         }
-        const ok = await this.postTurnControl(`/agent/decision`, { decisionId: plan.decisionId, approve, feedback });
+        const ok = await this.reply({ kind: `plan`, requestId: plan.requestId, approve, mode, feedback });
         if (!ok) {
             this.error.value = `Could not record your plan decision — the turn may have ended.`;
             return;
         }
-        this.setPlanStatus(message.id, approve ? `approved` : `rejected`);
+        this.attachCard(message.id, { plan: { ...plan, status: approve ? `approved` : `rejected` } });
         this.appendNotice(approve ? `Plan approved.` : `Kept planning.`);
         // Keep the rejection feedback visible as the user's turn — otherwise the typed text vanishes from the
         // transcript even though it was sent to the agent.
@@ -848,35 +867,64 @@ export class Conversation {
         }
     }
 
-    // Submits the user's picks for a pending question card. The /agent request is still open, so the agent's
-    // `ask` tool unblocks and the turn resumes using the answers.
+    // Submits the user's picks for a pending question card. The turn is parked on the `ask` tool, which
+    // unblocks and resumes using the answers.
     async answerQuestion(message: ChatMessage, answers: Record<string, string[]>): Promise<void> {
         const question = message.question;
         if (question?.status !== `pending`) {
             return;
         }
-        const ok = await this.postTurnControl(`/agent/answer`, { requestId: question.requestId, answers });
+        const ok = await this.reply({ kind: `question`, requestId: question.requestId, answers });
         if (!ok) {
             this.error.value = `Could not submit your answers — the turn may have ended.`;
             return;
         }
-        this.setQuestionState(message.id, `answered`, answers);
+        this.attachCard(message.id, { question: { ...question, status: `answered`, answers } });
     }
 
-    // Dismisses a pending question and stops the turn (Claude Code-style interrupt). The agent is parked on its
-    // `ask` tool — not generating — so aborting the stream leaves it idle rather than letting it proceed on a
-    // guessed default (which, for a coding agent, could mean unwanted edits).
-    cancelQuestion(message: ChatMessage): void {
-        if (message.question?.status !== `pending`) {
+    // Dismisses a pending question. This TELLS the daemon (cancelled), rather than just dropping the stream:
+    // the agent is parked inside its `ask` tool holding the conversation's run lock, so a client-side-only
+    // dismissal would wedge the conversation until the daemon restarted. The tool result says the user
+    // declined to answer, which lets the agent proceed on sensible defaults or ask again more cheaply.
+    async cancelQuestion(message: ChatMessage): Promise<void> {
+        const question = message.question;
+        if (question?.status !== `pending`) {
             return;
         }
-        this.setQuestionState(message.id, `cancelled`);
+        const ok = await this.reply({ kind: `question`, requestId: question.requestId, cancelled: true });
+        if (!ok) {
+            this.error.value = `Could not dismiss the question — the turn may have ended.`;
+            return;
+        }
+        this.attachCard(message.id, { question: { ...question, status: `cancelled` } });
         this.appendNotice(`Question dismissed.`);
-        this.abort();
     }
 
-    // Posts a turn-control message (plan decision / question answer) to the platform side-channel, which relays
-    // it to the sandbox daemon. Returns whether it succeeded.
+    // Answers a pending permission card. 'once' allows just this call, 'always' also persists the rules the
+    // SDK suggested so the same tool stops asking, 'deny' blocks it and hands the reason back to the agent.
+    async decidePermission(message: ChatMessage, decision: "once" | "always" | "deny", feedback?: string): Promise<void> {
+        const permission = message.permission;
+        if (permission?.status !== `pending`) {
+            return;
+        }
+        const ok = await this.reply({ kind: `permission`, requestId: permission.requestId, decision, feedback });
+        if (!ok) {
+            this.error.value = `Could not record your decision — the turn may have ended.`;
+            return;
+        }
+        const status = decision === `deny` ? `denied` : decision === `always` ? `always` : `allowed`;
+        this.attachCard(message.id, { permission: { ...permission, status } });
+    }
+
+    // Un-parks the turn's pending card on the daemon's side channel. Returns whether it succeeded — a 404
+    // means nothing holds that id any more (already answered, or the turn ended), which the callers surface
+    // rather than silently freezing a card the agent is still waiting on.
+    private async reply(body: AgentReply): Promise<boolean> {
+        return this.postTurnControl(`/agent/reply`, body);
+    }
+
+    // Posts a turn-control message to the platform side-channel, which relays it to the sandbox daemon.
+    // Returns whether it succeeded.
     private async postTurnControl(path: string, body: unknown): Promise<boolean> {
         try {
             const response = await sandboxRequest(path, {
@@ -1063,15 +1111,29 @@ export class Conversation {
                 // the post-decision continuation streams into a fresh one below the plan card. Flush first so
                 // any in-flight intro text finishes typing into this bubble, not the next.
                 this.flushType();
-                this.attachPlan(this.currentTextId(turn), event.decisionId, event.text);
+                this.attachCard(this.currentTextId(turn), { plan: { requestId: event.requestId, text: event.text, status: `pending` } });
                 turn.id = null;
                 return;
             case `question`:
-                // Same flow as plan: attach the question card to the current bubble and start a fresh bubble for
-                // whatever the agent streams after the answers come back.
+                // Same flow as plan: attach the card to the current bubble and start a fresh bubble for
+                // whatever the agent streams after the answer comes back.
                 this.flushType();
-                this.attachQuestion(this.currentTextId(turn), event.requestId, event.questions);
+                this.attachCard(this.currentTextId(turn), {
+                    question: { requestId: event.requestId, questions: event.questions, status: `pending` },
+                });
                 turn.id = null;
+                return;
+            case `permission`: {
+                const { kind: _kind, ...ask } = event;
+                this.flushType();
+                this.attachCard(this.currentTextId(turn), { permission: { ...ask, status: `pending` } });
+                turn.id = null;
+                return;
+            }
+            case `mode`:
+                // The turn's live posture — the user's pick echoed back at init, or a move the AGENT made
+                // (EnterPlanMode / a plan approval). Drives the composer's selector so it never lies.
+                this.mode.value = event.mode;
                 return;
             case `session`:
                 // Captured with the turn's provider/account so a later mismatch (a mid-chat switch) is
@@ -1223,28 +1285,11 @@ export class Conversation {
         }
     }
 
-    private attachPlan(id: number, decisionId: string, text: string): void {
-        this.messages.value = this.messages.value.map((message) =>
-            message.id === id ? { ...message, plan: { decisionId, text, status: `pending` } } : message,
-        );
-    }
-
-    private setPlanStatus(id: number, status: PlanStatus): void {
-        this.messages.value = this.messages.value.map((message) =>
-            message.id === id && message.plan ? { ...message, plan: { ...message.plan, status } } : message,
-        );
-    }
-
-    private attachQuestion(id: number, requestId: string, questions: AskQuestion[]): void {
-        this.messages.value = this.messages.value.map((message) =>
-            message.id === id ? { ...message, question: { requestId, questions, status: `pending` } } : message,
-        );
-    }
-
-    private setQuestionState(id: number, status: QuestionStatus, answers?: Record<string, string[]>): void {
-        this.messages.value = this.messages.value.map((message) =>
-            message.id === id && message.question ? { ...message, question: { ...message.question, status, answers } } : message,
-        );
+    // Hang an interactive card (plan / question / permission) on a bubble — and, with the answered card,
+    // freeze that answer into the transcript. One writer for all three: they differ in what they ask, not in
+    // how they attach.
+    private attachCard(id: number, card: Pick<ChatMessage, "plan" | "question" | "permission">): void {
+        this.messages.value = this.messages.value.map((message) => (message.id === id ? { ...message, ...card } : message));
     }
 
     private append(message: ChatMessage): void {

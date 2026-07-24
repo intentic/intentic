@@ -1,25 +1,23 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
 import type { DaemonClient } from "../daemon-client.js";
 
 /* An in-memory DaemonClient double: scenario-driven canned AgentEvent streams per prompt keyword, recording
- * every decision/answer post — the bridge under test is the real one (real SDK JSON-RPC via in-process app
+ * every reply post — the bridge under test is the real one (real SDK JSON-RPC via in-process app
  * composition); only the HTTP layer is faked. The HTTP layer itself (SSE framing, auth statuses) has its own
  * test over a real node:http server in daemon-client.test.ts. */
 
 export interface FakeDaemon {
     readonly client: DaemonClient;
-    readonly decisions: { decisionId: string; approve: boolean; feedback?: string }[];
-    readonly answers: { requestId: string; answers?: Record<string, string[]> }[];
+    // Every /agent/reply the bridge posted, in order; filter by `kind` to assert on one card type.
+    readonly replies: AgentReply[];
     readonly prompts: string[];
 }
 
 export const fakeDaemon = (scenario: (prompt: string) => AgentEvent[]): FakeDaemon => {
-    const decisions: FakeDaemon["decisions"] = [];
-    const answers: FakeDaemon["answers"] = [];
+    const replies: FakeDaemon["replies"] = [];
     const prompts: string[] = [];
     return {
-        decisions,
-        answers,
+        replies,
         prompts,
         client: {
             streamTurn: async function* (turn, signal) {
@@ -31,11 +29,8 @@ export const fakeDaemon = (scenario: (prompt: string) => AgentEvent[]): FakeDaem
                     yield event;
                 }
             },
-            postDecision: async (decisionId, approve, feedback) => {
-                decisions.push({ decisionId, approve, ...(feedback !== undefined ? { feedback } : {}) });
-            },
-            postAnswer: async (requestId, recorded) => {
-                answers.push({ requestId, ...(recorded !== undefined ? { answers: recorded } : {}) });
+            postReply: async (reply) => {
+                replies.push(reply);
             },
             getSession: async () => [
                 { role: "user", text: "earlier question" },

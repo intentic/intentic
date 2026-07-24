@@ -88,7 +88,7 @@ test("a plan frame round-trips through request_permission: approve posts the dec
     const { updates, daemon, connect, permissionQueue } = await harness((prompt) =>
         prompt.includes("plan me")
             ? [
-                  { kind: "plan", decisionId: "d1", text: "1. do it" },
+                  { kind: "plan", requestId: "d1", text: "1. do it" },
                   { kind: "delta", text: "executing" },
                   { kind: "done" },
               ]
@@ -100,7 +100,7 @@ test("a plan frame round-trips through request_permission: approve posts the dec
     await conn.agent.request(methods.agent.session.setMode, { sessionId, modeId: "plan" });
     const response = await conn.agent.request(methods.agent.session.prompt, { sessionId, prompt: [{ type: "text", text: "plan me" }] });
     expect(response.stopReason).toBe("end_turn");
-    expect(daemon.decisions).toEqual([{ decisionId: "d1", approve: true }]);
+    expect(daemon.replies).toEqual([{ kind: "plan", requestId: "d1", approve: true, mode: "acceptEdits" }]);
     // The plan text rode a Review-plan tool call, completed on approval.
     const kinds = updates.map((update) => update.update.sessionUpdate);
     expect(kinds).toEqual(["tool_call", "tool_call_update", "agent_message_chunk"]);
@@ -108,14 +108,14 @@ test("a plan frame round-trips through request_permission: approve posts the dec
 
 test("a plan rejection posts approve:false with the canned feedback", async () => {
     const { daemon, connect, permissionQueue } = await harness(() => [
-        { kind: "plan", decisionId: "d2", text: "plan" },
+        { kind: "plan", requestId: "d2", text: "plan" },
         { kind: "done" },
     ]);
     permissionQueue.push((options) => options.find((option) => option.optionId === "reject")?.optionId ?? "");
     const conn = connect();
     const sessionId = await newSession(conn);
     await conn.agent.request(methods.agent.session.prompt, { sessionId, prompt: [{ type: "text", text: "go" }] });
-    expect(daemon.decisions).toEqual([{ decisionId: "d2", approve: false, feedback: "Revise the plan." }]);
+    expect(daemon.replies).toEqual([{ kind: "plan", requestId: "d2", approve: false, mode: "plan", feedback: "Revise the plan." }]);
 });
 
 test("questions become one permission prompt each; a pick answers, a dismiss cancels", async () => {
@@ -128,11 +128,11 @@ test("questions become one permission prompt each; a pick answers, a dismiss can
     const conn = connect();
     const sessionId = await newSession(conn);
     await conn.agent.request(methods.agent.session.prompt, { sessionId, prompt: [{ type: "text", text: "ask" }] });
-    expect(daemon.answers).toEqual([{ requestId: "q1", answers: { "Which db?": ["Postgres"] } }]);
+    expect(daemon.replies).toEqual([{ kind: "question", requestId: "q1", answers: { "Which db?": ["Postgres"] } }]);
 
     permissionQueue.push(() => "__dismiss");
     await conn.agent.request(methods.agent.session.prompt, { sessionId, prompt: [{ type: "text", text: "ask" }] });
-    expect(daemon.answers[1]).toEqual({ requestId: "q1" });
+    expect(daemon.replies[1]).toEqual({ kind: "question", requestId: "q1", cancelled: true });
 });
 
 test("an error frame fails the prompt as a JSON-RPC error AFTER the stream drains", async () => {

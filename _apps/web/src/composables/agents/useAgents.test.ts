@@ -18,7 +18,7 @@ import { laneOf } from "./useAgents";
 // The kanban lane projection — pure over status + attention, so "finished" needs no explicit action:
 // a cleanly-completed, auto-landed turn reads landed/idle and the card moves lanes on the next roster frame.
 describe("laneOf", () => {
-    const none = { plan: false, question: false, conflict: false };
+    const none = { plan: false, question: false, permission: false, conflict: false };
 
     it("routes pending plan/question/conflict and errors to attention", () => {
         expect(laneOf({ status: `running`, attention: { ...none, plan: true } })).toBe(`attention`);

@@ -20,7 +20,15 @@ const props = defineProps<{
     streaming: boolean;
 }>();
 
-const { decidePlan, answerQuestion, cancelQuestion, openPlanPreview, editAndResend, streaming: conversationStreaming } = useChat();
+const {
+    decidePlan,
+    answerQuestion,
+    cancelQuestion,
+    decidePermission,
+    openPlanPreview,
+    editAndResend,
+    streaming: conversationStreaming,
+} = useChat();
 const { mobile } = useDevice();
 
 // Whimsical status words cycled while a turn is streaming (Claude Code style).
@@ -67,9 +75,24 @@ const toggleThinking = (): void => {
     thinkingOverride.value = !isThinkingOpen.value;
 };
 
-// A pending plan/question card is the one case where the turn is still streaming (its fetch stays open) but
-// the user's attention is required — the card itself is the prompt, so the loader must yield to it.
-const awaitingUser = computed(() => props.message.plan?.status === `pending` || props.message.question?.status === `pending`);
+// A pending card is the one case where the turn is still streaming (its fetch stays open) but the user's
+// attention is required — the card itself is the prompt, so the loader must yield to it.
+const awaitingUser = computed(
+    () =>
+        props.message.plan?.status === `pending` ||
+        props.message.question?.status === `pending` ||
+        props.message.permission?.status === `pending`,
+);
+
+// The permission card's header line: the bridge's own rendered prompt sentence, else its short noun phrase,
+// else the bare tool name — so the card reads like Claude Code's prompt rather than a raw tool dump.
+const permissionTitle = computed(() => {
+    const permission = props.message.permission;
+    if (permission === undefined) {
+        return ``;
+    }
+    return permission.title ?? permission.displayName ?? permission.toolName;
+});
 
 // Keep the loader visible for the whole live turn, not just before the first token. The model streams a
 // preamble sentence and then goes quiet while it runs tools and thinks — text is present but the turn isn't
@@ -379,12 +402,16 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     </button>
                 </div>
                 <div class="chat-markdown chat-markdown-compact px-3.5 py-3 text-content/85" v-html="render(planBody(message.plan))"></div>
-                <div v-if="message.plan.status === 'pending'" class="flex items-center gap-2 border-t border-line px-3.5 py-2.5">
-                    <button type="button" class="plan-approve" @click="decidePlan(message, true)">
+                <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                    <button type="button" class="plan-approve" @click="decidePlan(message, true, 'acceptEdits')">
                         <Icon name="check" class="text-xs" />
-                        Yes, proceed
+                        Yes, and auto-accept edits
                     </button>
-                    <button type="button" class="plan-reject" @click="decidePlan(message, false)">
+                    <button type="button" class="plan-reject" @click="decidePlan(message, true, 'default')">
+                        <Icon name="check" class="text-xs" />
+                        Yes, and approve each edit
+                    </button>
+                    <button type="button" class="plan-reject" @click="decidePlan(message, false, 'plan')">
                         <Icon name="pencil" class="text-xs" />
                         No, keep planning
                     </button>
@@ -453,6 +480,47 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         </button>
                         <button type="button" class="plan-reject" @click="cancelQuestion(message)">Dismiss</button>
                     </div>
+                </div>
+            </div>
+
+            <div v-if="message.permission" class="chat-surface w-full overflow-hidden rounded-xl">
+                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
+                    <Icon name="shield" class="text-sm text-primary-500" />
+                    <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.bottom="permissionTitle">{{
+                        permissionTitle
+                    }}</span>
+                    <span v-if="message.permission.status === 'allowed'" class="text-xs font-medium text-success">✓ Allowed</span>
+                    <span v-else-if="message.permission.status === 'always'" class="text-xs font-medium text-success">✓ Always allowed</span>
+                    <span v-else-if="message.permission.status === 'denied'" class="text-xs font-medium text-muted">✕ Denied</span>
+                </div>
+
+                <div class="flex flex-col gap-1 px-3.5 py-3">
+                    <span v-if="message.permission.description" class="text-sm text-content/85">{{ message.permission.description }}</span>
+                    <span v-if="message.permission.path" class="font-mono text-2xs text-subtle">{{ message.permission.path }}</span>
+                    <span v-if="message.permission.reason" class="text-2xs text-subtle">Requested because: {{ message.permission.reason }}</span>
+                </div>
+
+                <div
+                    v-if="message.permission.status === 'pending'"
+                    class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5"
+                >
+                    <button type="button" class="plan-approve" @click="decidePermission(message, 'once')">
+                        <Icon name="check" class="text-xs" />
+                        Allow once
+                    </button>
+                    <button
+                        v-if="message.permission.alwaysLabel"
+                        type="button"
+                        class="plan-reject"
+                        @click="decidePermission(message, 'always')"
+                    >
+                        <Icon name="lock" class="text-xs" />
+                        {{ message.permission.alwaysLabel }}
+                    </button>
+                    <button type="button" class="plan-reject" @click="decidePermission(message, 'deny')">
+                        <Icon name="times" class="text-xs" />
+                        No
+                    </button>
                 </div>
             </div>
 

@@ -406,8 +406,9 @@ const submit = (): void => {
     const text = draft.value.trim();
     const pendingPlan = pendingPlanMessage.value;
     if (pendingPlan) {
-        // Typing while a plan is pending rejects it with that text as feedback (Claude Code style).
-        void decidePlan(pendingPlan, false, text);
+        // Typing while a plan is pending rejects it with that text as feedback (Claude Code style) — the
+        // agent stays in plan mode and revises.
+        void decidePlan(pendingPlan, false, `plan`, text);
     } else if (streaming.value) {
         // Mid-turn steering: injected into the running turn between tool calls; chip and attachments wait.
         void steer(text);

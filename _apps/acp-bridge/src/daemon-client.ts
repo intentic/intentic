@@ -1,5 +1,5 @@
 import { RequestError } from "@agentclientprotocol/sdk";
-import { type AgentEvent, AgentEventSchema, type AgentTurn, type SessionTranscriptMessage, sseData, sseFrames } from "@intentic/sandbox-contract";
+import { type AgentEvent, AgentEventSchema, type AgentReply, type AgentTurn, type SessionTranscriptMessage, sseData, sseFrames } from "@intentic/sandbox-contract";
 
 /* The bridge's view of the sandbox daemon: the /agent SSE stream plus the decision/answer side channels and
  * the session store, every call carrying the bridge token (x-intentic-bridge — see the daemon's
@@ -9,8 +9,8 @@ import { type AgentEvent, AgentEventSchema, type AgentTurn, type SessionTranscri
 
 export interface DaemonClient {
     readonly streamTurn: (turn: AgentTurn, signal: AbortSignal) => AsyncGenerator<AgentEvent>;
-    readonly postDecision: (decisionId: string, approve: boolean, feedback?: string) => Promise<void>;
-    readonly postAnswer: (requestId: string, answers?: Record<string, string[]>) => Promise<void>;
+    // Un-parks a turn waiting on any interactive card (plan / question / permission) — one route, one body.
+    readonly postReply: (reply: AgentReply) => Promise<void>;
     readonly getSession: (id: string) => Promise<SessionTranscriptMessage[]>;
     // The auth probe (also `intentic-acp login`'s validation call).
     readonly listSessions: () => Promise<void>;
@@ -51,18 +51,11 @@ export const createDaemonClient = (url: string, token: string): DaemonClient => 
                 }
             }
         },
-        postDecision: async (decisionId, approve, feedback) => {
-            await request("/agent/decision", {
+        postReply: async (reply) => {
+            await request("/agent/reply", {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ decisionId, approve, ...(feedback !== undefined ? { feedback } : {}) }),
-            });
-        },
-        postAnswer: async (requestId, answers) => {
-            await request("/agent/answer", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify(answers !== undefined ? { requestId, answers } : { requestId, cancelled: true }),
+                body: JSON.stringify(reply),
             });
         },
         getSession: async (id) => {

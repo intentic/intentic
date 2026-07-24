@@ -1,6 +1,6 @@
 import type { IconName } from "@intentic-app/ui";
-import type { AgentProvider, CatalogOption, ModelBadge } from "@intentic/sandbox-contract";
-import { type ChatMode, type ConversationStatus, providerModels } from "./conversation";
+import type { AgentProvider, CatalogOption, ModelBadge, PermissionMode } from "@intentic/sandbox-contract";
+import { type ConversationStatus, providerModels } from "./conversation";
 
 /* Chat UI metadata shared by the desktop panel, the mobile header, and the menu bodies: the effort catalog,
  * the permission modes, and the small presentational helpers (tab status icon, relative time). The provider/
@@ -37,7 +37,7 @@ export const BADGE_META: Record<ModelBadge, { label: string; icon: IconName }> =
 };
 
 // Permission modes for the composer's mode selector; value mirrors the SDK permissionMode. 'plan' is default.
-export const MODES: readonly { value: ChatMode; label: string; icon: IconName; description: string }[] = [
+export const MODES: readonly { value: PermissionMode; label: string; icon: IconName; description: string }[] = [
     { value: `default`, label: `Manual`, icon: `question-circle`, description: `Ask before each file edit.` },
     { value: `acceptEdits`, label: `Edit automatically`, icon: `check-square`, description: `Apply file edits automatically.` },
     { value: `plan`, label: `Plan`, icon: `list-check`, description: `Propose a plan and wait for your approval before running.` },

@@ -5,6 +5,7 @@ import {
     type KeyedProvider,
     NATIVE_PROVIDERS,
     type OauthAccount,
+    type PermissionMode,
     type TranslatorAccounts,
     type UsageAccount,
 } from "@intentic/sandbox-contract";
@@ -15,7 +16,6 @@ import {
     type ChatAttachment,
     type ChatMessage,
     type CatalogLoadState,
-    type ChatMode,
     type ChatRole,
     Conversation,
     type ModelOption,
@@ -239,15 +239,15 @@ const openPlanPreview = (plan: PlanRequest): void => {
 };
 
 // A newly proposed plan opens as a rendered markdown preview tab in the main view (Claude Code VSCode style);
-// the approve/keep-planning buttons stay on the chat card. Keyed by decisionId so unrelated transcript updates
+// the approve/keep-planning buttons stay on the chat card. Keyed by requestId so unrelated transcript updates
 // (which re-create message objects) don't re-fire, while a revised plan — or switching to a chat tab with its
 // own pending plan — opens/refreshes the preview. Watching the active-conversation facade means a background
 // tab's plan never hijacks the main view; it opens when that tab is focused.
 watch(
-    () => pendingPlanMessage.value?.plan?.decisionId,
-    (decisionId) => {
+    () => pendingPlanMessage.value?.plan?.requestId,
+    (requestId) => {
         const plan = pendingPlanMessage.value?.plan;
-        if (decisionId === undefined || plan === undefined) {
+        if (requestId === undefined || plan === undefined) {
             return;
         }
         openPlanPreview(plan);
@@ -258,7 +258,7 @@ const activeModel = computed(() => active.value.activeModel.value);
 const contextUsage = computed(() => active.value.contextUsage.value);
 // The active conversation's permission mode (read + write) — the composer's mode pill drives it. Like the
 // turn settings below, a pick writes through to the persisted defaults so the next new chat inherits it.
-const mode = computed<ChatMode>({
+const mode = computed<PermissionMode>({
     get: () => active.value.mode.value,
     set: (value) => {
         active.value.mode.value = value;
@@ -799,13 +799,17 @@ const stop = (): void => {
     active.value.stop();
 };
 
-const decidePlan = (message: ChatMessage, approve: boolean, feedback?: string): Promise<void> => active.value.decidePlan(message, approve, feedback);
+// `nextMode` is the posture the approved plan executes in (Claude Code's auto-accept vs approve-each-edit
+// choice); a rejection passes `plan` so the agent stays put and revises.
+const decidePlan = (message: ChatMessage, approve: boolean, nextMode: PermissionMode, feedback?: string): Promise<void> =>
+    active.value.decidePlan(message, approve, nextMode, feedback);
 
 const answerQuestion = (message: ChatMessage, answers: Record<string, string[]>): Promise<void> => active.value.answerQuestion(message, answers);
 
-const cancelQuestion = (message: ChatMessage): void => {
-    active.value.cancelQuestion(message);
-};
+const cancelQuestion = (message: ChatMessage): Promise<void> => active.value.cancelQuestion(message);
+
+const decidePermission = (message: ChatMessage, decision: "once" | "always" | "deny", feedback?: string): Promise<void> =>
+    active.value.decidePermission(message, decision, feedback);
 
 // --- History ----------------------------------------------------------------------------------
 // Refresh the history list from the sandbox's session store (call when opening the history menu). A query
@@ -1153,6 +1157,7 @@ export function useChat() {
         openPlanPreview,
         answerQuestion,
         cancelQuestion,
+        decidePermission,
         loadSessions,
         openConversation,
         openAccountManage,

@@ -54,7 +54,7 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
 
 // Attention first, then running + fresh drafts, then most recently active.
 const weight = (entry: FleetAgent): number =>
-    entry.attention.plan || entry.attention.question || entry.attention.conflict || entry.status === `error`
+    entry.attention.plan || entry.attention.question || entry.attention.permission || entry.attention.conflict || entry.status === `error`
         ? 0
         : entry.status === `running` || entry.status === `awaiting` || entry.status === `draft`
           ? 1
@@ -74,7 +74,7 @@ const fleet = computed<FleetAgent[]>(() => {
                 provider: conversation.provider.value,
                 harness: conversation.harness.value,
                 updatedAt: 0,
-                attention: { plan: false, question: false, conflict: false },
+                attention: { plan: false, question: false, permission: false, conflict: false },
                 open: true,
                 unread: false,
             };
@@ -98,7 +98,13 @@ const fleet = computed<FleetAgent[]>(() => {
 const attention = computed(
     () =>
         fleet.value.filter(
-            (agent) => agent.attention.plan || agent.attention.question || agent.attention.conflict || agent.status === `error` || agent.unread,
+            (agent) =>
+                agent.attention.plan ||
+                agent.attention.question ||
+                agent.attention.permission ||
+                agent.attention.conflict ||
+                agent.status === `error` ||
+                agent.unread,
         ).length,
 );
 
@@ -107,7 +113,7 @@ const attention = computed(
 // follow-up message animates the card straight back to active. Unread stays a card badge, not a promotion.
 export type FleetLane = "attention" | "active" | "finished";
 export const laneOf = (agent: Pick<FleetAgent, "status" | "attention">): FleetLane => {
-    if (agent.attention.plan || agent.attention.question || agent.attention.conflict) {
+    if (agent.attention.plan || agent.attention.question || agent.attention.permission || agent.attention.conflict) {
         return `attention`;
     }
     if (agent.status === `awaiting` || agent.status === `conflict` || agent.status === `error`) {
