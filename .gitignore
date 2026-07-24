@@ -32,6 +32,9 @@ _archive/**/gen
 Thumbs.db
 .idea/
 
+# Claude Code per-user local settings — never shared across devs.
+/.claude/settings.local.json
+
 # intentic dogfood / demo (local only)
 /.intentic
 /intent
