@@ -31,6 +31,31 @@ export interface LandingContrastColumn {
     points: string[];
 }
 
+/** One system the sandbox connects to — a node in the integrations hub-and-spoke. */
+export interface IntegrationNode {
+    name: string;
+    category: string;
+    /** A key in Landing.astro's brandLogos map: a simple-icons slug, or an in-house glyph (ssh/mcp). */
+    logo: string;
+}
+
+/** One message in the "talk to it like a teammate" chat mock. */
+export interface ChatMessage {
+    author: string;
+    text: string;
+    time: string;
+    /** Renders the AGENT badge + tinted bubble — the specialized agent replying in-thread. */
+    agent?: boolean;
+}
+
+/** One participant in the shared-sandbox diagram — the owner, or an invited teammate. */
+export interface SharingPerson {
+    name: string;
+    role: string;
+    access: string;
+    owner?: boolean;
+}
+
 export interface LandingContent {
     meta: { title: string; description: string };
     hero: {
@@ -41,8 +66,16 @@ export interface LandingContent {
     };
     contrast: LandingSectionIntro & { prompt: LandingContrastColumn; agent: LandingContrastColumn };
     anatomy: LandingSectionIntro & { pillars: LandingFact[] };
+    // The sandbox-container figure: an agent on a machine you own, its tools installed and context loaded.
+    sandbox: LandingSectionIntro & { boundary: string; agent: { name: string; role: string }; layers: AgentSpecRow[] };
+    // The integrations hub-and-spoke: the sandbox at center, the systems it operates around it.
+    integrations: LandingSectionIntro & { hubLabel: string; hubSub: string; nodes: IntegrationNode[]; note: string };
     workforce: LandingSectionIntro & { moments: LandingFact[] };
+    // The conversation mock: assign work to the agent in Discord and it replies like a colleague.
+    teammate: LandingSectionIntro & { surface: string; thread: ChatMessage[]; note: string };
     ownership: LandingSectionIntro & { facts: LandingFact[] };
+    // The sharing diagram: an owner configures one sandbox; invited teammates share it over their own tunnels.
+    sharing: LandingSectionIntro & { people: SharingPerson[]; sandboxLabel: string; sandboxSub: string; note: string };
     economics: LandingSectionIntro & { accounts: { name: string; detail: string }[]; points: string[] };
     connect: LandingSectionIntro & { steps: LandingFact[]; commandNote: string };
     finalCta: { heading: string; sub: string };
@@ -124,6 +157,35 @@ export const landingContent: LandingContent = {
             },
         ],
     },
+    sandbox: {
+        eyebrow: "Inside a sandbox",
+        heading: "One agent, one machine, its tools really installed.",
+        sub: "A specialized agent isn't a chat window — it's a container on hardware you own. The toolchain the job needs is baked into the image and genuinely runnable, and the context that makes the work yours loads on every turn.",
+        boundary: "your machine · reached from your browser over a private tunnel",
+        agent: { name: "release-captain", role: "owns the weekly release" },
+        layers: [
+            { label: "Environment · installed", items: ["node 24", "pnpm", "docker", "psql"] },
+            { label: "Context · loaded every turn", items: ["6 skills", "release runbook", "house style"] },
+        ],
+    },
+    integrations: {
+        eyebrow: "Connected",
+        heading: "Wired into the systems you already run.",
+        sub: "Add what the role actually touches as capabilities — code, data, chat, docs, servers — a click each. The credential is stored inside the sandbox and never shown back to you; the agent operates the service from chat.",
+        hubLabel: "your sandbox",
+        hubSub: "keys stay inside",
+        nodes: [
+            { name: "GitHub", category: "Code & issues", logo: "github" },
+            { name: "PostgreSQL", category: "Data", logo: "postgresql" },
+            { name: "Sentry", category: "Observability", logo: "sentry" },
+            { name: "Discord", category: "Communication", logo: "discord" },
+            { name: "Outline", category: "Knowledge base", logo: "outline" },
+            { name: "SSH hosts", category: "Servers", logo: "ssh" },
+            { name: "Stripe", category: "Payments", logo: "stripe" },
+            { name: "MCP", category: "Any tool", logo: "mcp" },
+        ],
+        note: "…plus any MCP server, Claude Code plugin, or self-hosted service — the catalog is open-ended, not a fixed list.",
+    },
     workforce: {
         eyebrow: "Workforce",
         heading: "One agent, or a team that works while you don't.",
@@ -143,6 +205,29 @@ export const landingContent: LandingContent = {
             },
         ],
     },
+    teammate: {
+        eyebrow: "In your tools",
+        heading: "Talk to it like a teammate, where your team already works.",
+        sub: "A specialized agent doesn't only answer behind a chat window here. Invite it into Discord and it reads and sends messages like any colleague — you assign the work, it does it, and it reports back with the receipts.",
+        surface: "#releases",
+        thread: [
+            { author: "Dana", time: "9:41", text: "@release-captain ship 2.4 once CI is green, and drop the changelog in #announcements 🙏" },
+            {
+                author: "release-captain",
+                agent: true,
+                time: "9:41",
+                text: "On it. Watching the pipeline — I'll tag the release, draft the changelog from the merged PRs, and post it the second it's green.",
+            },
+            {
+                author: "release-captain",
+                agent: true,
+                time: "9:58",
+                text: "✓ Tagged v2.4.0 · changelog posted in #announcements · deploy is live. 3 PRs shipped, no failures.",
+            },
+            { author: "Dana", time: "9:59", text: "🎉 thanks!" },
+        ],
+        note: "Reachable today in Discord and through an embeddable web-chat widget for your own site — the agent reads and sends messages itself, every credential staying inside its sandbox.",
+    },
     ownership: {
         eyebrow: "Ownership",
         heading: "Real access is only safe if you own where it runs.",
@@ -161,6 +246,19 @@ export const landingContent: LandingContent = {
                 body: "Your browser holds the token that commands the sandbox — the platform never does. A breach reads a URL and reaches nothing. The engine is MIT on GitLab; verify it.",
             },
         ],
+    },
+    sharing: {
+        eyebrow: "Shared, safely",
+        heading: "Invite your team into the same specialized sandbox.",
+        sub: "One agent, many people. The owner installs the tools and connects the systems; invited teammates share the very same sandbox — each reaching it from their own browser over their own private tunnel.",
+        people: [
+            { name: "You", role: "Owner", access: "installs tools · connects systems · full control", owner: true },
+            { name: "Sam", role: "Teammate", access: "chats, drives & reviews · mirrors ports" },
+            { name: "Ada", role: "Teammate", access: "chats, drives & reviews · mirrors ports" },
+        ],
+        sandboxLabel: "one specialized sandbox",
+        sandboxSub: "release-captain · on the owner's machine",
+        note: "Setup stays owner-gated and credentials never leave the box. Invite by email; sharing is a Pro feature — revoking or leaving never is.",
     },
     economics: {
         eyebrow: "Economics",

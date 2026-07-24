@@ -375,9 +375,40 @@
     .animate-fade-in-up {
         animation: none;
     }
-    .orb {
+    .orb,
+    .hub-spoke {
         animation: none;
     }
+}
+
+/* ── Integrations hub ────────────────────────────────── */
+.hub-spoke {
+    stroke: color-mix(in srgb, var(--color-primary-500) 32%, transparent);
+    stroke-width: 1.25;
+    stroke-dasharray: 3 5;
+    animation: hub-flow 1.5s linear infinite;
+}
+@keyframes hub-flow {
+    to {
+        stroke-dashoffset: -8;
+    }
+}
+.hub-logo {
+    color: var(--color-muted);
+    transition:
+        color 0.2s ease,
+        border-color 0.2s ease,
+        background-color 0.2s ease,
+        transform 0.2s ease;
+}
+.hub-node:hover .hub-logo {
+    color: var(--color-content);
+    border-color: var(--color-line-strong);
+    background: var(--color-overlay);
+    transform: translateY(-2px);
+}
+.hub-node:hover .hub-name {
+    color: var(--color-content);
 }
 
 /* ── Hero floating orbs ──────────────────────────────── */
