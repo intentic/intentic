@@ -45,6 +45,8 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
 const botGlyph = icon('<rect x="5" y="8.5" width="14" height="10.5" rx="2"/><path d="M12 8.5V5M12 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M9.5 13v1.5M14.5 13v1.5"/>');
 const lockGlyph = icon('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>');
 const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
+// The hero pipeline's middle card labels each equipment row: environment / connected / context.
+const heroRowIcons = [anatomyIcons[1], anatomyIcons[2], anatomyIcons[3]];
 
 // Integrations-hub logos. Brand paths are verbatim simple-icons (CC0) — invisible-on-dark brands render
 // monochrome, so no per-brand colour fitting; ssh/mcp are in-house stroke glyphs in the site's line motif.
@@ -157,39 +159,73 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                     </ul>
                 </div>
 
-                <!-- Specialized-agent card: an agent as a configured worker, not a chat window -->
+                <!-- How it works, in one glance: a task → a specialized agent (its own equipped sandbox) → the whole job shipped -->
                 <div class="animate-fade-in-up" style="animation-delay: 60ms">
-                    <div class="card overflow-hidden shadow-2xl shadow-black/40">
-                        <div class="flex items-center justify-between border-b border-line px-4 py-2.5">
-                            <div class="flex items-center gap-2">
-                                <span class="h-2 w-2 rounded-full bg-success"></span>
-                                <span class="font-mono text-xs text-content">{content.hero.spec.name}</span>
-                            </div>
-                            <span class="text-2xs text-subtle">{content.hero.spec.role}</span>
+                    <div class="relative mx-auto max-w-md">
+                        <!-- Stage 1 · the task you hand it -->
+                        <div class="card bg-card/70 p-3.5 shadow-lg shadow-black/20">
+                            <div class="eyebrow mb-1.5">You hand it a task</div>
+                            <p class="text-sm leading-relaxed text-content">{content.hero.spec.task}</p>
                         </div>
-                        <div class="space-y-3.5 p-4">
-                            {
-                                content.hero.spec.rows.map((row) => (
-                                    <div class="flex flex-col gap-1.5">
-                                        <div class="eyebrow">{row.label}</div>
-                                        <div class="flex flex-wrap gap-1.5">
-                                            {row.items.map((item) => (
-                                                <span class="rounded-md border border-line bg-overlay/50 px-2 py-0.5 font-mono text-2xs text-muted">
-                                                    {item}
-                                                </span>
-                                            ))}
+
+                        <svg class="mx-auto text-subtle" width="22" height="34" viewBox="0 0 22 34" fill="none" aria-hidden="true">
+                            <line x1="11" y1="2" x2="11" y2="23" class="hero-flow-line" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2.5 4" />
+                            <path d="M6 21.5 11 28l5-6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+
+                        <!-- Stage 2 · the specialized agent — its own equipped sandbox (the centerpiece) -->
+                        <div class="card border-primary-600/30 bg-primary-600/[0.04] p-4 shadow-2xl shadow-black/50">
+                            <div class="flex items-center justify-between border-b border-line pb-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="h-2 w-2 rounded-full bg-success"></span>
+                                    <span class="font-mono text-sm text-content">{content.hero.spec.name}</span>
+                                </div>
+                                <span class="text-2xs text-subtle">{content.hero.spec.role}</span>
+                            </div>
+                            <div class="mt-3.5 space-y-3">
+                                {
+                                    content.hero.spec.rows.map((row, i) => (
+                                        <div class="flex items-start gap-2.5">
+                                            <span class="mt-0.5 shrink-0 text-link [&>svg]:h-4 [&>svg]:w-4">
+                                                <Fragment set:html={heroRowIcons[i]} />
+                                            </span>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="eyebrow">{row.label}</div>
+                                                <div class="mt-1 flex flex-wrap gap-1.5">
+                                                    {row.items.map((item) => (
+                                                        <span class="rounded-md border border-line bg-canvas/60 px-2 py-0.5 font-mono text-2xs text-muted">{item}</span>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))
-                            }
-                            <div class="mt-1 border-t border-line pt-3.5">
-                                <div class="ml-auto max-w-[90%] rounded-lg bg-overlay px-3 py-2 text-xs text-content">
-                                    {content.hero.spec.task}
-                                </div>
-                                <div class="mt-3 flex items-center gap-2 text-2xs text-subtle">
-                                    <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-                                    {content.hero.spec.outcome}
-                                </div>
+                                    ))
+                                }
+                            </div>
+                            <div class="mt-3.5 flex items-center gap-2 border-t border-line pt-3 text-2xs text-subtle">
+                                <span class="shrink-0 text-link [&>svg]:h-3.5 [&>svg]:w-3.5"><Fragment set:html={factIcons[0]} /></span>
+                                on hardware you own · reached over a private tunnel
+                            </div>
+                        </div>
+
+                        <svg class="mx-auto text-subtle" width="22" height="34" viewBox="0 0 22 34" fill="none" aria-hidden="true">
+                            <line x1="11" y1="2" x2="11" y2="23" class="hero-flow-line" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2.5 4" />
+                            <path d="M6 21.5 11 28l5-6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+
+                        <!-- Stage 3 · the whole job shipped, as real artifacts -->
+                        <div class="card border-success/30 bg-success/[0.05] p-3.5">
+                            <div class="eyebrow mb-2 text-success">It does the whole job</div>
+                            <div class="flex flex-col gap-1.5">
+                                {
+                                    content.hero.spec.outcome.split(" · ").map((step) => (
+                                        <div class="flex items-center gap-2 text-sm text-content">
+                                            <span class="shrink-0 text-success [&>svg]:h-3.5 [&>svg]:w-3.5">
+                                                <Fragment set:html={checkIcon} />
+                                            </span>
+                                            {step}
+                                        </div>
+                                    ))
+                                }
                             </div>
                         </div>
                     </div>
@@ -330,7 +366,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
 
                 <!-- Radial hub (md+): the sandbox at the centre, its systems on the spokes -->
                 <div class="relative mx-auto mt-14 hidden h-[480px] w-full max-w-3xl overflow-visible md:block">
-                    <svg class="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                    <svg class="hub-spoke-layer absolute inset-0 z-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
                         {hubNodes.map((node) => <line x1="50" y1="50" x2={node.x} y2={node.y} class="hub-spoke" vector-effect="non-scaling-stroke" />)}
                     </svg>
 

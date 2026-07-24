@@ -376,12 +376,19 @@
         animation: none;
     }
     .orb,
-    .hub-spoke {
+    .hub-spoke,
+    .hero-flow-line {
         animation: none;
     }
 }
 
 /* ── Integrations hub ────────────────────────────────── */
+/* Punch a hole in the spoke layer over the centre hub (radius clears the 112px hub incl. corners), so no
+ * line ever overlaps it — stacking/compositing order then can't flicker the lines in front during scroll-in. */
+.hub-spoke-layer {
+    -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent 0, transparent 85px, #000 130px);
+    mask-image: radial-gradient(circle at 50% 50%, transparent 0, transparent 85px, #000 130px);
+}
 .hub-spoke {
     stroke: color-mix(in srgb, var(--color-primary-500) 32%, transparent);
     stroke-width: 1.25;
@@ -409,6 +416,12 @@
 }
 .hub-node:hover .hub-name {
     color: var(--color-content);
+}
+
+/* Hero pipeline — the dashed connector "flows" a task down through the stages. */
+.hero-flow-line {
+    stroke: color-mix(in srgb, var(--color-primary-500) 55%, transparent);
+    animation: hub-flow 1.4s linear infinite;
 }
 
 /* ── Hero floating orbs ──────────────────────────────── */
