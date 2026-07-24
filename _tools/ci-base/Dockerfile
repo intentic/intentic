@@ -19,11 +19,12 @@ FROM node:24.18.0-bookworm-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f106
 #   python3 make g++        the node-gyp toolchain: node-pty ships no linux prebuild, so `pnpm install` ALWAYS
 #                           compiles it from source (this is also why .pnpm-setup carries the gyp_main.py chmod)
 #   ripgrep                 the iq engine's lexical tier shells into `rg --json`, so the iq suites need it
+#   openssh-client          sandbox git access generates its ed25519 key with ssh-keygen, so that suite needs it
 #   docker-ce-cli + buildx  the images/release jobs drive the dind service and export a mode=max registry cache
 # The docker apt repo is added the same way _apps/sandbox/Dockerfile adds it; resolved once, here, instead of in
 # three jobs at runtime.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep \
+    && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod a+r /etc/apt/keyrings/docker.asc \
@@ -51,4 +52,5 @@ RUN corepack enable \
 
 # Fail the image build, not some pipeline three days later, if any of the baked tooling is missing.
 RUN node --version && pnpm --version && git --version && docker --version && docker buildx version \
-    && bun --version && rg --version && python3 --version && make --version | head -1 && g++ --version | head -1
+    && bun --version && rg --version && python3 --version && make --version | head -1 && g++ --version | head -1 \
+    && command -v ssh-keygen
