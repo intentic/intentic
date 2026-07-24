@@ -14,7 +14,7 @@ import { readPackageGraph } from "./package-graph.js";
 import { discoverRepos, isValidRepoName } from "./repo-discovery.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
-import { resolveWithin } from "./workspace-files.js";
+import { isControlPlanePath, resolveWithin } from "./workspace-files.js";
 
 // The full /work view + extra-repo cloning. The binary /workspace/raw preview is a plain Hono route in app.ts
 // (a streamed binary body doesn't fit oRPC). External MCP tools moved to the unified capabilities manifest.
@@ -26,6 +26,12 @@ export const createWorkspaceRoutes = (services: Services) => {
         const target = resolveWithin(services.workspace.root, relPath);
         if (target === undefined) {
             throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
+        }
+        // The daemon's credential + auth state is not reachable through the generic file API — read, write, move
+        // or delete (see isControlPlanePath). NOT_FOUND rather than FORBIDDEN: the file API simply has nothing
+        // there, and a distinct code would confirm what it holds.
+        if (isControlPlanePath(services.workspace.root, target)) {
+            throw new ORPCError("NOT_FOUND", { message: "not found" });
         }
         return target;
     };
@@ -86,8 +92,9 @@ export const createWorkspaceRoutes = (services: Services) => {
         // proposal into accepted moves via the move route below — nothing here mutates /work.
         classify: i.classify.handler(async () => classifyWorkspace(services.workspace.root, await services.workspaceTree(services.workspace.root))),
         // Direct file management over /work (byte writes go through POST /workspace/upload). Both endpoints of a
-        // move/copy are guarded, so neither source nor target can escape or touch a secret/`.git` path. Every
-        // mutation pings history so it lands as a user-authored snapshot (debounced per gesture).
+        // move/copy run through `contained`, so neither source nor target can escape /work or reach the daemon's
+        // control plane. Every mutation pings history so it lands as a user-authored snapshot (debounced per
+        // gesture).
         mkdir: i.mkdir.handler(async ({ input }) => {
             await services.files.mkdir(contained(input.path));
             services.history.notifyUserWrite();

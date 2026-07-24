@@ -41,8 +41,15 @@ const toCatalog = (ids: string[]): { models: { id: string; label: string }[]; de
     default: ids[0]!,
 });
 
+// How long `opencode serve` gets to print its listening line. The SDK defaults to 5s, which a cold spawn misses
+// on a loaded host: the binary is ~175 MB of bun paged in from scratch while boot is also warming the search
+// index and starting the watchers (measured: 0.7s idle, 5–10s under that contention). Missing it is expensive —
+// the failed warmup pushes the CPU-heavy spawn onto the user's first Grok call, which is exactly what warming at
+// boot exists to avoid.
+const BOOT_TIMEOUT_MS = 60_000;
+
 export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fetch = fetch): OpenCodeService => {
-    let client: OpencodeClient | undefined;
+    let booting: Promise<OpencodeClient> | undefined;
     // xAI's catalog rarely changes, so cache it briefly: a grok turn AND every Claude turn's delegation note read
     // it, and each read is an api.x.ai round-trip. Only a real result (live discovery or recordModels) is cached —
     // the seed/persisted fallbacks stay uncached so a freshened token is retried on the next read. Cleared on
@@ -54,10 +61,7 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
     // The last-known-good catalog, persisted next to auth.json so it survives daemon restarts.
     const modelsPath = join(opencodeDir, "xai-models.json");
 
-    const ensure = async (): Promise<OpencodeClient> => {
-        if (client !== undefined) {
-            return client;
-        }
+    const boot = async (): Promise<OpencodeClient> => {
         // xAI's Responses API stores request/response server-side for 30 days by default (store: true in
         // @ai-sdk/xai) — opt every known model out via per-model options, the only seam OpenCode forwards to the
         // call. Config is fixed at server spawn, so a model first discovered later (the self-heal path) lacks the
@@ -71,6 +75,7 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
         let server: { url: string; close(): void };
         try {
             server = await createOpencodeServer({
+                timeout: BOOT_TIMEOUT_MS,
                 // No provider key — xAI auth is OAuth (stored by OpenCode). Run autonomously: the container IS the
                 // isolation boundary (same posture as Claude's bypassPermissions / Codex's danger-full-access).
                 config: {
@@ -85,8 +90,19 @@ export const createOpenCodeService = (xdgDataHome: string, fetchImpl: typeof fet
                 process.env["XDG_DATA_HOME"] = previous;
             }
         }
-        client = createOpencodeClient({ baseUrl: server.url });
-        return client;
+        return createOpencodeClient({ baseUrl: server.url });
+    };
+
+    // Single-flight: memoize the in-flight boot, not just the finished client. `opencode serve` takes seconds and
+    // binds a fixed port, so a caller arriving mid-spawn (the first Grok connect racing the boot warmup) would
+    // start a rival server, and whichever loses the bind fails its caller. Cleared on rejection so a failed boot
+    // stays retryable.
+    const ensure = (): Promise<OpencodeClient> => {
+        booting ??= boot().catch((error: unknown) => {
+            booting = undefined;
+            throw error;
+        });
+        return booting;
     };
 
     // OpenCode's persisted Auth store — each provider keyed at the top level:

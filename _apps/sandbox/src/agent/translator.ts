@@ -6,18 +6,21 @@ import type { Config } from "../env.config.js";
 import type { Services } from "../composition.js";
 
 /* The bundled translator is CLIProxyAPI: a Go proxy that lets the Claude Code harness — which speaks only the
- * Anthropic Messages API — drive OpenAI (Codex) and xAI (Grok) models on the user's SUBSCRIPTION. CLIProxyAPI
- * holds each provider's subscription OAuth in its auth-dir and re-serves it behind an Anthropic-compatible
- * endpoint; a routed turn (streamAgent) points ANTHROPIC_BASE_URL at config.translator.url with
- * config.translator.token as the bearer, and the model id selects the upstream provider.
+ * Anthropic Messages API — drive OpenAI (Codex), xAI (Grok) and Google (Gemini) models on the user's
+ * SUBSCRIPTION. CLIProxyAPI holds each provider's subscription OAuth in its auth-dir and re-serves it behind an
+ * Anthropic-compatible endpoint; a routed turn (streamAgent) points ANTHROPIC_BASE_URL at config.translator.url
+ * with config.translator.token as the bearer, and the model id selects the upstream provider.
  *
  * The binary is baked into the sandbox image (see the Dockerfile). On a bare `tsx watch` dev run TRANSLATOR_URL
  * is empty and startTranslator is a no-op — routed turns then surface streamAgent's clean "no translator" error.
  * The config is static (port + auth-dir + the local bearer); accounts are added/removed at runtime through the
  * Management API (see createCliProxyClient), so no config reconverge/restart is needed on a connect. */
 
-// CLIProxyAPI's provider ids for the two routed providers (the app calls the second "grok"; CLIProxyAPI "xai").
-const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = { codex: "codex", grok: "xai" };
+// CLIProxyAPI's provider ids for the routed providers. Only `codex` matches ours: the app says "grok" where
+// CLIProxyAPI says "xai", and "gemini" where it says "antigravity" — Antigravity is Google's own agent product,
+// and its channel is the one CLIProxyAPI serves Gemini models on from a plain Google-account sign-in. The app
+// surfaces the model the user picks, not the Google product that vends it.
+const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = { codex: "codex", grok: "xai", gemini: "antigravity" };
 
 // The subscription-token store (survives sandbox rebuilds alongside the other AI-provider credentials).
 const cliProxyAuthDir = (authRoot: string): string => join(authRoot, "cliproxy");
@@ -82,14 +85,20 @@ export const startTranslator = (services: Services): void => {
     void start().catch((error: unknown) => logger.warn({ err: error }, "translator: initial start failed"));
 };
 
-// The CLIProxyAPI Management API client + device-login orchestration the /translator routes and the routed-turn
-// gate use. `accounts` reads the connected-subscription set; `connectGrok`/`connectCodex` start a device-code
-// login (the user opens a URL and enters a code — CLIProxyAPI polls to completion in the background and writes
-// the token to auth-dir, so the UI polls `accounts` until connected); `disconnect` clears a provider's tokens.
+// The CLIProxyAPI Management API client + login orchestration the /translator routes and the routed-turn gate
+// use. `accounts` reads the connected-subscription set; `connect` starts a provider's login and returns what the
+// card shows; `complete` finishes the one provider whose login can't self-complete (see below); `disconnect`
+// clears a provider's tokens.
+//
+// Codex and Grok are device-code logins: the user opens a URL and enters the code, and CLIProxyAPI polls to
+// completion in the background and writes the token to auth-dir, so the UI polls `accounts` until connected and
+// never calls `complete`. Google's is a browser redirect to a loopback port that only exists inside this
+// container, so nothing can observe the grant — the user pastes the URL they landed on and `complete` hands it
+// back to CLIProxyAPI, which then finishes the exchange on its own and the UI polls `accounts` the same way.
 export interface CliProxyClient {
     readonly accounts: () => Promise<Record<KeyedProvider, boolean>>;
-    readonly connectGrok: () => Promise<{ url: string; code: string }>;
-    readonly connectCodex: () => Promise<{ url: string; code: string }>;
+    readonly connect: (provider: KeyedProvider) => Promise<{ url: string; code: string; state: string }>;
+    readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider) => Promise<void>;
 }
 
@@ -109,16 +118,48 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
     // Grok: CLIProxyAPI's xAI login is a device-code flow (headless-friendly) exposed over the Management API. It
     // returns the verification URL (with the code pre-filled) + user code and auto-polls to completion in the
     // background; the UI polls `accounts` until connected.
-    const connectGrok = async (): Promise<{ url: string; code: string }> => {
+    const connectGrok = async (): Promise<{ url: string; code: string; state: string }> => {
         const response = await fetch(`${managementUrl}/xai-auth-url`, { headers: auth });
         if (!response.ok) {
             throw new Error(`xAI subscription login failed to start (${response.status})`);
         }
-        const body = (await response.json()) as { url?: string; user_code?: string };
+        const body = (await response.json()) as { url?: string; user_code?: string; state?: string };
         if (body.url === undefined) {
             throw new Error("xAI subscription login returned no verification URL");
         }
-        return { url: body.url, code: body.user_code ?? "" };
+        return { url: body.url, code: body.user_code ?? "", state: body.state ?? "" };
+    };
+
+    // Gemini: CLIProxyAPI's Antigravity login is Google's ordinary browser OAuth — it hands back an authorize URL
+    // and a `state`, then waits for the grant to land in its auth-dir. Google redirects to a loopback port bound
+    // inside THIS container, which the user's browser can never reach, so the redirect always dead-ends in their
+    // address bar; that URL carries the grant, and `complete` below posts it back. No device-code flow exists for
+    // Google, so the empty `code` is what tells the card to ask for a paste instead of showing a code.
+    const connectGemini = async (): Promise<{ url: string; code: string; state: string }> => {
+        const response = await fetch(`${managementUrl}/antigravity-auth-url`, { headers: auth });
+        if (!response.ok) {
+            throw new Error(`Google sign-in failed to start (${response.status})`);
+        }
+        const body = (await response.json()) as { url?: string; state?: string };
+        if (body.url === undefined || body.state === undefined || body.state === "") {
+            throw new Error("Google sign-in returned no authorization URL");
+        }
+        return { url: body.url, code: "", state: body.state };
+    };
+
+    // Hand a pasted redirect URL back to CLIProxyAPI, which parses ?code=&state= out of it, matches it to the
+    // pending session and resumes the token exchange in the background. Its rejections are the ones worth
+    // reading (an expired handshake, a state that belongs to a different login), so surface its own message.
+    const complete = async (input: { provider: KeyedProvider; redirectUrl: string; state: string }): Promise<void> => {
+        const response = await fetch(`${managementUrl}/oauth-callback`, {
+            method: "POST",
+            headers: { ...auth, "content-type": "application/json" },
+            body: JSON.stringify({ provider: CLIPROXY_PROVIDER[input.provider], redirect_url: input.redirectUrl, state: input.state }),
+        });
+        if (!response.ok) {
+            const reason = ((await response.json().catch(() => undefined)) as { error?: string } | undefined)?.error;
+            throw new Error(reason ?? `Sign-in could not be completed (${response.status})`);
+        }
     };
 
     // Codex: CLIProxyAPI's Management API Codex login is a browser-redirect flow (loopback callback) that can't
@@ -126,7 +167,7 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
     // so drive that as a subprocess: parse the URL + code it prints, surface them, and leave it running to poll to
     // completion (writing the token to auth-dir). A superseding connect kills the prior child.
     let codexChild: ChildProcess | undefined;
-    const connectCodex = (): Promise<{ url: string; code: string }> =>
+    const connectCodex = (): Promise<{ url: string; code: string; state: string }> =>
         new Promise((resolve, reject) => {
             codexChild?.kill("SIGTERM");
             const child = spawn("cli-proxy-api", ["--codex-device-login", "--no-browser", "--config", configPath], {
@@ -144,7 +185,8 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
                 code = buffer.match(/Codex device code:\s*(\S+)/)?.[1] ?? code;
                 if (!settled && url !== undefined && code !== undefined) {
                     settled = true;
-                    resolve({ url, code });
+                    // The subprocess owns the poll to completion, so there is no handshake for the UI to resume.
+                    resolve({ url, code, state: "" });
                 }
             };
             child.stdout?.on("data", onData);
@@ -184,10 +226,14 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
     return {
         accounts: async () => {
             const providers = new Set((await listFiles()).map((file) => file.provider));
-            return { codex: providers.has(CLIPROXY_PROVIDER.codex), grok: providers.has(CLIPROXY_PROVIDER.grok) };
+            return {
+                codex: providers.has(CLIPROXY_PROVIDER.codex),
+                grok: providers.has(CLIPROXY_PROVIDER.grok),
+                gemini: providers.has(CLIPROXY_PROVIDER.gemini),
+            };
         },
-        connectGrok,
-        connectCodex,
+        connect: (provider) => (provider === "grok" ? connectGrok() : provider === "gemini" ? connectGemini() : connectCodex()),
+        complete,
         disconnect,
     };
 };

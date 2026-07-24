@@ -15,8 +15,8 @@ import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 
 /* The Sandbox hub's "Agent" tab — the home for everything about the AI the sandbox runs. The AI provider
- * accounts (Claude / ChatGPT / Grok) it authenticates as — each provider's native-harness account plus, for
- * codex/grok, the "Under Claude Code" subscription the translator serves them on — its behavior settings, and
+ * accounts (Claude / ChatGPT / Grok / Kimi / Gemini) it authenticates as — each provider's native-harness
+ * account plus, for codex/grok/gemini, the subscription the translator serves them on — its behavior settings, and
  * the import-memory tool. Accounts and memory live INSIDE the sandbox, never on the platform, which is why this
  * is a sandbox tab. Both connection surfaces reuse useChat's shared state/handshakes unchanged; opening the tab
  * loads usage and preps the provider (openAccountManage); closing it just hides the card (closeAccountManage) —
@@ -43,6 +43,7 @@ const {
     translatorConnectFlow,
     translatorBusy,
     connectTranslator,
+    completeTranslator,
     disconnectTranslator,
 } = useChat();
 
@@ -81,7 +82,7 @@ onUnmounted(closeAccountManage);
 // Grok's own harness; the subscription runs Grok models UNDER the Claude Code harness). Claude has no row: it
 // IS the Claude Code harness.
 const routedProvider = computed<KeyedProvider | undefined>(() =>
-    managedProvider.value === `codex` || managedProvider.value === `grok` ? managedProvider.value : undefined,
+    managedProvider.value === `codex` || managedProvider.value === `grok` || managedProvider.value === `gemini` ? managedProvider.value : undefined,
 );
 const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; loginHint: string }> = {
     codex: {
@@ -94,6 +95,21 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; loginHint
         hint: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription — a separate sign-in from the account above.`,
         loginHint: `Open x.ai with your SuperGrok / X Premium account and enter this code.`,
     },
+    gemini: {
+        title: `Google account`,
+        hint: `Runs Gemini models under the Claude Code harness on your Google account — the one connection Gemini needs.`,
+        loginHint: `Open Google and sign in. The page it sends you to won't load — that's expected, it points back inside the sandbox. Copy the whole address from your browser's address bar and paste it below.`,
+    },
+};
+
+// The pasted redirect URL for a routed login that can't self-complete (Google's — see completeTranslator).
+const redirectUrl = ref(``);
+const finishTranslator = async (): Promise<void> => {
+    if (redirectUrl.value.trim().length === 0) {
+        return;
+    }
+    await completeTranslator(redirectUrl.value);
+    redirectUrl.value = ``;
 };
 
 // Compact "142k" token count and a short usage summary line per account (from /system/usage).
@@ -333,9 +349,9 @@ const importMemory = async (): Promise<void> => {
 
             <p v-if="chatError" class="text-2xs text-danger">{{ chatError }}</p>
 
-            <!-- Native accounts (Claude, Grok). ChatGPT/Codex has no native account — it connects only through the
-                 subscription row below — so its whole native section is hidden. -->
-            <template v-if="managedProvider !== `codex`">
+            <!-- Native accounts (Claude, Grok, Kimi). ChatGPT/Codex and Gemini have no native account — both
+                 connect only through the subscription row below — so their whole native section is hidden. -->
+            <template v-if="managedProvider !== `codex` && managedProvider !== `gemini`">
                 <!-- Connected accounts for the managed provider; each can be disconnected independently. -->
                 <ul v-if="managedAccounts.length > 0" class="flex flex-col gap-1">
                     <li
@@ -437,10 +453,11 @@ const importMemory = async (): Promise<void> => {
                 </div>
             </template>
 
-            <!-- The subscription connection (translator). ChatGPT/Codex: the ONE connection, so it's the card's
-                 primary control. Grok: a secondary row beneath the native account, for running Grok UNDER the
-                 Claude Code harness. A device-code login; the translator connects on its own and the shared poll
-                 flips the row to "connected". -->
+            <!-- The subscription connection (translator). ChatGPT/Codex and Gemini: the ONE connection, so it's
+                 the card's primary control. Grok: a secondary row beneath the native account, for running Grok
+                 UNDER the Claude Code harness. Codex/Grok mint a one-time code and the translator connects on its
+                 own; Google redirects instead, so that flow asks for the landing URL back. Either way the shared
+                 poll flips the row to "connected". -->
             <div v-if="routedProvider" class="flex flex-col gap-1.5" :class="routedProvider === `grok` ? 'border-t border-line pt-2' : ''">
                 <div class="flex items-start justify-between gap-2">
                     <span class="flex min-w-0 flex-col gap-0.5">
@@ -479,7 +496,9 @@ const importMemory = async (): Promise<void> => {
                     class="flex flex-col gap-2 rounded-md border border-line bg-card p-2"
                 >
                     <p class="text-2xs text-subtle">{{ ROUTED_ROW[routedProvider].loginHint }}</p>
-                    <div class="flex flex-col items-center gap-1">
+                    <!-- A one-time code means the provider polls itself; no code means it redirects, and the
+                         landing URL carries the grant the sandbox never received. -->
+                    <div v-if="translatorConnectFlow.code" class="flex flex-col items-center gap-1">
                         <span class="text-2xs text-subtle">Your one-time code</span>
                         <span class="font-mono text-lg font-semibold tracking-[0.2em] text-content">{{ translatorConnectFlow.code }}</span>
                         <CopyButton :text="translatorConnectFlow.code" label="Copy" />
@@ -497,6 +516,22 @@ const importMemory = async (): Promise<void> => {
                             <template #icon><Icon name="external-link" /></template>
                         </Button>
                         <span class="text-2xs text-subtle"><Icon name="spinner" class="mr-1" spin />Waiting for you to finish signing in…</span>
+                    </div>
+                    <div v-if="!translatorConnectFlow.code" class="flex items-center gap-2">
+                        <input
+                            v-model="redirectUrl"
+                            type="text"
+                            class="min-w-0 flex-1 rounded-md border border-line bg-input px-2 py-1 text-2xs text-content"
+                            placeholder="Paste the address you landed on…"
+                            @keyup.enter="finishTranslator"
+                        />
+                        <Button
+                            label="Finish"
+                            size="small"
+                            :disabled="redirectUrl.trim().length === 0"
+                            :loading="translatorBusy === routedProvider"
+                            @click="finishTranslator"
+                        />
                     </div>
                 </div>
             </div>

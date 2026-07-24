@@ -388,7 +388,7 @@ export const createGrokAgent = (runner: GrokRunner) =>
     async function* runGrokAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
         const prompt = withFileNote(request.prompt, request.attachments ?? []);
         const turn =
-            request.plan === true
+            request.permissionMode === "plan"
                 ? runGrokPlanTurn({ ...request, prompt }, runner)
                 : streamTurn(
                       runner({

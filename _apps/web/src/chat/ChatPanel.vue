@@ -3,7 +3,7 @@ import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { providerLabel } from "@intentic/sandbox-contract";
+import { NATIVE_PROVIDERS, type NativeProvider, providerLabel } from "@intentic/sandbox-contract";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { type ChatAttachment, type ChatMessage, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
 import { formatReset, usageStatusFor, usageWindowLabel } from "../composables/chat/usageStatus";
@@ -87,7 +87,7 @@ const providerName = computed(() => providerLabel(provider.value));
 // blank) while Grok's daemon catalog is still loading.
 const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
 // An ACP provider owns its own model AND reasoning settings — no effort scale to offer (the segments hide).
-const nativeProvider = computed(() => provider.value === `claude` || provider.value === `codex` || provider.value === `grok`);
+const nativeProvider = computed(() => NATIVE_PROVIDERS.includes(provider.value as NativeProvider));
 const efforts = computed(() => (nativeProvider.value ? effortsFor(provider.value, model.value) : []));
 
 // The mobile pickers: pill taps open bottom sheets instead of anchored popovers.
@@ -350,10 +350,15 @@ const editorChipLabel = computed(() => {
     const name = target.file.split(`/`).pop() ?? target.file;
     return target.startLine !== undefined ? `${name}:${target.startLine}-${target.endLine}` : name;
 });
-// Whether the running turn accepts mid-turn steering: the Claude Code harness only (the claude provider, or
-// codex/grok routed under harness "claude-code") — mirrors the daemon's steerable gate.
+// Whether the running turn accepts mid-turn steering: the Claude Code harness only — the claude provider, kimi
+// and gemini (neither has a native runtime, so both always run on it), or codex/grok routed under harness
+// "claude-code". Mirrors the daemon's steerable gate in agent.routes.
 const steerable = computed(
-    () => provider.value === `claude` || ((provider.value === `codex` || provider.value === `grok`) && harness.value === `claude-code`),
+    () =>
+        provider.value === `claude` ||
+        provider.value === `kimi` ||
+        provider.value === `gemini` ||
+        ((provider.value === `codex` || provider.value === `grok`) && harness.value === `claude-code`),
 );
 
 // The composer Send is usable when there's text or a finished attachment and the turn state accepts it: idle

@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { createPlanRequest } from "./agent-requests.js";
+import { createRequest } from "./agent-requests.js";
 
 /* The always-plan flow for backends without a native ExitPlanMode hook (codex, grok, acp), emulated in two
  * phases: a read-only planning turn whose captured text becomes the `plan` frame, then — once approved on the
@@ -40,8 +40,8 @@ export async function* runPlanEmulation(
             // so don't propose a plan built from partial output.
             return;
         }
-        const { id, wait } = createPlanRequest();
-        yield { kind: "plan", decisionId: id, text: capture.planText };
+        const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
+        yield { kind: "plan", requestId: id, text: capture.planText };
         const decision = await wait(signal);
         if (signal.aborted) {
             return;

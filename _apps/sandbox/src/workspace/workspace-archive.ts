@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { extract, type Headers } from "tar-stream";
-import { MAX_UPLOAD_BYTES, resolveWithin, setWorkspaceMtime, writeStreamCounted } from "./workspace-files.js";
+import { isControlPlanePath, MAX_UPLOAD_BYTES, resolveWithin, setWorkspaceMtime, writeStreamCounted } from "./workspace-files.js";
 
 // A tar entry whose path climbs out of /work — the route answers 400 (same as the single-file upload's escape
 // guard), aborting the whole extraction rather than writing a partial tree outside the workspace.
@@ -44,6 +44,13 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
         const target = resolveWithin(root, header.name);
         if (target === undefined) {
             throw new PathEscapeError();
+        }
+        // The daemon's credential + auth state is not writable through the generic upload (see
+        // isControlPlanePath). Skip the entry rather than abort the extraction: a drop that happens to carry one
+        // must not cost the other ten thousand files.
+        if (isControlPlanePath(root, target)) {
+            await drain(stream);
+            return;
         }
         if (header.type !== "file") {
             if (header.type === "directory") {

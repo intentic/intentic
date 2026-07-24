@@ -18,6 +18,7 @@ export const PROVIDERS: readonly { label: string; value: NativeProvider }[] = [
     { label: "Codex", value: "codex" },
     { label: "Grok", value: "grok" },
     { label: "Kimi Code", value: "kimi" },
+    { label: "Gemini", value: "gemini" },
 ];
 
 // An ACP provider's label is its capability's display name, which the web layers on top — the raw id is the
@@ -26,7 +27,8 @@ export const providerLabel = (provider: AgentProvider): string => PROVIDERS.find
 
 // The harness (agentic loop) a turn runs on, orthogonal to the provider. `native` = the provider's own runtime;
 // `claude-code` = the Claude Code loop for any provider (codex/grok then route through the translator). Only
-// surfaced for codex/grok — claude is always its own Claude Code loop. See AgentHarness in schemas.ts.
+// surfaced for codex/grok — claude is always its own Claude Code loop, and kimi/gemini have no native runtime
+// to switch to (both only exist under this harness). See AgentHarness in schemas.ts.
 export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
     { label: "Native", value: "native" },
     { label: "Claude Code", value: "claude-code" },
@@ -46,6 +48,6 @@ export const modelsFor = (provider: AgentProvider): CatalogOption[] => {
             { label: "Haiku", value: "haiku" },
         ];
     }
-    // Codex/Grok/Kimi (live catalog only) and ACP providers (the agent owns its model): nothing static to pick.
+    // Codex/Grok/Kimi/Gemini (live catalog only) and ACP providers (the agent owns its model): nothing static.
     return [];
 };

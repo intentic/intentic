@@ -17,11 +17,16 @@ const sanitizeTitle = (prompt: string): string | undefined => {
     return clean === "" ? undefined : clean;
 };
 
+// The frames that PARK a turn on the user. A frame of any other kind arriving while parked means the user
+// answered and the turn is executing again, which clears the attention flags.
+const PAUSE_KINDS = new Set<AgentEvent["kind"]>(["plan", "question", "permission"]);
+
 interface RuntimeState {
     running: boolean;
     awaiting: boolean;
     plan: boolean;
     question: boolean;
+    permission: boolean;
     errored: boolean;
     activity: { tool?: string; target?: string; todo?: string } | undefined;
     contextTokens: number | undefined;
@@ -41,6 +46,7 @@ const freshRuntime = (): RuntimeState => ({
     awaiting: false,
     plan: false,
     question: false,
+    permission: false,
     errored: false,
     activity: undefined,
     contextTokens: undefined,
@@ -126,7 +132,12 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             harness: entry.harness,
             branch: entry.branch,
             updatedAt: Math.max(entry.updatedAt, state?.lastAt ?? 0),
-            attention: { plan: state?.plan ?? false, question: state?.question ?? false, conflict: entry.status === "conflict" },
+            attention: {
+                plan: state?.plan ?? false,
+                question: state?.question ?? false,
+                permission: state?.permission ?? false,
+                conflict: entry.status === "conflict",
+            },
             ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}),
             ...(entry.title !== undefined ? { title: entry.title } : {}),
             ...(entry.model !== undefined ? { model: entry.model } : {}),
@@ -241,11 +252,12 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             const state = runtimeOf(id);
             state.lastAt = Date.now();
             // A frame after a pause means the user answered — the turn is executing again.
-            const resumed = state.awaiting && event.kind !== "plan" && event.kind !== "question";
+            const resumed = state.awaiting && !PAUSE_KINDS.has(event.kind);
             if (resumed) {
                 state.awaiting = false;
                 state.plan = false;
                 state.question = false;
+                state.permission = false;
             }
             switch (event.kind) {
                 case "session":
@@ -267,6 +279,10 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 case "question":
                     state.awaiting = true;
                     state.question = true;
+                    break;
+                case "permission":
+                    state.awaiting = true;
+                    state.permission = true;
                     break;
                 case "tool_call":
                     state.pendingToolUses += 1;
@@ -302,6 +318,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 state.awaiting = false;
                 state.plan = false;
                 state.question = false;
+                state.permission = false;
                 state.startedAt = undefined;
             }
             // Tolerates a missing runtime state: the manual land route finishes with an outcome outside any

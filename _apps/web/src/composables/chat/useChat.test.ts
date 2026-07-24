@@ -44,7 +44,7 @@ describe(`useChat provider reconciliation`, () => {
 
         // No native accounts anywhere; only the ChatGPT subscription is connected in the translator.
         sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ accounts: [] }) } as Response));
-        sandboxJsonMock.mockResolvedValue({ codex: true, grok: false });
+        sandboxJsonMock.mockResolvedValue({ codex: true, grok: false, gemini: false });
         await loadAccountStatus();
         await nextTick();
 
@@ -65,7 +65,7 @@ describe(`useChat provider reconciliation`, () => {
                 json: () => Promise.resolve({ accounts: path.startsWith(`/grok`) ? [{ id: `xai`, label: `Grok`, connectedAt: 0 }] : [] }),
             } as Response),
         );
-        sandboxJsonMock.mockResolvedValue({ codex: false, grok: false });
+        sandboxJsonMock.mockResolvedValue({ codex: false, grok: false, gemini: false });
         await loadAccountStatus();
         await nextTick();
 
@@ -75,7 +75,7 @@ describe(`useChat provider reconciliation`, () => {
         expect(chat.connected.value).toBe(false); // routed: only the translator subscription serves the turn
 
         // The subscription connects (via the Agent tab's "Under Claude Code" row) — the same gate opens.
-        sandboxJsonMock.mockResolvedValue({ codex: false, grok: true });
+        sandboxJsonMock.mockResolvedValue({ codex: false, grok: true, gemini: false });
         await loadAccountStatus();
         expect(chat.connected.value).toBe(true);
     });

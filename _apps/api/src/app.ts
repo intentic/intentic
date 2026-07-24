@@ -243,6 +243,12 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
                 try {
                     return await options.next();
                 } catch (error) {
+                    // A client that vanished mid-request leaves the node request stream aborted, so oRPC's input
+                    // decode throws `TypeError: Body is unusable` (node-server's fast path refuses a read on a
+                    // disturbed stream). It answers a 400 nobody is left to receive — not worth a log line.
+                    if (options.request.signal?.aborted === true) {
+                        throw error;
+                    }
                     // The per-request logger rides on the oRPC context (buildOrpcContext); fall back to root.
                     const log = (options.context as Partial<OrpcContext> | undefined)?.logger ?? logger;
                     logUnexpectedError(log, error);

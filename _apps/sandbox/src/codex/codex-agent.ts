@@ -315,7 +315,7 @@ export const createCodexAgent = (codexHome: string, runner: CodexRunner = defaul
         // specific was already streamed.
         const { images, others } = splitAttachments(request.attachments);
         const turn =
-            request.plan === true
+            request.permissionMode === "plan"
                 ? runCodexPlanTurn(request, runner, turnBase)
                 : streamTurn(
                       runner({

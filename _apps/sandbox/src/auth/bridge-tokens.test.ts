@@ -30,8 +30,7 @@ test("list echoes id/label/createdAt only; revoke takes effect immediately", asy
 
 test("bridgeScoped allows exactly the agent-conversation surface", () => {
     expect(bridgeScoped("POST", "/agent")).toBe(true);
-    expect(bridgeScoped("POST", "/agent/decision")).toBe(true);
-    expect(bridgeScoped("POST", "/agent/answer")).toBe(true);
+    expect(bridgeScoped("POST", "/agent/reply")).toBe(true);
     expect(bridgeScoped("GET", "/sessions")).toBe(true);
     expect(bridgeScoped("GET", "/sessions/abc")).toBe(true);
     expect(bridgeScoped("GET", "/workspace/search")).toBe(true);

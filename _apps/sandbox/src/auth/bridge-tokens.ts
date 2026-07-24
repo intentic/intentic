@@ -80,7 +80,7 @@ export const fileBridgeTokens = (path: string): BridgeTokens => {
 // capabilities, history restore…) stay owner-Google-only.
 export const bridgeScoped = (method: string, path: string): boolean => {
     if (method === "POST") {
-        return path === "/agent" || path === "/agent/decision" || path === "/agent/answer";
+        return path === "/agent" || path === "/agent/reply";
     }
     if (method === "GET") {
         return path === "/sessions" || path.startsWith("/sessions/") || path === "/workspace/search";

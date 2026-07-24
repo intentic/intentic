@@ -208,9 +208,9 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     },
     // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
     cliProxy: {
-        accounts: async () => ({ codex: false, grok: false }),
-        connectGrok: async () => ({ url: "", code: "" }),
-        connectCodex: async () => ({ url: "", code: "" }),
+        accounts: async () => ({ codex: false, grok: false, gemini: false }),
+        connect: async () => ({ url: "", code: "", state: "" }),
+        complete: async () => {},
         disconnect: async () => {},
     },
     codexHome: "/work/.intentic/codex",
@@ -218,6 +218,7 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     // Never-empty catalog fakes matching the daemon's contract, so a native turn always resolves a model.
     claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
     codexModels: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }), record: async () => {} },
+    geminiModels: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },
     history: fakeHistory(),
     agent: async function* () {
         yield { kind: "done" };
@@ -1065,9 +1066,9 @@ test("agent.run selects the Claude account named on the turn and forwards its to
 
 const withTranslator = { ...baseConfig, translator: { url: "http://127.0.0.1:8788", token: "local-bearer" } };
 const codexConnectedProxy = {
-    accounts: async () => ({ codex: true, grok: false }),
-    connectGrok: async () => ({ url: "", code: "" }),
-    connectCodex: async () => ({ url: "", code: "" }),
+    accounts: async () => ({ codex: true, grok: false, gemini: false }),
+    connect: async () => ({ url: "", code: "", state: "" }),
+    complete: async () => {},
     disconnect: async () => {},
 };
 
@@ -1107,6 +1108,86 @@ test("agent.run gates a Codex turn with no subscription and no api key as subscr
     );
     const events = await runAgentTurn(client, { prompt: "hi", agent: "codex" });
     expect(codexCalled).toBe(false);
+    expect(events.some((event) => event.kind === "error" && event.code === "subscription-required")).toBe(true);
+});
+
+// Gemini is routed-only: Google publishes no Anthropic-protocol endpoint and no Gemini runtime is baked, so a
+// Gemini turn is ALWAYS the Claude Code harness pointed at the translator — with no harness on the turn at all.
+test("agent.run serves a Gemini turn on the translator subscription, withholding the Claude OAuth token", async () => {
+    let seen: { baseUrl?: string; authToken?: string; model?: string; oauthToken?: string } | undefined;
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                cliProxy: {
+                    accounts: async () => ({ codex: false, grok: false, gemini: true }),
+                    connect: async () => ({ url: "", code: "", state: "" }),
+                    complete: async () => {},
+                    disconnect: async () => {},
+                },
+                agent: async function* (request) {
+                    seen = request;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini" });
+    expect(events.some((event) => event.kind === "error")).toBe(false);
+    expect(seen?.baseUrl).toBe("http://127.0.0.1:8788");
+    expect(seen?.authToken).toBe("local-bearer");
+    // No model on the turn ⇒ the live Gemini catalog's own default, never an empty id.
+    expect(seen?.model).toBe("gemini-pro-agent");
+    // Setting the endpoint is what structurally withholds the user's Anthropic subscription token.
+    expect(seen?.oauthToken).toBeUndefined();
+});
+
+test("agent.run keeps a pinned Gemini model the catalog still offers, and drops one it doesn't", async () => {
+    const models = ["gemini-pro-agent", "gemini-3-flash"];
+    const geminiConnected = {
+        accounts: async () => ({ codex: false, grok: false, gemini: true }),
+        connect: async () => ({ url: "", code: "", state: "" }),
+        complete: async () => {},
+        disconnect: async () => {},
+    };
+    const run = async (model: string): Promise<string | undefined> => {
+        let seen: { model?: string } | undefined;
+        const client = clientFor(
+            createApp(
+                services({
+                    config: withTranslator,
+                    cliProxy: geminiConnected,
+                    geminiModels: { models: async () => ({ models: models.map((id) => ({ id, label: id })), default: models[0]! }) },
+                    agent: async function* (request) {
+                        seen = request;
+                        yield { kind: "done" };
+                    },
+                }),
+            ),
+        );
+        await runAgentTurn(client, { prompt: "hi", agent: "gemini", model });
+        return seen?.model;
+    };
+    expect(await run("gemini-3-flash")).toBe("gemini-3-flash");
+    // A retired pick fails catalog membership and falls to the live default rather than 400ing upstream.
+    expect(await run("gemini-2.5-pro")).toBe("gemini-pro-agent");
+});
+
+test("agent.run gates a Gemini turn with no Google account connected as subscription-required", async () => {
+    let agentCalled = false;
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                agent: async function* () {
+                    agentCalled = true;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    const events = await runAgentTurn(client, { prompt: "hi", agent: "gemini" });
+    expect(agentCalled).toBe(false);
     expect(events.some((event) => event.kind === "error" && event.code === "subscription-required")).toBe(true);
 });
 
@@ -1422,12 +1503,12 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
         ),
     );
     await runAgentTurn(client, {
-            prompt: "and now?",
-            history: [
-                { role: "user", text: "what is 2+2?" },
-                { role: "assistant", text: "4" },
-            ],
-        });
+        prompt: "and now?",
+        history: [
+            { role: "user", text: "what is 2+2?" },
+            { role: "assistant", text: "4" },
+        ],
+    });
     expect(seen?.prompt).toContain("continues from another AI runtime");
     expect(seen?.prompt).toContain("User: what is 2+2?");
     expect(seen?.prompt).toContain("Assistant: 4");
@@ -1656,7 +1737,7 @@ test("git.writeFile writes a contained file and rejects a path escape", async ()
     expect(writes).toHaveLength(1);
 });
 
-test("git.changes aggregates dirty repos across root + roles + clones, skipping clean and broken ones", async () => {
+test("git.changes aggregates dirty repos across root + roles + clones, skipping clean ones and reporting broken ones", async () => {
     const workspace = tempWorkspace([{ name: "intent" }, { name: "shop" }]);
     const client = clientFor(
         createApp(
@@ -1677,8 +1758,13 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
             }),
         ),
     );
+    // A clean repo drops out; a broken one stays in the response carrying git's reason, so a repo left torn by a
+    // canceled upload is something the panel can show rather than a repo that silently vanished.
     expect(await client.git.changes()).toEqual({
-        repos: [{ repo: "root", branch: "main", changes: [{ path: "notes.md", status: "added" }] }],
+        repos: [
+            { repo: "root", branch: "main", changes: [{ path: "notes.md", status: "added" }] },
+            { repo: "shop", changes: [], error: "broken repo" },
+        ],
     });
 });
 
@@ -1865,6 +1951,50 @@ test("POST /workspace/upload streams any contained path to disk, 400s escape, 41
         }),
     );
     expect((await capped.request("/workspace/upload?path=app/huge.bin", { method: "POST", body })).status).toBe(413);
+});
+
+test("the daemon's control plane is unreachable through the generic file API; its feature subtrees are not", async () => {
+    const writes: string[] = [];
+    const app = createApp(
+        services({
+            files: fakeFiles({
+                writeStream: async (absPath) => {
+                    writes.push(absPath);
+                },
+                size: async () => 4,
+                readBytes: async () => Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+            }),
+        }),
+    );
+    const body = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+
+    // owner.json/members.json ARE the answer to "who may drive this sandbox" (re-read from disk per request), and
+    // the rest hold the agent providers' tokens — so a member could otherwise upload a new owner and take the
+    // sandbox, or read the owner's token back out. Answered as if nothing were there, and nothing is written.
+    const controlPlane = [
+        ".intentic/owner.json",
+        ".intentic/members.json",
+        ".intentic/capabilities.json",
+        ".intentic/claude.json",
+        ".intentic/claude/acc.json",
+        ".intentic/codex/acc/auth.json",
+        ".intentic/kimi/acc.json",
+        ".intentic/opencode/auth.json",
+    ];
+    for (const path of controlPlane) {
+        expect([path, (await app.request(`/workspace/upload?path=${path}`, { method: "POST", body })).status]).toEqual([path, 404]);
+        expect([path, (await app.request(`/workspace/raw?path=${path}`)).status]).toEqual([path, 404]);
+    }
+    expect(writes).toHaveLength(0);
+
+    // The root .intentic's other subtrees are ordinary workspace content driven through this very API — chat
+    // attachments and a directory's own UI — and a repo's nested .intentic is not the control plane at all.
+    const open = [".intentic/attachments/u1/pic.png", ".intentic/ui/index.html", "app/.intentic/owner.json"];
+    for (const path of open) {
+        expect([path, (await app.request(`/workspace/upload?path=${path}`, { method: "POST", body })).status]).toEqual([path, 200]);
+        expect([path, (await app.request(`/workspace/raw?path=${path}`)).status]).toEqual([path, 200]);
+    }
+    expect(writes).toEqual(open.map((path) => `/work/${path}`));
 });
 
 test("POST /workspace/upload with x-intentic-base-hash refuses a stale write and passes a matching one", async () => {

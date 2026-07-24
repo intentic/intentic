@@ -14,10 +14,13 @@ import {
     acpProviders,
     type ChatAttachment,
     type ChatMessage,
+    type CatalogLoadState,
     type ChatMode,
     type ChatRole,
     Conversation,
+    type ModelOption,
     type PendingAttachment,
+    perProvider,
     planParts,
     type PlanRequest,
     providerAccounts,
@@ -344,8 +347,14 @@ const attachments = computed<PendingAttachment[]>({
 });
 
 // Per-provider labels + the route prefix each provider's daemon routes live under.
-const providerLabel = (p: AgentProvider): string => (p === `codex` ? `ChatGPT` : p === `grok` ? `Grok` : p === `kimi` ? `Kimi Code` : `Claude`);
-const providerBase = (p: AgentProvider): string => (p === `codex` ? `/codex` : p === `grok` ? `/grok` : p === `kimi` ? `/kimi` : `/claude`);
+const providerLabel = (p: AgentProvider): string =>
+    p === `codex` ? `ChatGPT` : p === `grok` ? `Grok` : p === `kimi` ? `Kimi Code` : p === `gemini` ? `Gemini` : `Claude`;
+const providerBase = (p: AgentProvider): string =>
+    p === `codex` ? `/codex` : p === `grok` ? `/grok` : p === `kimi` ? `/kimi` : p === `gemini` ? `/gemini` : `/claude`;
+// Providers whose ONLY credential is the translator subscription: they have no native account handshake, so the
+// card shows the routed row alone and there is nothing for `startConnect` to arm. Grok is deliberately absent —
+// it has both a native xAI account and a routed subscription, and which one gates depends on the harness.
+const subscriptionOnly = (p: AgentProvider): p is "codex" | "gemini" => p === `codex` || p === `gemini`;
 
 // Which account the manage/connect card acts on — decoupled from the chat-turn provider so connecting or
 // disconnecting one account never mutates the active conversation's provider.
@@ -376,12 +385,13 @@ const setManagedProvider = (target: AgentProvider): void => {
         return;
     }
     managedProvider.value = target;
-    // Codex has no native account handshake — it connects through the translator subscription (connectTranslator),
-    // its own control in the card. And no up-front handshake when the active conversation runs this provider
-    // ROUTED (under the Claude Code harness): that too is the translator subscription. Otherwise, when the card is
-    // open on an account-less provider, prep the native handshake so the open-URL anchor is a real user gesture.
+    // Codex and Gemini have no native account handshake — both connect through the translator subscription
+    // (connectTranslator), its own control in the card. And no up-front handshake when the active conversation
+    // runs this provider ROUTED (under the Claude Code harness): that too is the translator subscription.
+    // Otherwise, when the card is open on an account-less provider, prep the native handshake so the open-URL
+    // anchor is a real user gesture.
     const routedActive = target === provider.value && target === `grok` && harness.value === `claude-code`;
-    if (accountManageOpen.value && target !== `codex` && accountsOf(target).length === 0 && !routedActive) {
+    if (accountManageOpen.value && !subscriptionOnly(target) && accountsOf(target).length === 0 && !routedActive) {
         void startConnect(); // startConnect drops any prior handshake first
         return;
     }
@@ -394,9 +404,11 @@ const setManagedProvider = (target: AgentProvider): void => {
 // account (each program owns and refreshes its own grant; a shared refresh token would rotate out from under
 // one of them). Held here rather than in SandboxAgent so the composer gate reads the same connection state the
 // Agent tab manages, and so a device-login poll survives that tab unmounting.
-const translatorAccounts = ref<TranslatorAccounts>({ codex: false, grok: false });
-// The in-flight device login (verification URL + one-time code) the Agent tab's "Under Claude Code" row shows.
-const translatorConnectFlow = ref<{ provider: KeyedProvider; url: string; code: string } | undefined>(undefined);
+const translatorAccounts = ref<TranslatorAccounts>({ codex: false, grok: false, gemini: false });
+// The in-flight subscription login the Agent tab's routed row shows. `code` is the one-time device code for the
+// providers that mint one; an EMPTY code means the provider redirects instead, so the row asks the user to paste
+// the URL they landed on and `completeTranslator` finishes it against `state`.
+const translatorConnectFlow = ref<{ provider: KeyedProvider; url: string; code: string; state: string } | undefined>(undefined);
 const translatorBusy = ref<KeyedProvider | undefined>(undefined);
 let translatorPollTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -408,14 +420,15 @@ const refreshTranslatorAccounts = async (): Promise<void> => {
     }
 };
 
-// CLIProxyAPI finishes the device login in the background (no paste-back), so poll the connection state until
-// the provider flips connected — bounded by the same deadline as the native device flows.
+// CLIProxyAPI finishes every routed login in the background — the device flows poll upstream on their own, and
+// a redirect flow resumes the moment `completeTranslator` hands it the pasted URL — so in both cases the UI just
+// polls the connection state until the provider flips connected, bounded by the native device flows' deadline.
 const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Promise<void> => {
     if (translatorConnectFlow.value?.provider !== target) {
         return;
     }
     if (Date.now() > deadline) {
-        error.value = `The ${target === `codex` ? `ChatGPT` : `SuperGrok`} sign-in expired — start the connection again.`;
+        error.value = `The ${target === `codex` ? `ChatGPT` : target === `grok` ? `SuperGrok` : `Google`} sign-in expired — start the connection again.`;
         translatorConnectFlow.value = undefined;
         return;
     }
@@ -431,9 +444,9 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
     translatorPollTimer = setTimeout(() => void pollTranslatorOnce(target, deadline), 3_000);
 };
 
-// Start a subscription device login for a routed provider: the daemon returns the verification URL + one-time
-// code, the user approves upstream, and the poll flips the row to connected. One flow at a time — a new
-// connect supersedes a prior one (mirroring the daemon, which kills a superseded login subprocess).
+// Start a subscription login for a routed provider: the daemon returns the sign-in URL and, for the providers
+// that mint one, a one-time code. The user approves upstream and the poll flips the row to connected. One flow
+// at a time — a new connect supersedes a prior one (mirroring the daemon, which kills a superseded subprocess).
 const connectTranslator = async (target: KeyedProvider): Promise<void> => {
     if (translatorBusy.value !== undefined) {
         return;
@@ -444,11 +457,36 @@ const connectTranslator = async (target: KeyedProvider): Promise<void> => {
     try {
         translatorConnectFlow.value = {
             provider: target,
-            ...(await sandboxJson<{ url: string; code: string }>(`/translator/${target}/connect`, { method: `POST` })),
+            ...(await sandboxJson<{ url: string; code: string; state: string }>(`/translator/${target}/connect`, { method: `POST` })),
         };
         translatorPollTimer = setTimeout(() => void pollTranslatorOnce(target, Date.now() + CODEX_POLL_DEADLINE_MS), 3_000);
     } catch (caught) {
         error.value = errorMessage(caught, `Could not start the subscription connection — is your sandbox online?`);
+    } finally {
+        translatorBusy.value = undefined;
+    }
+};
+
+// Finish a redirect login by handing the daemon the URL the provider sent the browser to. Google's sign-in ends
+// on a loopback address only the sandbox container binds, so the page never loads for the user — but the address
+// bar still carries the grant, which is what they paste here. The translator then resumes the exchange on its
+// own, so success just means "keep polling"; the row flips connected on the next poll.
+const completeTranslator = async (redirectUrl: string): Promise<void> => {
+    const flow = translatorConnectFlow.value;
+    if (flow === undefined) {
+        return;
+    }
+    translatorBusy.value = flow.provider;
+    error.value = null;
+    try {
+        await sandboxJson(`/translator/${flow.provider}/complete`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ provider: flow.provider, redirectUrl: redirectUrl.trim(), state: flow.state }),
+        });
+        await refreshTranslatorAccounts();
+    } catch (caught) {
+        error.value = errorMessage(caught, `That sign-in link could not be completed — copy the whole URL and try again.`);
     } finally {
         translatorBusy.value = undefined;
     }
@@ -480,17 +518,17 @@ const hasAccount = (target: AgentProvider): boolean => accountsOf(target).length
 // Code harness likewise rides the translator subscription. Everything else needs the provider's account; an ACP
 // provider is its own credential store — installed means chat-ready, so it never gates the composer.
 const chatReady = (target: AgentProvider, loop: AgentHarness): boolean => {
-    if (target === `codex`) {
-        return translatorAccounts.value.codex;
+    if (subscriptionOnly(target)) {
+        return translatorAccounts.value[target];
     }
     if (target === `grok` && loop === `claude-code`) {
         return translatorAccounts.value.grok;
     }
     return hasAccount(target) || acpProviders.value.some((agent) => agent.id === target);
 };
-// Whether a provider can serve a fresh conversation at all (for auto-repointing an account-less tab): Codex via
-// the subscription, the rest via a connected account.
-const providerConnectable = (target: AgentProvider): boolean => (target === `codex` ? translatorAccounts.value.codex : hasAccount(target));
+// Whether a provider can serve a fresh conversation at all (for auto-repointing an account-less tab): Codex and
+// Gemini via the subscription, the rest via a connected account.
+const providerConnectable = (target: AgentProvider): boolean => (subscriptionOnly(target) ? translatorAccounts.value[target] : hasAccount(target));
 const connected = computed(() => chatReady(provider.value, harness.value));
 const claudeConnected = computed(() => hasAccount(`claude`));
 
@@ -507,7 +545,7 @@ watch([providerAccounts, translatorAccounts], () => {
         ) {
             continue;
         }
-        const fallback = ([`claude`, `codex`, `grok`, `kimi`] as const).find((p) => providerConnectable(p));
+        const fallback = NATIVE_PROVIDERS.find((p) => providerConnectable(p));
         if (fallback) {
             conversation.selectProvider(fallback);
         }
@@ -676,17 +714,17 @@ export const resetChat = (): void => {
     convSeq = 1;
     conversations.value = restoreTabs();
     sessions.value = [];
-    providerAccounts.value = { claude: [], codex: [], grok: [], kimi: [] };
-    selectedAccountId.value = { claude: undefined, codex: undefined, grok: undefined, kimi: undefined };
-    providerModels.value = { claude: [], codex: [], grok: [], kimi: [] };
-    providerDefaultModel.value = { claude: ``, codex: ``, grok: ``, kimi: `` };
-    providerModelsState.value = { claude: `idle`, codex: `idle`, grok: `idle`, kimi: `idle` };
+    providerAccounts.value = perProvider<readonly OauthAccount[]>(() => []);
+    selectedAccountId.value = perProvider<string | undefined>(() => undefined);
+    providerModels.value = perProvider<ModelOption[]>(() => []);
+    providerDefaultModel.value = perProvider(() => ``);
+    providerModelsState.value = perProvider<CatalogLoadState>(() => `idle`);
     managedProvider.value = turnDefaults.provider.value;
     cancelConnect();
     clearTimeout(translatorPollTimer);
     translatorConnectFlow.value = undefined;
     translatorBusy.value = undefined;
-    translatorAccounts.value = { codex: false, grok: false };
+    translatorAccounts.value = { codex: false, grok: false, gemini: false };
     error.value = null;
     accountManageOpen.value = false;
 };
@@ -963,10 +1001,11 @@ const closeAccountManage = (): void => {
 // Reflects the server's view of provider connections so the UI shows the right control on load and when the
 // user switches provider. Module-exported (like resetChat) for sandboxScope, which re-runs it whenever the
 // active daemon becomes reachable — connections live on the daemon, so reachability is the moment the status
-// can actually be read. Codex has no account list (it rides the translator subscription, loaded below).
+// can actually be read. Codex and Gemini have no account list (both ride a translator subscription, loaded
+// below), so only the providers with a sandbox-owned credential store are listed here.
 export const loadAccountStatus = async (): Promise<void> => {
     await Promise.all([
-        ...([`claude`, `grok`, `kimi`] as const).map(async (target) => {
+        ...NATIVE_PROVIDERS.filter((target) => !subscriptionOnly(target)).map(async (target) => {
             try {
                 await refreshAccounts(target);
             } catch {
@@ -977,7 +1016,7 @@ export const loadAccountStatus = async (): Promise<void> => {
         loadAllProviderModels(),
         // Installed ACP agents are providers too — surface them in the picker on the same seam.
         loadAcpProviders(),
-        // The translator's subscription connections gate routed (claude-code harness) codex/grok chats.
+        // The translator's subscription connections gate routed chats (codex/gemini always, grok under claude-code).
         refreshTranslatorAccounts(),
     ]);
 };
@@ -1125,6 +1164,7 @@ export function useChat() {
         translatorConnectFlow,
         translatorBusy,
         connectTranslator,
+        completeTranslator,
         disconnectTranslator,
     };
 }

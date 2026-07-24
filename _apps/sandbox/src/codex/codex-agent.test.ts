@@ -1,7 +1,7 @@
 import type { ThreadEvent } from "@openai/codex-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { resolvePlanDecision } from "../agent/agent-requests.js";
+import { resolveRequest } from "../agent/agent-requests.js";
 import { type CodexRunner, type CodexTurn, createCodexAgent } from "./codex-agent.js";
 
 // A fake runner yielding one canned ThreadEvent list per invocation (plan turns invoke it repeatedly),
@@ -22,14 +22,14 @@ const request = { prompt: "add a /ping route", cwd: "/work", signal: new AbortCo
 const collect = async (
     agent: ReturnType<typeof createCodexAgent>,
     turnRequest: Parameters<ReturnType<typeof createCodexAgent>>[0],
-    onPlan?: (decisionId: string) => { approve: boolean; feedback?: string },
+    onPlan?: (requestId: string) => { approve: boolean; feedback?: string },
 ): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
     for await (const event of agent(turnRequest)) {
         events.push(event);
         if (event.kind === "plan" && onPlan !== undefined) {
-            const decision = onPlan(event.decisionId);
-            setTimeout(() => resolvePlanDecision(event.decisionId, decision), 0);
+            const decision = onPlan(event.requestId);
+            setTimeout(() => resolveRequest({ kind: "plan", requestId: event.requestId, ...decision }), 0);
         }
     }
     return events;
@@ -162,7 +162,7 @@ test("a plan turn sends attached images on the first planning turn only — the 
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    await collect(createCodexAgent("/home", runner), { ...request, plan: true, attachments: ["/work/a/shot.png"] }, () => ({ approve: true }));
+    await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const, attachments: ["/work/a/shot.png"] }, () => ({ approve: true }));
     expect(calls).toHaveLength(2);
     expect(calls[0]!.images).toEqual(["/work/a/shot.png"]);
     expect(calls[1]!.images).toBeUndefined();
@@ -176,11 +176,11 @@ test("a plan turn proposes read-only, then executes full-access on the same thre
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    const events = await collect(createCodexAgent("/home", runner), { ...request, plan: true }, () => ({ approve: true }));
+    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-2" },
-        { kind: "plan", decisionId: expect.any(String) as string, text: "Plan: add the route, then test." },
+        { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route, then test." },
         { kind: "delta", text: "Done." },
         { kind: "done" },
     ]);
@@ -201,7 +201,7 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
         [{ type: "item.completed", item: { id: "m3", type: "agent_message", text: "Executed." } }],
     );
     let planCount = 0;
-    const events = await collect(createCodexAgent("/home", runner), { ...request, plan: true }, () => {
+    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const }, () => {
         planCount += 1;
         return planCount === 1 ? { approve: false, feedback: "use fastify" } : { approve: true };
     });
@@ -222,7 +222,7 @@ test("a plan turn that fails after holding a message emits the error and NO plan
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Partial plan." } },
         { type: "turn.failed", error: { message: "Payment Required" } },
     ]);
-    const events = await collect(createCodexAgent("/home", runner), { ...request, plan: true });
+    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const });
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-7" },
         { kind: "error", message: "Payment Required" },

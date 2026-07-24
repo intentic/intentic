@@ -1,6 +1,6 @@
 import type { AcpAgentConfig, AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { resolvePlanDecision } from "../agent/agent-requests.js";
+import { resolveRequest } from "../agent/agent-requests.js";
 import type { AgentRequest } from "../agent/agent.js";
 import { fakeAcpAgentApp, fakeAcpConnection } from "./__fixtures__/fake-acp-agent.js";
 import { type AcpTimeouts, createAcpAgent } from "./acp-agent.js";
@@ -25,14 +25,14 @@ const request = (prompt: string, overrides: Partial<AgentRequest> = {}): AgentRe
 const collect = async (
     agent: ReturnType<typeof createAcpAgent>,
     turnRequest: AgentRequest,
-    onPlan?: (decisionId: string) => { approve: boolean; feedback?: string },
+    onPlan?: (requestId: string) => { approve: boolean; feedback?: string },
 ): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
     for await (const event of agent("fake", CONFIG, turnRequest)) {
         events.push(event);
         if (event.kind === "plan" && onPlan !== undefined) {
-            const decision = onPlan(event.decisionId);
-            setTimeout(() => resolvePlanDecision(event.decisionId, decision), 0);
+            const decision = onPlan(event.requestId);
+            setTimeout(() => resolveRequest({ kind: "plan", requestId: event.requestId, ...decision }), 0);
         }
     }
     return events;
@@ -107,7 +107,7 @@ test("resuming a session the process doesn't know without loadSession self-heals
 
 test("plan mode runs the two-phase emulation: captured plan → approval → execute on the same session", async () => {
     const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp())), TIMEOUTS);
-    const events = await collect(agent, request("plan the work", { plan: true }), () => ({ approve: true }));
+    const events = await collect(agent, request("plan the work", { permissionMode: "plan" as const }), () => ({ approve: true }));
     const plan = events.find((event) => event.kind === "plan");
     expect(plan?.kind === "plan" && plan.text).toBe("1. do the thing");
     expect(events).toContainEqual({ kind: "delta", text: "executed" });

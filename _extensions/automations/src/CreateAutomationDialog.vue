@@ -91,6 +91,10 @@ const setAgent = (agent: AgentProvider): void => {
 const setHarness = (harness: AgentHarness): void => {
     form.harness = harness;
 };
+// Only codex/grok have both a native runtime and a routed one to switch between. Claude IS the Claude Code
+// loop, and kimi/gemini only ever run on it — so none of the three has a harness to choose. Same rule as
+// chat's picker (ChatModelPicker.harnessChoosable).
+const harnessChoosable = computed(() => form.agent === `codex` || form.agent === `grok`);
 
 // Guard/agent/approval fold away by default — revealed on demand or when a recipe prefills a guard.
 const advancedOpen = ref(false);
@@ -488,8 +492,8 @@ const submit = async (): Promise<void> => {
                 Wakes when an external system POSTs its webhook URL — shown after you create it.
             </p>
             <p v-else-if="form.kind === 'listener'" class="text-xs text-muted">
-                Fires instantly over {{ LISTENER_SOURCES[form.provider].label }}'s live connection when the selected events happen — "Any" wakes
-                on every kind.
+                Fires instantly over {{ LISTENER_SOURCES[form.provider].label }}'s live connection when the selected events happen — "Any" wakes on
+                every kind.
             </p>
             <label class="ui-field mt-3">
                 <span class="ui-field-label">
@@ -526,16 +530,14 @@ const submit = async (): Promise<void> => {
                         <input v-model="form.guard" placeholder="test -s .intentic/queue.json" class="font-mono" :class="cmp.input()" />
                         <p class="text-xs text-muted">
                             <template v-if="form.kind === 'event'">
-                                Runs before each wake with the payload in <span class="font-mono">$AUTOMATION_PAYLOAD</span>: exit 0 wakes the
-                                agent, anything else skips that run.
+                                Runs before each wake with the payload in <span class="font-mono">$AUTOMATION_PAYLOAD</span>: exit 0 wakes the agent,
+                                anything else skips that run.
                             </template>
                             <template v-else-if="form.kind === 'listener'">
-                                Runs before each wake; batched events arrive as JSON lines in <span class="font-mono">$AUTOMATION_PAYLOAD</span>:
-                                exit 0 wakes the agent, anything else skips that run.
+                                Runs before each wake; batched events arrive as JSON lines in <span class="font-mono">$AUTOMATION_PAYLOAD</span>: exit
+                                0 wakes the agent, anything else skips that run.
                             </template>
-                            <template v-else
-                                >Runs in your workspace before each wake: exit 0 wakes the agent, anything else skips that run.</template
-                            >
+                            <template v-else>Runs in your workspace before each wake: exit 0 wakes the agent, anything else skips that run.</template>
                         </p>
                     </label>
                     <div class="ui-field">
@@ -554,8 +556,8 @@ const submit = async (): Promise<void> => {
                         </div>
                     </div>
                     <!-- Harness (the agentic loop), orthogonal to the provider — only codex/grok can switch;
-                         claude is always its own Claude Code loop. Same semantics as chat's picker. -->
-                    <div v-if="form.agent !== 'claude'" class="ui-field">
+                         claude/kimi/gemini always run the Claude Code loop. Same semantics as chat's picker. -->
+                    <div v-if="harnessChoosable" class="ui-field">
                         <span class="ui-field-label">Harness</span>
                         <div class="flex flex-wrap gap-1.5">
                             <button

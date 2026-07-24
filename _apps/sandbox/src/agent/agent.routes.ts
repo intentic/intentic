@@ -17,7 +17,7 @@ import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { landAgent } from "../agents/land.js";
 import type { AgentRequest } from "./agent.js";
-import { resolvePlanDecision, resolveQuestionAnswer } from "./agent-requests.js";
+import { resolveRequest } from "./agent-requests.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
 import { delegationNote } from "./delegation.js";
@@ -93,14 +93,16 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
         signal?.addEventListener("abort", () => controller.abort(), { once: true });
     }
     // Steering needs the SDK's streaming-input mode, so it exists only where the Claude Code harness runs the
-    // turn: the claude provider (any harness), or codex/grok routed under harness "claude-code". A native
-    // codex/grok/ACP turn registers abort alone — steering it reports NOT_FOUND and the client falls back.
+    // turn: claude/kimi/gemini (always), or codex/grok routed under harness "claude-code". A native codex/grok
+    // or an ACP turn registers abort alone — steering it reports NOT_FOUND and the client falls back.
     const provider = input.agent ?? "claude";
-    // Kimi always runs on the Claude Code harness (it has no native runtime of its own — Moonshot speaks the
-    // Anthropic protocol), so it is steerable like a native Claude turn.
+    // Kimi and Gemini always run on this harness — neither has a native runtime here (Moonshot speaks the
+    // Anthropic protocol directly; Gemini is re-served through the translator) — so both are steerable like a
+    // native Claude turn, whatever harness the client happened to send.
     const steerable =
         provider === "claude" ||
         provider === "kimi" ||
+        provider === "gemini" ||
         ((provider === "codex" || provider === "grok") && (input.harness ?? "native") === "claude-code");
     const steering = steerable ? new SteeringQueue() : undefined;
     const unregister =
@@ -249,7 +251,7 @@ async function* runTurn(
         ...(Object.keys(cliEnv).length > 0 ? { cliEnv } : {}),
         ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
         ...(input.model !== undefined ? { model: input.model } : {}),
-        ...(input.plan !== undefined ? { plan: input.plan } : {}),
+        ...(input.permissionMode !== undefined ? { permissionMode: input.permissionMode } : {}),
         ...(input.effort !== undefined ? { effort: input.effort } : {}),
     };
     let run: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
@@ -353,34 +355,45 @@ async function* runTurn(
         request = attachmentPaths.length > 0 ? { ...withTools, attachments: attachmentPaths } : withTools;
     } else {
         // Endpoint + credentials for the Claude Code harness. A native Claude turn authenticates with the user's
-        // Anthropic subscription OAuth. A codex/grok provider running UNDER this harness (harness === "claude-code")
-        // instead points the harness at the sandbox's translator (CLIProxyAPI), which serves that provider on its
-        // connected SUBSCRIPTION OAuth — so the turn only needs the provider's subscription connected in the translator.
+        // Anthropic subscription OAuth. A codex/grok/gemini provider running UNDER this harness instead points the
+        // harness at the sandbox's translator (CLIProxyAPI), which serves that provider on its connected
+        // SUBSCRIPTION OAuth — so the turn only needs the provider's subscription connected in the translator.
+        // Codex and Grok reach this only under harness "claude-code" (their native runtimes are handled above);
+        // Gemini has no native runtime, so every Gemini turn is routed.
         let oauthToken: string | undefined;
         let endpoint: { baseUrl: string; authToken: string; model: string } | undefined;
-        if (input.agent === "codex" || input.agent === "grok") {
+        if (input.agent === "codex" || input.agent === "grok" || input.agent === "gemini") {
             if (services.config.translator.url === "") {
+                // Codex/Grok can fall back to their own runtime; Gemini has none, so it can only be an image problem.
+                const fallback =
+                    input.agent === "gemini"
+                        ? "Run a sandbox built from the published image."
+                        : "Use the provider's native harness, or run a sandbox built from the published image.";
                 yield {
                     kind: "error",
-                    message:
-                        "This sandbox has no model translator, so a non-Claude model can't run under the Claude Code harness here. Use the provider's native harness, or run a sandbox built from the published image.",
+                    message: `This sandbox has no model translator, so a non-Claude model can't run under the Claude Code harness here. ${fallback}`,
                 };
                 yield { kind: "done" };
                 return;
             }
             if (!(await services.cliProxy.accounts())[input.agent]) {
-                const label = input.agent === "codex" ? "ChatGPT" : "SuperGrok";
+                const label = input.agent === "codex" ? "ChatGPT subscription" : input.agent === "grok" ? "SuperGrok subscription" : "Google account";
                 yield {
                     kind: "error",
                     code: "subscription-required",
-                    message: `Connect your ${label} subscription in Sandbox ▸ Agent to run ${input.agent} under the Claude Code harness.`,
+                    message: `Connect your ${label} in Sandbox ▸ Agent to run ${input.agent} under the Claude Code harness.`,
                 };
                 yield { kind: "done" };
                 return;
             }
-            // Both routed providers resolve against their own live catalog — the same catalogs the native paths
+            // Every routed provider resolves against its own live catalog — the same catalogs the native paths
             // use, so a pick is validated identically whichever harness runs it.
-            const catalog = input.agent === "codex" ? await services.codexModels.models() : await services.openCode.xaiModels();
+            const catalog =
+                input.agent === "codex"
+                    ? await services.codexModels.models()
+                    : input.agent === "grok"
+                      ? await services.openCode.xaiModels()
+                      : await services.geminiModels.models();
             const model = routedModel(catalog, input.model);
             endpoint = { baseUrl: services.config.translator.url, authToken: services.config.translator.token, model };
         } else if (input.agent === "kimi") {
@@ -609,7 +622,7 @@ async function* runTurn(
                 yield { ...event, ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}) };
                 continue;
             } else if (event.kind === "plan") {
-                record({ type: "turn.plan", content: event.text, extra: { decisionId: event.decisionId } });
+                record({ type: "turn.plan", content: event.text, extra: { requestId: event.requestId } });
             } else if (event.kind === "error") {
                 record({ type: "turn.error", outcome: "error", error: event.message });
             }
@@ -660,25 +673,12 @@ export const createAgentRoutes = (services: Services) => {
             }
             yield { kind: "end" as const };
         }),
-        // Resolve a turn paused on an ExitPlanMode approval / interactive question; NOT_FOUND when nothing is
-        // waiting on that id (already answered, or the turn ended).
-        decision: i.decision.handler(({ input }) => {
-            const resolved = resolvePlanDecision(input.decisionId, {
-                approve: input.approve,
-                ...(input.feedback !== undefined ? { feedback: input.feedback } : {}),
-            });
-            if (!resolved) {
-                throw new ORPCError("NOT_FOUND", { message: "no pending plan for that decision" });
-            }
-            return { ok: true } as const;
-        }),
-        answer: i.answer.handler(({ input }) => {
-            const resolved = resolveQuestionAnswer(
-                input.requestId,
-                input.cancelled === true ? { cancelled: true } : { answers: input.answers ?? {} },
-            );
-            if (!resolved) {
-                throw new ORPCError("NOT_FOUND", { message: "no pending question for that request" });
+        // Un-park a turn waiting on an interactive card — a plan approval, question picks, or a per-tool
+        // permission prompt, all keyed by the same requestId. NOT_FOUND when nothing holds that id (already
+        // answered, or the turn ended), which is what tells the client to freeze the card as stale.
+        reply: i.reply.handler(({ input }) => {
+            if (!resolveRequest(input)) {
+                throw new ORPCError("NOT_FOUND", { message: `no pending ${input.kind} for that request` });
             }
             return { ok: true } as const;
         }),

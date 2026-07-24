@@ -10,6 +10,8 @@ import {
     type EditorContext,
     type ModelBadge,
     modelsFor,
+    NATIVE_PROVIDERS,
+    type NativeProvider,
     type OauthAccount,
     providerLabel,
     sseData,
@@ -51,17 +53,25 @@ export interface ModelOption extends CatalogOption {
     readonly badges?: readonly ModelBadge[];
 }
 
-// Every provider's model catalog is daemon-owned (/claude/models · /codex/models · /grok/models — live
-// discovery with a persisted/seed floor, never empty) and loaded into these records, so the pickers track
-// provider renames and new releases without a static list. useChat.loadProviderModels fills them when a daemon
-// is reachable; resetChat clears. Empty only until the first load.
-export const providerModels = ref<Record<AgentProvider, ModelOption[]>>({ claude: [], codex: [], grok: [], kimi: [] });
+// Seed one slot per native provider. AgentProvider is a bare string on the wire, so `Record<AgentProvider, T>`
+// is `Record<string, T>` and a missing provider key is NOT a type error — it reads back as `undefined` and the
+// provider silently loses its models, accounts or load state. Deriving every one of these records from the
+// contract's own vocabulary is what makes adding a provider a single edit in NATIVE_PROVIDERS instead of a hunt
+// through the literals below. `seed` runs per provider so no two share a mutable value.
+export const perProvider = <T>(seed: (provider: NativeProvider) => T): Record<AgentProvider, T> =>
+    Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, seed(provider)] as const));
+
+// Every provider's model catalog is daemon-owned (/claude/models · /codex/models · /grok/models · /kimi/models ·
+// /gemini/models — live discovery with a persisted/seed floor, never empty) and loaded into these records, so
+// the pickers track provider renames and new releases without a static list. useChat.loadProviderModels fills
+// them when a daemon is reachable; resetChat clears. Empty only until the first load.
+export const providerModels = ref<Record<AgentProvider, ModelOption[]>>(perProvider<ModelOption[]>(() => []));
 // Each provider's daemon-resolved default model id; empty only until the first load.
-export const providerDefaultModel = ref<Record<AgentProvider, string>>({ claude: ``, codex: ``, grok: ``, kimi: `` });
+export const providerDefaultModel = ref<Record<AgentProvider, string>>(perProvider(() => ``));
 // Per-provider catalog fetch state, so the picker can show a spinner/retry per provider group instead of a
-// silently-empty list (codex/grok/kimi have no static floor to fall back on before their first load).
+// silently-empty list (every provider but Claude has no static floor to fall back on before its first load).
 export type CatalogLoadState = "idle" | "loading" | "loaded" | "error";
-export const providerModelsState = ref<Record<AgentProvider, CatalogLoadState>>({ claude: `idle`, codex: `idle`, grok: `idle`, kimi: `idle` });
+export const providerModelsState = ref<Record<AgentProvider, CatalogLoadState>>(perProvider<CatalogLoadState>(() => `idle`));
 
 // The model a fresh conversation seeds for a provider. Harness-independent: codex/grok run the SAME subscription
 // model ids natively and under the Claude Code harness (the translator serves them), so the catalog no longer
@@ -104,6 +114,7 @@ export const providerTabs: readonly { value: AgentProvider; label: string }[] = 
     { value: `codex`, label: `ChatGPT` },
     { value: `grok`, label: `Grok` },
     { value: `kimi`, label: `Kimi Code` },
+    { value: `gemini`, label: `Gemini` },
 ];
 
 // A proposed plan awaiting the user's decision (the agent called ExitPlanMode). 'pending' shows the
@@ -243,8 +254,7 @@ interface TurnDefaults {
 // deterministic — gpt-5-codex / grok-4 — so they aren't persisted; rememberedModelFor derives them.)
 const readModels = (stored: unknown): Record<AgentProvider, string> => {
     const raw = (typeof stored === `object` && stored !== null ? stored : {}) as Record<string, unknown>;
-    const modelFor = (provider: AgentProvider): string => (typeof raw[provider] === `string` ? (raw[provider] as string) : defaultModelFor(provider));
-    return { claude: modelFor(`claude`), codex: modelFor(`codex`), grok: modelFor(`grok`), kimi: modelFor(`kimi`) };
+    return perProvider((provider) => (typeof raw[provider] === `string` ? (raw[provider] as string) : defaultModelFor(provider)));
 };
 
 const readTurnDefaults = (): TurnDefaults => {
@@ -263,10 +273,9 @@ const readTurnDefaults = (): TurnDefaults => {
         }
         const stored = JSON.parse(raw) as Record<string, unknown>;
         return {
-            provider:
-                stored[`provider`] === `codex` || stored[`provider`] === `grok` || stored[`provider`] === `kimi`
-                    ? (stored[`provider`] as AgentProvider)
-                    : `claude`,
+            // Only a native provider is restored: an ACP agent's id belongs to a capability that may no longer be
+            // installed on the sandbox this session opens, so it degrades to Claude rather than to a dead picker.
+            provider: NATIVE_PROVIDERS.includes(stored[`provider`] as NativeProvider) ? (stored[`provider`] as AgentProvider) : `claude`,
             harness: stored[`harness`] === `claude-code` ? `claude-code` : `native`,
             models: readModels(stored[`models`]),
             effort: typeof stored[`effort`] === `string` ? stored[`effort`] : fallback.effort,
@@ -312,13 +321,8 @@ export const rememberedModelFor = (provider: AgentProvider): string => turnDefau
 // turnDefaults): account ids are daemon-minted per sandbox, so they'd be meaningless across a sandbox switch —
 // useChat.loadAccountStatus fills these when a daemon becomes reachable and resetChat clears them. Kept here
 // (not in useChat) so a Conversation can seed/reset its account without importing useChat (a cycle).
-export const providerAccounts = ref<Record<AgentProvider, readonly OauthAccount[]>>({ claude: [], codex: [], grok: [], kimi: [] });
-export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>({
-    claude: undefined,
-    codex: undefined,
-    grok: undefined,
-    kimi: undefined,
-});
+export const providerAccounts = ref<Record<AgentProvider, readonly OauthAccount[]>>(perProvider<readonly OauthAccount[]>(() => []));
+export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>(perProvider<string | undefined>(() => undefined));
 
 // The account a fresh turn on a provider uses: the user's explicit pick when it's still connected, else the
 // provider's first connected account. The single source every account-reset site routes through.

@@ -12,18 +12,25 @@ const GROK_PATH = `M9.27 15.29l7.978-5.897c.391-.29.95-.177 1.137.272.98 2.369.5
 // Kimi (Moonshot): a crescent-moon mark evoking Moonshot's brand motif, single 24×24 path. Placeholder for the
 // official Kimi glyph — swap for the @lobehub/icons Kimi/Moonshot path when that icon set is added.
 const KIMI_PATH = `M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z`;
+// The official Google Gemini "spark" mark, single 24×24 path from the CC0 Simple Icons set (googlegemini).
+const GEMINI_PATH = `M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81`;
+
+const BRAND_PATHS: Record<string, string> = {
+    claude: CLAUDE_PATH,
+    codex: OPENAI_PATH,
+    grok: GROK_PATH,
+    kimi: KIMI_PATH,
+    gemini: GEMINI_PATH,
+};
 
 const props = defineProps<{ provider: AgentProvider }>();
-// The native providers carry brand marks; any other provider is an installed ACP agent — a generic glyph.
-const native = computed(() => props.provider === `claude` || props.provider === `codex` || props.provider === `grok` || props.provider === `kimi`);
-const path = computed(() =>
-    props.provider === `codex` ? OPENAI_PATH : props.provider === `grok` ? GROK_PATH : props.provider === `kimi` ? KIMI_PATH : CLAUDE_PATH,
-);
+// A provider with a brand mark draws it; anything else is an installed ACP agent — a generic glyph.
+const path = computed(() => BRAND_PATHS[props.provider]);
 </script>
 
 <template>
-    <svg v-if="native" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true">
-        <!-- Grok's mark is even-odd; Claude/OpenAI use the default nonzero winding. -->
+    <svg v-if="path" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true">
+        <!-- Grok's mark is even-odd; the rest use the default nonzero winding. -->
         <path :d="path" :fill-rule="provider === `grok` ? `evenodd` : undefined" />
     </svg>
     <Icon v-else name="sparkles" aria-hidden="true" />

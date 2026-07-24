@@ -23,11 +23,11 @@ export const SessionTranscriptMessageSchema = z.object({ role: z.enum(["user", "
 export type SessionTranscriptMessage = z.infer<typeof SessionTranscriptMessageSchema>;
 
 // The agent runtimes the daemon can serve — the vocabulary every surface that picks an agent shares (chat
-// turns, automations). The three NATIVE providers have dedicated adapters (and their ids are reserved); any
+// turns, automations). The NATIVE providers have dedicated adapters (and their ids are reserved); any
 // other value is the id of an installed `agent`-kind capability served over ACP (Agent Client Protocol).
 // Kept as a bare string on the wire (not an enum) so an unknown id is a clean error frame from the agent
 // route — the same bet RepoParamSchema makes — and adding an ACP agent needs no contract change.
-export const NATIVE_PROVIDERS = ["claude", "codex", "grok", "kimi"] as const;
+export const NATIVE_PROVIDERS = ["claude", "codex", "grok", "kimi", "gemini"] as const;
 export type NativeProvider = (typeof NATIVE_PROVIDERS)[number];
 export const AgentProviderSchema = z.string().min(1);
 export type AgentProvider = z.infer<typeof AgentProviderSchema>;
@@ -53,6 +53,12 @@ export type EditorContext = z.infer<typeof EditorContextSchema>;
 // The client-minted stable conversation identity. Constrained because it lands in branch names (agent/<id>)
 // and filesystem paths — the regex is the injection guard. Shared by the turn input and the attach input.
 const ConversationIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
+
+// How tool calls are gated — the Claude Agent SDK's PermissionMode, narrowed to the four the composer offers
+// (the SDK also has 'dontAsk'/'auto', which have no UI here). The user picks one per turn AND the agent can
+// move itself between them mid-turn, so this is both a turn input and the payload of the `mode` frame.
+export const PermissionModeSchema = z.enum(["default", "acceptEdits", "plan", "bypassPermissions"]);
+export type PermissionMode = z.infer<typeof PermissionModeSchema>;
 
 export const AgentTurnSchema = z
     .object({
@@ -89,8 +95,11 @@ export const AgentTurnSchema = z
         history: z.array(SessionTranscriptMessageSchema).max(200).optional(),
         // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
         model: z.string().optional(),
-        // When true, run the always-plan flow (propose → approve → execute). Reasoning controls are optional.
-        plan: z.boolean().optional(),
+        // How tool calls are gated for this turn (the SDK's permissionMode, verbatim). 'plan' runs the
+        // propose → approve → execute flow; 'default' prompts per tool on the permission side channel;
+        // 'acceptEdits' auto-accepts file edits; 'bypassPermissions' runs everything. The agent can move
+        // itself between modes mid-turn (EnterPlanMode/ExitPlanMode), which rides back as a `mode` frame.
+        permissionMode: PermissionModeSchema.optional(),
         effort: z.string().optional(),
         thinking: z.boolean().optional(),
         // The opt-in editor context chip: what the user is looking at, folded into the prompt daemon-side.
@@ -140,7 +149,12 @@ export const AgentActivitySchema = z.object({
 });
 export type AgentActivity = z.infer<typeof AgentActivitySchema>;
 // Which "needs you" flags are raised — the fleet badge aggregates these across all agents.
-export const AgentAttentionSchema = z.object({ plan: z.boolean(), question: z.boolean(), conflict: z.boolean() });
+export const AgentAttentionSchema = z.object({
+    plan: z.boolean(),
+    question: z.boolean(),
+    permission: z.boolean(),
+    conflict: z.boolean(),
+});
 export type AgentAttention = z.infer<typeof AgentAttentionSchema>;
 export const AgentSummarySchema = z.object({
     // The conversationId.
@@ -193,22 +207,49 @@ export type LandResult = z.infer<typeof LandResultSchema>;
 
 // The providers whose model can run UNDER the Claude Code harness through the bundled translator (CLIProxyAPI),
 // which holds their SUBSCRIPTION OAuth and re-serves it behind an Anthropic endpoint. The `claude` provider is
-// absent — native Anthropic OAuth serves it directly, without the translator.
-export const KeyedProviderSchema = z.enum(["codex", "grok"]);
+// absent — native Anthropic OAuth serves it directly, without the translator. Codex and Grok also have a native
+// runtime and so carry the harness axis; `gemini` is routed-only (Google publishes no Anthropic-protocol
+// endpoint and this sandbox bakes no Gemini runtime), so a Gemini turn is always a Claude Code turn.
+export const KeyedProviderSchema = z.enum(["codex", "grok", "gemini"]);
 export type KeyedProvider = z.infer<typeof KeyedProviderSchema>;
 
 // Which routed-provider subscriptions are connected in the translator (per provider). Drives the
 // "connected / connect subscription" state in Sandbox ▸ Agent.
-export const TranslatorAccountsSchema = z.object({ codex: z.boolean(), grok: z.boolean() });
+export const TranslatorAccountsSchema = z.object({ codex: z.boolean(), grok: z.boolean(), gemini: z.boolean() });
 export type TranslatorAccounts = z.infer<typeof TranslatorAccountsSchema>;
 
-// Side-channel bodies: the UI posts these to resolve a turn paused on a plan approval / question.
-export const DecisionSchema = z.object({ decisionId: z.string().min(1), approve: z.boolean(), feedback: z.string().optional() });
-export const AnswerSchema = z.object({
-    requestId: z.string().min(1),
-    answers: z.record(z.string(), z.array(z.string())).optional(),
-    cancelled: z.boolean().optional(),
-});
+// The side-channel body that un-parks a turn waiting on the user. Every interactive card — plan approval,
+// clarifying questions, a per-tool permission prompt — parks on the SAME registry keyed by `requestId`, so
+// one route resolves all three; the `kind` says which card answered and carries its payload.
+export const AgentReplySchema = z.discriminatedUnion("kind", [
+    // ExitPlanMode approval. `mode` is the posture to execute the approved plan in — Claude Code's "yes, and
+    // auto-accept edits" (acceptEdits) vs "yes, and manually approve edits" (default); it rides back to the SDK
+    // as a session setMode. Rejection feedback loops back into the model as the denial reason.
+    z.object({
+        kind: z.literal("plan"),
+        requestId: z.string().min(1),
+        approve: z.boolean(),
+        mode: PermissionModeSchema.optional(),
+        feedback: z.string().optional(),
+    }),
+    // AskUserQuestion picks: question text → chosen option label(s) (+ any free-text "Other"). `cancelled`
+    // is the dismissal, which tells the model to proceed on sensible defaults rather than leaving it parked.
+    z.object({
+        kind: z.literal("question"),
+        requestId: z.string().min(1),
+        answers: z.record(z.string(), z.array(z.string())).optional(),
+        cancelled: z.boolean().optional(),
+    }),
+    // A per-tool permission prompt. 'once' allows this call only; 'always' also persists the SDK's suggested
+    // rules so the same tool stops asking; 'deny' blocks it and feeds `feedback` back as the reason.
+    z.object({
+        kind: z.literal("permission"),
+        requestId: z.string().min(1),
+        decision: z.enum(["once", "always", "deny"]),
+        feedback: z.string().optional(),
+    }),
+]);
+export type AgentReply = z.infer<typeof AgentReplySchema>;
 // Steering: a user message delivered INTO the running turn (injected between tool calls, Claude Code style),
 // keyed by the conversation whose turn is in flight. NOT_FOUND when no steerable turn is running — the client
 // then falls back to a fresh send.
@@ -259,9 +300,23 @@ export const KimiConnectSchema = z.object({ apiKey: z.string().min(1), label: z.
 // completion and the UI polls `/grok/accounts`.
 // ponytail: OpenCode holds one xAI auth per data dir, so Grok stays single-account — the list is 0 or 1. Per
 // account would need an OpenCode server per data dir; add when there's demand.
-// A device-code login start: the verification URL + the one-time code the user enters there. Shared by the
-// native Grok flow (via OpenCode) and the routed-provider subscription connect (codex/grok via CLIProxyAPI).
+// A device-code login start: the verification URL + the one-time code the user enters there. The native Grok
+// flow (via OpenCode) — see TranslatorStartSchema for the routed-provider connect, which adds `state`.
 export const DeviceStartSchema = z.object({ url: z.string(), code: z.string() });
+// A routed-provider subscription login start (codex/grok/gemini via CLIProxyAPI). Codex and Grok mint a
+// one-time device `code` the user enters at the provider's site, and CLIProxyAPI polls to completion on its
+// own — the card only waits. Google publishes no device flow: the user approves in a browser and is redirected
+// to a loopback URL this sandbox never receives, so `code` is empty and the card asks them to paste that URL
+// back (see TranslatorCompleteSchema). Which half a provider uses is READ from the response rather than
+// hardcoded per provider, so the card needs no provider table.
+export const TranslatorStartSchema = z.object({ url: z.string(), code: z.string(), state: z.string() });
+// The paste-back half of a redirect login: the URL the provider sent the browser to, carrying the grant as
+// ?code=&state=. `state` ties it to the handshake that issued it — the translator rejects a mismatch.
+export const TranslatorCompleteSchema = z.object({
+    provider: KeyedProviderSchema,
+    redirectUrl: z.string().min(1),
+    state: z.string().min(1),
+});
 // A provider's model catalog, resolved daemon-side from live discovery with a persisted last-known-good list and
 // a seed floor (Grok via opencode.ts xaiModels, Codex via codex-models.ts, Claude via the Agent SDK's
 // supportedModels) — never empty, so the picker is never blank. `label` is the humanized display name; `default`
@@ -286,6 +341,7 @@ export const ModelSchema = z.object({
     description: z.string().optional(),
     badges: z.array(ModelBadgeSchema).optional(),
 });
+export type Model = z.infer<typeof ModelSchema>;
 export const ModelsSchema = z.object({ models: z.array(ModelSchema), default: z.string() });
 
 // ---- sessions ----
@@ -392,9 +448,14 @@ export const RepoChangesSchema = z.object({
     // Absent on an unborn HEAD (a repo initialized but never committed).
     branch: z.string().optional(),
     changes: z.array(GitChangeSchema),
+    // Why the repo could not be scanned at all, condensed to git's own one-line reason ("fatal: bad object HEAD").
+    // A repo left torn by a canceled or failed upload used to be dropped from the response entirely, so it just
+    // vanished from the panel with nothing to act on; it now arrives with empty `changes` and this set instead.
+    error: z.string().optional(),
 });
 export type RepoChanges = z.infer<typeof RepoChangesSchema>;
-// The aggregated review set across every repo (root + every discovered repo); only repos with changes appear.
+// The aggregated review set across every repo (root + every discovered repo); a repo appears when it has changes
+// or when it failed to scan.
 export const GitChangesSchema = z.object({ repos: z.array(RepoChangesSchema) });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
 

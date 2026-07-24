@@ -97,6 +97,10 @@ export const resetUploadQueue = (): void => {
 
 const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
 
+// A repo's own git metadata: the `.git` directory itself, anything under it, or the `.git` FILE a worktree or
+// submodule checkout carries instead of a directory. Segment-wise, so a `src/.gitignore` or `notes/git` can't match.
+const isGitEntry = (path: string): boolean => path.split(`/`).includes(`.git`);
+
 // Aggregate progress = the bytes of every file that has actually landed. Recomputed when a chunk is reset for a
 // retry so the failed attempt's partial bytes don't linger and double-count; the live onBytes deltas add on top.
 const recomputeBytesDone = (): void => {
@@ -373,6 +377,12 @@ export function useUploadQueue() {
         // writes into one file. Keep only the last (dedupeByPath) and surface the drops so the panel never silently
         // does less than the file count.
         const surviving = dedupeByPath(unchanged, (entry) => entry.path);
+        // A dropped repo deliberately keeps its .git (dropEntries), and the daemon calls a directory a repo the
+        // moment .git merely EXISTS — so if refs/objects land before the work tree they describe, every Changes
+        // poll runs `git status` against a half-written repo ("fatal: bad object HEAD"). The queue uploads in array
+        // order, so sinking every .git entry to the back makes the repo discoverable only once its work tree is
+        // already on disk. sort is stable, so everything else keeps the order dedupeByPath produced.
+        surviving.sort((left, right) => (isGitEntry(left.path) ? 1 : 0) - (isGitEntry(right.path) ? 1 : 0));
         skippedUnchanged.value += entries.length - surviving.length;
         if (surviving.length === 0) {
             // The whole drop is already up to date — surface it (via skippedUnchanged) instead of a silent no-op.

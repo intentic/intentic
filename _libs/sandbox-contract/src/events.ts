@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentSummarySchema } from "./schemas.js";
+import { AgentSummarySchema, PermissionModeSchema } from "./schemas.js";
 
 // The wire shapes streamed from the daemon's event-iterator procedures. This is their canonical home: the
 // daemon yields them and the browser client consumes them from the same schema, so the two can't drift (they
@@ -21,6 +21,25 @@ export const AskQuestionSchema = z.object({
     options: z.array(AskOptionSchema),
 });
 export type AskQuestion = z.infer<typeof AskQuestionSchema>;
+
+// One per-tool permission prompt (the SDK's canUseTool callback, surfaced as a card). The daemon passes the
+// bridge's own rendered strings through rather than re-deriving them, so the prompt reads exactly as Claude
+// Code words it. `alwaysLabel` is present only when the SDK offered rules to persist — without it the card
+// shows allow-once / deny alone, because there is nothing an "always" answer could remember.
+export const PermissionAskSchema = z.object({
+    toolName: z.string(),
+    // "Claude wants to read foo.txt" — the full prompt sentence, when the bridge rendered one.
+    title: z.string().optional(),
+    // Short noun phrase for the allow button ("Read file").
+    displayName: z.string().optional(),
+    description: z.string().optional(),
+    // Why the prompt fired ('rule' | 'mode' | 'classifier' | …) — shown as the card's muted subline.
+    reason: z.string().optional(),
+    // The file the request is about, when it is about one (workspace-root-relative).
+    path: z.string().optional(),
+    alwaysLabel: z.string().optional(),
+});
+export type PermissionAsk = z.infer<typeof PermissionAskSchema>;
 
 // One provider-advertised slash command (an ACP agent's available_commands entry). `hint` is the argument
 // placeholder the popover shows after the name.
@@ -92,7 +111,8 @@ export type ToolCallContent = z.infer<typeof ToolCallContentSchema>;
 // One frame from an agent turn, relayed to the UI. `kind`-discriminated. The daemon normalizes the SDK's
 // ~40 SDKMessage types down to this union: high-value block types get a dedicated frame
 // (delta/thinking/tool_call/tool_call_update/todos/usage/rate_limit_info/context_usage/init/compact); any SDK message
-// without a UI mapping is dropped. `plan`/`question` pause the turn until the user answers on a side channel.
+// without a UI mapping is dropped. `plan`/`question`/`permission` pause the turn until the user answers on the
+// `POST /agent/reply` side channel; `mode` reports the live permission posture as the agent changes it.
 // `parentToolUseId` tags frames produced inside a subagent (Task tool).
 export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("session"), sessionId: z.string() }),
@@ -163,8 +183,14 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     RateLimitInfoSchema.extend({ kind: z.literal("rate_limit_info"), account: z.string().optional() }),
     ContextUsageSchema.extend({ kind: z.literal("context_usage") }),
     z.object({ kind: z.literal("compact"), trigger: z.string(), preTokens: z.number().optional(), postTokens: z.number().optional() }),
-    z.object({ kind: z.literal("plan"), decisionId: z.string(), text: z.string() }),
+    // The three interactive cards. Each parks the turn until `POST /agent/reply` resolves its `requestId`.
+    z.object({ kind: z.literal("plan"), requestId: z.string(), text: z.string() }),
     z.object({ kind: z.literal("question"), requestId: z.string(), questions: z.array(AskQuestionSchema) }),
+    PermissionAskSchema.extend({ kind: z.literal("permission"), requestId: z.string() }),
+    // The turn's permission mode, whenever it changes — the user's pick at turn start, then every move the
+    // AGENT makes on its own (EnterPlanMode on a request that needs thinking through, ExitPlanMode once the
+    // user approves). The composer's mode selector follows this, so the UI never lies about the live posture.
+    z.object({ kind: z.literal("mode"), mode: PermissionModeSchema }),
     // `code` is a machine-readable discriminator for errors the UI reacts to programmatically (dropping a
     // dead session id so the next send self-heals). Absent on plain failures.
     z.object({

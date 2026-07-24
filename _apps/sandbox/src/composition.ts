@@ -66,6 +66,7 @@ import {
     revertCommit,
     workingFileDiff,
 } from "./git/changes.js";
+import { type GeminiCatalog, createGeminiCatalog } from "./gemini/gemini-catalog.js";
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
 import { type KimiCatalog, createKimiCatalog } from "./kimi/kimi-catalog.js";
@@ -164,10 +165,14 @@ export interface Services {
     // its model here (it runs on the Claude Code harness pointed at Moonshot's Anthropic endpoint); /kimi/models
     // serves the picker.
     readonly kimiModels: KimiCatalog;
+    // Gemini's live model catalog, read from the translator's /v1/models (persisted → seed floor, never empty).
+    // A Gemini turn resolves its model here; /gemini/models serves the picker. There is no geminiStore twin:
+    // Gemini is routed-only, so the translator owns the credential.
+    readonly geminiModels: GeminiCatalog;
     // The bundled translator (CLIProxyAPI): connects/lists/disconnects the routed providers' SUBSCRIPTION OAuth
-    // (codex → ChatGPT, grok → SuperGrok). Codex has no other credential — every Codex turn (native provider +
-    // the Claude agent's shell delegation) authenticates through this on the ChatGPT subscription. /translator
-    // drives the device-login connect; streamAgent reads `accounts` to gate a Codex turn.
+    // (codex → ChatGPT, grok → SuperGrok, gemini → Google). Codex and Gemini have no other credential — every
+    // Codex turn (native provider + the Claude agent's shell delegation) and every Gemini turn authenticates
+    // through this. /translator drives the connect; streamAgent reads `accounts` to gate a routed turn.
     readonly cliProxy: CliProxyClient;
     // The sandbox-wide CODEX_HOME (sessions + the config.toml selecting the translator provider). The codex
     // adapter defaults to it, and the Claude agent's shell delegation points `codex` at it.
@@ -343,10 +348,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(join(workspace.root, ".intentic", "settings.json")),
         claudeStore,
-        claudeModels: createClaudeCatalog(claudeStore, config, workspace.root),
+        claudeModels: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
         codexModels: createCodexCatalog(config, join(codexBase, "models.json")),
         kimiStore,
         kimiModels: createKimiCatalog(kimiStore, config, join(authRoot, "kimi", "models.json")),
+        geminiModels: createGeminiCatalog(config, join(authRoot, "gemini", "models.json")),
         cliProxy: createCliProxyClient({
             managementUrl: cliProxyManagementUrl(config),
             token: config.translator.token,

@@ -35,7 +35,15 @@ import { createTerminalRoute } from "./terminal/terminal.js";
 import { createWebchatRoute } from "./webchat/webchat.routes.js";
 import { extractTarToWorkspace, PathEscapeError } from "./workspace/workspace-archive.js";
 import { computeUploadSkip, type UploadManifestEntry } from "./workspace/workspace-diff.js";
-import { contentTypeForPath, MAX_RAW_BYTES, MAX_UPLOAD_BYTES, resolveWithin, sha256Text, UploadTooLargeError } from "./workspace/workspace-files.js";
+import {
+    contentTypeForPath,
+    isControlPlanePath,
+    MAX_RAW_BYTES,
+    MAX_UPLOAD_BYTES,
+    resolveWithin,
+    sha256Text,
+    UploadTooLargeError,
+} from "./workspace/workspace-files.js";
 
 // Only genuine server faults (5xx) are logged; expected ORPCErrors (NOT_FOUND/BAD_REQUEST/…) are the routes'
 // normal control flow and would be noise.
@@ -71,7 +79,15 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 try {
                     return await options.next();
                 } catch (error) {
-                    logUnexpectedError(services, error);
+                    // A client that vanished mid-request (tab closed, a cancelled query, a dropped tunnel hop) leaves
+                    // the node request stream aborted, and node-server's fast path rejects a read on a disturbed
+                    // stream — so oRPC's input decode throws `TypeError: Body is unusable`. Not an incident: oRPC
+                    // downgrades it to a 400 that goes to a socket nobody is holding. The window is real because the
+                    // bearer middleware awaits `authorize` (JWKS verify + owner read) before the body is ever read,
+                    // so every in-flight POST the browser cancels during a busy stretch lands here.
+                    if (options.request.signal?.aborted !== true) {
+                        logUnexpectedError(services, error);
+                    }
                     throw error;
                 }
             },
@@ -172,6 +188,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         if (target === undefined) {
             return c.json({ error: "invalid path" }, 400);
         }
+        // The daemon's credential + auth state answers as if it weren't there — no oracle, and no reading the
+        // owner's provider token out through the generic file API.
+        if (isControlPlanePath(services.workspace.root, target)) {
+            return c.json({ error: "not found" }, 404);
+        }
         const size = await services.files.size(target);
         if (size === undefined) {
             return c.json({ error: "not found" }, 404);
@@ -198,6 +219,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         const target = path === undefined ? undefined : resolveWithin(services.workspace.root, path);
         if (target === undefined) {
             return c.json({ error: "invalid path" }, 400);
+        }
+        // Same floor as the raw read: the sandbox's owner/members/credential files are not writable through the
+        // generic upload, or any member could hand themselves the sandbox by posting a new owner.json.
+        if (isControlPlanePath(services.workspace.root, target)) {
+            return c.json({ error: "not found" }, 404);
         }
         // A big file arrives as sequential parts (the browser keeps each request under Cloudflare's ~100 MB edge
         // body cap); ?offset says where this part lands, and the write goes in place instead of truncating.
@@ -261,8 +287,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
 
     // Bulk directory upload: the browser streams ONE tar of a large dropped tree here (over per-file POSTs, which
     // cost a round-trip each) and we extract it entry-by-entry into /work. Same guards as the single upload,
-    // applied per entry: 400 on any escaping path (aborts), silently skips secret/`.git` entries, 413 once the
-    // running total passes the cap. Streamed both ways, so a huge tree never lands in memory.
+    // applied per entry: 400 on any escaping path (aborts), silently skips the daemon's control-plane files
+    // (isControlPlanePath), 413 once the running total passes the cap. `.git` IS written — a dropped repo keeps
+    // its own, so it stays connected to its remote. Streamed both ways, so a huge tree never lands in memory.
     app.post("/workspace/upload-archive", async (c) => {
         const body = c.req.raw.body;
         if (body === null) {

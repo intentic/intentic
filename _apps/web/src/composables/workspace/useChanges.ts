@@ -79,6 +79,9 @@ export function useChanges() {
         queryFn: () => sandboxJson<GitChangesResponse>(`/git/changes`),
     });
 
+    // `repos` also carries the repos git could NOT scan (empty `changes` + a one-line `error`; the panel renders
+    // them as their own rows). They contribute 0 to `count`, which is what every badge wants — a torn repo has no
+    // reviewable work — and the panel, the only consumer that iterates the list, splits them out itself.
     const repos = computed<readonly RepoChanges[]>(() => query.data.value?.repos ?? []);
     const count = computed(() => repos.value.reduce((total, repo) => total + repo.changes.length, 0));
     const hasChanges = computed(() => count.value > 0);

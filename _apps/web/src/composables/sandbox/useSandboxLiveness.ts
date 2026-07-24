@@ -5,6 +5,7 @@ import { useChat } from "../chat/useChat";
 import { readIntenticLines } from "../intenticStream";
 import { queryClient } from "../queryPersistence";
 import { sandboxRequest } from "./sandboxClient";
+import { throttleTrailing } from "../throttleTrailing";
 import { errorMessage } from "../useAsyncAction";
 import { presenceStreamOpened, resetPresence, setPresenceUsers } from "../usePresence";
 import { useSandbox } from "./useSandbox";
@@ -16,6 +17,12 @@ const WATCHDOG_MS = 6000;
 // Reconnect backoff while the sandbox is down — fast first retry (a restart should reconnect quickly), capped.
 const BACKOFF_MIN_MS = 1000;
 const BACKOFF_MAX_MS = 5000;
+// One review refetch per second while writes keep landing. Each one is the daemon's most expensive read — a full
+// discoverRepos walk plus a `git status` per repo — and the watcher batches every 250ms, so a drag-dropped repo
+// used to fire ~15 of them in 9 seconds. A second of staleness is imperceptible next to that cost.
+const CHANGES_REFRESH_MS = 1000;
+
+const refreshChanges = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: [`git`, `changes`] }), CHANGES_REFRESH_MS);
 
 /* Keeps useSandbox().reachable live by holding a single long-lived SSE stream open to the sandbox daemon
  * (`/events`), instead of polling. A killed sandbox breaks the stream — detected instantly (or within the
@@ -156,7 +163,7 @@ const stream = async (): Promise<void> => {
             // Any worktree write surfaces in the Changes review — but not during a streaming turn, whose constant
             // writes would hammer `git status`; the stream-end invalidation (useChanges) covers that batch.
             if (!useChat().streaming.value) {
-                void queryClient.invalidateQueries({ queryKey: [`git`, `changes`] });
+                refreshChanges();
             }
         }
     }

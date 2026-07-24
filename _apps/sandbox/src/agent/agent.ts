@@ -1,19 +1,21 @@
 import {
+    type CanUseTool,
     createSdkMcpServer,
     type EffortLevel,
+    type McpSdkServerConfigWithInstance,
     type McpServerConfig,
     type Options,
-    type PermissionMode,
     query,
     type SDKMessage,
     type SDKUserMessage,
     tool,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AskQuestion, TodoItem } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, TodoItem } from "@intentic/sandbox-contract";
+import { relative, sep } from "node:path";
 import { z } from "zod";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
-import { createPlanRequest, createQuestionRequest, type QuestionResponse } from "./agent-requests.js";
+import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { agentSessionName, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
 import { editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
@@ -49,11 +51,9 @@ export interface AgentRequest {
     // and authenticates with the fixed local bearer — no per-account OAuth auth.json. codexHome then holds only
     // sessions/rollouts, never a credential.
     readonly codexEndpoint?: { readonly baseUrl: string; readonly authToken: string };
-    // Defaults to the autonomous sandbox posture; the container's isolation is what makes this safe.
+    // How tool calls are gated this turn. Defaults to the autonomous sandbox posture (bypassPermissions) —
+    // the container's isolation is what makes that safe. The agent can move itself out of it mid-turn.
     readonly permissionMode?: PermissionMode;
-    // When true, run the always-plan flow: propose an approach via ExitPlanMode and wait for approval
-    // before executing (tools then auto-accept). Clarifying questions are asked via AskUserQuestion.
-    readonly plan?: boolean;
     // Reasoning controls forwarded to the SDK (effort level / extended thinking).
     readonly effort?: string;
     readonly thinking?: boolean;
@@ -209,9 +209,13 @@ async function* sdkTurns(stream: AsyncIterable<SDKMessage>, steering: SteeringQu
     }
 }
 
+// The modes the contract (and so the composer) models. The SDK also resolves 'dontAsk' and 'auto' — from a
+// settings default, say — which have no UI here, so a mode frame is only emitted for one of these four.
+const PERMISSION_MODES = new Set<PermissionMode>(["default", "acceptEdits", "plan", "bypassPermissions"]);
+
 // Normalize the SDK's SDKMessage stream onto AgentEvents. High-value block types get a dedicated frame;
-// any SDK message without a mapping is dropped. Shared by the plain and plan paths; does NOT emit the
-// terminal `done` (callers do that once the whole turn settles).
+// any SDK message without a mapping is dropped. Does NOT emit the terminal `done` (runAgent does that once
+// the whole turn settles).
 async function* streamSdk(
     queryFn: QueryFn,
     prompt: string | AsyncIterable<SDKUserMessage>,
@@ -237,6 +241,17 @@ async function* streamSdk(
     // context_usage frame at the result so the UI can warn as the chat nears auto-compaction.
     let contextTokens: number | undefined;
     let contextModel: string | undefined;
+    // The turn's live permission mode, so the composer can follow it. The SDK has no mode-change message —
+    // `init` states the resolved starting mode, `status` piggybacks the current one, and the agent's own
+    // EnterPlanMode is only visible as a tool call — so the three are folded here and de-duplicated.
+    let mode: PermissionMode | undefined;
+    const modeChange = (next: PermissionMode | undefined): AgentEvent | undefined => {
+        if (next === undefined || next === mode || !PERMISSION_MODES.has(next)) {
+            return undefined;
+        }
+        mode = next;
+        return { kind: "mode", mode: next };
+    };
     for await (const message of sdkTurns(queryFn({ prompt, options }), steering)) {
         const sessionId = (message as { session_id?: string }).session_id;
         if (!sessionSent && typeof sessionId === "string" && sessionId !== "") {
@@ -294,6 +309,15 @@ async function* streamSdk(
                         if (items !== undefined) {
                             yield { kind: "todos", items };
                             continue;
+                        }
+                    }
+                    // The agent moving itself into planning. Nothing else reports it — there is no mode-change
+                    // SDK message — so the tool call IS the signal. ExitPlanMode is NOT mirrored here: the user's
+                    // approval chooses the mode it lands in, and canUseTool pushes that frame.
+                    if (block.name === "EnterPlanMode") {
+                        const changed = modeChange("plan");
+                        if (changed !== undefined) {
+                            yield changed;
                         }
                     }
                     // First Bash of the turn: name the live `agent-<id>` tmux session so the browser surfaces
@@ -362,6 +386,17 @@ async function* streamSdk(
                 if (message.model) {
                     yield { kind: "init", model: message.model };
                 }
+                const changed = modeChange(message.permissionMode as PermissionMode);
+                if (changed !== undefined) {
+                    yield changed;
+                }
+            } else if (message.subtype === "status") {
+                // `status` carries the CURRENT mode when it knows it — the backstop that catches any mode move
+                // the two signals above miss (a hook, a settings default, a /mode-style slash command).
+                const changed = modeChange(message.permissionMode as PermissionMode);
+                if (changed !== undefined) {
+                    yield changed;
+                }
             } else if (message.subtype === "compact_boundary") {
                 const meta = message.compact_metadata;
                 yield {
@@ -422,11 +457,11 @@ async function* streamSdk(
 }
 
 // Render the user's question picks (or a dismissal) as the `ask` tool's text result.
-const formatAnswers = (questions: AskQuestion[], response: QuestionResponse): string => {
-    if (response.cancelled || response.answers === undefined) {
+const formatAnswers = (questions: AskQuestion[], reply: Extract<AgentReply, { kind: "question" }>): string => {
+    if (reply.cancelled || reply.answers === undefined) {
         return "The user dismissed the questions without answering. Proceed with sensible defaults unless essential.";
     }
-    const answers = response.answers;
+    const answers = reply.answers;
     const lines = questions.map((q) => {
         const picks = answers[q.question] ?? [];
         return `- ${q.header || q.question}: ${picks.length > 0 ? picks.join(", ") : "(no answer)"}`;
@@ -464,7 +499,17 @@ const cleanerEnv = (request: AgentRequest): Record<string, string> => {
     };
 };
 
-// Base SDK options shared by both paths.
+// Told to the model every turn, in every mode. The chat renders AskUserQuestion as a clickable card and
+// ExitPlanMode as an approval card, but a model that doesn't know the widgets exist writes "A) … B) …" as
+// prose instead — which is exactly the failure this text prevents. EnterPlanMode is named too, because the
+// user's chosen mode is a starting posture, not a cage: the agent is expected to step up into planning when
+// a request turns out to be bigger than it looked.
+const INTERACTIVE_GUIDANCE = [
+    "When a decision is genuinely the user's to make — an ambiguous requirement, a fork between real alternatives, a missing preference you cannot infer from the code — ask with the AskUserQuestion tool. It renders as a clickable card in the chat; options written as plain text do not, so the user cannot answer them by clicking. Do not use it for questions you can answer yourself by reading the workspace.",
+    "When a request is large, risky, or underspecified, call EnterPlanMode first, investigate read-only, then ExitPlanMode to get your plan approved before changing anything.",
+].join("\n\n");
+
+// Base SDK options for the turn.
 const baseOptions = (request: AgentRequest, abortController: AbortController, permissionMode: PermissionMode, tmuxEnabled: boolean): Options => ({
     cwd: request.cwd,
     includePartialMessages: true,
@@ -472,7 +517,11 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
     abortController,
     // Inherit Claude Code's coding-tuned system prompt. The Agent SDK sends an EMPTY system prompt when this
     // is omitted, which is the main reason a bare SDK turn feels weaker at coding than the CLI/VSCode product.
-    systemPrompt: { type: "preset", preset: "claude_code", ...(request.systemAppend !== undefined ? { append: request.systemAppend } : {}) },
+    systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: request.systemAppend !== undefined ? `${INTERACTIVE_GUIDANCE}\n\n${request.systemAppend}` : INTERACTIVE_GUIDANCE,
+    },
     // Load the workspace's .claude/ config: CLAUDE.md memory, skills, subagents (.claude/agents), settings,
     // hooks, and .mcp.json — plus the user tier. The SDK default is [] (loads nothing), so every filesystem
     // capability was invisible until now. New skills/subagents/hooks then arrive as files, no code change.
@@ -516,62 +565,15 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
     ...(request.disallowedTools !== undefined ? { disallowedTools: [...request.disallowedTools] } : {}),
 });
 
-// Run one agent turn over `request.cwd`, streaming typed events. A throwing/aborted turn surfaces as an
-// `error` event (errors are reported to the UI, not swallowed, then the stream closes with `done`).
-export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaultQuery): AsyncGenerator<AgentEvent> {
-    const abortController = new AbortController();
-    if (request.signal.aborted) {
-        abortController.abort();
-    } else {
-        request.signal.addEventListener("abort", () => abortController.abort(), { once: true });
-    }
-
-    if (request.plan === true) {
-        yield* runPlanTurn(request, queryFn, abortController);
-        return;
-    }
-
-    // Default autonomous posture: full tools, no prompting. The container's isolation makes this safe.
-    const permissionMode: PermissionMode = request.permissionMode ?? "bypassPermissions";
-    const mcpServers = { ...request.sdkServers, ...mcpServersOf(request.tools ?? []) };
-    const tmuxEnabled = tmuxRunEnabled();
-    let stderr = "";
-    const options: Options = {
-        ...baseOptions(request, abortController, permissionMode, tmuxEnabled),
-        allowDangerouslySkipPermissions: permissionMode === "bypassPermissions",
-        stderr: (data) => {
-            stderr += data;
-        },
-        ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
-    };
-    try {
-        yield* streamSdk(queryFn, promptInput(request), options, request.cwd, tmuxEnabled, request.steering);
-    } catch (error) {
-        yield { kind: "error", message: errorMessage(error, stderr) };
-    } finally {
-        // Ends the streaming input, so the SDK subprocess settles; late steer pushes then report undelivered.
-        request.steering?.close();
-    }
-    yield { kind: "done" };
-}
-
-// Always-plan flow: the model proposes via ExitPlanMode (we surface a `plan` event and block on the user's
-// approval), asks clarifying questions via AskUserQuestion (aliased to our `ask` tool → `question` event),
-// and once approved executes with every tool auto-accepted. `canUseTool` runs concurrently with the SDK
-// loop, so a queue bridges both into this generator.
-const noop = (): void => {};
-
-async function* runPlanTurn(request: AgentRequest, queryFn: QueryFn, abortController: AbortController): AsyncGenerator<AgentEvent> {
-    const queue: AgentEvent[] = [];
-    let wake: () => void = noop;
-    let finished = false;
-    const push = (event: AgentEvent): void => {
-        queue.push(event);
-        wake();
-    };
-
-    const uiServer = createSdkMcpServer({
+// The `ask` tool behind AskUserQuestion. It is an SDK MCP tool rather than the built-in of the same name
+// because the built-in renders its own picker inside the CLI — headless, that UI has nowhere to go. Aliasing
+// the built-in NAME onto this tool (see toolAliases below) keeps the model's trained call site working while
+// the answer round-trips through our own card. `alwaysLoad` keeps it in the prompt instead of behind tool
+// search: a tool the model has to go looking for is a tool it writes plain-text options instead of using.
+const askServer = (request: AgentRequest, push: (event: AgentEvent) => void): McpSdkServerConfigWithInstance =>
+    createSdkMcpServer({
         name: "ui",
+        alwaysLoad: true,
         tools: [
             tool(
                 "ask",
@@ -593,43 +595,142 @@ async function* runPlanTurn(request: AgentRequest, queryFn: QueryFn, abortContro
                         .max(4),
                 },
                 async (args) => {
-                    const { id, wait } = createQuestionRequest();
-                    push({ kind: "question", requestId: id, questions: args.questions as AskQuestion[] });
-                    const response = await wait(request.signal);
-                    return { content: [{ type: "text", text: formatAnswers(args.questions as AskQuestion[], response) }] };
+                    const questions = args.questions as AskQuestion[];
+                    const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true });
+                    push({ kind: "question", requestId: id, questions });
+                    const reply = await wait(request.signal);
+                    return { content: [{ type: "text", text: formatAnswers(questions, reply) }] };
                 },
             ),
         ],
     });
 
+// Tools that must never raise a permission card: asking the user a question, and entering plan mode, are both
+// the agent deferring TO the user. Prompting for permission to prompt would be a dead end.
+const UNGATED = new Set(["mcp__ui__ask", "AskUserQuestion", "EnterPlanMode"]);
+
+// The mode the SDK lands in when a plan is approved without the card naming one (the client always names one;
+// this covers a reply that predates the field, e.g. the ACP bridge's single-option approval).
+const DEFAULT_POST_PLAN_MODE: PermissionMode = "acceptEdits";
+
+// A workspace-root-relative path for the permission card, matching the tree/file route space the rest of the
+// UI uses. A path outside the workspace (rare — an additionalDirectories read) stays absolute.
+const relativePath = (absolute: string | undefined, cwd: string): string | undefined => {
+    if (absolute === undefined || absolute === "") {
+        return undefined;
+    }
+    const rel = relative(cwd, absolute);
+    return rel === "" || rel.startsWith("..") ? absolute : rel.split(sep).join("/");
+};
+
+// Every permission decision the turn needs from the user, as the SDK's canUseTool. The SDK only calls this
+// when the active mode actually requires a prompt (bypassPermissions never does; acceptEdits skips edits;
+// default skips reads), so there is no mode branching here — if we were called, the user is the decider.
+const permissionGate =
+    (request: AgentRequest, push: (event: AgentEvent) => void): CanUseTool =>
+    async (toolName, input, options) => {
+        if (toolName === "ExitPlanMode") {
+            const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
+            push({ kind: "plan", requestId: id, text: String((input as { plan?: unknown }).plan ?? "") });
+            const reply = await wait(request.signal);
+            if (!reply.approve) {
+                return { behavior: "deny", message: reply.feedback?.trim() || "Keep refining the plan — do not exit plan mode yet." };
+            }
+            // Approval carries the posture to execute in (auto-accept edits vs approve each one). Setting it
+            // on the session is what actually moves the SDK out of plan mode for the rest of the turn.
+            const mode = reply.mode ?? DEFAULT_POST_PLAN_MODE;
+            push({ kind: "mode", mode });
+            return {
+                behavior: "allow",
+                updatedInput: input,
+                updatedPermissions: [{ type: "setMode", mode, destination: "session" }],
+                decisionClassification: "user_temporary",
+            };
+        }
+        if (UNGATED.has(toolName)) {
+            return { behavior: "allow", updatedInput: input };
+        }
+        const { id, wait } = createRequest("permission", {
+            kind: "permission",
+            requestId: "",
+            decision: "deny",
+            feedback: "The turn was cancelled before you answered.",
+        });
+        // The bridge already rendered the prompt sentence, the button noun, and the reason — pass them
+        // through rather than re-deriving worse copy from the raw tool name and input.
+        const suggestions = options.suggestions ?? [];
+        push({
+            kind: "permission",
+            requestId: id,
+            toolName,
+            ...(options.title !== undefined ? { title: options.title } : {}),
+            ...(options.displayName !== undefined ? { displayName: options.displayName } : {}),
+            ...(options.description !== undefined ? { description: options.description } : {}),
+            ...(options.decisionReason !== undefined ? { reason: options.decisionReason } : {}),
+            ...(relativePath(options.blockedPath, request.cwd) !== undefined
+                ? { path: relativePath(options.blockedPath, request.cwd) as string }
+                : {}),
+            // Only offer "always" when the SDK gave us rules to persist — otherwise the button would promise
+            // a memory that nothing writes.
+            ...(suggestions.length > 0 ? { alwaysLabel: `Don't ask again for ${options.displayName ?? toolName}` } : {}),
+        });
+        const reply = await wait(request.signal);
+        if (reply.decision === "deny") {
+            return { behavior: "deny", message: reply.feedback?.trim() || `The user declined ${toolName}. Do not retry it; find another way or ask.` };
+        }
+        return {
+            behavior: "allow",
+            updatedInput: input,
+            decisionClassification: reply.decision === "always" ? "user_permanent" : "user_temporary",
+            ...(reply.decision === "always" && suggestions.length > 0 ? { updatedPermissions: suggestions } : {}),
+        };
+    };
+
+const noop = (): void => {};
+
+// Run one agent turn over `request.cwd`, streaming typed events. ONE path for every permission mode: the
+// interactive surface (question cards, plan approval, per-tool permission prompts) is always wired, and which
+// of it actually fires is the SDK's call given the turn's mode — which the agent itself can change mid-turn
+// via EnterPlanMode/ExitPlanMode. `canUseTool` and the `ask` handler run concurrently with the SDK loop, so a
+// queue bridges their events and the stream's into this generator.
+//
+// A throwing/aborted turn surfaces as an `error` event (errors are reported to the UI, not swallowed), then
+// the stream closes with `done`.
+export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaultQuery): AsyncGenerator<AgentEvent> {
+    const abortController = new AbortController();
+    if (request.signal.aborted) {
+        abortController.abort();
+    } else {
+        request.signal.addEventListener("abort", () => abortController.abort(), { once: true });
+    }
+
+    const queue: AgentEvent[] = [];
+    let wake: () => void = noop;
+    let finished = false;
+    const push = (event: AgentEvent): void => {
+        queue.push(event);
+        wake();
+    };
+
+    const permissionMode: PermissionMode = request.permissionMode ?? "bypassPermissions";
     const tmuxEnabled = tmuxRunEnabled();
     let stderr = "";
     const options: Options = {
-        ...baseOptions(request, abortController, "plan", tmuxEnabled),
+        ...baseOptions(request, abortController, permissionMode, tmuxEnabled),
+        allowDangerouslySkipPermissions: permissionMode === "bypassPermissions",
         stderr: (data) => {
             stderr += data;
         },
-        // The `ui` server backs AskUserQuestion; the agent's remote MCP tools are merged in alongside it so
-        // the model can also consult them while planning (a same-named tool would override `ui`, but `ui` is
-        // reserved). canUseTool auto-allows every tool after approval, so the remote tools need no extra gate.
-        mcpServers: { ui: uiServer, ...request.sdkServers, ...mcpServersOf(request.tools ?? []) },
+        // The `ui` server backs AskUserQuestion; the agent's remote MCP tools are merged in alongside it (a
+        // same-named tool would override `ui`, but `ui` is reserved).
+        mcpServers: { ui: askServer(request, push), ...request.sdkServers, ...mcpServersOf(request.tools ?? []) },
         toolAliases: { AskUserQuestion: "mcp__ui__ask" },
+        // Our card renders markdown, so option previews should arrive as markdown (the CLI default, pinned
+        // here because the web-SDK default is HTML and would render as escaped source in the card).
+        toolConfig: { askUserQuestion: { previewFormat: "markdown" } },
         planModeInstructions:
             "Propose a clear, concise approach for the user's request, then call ExitPlanMode to ask for approval before executing. When you need the user to choose between options, ask with the AskUserQuestion tool rather than writing the choices as plain text.",
-        canUseTool: async (toolName, input) => {
-            if (toolName === "ExitPlanMode") {
-                const { id, wait } = createPlanRequest();
-                push({ kind: "plan", decisionId: id, text: String((input as { plan?: unknown }).plan ?? "") });
-                const decision = await wait(request.signal);
-                if (decision.approve) {
-                    return { behavior: "allow", updatedInput: input };
-                }
-                return { behavior: "deny", message: decision.feedback?.trim() || "Keep refining the plan — do not exit plan mode yet." };
-            }
-            // After approval (and for question prompts) every tool is auto-accepted — the container is the
-            // isolation boundary, so execution needs no per-command prompting.
-            return { behavior: "allow", updatedInput: input };
-        },
+        canUseTool: permissionGate(request, push),
     };
 
     const pump = (async () => {
@@ -640,6 +741,7 @@ async function* runPlanTurn(request: AgentRequest, queryFn: QueryFn, abortContro
         } catch (error) {
             push({ kind: "error", message: errorMessage(error, stderr) });
         } finally {
+            // Ends the streaming input, so the SDK subprocess settles; late steer pushes then report undelivered.
             request.steering?.close();
             finished = true;
             wake();

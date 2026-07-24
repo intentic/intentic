@@ -1,7 +1,7 @@
 import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { resolvePlanDecision } from "../agent/agent-requests.js";
+import { resolveRequest } from "../agent/agent-requests.js";
 import { createGrokAgent, createGrokRunner, type GrokRunner, type GrokTurn } from "./grok-agent.js";
 import type { OpenCodeService } from "./opencode.js";
 
@@ -24,14 +24,14 @@ const request = { prompt: "add a /ping route", cwd: "/work", signal: new AbortCo
 const collect = async (
     agent: ReturnType<typeof createGrokAgent>,
     turnRequest: Parameters<ReturnType<typeof createGrokAgent>>[0],
-    onPlan?: (decisionId: string) => { approve: boolean; feedback?: string },
+    onPlan?: (requestId: string) => { approve: boolean; feedback?: string },
 ): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
     for await (const event of agent(turnRequest)) {
         events.push(event);
         if (event.kind === "plan" && onPlan !== undefined) {
-            const decision = onPlan(event.decisionId);
-            setTimeout(() => resolvePlanDecision(event.decisionId, decision), 0);
+            const decision = onPlan(event.requestId);
+            setTimeout(() => resolveRequest({ kind: "plan", requestId: event.requestId, ...decision }), 0);
         }
     }
     return events;
@@ -176,11 +176,11 @@ test("a plan turn proposes read-only on the plan agent, then executes on build a
             { type: "session.idle", properties: { sessionID: "s2" } },
         ],
     );
-    const events = await collect(createGrokAgent(runner), { ...request, plan: true }, () => ({ approve: true }));
+    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "s2" },
-        { kind: "plan", decisionId: expect.any(String) as string, text: "Plan: add the route, then test." },
+        { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route, then test." },
         { kind: "delta", text: "Done." },
         { kind: "done" },
     ]);
@@ -208,7 +208,7 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
         ],
     );
     let planCount = 0;
-    const events = await collect(createGrokAgent(runner), { ...request, plan: true }, () => {
+    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const }, () => {
         planCount += 1;
         return planCount === 1 ? { approve: false, feedback: "use fastify" } : { approve: true };
     });
@@ -246,7 +246,7 @@ test("a plan turn captures only the assistant's text, never the echoed user prom
         ],
         [{ type: "session.idle", properties: { sessionID: "s5" } }],
     );
-    const events = await collect(createGrokAgent(runner), { ...request, plan: true }, () => ({ approve: true }));
+    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
     const plan = events.find((event) => event.kind === "plan") as { text: string } | undefined;
     expect(plan?.text).toBe("Plan: add the route.");
 });
@@ -262,7 +262,7 @@ test("a plan turn that errors after partial text emits the error and NO plan fra
         },
         { type: "session.error", properties: { sessionID: "s6", error: { name: "PaymentRequiredError", data: { message: "Payment Required" } } } },
     ]);
-    const events = await collect(createGrokAgent(runner), { ...request, plan: true });
+    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const });
     expect(events).toEqual([
         { kind: "session", sessionId: "s6" },
         { kind: "error", message: "Payment Required" },

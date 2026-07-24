@@ -27,7 +27,7 @@ flowchart TB
 
     subgraph tenant["Tenant machine — your PC or a server"]
         subgraph sandbox["Sandbox — one per user · its own Cloudflare tunnel"]
-            agent["Agents: Claude · Codex · Grok · Kimi Code"]
+            agent["Agents: Claude · Codex · Grok · Kimi Code · Gemini"]
             cli["intentic CLI"]
             repos["repos:<br/>intent · desired-state · app"]
         end
@@ -56,7 +56,7 @@ flowchart TB
   `pnpm db:up` / `docker compose` work in the workspace; the HOST's Docker socket is never mounted, so the
   agent's containers can only live inside the sandbox's own engine; its cloudflared runs as a separate sidecar
   container). Runs the coding agents (Claude via the agent
-  SDK, Codex, Grok, Kimi Code — spawned per turn, not resident) and the `intentic` CLI over the three repos
+  SDK, Codex, Grok, Kimi Code, Gemini — spawned per turn, not resident) and the `intentic` CLI over the three repos
   (`intent` = `deploy.config.ts`, the IaC; `desired-state` = resolved artifact + status; `app` =
   the application code), and exposes its daemon over its **own Cloudflare tunnel**. SSH keys,
   Cloudflare and agent tokens ride straight into it and never reach the platform.
@@ -96,8 +96,9 @@ endpoint. One Node process serves the oRPC contract on `:8787` and a preview pro
 terminals, panel dev servers, and agent shell commands all run in a shared `tmux` server so they
 survive reconnects. Its subsystems:
 
-- **Agent backends** — Claude (agent SDK, spawned per turn), Codex, Grok/opencode, and Kimi Code (Moonshot's
-  Anthropic-compatible endpoint on the Claude Code harness)
+- **Agent backends** — Claude (agent SDK, spawned per turn), Codex, Grok/opencode, Kimi Code (Moonshot's
+  Anthropic-compatible endpoint on the Claude Code harness), and Gemini (Google's models re-served through the
+  bundled translator, also on the Claude Code harness)
   ([agent/](_apps/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE
   ([webchat/](_apps/sandbox/src/webchat/)). A chat turn executes as a **detached run**
   ([agent/turn-runs.ts](_apps/sandbox/src/agent/turn-runs.ts)): `POST /agent` acks with a run id and the

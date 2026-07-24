@@ -19,6 +19,28 @@ export const resolveWithin = (dir: string, relPath: string): string | undefined 
     return target;
 };
 
+// The daemon's own credential and authorization state, all of it directly under the WORKSPACE ROOT's .intentic/.
+// owner.json and members.json ARE the answer to "who may drive this sandbox" — re-read from disk on every
+// request — capabilities.json carries the capability manifest's secrets, and claude/ codex/ kimi/ opencode/ hold
+// the agent providers' tokens (AGENT_AUTH_DIR moves that set out of /work entirely, and then none of this is
+// reachable to begin with).
+const CONTROL_PLANE_ENTRIES = new Set(["owner.json", "members.json", "capabilities.json", "claude.json", "claude", "codex", "kimi", "opencode"]);
+
+// Whether an absolute path lands in that control plane. Every one of those files has a purpose-built, owner-gated
+// route, so the GENERIC file API must not tunnel around them: a member — someone the owner invited to
+// collaborate — could otherwise upload their own owner.json and take the sandbox, or read the owner's provider
+// token straight back out of the raw route. Denied for everyone, the owner included: no flow needs to reach a
+// token through the file API, and a rule with no role in it cannot be got wrong at a call site.
+//
+// Scoped deliberately tight. Only the ROOT .intentic is the control plane — a repo's own nested .intentic is
+// ordinary workspace content — and only these entries within it, because the root's other subtrees are real
+// features the browser drives through this same API (chat attachments under attachments/, a directory's own UI
+// under ui/). A new credential store added under .intentic/ belongs in the set above.
+export const isControlPlanePath = (root: string, absPath: string): boolean => {
+    const segments = relative(resolve(root), absPath).split(sep);
+    return segments.length >= 2 && segments[0] === ".intentic" && CONTROL_PLANE_ENTRIES.has(segments[1] ?? "");
+};
+
 // Read a workspace file's text; undefined when it does not exist (the daemon maps that to 404). The path is
 // already repo-contained by resolveWithin at the call site.
 export const readWorkspaceFile = async (absPath: string): Promise<string | undefined> => {

@@ -137,7 +137,7 @@ test("the plan turn keeps the ui server and merges the request's tools alongside
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    await collect({ ...request, plan: true, tools: [{ name: "obs", url: "https://signoz.example.com/mcp", token: "tok" }] }, capture);
+    await collect({ ...request, permissionMode: "plan" as const, tools: [{ name: "obs", url: "https://signoz.example.com/mcp", token: "tok" }] }, capture);
     // The plan flow's AskUserQuestion server stays; the agent's remote tools are added next to it.
     expect(captured?.mcpServers?.["ui"]).toBeDefined();
     expect(captured?.mcpServers?.["obs"]).toEqual({

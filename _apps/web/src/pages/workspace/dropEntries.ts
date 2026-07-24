@@ -41,8 +41,10 @@ const withTimeout = async <T>(promise: Promise<T>, label: string): Promise<T> =>
 // `.git` so it stays connected to its remote, and `.tmp` scratch never shows up in a drop.
 const IGNORED_DIRS = new Set([...WORKSPACE_IGNORED_DIRS].filter((dir) => dir !== ".git" && dir !== ".tmp"));
 
-// Secret files the daemon refuses to write (they'd 404) — skip them client-side so they don't show as failures.
-// `.env.example` is safe (placeholder values only).
+// Secrets a drop leaves behind on purpose: shipping your local credentials into the sandbox is not what dragging
+// a project in meant. This is the client's own choice, not a mirror of a daemon rule — the daemon refuses only
+// its own control-plane files (isControlPlanePath: owner/members/capabilities + the provider token dirs under
+// /work/.intentic), and would happily write every name below. `.env.example` is safe (placeholder values only).
 const isSecretFile = (name: string): boolean =>
     name === ".secrets.json" || name === "claude.json" || name === "capabilities.json" || (name.startsWith(".env") && name !== ".env.example");
 

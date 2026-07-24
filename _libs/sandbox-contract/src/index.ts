@@ -7,6 +7,7 @@ import { claudeContract } from "./contracts/claude.contract.js";
 import { codexContract } from "./contracts/codex.contract.js";
 import { draftsContract } from "./contracts/drafts.contract.js";
 import { extensionsContract } from "./contracts/extensions.contract.js";
+import { geminiContract } from "./contracts/gemini.contract.js";
 import { gitContract } from "./contracts/git.contract.js";
 import { grokContract } from "./contracts/grok.contract.js";
 import { historyContract } from "./contracts/history.contract.js";
@@ -32,6 +33,7 @@ export { claudeContract } from "./contracts/claude.contract.js";
 export { codexContract } from "./contracts/codex.contract.js";
 export { draftsContract } from "./contracts/drafts.contract.js";
 export { extensionsContract } from "./contracts/extensions.contract.js";
+export { geminiContract } from "./contracts/gemini.contract.js";
 export { gitContract } from "./contracts/git.contract.js";
 export { grokContract } from "./contracts/grok.contract.js";
 export { historyContract } from "./contracts/history.contract.js";
@@ -71,6 +73,7 @@ export const sandboxContract = {
     sessions: sessionsContract,
     settings: settingsContract,
     intentic: intenticContract,
+    gemini: geminiContract,
     git: gitContract,
     grok: grokContract,
     kimi: kimiContract,

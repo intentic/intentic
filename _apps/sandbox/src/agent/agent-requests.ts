@@ -1,82 +1,54 @@
 import { randomUUID } from "node:crypto";
+import type { AgentReply } from "@intentic/sandbox-contract";
 
-/* In-memory bridges that let an in-flight agent turn pause and wait for the user. When the model
- * calls ExitPlanMode we surface the plan and block until the user approves/rejects; when it asks
- * interactive questions we block until the user answers. Decisions/answers arrive on separate
- * `POST /agent/decision` / `POST /agent/answer` requests and resolve the paused promise here.
+/* The bridge that lets an in-flight agent turn pause and wait for the user. Three cards park here — an
+ * ExitPlanMode approval, a set of AskUserQuestion picks, and a per-tool permission prompt — and all three do
+ * the same thing: mint an id, stream a frame carrying it, and block until `POST /agent/reply` resolves that
+ * id. So there is one registry, not one per card: the reply's `kind` is what the waiter reads.
+ *
+ * A waiter always settles. If the turn aborts (Stop, or the browser dismissing a card) the abort signal
+ * settles it with `onAbort`'s value instead, so the SDK's tool handler never hangs holding the turn open.
  *
  * The daemon is single-tenant (one container per project, reached only over its authenticated tunnel — the
  * owner's Google ID token), so requests are keyed by an unguessable id alone — no per-user scoping. */
 
-export interface PlanDecision {
-    readonly approve: boolean;
-    readonly feedback?: string;
-}
+type Waiter = (reply: AgentReply) => void;
 
-export interface QuestionResponse {
-    // Map of question text → selected option label(s) (+ any free-text "Other" answer).
-    readonly answers?: Record<string, string[]>;
-    // Set when the user dismissed the card or the turn was aborted before answering.
-    readonly cancelled?: boolean;
-}
+const pending = new Map<string, Waiter>();
 
-const pendingPlans = new Map<string, (decision: PlanDecision) => void>();
-const pendingQuestions = new Map<string, (response: QuestionResponse) => void>();
-
-// Register a pending plan approval; resolves on the user's decision, or denies on abort (Stop).
-export function createPlanRequest(): { id: string; wait: (signal: AbortSignal) => Promise<PlanDecision> } {
+// Register a card awaiting the user. `onAbort` is the reply synthesized if the turn dies first — each caller
+// supplies the answer that makes its own tool result read honestly ("cancelled", "denied", …).
+export function createRequest<K extends AgentReply["kind"]>(
+    kind: K,
+    onAbort: Extract<AgentReply, { kind: K }>,
+): { id: string; wait: (signal: AbortSignal) => Promise<Extract<AgentReply, { kind: K }>> } {
     const id = randomUUID();
-    const wait = (signal: AbortSignal): Promise<PlanDecision> =>
-        new Promise<PlanDecision>((resolve) => {
-            const settle = (decision: PlanDecision): void => {
-                if (pendingPlans.delete(id)) {
-                    resolve(decision);
+    const wait = (signal: AbortSignal): Promise<Extract<AgentReply, { kind: K }>> =>
+        new Promise((resolve) => {
+            const settle = (reply: AgentReply): void => {
+                if (!pending.delete(id)) {
+                    return;
                 }
+                // A reply for the wrong card can only come from a client bug; the waiter's own kind is what
+                // its caller is typed against, so an off-kind reply settles as the abort value instead.
+                resolve(reply.kind === kind ? (reply as Extract<AgentReply, { kind: K }>) : onAbort);
             };
             if (signal.aborted) {
-                settle({ approve: false, feedback: "Planning cancelled." });
+                settle(onAbort);
                 return;
             }
-            pendingPlans.set(id, settle);
-            signal.addEventListener("abort", () => settle({ approve: false, feedback: "Planning cancelled." }), { once: true });
+            pending.set(id, settle);
+            signal.addEventListener("abort", () => settle(onAbort), { once: true });
         });
     return { id, wait };
 }
 
-export function resolvePlanDecision(id: string, decision: PlanDecision): boolean {
-    const settle = pendingPlans.get(id);
+// Resolve the parked card. False when nothing holds that id — the turn already ended, and the route 404s.
+export function resolveRequest(reply: AgentReply): boolean {
+    const settle = pending.get(reply.requestId);
     if (settle === undefined) {
         return false;
     }
-    settle(decision);
-    return true;
-}
-
-// Register a pending question; resolves on the user's answer, or cancels on abort (Stop).
-export function createQuestionRequest(): { id: string; wait: (signal: AbortSignal) => Promise<QuestionResponse> } {
-    const id = randomUUID();
-    const wait = (signal: AbortSignal): Promise<QuestionResponse> =>
-        new Promise<QuestionResponse>((resolve) => {
-            const settle = (response: QuestionResponse): void => {
-                if (pendingQuestions.delete(id)) {
-                    resolve(response);
-                }
-            };
-            if (signal.aborted) {
-                settle({ cancelled: true });
-                return;
-            }
-            pendingQuestions.set(id, settle);
-            signal.addEventListener("abort", () => settle({ cancelled: true }), { once: true });
-        });
-    return { id, wait };
-}
-
-export function resolveQuestionAnswer(id: string, response: QuestionResponse): boolean {
-    const settle = pendingQuestions.get(id);
-    if (settle === undefined) {
-        return false;
-    }
-    settle(response);
+    settle(reply);
     return true;
 }

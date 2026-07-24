@@ -252,7 +252,7 @@ export const createAcpAgent = (connections: AcpConnections, timeouts: AcpTimeout
         const prompt = withFileNote(request.prompt, [...others, ...unread]);
 
         try {
-            if (request.plan === true) {
+            if (request.permissionMode === "plan") {
                 // Plan flow is text-only prompts; attachment paths ride the note (images too — the planning
                 // phase reads, it doesn't look at screenshots natively; keeping phases uniform beats cleverness).
                 const planPhase: PlanPhase = async function* (phasePrompt, sessionId) {

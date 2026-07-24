@@ -6,9 +6,27 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
 import { discoverRepos, isValidRepoId } from "../workspace/repo-discovery.js";
-import { resolveWithin } from "../workspace/workspace-files.js";
+import { isControlPlanePath, resolveWithin } from "../workspace/workspace-files.js";
 import type { ActionResult } from "./changes.js";
 import { AGENT_GIT_AUTHOR } from "./git.js";
+
+// How long one Changes scan's result stands in for the next caller's. Long enough to swallow the browser's
+// per-batch refetch storm, short enough that a save still shows up in the panel as it happens.
+const COALESCE_MS = 500;
+
+// Why a repo could not be scanned, in one line for the panel. execFile rejects with the whole command line in
+// `message`, so prefer git's own stderr and keep its last line — the `fatal:` verdict, not the noise above it.
+const scanFailure = (error: unknown): string => {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    const text = typeof stderr === "string" && stderr.trim() !== "" ? stderr : error instanceof Error ? error.message : String(error);
+    return (
+        text
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line !== "")
+            .at(-1) ?? "git could not read this repo"
+    );
+};
 
 const exists = async (path: string): Promise<boolean> => {
     try {
@@ -50,6 +68,29 @@ export const createGitRoutes = (services: Services) => {
         }
         throw new ORPCError("NOT_FOUND", { message: "unknown repo" });
     };
+    // Resolve a repo-relative path inside an already-resolved repo dir, with the two floors every file surface
+    // applies: it may not climb out of the repo, and it may not reach the daemon's control plane — for repo
+    // "root" that dir IS the workspace, so without this the repo file API would be the way around
+    // isControlPlanePath. NOT_FOUND for the latter, matching the workspace routes.
+    const guardRepoPath = (dir: string, path: string): string => {
+        const target = resolveWithin(dir, path);
+        if (target === undefined) {
+            throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
+        }
+        if (isControlPlanePath(services.workspace.root, target)) {
+            throw new ORPCError("NOT_FOUND", { message: "not found" });
+        }
+        return target;
+    };
+    // The coalesced Changes scan's memo (built below). Every mutation this router performs is one the user just
+    // asked for and expects to see at once, so it drops the memo: the panel's own post-action refetch must never
+    // be answered from a scan that predates the action it is refetching for.
+    let scan: Promise<{ repos: RepoChanges[] }> | undefined;
+    let reusableUntil = 0;
+    const invalidateScan = (): void => {
+        scan = undefined;
+        reusableUntil = 0;
+    };
     // A sequence/HEAD-moving op: checkpoint the pre-action tree FIRST (so even a rewrite stays reversible from
     // the Checkpoints timeline), run it, and record the resulting tree on the timeline on a clean apply.
     const guarded = async (repo: string, label: string, run: (dir: string) => Promise<ActionResult>): Promise<ActionResult> => {
@@ -57,44 +98,73 @@ export const createGitRoutes = (services: Services) => {
         await services.history.snapshot("user", label);
         const result = await run(dir);
         if (result.ok) {
+            invalidateScan();
             services.history.notifyUserWrite();
         }
         return result;
     };
-    return {
-        changes: i.changes.handler(async () => {
-            const repoIds = await discoverRepos(services.workspace.root);
-            // A Changes review right after a clone must not sweep the new repo's files into the root scope —
-            // converge the root excludes on the repo set we're about to scan.
-            await syncRootExcludes(services.config.historyRoot, repoIds);
-            const candidates = [
-                { repo: "root", dir: services.workspace.root },
-                ...repoIds.map((id) => ({ repo: id, dir: join(services.workspace.root, id) })),
-            ];
-            // Each candidate is its own repo dir (own .git, no shared index.lock), so the scans run
-            // concurrently — the panel waits for the slowest repo, not the sum of all of them.
-            const scanned = await Promise.all(
-                candidates.map(async (candidate): Promise<RepoChanges | undefined> => {
-                    try {
-                        await healPointer(candidate.repo, candidate.dir);
-                        const { branch, changes } = await services.git.changedFiles(candidate.dir);
-                        if (changes.length > 0) {
-                            return { repo: candidate.repo, ...(branch !== undefined ? { branch } : {}), changes };
-                        }
-                    } catch (error) {
-                        // One broken repo (a deleted .git with no heal source, a mid-clone dir) must not 500 the panel.
-                        services.logger.warn({ err: error, repo: candidate.repo }, "git changes: repo skipped");
+    const scanAll = async (): Promise<{ repos: RepoChanges[] }> => {
+        const repoIds = await discoverRepos(services.workspace.root);
+        // A Changes review right after a clone must not sweep the new repo's files into the root scope —
+        // converge the root excludes on the repo set we're about to scan.
+        await syncRootExcludes(services.config.historyRoot, repoIds);
+        const candidates = [
+            { repo: "root", dir: services.workspace.root },
+            ...repoIds.map((id) => ({ repo: id, dir: join(services.workspace.root, id) })),
+        ];
+        // Each candidate is its own repo dir (own .git, no shared index.lock), so the scans run
+        // concurrently — the panel waits for the slowest repo, not the sum of all of them.
+        const scanned = await Promise.all(
+            candidates.map(async (candidate): Promise<RepoChanges | undefined> => {
+                try {
+                    await healPointer(candidate.repo, candidate.dir);
+                    const { branch, changes } = await services.git.changedFiles(candidate.dir);
+                    if (changes.length > 0) {
+                        return { repo: candidate.repo, ...(branch !== undefined ? { branch } : {}), changes };
                     }
                     return undefined;
-                }),
-            );
-            return { repos: scanned.filter((repo) => repo !== undefined) };
-        }),
+                } catch (error) {
+                    // One broken repo (a deleted .git with no heal source, a repo whose .git is still uploading)
+                    // must not 500 the panel — but it must not disappear from it either, so the reason rides back
+                    // in the response. Debug, not warn: while a dropped repo's .git lands this fires on every poll
+                    // and the client is already being told.
+                    services.logger.debug({ err: error, repo: candidate.repo }, "git changes: repo unscannable");
+                    return { repo: candidate.repo, changes: [], error: scanFailure(error) };
+                }
+            }),
+        );
+        return { repos: scanned.filter((repo) => repo !== undefined) };
+    };
+
+    // The panel refetches on every workspace-change batch — several times a second while a drop or a build lands,
+    // from every connected browser — and each scan is a full discoverRepos walk plus a `git status` per repo.
+    // Collapse them: callers arriving while a scan runs share it, and its result is reused for COALESCE_MS after it
+    // settles, so a burst costs one scan instead of one per observer per batch. `reusableUntil` is 0 for the whole
+    // time a scan is in flight, which is what makes the sharing (not just the caching) work.
+    const coalescedScan = (): Promise<{ repos: RepoChanges[] }> => {
+        if (scan !== undefined && (reusableUntil === 0 || Date.now() < reusableUntil)) {
+            return scan;
+        }
+        reusableUntil = 0;
+        scan = scanAll().then(
+            (result) => {
+                reusableUntil = Date.now() + COALESCE_MS;
+                return result;
+            },
+            (error: unknown) => {
+                // A whole-scan failure is never worth serving to the next caller — drop it so they rescan.
+                scan = undefined;
+                throw error;
+            },
+        );
+        return scan;
+    };
+
+    return {
+        changes: i.changes.handler(coalescedScan),
         fileDiff: i.fileDiff.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
-            if (resolveWithin(dir, input.path) === undefined) {
-                throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
-            }
+            guardRepoPath(dir, input.path);
             return services.git.fileDiff(dir, input.path, "HEAD");
         }),
         // The git-history graph: every workspace repo (for the tree affordance + the graph's switcher), one
@@ -108,9 +178,7 @@ export const createGitRoutes = (services: Services) => {
         commitDiff: i.commitDiff.handler(async ({ input }) => ({ files: await services.git.commitChanges(await repoDir(input.repo), input.sha) })),
         commitFileDiff: i.commitFileDiff.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
-            if (resolveWithin(dir, input.path) === undefined) {
-                throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
-            }
+            guardRepoPath(dir, input.path);
             return services.git.commitFileDiff(dir, input.sha, input.path);
         }),
         // Write actions from the commit context menu (VSCode "Git Graph" parity). Branch/tag are
@@ -129,6 +197,7 @@ export const createGitRoutes = (services: Services) => {
             const dir = await repoDir(input.repo);
             await services.history.snapshot("user", `before checkout ${input.ref.slice(0, 12)}`);
             await services.git.checkoutRef(dir, input.ref);
+            invalidateScan();
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
@@ -136,6 +205,7 @@ export const createGitRoutes = (services: Services) => {
             const dir = await repoDir(input.repo);
             await services.history.snapshot("user", `before reset --${input.mode}`);
             await services.git.resetTo(dir, input.sha, input.mode);
+            invalidateScan();
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
@@ -161,10 +231,12 @@ export const createGitRoutes = (services: Services) => {
                 input.paths !== undefined
                     ? await services.git.commitPaths(dir, input.message, input.paths, AGENT_GIT_AUTHOR)
                     : await services.git.commitAll(dir, input.message, AGENT_GIT_AUTHOR);
+            invalidateScan();
             return { committed };
         }),
         discard: i.discard.handler(async ({ input }) => {
             await services.git.discardPaths(await repoDir(input.repo), input.paths);
+            invalidateScan();
             // The worktree changed under the user's feet — record it on the safety timeline like any user write.
             services.history.notifyUserWrite();
             return { ok: true } as const;
@@ -175,22 +247,15 @@ export const createGitRoutes = (services: Services) => {
         }),
         files: i.files.handler(async ({ input }) => ({ files: await services.git.listFiles(await repoDir(input.repo)) })),
         readFile: i.readFile.handler(async ({ input }) => {
-            const target = resolveWithin(await repoDir(input.repo), input.path);
-            if (target === undefined) {
-                throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
-            }
-            const content = await services.files.read(target);
+            const content = await services.files.read(guardRepoPath(await repoDir(input.repo), input.path));
             if (content === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "not found" });
             }
             return { path: input.path, content };
         }),
         writeFile: i.writeFile.handler(async ({ input }) => {
-            const target = resolveWithin(await repoDir(input.repo), input.path);
-            if (target === undefined) {
-                throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
-            }
-            await services.files.write(target, input.content);
+            await services.files.write(guardRepoPath(await repoDir(input.repo), input.path), input.content);
+            invalidateScan();
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),

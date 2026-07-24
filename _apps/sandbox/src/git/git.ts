@@ -1,4 +1,4 @@
-import { IGNORE_FILE_MODE, type GitRunner } from "@intentic/scaffold";
+import { GIT_GLOBAL_ARGS, type GitRunner } from "@intentic/scaffold";
 import { shellQuote, type TerminalRunner } from "../terminal/terminal-run.js";
 
 // A GitRunner that executes visibly through a terminal session (capability flows — the user watches the actual
@@ -8,7 +8,7 @@ import { shellQuote, type TerminalRunner } from "../terminal/terminal-run.js";
 export const terminalGit =
     (runner: TerminalRunner, session: string): GitRunner =>
     async (dir, args) => ({
-        stdout: await runner.run(session, ["git", ...IGNORE_FILE_MODE, "-C", dir, ...args].map(shellQuote).join(" "), { cwd: dir, window: "git" }),
+        stdout: await runner.run(session, ["git", ...GIT_GLOBAL_ARGS, "-C", dir, ...args].map(shellQuote).join(" "), { cwd: dir, window: "git" }),
         stderr: "",
     });
 
