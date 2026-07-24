@@ -4,12 +4,15 @@
 # version is repeated here.
 
 stages:
+  - prebuild
   - test
   - images
   - release
 
 variables:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  # The prebaked job image every job below runs in (built by the `ci-base` job from _tools/ci-base).
+  CI_BASE_IMAGE: $CI_REGISTRY_IMAGE/ci-base:latest
   # CI builds the site but never deploys it, so IndexNow submission is pure waste here — it polls the LIVE
   # site for the key file (90s timeout) and then retries a 403 five times, ~2 min per build. Submit from
   # wherever the site actually deploys.
@@ -68,33 +71,61 @@ variables:
 
 .pnpm-setup:
   script:
-    - corepack enable
-    # Restore the exec bit corepack strips off its bundled node-gyp gyp_main.py: node-pty (no linux prebuild)
-    # compiles from source and make invokes gyp_main.py directly, otherwise dying with "Permission denied".
+    # corepack, pnpm and the node-gyp exec-bit fix are all baked into ci-base. These two lines exist only to
+    # cover DRIFT: when package.json's packageManager moves ahead of the pnpm pinned in the image, corepack
+    # fetches the new version here, and that freshly-fetched copy needs the same fix — corepack strips the exec
+    # bit off its bundled gyp_main.py, and node-pty (no linux prebuild) compiles from source and invokes it
+    # directly. When the versions match, both are no-ops.
     - pnpm --version
     - find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
     - pnpm install --frozen-lockfile --store-dir "$CI_PROJECT_DIR/.pnpm-store"
     # Keep the cached .turbo archive bounded: drop entries untouched for 14 days (rebuilt + re-cached if needed).
     - find .turbo/cache -type f -mtime +14 -delete 2>/dev/null || true
 
-# The docker CLI + buildx on the node image, for jobs that drive the dind service. Registry login stays
-# per-job — only the jobs that push need it.
-.docker-cli-setup:
-  script:
-    - install -m 0755 -d /etc/apt/keyrings
-    - curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-    - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
-    - apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin
-
 default:
-  image: node:24.18.0
+  # _tools/ci-base: node 24.18.0 + docker CLI/buildx + ripgrep + bun + pnpm, so no job installs tooling at
+  # runtime. The tag is mutable (the ci-base job moves it on main), so gitlab-runner's pull_policy must stay
+  # "always" — with the layers already on the host that is a manifest digest check, not a download.
+  image: $CI_BASE_IMAGE
   cache:
     - !reference [.cache-defs, pnpm]
     - !reference [.cache-defs, turbo]
   before_script:
     - !reference [.pnpm-setup, script]
-    # The iq engine's lexical tier shells into ripgrep (the test job runs the iq test suites).
-    - apt-get update && apt-get install -y --no-install-recommends ripgrep
+
+# The CI job image itself. Runs ahead of everything, but ONLY when _tools/ci-base changes — every other pipeline
+# skips it and the prebuild stage costs nothing. It cannot run in $CI_BASE_IMAGE (building that is the point), so
+# it uses the plain docker CLI image and clears the default before_script/cache, which assume node + pnpm.
+# `latest` is pushed ONLY from main: an MR touching this dir still builds the image to prove it compiles, but must
+# not move the tag every other pipeline pulls. Consequence: an MR that needs a NEW tool in the base image cannot
+# use it until the change lands on main.
+ci-base:
+  extends: .dind
+  stage: prebuild
+  interruptible: true
+  image: docker:27-cli
+  before_script: []
+  cache: []
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - _tools/ci-base/**/*
+      variables:
+        PUSH_BASE: "1"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - _tools/ci-base/**/*
+      variables:
+        PUSH_BASE: "0"
+  script:
+    - docker build -t "$CI_BASE_IMAGE" _tools/ci-base
+    - |
+      if [ "$PUSH_BASE" = "1" ]; then
+        docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+        docker push "$CI_BASE_IMAGE"
+      else
+        echo "merge request — image built for validation only, tag not moved"
+      fi
 
 # Build + test every product (turbo runs across intentic/, platform/, site/): the MR gate, and on main the
 # verify step the images + release stages wait on via stage ordering — a red build publishes nothing.
@@ -106,9 +137,11 @@ test:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == "main"'
+  # One turbo invocation, not two: `build` then `test` as separate calls is a hard barrier — every package must
+  # finish building before ANY test starts. A single `build test` graph lets each package's tests run the moment
+  # its own deps are built while the rest of the monorepo is still compiling.
   script:
-    - pnpm turbo run build
-    - pnpm turbo run test
+    - pnpm turbo run build test
 
 # Hermetic infra e2e on merge requests — NON-BLOCKING sidecar (allow_failure). Boots a Docker-in-Docker host
 # via testcontainers and drives the real CLI (resolve -> targeted apply -> adopt -> readiness diagnostics), no
@@ -151,7 +184,6 @@ e2e:nightly:
         - .cache/intentic-e2e
   before_script:
     - !reference [.pnpm-setup, script]
-    - !reference [.docker-cli-setup, script]
     - mkdir -p "$HOME/.cache" "$CI_PROJECT_DIR/.cache/intentic-e2e" && ln -sfn "$CI_PROJECT_DIR/.cache/intentic-e2e" "$HOME/.cache/intentic-e2e"
   script:
     - pnpm e2e
@@ -165,8 +197,9 @@ e2e:nightly:
 images:
   extends: .dind
   stage: images
-  # node image (not docker:27): prepare-image-trees.sh compiles the payload JOB-side — with the warm pnpm
-  # store + turbo cache from the test job it's a cache replay, and the Dockerfile is left with pure COPYs.
+  # ci-base (node + docker CLI), not a bare docker:27 image: prepare-image-trees.sh compiles the payload
+  # JOB-side — with the warm pnpm store + turbo cache from the test job it's a cache replay, and the
+  # Dockerfile is left with pure COPYs.
   interruptible: true
   cache:
     - !reference [.cache-defs, pnpm-pull]
@@ -174,7 +207,6 @@ images:
     - !reference [.cache-defs, iq-models]
   before_script:
     - !reference [.pnpm-setup, script]
-    - !reference [.docker-cli-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -210,7 +242,6 @@ images:platform:
     - !reference [.cache-defs, turbo-pull]
   before_script:
     - !reference [.pnpm-setup, script]
-    - !reference [.docker-cli-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -232,6 +263,12 @@ images:platform:
 release:
   extends: .dind
   stage: release
+  # Only test — deliberately NOT the images job. The release builds its own sandbox tree because semantic-release's
+  # prepareCmd stamps the release version into every package.json first, and the sandbox READS that at runtime
+  # (src/version.ts; ensure-intent's dependencySpec switches `link:` → `~<version>` on it). The images job's
+  # sha-/latest images are built unstamped (0.0.0 = dev mode), so they are NOT retaggable as a release. The
+  # duplicated work is bounded by the shared mode=max registry buildcache, and running parallel to images keeps
+  # it off the critical path — provided the runner has slots free (gitlab-runner concurrent >= 4).
   needs: ["test"]
   resource_group: release
   # The publish is heavy (cold image builds + registry cache export). Give it room beyond the 1h default so a
@@ -254,10 +291,7 @@ release:
   before_script:
     - !reference [.pnpm-setup, script]
     - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
-    - !reference [.docker-cli-setup, script]
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - curl -fsSL https://bun.sh/install | bash
-    - export PATH="$HOME/.bun/bin:$PATH"
     - git remote set-url --push origin "https://oauth2:${GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
     - pnpm exec semantic-release

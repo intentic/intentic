@@ -28,7 +28,7 @@
       "mcp__playwright__browser_navigate"
     ]
   },
-  "model": "fable",
+  "model": "opus",
   "autoMemoryEnabled": true,
   "theme": "dark-daltonized",
   "switchModelsOnFlag": false
