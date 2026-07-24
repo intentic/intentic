@@ -673,7 +673,7 @@ watch(commandReady, (ready) => {
 
                 <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
                      the SYNC_DIR env on the command below — no re-mint. The folder is derived from the name. -->
-                <div class="flex items-center gap-3 rounded-xl border border-line bg-canvas p-4">
+                <label class="flex cursor-pointer items-center gap-3 rounded-lg bg-canvas p-4">
                     <ToggleSwitch v-model="syncEnabled" class="shrink-0" aria-label="Also sync a local folder with this sandbox" />
                     <div class="flex flex-col gap-0.5">
                         <span class="text-sm font-semibold text-content">Also sync a local folder with this sandbox</span>
@@ -684,7 +684,7 @@ watch(commandReady, (ready) => {
                             <template v-else>Mirror a local folder here so you can use your own editor.</template>
                         </span>
                     </div>
-                </div>
+                </label>
                 <!-- The command carries the chosen path's values, so we don't reveal it until that path is ready — a
                      command missing the token/zone/subdomain or the provisioned tunnel would just fail in the sandbox. -->
                 <div v-if="!commandReady" class="flex items-center gap-2 rounded-lg border border-dashed border-line px-3 py-4 text-xs text-muted">
