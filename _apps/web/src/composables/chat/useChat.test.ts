@@ -30,6 +30,7 @@ const { sandboxJson, sandboxRequest } = await import("../sandbox/sandboxClient")
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 const sandboxJsonMock = vi.mocked(sandboxJson);
 const { loadAccountStatus, resetChat, useChat } = await import("./useChat");
+const { usageStatusByAccount } = await import("./usageStatus");
 
 afterEach(() => {
     vi.clearAllMocks();
@@ -78,6 +79,59 @@ describe(`useChat provider reconciliation`, () => {
         sandboxJsonMock.mockResolvedValue({ codex: false, grok: true, gemini: false });
         await loadAccountStatus();
         expect(chat.connected.value).toBe(true);
+    });
+});
+
+describe(`account usage hydration`, () => {
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+        usageStatusByAccount.value = {};
+        sandboxJsonMock.mockResolvedValue({ codex: false, grok: false, gemini: false });
+    });
+
+    // The daemon persists each account's usage window; without this the picker stays blank on a fresh load
+    // until that account happens to run a turn — which is exactly the turn the user wanted to spend wisely.
+    it(`seeds the usage map from the persisted snapshots on the account list`, async () => {
+        sandboxRequestMock.mockImplementation((path: string) =>
+            Promise.resolve({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        accounts: path.startsWith(`/claude`)
+                            ? [
+                                  { id: `a1`, label: `Personal`, connectedAt: 0, usage: { status: `allowed`, utilization: 12, measuredAt: 500 } },
+                                  { id: `a2`, label: `Work`, connectedAt: 1 },
+                              ]
+                            : [],
+                    }),
+            } as Response),
+        );
+        await loadAccountStatus();
+
+        expect(usageStatusByAccount.value[`a1`]).toMatchObject({ utilization: 12, measuredAt: 500 });
+        // An account the daemon has no reading for stays absent — unknown, not 0%.
+        expect(usageStatusByAccount.value[`a2`]).toBeUndefined();
+    });
+
+    it(`keeps a live streamed reading when the persisted one is older`, async () => {
+        usageStatusByAccount.value = { a1: { status: `allowed`, utilization: 80, measuredAt: 9_000 } };
+        sandboxRequestMock.mockImplementation((path: string) =>
+            Promise.resolve({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        accounts: path.startsWith(`/claude`)
+                            ? [{ id: `a1`, label: `Personal`, connectedAt: 0, usage: { status: `allowed`, utilization: 30, measuredAt: 500 } }]
+                            : [],
+                    }),
+            } as Response),
+        );
+        await loadAccountStatus();
+
+        // The daemon's write is fire-and-forget, so a refresh can land between a frame and its persist —
+        // the newer reading must win, or the chip would flicker backwards mid-session.
+        expect(usageStatusByAccount.value[`a1`]).toMatchObject({ utilization: 80, measuredAt: 9_000 });
     });
 });
 

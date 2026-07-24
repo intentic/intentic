@@ -1091,13 +1091,17 @@ export class Conversation {
                 this.setUsage(event);
                 turn.id = null;
                 return;
-            case `rate_limit_info`:
+            case `rate_limit_info`: {
                 // Account-wide subscription usage (5-hour / weekly window), keyed by the account that served
-                // the turn so switching accounts shows the right window. Not tied to any bubble.
-                if (event.account !== undefined) {
-                    usageStatusByAccount.value = { ...usageStatusByAccount.value, [event.account]: event };
+                // the turn so switching accounts shows the right window. Not tied to any bubble. Stamped with
+                // the read time so it can be compared against the daemon's persisted snapshot on the next
+                // `/accounts` load — whichever is newer wins, and the picker can say how stale a reading is.
+                const { kind: _kind, account, ...snapshot } = event;
+                if (account !== undefined) {
+                    usageStatusByAccount.value = { ...usageStatusByAccount.value, [account]: { ...snapshot, measuredAt: Date.now() } };
                 }
                 return;
+            }
             case `context_usage`:
                 // Per-conversation context-window fill — held on this instance (not the singleton) so the
                 // composer shows the active chat's meter for auto-compaction awareness.

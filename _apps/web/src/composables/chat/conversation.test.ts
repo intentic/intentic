@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ChatMessage, Conversation, transcriptOf, turnDefaults } from "./conversation";
+import { usageStatusByAccount } from "./usageStatus";
 
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
 const { sandboxRequest } = await import("../sandbox/sandboxClient");
@@ -513,6 +514,37 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)!.text).toContain(`usage limit`);
         expect(conversation.error.value).toBeNull();
         expect(conversation.status.value).not.toBe(`error`);
+    });
+
+    it(`stores a rate_limit_info frame against its account, stamped so staleness is comparable`, async () => {
+        usageStatusByAccount.value = {};
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `rate_limit_info`, account: `acct-1`, status: `allowed_warning`, utilization: 87, rateLimitType: `seven_day`, resetsAt: 1_800_000 },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`hello`, settings);
+
+        // Keyed by the serving account (not the conversation) and carrying measuredAt, so the next /accounts
+        // load can tell this live reading from the daemon's persisted one.
+        const stored = usageStatusByAccount.value[`acct-1`]!;
+        expect(stored).toMatchObject({ status: `allowed_warning`, utilization: 87, rateLimitType: `seven_day`, resetsAt: 1_800_000 });
+        expect(stored.measuredAt).toBeGreaterThan(0);
+        // The frame's envelope fields are not part of the snapshot.
+        expect(stored).not.toHaveProperty(`kind`);
+        expect(stored).not.toHaveProperty(`account`);
+    });
+
+    it(`ignores a rate_limit_info frame the daemon could not attribute to an account`, async () => {
+        usageStatusByAccount.value = {};
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `rate_limit_info`, status: `allowed`, utilization: 5 }, { kind: `done` }]));
+        await conversation.send(`hello`, settings);
+
+        // An env-token turn has no account to key the snapshot by — better unknown than misattributed.
+        expect(usageStatusByAccount.value).toEqual({});
     });
 
     it(`stop() records a notice and aborts without surfacing the abort as an error`, async () => {

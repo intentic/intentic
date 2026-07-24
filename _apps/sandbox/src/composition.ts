@@ -38,6 +38,7 @@ import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/ca
 import { createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStore, type MembersStore, type VerifiedIdentity } from "./auth/auth.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
 import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
+import { type ClaudeUsageStore, fileClaudeUsageStore } from "./claude/claude-usage.js";
 import { createCodexAgent } from "./codex/codex-agent.js";
 import { type CodexCatalog, createCodexCatalog } from "./codex/codex-catalog.js";
 import { codexThreadExists } from "./sessions/codex-sessions.js";
@@ -152,6 +153,9 @@ export interface Services {
     readonly sandboxSettings: SandboxSettingsStore;
     // Claude subscription accounts (one <id>.json per account under .intentic/claude), several per sandbox.
     readonly claudeStore: ClaudeStore;
+    // The latest usage-window snapshot per Claude account (historyRoot/claude-usage.json). streamAgent records
+    // what the turn stream reports; /claude/accounts merges it in so the picker shows each account's headroom.
+    readonly claudeUsage: ClaudeUsageStore;
     // Claude's live model catalog from the Agent SDK's supportedModels() (alias fallback, never empty). Serves
     // /claude/models for the picker so new tiers + effort levels need no code change.
     readonly claudeModels: ClaudeCatalog;
@@ -348,6 +352,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(join(workspace.root, ".intentic", "settings.json")),
         claudeStore,
+        claudeUsage: fileClaudeUsageStore(join(config.historyRoot, "claude-usage.json")),
         claudeModels: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
         codexModels: createCodexCatalog(config, join(codexBase, "models.json")),
         kimiStore,

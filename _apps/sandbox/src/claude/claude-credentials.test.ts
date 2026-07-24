@@ -1,5 +1,17 @@
+import { mkdtempSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vitest";
-import { buildAuthorizeUrl, type ClaudeStore, ensureFreshToken, newAccount, type StoredAccount, type TokenSet } from "./claude-credentials.js";
+import {
+    buildAuthorizeUrl,
+    type ClaudeStore,
+    ensureFreshToken,
+    fileClaudeStore,
+    newAccount,
+    type StoredAccount,
+    type TokenSet,
+} from "./claude-credentials.js";
 
 // One in-memory account keyed by id, matching the file store's account-keyed surface.
 const memoryStore = (initial?: StoredAccount): ClaudeStore & { current: () => StoredAccount | undefined } => {
@@ -74,4 +86,27 @@ test("ensureFreshToken returns the (expired) token unchanged when there is no re
         throw new Error("should not refresh without a refresh token");
     });
     expect(token).toBe("only");
+});
+
+// The catalog persists its discovered models as models.json in the SAME dir the account store scans, so an
+// unparsed read surfaced it as a blank `{}` account: a phantom row in the picker, and — since the list is
+// sorted by connectedAt and `accounts[0]` is the daemon's default — a coin-flip chance of the turn resolving
+// no account at all.
+test("fileClaudeStore ignores non-account json in the store dir", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "claude-store-"));
+    const store = fileClaudeStore(dir);
+    await store.write({ id: "acct-1", label: "Personal", connectedAt: 1, accessToken: "t" });
+    await writeFile(join(dir, "models.json"), JSON.stringify([{ id: "claude-opus-4-8", label: "Opus" }]));
+    await writeFile(join(dir, "truncated.json"), `{"id":"half`);
+    expect(await store.list()).toEqual([{ id: "acct-1", label: "Personal", connectedAt: 1 }]);
+});
+
+test("fileClaudeStore round-trips an account through the filesystem", async () => {
+    const store = fileClaudeStore(mkdtempSync(join(tmpdir(), "claude-store-")));
+    const account: StoredAccount = { id: "acct-1", label: "Work", connectedAt: 7, accessToken: "t", refreshToken: "r", scope: "s" };
+    await store.write(account);
+    expect(await store.read("acct-1")).toEqual(account);
+    await store.clear("acct-1");
+    expect(await store.read("acct-1")).toBeUndefined();
+    expect(await store.list()).toEqual([]);
 });

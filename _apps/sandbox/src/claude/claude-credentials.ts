@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { OauthAccount } from "@intentic/sandbox-contract";
+import { z } from "zod";
 
 /* Claude subscription OAuth (PKCE) against the public Claude Code client — the sandbox OWNS these credentials
  * (the platform no longer holds them): the user authorizes once, the sandbox stores the tokens beside the
@@ -47,20 +48,24 @@ export const buildAuthorizeUrl = (): AuthorizeChallenge => {
 
 // The freshly-minted token set from an exchange/refresh — tokens plus an epoch-ms expiry (JSON-friendly),
 // before it is tagged with account identity.
-export interface TokenSet {
-    readonly accessToken: string;
-    readonly refreshToken?: string;
-    readonly expiresAt?: number;
-    readonly scope?: string;
-}
+const TokenSetSchema = z.object({
+    accessToken: z.string(),
+    refreshToken: z.string().optional(),
+    expiresAt: z.number().optional(),
+    scope: z.string().optional(),
+});
+export type TokenSet = z.infer<typeof TokenSetSchema>;
 
 // The persisted account: a token set tagged with its account identity. Stored beside the workspace, outside
-// the three repos so it is never committed — one file per account under the store dir.
-export interface StoredAccount extends TokenSet {
-    readonly id: string;
-    readonly label: string;
-    readonly connectedAt: number; // epoch ms
-}
+// the three repos so it is never committed — one file per account under the store dir. A schema rather than a
+// bare interface because reads are PARSED, not trusted: the store dir also holds the catalog's models.json, so
+// an unparsed read surfaces every stray .json as a blank account in the picker.
+const StoredAccountSchema = TokenSetSchema.extend({
+    id: z.string(),
+    label: z.string(),
+    connectedAt: z.number(), // epoch ms
+});
+export type StoredAccount = z.infer<typeof StoredAccountSchema>;
 
 // The metadata view (no tokens) the account list surfaces.
 const toAccount = (stored: StoredAccount): OauthAccount => ({
@@ -136,7 +141,8 @@ export const fileClaudeStore = (dir: string): ClaudeStore => {
     const path = (id: string): string => join(dir, `${id}.json`);
     const readStored = async (id: string): Promise<StoredAccount | undefined> => {
         try {
-            return JSON.parse(await readFile(path(id), "utf8")) as StoredAccount;
+            const parsed = StoredAccountSchema.safeParse(JSON.parse(await readFile(path(id), "utf8")));
+            return parsed.success ? parsed.data : undefined;
         } catch {
             return undefined;
         }

@@ -32,6 +32,7 @@ import {
     selectedAccountId,
     turnDefaults,
 } from "./conversation";
+import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { useSandbox } from "../sandbox/useSandbox";
@@ -584,6 +585,18 @@ const refreshAccounts = async (target: AgentProvider): Promise<OauthAccount[]> =
     }
     const list = ((await response.json()) as { accounts?: OauthAccount[] }).accounts ?? [];
     providerAccounts.value = { ...providerAccounts.value, [target]: list };
+    // Seed the shared usage map from the daemon's persisted snapshots, so a fresh page load shows each account's
+    // remaining headroom immediately instead of staying blank until that account's next turn. A reading this
+    // session already streamed wins when it is the newer of the two (the daemon's write is fire-and-forget, so
+    // a refresh can land between the frame and its persist).
+    const seeded = { ...usageStatusByAccount.value };
+    for (const entry of list) {
+        const persisted = entry.usage;
+        if (persisted !== undefined && (seeded[entry.id]?.measuredAt ?? 0) <= persisted.measuredAt) {
+            seeded[entry.id] = persisted;
+        }
+    }
+    usageStatusByAccount.value = seeded;
     if (!list.some((entry) => entry.id === selectedAccountId.value[target])) {
         selectedAccountId.value = { ...selectedAccountId.value, [target]: list[0]?.id };
     }

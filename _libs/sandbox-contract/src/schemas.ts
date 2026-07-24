@@ -258,6 +258,26 @@ export const SteerSchema = z.object({ conversationId: z.string().min(1), text: z
 // /agent fetch (which sends no cancel frame).
 export const StopTurnSchema = z.object({ conversationId: z.string().min(1) });
 
+// ---- claude subscription usage ----
+// Which usage window is active for a Claude account, how much of it is spent, and when it resets. Two readers,
+// so it lives here rather than beside the stream frames: the SDK's rate_limit_event rides it out on the agent
+// stream (see the `rate_limit_info` frame in events.ts), and the daemon persists the latest snapshot per
+// account so `/claude/accounts` can answer "how much is left on each" without spending a turn to find out.
+export const RateLimitInfoSchema = z.object({
+    status: z.enum(["allowed", "allowed_warning", "rejected"]),
+    resetsAt: z.number().optional(), // epoch seconds
+    rateLimitType: z.string().optional(), // 'five_hour' | 'seven_day' | 'seven_day_opus' | ...
+    utilization: z.number().optional(), // 0-100, how much of the window is used
+});
+export type RateLimitInfo = z.infer<typeof RateLimitInfoSchema>;
+
+// The persisted view: a snapshot plus when it was taken. Within one window utilization only climbs, so a
+// snapshot stays a valid FLOOR until `resetsAt` passes — after that the window has rolled over and the store
+// drops it rather than reporting a stale number. `measuredAt` is epoch MS (matching connectedAt), while
+// `resetsAt` stays epoch SECONDS (matching the SDK frame) — they are deliberately different units.
+export const AccountUsageSchema = RateLimitInfoSchema.extend({ measuredAt: z.number() });
+export type AccountUsage = z.infer<typeof AccountUsageSchema>;
+
 // ---- provider oauth ----
 // Claude uses the PKCE authorize-URL + paste-back handshake (start → exchange). Codex uses OpenAI's device-code
 // flow (start → poll): the browser signs in at verificationUri and enters userCode; the daemon polls until done.
@@ -275,6 +295,10 @@ export const OauthAccountSchema = z.object({
     // Provider-agnostic; only Codex probes it today (Claude refreshes on-demand, Grok's tokens are OpenCode's).
     needsReauth: z.boolean().optional(),
     detail: z.string().optional(),
+    // The account's last known subscription-usage snapshot, so the picker can show what's left on each account
+    // before the user commits a turn to one. Claude-only (it is the sole provider whose stream reports a usage
+    // window) and absent until that account has run a turn — an unmeasured account reads as unknown, never 0%.
+    usage: AccountUsageSchema.optional(),
 });
 export type OauthAccount = z.infer<typeof OauthAccountSchema>;
 export const OauthAccountListSchema = z.object({ accounts: z.array(OauthAccountSchema) });

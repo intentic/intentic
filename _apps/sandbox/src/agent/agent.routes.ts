@@ -619,6 +619,16 @@ async function* runTurn(
                 yield { ...event, ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}) };
                 continue;
             } else if (event.kind === "rate_limit_info") {
+                // Persist the snapshot as well as streaming it, so the account picker can report this account's
+                // headroom on the next page load instead of only for as long as this tab stays open. Attributed
+                // turns only — an env-token turn has no account to key it by. Fire-and-forget: a usage write
+                // must never delay or fail a turn (same contract as the activity append below).
+                if (resolvedAccount !== undefined) {
+                    const { kind: _kind, account: _account, ...snapshot } = event;
+                    services.claudeUsage
+                        .record(resolvedAccount, { ...snapshot, measuredAt: Date.now() })
+                        .catch((error: unknown) => services.logger.warn({ err: error }, "claude usage: snapshot write failed"));
+                }
                 yield { ...event, ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}) };
                 continue;
             } else if (event.kind === "plan") {

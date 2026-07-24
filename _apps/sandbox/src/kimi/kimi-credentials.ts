@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { OauthAccount } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import type { Config } from "../env.config.js";
 
 /* Kimi (Moonshot) credentials — the sandbox OWNS them, an API key rather than an OAuth grant. Kimi has no
@@ -11,12 +12,15 @@ import type { Config } from "../env.config.js";
  * sends to Moonshot's Anthropic-compatible endpoint (see agent.routes). */
 
 // The persisted account: the API key tagged with account identity. Stored under the store dir, one file each.
-export interface StoredKimiAccount {
-    readonly id: string;
-    readonly label: string;
-    readonly apiKey: string;
-    readonly connectedAt: number; // epoch ms
-}
+// A schema rather than a bare interface because reads are PARSED, not trusted: the store dir also holds the
+// catalog's models.json, so an unparsed read surfaces every stray .json as a blank account in the picker.
+const StoredKimiAccountSchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    apiKey: z.string(),
+    connectedAt: z.number(), // epoch ms
+});
+export type StoredKimiAccount = z.infer<typeof StoredKimiAccountSchema>;
 
 // The metadata view (no key) the account list surfaces — the same shape every provider's `/accounts` returns.
 const toAccount = (stored: StoredKimiAccount): OauthAccount => ({ id: stored.id, label: stored.label, connectedAt: stored.connectedAt });
@@ -43,7 +47,8 @@ export const fileKimiStore = (dir: string): KimiStore => {
     const path = (id: string): string => join(dir, `${id}.json`);
     const readStored = async (id: string): Promise<StoredKimiAccount | undefined> => {
         try {
-            return JSON.parse(await readFile(path(id), "utf8")) as StoredKimiAccount;
+            const parsed = StoredKimiAccountSchema.safeParse(JSON.parse(await readFile(path(id), "utf8")));
+            return parsed.success ? parsed.data : undefined;
         } catch {
             return undefined;
         }

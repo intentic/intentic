@@ -206,6 +206,8 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         clear: async () => {},
         list: async () => [{ id: "default", label: "Claude", connectedAt: 0 }],
     },
+    // No usage measured by default — an account that hasn't run a turn since its window reset reports none.
+    claudeUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
     // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
     cliProxy: {
         accounts: async () => ({ codex: false, grok: false, gemini: false }),

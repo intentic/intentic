@@ -5,6 +5,7 @@ import { type AgentHarness, type AgentProvider, PROVIDERS } from "@intentic/sand
 import { BADGE_META } from "../composables/chat/catalog";
 import { acpProviders, providerAccounts, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
 import { filterEntries, type PickerEntry, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
+import { usageDetail, usagePercent, usageStatusFor } from "../composables/chat/usageStatus";
 import { loadAllProviderModels, loadProviderModels, useChat } from "../composables/chat/useChat";
 import ProviderLogo from "./ProviderLogo.vue";
 
@@ -120,6 +121,22 @@ const activeAccountId = computed(() => account.value ?? accounts.value[0]?.id);
 
 const footerVisible = computed(
     () => accounts.value.length > 1 || provider.value === `claude` || harnessChoosable.value || messages.value.length > 0,
+);
+
+// The account rows, each decorated with how much of its usage window is spent — the whole point of the account
+// list being a list: with several connected, "which one has room left" is the actual question, and answering it
+// used to cost a turn to find out. Only Claude reports a window, and only for accounts that have run a turn
+// since their last reset, so an undecorated row means "unknown", never "empty".
+const accountRows = computed(() =>
+    accounts.value.map((entry) => {
+        const usage = usageStatusFor(entry.id);
+        return {
+            ...entry,
+            percent: usagePercent(usage),
+            usageDetail: usage !== undefined ? usageDetail(usage) : undefined,
+            usageWarn: usage !== undefined && usage.status !== `allowed`,
+        };
+    }),
 );
 
 onMounted(() => {
@@ -279,19 +296,29 @@ onMounted(() => {
                 <span class="text-2xs uppercase tracking-wide text-subtle">Account</span>
                 <div class="flex flex-col gap-1">
                     <button
-                        v-for="a in accounts"
+                        v-for="a in accountRows"
                         :key="a.id"
                         type="button"
-                        class="qopt flex h-8 min-w-0 items-center rounded-lg border px-2 text-xs max-md:h-11"
+                        class="qopt flex h-8 min-w-0 items-center gap-2 rounded-lg border px-2 text-xs max-md:h-11"
                         :class="{ 'qopt-on': activeAccountId === a.id }"
                         :disabled="streaming"
                         @click="selectAccount(a.id)"
                     >
                         <span class="truncate text-content">{{ a.label }}</span>
+                        <!-- How much of this account's window is spent, so the switch decision is informed
+                             before it costs a turn. Absent ⇒ never measured (or its window has since reset). -->
+                        <span
+                            v-if="a.percent !== undefined"
+                            class="ml-auto shrink-0 tabular-nums text-2xs"
+                            :class="a.usageWarn ? 'text-warning' : 'text-subtle'"
+                            v-tooltip.top="a.usageDetail"
+                            >{{ a.percent }}%</span
+                        >
                         <Icon
                             v-if="a.needsReauth"
                             name="exclamation-triangle"
-                            class="ml-auto shrink-0 text-2xs text-warning"
+                            class="shrink-0 text-2xs text-warning"
+                            :class="{ 'ml-auto': a.percent === undefined }"
                             v-tooltip.top="a.detail ?? 'This account needs to be reconnected'"
                         />
                     </button>

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentSummarySchema, PermissionModeSchema } from "./schemas.js";
+import { AgentSummarySchema, PermissionModeSchema, RateLimitInfoSchema } from "./schemas.js";
 
 // The wire shapes streamed from the daemon's event-iterator procedures. This is their canonical home: the
 // daemon yields them and the browser client consumes them from the same schema, so the two can't drift (they
@@ -57,17 +57,6 @@ export const TodoItemSchema = z.object({
     activeForm: z.string().optional(),
 });
 export type TodoItem = z.infer<typeof TodoItemSchema>;
-
-// Claude subscription usage for a turn (the SDK's rate_limit_event): which window is active, how much of it is
-// spent, and when it resets. Emitted on the stream at no token cost; only Claude turns report it. Its own
-// schema so the browser can hold the latest snapshot as a plain value, separate from the `kind`-tagged frame.
-export const RateLimitInfoSchema = z.object({
-    status: z.enum(["allowed", "allowed_warning", "rejected"]),
-    resetsAt: z.number().optional(), // epoch seconds
-    rateLimitType: z.string().optional(), // 'five_hour' | 'seven_day' | 'seven_day_opus' | ...
-    utilization: z.number().optional(), // 0-100, how much of the window is used
-});
-export type RateLimitInfo = z.infer<typeof RateLimitInfoSchema>;
 
 // Context-window fill for a conversation: how many tokens the latest request sent vs the model's window, so
 // the UI can warn as the chat nears auto-compaction. Per-conversation, unlike the account-wide usage above.
