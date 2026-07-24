@@ -233,6 +233,83 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
             </div>
         </section>
 
+        <!-- 1.5 · The product — real screenshots of the workspace -->
+        <section class="border-t border-line" id="tour">
+            <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">
+                <div class="eyebrow">{content.tour.eyebrow}</div>
+                <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">{content.tour.heading}</h2>
+                <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">{content.tour.sub}</p>
+
+                <!-- Hero: the fleet board in a browser window -->
+                <figure class="mt-12">
+                    <div class="overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
+                        <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
+                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
+                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
+                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
+                            <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">release-captain · /agents</span>
+                        </div>
+                        <img
+                            src={content.tour.hero.src}
+                            alt={content.tour.hero.alt}
+                            width="2152"
+                            height="940"
+                            loading="lazy"
+                            decoding="async"
+                            class="w-full"
+                        />
+                    </div>
+                    <figcaption class="mx-auto mt-4 max-w-2xl text-center text-xs leading-relaxed text-subtle">{content.tour.hero.caption}</figcaption>
+                </figure>
+
+                <!-- Feature rows: one surface each, image and copy alternating -->
+                <div class="mt-16 space-y-16 lg:mt-20 lg:space-y-24">
+                    <!-- Chat — the mobile surface, in a phone frame (image right) -->
+                    <div class="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
+                        <div>
+                            <h3 class="text-xl font-semibold tracking-tight text-content">{content.tour.chat.title}</h3>
+                            <p class="mt-3 max-w-md text-base leading-relaxed text-muted">{content.tour.chat.body}</p>
+                        </div>
+                        <div class="flex justify-center">
+                            <div class="w-full max-w-[300px] overflow-hidden rounded-[2rem] border border-line-strong bg-card p-2 shadow-2xl shadow-black/50">
+                                <img
+                                    src={content.tour.chat.src}
+                                    alt={content.tour.chat.alt}
+                                    width="860"
+                                    height="1864"
+                                    loading="lazy"
+                                    decoding="async"
+                                    class="w-full rounded-[1.5rem]"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Landscape surfaces, each in a browser window, alternating sides -->
+                    {
+                        content.tour.shots.map((shot, i) => (
+                            <div class="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
+                                <div class={i % 2 === 0 ? "lg:order-2" : "lg:order-1"}>
+                                    <h3 class="text-xl font-semibold tracking-tight text-content">{shot.title}</h3>
+                                    <p class="mt-3 max-w-md text-base leading-relaxed text-muted">{shot.body}</p>
+                                </div>
+                                <div class={i % 2 === 0 ? "lg:order-1" : "lg:order-2"}>
+                                    <div class="overflow-hidden rounded-xl border border-line bg-card shadow-xl shadow-black/40">
+                                        <div class="flex items-center gap-1.5 border-b border-line bg-overlay/40 px-3 py-2">
+                                            <span class="h-2 w-2 rounded-full bg-line-strong" />
+                                            <span class="h-2 w-2 rounded-full bg-line-strong" />
+                                            <span class="h-2 w-2 rounded-full bg-line-strong" />
+                                        </div>
+                                        <img src={shot.src} alt={shot.alt} loading="lazy" decoding="async" class="w-full" />
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    }
+                </div>
+            </div>
+        </section>
+
         <!-- 2 · Why specialized — prompt vs agent -->
         <section class="border-t border-line" id="contrast">
             <div class="fade-in mx-auto max-w-6xl px-6 py-20 lg:py-24">

@@ -56,6 +56,14 @@ export interface SharingPerson {
     owner?: boolean;
 }
 
+/** One captioned product screenshot in the "see it in action" tour. */
+export interface TourShot {
+    src: string;
+    alt: string;
+    title: string;
+    body: string;
+}
+
 export interface LandingContent {
     meta: { title: string; description: string };
     hero: {
@@ -63,6 +71,13 @@ export interface LandingContent {
         subhead: string;
         chips: string[];
         spec: AgentSpec;
+    };
+    // The product tour: real screenshots of the workspace — the fleet board, the chat, diff review, and the
+    // integrations catalog — so a visitor sees exactly what they'd be using, not just diagrams.
+    tour: LandingSectionIntro & {
+        hero: { src: string; alt: string; caption: string };
+        chat: TourShot;
+        shots: TourShot[];
     };
     contrast: LandingSectionIntro & { prompt: LandingContrastColumn; agent: LandingContrastColumn };
     anatomy: LandingSectionIntro & { pillars: LandingFact[] };
@@ -110,6 +125,48 @@ export const landingContent: LandingContent = {
             task: "Cut the 2.4 release and post the changelog.",
             outcome: "tag pushed · changelog drafted · deploy watched",
         },
+    },
+    tour: {
+        eyebrow: "The product",
+        heading: "This is the actual workspace.",
+        sub: "Not a chat box bolted onto a model — a real IDE for a fleet of agents. Watch every run, drive one, review its diffs, and wire it into the systems you already use. Works with Claude Code, Codex, and Grok.",
+        hero: {
+            src: "/assets/product/agents-fleet.png",
+            alt: "The intentic agent fleet board — a kanban of running agents grouped into Attention, Active and Finished lanes, each card showing its model, branch, cost and diff stats.",
+            caption: "The fleet board — every agent on its own isolated branch, sorted by what needs you. Run a whole team in parallel; finished work lands in your workspace.",
+        },
+        chat: {
+            src: "/assets/product/chat.png",
+            alt: "The intentic chat surface on mobile: a Stripe-billing task with Read, Bash and Edit tool calls, a live to-do checklist, and the agent's reply.",
+            title: "Chat that does the work",
+            body: "Talk to it like a coworker. It reads files, runs commands, and edits code — every tool call and to-do visible as it works. Switch between Claude, Codex, and Grok mid-conversation, on your own subscription.",
+        },
+        shots: [
+            {
+                src: "/assets/product/agent-review.png",
+                alt: "The isolated diff review: six changed files with per-file line stats, a Land now button, and the agent's live conversation docked alongside.",
+                title: "Review the diff, then land it",
+                body: "Each agent works on its own branch, so nothing touches your tree until you say so. See the full diff across every repo and land it in one click — or discard it and keep going.",
+            },
+            {
+                src: "/assets/product/capabilities.png",
+                alt: "The capability catalog: DevOps, Docker, Stripe, SSH, VPN, Reddit, X, YouTube, MCP and Claude plugins, each with a short description.",
+                title: "Wire in your systems",
+                body: "A catalog of capabilities — GitHub, Postgres, Stripe, SSH, Docker, MCP servers, Claude plugins — added in a click. The credential is stored inside the sandbox and the agent operates the service from chat.",
+            },
+            {
+                src: "/assets/product/workspace.png",
+                alt: "The workspace: a file tree beside a syntax-highlighted editor showing a Stripe checkout module.",
+                title: "A real editor and terminal",
+                body: "Browse the tree, open files, run the terminal, watch panels come up on live preview URLs. The sandbox is a full workspace on a machine you own — not a toy.",
+            },
+            {
+                src: "/assets/product/sandbox.png",
+                alt: "The sandbox hub: the sandbox name, online status, its URL, agent account and capabilities at a glance.",
+                title: "One sandbox, fully yours",
+                body: "Every agent runs in its own container on your hardware, reached from your browser over a private tunnel. The platform stores only its URL — it can't reach in.",
+            },
+        ],
     },
     contrast: {
         eyebrow: "Why specialized",
