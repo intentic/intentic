@@ -25,11 +25,11 @@ const subscription = computed(() => provider.value === `codex` || (provider.valu
         <Icon name="sparkles" class="text-xl text-link" />
         <p class="text-sm text-muted">
             <template v-if="subscription">
-                Connect your {{ provider === `codex` ? `ChatGPT` : `SuperGrok` }} subscription to run
-                {{ provider === `codex` ? `Codex` : `Grok` }}{{ provider === `codex` ? `` : ` under Claude Code` }}.
+                Connect your {{ provider === `codex` ? `ChatGPT` : `SuperGrok` }} subscription to run {{ provider === `codex` ? `Codex` : `Grok`
+                }}{{ provider === `codex` ? `` : ` under Claude Code` }}.
             </template>
             <template v-else>
-                Connect your {{ provider === `grok` ? `Grok` : `Claude` }} account to start chatting.
+                Connect your {{ provider === `grok` ? `Grok` : provider === `kimi` ? `Kimi Code` : `Claude` }} account to start chatting.
             </template>
         </p>
         <!-- Point this chat at whichever provider is connected, straight from the gate, so picking a

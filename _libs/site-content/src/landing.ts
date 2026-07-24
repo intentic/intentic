@@ -107,7 +107,7 @@ export const landingContent: LandingContent = {
     meta: {
         title: "intentic — Specialized agents that own their workspace",
         description:
-            "A specialized agent is more than a prompt. intentic gives each coding agent its own sandbox — the libraries, dev-tools, and integrations its job needs, plus curated context — on hardware you own. Works with Claude Code, Codex, and Grok. Free to start.",
+            "A specialized agent is more than a prompt. intentic gives each coding agent its own sandbox — the libraries, dev-tools, and integrations its job needs, plus curated context — on hardware you own. Works with Claude Code, Codex, Grok, and Kimi Code. Free to start.",
     },
     hero: {
         headlineLines: ["A specialized agent is", "more than a prompt."],
@@ -129,7 +129,7 @@ export const landingContent: LandingContent = {
     tour: {
         eyebrow: "The product",
         heading: "This is the actual workspace.",
-        sub: "Not a chat box bolted onto a model — a real IDE for a fleet of agents. Autonomy still needs a human in the loop: you configure each agent's context, watch every run, drive one, and review its diffs before anything lands. That's what the workspace is for. Works with Claude Code, Codex, and Grok.",
+        sub: "Not a chat box bolted onto a model — a real IDE for a fleet of agents. Autonomy still needs a human in the loop: you configure each agent's context, watch every run, drive one, and review its diffs before anything lands. That's what the workspace is for. Works with Claude Code, Codex, Grok, and Kimi Code.",
         hero: {
             src: "/assets/product/agents-fleet.png",
             alt: "The intentic agent fleet board — a kanban of running agents grouped into Attention, Active and Finished lanes, each card showing its model, branch, cost and diff stats.",
@@ -139,7 +139,7 @@ export const landingContent: LandingContent = {
             src: "/assets/product/chat.png",
             alt: "The intentic chat surface on mobile: a Stripe-billing task with Read, Bash and Edit tool calls, a live to-do checklist, and the agent's reply.",
             title: "Chat that does the work",
-            body: "Talk to it like a coworker. It reads files, runs commands, and edits code — every tool call and to-do visible as it works. Switch between Claude, Codex, and Grok mid-conversation, on your own subscription.",
+            body: "Talk to it like a coworker. It reads files, runs commands, and edits code — every tool call and to-do visible as it works. Switch between Claude, Codex, Grok, and Kimi mid-conversation, on your own subscription.",
         },
         shots: [
             {
@@ -335,6 +335,7 @@ export const landingContent: LandingContent = {
             { name: "Claude", detail: "Opus, Sonnet, Haiku — on your Claude plan" },
             { name: "Codex", detail: "on your ChatGPT plan" },
             { name: "Grok", detail: "on your SuperGrok plan" },
+            { name: "Kimi Code", detail: "on your Kimi Membership" },
         ],
         points: [
             "No per-token metering, and no markup on your model usage.",

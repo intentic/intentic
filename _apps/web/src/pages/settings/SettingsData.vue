@@ -63,7 +63,14 @@ const confirmDelete = async (): Promise<void> => {
                 description="Permanently removes your account, sandboxes, shared access and billing data. Cannot be undone."
             >
                 <template #control>
-                    <Button v-if="!confirmingDelete" label="Delete" severity="danger" :outlined="true" size="small" @click="confirmingDelete = true" />
+                    <Button
+                        v-if="!confirmingDelete"
+                        label="Delete"
+                        severity="danger"
+                        :outlined="true"
+                        size="small"
+                        @click="confirmingDelete = true"
+                    />
                 </template>
                 <template v-if="confirmingDelete || deleteError" #below>
                     <div v-if="confirmingDelete" class="flex items-center justify-end gap-2">

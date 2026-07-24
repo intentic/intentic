@@ -224,13 +224,17 @@ const save = async (): Promise<void> => {
 
             <RouterLink to="/capabilities" class="block">
                 <Row icon="th-large" title="Capabilities" description="Tools, services and integrations this sandbox can use." interactive chevron>
-                    <template #control><span class="text-2xs text-subtle">{{ capabilities.length }}</span></template>
+                    <template #control
+                        ><span class="text-2xs text-subtle">{{ capabilities.length }}</span></template
+                    >
                 </Row>
             </RouterLink>
 
             <RouterLink to="/sandbox/status" class="block">
                 <Row icon="bolt" title="Running now" description="Live operator panels and active services." interactive chevron>
-                    <template #control><span class="text-2xs text-subtle">{{ runningCount }}</span></template>
+                    <template #control
+                        ><span class="text-2xs text-subtle">{{ runningCount }}</span></template
+                    >
                 </Row>
             </RouterLink>
 

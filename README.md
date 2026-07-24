@@ -1,6 +1,6 @@
 # intentic
 
-**Specialized agents that own their workspace.** intentic turns a generic coding assistant into a *specialized agent* — an autonomous employee with its own sandbox on hardware you own: its dev-tools really installed, wired to the systems it operates, its context curated for one job. Run one, or a whole team, from any browser. Works with Claude Code, Codex, and Grok, on your own subscription.
+**Specialized agents that own their workspace.** intentic turns a generic coding assistant into a *specialized agent* — an autonomous employee with its own sandbox on hardware you own: its dev-tools really installed, wired to the systems it operates, its context curated for one job. Run one, or a whole team, from any browser. Works with Claude Code, Codex, Grok, and Kimi Code, on your own subscription.
 
 ## Co-piloted, not fire-and-forget
 

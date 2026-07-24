@@ -27,7 +27,7 @@ export type SessionTranscriptMessage = z.infer<typeof SessionTranscriptMessageSc
 // other value is the id of an installed `agent`-kind capability served over ACP (Agent Client Protocol).
 // Kept as a bare string on the wire (not an enum) so an unknown id is a clean error frame from the agent
 // route — the same bet RepoParamSchema makes — and adding an ACP agent needs no contract change.
-export const NATIVE_PROVIDERS = ["claude", "codex", "grok"] as const;
+export const NATIVE_PROVIDERS = ["claude", "codex", "grok", "kimi"] as const;
 export type NativeProvider = (typeof NATIVE_PROVIDERS)[number];
 export const AgentProviderSchema = z.string().min(1);
 export type AgentProvider = z.infer<typeof AgentProviderSchema>;
@@ -248,6 +248,11 @@ export const OauthExchangeSchema = z.object({
     label: z.string().optional(),
 });
 export const AuthorizeChallengeSchema = z.object({ authorizeUrl: z.string(), verifier: z.string(), state: z.string() });
+// Kimi (Moonshot) authenticates with an API key, not OAuth: the user pastes a key from their Moonshot account
+// and the sandbox stores it as an account (one key per account, several accounts side by side). `label` is the
+// user's display name (blank ⇒ the daemon derives a default). The key never rides back out — connection status
+// is existence in `/kimi/accounts`.
+export const KimiConnectSchema = z.object({ apiKey: z.string().min(1), label: z.string().optional() });
 // xAI Grok (via OpenCode) uses subscription OAuth via the headless device-code method. `start` returns the
 // `url` the user opens (xAI's verification_uri_complete, which pre-fills the code) and `code` — the same
 // one-time code, surfaced so the card matches x.ai exactly. There is no paste-back: OpenCode polls to

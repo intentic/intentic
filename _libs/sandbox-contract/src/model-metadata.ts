@@ -33,6 +33,8 @@ const RULES: readonly { pattern: RegExp; metadata: ModelMetadata }[] = [
     { pattern: /grok.*(fast|mini)/, metadata: { description: `Speed-first Grok`, badges: [`fast`], rank: FAST } },
     { pattern: /grok.*code/, metadata: { description: `xAI's coding model`, badges: [`agentic`, `fast`], rank: CODING } },
     { pattern: /grok/, metadata: { description: `xAI frontier model`, badges: [`reasoning`], rank: FLAGSHIP } },
+    { pattern: /kimi.*(turbo|flash|fast)|k2.*(turbo|flash|fast)/, metadata: { description: `Speed-first Kimi`, badges: [`fast`], rank: FAST } },
+    { pattern: /kimi|k2/, metadata: { description: `Moonshot's frontier model`, badges: [`reasoning`, `agentic`], rank: FLAGSHIP } },
     { pattern: /fast|mini|nano|lite|flash/, metadata: { badges: [`fast`], rank: FAST } },
 ];
 

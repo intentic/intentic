@@ -8,7 +8,7 @@ import {
     connectorCard,
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace, type MarketplacePlugin } from "@intentic-app/api-contract";
-import { cmp, type IconName, Page, PageHeader, Segmented } from "@intentic-app/ui";
+import { cmp, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic-app/ui";
 import { type CapabilityEffect, capabilityEffects } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
@@ -500,111 +500,109 @@ const submitLabel = computed(() =>
             <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
                 <!-- The connectors already added for this card — each instance removable here (the only place a
                      custom-named instance can be torn down). -->
-                <div v-if="selectedInstances.length > 0" class="rounded-lg border border-line bg-card p-3">
-                    <div class="mb-2 text-2xs font-semibold uppercase tracking-wide text-subtle">Connected</div>
-                    <ul class="flex flex-col gap-1.5">
-                        <li v-for="instance in selectedInstances" :key="instance.id" class="flex flex-col gap-0.5">
-                            <div class="flex items-center gap-2 text-xs">
-                                <span class="font-medium text-content">{{ instance.id }}</span>
-                                <span class="text-2xs text-muted">{{ instance.status.state }}</span>
-                                <div class="ml-auto flex items-center gap-1">
-                                    <!-- A browser capability connects via a live login window, not a form — offer it here
+                <RowGroup v-if="selectedInstances.length > 0" label="Connected">
+                    <div v-for="instance in selectedInstances" :key="instance.id" class="flex flex-col gap-1 px-4 py-3">
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="font-medium text-content">{{ instance.id }}</span>
+                            <span class="text-2xs text-muted">{{ instance.status.state }}</span>
+                            <div class="ml-auto flex items-center gap-1">
+                                <!-- A browser capability connects via a live login window, not a form — offer it here
                                          (also the way to re-log-in once a session expires). -->
-                                    <Button
-                                        v-if="selected.kind === 'browser'"
-                                        :label="instance.status.state === 'active' ? 'Re-log in' : 'Log in'"
-                                        size="small"
-                                        :text="true"
-                                        @click="openLogin(String(instance.config[`platform`]), selected.name)"
-                                    >
-                                        <template #icon><Icon name="sign-in" /></template>
-                                    </Button>
-                                    <!-- An ACP agent with a declared loginCommand signs in interactively: the daemon
+                                <Button
+                                    v-if="selected.kind === 'browser'"
+                                    :label="instance.status.state === 'active' ? 'Re-log in' : 'Log in'"
+                                    size="small"
+                                    :text="true"
+                                    @click="openLogin(String(instance.config[`platform`]), selected.name)"
+                                >
+                                    <template #icon><Icon name="sign-in" /></template>
+                                </Button>
+                                <!-- An ACP agent with a declared loginCommand signs in interactively: the daemon
                                          starts it in the capability's job session and the terminal panel opens on it. -->
-                                    <Button
-                                        v-if="selected.kind === 'agent' && instance.config[`loginCommand`] !== undefined"
-                                        label="Sign in"
-                                        size="small"
-                                        :text="true"
-                                        @click="startAgentLogin(instance.id)"
-                                    >
-                                        <template #icon><Icon name="sign-in" /></template>
-                                    </Button>
-                                    <Button
-                                        v-if="selected.kind !== 'devops'"
-                                        size="small"
-                                        severity="danger"
-                                        :text="true"
-                                        :rounded="true"
-                                        aria-label="Remove instance"
-                                        @click="askRemove(instance.id)"
-                                    >
-                                        <template #icon><Icon name="trash" /></template>
-                                    </Button>
-                                </div>
+                                <Button
+                                    v-if="selected.kind === 'agent' && instance.config[`loginCommand`] !== undefined"
+                                    label="Sign in"
+                                    size="small"
+                                    :text="true"
+                                    @click="startAgentLogin(instance.id)"
+                                >
+                                    <template #icon><Icon name="sign-in" /></template>
+                                </Button>
+                                <Button
+                                    v-if="selected.kind !== 'devops'"
+                                    size="small"
+                                    severity="danger"
+                                    :text="true"
+                                    :rounded="true"
+                                    aria-label="Remove instance"
+                                    @click="askRemove(instance.id)"
+                                >
+                                    <template #icon><Icon name="trash" /></template>
+                                </Button>
                             </div>
-                            <CapabilityEffects :effects="instanceEffects(instance)" :compact="true" />
-                            <!-- A browser capability that's installed but not signed in is pending on the LOGIN, not a
+                        </div>
+                        <CapabilityEffects :effects="instanceEffects(instance)" :compact="true" />
+                        <!-- A browser capability that's installed but not signed in is pending on the LOGIN, not a
                                  rebuild — make the hint open the login window (same action as the button above), never
                                  the /sandbox rebuild hub. Keyed off the daemon's "rebuild" detail (see handlers/browser.ts). -->
-                            <button
-                                v-if="
-                                    instance.status.state === 'pending' &&
-                                    selected.kind === 'browser' &&
-                                    !String(instance.status.detail ?? '').includes('rebuild')
-                                "
-                                type="button"
-                                class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
-                                @click="openLogin(String(instance.config[`platform`]), selected.name)"
-                            >
-                                <Icon name="exclamation-triangle" />
-                                {{ instance.status.detail ?? "Not connected" }} — Log in →
-                            </button>
-                            <!-- A capability that needs a sandbox rebuild (Discord voice / a DB client / a browser whose
+                        <button
+                            v-if="
+                                instance.status.state === 'pending' &&
+                                selected.kind === 'browser' &&
+                                !String(instance.status.detail ?? '').includes('rebuild')
+                            "
+                            type="button"
+                            class="inline-flex w-fit items-center gap-1 text-2xs text-warning hover:underline"
+                            @click="openLogin(String(instance.config[`platform`]), selected.name)"
+                        >
+                            <Icon name="exclamation-triangle" />
+                            {{ instance.status.detail ?? "Not connected" }} — Log in →
+                        </button>
+                        <!-- A capability that needs a sandbox rebuild (Discord voice / a DB client / a browser whose
                                  Chromium isn't installed yet) is otherwise a dead-end "pending" — point at the Sandbox ▸
                                  Environment tab where the rebuild command lives. -->
-                            <RouterLink
-                                v-else-if="instance.status.state === 'pending'"
-                                to="/sandbox/environment"
-                                class="inline-flex items-center gap-1 text-2xs text-warning hover:underline"
-                            >
-                                <Icon name="exclamation-triangle" />
-                                {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
-                            </RouterLink>
-                        </li>
-                    </ul>
-                </div>
+                        <RouterLink
+                            v-else-if="instance.status.state === 'pending'"
+                            to="/sandbox/environment"
+                            class="inline-flex items-center gap-1 text-2xs text-warning hover:underline"
+                        >
+                            <Icon name="exclamation-triangle" />
+                            {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
+                        </RouterLink>
+                    </div>
+                </RowGroup>
 
                 <!-- Marketplace browse (plugin only): resolve a marketplace repo and pre-fill the form below. -->
-                <div v-if="selected.kind === 'plugin'" class="rounded-lg border border-line bg-card p-3">
-                    <div class="mb-2 text-2xs font-semibold uppercase tracking-wide text-subtle">From a marketplace (optional)</div>
-                    <div class="flex gap-2">
-                        <input v-model="marketUrl" placeholder="https://github.com/owner/marketplace" :class="cmp.input('min-w-0 flex-1')" />
-                        <input v-model="marketToken" type="password" autocomplete="off" placeholder="Token" :class="cmp.input('w-28')" />
-                        <Button
-                            label="Browse"
-                            size="small"
-                            :disabled="marketUrl.trim().length === 0 || browsing"
-                            :loading="browsing"
-                            @click="browse"
-                        />
+                <RowGroup v-if="selected.kind === 'plugin'" label="From a marketplace (optional)">
+                    <div class="flex flex-col gap-2 px-4 py-3">
+                        <div class="flex gap-2">
+                            <input v-model="marketUrl" placeholder="https://github.com/owner/marketplace" :class="cmp.input('min-w-0 flex-1')" />
+                            <input v-model="marketToken" type="password" autocomplete="off" placeholder="Token" :class="cmp.input('w-28')" />
+                            <Button
+                                label="Browse"
+                                size="small"
+                                :disabled="marketUrl.trim().length === 0 || browsing"
+                                :loading="browsing"
+                                @click="browse"
+                            />
+                        </div>
+                        <div v-if="market" class="scrollbar-thin flex max-h-40 flex-col gap-0.5 overflow-auto">
+                            <button
+                                v-for="plugin in market.plugins"
+                                :key="plugin.name"
+                                type="button"
+                                class="flex items-baseline gap-2 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:bg-overlay disabled:opacity-50"
+                                :disabled="plugin.install === undefined"
+                                @click="pickPlugin(plugin)"
+                            >
+                                <span class="font-medium text-content">{{ plugin.name }}</span>
+                                <span v-if="plugin.version" class="text-2xs text-subtle">{{ plugin.version }}</span>
+                                <span class="min-w-0 truncate text-2xs text-muted">{{ plugin.description }}</span>
+                                <span v-if="plugin.install === undefined" class="ml-auto shrink-0 text-2xs text-subtle">not installable</span>
+                            </button>
+                        </div>
                     </div>
-                    <div v-if="market" class="scrollbar-thin mt-2 flex max-h-40 flex-col gap-1 overflow-auto">
-                        <button
-                            v-for="plugin in market.plugins"
-                            :key="plugin.name"
-                            type="button"
-                            class="flex items-baseline gap-2 rounded-md border border-line bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:border-line-strong disabled:opacity-50"
-                            :disabled="plugin.install === undefined"
-                            @click="pickPlugin(plugin)"
-                        >
-                            <span class="font-medium text-content">{{ plugin.name }}</span>
-                            <span v-if="plugin.version" class="text-2xs text-subtle">{{ plugin.version }}</span>
-                            <span class="min-w-0 truncate text-2xs text-muted">{{ plugin.description }}</span>
-                            <span v-if="plugin.install === undefined" class="ml-auto shrink-0 text-2xs text-subtle">not installable</span>
-                        </button>
-                    </div>
-                </div>
+                </RowGroup>
 
                 <label class="ui-field">
                     <span class="ui-field-label">Name</span>
@@ -683,7 +681,7 @@ const submitLabel = computed(() =>
                 description="Grow your sandbox — each capability gives your agent new tools or connects your accounts. Everything is stored only in your sandbox."
             />
 
-            <div class="flex flex-col gap-8">
+            <div class="flex flex-col gap-6">
                 <div v-for="group in groupedCatalog" :key="group.label" class="flex flex-col gap-3">
                     <div>
                         <div :class="cmp.sectionLabel()">{{ group.label }}</div>
@@ -696,7 +694,7 @@ const submitLabel = computed(() =>
                                 class="flex h-full w-full items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay"
                                 @click="pick(entry)"
                             >
-                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-canvas">
+                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-canvas">
                                     <img
                                         v-if="logoUrl(entry) && !logoFailed.has(entry.id)"
                                         :src="logoUrl(entry)"

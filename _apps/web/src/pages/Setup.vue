@@ -284,7 +284,13 @@ const linuxCommand = (): string => {
         return ``;
     }
     const envs = `${mode.value === `own` ? ` CF_TOKEN='${cfToken.value.trim()}'` : ``}${platformEnv()}${syncEnv()}`;
-    return bashCommand(`sh`, `sudo${envs === `` ? `` : ` env${envs}`} `, code);
+    // Production's curl|sh install needs root (Docker install, self-host wiring, /opt writes). Local dev runs
+    // connect.sh BY PATH as the developer — who has docker via their group and their Node toolchain (pnpm) on
+    // PATH — so `sudo` there only resets PATH to root's secure_path, which kills the in-repo `pnpm build:sandbox`
+    // the dev image is built from: the build fails "pnpm: command not found" and connect.sh silently falls back
+    // to the PREVIOUS image, so the sandbox never runs the working tree. No sudo in dev ⇒ the paste rebuilds.
+    const runner = environment.production ? `sudo ` : ``;
+    return bashCommand(`sh`, `${runner}${envs === `` ? `` : `env${envs} `}`, code);
 };
 
 const windowsCommand = (): string => {

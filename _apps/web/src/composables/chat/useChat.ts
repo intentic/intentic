@@ -344,8 +344,8 @@ const attachments = computed<PendingAttachment[]>({
 });
 
 // Per-provider labels + the route prefix each provider's daemon routes live under.
-const providerLabel = (p: AgentProvider): string => (p === `codex` ? `ChatGPT` : p === `grok` ? `Grok` : `Claude`);
-const providerBase = (p: AgentProvider): string => (p === `codex` ? `/codex` : p === `grok` ? `/grok` : `/claude`);
+const providerLabel = (p: AgentProvider): string => (p === `codex` ? `ChatGPT` : p === `grok` ? `Grok` : p === `kimi` ? `Kimi Code` : `Claude`);
+const providerBase = (p: AgentProvider): string => (p === `codex` ? `/codex` : p === `grok` ? `/grok` : p === `kimi` ? `/kimi` : `/claude`);
 
 // Which account the manage/connect card acts on — decoupled from the chat-turn provider so connecting or
 // disconnecting one account never mutates the active conversation's provider.
@@ -507,7 +507,7 @@ watch([providerAccounts, translatorAccounts], () => {
         ) {
             continue;
         }
-        const fallback = ([`claude`, `codex`, `grok`] as const).find((p) => providerConnectable(p));
+        const fallback = ([`claude`, `codex`, `grok`, `kimi`] as const).find((p) => providerConnectable(p));
         if (fallback) {
             conversation.selectProvider(fallback);
         }
@@ -522,7 +522,7 @@ const accountManageOpen = ref(false);
 // verifier/state to `completeConnect`; Grok (xAI OAuth via OpenCode) just tracks the poll — OpenCode owns the
 // tokens. (Codex has no native connect: it authenticates through the translator subscription, whose device
 // login is a separate flow — connectTranslator above.)
-type PendingAuth = { provider: "claude"; verifier: string; state: string } | { provider: "grok" };
+type PendingAuth = { provider: "claude"; verifier: string; state: string } | { provider: "grok" } | { provider: "kimi" };
 let pendingAuth: PendingAuth | null = null;
 // Grok's xAI device code, surfaced in the card (pre-filled at x.ai; the user just approves).
 const userCode = ref<string | null>(null);
@@ -676,11 +676,11 @@ export const resetChat = (): void => {
     convSeq = 1;
     conversations.value = restoreTabs();
     sessions.value = [];
-    providerAccounts.value = { claude: [], codex: [], grok: [] };
-    selectedAccountId.value = { claude: undefined, codex: undefined, grok: undefined };
-    providerModels.value = { claude: [], codex: [], grok: [] };
-    providerDefaultModel.value = { claude: ``, codex: ``, grok: `` };
-    providerModelsState.value = { claude: `idle`, codex: `idle`, grok: `idle` };
+    providerAccounts.value = { claude: [], codex: [], grok: [], kimi: [] };
+    selectedAccountId.value = { claude: undefined, codex: undefined, grok: undefined, kimi: undefined };
+    providerModels.value = { claude: [], codex: [], grok: [], kimi: [] };
+    providerDefaultModel.value = { claude: ``, codex: ``, grok: ``, kimi: `` };
+    providerModelsState.value = { claude: `idle`, codex: `idle`, grok: `idle`, kimi: `idle` };
     managedProvider.value = turnDefaults.provider.value;
     cancelConnect();
     clearTimeout(translatorPollTimer);
@@ -890,10 +890,21 @@ watch([reachable, conversations], ([isReachable]) => {
 // user-clicked link (finished via `completeConnect`). Codex: mint a one-time device code + verification URL and
 // start the poll loop — the user signs in at ChatGPT and the account connects on its own. Surfaces the server's
 // reason (sandbox offline / daemon still starting) inline on failure rather than as a silently-blocked popup.
+// Moonshot's API-key page, surfaced as the "get your key" link in the Kimi connect card.
+const KIMI_KEY_URL = `https://platform.moonshot.ai/console/api-keys`;
+
 const startConnect = async (): Promise<void> => {
     const target = managedProvider.value;
     cancelConnect();
     error.value = null;
+    if (target === `kimi`) {
+        // Kimi authenticates with an API key, not OAuth — there's no server `start`. Arm the paste UI (a link to
+        // Moonshot's key page + the paste field) and finish in completeConnect by POSTing the key. Reuses
+        // authorizeUrl/pendingAuth so the card's existing paste flow (shared with Claude) renders unchanged.
+        pendingAuth = { provider: `kimi` };
+        authorizeUrl.value = KIMI_KEY_URL;
+        return;
+    }
     let response: Response;
     try {
         response = await sandboxRequest(`${providerBase(target)}/oauth/start`, { method: `POST` });
@@ -955,7 +966,7 @@ const closeAccountManage = (): void => {
 // can actually be read. Codex has no account list (it rides the translator subscription, loaded below).
 export const loadAccountStatus = async (): Promise<void> => {
     await Promise.all([
-        ...([`claude`, `grok`] as const).map(async (target) => {
+        ...([`claude`, `grok`, `kimi`] as const).map(async (target) => {
             try {
                 await refreshAccounts(target);
             } catch {
@@ -987,6 +998,30 @@ const loadAcpProviders = async (): Promise<void> => {
 // Only Claude has a paste-back step (exchange the code Anthropic showed against the PKCE handshake). Codex and
 // Grok complete via their device poll loops — no code is entered in this app.
 const completeConnect = async (code: string): Promise<boolean> => {
+    // Kimi: the pasted value is a Moonshot API key, stored as a new account (no OAuth exchange).
+    if (pendingAuth?.provider === `kimi`) {
+        let response: Response;
+        try {
+            response = await sandboxRequest(`/kimi/account/connect`, {
+                method: `POST`,
+                headers: { "content-type": `application/json` },
+                body: JSON.stringify({ apiKey: code.trim(), label: connectLabel.value.trim() || undefined }),
+            });
+        } catch {
+            error.value = `Could not connect your Kimi account — check the API key and try again.`;
+            return false;
+        }
+        if (!response.ok) {
+            error.value = `Could not connect your Kimi account — check the API key and try again.`;
+            return false;
+        }
+        addAccount(`kimi`, (await response.json()) as OauthAccount);
+        cancelConnect();
+        error.value = null;
+        // The key just connected — its catalog (Moonshot /v1/models) may only now be discoverable.
+        void loadProviderModels(`kimi`);
+        return true;
+    }
     if (pendingAuth?.provider !== `claude`) {
         error.value = `Start the connection first.`;
         return false;

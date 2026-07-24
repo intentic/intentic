@@ -8,6 +8,8 @@ import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
 import { extensionEnvOf } from "../extensions/extension-env.js";
 import { extensionAgentDirsOf, extensionBinDirsOf } from "../extensions/installed-extensions.js";
 import { ensureFreshToken } from "../claude/claude-credentials.js";
+import { resolveKimiKey } from "../kimi/kimi-credentials.js";
+import { MOONSHOT_ANTHROPIC_BASE } from "../kimi/kimi-models.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
@@ -88,7 +90,12 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
     // turn: the claude provider (any harness), or codex/grok routed under harness "claude-code". A native
     // codex/grok/ACP turn registers abort alone — steering it reports NOT_FOUND and the client falls back.
     const provider = input.agent ?? "claude";
-    const steerable = provider === "claude" || ((provider === "codex" || provider === "grok") && (input.harness ?? "native") === "claude-code");
+    // Kimi always runs on the Claude Code harness (it has no native runtime of its own — Moonshot speaks the
+    // Anthropic protocol), so it is steerable like a native Claude turn.
+    const steerable =
+        provider === "claude" ||
+        provider === "kimi" ||
+        ((provider === "codex" || provider === "grok") && (input.harness ?? "native") === "claude-code");
     const steering = steerable ? new SteeringQueue() : undefined;
     const unregister =
         input.conversationId !== undefined
@@ -374,6 +381,26 @@ async function* runTurn(
             const model =
                 input.agent === "codex" && routedCodexDead ? (await services.codexModels.models()).default : routedModel(input.agent, input.model);
             endpoint = { baseUrl: services.config.translator.url, authToken: services.config.translator.token, model };
+        } else if (input.agent === "kimi") {
+            // Kimi (Moonshot) speaks the Anthropic Messages protocol, so it runs on THIS harness with the endpoint
+            // pointed at Moonshot's Anthropic-compatible base and authenticated with the sandbox-owned API key (the
+            // selected account's, else the first stored one, else the container MOONSHOT_API_KEY). Withholding the
+            // Claude OAuth token happens automatically once `endpoint` is set (baseUrl in agent.ts drops it).
+            const resolved = await resolveKimiKey(services.kimiStore, services.config, input.account);
+            if (resolved === undefined) {
+                yield {
+                    kind: "error",
+                    code: "subscription-required",
+                    message: "No Kimi account connected — add your Kimi (Moonshot) API key in Sandbox ▸ Agent before chatting.",
+                };
+                yield { kind: "done" };
+                return;
+            }
+            resolvedAccount = resolved.accountId;
+            // Resolve a concrete model so the turn never sends an empty id to Moonshot: the pinned pick, else the
+            // live catalog default (discovery → persisted → seed floor, never empty).
+            const model = input.model !== undefined && input.model !== "" ? input.model : (await services.kimiModels.models()).default;
+            endpoint = { baseUrl: MOONSHOT_ANTHROPIC_BASE, authToken: resolved.apiKey, model };
         } else {
             const accountId = input.account ?? (await services.claudeStore.list())[0]?.id;
             if (accountId !== undefined) {

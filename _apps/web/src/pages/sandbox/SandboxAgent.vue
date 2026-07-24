@@ -120,10 +120,14 @@ const usageLine = (id: string): string | undefined => {
 const connectHint = computed(() =>
     managedProvider.value === `grok`
         ? `Open x.ai on any device with your SuperGrok / X Premium account and approve — this connects on its own.`
-        : `Open Anthropic to authorize, then paste the code it shows you.`,
+        : managedProvider.value === `kimi`
+          ? `Open Moonshot to create an API key on your Kimi account, then paste it here.`
+          : `Open Anthropic to authorize, then paste the code it shows you.`,
 );
-const openLabel = computed(() => (managedProvider.value === `grok` ? `Open x.ai` : `Open Anthropic`));
-const pastePlaceholder = computed(() => `Paste code…`);
+const openLabel = computed(() =>
+    managedProvider.value === `grok` ? `Open x.ai` : managedProvider.value === `kimi` ? `Open Moonshot` : `Open Anthropic`,
+);
+const pastePlaceholder = computed(() => (managedProvider.value === `kimi` ? `Paste API key…` : `Paste code…`));
 // Grok holds a single account (OpenCode owns the xAI credential), so hide "connect another" once it's linked.
 const canConnectMore = computed(() => managedProvider.value !== `grok` || managedAccounts.value.length === 0);
 // A connect handshake is live once startConnect has produced its authorize URL / device code.
@@ -332,103 +336,105 @@ const importMemory = async (): Promise<void> => {
             <!-- Native accounts (Claude, Grok). ChatGPT/Codex has no native account — it connects only through the
                  subscription row below — so its whole native section is hidden. -->
             <template v-if="managedProvider !== `codex`">
-            <!-- Connected accounts for the managed provider; each can be disconnected independently. -->
-            <ul v-if="managedAccounts.length > 0" class="flex flex-col gap-1">
-                <li
-                    v-for="account in managedAccounts"
-                    :key="account.id"
-                    class="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5"
-                    :class="account.needsReauth ? 'border-warning/40 bg-warning/10' : 'border-line bg-card'"
-                >
-                    <span class="flex min-w-0 flex-col">
-                        <span class="flex min-w-0 items-center gap-2">
-                            <Icon name="circle-fill" class="text-[0.5rem]" :class="account.needsReauth ? 'text-warning' : 'text-success'" />
-                            <span class="truncate text-2xs text-content">{{ account.label }}</span>
+                <!-- Connected accounts for the managed provider; each can be disconnected independently. -->
+                <ul v-if="managedAccounts.length > 0" class="flex flex-col gap-1">
+                    <li
+                        v-for="account in managedAccounts"
+                        :key="account.id"
+                        class="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5"
+                        :class="account.needsReauth ? 'border-warning/40 bg-warning/10' : 'border-line bg-card'"
+                    >
+                        <span class="flex min-w-0 flex-col">
+                            <span class="flex min-w-0 items-center gap-2">
+                                <Icon name="circle-fill" class="text-[0.5rem]" :class="account.needsReauth ? 'text-warning' : 'text-success'" />
+                                <span class="truncate text-2xs text-content">{{ account.label }}</span>
+                            </span>
+                            <!-- A revoked/expired credential explains itself and offers reconnect; else the usage line. -->
+                            <span v-if="account.needsReauth" class="pl-3.5 text-[0.65rem] text-warning">{{
+                                account.detail ?? `Reconnect to keep using this account.`
+                            }}</span>
+                            <span v-else-if="usageLine(account.id)" class="pl-3.5 text-[0.65rem] text-subtle">{{ usageLine(account.id) }}</span>
                         </span>
-                        <!-- A revoked/expired credential explains itself and offers reconnect; else the usage line. -->
-                        <span v-if="account.needsReauth" class="pl-3.5 text-[0.65rem] text-warning">{{
-                            account.detail ?? `Reconnect to keep using this account.`
-                        }}</span>
-                        <span v-else-if="usageLine(account.id)" class="pl-3.5 text-[0.65rem] text-subtle">{{ usageLine(account.id) }}</span>
-                    </span>
-                    <div class="flex shrink-0 items-center gap-1">
-                        <Button v-if="account.needsReauth && canConnectMore" label="Re-log in" size="small" @click="startConnect">
-                            <template #icon><Icon name="link" /></template>
-                        </Button>
-                        <Button label="Disconnect" size="small" severity="danger" :text="true" @click="disconnect(account.id)">
-                            <template #icon><Icon name="sign-out" /></template>
-                        </Button>
-                    </div>
-                </li>
-            </ul>
-            <p v-else class="text-2xs text-subtle">No {{ providerTabs.find((t) => t.value === managedProvider)?.label }} account connected yet.</p>
-
-            <!-- Connect another account: a labelled sign-in handshake (kicked off on demand so the open-URL anchor
-                 is a real user gesture, never a blocked programmatic popup). -->
-            <div v-if="canConnectMore" class="flex flex-col gap-2 border-t border-line pt-2">
-                <Button v-if="!connecting" label="Connect another account" size="small" @click="startConnect">
-                    <template #icon><Icon name="link" /></template>
-                </Button>
-                <template v-else>
-                    <p class="text-2xs text-subtle">{{ connectHint }}</p>
-                    <input
-                        v-model="connectLabel"
-                        name="accountLabel"
-                        placeholder="Account name (optional)"
-                        class="min-w-0 rounded-md border border-line bg-card px-3 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                    />
-                    <template v-if="managedProvider === `grok`">
-                        <div v-if="userCode" class="flex flex-col items-center gap-1 rounded-md border border-line bg-card py-2">
-                            <span class="text-2xs text-subtle">Code (already filled in at x.ai — just approve)</span>
-                            <span class="font-mono text-lg font-semibold tracking-[0.2em] text-content">{{ userCode }}</span>
-                            <CopyButton :text="userCode ?? ``" label="Copy" />
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <Button
-                                v-if="authorizeUrl"
-                                as="a"
-                                :label="openLabel"
-                                size="small"
-                                severity="secondary"
-                                :href="authorizeUrl"
-                                target="_blank"
-                                rel="noopener"
-                            >
-                                <template #icon><Icon name="external-link" /></template>
+                        <div class="flex shrink-0 items-center gap-1">
+                            <Button v-if="account.needsReauth && canConnectMore" label="Re-log in" size="small" @click="startConnect">
+                                <template #icon><Icon name="link" /></template>
                             </Button>
-                            <span v-if="userCode" class="text-2xs text-subtle"
-                                ><Icon name="spinner" class="mr-1" spin />Waiting for you to approve…</span
-                            >
+                            <Button label="Disconnect" size="small" severity="danger" :text="true" @click="disconnect(account.id)">
+                                <template #icon><Icon name="sign-out" /></template>
+                            </Button>
+                        </div>
+                    </li>
+                </ul>
+                <p v-else class="text-2xs text-subtle">
+                    No {{ providerTabs.find((t) => t.value === managedProvider)?.label }} account connected yet.
+                </p>
+
+                <!-- Connect another account: a labelled sign-in handshake (kicked off on demand so the open-URL anchor
+                 is a real user gesture, never a blocked programmatic popup). -->
+                <div v-if="canConnectMore" class="flex flex-col gap-2 border-t border-line pt-2">
+                    <Button v-if="!connecting" label="Connect another account" size="small" @click="startConnect">
+                        <template #icon><Icon name="link" /></template>
+                    </Button>
+                    <template v-else>
+                        <p class="text-2xs text-subtle">{{ connectHint }}</p>
+                        <input
+                            v-model="connectLabel"
+                            name="accountLabel"
+                            placeholder="Account name (optional)"
+                            class="min-w-0 rounded-md border border-line bg-card px-3 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                        />
+                        <template v-if="managedProvider === `grok`">
+                            <div v-if="userCode" class="flex flex-col items-center gap-1 rounded-md border border-line bg-card py-2">
+                                <span class="text-2xs text-subtle">Code (already filled in at x.ai — just approve)</span>
+                                <span class="font-mono text-lg font-semibold tracking-[0.2em] text-content">{{ userCode }}</span>
+                                <CopyButton :text="userCode ?? ``" label="Copy" />
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <Button
+                                    v-if="authorizeUrl"
+                                    as="a"
+                                    :label="openLabel"
+                                    size="small"
+                                    severity="secondary"
+                                    :href="authorizeUrl"
+                                    target="_blank"
+                                    rel="noopener"
+                                >
+                                    <template #icon><Icon name="external-link" /></template>
+                                </Button>
+                                <span v-if="userCode" class="text-2xs text-subtle"
+                                    ><Icon name="spinner" class="mr-1" spin />Waiting for you to approve…</span
+                                >
+                            </div>
+                        </template>
+                        <div v-else class="flex flex-col gap-2">
+                            <div class="flex items-center gap-2">
+                                <Button
+                                    v-if="authorizeUrl"
+                                    as="a"
+                                    :label="openLabel"
+                                    size="small"
+                                    severity="secondary"
+                                    :href="authorizeUrl"
+                                    target="_blank"
+                                    rel="noopener"
+                                >
+                                    <template #icon><Icon name="external-link" /></template>
+                                </Button>
+                            </div>
+                            <div class="flex gap-2">
+                                <input
+                                    v-model="connectCode"
+                                    name="connectCode"
+                                    :placeholder="pastePlaceholder"
+                                    class="min-w-0 flex-1 rounded-md border border-line bg-card px-3 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                                    @keydown.enter="finishConnect"
+                                />
+                                <Button label="Finish" size="small" :disabled="connectCode.trim().length === 0" @click="finishConnect" />
+                            </div>
                         </div>
                     </template>
-                    <div v-else class="flex flex-col gap-2">
-                        <div class="flex items-center gap-2">
-                            <Button
-                                v-if="authorizeUrl"
-                                as="a"
-                                :label="openLabel"
-                                size="small"
-                                severity="secondary"
-                                :href="authorizeUrl"
-                                target="_blank"
-                                rel="noopener"
-                            >
-                                <template #icon><Icon name="external-link" /></template>
-                            </Button>
-                        </div>
-                        <div class="flex gap-2">
-                            <input
-                                v-model="connectCode"
-                                name="connectCode"
-                                :placeholder="pastePlaceholder"
-                                class="min-w-0 flex-1 rounded-md border border-line bg-card px-3 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                                @keydown.enter="finishConnect"
-                            />
-                            <Button label="Finish" size="small" :disabled="connectCode.trim().length === 0" @click="finishConnect" />
-                        </div>
-                    </div>
-                </template>
-            </div>
+                </div>
             </template>
 
             <!-- The subscription connection (translator). ChatGPT/Codex: the ONE connection, so it's the card's

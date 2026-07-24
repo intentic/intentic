@@ -14,6 +14,7 @@ import { createGrokRoutes } from "./grok/grok.routes.js";
 import { createHistoryRoutes } from "./history/history.routes.js";
 import { createIntenticRoutes } from "./intentic/intentic.routes.js";
 import { createInventoryRoutes } from "./inventory/inventory.routes.js";
+import { createKimiRoutes } from "./kimi/kimi.routes.js";
 import { createLogsRoutes } from "./logs/logs.routes.js";
 import { createPanelsRoutes } from "./panels/panels.routes.js";
 import { createPortsRoutes } from "./ports/ports.routes.js";
@@ -40,6 +41,7 @@ export const createRouter = (services: Services) => ({
     intentic: createIntenticRoutes(services),
     git: createGitRoutes(services),
     grok: createGrokRoutes(services),
+    kimi: createKimiRoutes(services),
     history: createHistoryRoutes(services),
     workspace: createWorkspaceRoutes(services),
     inventory: createInventoryRoutes(services),

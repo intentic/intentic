@@ -88,6 +88,10 @@ const configSchema = z.object({
     // Container-env OpenAI fallback cred: gates native Codex turns (the OPENAI_API_KEY fallback CODEX_HOME when a
     // turn resolved no connected ChatGPT account).
     openaiApiKey: z.string().default("").meta({ secret: true }),
+    // Container-env Kimi (Moonshot) fallback cred: gates a Kimi turn when no key-based account is stored (a bare
+    // dev run) and feeds the /kimi/models catalog discovery. Kimi runs on the Claude Code harness pointed at
+    // Moonshot's Anthropic-compatible endpoint, so this is the key that endpoint authenticates with.
+    moonshotApiKey: z.string().default("").meta({ secret: true }),
     // The user's Cloudflare API token, set by connect.{sh,ps1} on the own-Cloudflare path (empty on the
     // intentic-provided path — the user has no token). The infra panel's context reads its presence to know
     // whether host tunnels are minted by the user's CF (own) or relayed to the platform (intentic-provided).

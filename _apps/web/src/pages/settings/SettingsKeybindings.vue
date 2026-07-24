@@ -30,16 +30,14 @@ interface Row {
 const rows = computed<readonly Row[]>(() => {
     const q = query.value.trim().toLowerCase();
     return commands.value
-        .map(
-            (entry): Row => ({
-                command: entry.command,
-                title: entry.title,
-                owner: entry.owner,
-                chord: effectiveKeybinding(entry.command, entry.keybinding),
-                overridden: keymapOverrides.value[entry.command] !== undefined,
-                hasDefault: entry.keybinding !== undefined,
-            }),
-        )
+        .map((entry): Row => ({
+            command: entry.command,
+            title: entry.title,
+            owner: entry.owner,
+            chord: effectiveKeybinding(entry.command, entry.keybinding),
+            overridden: keymapOverrides.value[entry.command] !== undefined,
+            hasDefault: entry.keybinding !== undefined,
+        }))
         .filter((row) => q.length === 0 || row.title.toLowerCase().includes(q) || row.command.toLowerCase().includes(q))
         .sort((a, b) => a.title.localeCompare(b.title));
 });
@@ -133,11 +131,7 @@ onUnmounted(stopRecording);
                 <div class="flex w-40 shrink-0 items-center justify-end gap-1.5">
                     <span v-if="recording === row.command" class="text-2xs italic text-primary-500">Press keys… (Esc)</span>
                     <template v-else>
-                        <span
-                            v-if="conflicting(row.chord)"
-                            v-tooltip.top="'Another command uses this shortcut'"
-                            class="text-warning"
-                        >
+                        <span v-if="conflicting(row.chord)" v-tooltip.top="'Another command uses this shortcut'" class="text-warning">
                             <Icon name="exclamation-triangle" class="text-[0.7rem]" />
                         </span>
                         <kbd

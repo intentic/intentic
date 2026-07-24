@@ -12,6 +12,7 @@ import { grokContract } from "./contracts/grok.contract.js";
 import { historyContract } from "./contracts/history.contract.js";
 import { intenticContract } from "./contracts/intentic.contract.js";
 import { inventoryContract } from "./contracts/inventory.contract.js";
+import { kimiContract } from "./contracts/kimi.contract.js";
 import { logsContract } from "./contracts/logs.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
@@ -36,6 +37,7 @@ export { grokContract } from "./contracts/grok.contract.js";
 export { historyContract } from "./contracts/history.contract.js";
 export { intenticContract } from "./contracts/intentic.contract.js";
 export { inventoryContract } from "./contracts/inventory.contract.js";
+export { kimiContract } from "./contracts/kimi.contract.js";
 export { logsContract } from "./contracts/logs.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
@@ -72,6 +74,7 @@ export const sandboxContract = {
     intentic: intenticContract,
     git: gitContract,
     grok: grokContract,
+    kimi: kimiContract,
     history: historyContract,
     workspace: workspaceContract,
     inventory: inventoryContract,

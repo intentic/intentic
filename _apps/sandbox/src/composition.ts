@@ -68,6 +68,8 @@ import {
 } from "./git/changes.js";
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
+import { type KimiCatalog, createKimiCatalog } from "./kimi/kimi-catalog.js";
+import { fileKimiStore, type KimiStore } from "./kimi/kimi-credentials.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
@@ -156,6 +158,12 @@ export interface Services {
     // its model here so it never sends the SDK's rejected gpt-5-codex default; /codex/models serves the picker;
     // a turn's self-heal `record`s the ids the subscription proved valid.
     readonly codexModels: CodexCatalog;
+    // Kimi (Moonshot) API-key accounts (one <id>.json per account under .intentic/kimi), several per sandbox.
+    readonly kimiStore: KimiStore;
+    // Kimi/Moonshot's live model catalog (discovery → persisted → seed floor, never empty). A Kimi turn resolves
+    // its model here (it runs on the Claude Code harness pointed at Moonshot's Anthropic endpoint); /kimi/models
+    // serves the picker.
+    readonly kimiModels: KimiCatalog;
     // The bundled translator (CLIProxyAPI): connects/lists/disconnects the routed providers' SUBSCRIPTION OAuth
     // (codex → ChatGPT, grok → SuperGrok). Codex has no other credential — every Codex turn (native provider +
     // the Claude agent's shell delegation) authenticates through this on the ChatGPT subscription. /translator
@@ -309,6 +317,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         : undefined;
 
     const claudeStore = fileClaudeStore(join(authRoot, "claude"));
+    const kimiStore = fileKimiStore(join(authRoot, "kimi"));
 
     // Hoisted (not inline in the literal below): the ACP connection pool implements ACP terminal/* over the
     // same runner, so both must share one instance (and its `visible` gate).
@@ -336,6 +345,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         claudeStore,
         claudeModels: createClaudeCatalog(claudeStore, config, workspace.root),
         codexModels: createCodexCatalog(config, join(codexBase, "models.json")),
+        kimiStore,
+        kimiModels: createKimiCatalog(kimiStore, config, join(authRoot, "kimi", "models.json")),
         cliProxy: createCliProxyClient({
             managementUrl: cliProxyManagementUrl(config),
             token: config.translator.token,

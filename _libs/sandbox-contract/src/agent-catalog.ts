@@ -17,6 +17,7 @@ export const PROVIDERS: readonly { label: string; value: NativeProvider }[] = [
     { label: "Claude Code", value: "claude" },
     { label: "Codex", value: "codex" },
     { label: "Grok", value: "grok" },
+    { label: "Kimi Code", value: "kimi" },
 ];
 
 // An ACP provider's label is its capability's display name, which the web layers on top — the raw id is the
@@ -45,6 +46,6 @@ export const modelsFor = (provider: AgentProvider): CatalogOption[] => {
             { label: "Haiku", value: "haiku" },
         ];
     }
-    // Codex/Grok (live catalog only) and ACP providers (the agent owns its model): nothing static to pick.
+    // Codex/Grok/Kimi (live catalog only) and ACP providers (the agent owns its model): nothing static to pick.
     return [];
 };

@@ -50,13 +50,13 @@ export interface ModelOption extends CatalogOption {
 // discovery with a persisted/seed floor, never empty) and loaded into these records, so the pickers track
 // provider renames and new releases without a static list. useChat.loadProviderModels fills them when a daemon
 // is reachable; resetChat clears. Empty only until the first load.
-export const providerModels = ref<Record<AgentProvider, ModelOption[]>>({ claude: [], codex: [], grok: [] });
+export const providerModels = ref<Record<AgentProvider, ModelOption[]>>({ claude: [], codex: [], grok: [], kimi: [] });
 // Each provider's daemon-resolved default model id; empty only until the first load.
-export const providerDefaultModel = ref<Record<AgentProvider, string>>({ claude: ``, codex: ``, grok: `` });
+export const providerDefaultModel = ref<Record<AgentProvider, string>>({ claude: ``, codex: ``, grok: ``, kimi: `` });
 // Per-provider catalog fetch state, so the picker can show a spinner/retry per provider group instead of a
-// silently-empty list (codex/grok have no static floor to fall back on before their first load).
+// silently-empty list (codex/grok/kimi have no static floor to fall back on before their first load).
 export type CatalogLoadState = "idle" | "loading" | "loaded" | "error";
-export const providerModelsState = ref<Record<AgentProvider, CatalogLoadState>>({ claude: `idle`, codex: `idle`, grok: `idle` });
+export const providerModelsState = ref<Record<AgentProvider, CatalogLoadState>>({ claude: `idle`, codex: `idle`, grok: `idle`, kimi: `idle` });
 
 // The model a fresh conversation seeds for a provider. Harness-independent: codex/grok run the SAME subscription
 // model ids natively and under the Claude Code harness (the translator serves them), so the catalog no longer
@@ -98,6 +98,7 @@ export const providerTabs: readonly { value: AgentProvider; label: string }[] = 
     { value: `claude`, label: `Claude` },
     { value: `codex`, label: `ChatGPT` },
     { value: `grok`, label: `Grok` },
+    { value: `kimi`, label: `Kimi Code` },
 ];
 
 // A proposed plan awaiting the user's decision (the agent called ExitPlanMode). 'pending' shows the
@@ -237,9 +238,8 @@ interface TurnDefaults {
 // deterministic — gpt-5-codex / grok-4 — so they aren't persisted; rememberedModelFor derives them.)
 const readModels = (stored: unknown): Record<AgentProvider, string> => {
     const raw = (typeof stored === `object` && stored !== null ? stored : {}) as Record<string, unknown>;
-    const modelFor = (provider: AgentProvider): string =>
-        typeof raw[provider] === `string` ? (raw[provider] as string) : defaultModelFor(provider);
-    return { claude: modelFor(`claude`), codex: modelFor(`codex`), grok: modelFor(`grok`) };
+    const modelFor = (provider: AgentProvider): string => (typeof raw[provider] === `string` ? (raw[provider] as string) : defaultModelFor(provider));
+    return { claude: modelFor(`claude`), codex: modelFor(`codex`), grok: modelFor(`grok`), kimi: modelFor(`kimi`) };
 };
 
 const readTurnDefaults = (): TurnDefaults => {
@@ -258,7 +258,10 @@ const readTurnDefaults = (): TurnDefaults => {
         }
         const stored = JSON.parse(raw) as Record<string, unknown>;
         return {
-            provider: stored[`provider`] === `codex` || stored[`provider`] === `grok` ? (stored[`provider`] as AgentProvider) : `claude`,
+            provider:
+                stored[`provider`] === `codex` || stored[`provider`] === `grok` || stored[`provider`] === `kimi`
+                    ? (stored[`provider`] as AgentProvider)
+                    : `claude`,
             harness: stored[`harness`] === `claude-code` ? `claude-code` : `native`,
             models: readModels(stored[`models`]),
             effort: typeof stored[`effort`] === `string` ? stored[`effort`] : fallback.effort,
@@ -298,15 +301,19 @@ watch(
 // The model to restore for a provider: the one the user last picked for it (persisted), else the provider's
 // default. Harness-independent — the model survives a harness switch (the catalog is shared), so switching
 // Default ↔ Claude Code keeps the chosen model. The single source every model-reset site routes through.
-export const rememberedModelFor = (provider: AgentProvider): string =>
-    turnDefaults.models.value[provider] || defaultModelFor(provider);
+export const rememberedModelFor = (provider: AgentProvider): string => turnDefaults.models.value[provider] || defaultModelFor(provider);
 
 // Connected provider accounts and the per-provider selection for new turns. In-memory (NOT persisted like
 // turnDefaults): account ids are daemon-minted per sandbox, so they'd be meaningless across a sandbox switch —
 // useChat.loadAccountStatus fills these when a daemon becomes reachable and resetChat clears them. Kept here
 // (not in useChat) so a Conversation can seed/reset its account without importing useChat (a cycle).
-export const providerAccounts = ref<Record<AgentProvider, readonly OauthAccount[]>>({ claude: [], codex: [], grok: [] });
-export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>({ claude: undefined, codex: undefined, grok: undefined });
+export const providerAccounts = ref<Record<AgentProvider, readonly OauthAccount[]>>({ claude: [], codex: [], grok: [], kimi: [] });
+export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>({
+    claude: undefined,
+    codex: undefined,
+    grok: undefined,
+    kimi: undefined,
+});
 
 // The account a fresh turn on a provider uses: the user's explicit pick when it's still connected, else the
 // provider's first connected account. The single source every account-reset site routes through.
