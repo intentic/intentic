@@ -66,13 +66,16 @@ volume self-initializes and an image bump self-migrates — no manual db step.
 
 ## Continuous deploy via Komodo (optional)
 
-Run this compose as a **Komodo stack** and every main push redeploys itself: `images:platform` ends with
-[deploy-platform.sh](../../scripts/deploy-platform.sh), which calls Komodo's `DeployStack` — the stack's
-services run `:latest` with `pull_policy: always`, so the redeploy pulls what CI just pushed. The hook
-self-skips until these GitLab CI/CD variables exist (so it is pure configuration, no pipeline edit):
+Run this compose as a **Komodo stack** named `intentic-platform` and every main push redeploys itself:
+`images:platform` ends with [deploy-platform.sh](../../scripts/deploy-platform.sh), which calls Komodo's
+`DeployStack` — the stack's services run `:latest` with `pull_policy: always`, so the redeploy pulls what CI
+just pushed. The stack name is set in the job's rules (`PLATFORM_DEPLOY_STACK`) and the Komodo core origin
+defaults to `https://komodo.radarsu.com`, leaving one thing to configure — the api key, as masked GitLab
+CI/CD variables:
 
 | Variable | Value |
 | --- | --- |
-| `PLATFORM_DEPLOY_STACK` | the Komodo stack name (e.g. `intentic-platform`) |
-| `KOMODO_URL` | the Komodo core origin reachable from the runner (e.g. `http://192.168.0.x:9120`) |
 | `KOMODO_API_KEY` / `KOMODO_API_SECRET` | an api key minted in Komodo (mask both) |
+
+Optional overrides: `KOMODO_URL` (a different core origin, e.g. `http://192.168.0.x:9120`) and
+`PLATFORM_DEPLOY_STACK` (a different stack name — unsetting it in the rules disables the deploy).

@@ -232,9 +232,9 @@ images:
 # and the Dockerfiles are pure COPY. docker:release's TURBO_HASH tag makes the release content-addressed, so
 # the changes: globs are deliberately COARSE — anything in the workspace dirs the platform's dependency
 # closure can reach (web compiles in _extensions UI bundles; @intentic/constants et al live under _tools) —
-# and a push that didn't change an app's actual inputs just re-tags the existing image registry-side. The
-# optional deploy hook (deploy-platform.sh) then rolls the Komodo stack; it self-skips until its CI vars are
-# configured.
+# and a push that didn't change an app's actual inputs just re-tags the existing image registry-side. The job
+# ends by rolling the Komodo stack named in PLATFORM_DEPLOY_STACK (deploy-platform.sh) — set per-branch in the
+# rules below, so a branch without it publishes images and deploys nothing.
 images:platform:
   extends: .dind
   stage: images
@@ -255,9 +255,11 @@ images:platform:
         - _tools/**/*
         - turbo.json
         - pnpm-lock.yaml
+      variables:
+        PLATFORM_DEPLOY_STACK: "intentic-platform"
   script:
     - pnpm turbo run docker:release --filter=@intentic-app/api --filter=@intentic-app/web
-    - bash _tools/scripts/deploy-platform.sh
+    - DEPLOY_VERSION=$CI_COMMIT_SHORT_SHA bash _tools/scripts/deploy-platform.sh
 
 # Release: semantic-release over the test job's verified build (npm publish, GitLab Release with the
 # cross-compiled intentic-sync binaries, and the sandbox/dind-host images at the release version + moving

@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # Roll the self-hosted platform after images:platform pushes: one Komodo DeployStack call against the stack
 # created from _tools/selfhost/platform (its services run :latest with pull_policy: always, so a redeploy
-# pulls what CI just pushed). Deliberately inert until the CI/CD variables are configured — the images job
-# calls this unconditionally and it self-skips, so enabling continuous deploy is pure configuration:
-#   PLATFORM_DEPLOY_STACK   the Komodo stack name (e.g. intentic-platform)
-#   KOMODO_URL              the Komodo core origin, reachable from the runner (e.g. http://192.168.0.x:9120)
+# pulls what CI just pushed).
+#
+# PLATFORM_DEPLOY_STACK is set per-branch in .gitlab-ci.yml rules; an empty value means "do not auto-deploy",
+# so a manual/local run of the images job is inert. The Komodo core origin is baked in here (override with a
+# KOMODO_URL CI variable), leaving the api key the only configuration:
 #   KOMODO_API_KEY / KOMODO_API_SECRET   an api key minted in Komodo (masked CI variables)
 set -euo pipefail
 
-if [ -z "${PLATFORM_DEPLOY_STACK:-}" ] || [ -z "${KOMODO_URL:-}" ]; then
-    echo "PLATFORM_DEPLOY_STACK/KOMODO_URL not set — skipping platform deploy."
+if [ -z "${PLATFORM_DEPLOY_STACK:-}" ]; then
+    echo "No PLATFORM_DEPLOY_STACK set for this branch — skipping platform deploy."
     exit 0
 fi
 
-echo "deploying Komodo stack '$PLATFORM_DEPLOY_STACK'"
+KOMODO_URL="${KOMODO_URL:-https://komodo.radarsu.com}"
+
+echo "deploying Komodo stack '$PLATFORM_DEPLOY_STACK' (version ${DEPLOY_VERSION:-unknown})"
 curl -fsS -X POST "$KOMODO_URL/execute" \
     -H "Content-Type: application/json" \
     -H "X-Api-Key: ${KOMODO_API_KEY:?}" \
