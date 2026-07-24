@@ -4,7 +4,7 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import { type AgentHarness, type AgentProvider, PROVIDERS } from "@intentic/sandbox-contract";
 import { BADGE_META } from "../composables/chat/catalog";
 import { acpProviders, providerAccounts, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
-import { filterEntries, type PickerEntry, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
+import { customEntryFor, filterEntries, type PickerEntry, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
 import { usageDetail, usagePercent, usageStatusFor } from "../composables/chat/usageStatus";
 import { loadAllProviderModels, loadProviderModels, useChat } from "../composables/chat/useChat";
 import ProviderLogo from "./ProviderLogo.vue";
@@ -36,6 +36,13 @@ const searchInput = ref<HTMLInputElement | null>(null);
 
 const searching = computed(() => query.value.trim().length > 0);
 
+// The custom-model row, appended last to the search results: typing a full model id offers it directly (see
+// customEntryFor). It targets the railed provider when one is filtered, else the active provider — the same
+// provider an ordinary pick would apply to.
+const customEntry = computed<PickerEntry | undefined>(() =>
+    searching.value ? customEntryFor(pickerEntries.value, query.value, rail.value ?? provider.value) : undefined,
+);
+
 // The visible list: while searching a single flat ranked section (provider identity rides on every row's
 // logo); browsing, one section per provider with the active provider hoisted first. Rows carry their index in
 // visual order — the keyboard highlight's coordinate system.
@@ -44,7 +51,9 @@ const sections = computed<readonly { provider?: AgentProvider; rows: { entry: Pi
     const withRows = (entries: readonly PickerEntry[]): { entry: PickerEntry; index: number }[] =>
         entries.map((entry) => ({ entry, index: index++ }));
     if (searching.value) {
-        return [{ rows: withRows(filterEntries(pickerEntries.value, query.value, rail.value)) }];
+        const matched = filterEntries(pickerEntries.value, query.value, rail.value);
+        // Ranked catalog hits first; the escape hatch sits under them so Enter still takes the real match.
+        return [{ rows: withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]) }];
     }
     return pickerSections(pickerEntries.value, provider.value, rail.value).map((section) => ({
         provider: section.provider,

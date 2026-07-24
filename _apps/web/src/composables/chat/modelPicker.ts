@@ -78,6 +78,27 @@ export const filterEntries = (entries: readonly PickerEntry[], query: string, ra
     return matched.toSorted((a, b) => rankFor(a, tokens) - rankFor(b, tokens));
 };
 
+// The custom-model escape hatch: any id the user types that no catalog row already offers, mirroring Claude
+// Code's own `/model <id>`, which accepts an arbitrary string and lists it as a "Custom model". Both of the
+// catalogs a provider publishes can lag a release — Claude Code's tier aliases lag one by design (`opus` kept
+// resolving to claude-opus-4-8 after claude-opus-5 shipped), and a REST /v1/models entry still has to reach the
+// account — so during that window typing the id is the ONLY way to drive a model that already serves turns.
+// Offered on an exact-id miss only, so it never competes with a real catalog hit, and it carries no metadata
+// because none is published: an unrecognized id is exactly as unknown to us as it looks.
+export const customEntryFor = (entries: readonly PickerEntry[], query: string, provider: AgentProvider): PickerEntry | undefined => {
+    const value = query.trim();
+    // A model id is a hyphenated, whitespace-free token (claude-opus-5, gpt-5.1, grok-4-fast). Requiring the
+    // hyphen is what stops an ordinary search word — "fast", "opus" — from offering a junk row on every
+    // keystroke; the bare tier aliases that carry no hyphen are catalog rows already, so nothing is unreachable.
+    if (!/^[\w.]+(-[\w.]+)+$/.test(value)) {
+        return undefined;
+    }
+    if (entries.some((entry) => entry.provider === provider && entry.value === value)) {
+        return undefined;
+    }
+    return { key: `${provider}:${value}`, provider, value, label: value, description: `use as custom model id` };
+};
+
 // Browse-mode grouping: one section per provider (respecting the rail filter), the active provider hoisted
 // first — the models pickable without a session restart sit nearest — and the rest in stable PROVIDERS order.
 // Empty sections are kept: the component renders their loading/error/empty state row under the header.

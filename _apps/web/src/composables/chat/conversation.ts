@@ -105,10 +105,18 @@ export const acpProviders = ref<readonly { id: string; label: string }[]>([]);
 export const providerDisplayLabel = (provider: AgentProvider): string =>
     acpProviders.value.find((agent) => agent.id === provider)?.label ?? providerLabel(provider);
 
-// The display label for a selected model id — the option's label, else the provider name so the chip is never
-// blank (Grok's catalog can be briefly empty on first load; an ACP agent has no model options at all).
-export const modelLabelFor = (provider: AgentProvider, modelId: string): string =>
-    modelOptionsFor(provider).find((option) => option.value === modelId)?.label ?? providerDisplayLabel(provider);
+// The display label for a selected model id — the option's label, else the raw id, else the provider name. The
+// raw-id rung is what a custom model rides on: it belongs to no catalog by definition, and naming the provider
+// there would hide WHICH model the turn actually runs. The provider name remains the floor for an EMPTY id, so
+// the chip is never blank (Grok's catalog can be briefly empty on first load; an ACP agent owns its own model
+// and carries no id at all).
+export const modelLabelFor = (provider: AgentProvider, modelId: string): string => {
+    const option = modelOptionsFor(provider).find((entry) => entry.value === modelId);
+    if (option !== undefined) {
+        return option.label;
+    }
+    return modelId === `` ? providerDisplayLabel(provider) : modelId;
+};
 
 // The provider tabs shown wherever accounts are picked (the account dialog + the composer's connect gate).
 // Labels differ from the internal ids (codex → "ChatGPT").
