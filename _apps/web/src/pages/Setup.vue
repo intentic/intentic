@@ -672,8 +672,10 @@ watch(commandReady, (ready) => {
                 </p>
 
                 <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
-                     the SYNC_DIR env on the command below — no re-mint. The folder is derived from the name. -->
-                <label class="flex cursor-pointer items-center gap-3 rounded-lg bg-canvas p-4">
+                     the SYNC_DIR env on the command below — no re-mint. The folder is derived from the name.
+                     Hidden on the compose tab: that path has no place to carry SYNC_DIR, so the toggle would do
+                     nothing there — the compose panel points at the workspace's Desktop sync card instead. -->
+                <label v-if="runTab !== `compose`" class="flex cursor-pointer items-center gap-3 rounded-lg bg-canvas p-4">
                     <ToggleSwitch v-model="syncEnabled" class="shrink-0" aria-label="Also sync a local folder with this sandbox" />
                     <div class="flex flex-col gap-0.5">
                         <span class="text-sm font-semibold text-content">Also sync a local folder with this sandbox</span>
@@ -704,7 +706,7 @@ watch(commandReady, (ready) => {
                             />
                             <CopyButton v-if="runTab !== `compose`" :text="selectedCommand" label="Copy" />
                         </div>
-                        <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" :sync-enabled="syncEnabled" />
+                        <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
                         <template v-else>
                             <Code :code="selectedCommand" :lang="selectedCommandLang" :wrap="true" :copyable="false" />
                             <!-- Local dev only: platformEnv() injects SANDBOX_IMAGE=intentic-sandbox:dev — connect.sh

@@ -9,7 +9,7 @@ import { composeBootstrap, composeFile } from "./setupCompose";
  * setup code into the compose .env. Same container/volume/network names as the script, so the workspace data
  * and cleanup keep working whichever way the sandbox is managed. */
 
-const props = defineProps<{ args: ComposeArgs; syncEnabled: boolean }>();
+const props = defineProps<{ args: ComposeArgs }>();
 
 const yaml = computed(() => composeFile(props.args));
 const bootstrap = computed(() => composeBootstrap(props.args));
@@ -33,7 +33,7 @@ const bootstrap = computed(() => composeBootstrap(props.args));
             manage with <code>docker compose</code> (<code>up -d</code>, <code>down</code>, <code>logs</code>). Your workspace lives in the named
             volumes, so <code>down</code>/<code>up</code> keeps it.
         </p>
-        <p v-if="syncEnabled" class="text-xs text-muted">
+        <p class="text-xs text-muted">
             Desktop sync isn't part of the compose path — once your workspace opens, enable it from its <b>Desktop sync</b> card.
         </p>
         <p v-if="args.platformUrl" class="flex items-center gap-2 text-xs text-warning">
