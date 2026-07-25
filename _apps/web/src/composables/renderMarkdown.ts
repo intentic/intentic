@@ -1,25 +1,72 @@
 import DOMPurify from "dompurify";
-import { marked } from "marked";
+import { Marked } from "marked";
+import { type CodeBlock, codeBlockHtml, escapeHtml } from "./markdownCode";
 
 /* Render untrusted markdown (workspace files, agent chat output) to SANITIZED HTML for v-html. Vue's v-html
  * does NOT sanitize, so we must do it ourselves — marked passes inline HTML through, so without this a
  * workspace file or a crafted agent turn could inject <script>/onerror. DOMPurify strips the active markup
  * while keeping the prose. */
 
-// Minimal HTML escape for the fallback path — enough to render arbitrary text inertly inside v-html.
-const escapeHtml = (text: string): string => text.replace(/&/g, `&amp;`).replace(/</g, `&lt;`).replace(/>/g, `&gt;`).replace(/"/g, `&quot;`);
+/* Fenced code blocks are collected out of band and left as an index-only placeholder, which markdownCode
+ * fills in after sanitizing (see codeBlockHtml for why that order). The collector is module state because
+ * marked.parse is synchronous — it is filled and drained inside a single call.
+ *
+ * A crafted turn could write that placeholder as literal HTML and have one of its OWN code blocks rendered
+ * twice; there is nothing else to gain, since the substituted markup is ours, so this stays unguarded rather
+ * than carrying a per-render nonce. */
+let collected: CodeBlock[] = [];
+const marked = new Marked({
+    renderer: {
+        code({ text, lang }) {
+            collected.push({ code: text, lang: lang ?? `` });
+            return `<pre data-md-code="${collected.length - 1}"></pre>`;
+        },
+    },
+});
+const CODE_PLACEHOLDER = /<pre data-md-code="(\d+)"><\/pre>/g;
+
+// Sanitized HTML plus the code blocks its placeholders stand for. Split from substitution so a streaming
+// turn can parse its settled prefix once and still pick up highlighting that lands later.
+interface MarkdownParts {
+    readonly html: string;
+    readonly blocks: readonly CodeBlock[];
+}
+
+const EMPTY: MarkdownParts = { html: ``, blocks: [] };
+
+// Number of markdown parses since load. The streaming split exists to keep this proportional to an answer's
+// BLOCK count rather than its frame count; renderMarkdown.test.ts asserts exactly that, which is the only
+// reason it is exported.
+let parses = 0;
+export const markdownParseCount = (): number => parses;
 
 // Never let a markdown/sanitizer edge case (or a non-string slipping in mid-stream) crash the surrounding
-// component — a chat bubble re-renders this on every streamed delta, so a single throw would blank the turn.
+// component — a chat bubble re-runs this on every streamed delta, so a single throw would blank the turn.
 // On any failure, fall back to the raw text, HTML-escaped, so the content still shows (just unstyled).
-export const renderMarkdown = (source: string): string => {
-    const text = typeof source === `string` ? source : String(source ?? ``);
+const parseParts = (text: string): MarkdownParts => {
+    parses += 1;
+    collected = [];
     try {
-        return DOMPurify.sanitize(marked.parse(text, { async: false }));
+        return { html: DOMPurify.sanitize(marked.parse(text, { async: false })), blocks: collected };
     } catch {
-        return escapeHtml(text);
+        return { html: escapeHtml(text), blocks: [] };
     }
 };
+
+// Swap each placeholder for its real markup. Runs on every render rather than being memoised with the parse,
+// so a block that was still uncoloured when it settled picks up its highlighting as soon as that arrives.
+const substitute = (parts: MarkdownParts, colour: boolean): string =>
+    parts.blocks.length === 0
+        ? parts.html
+        : parts.html.replace(CODE_PLACEHOLDER, (match, index: string) => {
+              const block = parts.blocks[Number(index)];
+              return block === undefined ? match : codeBlockHtml(block, colour);
+          });
+
+const asText = (source: string): string => (typeof source === `string` ? source : String(source ?? ``));
+
+// Whole-message render: everything is finished text, so every code block is worth colouring.
+export const renderMarkdown = (source: string): string => substitute(parseParts(asText(source)), true);
 
 /* Streaming split — the answer a turn is still writing is re-rendered on every animation frame (the
  * typewriter loop appends a few characters per frame), and re-parsing + re-sanitizing the WHOLE message each
@@ -102,24 +149,29 @@ export const settledEnd = (text: string, from: number): number => {
     return settled;
 };
 
-export interface StreamingMarkdown {
+export interface RenderedMarkdown {
     // `settled` is stable across frames for a given prefix; `tail` is the part still being written.
-    readonly render: (source: string) => { readonly settled: string; readonly tail: string };
+    readonly settled: string;
+    readonly tail: string;
+}
+
+export interface StreamingMarkdown {
+    readonly render: (source: string) => RenderedMarkdown;
 }
 
 // One renderer per streaming message (the caller holds it for the message's lifetime).
 export const createStreamingMarkdown = (): StreamingMarkdown => {
     let boundary = 0;
     let settledSource = ``;
-    let settledHtml = ``;
+    let settledParts = EMPTY;
     return {
         render: (source) => {
-            const text = typeof source === `string` ? source : String(source ?? ``);
+            const text = asText(source);
             // Not an append but a rewrite (an edited re-run, a bubble reused for a new turn) — start over.
             if (!text.startsWith(settledSource)) {
                 boundary = 0;
                 settledSource = ``;
-                settledHtml = ``;
+                settledParts = EMPTY;
             }
             const next = settledEnd(text, boundary);
             if (next > boundary) {
@@ -130,9 +182,11 @@ export const createStreamingMarkdown = (): StreamingMarkdown => {
                 // the cut, a reference-style link defined earlier) then still does, and any seam artifact in
                 // the tail heals the moment it settles. This runs once per completed block — not per frame,
                 // which is the entire point.
-                settledHtml = renderMarkdown(settledSource);
+                settledParts = parseParts(settledSource);
             }
-            return { settled: settledHtml, tail: renderMarkdown(text.slice(boundary)) };
+            // The tail is not coloured: its text changes every frame, so highlighting it would thrash the
+            // cache for a block that is about to settle and be highlighted exactly once.
+            return { settled: substitute(settledParts, true), tail: substitute(parseParts(text.slice(boundary)), false) };
         },
     };
 };

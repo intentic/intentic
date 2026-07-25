@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Segmented } from "@intentic-app/ui";
 import { computed, ref, watch } from "vue";
+import { copyCodeFromEvent } from "../../../composables/markdownCode";
 import { renderMarkdown } from "../../../composables/renderMarkdown";
 import type { LineJump } from "../workspaceTabs";
 import CodeView from "./CodeView.vue";
@@ -38,7 +39,8 @@ const rendered = computed<string>(() => renderMarkdown(source));
             />
         </div>
         <div class="min-h-0 flex-1">
-            <div v-if="view === 'preview'" class="scrollbar-thin h-full overflow-auto bg-canvas px-6 py-5">
+            <!-- Delegated click: the code blocks' copy buttons live inside v-html (see copyCodeFromEvent). -->
+            <div v-if="view === 'preview'" class="scrollbar-thin h-full overflow-auto bg-canvas px-6 py-5" @click="copyCodeFromEvent">
                 <div class="md-prose mx-auto max-w-3xl text-content/90" v-html="rendered"></div>
             </div>
             <CodeView v-else :code="source" lang="markdown" :scroll-to-line="line" />

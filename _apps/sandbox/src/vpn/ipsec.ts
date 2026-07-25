@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import type { IpsecVpnConfig, VpnConfig } from "@intentic/sandbox-contract";
@@ -22,7 +23,13 @@ const config = (raw: VpnConfig): IpsecVpnConfig => raw as IpsecVpnConfig;
 // 5 and 14). Not terminated with "!" so strongSwan will still negotiate its own defaults if a gateway wants
 // something adjacent — a stricter list is the kind of thing that turns a working VPN into an opaque failure.
 const IKE_PROPOSALS = "aes128-sha256-modp1536,aes256-sha256-modp2048,aes128-sha256-modp2048,aes256-sha256-modp1536,aes128-sha256-modp1024";
-const ESP_PROPOSALS = "aes128-sha256-modp2048,aes256-sha256-modp2048,aes128-sha256,aes256-sha256";
+
+// Phase 2 proposals, split by PFS because the two are not interchangeable and a mixed list is actively harmful:
+// strongSwan takes the KE group for quick mode from the proposal list, so ONE entry carrying a DH group makes it
+// send a KE payload, and a gateway configured without PFS answers NO_PROPOSAL_CHOSEN — after phase 1, XAuth and
+// the virtual IP have all succeeded, which makes it look like anything but a phase 2 mismatch.
+const ESP_PROPOSALS_PFS = "aes128-sha256-modp2048,aes256-sha256-modp2048,aes128-sha256-modp1536,aes256-sha256-modp1536";
+const ESP_PROPOSALS_NO_PFS = "aes128-sha256,aes256-sha256,aes128-sha1,aes256-sha1";
 
 // strongSwan refuses IKEv1 aggressive mode with a PSK unless this is set, and it is right to: the PSK hash goes
 // out unencrypted. FortiGate dial-up with a group PSK requires it anyway, so the grant is per sandbox and only
@@ -44,7 +51,7 @@ export const ipsecConnConfig = (id: string, raw: IpsecVpnConfig): string => {
         `    keyexchange=ikev${raw.ikeVersion}`,
         ...(raw.ikeVersion === "1" && raw.aggressive === "on" ? ["    aggressive=yes"] : []),
         `    ike=${IKE_PROPOSALS}`,
-        `    esp=${ESP_PROPOSALS}`,
+        `    esp=${raw.pfs === "off" ? ESP_PROPOSALS_NO_PFS : ESP_PROPOSALS_PFS}`,
         `    right=${raw.server}`,
         `    rightid=${raw.remoteId ?? "%any"}`,
         // A dial-up client asks for everything and lets the gateway narrow it — matching FortiClient's
@@ -92,24 +99,59 @@ const ensureCharon = async (): Promise<void> => {
     await exec("ipsec", ["start"]).catch(() => undefined);
 };
 
+// Whether charon has LOADED a connection — distinct from it being up. In `ipsec statusall` a loaded connection
+// appears under "Connections:" as `<name>:` with no bracket, while its live SAs use `<name>[n]:` / `<name>{n}:`.
+export const parseIpsecLoaded = (conn: string, output: string): boolean =>
+    output.split("\n").some((line) => new RegExp(`^\\s*${conn}:\\s`).test(line));
+
+// `ipsec start` forks and returns immediately, and `ipsec reload` only ASKS starter to re-read ipsec.conf —
+// neither waits for the connection to reach charon. Dialling in that window fails with charon's least helpful
+// message, "no config named '<conn>'", which reads like the config was never written when in fact it was
+// written microseconds earlier. So wait for the connection to actually appear before `ipsec up`.
+const CONN_LOAD_TIMEOUT_MS = 20_000;
+const waitForConn = async (conn: string): Promise<boolean> => {
+    for (let attempt = 0; attempt * 500 < CONN_LOAD_TIMEOUT_MS; attempt++) {
+        const { stdout } = await exec("ipsec", ["statusall", conn]).catch(() => ({ stdout: "" }));
+        if (parseIpsecLoaded(conn, stdout)) {
+            return true;
+        }
+        await delay(500);
+    }
+    return false;
+};
+
 // One connection's line pair from `ipsec statusall`. The IKE_SA line carries ESTABLISHED; the CHILD_SA line
 // carries "<localTS> === <remoteTS>", where the local traffic selector IS the virtual IP the gateway assigned
 // and the remote one is what it routed into the tunnel. Parsed as a pure function against real output shape.
-export const parseIpsecStatus = (conn: string, output: string): { established: boolean; address?: string | undefined; routes: string[] } => {
+export interface IpsecStatus {
+    // A CHILD_SA is INSTALLED — the ONLY state in which traffic actually flows. Reported as "connected".
+    readonly established: boolean;
+    // Phase 1 is up but no CHILD_SA yet. Reporting this as connected was a false positive: XAuth and the
+    // virtual IP can all succeed and quick mode still fail (NO_PROPOSAL_CHOSEN on a PFS mismatch), leaving a
+    // tunnel that looks up and routes nothing.
+    readonly negotiating: boolean;
+    readonly address?: string | undefined;
+    readonly routes: string[];
+}
+
+export const parseIpsecStatus = (conn: string, output: string): IpsecStatus => {
     // Matched line by line rather than with one multi-line regex: `\s` crosses newlines, so a pattern spanning
     // "selector === selector" would happily start on the CHILD_SA's INSTALLED line and finish on the next one.
     const lines = output.split("\n");
-    const established = lines.some((line) => new RegExp(`^\\s*${conn}\\[\\d+\\]:\\s+ESTABLISHED`).test(line));
+    const ikeUp = lines.some((line) => new RegExp(`^\\s*${conn}\\[\\d+\\]:\\s+ESTABLISHED`).test(line));
+    // e.g. "e2e{1}:  INSTALLED, TUNNEL, reqid 1, ESP in UDP SPIs: …"
+    const childInstalled = lines.some((line) => new RegExp(`^\\s*${conn}\\{\\d+\\}:\\s+INSTALLED`).test(line));
     // e.g. "systemeg{1}:   10.212.134.200/32 === 0.0.0.0/0" — the left side is the virtual IP the gateway
     // assigned through mode config, the right side is what it routed into the tunnel.
     const childPrefix = new RegExp(`^\\s*${conn}\\{\\d+\\}:`);
     const selectorLine = lines.find((line) => childPrefix.test(line) && line.includes(" === "));
     if (selectorLine === undefined) {
-        return { established, routes: [] };
+        return { established: childInstalled, negotiating: ikeUp && !childInstalled, routes: [] };
     }
     const [local, remote] = selectorLine.slice(selectorLine.indexOf(":") + 1).split(" === ");
     return {
-        established,
+        established: childInstalled,
+        negotiating: ikeUp && !childInstalled,
         // The first local traffic selector is the virtual IP; a tunnel with several selectors still has one
         // assigned address, so the rest are routing detail rather than a second identity.
         address: (local ?? "")
@@ -121,6 +163,29 @@ export const parseIpsecStatus = (conn: string, output: string): { established: b
             .split(/\s+/)
             .filter((entry) => entry !== ""),
     };
+};
+
+// charon's own log is precise but says nothing about WHICH setting to change. Each pattern below maps a
+// negotiation failure onto the field responsible, because the raw line is close to unactionable otherwise —
+// "calculated HASH does not match HASH payload" is IKEv1's way of saying the pre-shared key is wrong, and
+// nothing in it points at the pre-shared key.
+export const ipsecFailureHint = (log: string): string | undefined => {
+    if (/calculated HASH does not match/i.test(log)) {
+        return "The gateway rejected the pre-shared key. In aggressive mode this is what a wrong PSK looks like — phase 1 gets as far as hashing, then fails. Check the Pre-shared key (and the Local ID, which is what selects the key on a dial-up gateway).";
+    }
+    if (/XAUTH.*failed|authentication of '.*' with XAuth|xauth.*(rejected|failed)/i.test(log)) {
+        return "The pre-shared key was accepted but the XAuth sign-in failed — check the XAuth username and password.";
+    }
+    if (/no shared key found|no private key found/i.test(log)) {
+        return "strongSwan found no key for this peer. The Local ID has to match what the gateway expects, since that is what it looks the key up by.";
+    }
+    if (/NO_PROPOSAL_CHOSEN|no acceptable proposal/i.test(log)) {
+        return "The gateway refused every encryption proposal. Check the IKE version and whether aggressive mode matches how the gateway is configured.";
+    }
+    if (/retransmit|no response|INVALID_KE_PAYLOAD/i.test(log)) {
+        return "The gateway did not answer. Check the address, and that UDP 500/4500 out of this sandbox is not blocked.";
+    }
+    return undefined;
 };
 
 export const ipsecDriver: VpnDriver = {
@@ -160,6 +225,11 @@ export const ipsecDriver: VpnDriver = {
         // Pick up the files just written; charon caches both config and secrets.
         await exec("ipsec", ["rereadall"]).catch(() => undefined);
         await exec("ipsec", ["reload"]).catch(() => undefined);
+        if (!(await waitForConn(conn))) {
+            throw new Error(
+                `strongSwan did not load the "${id}" connection within ${CONN_LOAD_TIMEOUT_MS / 1000}s of being asked to. Its config is at ${ipsecConnPath(id)}; \`ipsec statusall\` shows what charon did load.`,
+            );
+        }
         yield { kind: "log", message: `Negotiating IKEv${ipsec.ikeVersion} with ${ipsec.server}…` };
         // `ipsec up` blocks until the negotiation resolves and exits non-zero on failure, printing charon's own
         // reason (NO_PROPOSAL_CHOSEN, AUTHENTICATION_FAILED, …) — the message worth propagating either way,
@@ -173,7 +243,8 @@ export const ipsecDriver: VpnDriver = {
         );
         const after = await exec("ipsec", ["statusall", conn]).catch(() => ({ stdout: "" }));
         if (!parseIpsecStatus(conn, after.stdout).established) {
-            throw new Error([`strongSwan could not establish ${id}.`, dialOutput].filter((part) => part !== "").join("\n"));
+            const hint = ipsecFailureHint(dialOutput);
+            throw new Error([`strongSwan could not establish ${id}.`, hint, dialOutput].filter((part) => part !== undefined && part !== "").join("\n\n"));
         }
         yield { kind: "log", message: `Connected ${id}. The gateway's routed networks now ride the IPsec tunnel.` };
     },
@@ -188,7 +259,9 @@ export const ipsecDriver: VpnDriver = {
         const { stdout } = await exec("ipsec", ["statusall", conn]).catch(() => ({ stdout: "" }));
         const status = parseIpsecStatus(conn, stdout);
         if (!status.established) {
-            return { state: "disconnected" };
+            // Phase 1 up with no CHILD_SA is genuinely mid-negotiation (or a quick-mode failure that DPD will
+            // retry) — never "connected", because nothing routes through it.
+            return status.negotiating ? { state: "connecting", interface: `ipsec:${conn}` } : { state: "disconnected" };
         }
         return {
             state: "connected",

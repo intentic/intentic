@@ -147,6 +147,7 @@ catalog:
   ignore: 7.0.5
   imapflow: 1.4.7
   jose: 6.2.3
+  jsdom: 29.1.1
   knip: 6.23.0
   mailparser: 3.9.14
   marked: 18.0.5

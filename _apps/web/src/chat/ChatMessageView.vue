@@ -4,7 +4,8 @@ import type { AskQuestion, TodoItem } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { type ChatMessage, planParts, type PlanRequest } from "../composables/chat/conversation";
-import { createStreamingMarkdown, renderMarkdown } from "../composables/renderMarkdown";
+import { copyCodeFromEvent } from "../composables/markdownCode";
+import { useMarkdown } from "../composables/useMarkdown";
 import { restoreSnapshot } from "../composables/workspace/useHistory";
 import { useChat } from "../composables/chat/useChat";
 import ChatImageThumb from "./ChatImageThumb.vue";
@@ -50,14 +51,15 @@ const LOADER_WORDS = [
 ];
 
 // --- Markdown / rendering --------------------------------------------------------------------
-const render = (text: string): string => renderMarkdown(text);
-
-// The assistant body is split into settled + still-writing halves (see createStreamingMarkdown): the settled
-// HTML is byte-identical between frames, so Vue skips patching that v-html and the already-rendered DOM —
-// along with any text the user has selected in it — survives the turn. One renderer per message view, held
-// for the component's life (the list is keyed by message id, so an instance tracks one message throughout).
-const markdownStream = createStreamingMarkdown();
-const body = computed(() => markdownStream.render(props.message.text));
+// Both prose surfaces go through the one composable (see useMarkdown), which splits a live turn into settled
+// + still-writing halves and renders anything finished in one pass. One renderer per message view, held for
+// the component's life — the list is keyed by message id, so an instance tracks one message throughout.
+const body = useMarkdown(
+    () => props.message.text,
+    () => props.streaming,
+);
+// A plan card's body arrives whole with the card, so it never streams.
+const plan = useMarkdown(() => (props.message.plan ? planParts(props.message.plan.text).body : ``), false);
 
 const todoIcon = (todo: TodoItem): { name: IconName; spin?: boolean; class: string } => {
     if (todo.status === `completed`) {
@@ -70,8 +72,7 @@ const todoIcon = (todo: TodoItem): { name: IconName; spin?: boolean; class: stri
 };
 const todoText = (todo: TodoItem): string => (todo.status === `in_progress` && todo.activeForm ? todo.activeForm : todo.content);
 
-const planTitle = (plan: PlanRequest): string => planParts(plan.text).title ?? `Proposed plan`;
-const planBody = (plan: PlanRequest): string => planParts(plan.text).body;
+const planTitle = (request: PlanRequest): string => planParts(request.text).title ?? `Proposed plan`;
 
 // --- Thinking fold / typing loader -----------------------------------------------------------
 // Manual override of the thinking section's expanded state. When unset, it defaults to expanded while the
@@ -275,7 +276,9 @@ const onEditKeydown = (event: KeyboardEvent): void => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-1" :class="{ 'items-end': message.role === 'user' }">
+    <!-- The click handler is delegated for the code-block copy buttons: they live inside v-html, so they can
+         hold no component of their own (see copyCodeFromEvent). -->
+    <div class="chat-message flex flex-col gap-1" :class="{ 'items-end': message.role === 'user' }" @click="copyCodeFromEvent">
         <div v-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
             <!-- The chip/thumbnail row stays visible in edit mode (read-only — the attachments ride the re-run). -->
             <div v-if="message.attachments?.length" class="flex flex-wrap justify-end gap-1.5">
@@ -410,7 +413,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         <Icon name="window-maximize" class="text-xs" />
                     </button>
                 </div>
-                <div class="chat-markdown chat-markdown-compact px-3.5 py-3 text-content/85" v-html="render(planBody(message.plan))"></div>
+                <div class="chat-markdown chat-markdown-compact px-3.5 py-3 text-content/85" v-html="plan.settled"></div>
                 <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
                     <button type="button" class="plan-approve" @click="decidePlan(message, true, 'acceptEdits')">
                         <Icon name="check" class="text-xs" />

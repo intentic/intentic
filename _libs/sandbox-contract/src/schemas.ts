@@ -958,6 +958,17 @@ export type VpnProvider = z.infer<typeof VpnProviderSchema>;
 
 const autoConnect = z.enum(["on", "off"]).default("on");
 
+// FortiClient wraps every stored credential in its own "EncX <hex>" (older builds: "Enc <hex>") encryption,
+// keyed to the machine that exported the config — it is NOT recoverable from the file. Pasting one is an easy
+// mistake to make, because in the XML it sits exactly where the credential belongs, and the failure it causes
+// is unreadable: phase 1 negotiates fine and IKE then reports "calculated HASH does not match HASH payload",
+// which says nothing about where the bad value came from. Rejecting it here turns that into a sentence at the
+// point of entry. (The FortiClient importer already drops these — this catches a hand-paste.)
+const notForticlientCiphertext = <T extends z.ZodType<string>>(field: T, label: string): T =>
+    field.refine((value) => !/^Enc[X]?\s+[0-9A-Fa-f]{8,}$/.test(value.trim()), {
+        message: `That looks like a value copied straight out of a FortiClient config — FortiClient encrypts it with a key tied to the machine that exported it, so it can't be used here. Enter the actual ${label} (ask whoever administers the gateway).`,
+    }) as unknown as T;
+
 export const WireguardVpnConfigSchema = z.object({
     provider: z.literal("wireguard"),
     // The pasted .conf ([Interface] + [Peer]) — it holds the private key, so it's this arm's secret field.
@@ -970,7 +981,7 @@ export const FortinetVpnConfigSchema = z.object({
     server: z.string().min(1),
     port: z.coerce.number().int().min(1).max(65535).default(443),
     username: z.string().min(1),
-    password: z.string().min(1),
+    password: notForticlientCiphertext(z.string().min(1), "password"),
     // A FortiGate on a self-signed/private-CA certificate: openconnect pins this digest
     // ("sha256:…", copied from its own refusal message) instead of trusting a CA. Absent ⇒ normal CA validation.
     trustedCert: z.string().min(1).optional(),
@@ -981,14 +992,19 @@ export const FortinetVpnConfigSchema = z.object({
 export const IpsecVpnConfigSchema = z.object({
     provider: z.literal("ipsec"),
     server: z.string().min(1),
-    presharedKey: z.string().min(1),
+    presharedKey: notForticlientCiphertext(z.string().min(1), "pre-shared key"),
     // The local IKE identity (FortiClient's <localid>) — dial-up FortiGates key their phase-1 selection off it.
     localId: z.string().min(1).optional(),
     remoteId: z.string().min(1).optional(),
     // XAuth (FortiClient's <xauth>) — absent for PSK-only tunnels.
     username: z.string().min(1).optional(),
-    password: z.string().min(1).optional(),
+    password: notForticlientCiphertext(z.string().min(1), "XAuth password").optional(),
     ikeVersion: z.enum(["1", "2"]).default("1"),
+    // Perfect Forward Secrecy for phase 2. Must match the gateway EXACTLY: it decides whether a KE payload is
+    // sent in quick mode, and a mismatch fails with NO_PROPOSAL_CHOSEN only after phase 1 and XAuth have
+    // succeeded — which reads like anything but a phase 2 problem. FortiClient stores it as <pfs> under
+    // <ipsec_settings> and defaults it on, so that is the default here too.
+    pfs: z.enum(["on", "off"]).default("on"),
     // IKEv1 aggressive mode: insecure by construction, and exactly what FortiGate dial-up with a group PSK
     // requires — hence opt-in per connection rather than a global strongSwan setting.
     aggressive: z.enum(["on", "off"]).default("on"),

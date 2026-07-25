@@ -22,9 +22,12 @@ const VPN_FRAGMENT = `# vpn capability: clients for all three supported protocol
 # WireGuard: wg-quick and the resolvconf its DNS= handling shells out to.
 # FortiGate SSL-VPN: openconnect with its vpnc routing script. openconnect routes over tun rather than spawning
 #   pppd, so it needs no /dev/ppp — which is why it, not openfortivpn, is the client here.
-# IPsec: strongSwan and the extra charon plugins carrying xauth-generic.
+# IPsec: strongSwan, plus BOTH charon plugin sets. libcharon-extauth-plugins is the one that matters and is
+#   easy to miss: xauth-generic lives there, not in libcharon-extra-plugins (which ships only xauth-eap and
+#   xauth-pam, neither of which can answer a gateway's XAuth challenge with a username and password). Without
+#   it an XAuth tunnel negotiates phase 1 and then fails with no mention of the missing plugin.
 RUN apt-get update && apt-get install -y --no-install-recommends \\
-        wireguard-tools openresolv openconnect vpnc-scripts strongswan libcharon-extra-plugins \\
+        wireguard-tools openresolv openconnect vpnc-scripts strongswan libcharon-extra-plugins libcharon-extauth-plugins \\
     && rm -rf /var/lib/apt/lists/*
 # intentic:runtime --device=/dev/net/tun
 # intentic:runtime --cap-add=NET_ADMIN`;

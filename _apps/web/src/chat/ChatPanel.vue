@@ -941,6 +941,15 @@ watch(keyboardInset, () => {
 <!-- Unscoped on purpose: .chat-markdown targets v-html-injected prose, and the rest are class names shared
      across the chat components (tabs, message view, account panel), so they live once here at the panel root. -->
 <style>
+/* Long transcripts: let the browser skip layout and paint for turns that are scrolled out of view. Every
+   message here has been painted at least once — it streamed in front of the user — so `auto` remembers each
+   one's real height and scrolling back through them needs no size estimator. The intrinsic size only has to
+   carry a transcript restored straight to its bottom, where the rows above have never painted; the browser's
+   scroll anchoring absorbs the correction as they realize. */
+.chat-message {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 3rem;
+}
 .chat-surface {
     background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
     border: 1px solid color-mix(in srgb, var(--color-primary-500) 22%, var(--color-line));
@@ -1034,6 +1043,8 @@ watch(keyboardInset, () => {
     padding: 0;
     font-size: 0.8125rem;
 }
+/* Fenced code blocks are substituted as raw markup by markdownCode and styled app-wide in styles.css — the
+   workspace markdown preview renders the same markup from the same renderer. */
 .chat-markdown code {
     font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 0.85em;
