@@ -14,6 +14,7 @@ const systemEg: IpsecVpnConfig = {
     ikeVersion: "1",
     aggressive: "on",
     pfs: "on",
+    dhGroup: "14",
     autoConnect: "on",
 };
 
@@ -30,9 +31,11 @@ test("generates an IKEv1 aggressive-mode conn with mode-config and XAuth", () =>
     expect(conf).toContain("xauth_identity=someone");
     // Loaded, not dialled: connecting must stay an explicit action, never a side effect of writing config.
     expect(conf).toContain("auto=add");
-    // The proposals cover FortiClient's AES128/AES256 + SHA256 over DH groups 5 (modp1536) and 14 (modp2048).
-    expect(conf).toContain("modp1536");
-    expect(conf).toContain("modp2048");
+    // ONE group across both phases: IKEv1 quick mode derives its KE group from the IKE SA, so a phase-1 list
+    // starting on a different group than phase 2 needs is refused with NO_PROPOSAL_CHOSEN.
+    expect(conf).toContain("ike=aes128-sha256-modp2048");
+    expect(conf).toContain("esp=aes128-sha256-modp2048");
+    expect(conf).not.toContain("modp1536");
 });
 
 test("omits aggressive mode for IKEv2 and for an explicitly disabled IKEv1 tunnel", () => {
@@ -177,4 +180,16 @@ test("PFS decides whether quick mode offers a DH group at all", () => {
     expect(espLine(ipsecConnConfig("x", { ...systemEg, pfs: "on" }))).toContain("modp2048");
     expect(espLine(ipsecConnConfig("x", { ...systemEg, pfs: "off" }))).not.toContain("modp");
     expect(espLine(ipsecConnConfig("x", { ...systemEg, pfs: "off" }))).toContain("aes128-sha256");
+});
+
+test("the DH group is pinned identically in both phases, and never emits an unmapped literal", () => {
+    for (const [group, name] of [["5", "modp1536"], ["2", "modp1024"], ["19", "ecp256"]] as const) {
+        const conf = ipsecConnConfig("x", { ...systemEg, dhGroup: group });
+        expect(conf).toContain(`ike=aes128-sha256-${name}`);
+        expect(conf).toContain(`esp=aes128-sha256-${name}`);
+    }
+    // A config that somehow carries an unmapped group must still produce a loadable file, not "…-undefined".
+    const broken = ipsecConnConfig("x", { ...systemEg, dhGroup: "99" as unknown as IpsecVpnConfig["dhGroup"] });
+    expect(broken).not.toContain("undefined");
+    expect(broken).toContain("modp2048");
 });

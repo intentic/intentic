@@ -296,6 +296,31 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 when: { key: "provider", value: "ipsec" },
             },
             {
+                key: "pfs",
+                label: "Perfect Forward Secrecy",
+                default: "on",
+                options: [
+                    { value: "on", label: "On" },
+                    { value: "off", label: "Off" },
+                ],
+                when: { key: "provider", value: "ipsec" },
+            },
+            {
+                key: "dhGroup",
+                label: "DH group",
+                default: "14",
+                options: [
+                    { value: "14", label: "14 (2048)" },
+                    { value: "5", label: "5 (1536)" },
+                    { value: "2", label: "2 (1024)" },
+                    { value: "15", label: "15 (3072)" },
+                    { value: "16", label: "16 (4096)" },
+                    { value: "19", label: "19 (ECP256)" },
+                    { value: "20", label: "20 (ECP384)" },
+                ],
+                when: { key: "provider", value: "ipsec" },
+            },
+            {
                 key: "aggressive",
                 label: "Aggressive mode",
                 default: "on",

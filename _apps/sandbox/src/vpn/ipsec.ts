@@ -22,14 +22,41 @@ const config = (raw: VpnConfig): IpsecVpnConfig => raw as IpsecVpnConfig;
 // FortiGate dial-up defaults, covering the proposals FortiClient offers (AES128/AES256 with SHA256, DH groups
 // 5 and 14). Not terminated with "!" so strongSwan will still negotiate its own defaults if a gateway wants
 // something adjacent — a stricter list is the kind of thing that turns a working VPN into an opaque failure.
-const IKE_PROPOSALS = "aes128-sha256-modp1536,aes256-sha256-modp2048,aes128-sha256-modp2048,aes256-sha256-modp1536,aes128-sha256-modp1024";
+// FortiClient's DH group numbers to strongSwan's names.
+const DH_GROUPS: Record<IpsecVpnConfig["dhGroup"], string> = {
+    "2": "modp1024",
+    "5": "modp1536",
+    "14": "modp2048",
+    "15": "modp3072",
+    "16": "modp4096",
+    "19": "ecp256",
+    "20": "ecp384",
+};
 
-// Phase 2 proposals, split by PFS because the two are not interchangeable and a mixed list is actively harmful:
-// strongSwan takes the KE group for quick mode from the proposal list, so ONE entry carrying a DH group makes it
-// send a KE payload, and a gateway configured without PFS answers NO_PROPOSAL_CHOSEN — after phase 1, XAuth and
-// the virtual IP have all succeeded, which makes it look like anything but a phase 2 mismatch.
-const ESP_PROPOSALS_PFS = "aes128-sha256-modp2048,aes256-sha256-modp2048,aes128-sha256-modp1536,aes256-sha256-modp1536";
-const ESP_PROPOSALS_NO_PFS = "aes128-sha256,aes256-sha256,aes128-sha1,aes256-sha1";
+// ONE DH group across both phases, and it is load-bearing. IKEv1 quick mode carries a single KE payload, and
+// strongSwan derives its group from the IKE SA — so a phase-1 list whose FIRST entry is a different group than
+// the gateway wants for phase 2 gets NO_PROPOSAL_CHOSEN whatever the esp= line says. Verified end to end: with
+// phase 1 on modp1536 the gateway received ESP proposals carrying MODP_1536 and refused; pinning both phases
+// to the configured group established the CHILD_SA.
+//
+// Ciphers stay a short list (the responder picks); only the group is pinned.
+// Falls back rather than trusting the lookup: an unmapped group would splice the literal "undefined" into a
+// proposal string and produce an ipsec.conf charon rejects wholesale.
+const dhOf = (raw: IpsecVpnConfig): string => DH_GROUPS[raw.dhGroup] ?? DH_GROUPS["14"];
+
+const ikeProposals = (raw: IpsecVpnConfig): string => {
+    const dh = dhOf(raw);
+    return `aes128-sha256-${dh},aes256-sha256-${dh},aes128-sha1-${dh},aes256-sha1-${dh}`;
+};
+// PFS off means NO group at all: one DH-bearing proposal is enough to make strongSwan send a KE payload, which
+// a gateway configured without PFS rejects outright.
+const espProposals = (raw: IpsecVpnConfig): string => {
+    if (raw.pfs === "off") {
+        return "aes128-sha256,aes256-sha256,aes128-sha1,aes256-sha1";
+    }
+    const dh = dhOf(raw);
+    return `aes128-sha256-${dh},aes256-sha256-${dh},aes128-sha1-${dh},aes256-sha1-${dh}`;
+};
 
 // strongSwan refuses IKEv1 aggressive mode with a PSK unless this is set, and it is right to: the PSK hash goes
 // out unencrypted. FortiGate dial-up with a group PSK requires it anyway, so the grant is per sandbox and only
@@ -50,8 +77,8 @@ export const ipsecConnConfig = (id: string, raw: IpsecVpnConfig): string => {
         `conn ${connName(id)}`,
         `    keyexchange=ikev${raw.ikeVersion}`,
         ...(raw.ikeVersion === "1" && raw.aggressive === "on" ? ["    aggressive=yes"] : []),
-        `    ike=${IKE_PROPOSALS}`,
-        `    esp=${raw.pfs === "off" ? ESP_PROPOSALS_NO_PFS : ESP_PROPOSALS_PFS}`,
+        `    ike=${ikeProposals(raw)}`,
+        `    esp=${espProposals(raw)}`,
         `    right=${raw.server}`,
         `    rightid=${raw.remoteId ?? "%any"}`,
         // A dial-up client asks for everything and lets the gateway narrow it — matching FortiClient's

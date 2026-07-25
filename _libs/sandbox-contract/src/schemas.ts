@@ -1005,6 +1005,12 @@ export const IpsecVpnConfigSchema = z.object({
     // succeeded — which reads like anything but a phase 2 problem. FortiClient stores it as <pfs> under
     // <ipsec_settings> and defaults it on, so that is the default here too.
     pfs: z.enum(["on", "off"]).default("on"),
+    // The Diffie-Hellman group, as FortiClient numbers them. ONE field for both phases on purpose: in IKEv1
+    // strongSwan sends a single KE payload in quick mode and the phase-2 group ends up following phase 1, so
+    // offering a phase-1 list that starts with a different group than the gateway wants for phase 2 fails with
+    // NO_PROPOSAL_CHOSEN no matter what the esp= line says. 14 (modp2048) is FortiClient's phase-2 default;
+    // it is <dhgroup> under <ipsec_settings> in an export.
+    dhGroup: z.enum(["2", "5", "14", "15", "16", "19", "20"]).default("14"),
     // IKEv1 aggressive mode: insecure by construction, and exactly what FortiGate dial-up with a group PSK
     // requires — hence opt-in per connection rather than a global strongSwan setting.
     aggressive: z.enum(["on", "off"]).default("on"),
@@ -1156,6 +1162,9 @@ export const ForticlientConnectionSchema = z.object({
     // ipsec-only, and only when the file stored them in the clear.
     localId: z.string().optional(),
     aggressive: z.boolean().optional(),
+    // Phase-2 settings, read from <ipsec_settings> — the pair that decides whether quick mode can succeed.
+    pfs: z.boolean().optional(),
+    dhGroup: z.string().optional(),
     // What the user still has to supply for this connection to dial (always at least the password).
     needs: z.array(z.string()),
 });

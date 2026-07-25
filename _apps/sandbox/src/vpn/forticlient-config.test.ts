@@ -48,6 +48,9 @@ const XML = `<?xml version="1.0" encoding="UTF-8" ?>
                     </ike_settings>
                     <ipsec_settings>
                         <remote_networks><network><addr>0.0.0.0</addr></network></remote_networks>
+                        <dhgroup>14</dhgroup>
+                        <key_life_type>seconds</key_life_type>
+                        <pfs>1</pfs>
                     </ipsec_settings>
                 </connection>
             </connections>
@@ -90,6 +93,10 @@ test("reads the IPsec connection's phase-1 endpoint, local id and aggressive mod
         port: 500,
         localId: "extNET",
         aggressive: true,
+        // Phase 2, from <ipsec_settings> — the pair that decides whether quick mode can succeed at all. The
+        // group must NOT come from <ike_settings>, which lists "5;14;" and says nothing about phase 2.
+        pfs: true,
+        dhGroup: "14",
     });
     // The PSK is always encrypted in an export; XAuth is enabled with an encrypted username, so both it and
     // the password have to be typed.
@@ -120,4 +127,31 @@ test("splitServer only treats a trailing :digits as a port", () => {
     expect(splitServer("host.example.com", 443)).toEqual({ host: "host.example.com", port: 443 });
     // An IPv6 literal keeps its colons; nothing trailing looks like a port.
     expect(splitServer("[2001:db8::1]", 500)).toEqual({ host: "[2001:db8::1]", port: 500 });
+});
+
+test("reads phase-2 PFS and DH group from <ipsec_settings>, never from <ike_settings>", () => {
+    // <ike_settings> offers several groups; only <ipsec_settings> says which one quick mode must use.
+    const xml = `<forticlient_configuration><vpn><ipsecvpn><connections><connection>
+        <name>gw</name>
+        <ike_settings><server>gw.example.com</server><mode>aggressive</mode><dhgroup>5;14;</dhgroup></ike_settings>
+        <ipsec_settings><dhgroup>14</dhgroup><pfs>1</pfs></ipsec_settings>
+    </connection></connections></ipsecvpn></vpn></forticlient_configuration>`;
+    expect(parseForticlientConfig(xml)[0]).toMatchObject({ dhGroup: "14", pfs: true });
+});
+
+test("an explicit <pfs>0</pfs> turns PFS off; a missing one leaves it on", () => {
+    const build = (phase2: string): string =>
+        `<forticlient_configuration><vpn><ipsecvpn><connections><connection><name>gw</name>
+         <ike_settings><server>gw.example.com</server></ike_settings>
+         <ipsec_settings>${phase2}</ipsec_settings></connection></connections></ipsecvpn></vpn></forticlient_configuration>`;
+    expect(parseForticlientConfig(build("<pfs>0</pfs>"))[0]?.pfs).toBe(false);
+    // FortiClient omits <pfs> when it is on, so absence must not read as off.
+    expect(parseForticlientConfig(build(""))[0]?.pfs).toBe(true);
+});
+
+test("a DH group the capability cannot express is dropped rather than imported wrong", () => {
+    const xml = `<forticlient_configuration><vpn><ipsecvpn><connections><connection><name>gw</name>
+        <ike_settings><server>gw.example.com</server></ike_settings>
+        <ipsec_settings><dhgroup>31</dhgroup></ipsec_settings></connection></connections></ipsecvpn></vpn></forticlient_configuration>`;
+    expect(parseForticlientConfig(xml)[0]?.dhGroup).toBeUndefined();
 });
