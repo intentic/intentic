@@ -964,8 +964,12 @@ const autoConnect = z.enum(["on", "off"]).default("on");
 // is unreadable: phase 1 negotiates fine and IKE then reports "calculated HASH does not match HASH payload",
 // which says nothing about where the bad value came from. Rejecting it here turns that into a sentence at the
 // point of entry. (The FortiClient importer already drops these — this catches a hand-paste.)
+// Exported so the add form can flag it inline on blur instead of only on a rejected round-trip — one
+// definition of what "this is ciphertext, not a credential" means, shared by the browser and the daemon.
+export const isForticlientCiphertext = (value: string): boolean => /^Enc[X]?\s+[0-9A-Fa-f]{8,}$/.test(value.trim());
+
 const notForticlientCiphertext = <T extends z.ZodType<string>>(field: T, label: string): T =>
-    field.refine((value) => !/^Enc[X]?\s+[0-9A-Fa-f]{8,}$/.test(value.trim()), {
+    field.refine((value) => !isForticlientCiphertext(value), {
         message: `That looks like a value copied straight out of a FortiClient config — FortiClient encrypts it with a key tied to the machine that exported it, so it can't be used here. Enter the actual ${label} (ask whoever administers the gateway).`,
     }) as unknown as T;
 

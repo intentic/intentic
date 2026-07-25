@@ -9,7 +9,7 @@ import {
 } from "@intentic-app/capability-catalog";
 import { type CapabilitySummary, type Marketplace, type MarketplacePlugin } from "@intentic-app/api-contract";
 import { cmp, type IconName, Page, PageHeader, RowGroup, Segmented } from "@intentic-app/ui";
-import { type CapabilityEffect, capabilityEffects, type ForticlientConnection } from "@intentic/sandbox-contract";
+import { type CapabilityEffect, capabilityEffects, type ForticlientConnection, isForticlientCiphertext } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, nextTick, reactive, ref, watch } from "vue";
@@ -149,6 +149,11 @@ const fieldError = (field: CapabilityField): string | undefined => {
     const val = (values[field.key] ?? ``).trim();
     if (field.optional !== true && val.length === 0) return `This field is required.`;
     if (val.length > 0 && !field.secret && field.key.toLowerCase().includes(`url`) && !URL_RE.test(val)) return `Enter a valid URL (e.g. https://…).`;
+    // A value lifted straight out of a FortiClient config is ciphertext, not a credential — the daemon rejects
+    // it, so say so here rather than after a round-trip.
+    if (val.length > 0 && isForticlientCiphertext(val)) {
+        return `FortiClient encrypted this with a key tied to the machine that exported it — it can't be used. Enter the real value.`;
+    }
     if (val.length > 0 && field.key === `port`) {
         const n = Number(val);
         if (!Number.isInteger(n) || n < 1 || n > 65535) return `Enter a valid port number (1–65535).`;
@@ -337,6 +342,15 @@ const importForticlientConfig = async (): Promise<void> => {
 const pickForticlient = (connection: ForticlientConnection): void => {
     name.value = connection.id;
     nameEdited.value = true;
+    // Blank every secret first. FortiClient encrypts credentials, so none can be imported — and anything
+    // already in those fields belongs to a DIFFERENT connection (or to dev autofill, which remembers the last
+    // value pasted for this card). Carrying it over silently submits the wrong credential, which is exactly
+    // how an EncX blob reached the daemon and got rejected.
+    for (const field of selected.value?.fields ?? []) {
+        if (field.secret === true) {
+            values[field.key] = ``;
+        }
+    }
     values[`provider`] = connection.provider;
     values[`server`] = connection.server;
     values[`port`] = String(connection.port);
@@ -345,7 +359,14 @@ const pickForticlient = (connection: ForticlientConnection): void => {
         values[`localId`] = connection.localId ?? ``;
         values[`aggressive`] = connection.aggressive === true ? `on` : `off`;
         values[`ikeVersion`] = `1`;
+        // Phase 2 decides whether quick mode can succeed at all — carry both across from the export.
+        values[`pfs`] = connection.pfs === false ? `off` : `on`;
+        if (connection.dhGroup !== undefined) {
+            values[`dhGroup`] = connection.dhGroup;
+        }
     }
+    // The fields still needed are the ones to land on, not the top of the form.
+    touched.clear();
 };
 
 const pickPlugin = (plugin: MarketplacePlugin): void => {
@@ -394,10 +415,12 @@ watch(
             }
         }
         // Dev autofill (inert in prod): prefill secret fields with the values the last successful add used.
+        // A remembered value that the daemon would now reject is skipped — it was saved before the check
+        // existed, and silently re-offering it turns a convenience into a confusing 400 on submit.
         for (const field of entry.fields) {
             if (field.secret === true && field.value === undefined) {
                 const remembered = devFillGet(`capability.${entry.id}.${field.key}`);
-                if (remembered !== undefined) {
+                if (remembered !== undefined && !isForticlientCiphertext(remembered)) {
                     values[field.key] = remembered;
                 }
             }
