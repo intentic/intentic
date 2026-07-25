@@ -70,6 +70,12 @@ test("baseImageOf prefers the runner-named base, else an official running image,
     expect(baseImageOf("", "")).toBe(RELEASE);
     expect(baseImageOf("", "intentic-sandbox:dev")).toBe(RELEASE);
     expect(baseImageOf("", "evil.example.com/sandbox:latest")).toBe(RELEASE);
+    // BACKWARD COMPATIBILITY: an overlaid sandbox created by a runner that predates SANDBOX_BASE_IMAGE runs an
+    // `intentic-sandbox-env-<slug>:<hash>` image with no base named. It must still resolve to `:stable` — the
+    // exact base the old daemon hardcoded — so upgrading composes byte-identical content and does NOT greet
+    // the owner with a spurious "rebuild required".
+    expect(baseImageOf("", "intentic-sandbox-env-demo:abc123def456")).toBe(RELEASE);
+    expect(baseImageOf("", "intentic-sandbox-env:abc123def456")).toBe(RELEASE);
     // Unset/blank must never reach the FROM line verbatim — `FROM undefined` is an overlay that cannot build.
     expect(baseImageOf(undefined, undefined)).toBe(RELEASE);
     expect(baseImageOf("   ", "")).toBe(RELEASE);

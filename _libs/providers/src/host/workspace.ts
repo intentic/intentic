@@ -174,7 +174,12 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 if (build.code !== 0) {
                     throw new Error(`failed to build the workspace overlay image on host: exited ${build.code}: ${build.stderr.trim()}`);
                 }
-                environmentEnv = ` -e SANDBOX_ENVIRONMENT_HASH=${environmentDigest(parsed.dockerfile)}`;
+                // Name the base the overlay was built FROM alongside its hash. Without it the daemon would have
+                // to infer a base from SANDBOX_IMAGE — which here is the overlay's own tag — and fall back to
+                // the release tag. That inference happens to match today only because the graph pins `:stable`;
+                // the moment it pins a version, the daemon would compose a DIFFERENT base than was built,
+                // and every server sandbox would sit permanently on "rebuild required".
+                environmentEnv = ` -e SANDBOX_ENVIRONMENT_HASH=${environmentDigest(parsed.dockerfile)} -e SANDBOX_BASE_IMAGE=${parsed.image}`;
             }
             await session.exec(`docker network inspect ${parsed.network} >/dev/null 2>&1 || docker network create ${parsed.network}`);
             // Forwarded into the sandbox so the agent talks to a custom Anthropic endpoint.
