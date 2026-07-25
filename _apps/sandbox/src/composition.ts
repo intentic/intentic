@@ -350,7 +350,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         agentToken: randomBytes(32).toString("hex"),
         info,
         tools: internalTools(config.intenticAgentTools),
-        capabilities: fileCapabilitiesStore(join(workspace.root, ".intentic", "capabilities.json")),
+        capabilities: fileCapabilitiesStore(join(workspace.root, ".intentic", "capabilities.json"), (id, reason) =>
+            logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
+        ),
         bridgeTokens: fileBridgeTokens(join(workspace.root, ".intentic", "bridge-tokens.json")),
         automations: fileAutomationsStore(join(workspace.root, ".intentic", "automations.json")),
         approvals: fileApprovalsStore(join(workspace.root, ".intentic", "approvals")),

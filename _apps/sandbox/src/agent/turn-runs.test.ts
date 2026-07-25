@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
 import { describe, expect, it, vi } from "vitest";
+import { commandsOf, resetCommands } from "./agent-commands.js";
 import { startTurnRun, type TurnFn, turnRunOf } from "./turn-runs.js";
 
 // A hand-cranked turn: the test pushes events (or a failure) and the run's pump consumes them as they land —
@@ -142,5 +143,23 @@ describe(`turn runs`, () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it(`caches each provider's published commands so a conversation that hasn't run a turn can read them`, async () => {
+        resetCommands();
+        const { turnFn, push, close } = crankedTurn();
+        startTurnRun(turnFn, { ...turn(`c-commands`), agent: `kimi` });
+
+        const followed = collect(`c-commands`);
+        push({ kind: `commands`, items: [{ name: `review`, description: `Review a PR` }] });
+        // Replace-wholesale, matching the frame's own semantics: the later list wins outright.
+        push({ kind: `commands`, items: [{ name: `deploy`, description: `Ship it` }] });
+        push({ kind: `done` });
+        close();
+        await followed;
+
+        expect(commandsOf(`kimi`)).toEqual([{ name: `deploy`, description: `Ship it` }]);
+        // Keyed by provider — a turn on one never answers for another. An absent `agent` means claude.
+        expect(commandsOf(`claude`)).toEqual([]);
     });
 });

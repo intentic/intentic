@@ -1,4 +1,5 @@
 import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
+import { recordCommands } from "./agent-commands.js";
 
 /* Detached turn runs — turn EXECUTION decoupled from any client connection. POST /agent starts a run: the
  * turn generator is pumped daemon-side into a seq-stamped frame log, and any number of clients render it by
@@ -99,9 +100,15 @@ export function startTurnRun(turnFn: TurnFn, input: AgentTurn & { conversationId
     }
     const run = new TurnRun(input.prompt);
     runs.set(input.conversationId, run);
+    const provider = input.agent ?? "claude";
     void (async () => {
         try {
             for await (const event of turnFn(input, undefined)) {
+                // Every provider republishes its slash commands each turn; cache the latest so a conversation
+                // that hasn't run one yet still has a populated `/` popover (see agent-commands.ts).
+                if (event.kind === "commands") {
+                    recordCommands(provider, event.items);
+                }
                 run.push(event);
             }
         } catch (error) {

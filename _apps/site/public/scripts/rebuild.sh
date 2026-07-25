@@ -74,6 +74,11 @@ fi
 # output in $LOG; success is checked via image inspect because a pipeline's exit status is tee's (POSIX sh,
 # no pipefail).
 TAG="intentic-sandbox-env-${SLUG}:$(printf '%s' "$WANT_HASH" | cut -c1-12)"
+# The upstream image this overlay extends. Passed to the container as SANDBOX_BASE_IMAGE so the daemon keeps
+# composing against the SAME base: without it the daemon would see only SANDBOX_IMAGE (this overlay's own tag),
+# fail to recognise it as a base, fall back to the release tag, and recompose a different overlay — asking for
+# yet another rebuild, and rolling the sandbox back to :stable each time.
+BASE_IMAGE="$(awk 'NF && $1 !~ /^#/ { if ($1 == "FROM") print $2; exit }' "$overlay")"
 echo "intentic: building ${TAG} from the approved overlay…"
 echo "== docker build ${TAG} ==" >>"$LOG"
 docker build -t "$TAG" - <"$overlay" 2>&1 | tee -a "$LOG" || true
@@ -143,6 +148,7 @@ if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
     -v "${DOCKER_VOLUME}:/var/lib/docker" \
     "$@" \
     -e SANDBOX_IMAGE="$TAG" \
+    -e SANDBOX_BASE_IMAGE="$BASE_IMAGE" \
     -e SANDBOX_ENVIRONMENT_HASH="$WANT_HASH" \
     "$TAG" >/dev/null 2>>"$LOG"; then
     tail -n 5 "$LOG" >&2

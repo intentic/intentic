@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentSummarySchema, PermissionModeSchema, RateLimitInfoSchema } from "./schemas.js";
+import { AgentProviderSchema, AgentSummarySchema, PermissionModeSchema, RateLimitInfoSchema } from "./schemas.js";
 
 // The wire shapes streamed from the daemon's event-iterator procedures. This is their canonical home: the
 // daemon yields them and the browser client consumes them from the same schema, so the two can't drift (they
@@ -41,14 +41,19 @@ export const PermissionAskSchema = z.object({
 });
 export type PermissionAsk = z.infer<typeof PermissionAskSchema>;
 
-// One provider-advertised slash command (an ACP agent's available_commands entry). `hint` is the argument
-// placeholder the popover shows after the name.
+// One provider-advertised slash command — an ACP agent's available_commands entry, or a Claude Code session's
+// supportedCommands() (its built-ins plus the workspace's own .claude/commands and any plugin/skill commands).
+// `hint` is the argument placeholder the popover shows after the name.
 export const AgentCommandSchema = z.object({
     name: z.string(),
     description: z.string(),
     hint: z.string().optional(),
 });
 export type AgentCommand = z.infer<typeof AgentCommandSchema>;
+
+// GET /agent/commands — which provider's last-published list to read; absent = claude, matching AgentTurn.
+export const AgentCommandsQuerySchema = z.object({ agent: AgentProviderSchema.optional() });
+export const AgentCommandsSchema = z.object({ commands: z.array(AgentCommandSchema) });
 
 // One TodoWrite/Task checklist item, surfaced live so the UI shows the agent's plan-of-work (Claude Code style).
 export const TodoItemSchema = z.object({

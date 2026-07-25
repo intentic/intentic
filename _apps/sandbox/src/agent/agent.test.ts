@@ -1,7 +1,7 @@
 import type { Options, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { type QueryFn, runAgent } from "./agent.js";
+import { type AgentQuery, type QueryFn, runAgent } from "./agent.js";
 import { SteeringQueue } from "./agent-steering.js";
 
 // Build a fake QueryFn yielding canned SDK messages (cast to SDKMessage — tests exercise only the fields
@@ -355,4 +355,59 @@ test("a thrown error from the SDK is reported as an error event, then done", asy
         { kind: "error", message: "stream blew up" },
         { kind: "done" },
     ]);
+});
+
+// A fake whose stream is paired with a supportedCommands(), the shape the real SDK Query satisfies.
+const queryWithCommands = (commands: unknown, ...messages: unknown[]): QueryFn =>
+    (args) =>
+        Object.assign(fakeQuery(...messages)(args), {
+            supportedCommands: async () => commands as Awaited<ReturnType<NonNullable<AgentQuery["supportedCommands"]>>>,
+        });
+
+test("the session's slash commands are published at init, dropping empty argument hints", async () => {
+    const events = await collect(
+        request,
+        queryWithCommands(
+            [
+                { name: "review", description: "Review a PR", argumentHint: "<pr>" },
+                { name: "compact", description: "Compact the context", argumentHint: "" },
+            ],
+            { type: "system", subtype: "init", session_id: "s", model: "sonnet" },
+            { type: "result", subtype: "success" },
+        ),
+    );
+    expect(events).toContainEqual({
+        kind: "commands",
+        items: [
+            { name: "review", description: "Review a PR", hint: "<pr>" },
+            { name: "compact", description: "Compact the context" },
+        ],
+    });
+});
+
+test("a commands_changed push republishes the whole list mid-turn", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "system", subtype: "init", session_id: "s", model: "sonnet" },
+            { type: "system", subtype: "commands_changed", session_id: "s", commands: [{ name: "deploy", description: "Ship it", argumentHint: "" }] },
+            { type: "result", subtype: "success" },
+        ),
+    );
+    expect(events).toContainEqual({ kind: "commands", items: [{ name: "deploy", description: "Ship it" }] });
+});
+
+test("a stream with no command list publishes no commands frame", async () => {
+    const events = await collect(request, queryWithCommands([], { type: "system", subtype: "init", session_id: "s", model: "sonnet" }));
+    expect(events.some((event) => event.kind === "commands")).toBe(false);
+});
+
+test("a failing supportedCommands never breaks the turn", async () => {
+    const rejecting: QueryFn = (args) =>
+        Object.assign(fakeQuery({ type: "system", subtype: "init", session_id: "s", model: "sonnet" }, { type: "result", subtype: "success" })(args), {
+            supportedCommands: () => Promise.reject(new Error("CLI has no command list")),
+        });
+    const events = await collect(request, rejecting);
+    expect(events.some((event) => event.kind === "commands")).toBe(false);
+    expect(events.at(-1)).toEqual({ kind: "done" });
 });

@@ -18,6 +18,7 @@ import { resolveWithin } from "../workspace/workspace-files.js";
 import { landAgent } from "../agents/land.js";
 import type { AgentRequest } from "./agent.js";
 import { resolveRequest } from "./agent-requests.js";
+import { commandsOf } from "./agent-commands.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
 import { delegationNote } from "./delegation.js";
@@ -707,5 +708,8 @@ export const createAgentRoutes = (services: Services) => {
             }
             return { ok: true } as const;
         }),
+        // The provider's slash commands from its most recent turn. Empty (not an error) when it has never run
+        // one here — the popover simply stays closed until the first turn publishes the list.
+        commands: i.commands.handler(({ input }) => ({ commands: [...commandsOf(input.agent ?? "claude")] })),
     };
 };

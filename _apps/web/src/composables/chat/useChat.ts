@@ -1,4 +1,5 @@
 import {
+    type AgentCommand,
     type AgentHarness,
     type AgentProvider,
     type EditorContext,
@@ -24,6 +25,7 @@ import {
     planParts,
     type PlanRequest,
     providerAccounts,
+    providerCommands,
     providerDefaultModel,
     providerModels,
     providerModelsState,
@@ -218,6 +220,17 @@ watch(
     },
 );
 
+// Load a provider's daemon-published slash commands into the shared record. Cheap (a cached in-memory read
+// daemon-side), so it rides the same reachable seam as the account/model catalogs.
+const loadProviderCommands = async (target: AgentProvider): Promise<void> => {
+    try {
+        const body = await sandboxJson<{ commands?: AgentCommand[] }>(`/agent/commands?agent=${encodeURIComponent(target)}`);
+        providerCommands.value = { ...providerCommands.value, [target]: body.commands ?? [] };
+    } catch {
+        // Leave the last list; the popover simply stays as it was until the next load.
+    }
+};
+
 // Past conversations from the sandbox's session store, loaded on demand for the history menu.
 const sessions = ref<ChatSession[]>([]);
 
@@ -225,8 +238,13 @@ const sessions = ref<ChatSession[]>([]);
 // message/composer template stays put as the user switches tabs.
 const messages = computed(() => active.value.messages.value);
 const streaming = computed(() => active.value.streaming.value);
-// The active provider's own slash commands (ACP agents advertise them; native providers never do).
-const availableCommands = computed(() => active.value.availableCommands.value);
+// The active conversation's slash commands: the list its own turns published (authoritative — it reflects the
+// session's live config), falling back to the provider's last daemon-published list so a conversation that
+// hasn't run a turn yet still has a populated `/` popover.
+const availableCommands = computed<readonly AgentCommand[]>(() => {
+    const own = active.value.availableCommands.value;
+    return own.length > 0 ? own : (providerCommands.value[active.value.provider.value] ?? []);
+});
 const awaitingDecision = computed(() => active.value.awaitingDecision.value);
 const pendingPlanMessage = computed(() => active.value.pendingPlanMessage.value);
 
@@ -730,6 +748,7 @@ export const resetChat = (): void => {
     providerAccounts.value = perProvider<readonly OauthAccount[]>(() => []);
     selectedAccountId.value = perProvider<string | undefined>(() => undefined);
     providerModels.value = perProvider<ModelOption[]>(() => []);
+    providerCommands.value = perProvider<readonly AgentCommand[]>(() => []);
     providerDefaultModel.value = perProvider(() => ``);
     providerModelsState.value = perProvider<CatalogLoadState>(() => `idle`);
     managedProvider.value = turnDefaults.provider.value;
@@ -1033,6 +1052,10 @@ export const loadAccountStatus = async (): Promise<void> => {
         loadAllProviderModels(),
         // Installed ACP agents are providers too — surface them in the picker on the same seam.
         loadAcpProviders(),
+        // Each provider's last-published slash commands, so a fresh conversation's `/` popover is populated
+        // before its first turn. Claude only: the ACP list arrives per session on the wire anyway, and an ACP
+        // provider isn't known until loadAcpProviders resolves.
+        loadProviderCommands(`claude`),
         // The translator's subscription connections gate routed chats (codex/gemini always, grok under claude-code).
         refreshTranslatorAccounts(),
     ]);

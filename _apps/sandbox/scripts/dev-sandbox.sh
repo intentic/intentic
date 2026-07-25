@@ -70,10 +70,13 @@ done
 auth_src="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/agent-auth"}}{{if eq .Type "volume"}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null || true)"
 [ -n "$auth_src" ] && set -- "$@" -v "${auth_src}:/agent-auth"
 
-# Replay allowlisted "# intentic:runtime" directives from the composed overlay on /work (rebuild.sh's list),
-# so dev sandboxes with the docker/vpn capability keep their privileges across a swap. No hash check: the dev
-# recreate has no owner-approval step (the whole point of this script), and it's the developer's own machine.
+# The composed overlay on /work: the source of both the container's privileges AND its extra tooling. No hash
+# check anywhere below — the dev recreate has no owner-approval step (the whole point of this script), and it's
+# the developer's own machine.
 overlay="$(docker exec "$CONTAINER" cat /work/.intentic/environment.approved.Dockerfile 2>/dev/null || true)"
+
+# Replay allowlisted "# intentic:runtime" directives (rebuild.sh's list), so dev sandboxes with the docker/vpn
+# capability keep their privileges across a swap.
 if [ -n "$overlay" ]; then
     while IFS= read -r line; do
         case "$line" in
@@ -91,7 +94,36 @@ $overlay
 EOF
 fi
 
-echo "intentic: recreating ${CONTAINER} from ${TAG}…"
+# BUILD the overlay on top of the dev image when it installs anything, and run THAT.
+#
+# Without this the dev loop and the rebuild loop were mutually exclusive, which is a trap rather than an
+# inconvenience: this script gave you a fresh daemon with none of the overlay's packages (a vpn capability's
+# openconnect/strongSwan never got installed, so the feature read as "needs a rebuild" forever), while
+# rebuild.sh gave you the packages by building FROM the published :stable — throwing the freshly-built daemon
+# away and replacing it with the last release. Neither container could both run new code and have the tooling
+# that code drives.
+#
+# The FROM is rewritten to the dev tag, and SANDBOX_BASE_IMAGE tells the daemon to keep composing against it —
+# so the recompose on boot reproduces this exact file, its hash matches the stamp below, and the Environment
+# card stays quiet instead of demanding a rebuild that would undo the swap.
+RUN_IMAGE="$TAG"
+if [ -n "$overlay" ] && printf '%s\n' "$overlay" | grep -qE '^\s*(RUN|ENV)\s'; then
+    dev_overlay="$(mktemp)"
+    trap 'rm -f "$dev_overlay"' EXIT
+    printf '%s\n' "$overlay" | sed -E "1,/^[[:space:]]*FROM[[:space:]]/ s|^[[:space:]]*FROM[[:space:]].*|FROM ${TAG}|" >"$dev_overlay"
+    ENV_HASH="$({ sha256sum "$dev_overlay" 2>/dev/null || shasum -a 256 "$dev_overlay"; } | cut -c1-64)"
+    RUN_IMAGE="intentic-sandbox-dev-env-${SLUG}:$(printf '%s' "$ENV_HASH" | cut -c1-12)"
+    echo "intentic: building ${RUN_IMAGE} — the overlay's tooling on top of ${TAG}…"
+    if ! docker build -t "$RUN_IMAGE" - <"$dev_overlay"; then
+        echo "error: building the dev overlay failed — the sandbox is untouched." >&2
+        exit 1
+    fi
+    set -- "$@" -e SANDBOX_ENVIRONMENT_HASH="$ENV_HASH"
+fi
+# Always named, even with no overlay: it is what stops a later recompose from flipping the base to :stable.
+set -- "$@" -e SANDBOX_BASE_IMAGE="$TAG"
+
+echo "intentic: recreating ${CONTAINER} from ${RUN_IMAGE}…"
 docker rm -f "$CONTAINER" >/dev/null
 # Same shape as connect.sh's run: unprivileged unless the overlay's directives grant privileges, per-sandbox
 # network + the stable tunnel-origin alias, the persistent /work + /history + /var/lib/docker volumes, bounded
@@ -105,8 +137,8 @@ if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
     -v "${HISTORY_VOLUME}:/history" \
     -v "${DOCKER_VOLUME}:/var/lib/docker" \
     "$@" \
-    -e SANDBOX_IMAGE="$TAG" \
-    "$TAG" >/dev/null; then
+    -e SANDBOX_IMAGE="$RUN_IMAGE" \
+    "$RUN_IMAGE" >/dev/null; then
     echo "error: starting the recreated sandbox failed." >&2
     exit 1
 fi
@@ -125,4 +157,4 @@ until docker exec "$CONTAINER" curl -sf http://localhost:8787/health >/dev/null 
     sleep 2
 done
 
-echo "intentic: sandbox is live on ${TAG} — docker logs -f ${CONTAINER}"
+echo "intentic: sandbox is live on ${RUN_IMAGE} — docker logs -f ${CONTAINER}"

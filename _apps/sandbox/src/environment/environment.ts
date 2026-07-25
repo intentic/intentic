@@ -16,7 +16,36 @@ export const proposalPath = (services: Services): string => join(services.worksp
 export const approvedPath = (services: Services): string => join(services.workspace.root, ".intentic", "environment.approved.Dockerfile");
 export const customPath = (services: Services): string => join(services.workspace.root, ".intentic", "environment.custom.Dockerfile");
 
-const BASE_IMAGE = "registry.gitlab.com/radarsu/intentic/sandbox:stable";
+// The overlay extends the image this sandbox is actually on, not a fixed tag. Hardcoding `:stable` meant every
+// environment rebuild silently rolled the daemon back to the last release: a sandbox started on `:latest` or a
+// pinned SHA (SANDBOX_IMAGE, which connect.sh passes through) came back from a rebuild older than it went in,
+// with no sign a downgrade happened. A capability whose whole point is its image fragment (vpn) is the worst
+// case — applying the fragment and running a daemon that understands it become mutually exclusive.
+const RELEASE_IMAGE = "registry.gitlab.com/radarsu/intentic/sandbox:stable";
+const OFFICIAL_IMAGE = /^registry\.gitlab\.com\/radarsu\/intentic\/sandbox:\S+$/;
+
+// Both inputs are RUNNER-set container env (SANDBOX_BASE_IMAGE / SANDBOX_IMAGE) — never anything the agent can
+// write — so neither is a path for smuggling a base image past the owner.
+//
+// `baseImage` wins because after a rebuild `runningImage` is the overlay's own tag
+// (`intentic-sandbox-env-<slug>:<hash>` — see rebuild.sh / update.sh / dev-sandbox.sh), which is not a base at
+// all. Preferring the running image there would flip the composed FROM on every recompose, changing the
+// content, changing its hash, and asking the owner to rebuild AGAIN — the endless prompt, which each time also
+// downgraded them to whatever `:stable` happened to be.
+//
+// An unofficial ref is honoured ONLY when the runner named it explicitly as the base: that is the local dev
+// image (`intentic-sandbox:dev`), where the alternative is worse — a rebuild that silently replaces a
+// developer's freshly-built daemon with the last release. Deriving a base from `runningImage` stays restricted
+// to official refs, so a stock sandbox can never end up extending something unofficial by inference.
+// Blank-checked rather than `!== ""`: this value ends up verbatim in a FROM line, so anything unset must fall
+// through to a real image instead of composing `FROM undefined` — an overlay that fails to build at all.
+export const baseImageOf = (baseImage: string | undefined, runningImage: string | undefined): string => {
+    if (baseImage !== undefined && baseImage.trim() !== "") {
+        return baseImage.trim();
+    }
+    const running = runningImage?.trim() ?? "";
+    return OFFICIAL_IMAGE.test(running) ? running : RELEASE_IMAGE;
+};
 
 // The composed overlay must extend the official sandbox image — the first instruction is pinned so an approved
 // overlay can't swap the base for an arbitrary image. Held by construction in composeEnvironment; rebuild.sh
@@ -50,6 +79,8 @@ export const composeEnvironment = async (services: Services): Promise<string | u
         ...new Set((await Promise.all(capabilities.map((capability) => capabilityFragments(services, capability)))).flat()),
     ].toSorted();
     const custom = ((await services.files.read(customPath(services))) ?? "").trim();
+    // The base this container was built from, so a rebuild is version-preserving rather than a silent rollback.
+    const base = baseImageOf(services.config.sandbox.baseImage, services.config.sandbox.image);
     if (fragments.length === 0 && custom === "") {
         if (services.config.sandbox.environmentHash === "") {
             await services.files.remove(approvedPath(services));
@@ -57,11 +88,11 @@ export const composeEnvironment = async (services: Services): Promise<string | u
         }
         // The running container was built from an overlay that now has nothing left in it: keep a bare overlay
         // so the owner has a hash-pinned rebuild path back to stock.
-        const bare = `${HEADER}\n\nFROM ${BASE_IMAGE}\n`;
+        const bare = `${HEADER}\n\nFROM ${base}\n`;
         await services.files.write(approvedPath(services), bare);
         return sha256Hex(bare);
     }
-    const sections = [HEADER, `FROM ${BASE_IMAGE}`, ...fragments, ...(custom === "" ? [] : [CUSTOM_MARKER, custom])];
+    const sections = [HEADER, `FROM ${base}`, ...fragments, ...(custom === "" ? [] : [CUSTOM_MARKER, custom])];
     const content = `${sections.join("\n\n")}\n`;
     await services.files.write(approvedPath(services), content);
     return sha256Hex(content);

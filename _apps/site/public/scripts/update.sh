@@ -82,6 +82,9 @@ fi
 # workspace volume; copy it out once and build that same copy.
 TARGET_IMAGE="$IMAGE"
 ENV_HASH=""
+# The upstream image the container ends up extending — passed through as SANDBOX_BASE_IMAGE so the daemon keeps
+# composing against the same base instead of falling back to the release tag and re-prompting a rebuild.
+BASE_IMAGE="$IMAGE"
 overlay="$(mktemp)"
 trap 'rm -f "$overlay"' EXIT
 if docker cp "${CONTAINER}:${APPROVED_FILE}" "$overlay" >/dev/null 2>&1 && [ -s "$overlay" ]; then
@@ -95,6 +98,7 @@ if docker cp "${CONTAINER}:${APPROVED_FILE}" "$overlay" >/dev/null 2>&1 && [ -s 
     # chars tag the built image — identical derivation to rebuild.sh.
     ENV_HASH="$({ sha256sum "$overlay" 2>/dev/null || shasum -a 256 "$overlay"; } | cut -c1-64)"
     TARGET_IMAGE="intentic-sandbox-env-${SLUG}:$(printf '%s' "$ENV_HASH" | cut -c1-12)"
+    BASE_IMAGE="$(awk 'NF && $1 !~ /^#/ { if ($1 == "FROM") print $2; exit }' "$overlay")"
     echo "intentic: rebuilding your environment overlay on the new base…"
     echo "== docker build --pull ${TARGET_IMAGE} ==" >>"$LOG"
     docker build --pull -t "$TARGET_IMAGE" - <"$overlay" 2>&1 | tee -a "$LOG" || true
@@ -165,6 +169,7 @@ if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
     -v "${DOCKER_VOLUME}:/var/lib/docker" \
     "$@" \
     -e SANDBOX_IMAGE="$TARGET_IMAGE" \
+    -e SANDBOX_BASE_IMAGE="$BASE_IMAGE" \
     "$TARGET_IMAGE" >/dev/null 2>>"$LOG"; then
     tail -n 5 "$LOG" >&2
     echo "error: starting the updated sandbox failed. The previous container's logs and this error are saved to ${LOG}." >&2

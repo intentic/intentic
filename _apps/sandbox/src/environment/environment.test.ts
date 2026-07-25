@@ -12,6 +12,7 @@ import {
     approveEnvironment,
     composeEnvironment,
     customPath,
+    baseImageOf,
     hasValidBase,
     proposalPath,
     readEnvironment,
@@ -21,12 +22,18 @@ import {
 // A proposal is custom-section content only — the daemon owns the FROM.
 const CUSTOM = "RUN apt-get update && apt-get install -y cowsay\n";
 
+// The moving release tag the base falls back to when nothing official is available.
+const RELEASE = "registry.gitlab.com/radarsu/intentic/sandbox:stable";
+
 // The real first-party connectors/discord extensions, so a cli capability's image fragment resolves.
 const EXTENSIONS_DIR = fileURLToPath(new URL("../../../../_extensions", import.meta.url));
 
-const stubServices = (environmentHashApplied = "", capabilities: Capability[] = []): Services =>
+const stubServices = (environmentHashApplied = "", capabilities: Capability[] = [], image = "", baseImage = ""): Services =>
     ({
-        config: { sandbox: { environmentHash: environmentHashApplied, name: "intentic-sandbox-demo" }, extensionsDir: EXTENSIONS_DIR },
+        config: {
+            sandbox: { environmentHash: environmentHashApplied, name: "intentic-sandbox-demo", image, baseImage },
+            extensionsDir: EXTENSIONS_DIR,
+        },
         workspace: { root: mkdtempSync(join(tmpdir(), "environment-")) },
         files: { read: readWorkspaceFile, write: writeWorkspaceFile, remove: removeWorkspacePath },
         logger: { warn: () => undefined },
@@ -47,6 +54,42 @@ test("hasValidBase pins the first instruction to the official sandbox image", ()
     expect(hasValidBase("FROM registry.gitlab.com/radarsu/intentic/sandbox:\n")).toBe(false);
     expect(hasValidBase("RUN true\nFROM registry.gitlab.com/radarsu/intentic/sandbox:stable\n")).toBe(false);
     expect(hasValidBase("")).toBe(false);
+});
+
+test("baseImageOf prefers the runner-named base, else an official running image, else the release tag", () => {
+    const latest = "registry.gitlab.com/radarsu/intentic/sandbox:latest";
+    // Fresh connect.sh run: no base named, and the running image IS the base.
+    expect(baseImageOf("", latest)).toBe(latest);
+    expect(baseImageOf("", "registry.gitlab.com/radarsu/intentic/sandbox:sha-abc1234")).toBe("registry.gitlab.com/radarsu/intentic/sandbox:sha-abc1234");
+    // After a rebuild the running image is the overlay's own tag, which is not a base — the named base wins.
+    // Getting this wrong is what produced the endless rebuild prompt AND rolled the sandbox back each time.
+    expect(baseImageOf(latest, "intentic-sandbox-env-demo:abc123def456")).toBe(latest);
+    // The dev loop: an unofficial ref is honoured only because the runner named it explicitly.
+    expect(baseImageOf("intentic-sandbox:dev", "intentic-sandbox-dev-env-demo:abc123def456")).toBe("intentic-sandbox:dev");
+    // Nothing named: an unofficial running image is never promoted to a base by inference.
+    expect(baseImageOf("", "")).toBe(RELEASE);
+    expect(baseImageOf("", "intentic-sandbox:dev")).toBe(RELEASE);
+    expect(baseImageOf("", "evil.example.com/sandbox:latest")).toBe(RELEASE);
+    // Unset/blank must never reach the FROM line verbatim — `FROM undefined` is an overlay that cannot build.
+    expect(baseImageOf(undefined, undefined)).toBe(RELEASE);
+    expect(baseImageOf("   ", "")).toBe(RELEASE);
+});
+
+test("a rebuild is version-preserving: composing again after one is byte-identical", async () => {
+    const latest = "registry.gitlab.com/radarsu/intentic/sandbox:latest";
+    const services = stubServices("", [vpn("office")], latest);
+
+    const first = await composeEnvironment(services);
+    const approved = (await services.files.read(approvedPath(services)))!;
+    expect(approved).toContain(`FROM ${latest}`);
+    expect(hasValidBase(approved)).toBe(true);
+
+    // Recompose as the daemon does on boot AFTER a rebuild: the container now runs the overlay's own tag, with
+    // the base named by rebuild.sh and the applied hash stamped. Identical content and hash ⇒ the Environment
+    // card stays quiet instead of asking for another rebuild.
+    const rebuilt = stubServices(first!, [vpn("office")], "intentic-sandbox-env-demo:abc123def456", latest);
+    expect(await composeEnvironment(rebuilt)).toBe(first);
+    expect(await rebuilt.files.read(approvedPath(rebuilt))).toBe(approved);
 });
 
 test("propose → approve stores the custom section and recomposes; applied derives from the composed hash", async () => {

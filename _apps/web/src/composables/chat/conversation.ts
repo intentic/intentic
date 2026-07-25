@@ -96,6 +96,13 @@ export const modelOptionsFor = (provider: AgentProvider): ModelOption[] => {
     const live = providerModels.value[provider] ?? [];
     return live.length > 0 ? live : modelsFor(provider);
 };
+// The slash commands each provider last published daemon-side (GET /agent/commands), loaded on the same
+// reachable seam as accounts/models. A conversation's OWN list — replaced by every `commands` frame its turns
+// emit — stays authoritative once it has run one; this is the seed that makes the composer's `/` popover work
+// BEFORE that, since a provider's commands are a property of the workspace, not of one conversation. Empty
+// until the first load, and until that provider has run a turn in the daemon's lifetime.
+export const providerCommands = ref<Record<AgentProvider, readonly AgentCommand[]>>(perProvider<readonly AgentCommand[]>(() => []));
+
 // Installed ACP agent providers (agent-kind capabilities): id + display label, loaded on the same reachable
 // seam as accounts/models (useChat.loadAcpProviders) so the picker lists them. Empty until the first load.
 export const acpProviders = ref<readonly { id: string; label: string }[]>([]);
@@ -406,8 +413,9 @@ export class Conversation {
     readonly messages = ref<ChatMessage[]>([]);
     readonly streaming = ref(false);
     readonly error = ref<string | null>(null);
-    // The provider's own slash commands (ACP agents advertise them mid-session; native providers never do) —
-    // replaced whole per `commands` frame, listed by the composer's `/` popover.
+    // This conversation's slash commands — replaced whole per `commands` frame, listed by the composer's `/`
+    // popover. Both provider families publish them: an ACP agent mid-session, Claude at each turn's init (plus
+    // a republish whenever the session's list changes).
     readonly availableCommands = ref<readonly AgentCommand[]>([]);
 
     // True while a turn is paused on a card awaiting the user's input (a pending plan, question, or tool

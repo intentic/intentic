@@ -447,8 +447,8 @@ const submit = (): void => {
 
 // --- @-mention + /-command popovers -----------------------------------------------------------
 // The caret drives which popover is live: an @-token at the caret opens the file picker; a leading `/` with
-// the caret still inside the first token opens the provider's command list (ACP agents only — native
-// providers advertise none). Escape dismisses until the token changes.
+// the caret still inside the first token opens the provider's command list. Escape dismisses until the token
+// changes.
 const caret = ref(0);
 const syncCaret = (): void => {
     caret.value = input.value?.selectionStart ?? draft.value.length;

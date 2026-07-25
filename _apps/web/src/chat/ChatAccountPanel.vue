@@ -44,12 +44,13 @@ const accountLabel = computed(() => ACCOUNT_LABEL[provider.value] ?? `Claude`);
         </p>
         <!-- Point this chat at whichever provider is connected, straight from the gate, so picking a
              not-yet-connected provider is never a dead end. -->
-        <div class="flex items-center gap-1">
+        <!-- Wraps rather than overflowing: the gate sits in a narrow side panel, where five tabs never fit on one row. -->
+        <div class="flex flex-wrap items-center justify-center gap-1">
             <button
                 v-for="tab in providerTabs"
                 :key="tab.value"
                 type="button"
-                class="composer-ghost h-7 px-2.5 text-xs font-medium"
+                class="composer-ghost h-7 shrink-0 whitespace-nowrap px-2.5 text-xs font-medium"
                 :class="{ 'composer-active': provider === tab.value }"
                 @click="selectProvider(tab.value)"
                 :aria-pressed="provider === tab.value"

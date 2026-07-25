@@ -8,6 +8,7 @@ import {
     query,
     type SDKMessage,
     type SDKUserMessage,
+    type SlashCommand,
     tool,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, TodoItem } from "@intentic/sandbox-contract";
@@ -92,9 +93,27 @@ export interface AgentRequest {
     readonly steering?: SteeringQueue;
 }
 
+// What a turn needs from the SDK: the message stream, plus the session's slash-command list. The real
+// `query` returns a Query, which satisfies both; `supportedCommands` is optional because a fake stream
+// legitimately has none (it resolves the CLI's initialize response, which no canned generator produces).
+export type AgentQuery = AsyncIterable<SDKMessage> & {
+    readonly supportedCommands?: () => Promise<readonly SlashCommand[]>;
+};
+
 // The SDK `query` is injected so tests drive a fake message stream — no API calls, no bundled binary.
-export type QueryFn = (args: { readonly prompt: string | AsyncIterable<SDKUserMessage>; readonly options: Options }) => AsyncIterable<SDKMessage>;
+export type QueryFn = (args: { readonly prompt: string | AsyncIterable<SDKUserMessage>; readonly options: Options }) => AgentQuery;
 const defaultQuery: QueryFn = (args) => query(args);
+
+// The SDK's slash commands, mapped onto the wire shape the composer's `/` popover renders. `argumentHint`
+// is always a string there (empty when the command takes no argument), so an empty one carries no hint.
+const commandFrame = (commands: readonly SlashCommand[]): AgentEvent => ({
+    kind: "commands",
+    items: commands.map((command) => ({
+        name: command.name,
+        description: command.description,
+        ...(command.argumentHint !== "" ? { hint: command.argumentHint } : {}),
+    })),
+});
 
 // The turn's prompt input: a steerable turn streams user messages (the initial prompt, then whatever the
 // steer route pushes until the queue closes at turn end); an unsteerable one keeps single-message mode.
@@ -252,7 +271,10 @@ async function* streamSdk(
         mode = next;
         return { kind: "mode", mode: next };
     };
-    for await (const message of sdkTurns(queryFn({ prompt, options }), steering)) {
+    // Bound rather than inlined into sdkTurns: the turn also reads the session's slash-command list off this
+    // handle at `init` (see below), which the bare AsyncIterable it is consumed as does not expose.
+    const session = queryFn({ prompt, options });
+    for await (const message of sdkTurns(session, steering)) {
         const sessionId = (message as { session_id?: string }).session_id;
         if (!sessionSent && typeof sessionId === "string" && sessionId !== "") {
             sessionSent = true;
@@ -390,6 +412,16 @@ async function* streamSdk(
                 if (changed !== undefined) {
                     yield changed;
                 }
+                // The session's slash commands — built-ins plus the workspace's own .claude/commands and any
+                // plugin/skill commands, all of which load because baseOptions sets settingSources. Read HERE
+                // rather than before the stream on purpose: supportedCommands() awaits the SDK's initialize
+                // response, and `init` is proof that response already landed, so it resolves immediately. Asked
+                // any earlier, a CLI that dies during startup would hang the turn on a promise that never
+                // settles instead of surfacing as the stream error it is.
+                const commands = await session.supportedCommands?.().catch(() => undefined);
+                if (commands !== undefined && commands.length > 0) {
+                    yield commandFrame(commands);
+                }
             } else if (message.subtype === "status") {
                 // `status` carries the CURRENT mode when it knows it — the backstop that catches any mode move
                 // the two signals above miss (a hook, a settings default, a /mode-style slash command).
@@ -397,6 +429,12 @@ async function* streamSdk(
                 if (changed !== undefined) {
                     yield changed;
                 }
+            } else if (message.subtype === "commands_changed") {
+                // A mid-session republish of the WHOLE list (skills discovered as the agent works in a
+                // subdirectory, a reloaded plugin). The SDK's contract is replace-wholesale, which is exactly
+                // what this frame means to the client — supportedCommands() is captured at initialize and
+                // never reflects these, so re-asking it would return the stale init list.
+                yield commandFrame(message.commands);
             } else if (message.subtype === "compact_boundary") {
                 const meta = message.compact_metadata;
                 yield {

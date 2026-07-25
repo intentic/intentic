@@ -3,9 +3,10 @@ import { useListNavigation } from "@intentic-app/ui";
 import type { AgentCommand } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 
-/* The composer's `/` command picker: the provider's own slash commands (ACP agents advertise them via
- * available_commands; native providers never populate the list, so this only appears on ACP conversations).
- * Same shell as the mention popover — the parent owns the keyboard flow and calls move/pickActive. */
+/* The composer's `/` command picker: the provider's own slash commands — an ACP agent's available_commands,
+ * or a Claude session's supportedCommands() (its built-ins plus the workspace's .claude/commands and any
+ * plugin/skill commands). Same shell as the mention popover — the parent owns the keyboard flow and calls
+ * move/pickActive. */
 
 const props = defineProps<{ query: string; commands: readonly AgentCommand[] }>();
 const emit = defineEmits<{ pick: [name: string] }>();
@@ -46,7 +47,10 @@ defineExpose({ move, pickActive });
             :class="{ 'bg-overlay': index === activeIndex }"
             @mousedown.prevent="emit('pick', command.name)"
         >
-            <span class="shrink-0 font-mono text-sm text-content">/{{ command.name }}</span>
+            <!-- text-xs, not the text-sm its sibling popovers use for a primary: this one is MONO, which at a
+                 given size reads wider and heavier than proportional text, so a step down is what makes it
+                 optically match the mention/model rows — and the composer's own 0.75rem text below it. -->
+            <span class="shrink-0 font-mono text-xs text-content">/{{ command.name }}</span>
             <span v-if="command.hint" class="shrink-0 font-mono text-2xs text-subtle">{{ command.hint }}</span>
             <span class="truncate text-2xs text-subtle">{{ command.description }}</span>
         </button>
