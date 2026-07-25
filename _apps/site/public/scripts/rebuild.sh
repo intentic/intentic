@@ -63,22 +63,33 @@ if [ "$have_hash" != "$WANT_HASH" ]; then
     echo "       Re-review and re-approve it on the Environment card, then run the fresh command it shows." >&2
     exit 1
 fi
-# Belt-and-braces (the daemon already enforced it at approval): the overlay must extend the official image.
-if ! awk 'NF && $1 !~ /^#/ { ok = ($1 == "FROM" && $2 ~ /^registry\.gitlab\.com\/radarsu\/intentic\/sandbox:/); exit } END { exit ok ? 0 : 1 }' "$overlay"; then
-    echo "error: the approved overlay must start with FROM registry.gitlab.com/radarsu/intentic/sandbox:<tag>." >&2
+# The upstream image this overlay extends, and the belt-and-braces check on it (the daemon already enforced
+# this at approval). Two bases are legal: any OFFICIAL sandbox image, or the exact base this container was
+# already created from — SANDBOX_BASE_IMAGE, set at `docker run` by whichever runner made it, so it is not a
+# value the agent can write. The second case is what lets a locally-built image (intentic-sandbox:dev) be
+# rebuilt onto itself; without it, rebuilding a dev sandbox silently replaced its daemon with the last release.
+BASE_IMAGE="$(awk 'NF && $1 !~ /^#/ { if ($1 == "FROM") print $2; exit }' "$overlay")"
+CURRENT_BASE="$(docker exec "$CONTAINER" printenv SANDBOX_BASE_IMAGE 2>/dev/null || true)"
+if [ -z "$BASE_IMAGE" ]; then
+    echo "error: the approved overlay has no FROM instruction." >&2
     exit 1
 fi
+case "$BASE_IMAGE" in
+    registry.gitlab.com/radarsu/intentic/sandbox:?*) ;;
+    *)
+        if [ -z "$CURRENT_BASE" ] || [ "$BASE_IMAGE" != "$CURRENT_BASE" ]; then
+            echo "error: the approved overlay must start with FROM registry.gitlab.com/radarsu/intentic/sandbox:<tag>" >&2
+            echo "       (or FROM this sandbox's own base, ${CURRENT_BASE:-<none>}); found ${BASE_IMAGE}." >&2
+            exit 1
+        fi
+        ;;
+esac
 
 # Build BEFORE touching the container, so a failed build leaves the sandbox running untouched. Stdin build:
 # the overlay is FROM + RUN/ENV only, so there is no build context to send. The tee keeps the full build
 # output in $LOG; success is checked via image inspect because a pipeline's exit status is tee's (POSIX sh,
 # no pipefail).
 TAG="intentic-sandbox-env-${SLUG}:$(printf '%s' "$WANT_HASH" | cut -c1-12)"
-# The upstream image this overlay extends. Passed to the container as SANDBOX_BASE_IMAGE so the daemon keeps
-# composing against the SAME base: without it the daemon would see only SANDBOX_IMAGE (this overlay's own tag),
-# fail to recognise it as a base, fall back to the release tag, and recompose a different overlay — asking for
-# yet another rebuild, and rolling the sandbox back to :stable each time.
-BASE_IMAGE="$(awk 'NF && $1 !~ /^#/ { if ($1 == "FROM") print $2; exit }' "$overlay")"
 echo "intentic: building ${TAG} from the approved overlay…"
 echo "== docker build ${TAG} ==" >>"$LOG"
 docker build -t "$TAG" - <"$overlay" 2>&1 | tee -a "$LOG" || true

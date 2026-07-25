@@ -4,7 +4,7 @@ import type { AskQuestion, TodoItem } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { type ChatMessage, planParts, type PlanRequest } from "../composables/chat/conversation";
-import { renderMarkdown } from "../composables/renderMarkdown";
+import { createStreamingMarkdown, renderMarkdown } from "../composables/renderMarkdown";
 import { restoreSnapshot } from "../composables/workspace/useHistory";
 import { useChat } from "../composables/chat/useChat";
 import ChatImageThumb from "./ChatImageThumb.vue";
@@ -51,6 +51,13 @@ const LOADER_WORDS = [
 
 // --- Markdown / rendering --------------------------------------------------------------------
 const render = (text: string): string => renderMarkdown(text);
+
+// The assistant body is split into settled + still-writing halves (see createStreamingMarkdown): the settled
+// HTML is byte-identical between frames, so Vue skips patching that v-html and the already-rendered DOM —
+// along with any text the user has selected in it — survives the turn. One renderer per message view, held
+// for the component's life (the list is keyed by message id, so an instance tracks one message throughout).
+const markdownStream = createStreamingMarkdown();
+const body = computed(() => markdownStream.render(props.message.text));
 
 const todoIcon = (todo: TodoItem): { name: IconName; spin?: boolean; class: string } => {
     if (todo.status === `completed`) {
@@ -200,13 +207,13 @@ const restoreToCheckpoint = async (): Promise<void> => {
     }
 };
 
-// --- Inline edit of a past user message (hover pencil → textarea → re-run from here) ----------
+// --- Inline edit of a past user message (hover pencil → textarea → branch from here) ---------
 const editing = ref(false);
 const editText = ref(``);
 const editInput = ref<HTMLTextAreaElement>();
 
-// The gate is the conversation-level stream (via useChat), not the per-message `streaming` prop: no rewind
-// may land while any turn of this chat is in flight (a parked plan/question card keeps the fetch open too).
+// The gate is the conversation-level stream (via useChat), not the per-message `streaming` prop: no branch
+// may be taken while any turn of this chat is in flight (a parked plan/question card keeps the fetch open too).
 const canEdit = computed(() => props.message.role === `user` && !conversationStreaming.value);
 // Mirrors send's guard: an attachment-only re-run is legal, an entirely empty one is not.
 const canSubmitEdit = computed(() => editText.value.trim().length > 0 || (props.message.attachments?.length ?? 0) > 0);
@@ -242,7 +249,7 @@ const submitEdit = (): void => {
         return;
     }
     editing.value = false;
-    // The rewind truncates the transcript at this message, so this component instance unmounts.
+    // The branch opens in a new tab and takes focus; this conversation is left exactly as it was.
     void editAndResend(props.message, editText.value);
 };
 
@@ -296,7 +303,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         type="button"
                         class="composer-ghost h-6 gap-1 px-2 text-2xs disabled:cursor-default disabled:opacity-50"
                         :disabled="!canSubmitEdit"
-                        v-tooltip.top="'Re-run the conversation from here'"
+                        v-tooltip.top="'Send as a new branch — this conversation is kept'"
                         @click="submitEdit"
                     >
                         <Icon name="send" class="text-2xs" />
@@ -327,7 +334,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     type="button"
                     class="composer-ghost h-6 w-6 shrink-0 transition-opacity"
                     :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
-                    v-tooltip.left="'Edit & re-run from here'"
+                    v-tooltip.left="'Edit & branch from here'"
                     aria-label="Edit message"
                     @click="startEdit"
                 >
@@ -377,11 +384,13 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
             </div>
 
-            <div
-                v-if="message.text"
-                class="chat-markdown chat-surface-assistant w-full rounded-lg px-3 py-2 text-content/85"
-                v-html="render(message.text)"
-            ></div>
+            <!-- Two v-html slots, not one: the settled half is unchanged between frames so Vue leaves its DOM
+                 (and the user's selection) alone, while only the short tail is re-rendered. `.md-part` is
+                 display:contents, so the prose still lays out as direct children of .chat-markdown. -->
+            <div v-if="message.text" class="chat-markdown chat-surface-assistant w-full rounded-lg px-3 py-2 text-content/85">
+                <div v-if="body.settled" class="md-part" v-html="body.settled"></div>
+                <div v-if="body.tail" class="md-part" v-html="body.tail"></div>
+            </div>
 
             <div v-if="message.plan" class="chat-surface w-full overflow-hidden rounded-xl">
                 <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">

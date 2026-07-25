@@ -1,0 +1,97 @@
+import type { ChatMessage } from "./conversation";
+
+/* A local mirror of each conversation's transcript, so reopening a chat paints from disk instead of waiting on
+ * a round-trip to the sandbox — which is a Cloudflare tunnel to a machine that may be asleep, on the far side
+ * of a reachability probe. The daemon stays the source of truth: the cache is painted first and then REPLACED
+ * by whatever the daemon reports (a live turn reattaches, an idle one rehydrates from the session store), so a
+ * stale or partial mirror can only ever cost a repaint, never a wrong transcript.
+ *
+ * IndexedDB rather than localStorage: transcripts carry tool cards and thinking and run to megabytes, which
+ * would blow the 5MB synchronous localStorage budget the tab snapshot already lives in. Every operation
+ * degrades to a no-op when IndexedDB is unavailable (private mode, disabled storage), leaving exactly the
+ * fetch-on-open behaviour that existed before this cache.
+ *
+ * Entries are keyed by conversationId alone. Those are client-minted UUIDs, so they cannot collide across
+ * sandboxes, and a sandbox's tab snapshot only ever names its own conversations — a sandbox prefix would buy
+ * nothing while coupling this module to the sandbox singleton, which reaches browser globals at import time
+ * and would drag them into every module that mirrors a transcript. */
+
+const DB_NAME = `intentic.chat`;
+const DB_VERSION = 1;
+const STORE = `transcripts`;
+
+// The tail of a long conversation is what a repaint needs; the whole history would grow unbounded on disk for
+// a view the user has to scroll up to reach anyway (and the daemon still holds all of it).
+const KEPT_MESSAGES = 300;
+
+let connection: Promise<IDBDatabase | undefined> | undefined;
+
+const openDb = (): Promise<IDBDatabase | undefined> => {
+    connection ??= new Promise<IDBDatabase | undefined>((resolve) => {
+        try {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            request.onupgradeneeded = () => {
+                if (!request.result.objectStoreNames.contains(STORE)) {
+                    request.result.createObjectStore(STORE);
+                }
+            };
+            request.onsuccess = () => resolve(request.result);
+            // Blocked, denied, or version-clash: every caller degrades to the uncached path.
+            request.onerror = () => resolve(undefined);
+            request.onblocked = () => resolve(undefined);
+        } catch {
+            resolve(undefined);
+        }
+    });
+    return connection;
+};
+
+const run = async <T>(mode: IDBTransactionMode, act: (store: IDBObjectStore) => IDBRequest<T>): Promise<T | undefined> => {
+    const db = await openDb();
+    if (db === undefined) {
+        return undefined;
+    }
+    return new Promise<T | undefined>((resolve) => {
+        try {
+            const request = act(db.transaction(STORE, mode).objectStore(STORE));
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => resolve(undefined);
+        } catch {
+            resolve(undefined);
+        }
+    });
+};
+
+// Object URLs for image thumbnails are revoked with the page that minted them, so a persisted one would point
+// at nothing after a reload — dropped, which degrades the chip to its file icon exactly as a restored tab's
+// attachments already do. Everything else on a message is plain data and structured-clones as-is.
+const persistable = (messages: readonly ChatMessage[]): ChatMessage[] =>
+    messages.slice(-KEPT_MESSAGES).map((message) =>
+        message.attachments === undefined
+            ? message
+            : {
+                  ...message,
+                  attachments: message.attachments.map(({ name, path }) => ({ name, path })),
+              },
+    );
+
+export const saveTranscript = async (conversationId: string, messages: readonly ChatMessage[]): Promise<void> => {
+    // An empty transcript is the absence of a mirror, not a mirror of nothing — writing it would blank a good
+    // cache entry when a conversation is reset before its replacement content arrives.
+    if (messages.length === 0) {
+        return;
+    }
+    await run(`readwrite`, (store) => store.put(persistable(messages), conversationId));
+};
+
+export const readTranscript = async (conversationId: string): Promise<ChatMessage[] | undefined> => {
+    const cached = await run<ChatMessage[]>(`readonly`, (store) => store.get(conversationId));
+    return Array.isArray(cached) && cached.length > 0 ? cached : undefined;
+};
+
+// Closing a tab is the one unambiguous "done with this" signal, and without it the store would grow for the
+// life of the browser profile. Reopening from history or the fleet still works — it just pays the fetch again,
+// which is exactly the pre-cache behaviour, and the fetch re-warms the mirror.
+export const dropTranscript = async (conversationId: string): Promise<void> => {
+    await run(`readwrite`, (store) => store.delete(conversationId));
+};

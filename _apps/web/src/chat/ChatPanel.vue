@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
-import { computed, nextTick, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { NATIVE_PROVIDERS, type NativeProvider, providerLabel } from "@intentic/sandbox-contract";
 import { effortsFor, MODES } from "../composables/chat/catalog";
@@ -99,6 +99,7 @@ const modeSheetOpen = ref(false);
 const atBottom = ref(true);
 
 const scroller = ref<HTMLElement>();
+const content = ref<HTMLElement>();
 const input = ref<HTMLTextAreaElement>();
 const providerModel = ref<InstanceType<typeof Popover> | null>(null);
 const modeMenu = ref<InstanceType<typeof Popover> | null>(null);
@@ -595,23 +596,32 @@ const endResize = (event: PointerEvent): void => {
 };
 
 // --- Lifecycle / effects ---------------------------------------------------------------------
+const pinToBottom = (): void => {
+    const element = scroller.value;
+    if (element) {
+        element.scrollTop = element.scrollHeight;
+    }
+};
+
 // Keep the newest tokens in view as the transcript grows — but only while the user is already at the bottom,
 // so scrolling up to read isn't fought by streaming tokens.
-watch(
-    messages,
-    () => {
-        if (!atBottom.value) {
-            return;
+//
+// Driven by the transcript's measured HEIGHT rather than by watching message data. The deep watch this
+// replaces re-traversed every message, tool call and todo of the whole conversation on each streamed frame
+// (the typewriter loop ticks per animation frame), so its cost grew with the conversation's length rather
+// than the answer's. Measuring is O(1) and also catches growth that never appears in the data at all — an
+// image finishing load, a tool card expanding, prose reflowing when the panel is resized.
+onMounted(() => {
+    const observer = new ResizeObserver(() => {
+        if (atBottom.value) {
+            pinToBottom();
         }
-        void nextTick(() => {
-            const element = scroller.value;
-            if (element) {
-                element.scrollTop = element.scrollHeight;
-            }
-        });
-    },
-    { deep: true },
-);
+    });
+    if (content.value) {
+        observer.observe(content.value);
+    }
+    onUnmounted(() => observer.disconnect());
+});
 
 // A tab switch swaps a possibly multi-line draft under the textarea — re-size it to the new content.
 watch(
@@ -642,12 +652,7 @@ watch(keyboardInset, () => {
     if (!atBottom.value) {
         return;
     }
-    void nextTick(() => {
-        const element = scroller.value;
-        if (element) {
-            element.scrollTop = element.scrollHeight;
-        }
-    });
+    void nextTick(pinToBottom);
 });
 </script>
 
@@ -677,12 +682,16 @@ watch(keyboardInset, () => {
         <ChatTabsMobile v-if="mobile" @select="selectTab" @close="closeTab" @new="newChat" @open="openFromHistory" />
         <ChatTabs v-else @select="selectTab" @close="closeTab" @new="newChat" @open="openFromHistory" />
 
-        <div ref="scroller" class="scrollbar-thin flex flex-1 flex-col gap-1 overflow-auto p-4" @scroll="onScroll">
-            <template v-if="messages.length > 0">
-                <ChatMessageView v-for="message in messages" :key="message.id" :message="message" :streaming="isStreaming(message)" />
-            </template>
-            <p v-else class="m-auto max-w-[80%] text-center text-sm text-muted">Start a conversation with {{ providerName }}.</p>
-            <p v-if="activeError" class="text-sm text-danger">{{ activeError }}</p>
+        <!-- The inner wrapper is what the autoscroll ResizeObserver measures; the scroller itself never
+             changes height, so it can't report the transcript growing. -->
+        <div ref="scroller" class="scrollbar-thin flex flex-1 flex-col overflow-auto p-4" @scroll="onScroll">
+            <div ref="content" class="flex flex-1 flex-col gap-1">
+                <template v-if="messages.length > 0">
+                    <ChatMessageView v-for="message in messages" :key="message.id" :message="message" :streaming="isStreaming(message)" />
+                </template>
+                <p v-else class="m-auto max-w-[80%] text-center text-sm text-muted">Start a conversation with {{ providerName }}.</p>
+                <p v-if="activeError" class="text-sm text-danger">{{ activeError }}</p>
+            </div>
         </div>
 
         <!-- The whole footer (account connect + composer) talks to the daemon, so it yields to a hint while the
@@ -948,6 +957,19 @@ watch(keyboardInset, () => {
     margin-top: 0;
 }
 .chat-markdown > :last-child {
+    margin-bottom: 0;
+}
+/* A streamed assistant body is split across two .md-part wrappers (settled + still-writing). display:contents
+   removes them from layout so the prose inside still behaves as direct children of .chat-markdown — but the
+   two rules above then match the WRAPPER, where margin does nothing, so the edge rules are restated one level
+   down. Both parts are v-if'd on non-empty content, so whichever exists is correctly first/last. */
+.chat-markdown > .md-part {
+    display: contents;
+}
+.chat-markdown > .md-part:first-child > :first-child {
+    margin-top: 0;
+}
+.chat-markdown > .md-part:last-child > :last-child {
     margin-bottom: 0;
 }
 .chat-markdown p {

@@ -29,7 +29,7 @@ import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
 import { errorMessage } from "../useAsyncAction";
 import { mentionPaths } from "./useMentions";
-
+import { readTranscript, saveTranscript } from "./transcriptCache";
 import { formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus";
 
 // 'notice' is a small muted system line in the transcript (dismissed / kept planning / approved /
@@ -615,6 +615,51 @@ export class Conversation {
         this.append({ id: this.pendingSwitchNoticeId, role: `notice`, text });
     }
 
+    // Mirror the settled transcript to the local cache (see transcriptCache), so reopening this conversation
+    // paints from disk rather than waiting on the sandbox. Fire-and-forget, and only where the transcript has
+    // settled — a turn ending, a remote transcript landing — never per streamed frame.
+    private persist(): void {
+        void saveTranscript(this.conversationId, this.messages.value);
+    }
+
+    // Paint the locally cached transcript, if there is one and nothing has been rendered yet. Returns whether
+    // anything was painted. The daemon still reconciles afterwards and REPLACES this — the cache only decides
+    // what the user looks at during the round-trip, so a stale mirror costs a repaint and nothing more.
+    async paintCached(): Promise<boolean> {
+        if (this.messages.value.length > 0 || this.streaming.value) {
+            return false;
+        }
+        const cached = await readTranscript(this.conversationId);
+        // Re-checked after the await: a turn or a reattach may have landed while IndexedDB was reading, and
+        // the live transcript always wins over the mirror.
+        if (cached === undefined || this.messages.value.length > 0 || this.streaming.value) {
+            return false;
+        }
+        this.messages.value = cached;
+        this.nextId = Math.max(0, ...cached.map((message) => message.id)) + 1;
+        return true;
+    }
+
+    // Seed this conversation as a BRANCH of `source` taken just before `index`: the turns before that point
+    // become this conversation's transcript and its settings ride across, while the source is left completely
+    // untouched — that is the whole point of branching over rewinding. No session is carried: a branch is a
+    // new conversation daemon-side, and its first send seeds a fresh one from the transcript above via the
+    // same `history` mechanism a provider switch already uses.
+    branchFrom(source: Conversation, index: number): void {
+        this.messages.value = source.messages.value.slice(0, index).map((message) => ({ ...message, id: this.nextId++ }));
+        this.provider.value = source.provider.value;
+        this.harness.value = source.harness.value;
+        this.account.value = source.account.value;
+        this.model.value = source.model.value;
+        this.effort.value = source.effort.value;
+        this.thinking.value = source.thinking.value;
+        this.mode.value = source.mode.value;
+        this.isolated.value = source.isolated.value;
+        // Left null so send() names the branch after the edited message — two tabs sharing one title is the
+        // one thing that makes a branch hard to find again.
+        this.title.value = null;
+    }
+
     // Restore a past conversation pulled from history: build bubbles from the stored transcript and arm its
     // session so the next turn resumes it in the sandbox.
     loadTranscript(messages: { role: ChatRole; text: string }[], sessionId: string, title: string | null): void {
@@ -633,6 +678,7 @@ export class Conversation {
         this.title.value = title;
         this.activeModel.value = null;
         this.error.value = null;
+        this.persist();
     }
 
     async send(prompt: string, settings: TurnSettings, attachments: readonly ChatAttachment[] = [], editorContext?: EditorContext): Promise<void> {
@@ -744,6 +790,7 @@ export class Conversation {
             this.inflight = null;
             this.streaming.value = false;
             this.turnStartedAt.value = undefined;
+            this.persist();
         }
     }
 
@@ -766,37 +813,6 @@ export class Conversation {
             this.draft.value = this.draft.value.trim().length > 0 ? `${trimmed} ${this.draft.value}` : trimmed;
             this.appendNotice(`The turn ended before your message was delivered — send it again.`);
         }
-    }
-
-    // Rewind-and-rerun: replace a past user turn with edited text and replay from that point. Everything from
-    // the edited message onward is discarded — a pending switch notice included (it is always the last
-    // message, so the cut removes it and send() resets its id) — the session is retired, and send() seeds a
-    // fresh provider session from the truncated transcript: the same segment-cut mechanism a provider switch
-    // uses, so it works uniformly across runtimes. The original turn's attachments ride again (their uploads
-    // are still in the workspace; a lost previewUrl just drops the thumbnail to the file chip).
-    async editAndResend(messageId: number, text: string, settings: TurnSettings): Promise<void> {
-        if (this.streaming.value) {
-            return;
-        }
-        const index = this.messages.value.findIndex((message) => message.id === messageId);
-        if (index === -1 || this.messages.value[index]!.role !== `user`) {
-            return;
-        }
-        const attachments = this.messages.value[index]!.attachments ?? [];
-        // Mirror send's empty guard BEFORE truncating — an empty edit must not destroy the tail and then no-op.
-        if (text.trim().length === 0 && attachments.length === 0) {
-            return;
-        }
-        this.messages.value = this.messages.value.slice(0, index);
-        this.session.value = undefined;
-        // The retired session's live model and context meter don't describe the re-run (mirrors selectProvider).
-        this.activeModel.value = null;
-        this.contextUsage.value = undefined;
-        // Editing the conversation's first user turn re-derives the title from the new text.
-        if (!this.messages.value.some((message) => message.role === `user`)) {
-            this.title.value = null;
-        }
-        await this.send(text, settings, attachments);
     }
 
     // User-initiated Stop button: record a muted notice, hard-cancel the turn daemon-side (/agent/stop —
@@ -856,6 +872,7 @@ export class Conversation {
                 this.inflight = null;
                 this.streaming.value = false;
                 this.turnStartedAt.value = undefined;
+                this.persist();
             }
         }
     }

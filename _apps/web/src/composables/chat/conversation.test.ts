@@ -561,8 +561,8 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Stopped.` });
     });
 
-    it(`editAndResend truncates at the edited message, retires the session, and seeds the re-run from the earlier transcript`, async () => {
-        const conversation = new Conversation(`c1`);
+    it(`branchFrom copies the turns before the edit and seeds a fresh session from them`, async () => {
+        const source = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 { kind: `session`, sessionId: `s-1` },
@@ -570,115 +570,88 @@ describe(`Conversation`, () => {
                 { kind: `context_usage`, tokens: 500, contextWindow: 1000 },
             ]),
         );
-        await conversation.send(`first`, settings);
+        await source.send(`first`, settings);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `two` }]));
-        await conversation.send(`second`, settings);
-        const target = conversation.messages.value[2]!; // the second user turn
+        await source.send(`second`, settings);
+        const index = source.messages.value.findIndex((message) => message.text === `second`);
 
+        const branch = new Conversation(`c2`);
+        branch.branchFrom(source, index);
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 { kind: `session`, sessionId: `s-2` },
                 { kind: `delta`, text: `redone` },
             ]),
         );
-        await conversation.editAndResend(target.id, `second, revised`, settings);
+        await branch.send(`second, revised`, settings);
 
-        // Everything from the edited message onward is gone; the edited text is the new turn.
-        expect(conversation.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second, revised`, `redone`]);
-        // The retired session never rides the wire — the fresh session is seeded from the pre-cut transcript.
+        // The branch carries the turns before the edit, then the edited turn and its answer.
+        expect(branch.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second, revised`, `redone`]);
+        // The branch is a new conversation daemon-side: no session id rides, and the copied transcript seeds it.
         const body = turnBodies()[2]!;
         expect(`sessionId` in body).toBe(false);
         expect(body[`history`]).toEqual([
             { role: `user`, text: `first` },
             { role: `assistant`, text: `one` },
         ]);
-        expect(conversation.session.value).toMatchObject({ id: `s-2`, provider: `claude` });
-        // The retired session's context meter was dropped at the cut (this stream reported none).
-        expect(conversation.contextUsage.value).toBeUndefined();
-        // The title still names the untouched first turn.
-        expect(conversation.title.value).toBe(`first`);
+        expect(branch.session.value).toMatchObject({ id: `s-2`, provider: `claude` });
+        expect(branch.conversationId).not.toBe(source.conversationId);
+        // The point of branching: the source keeps its own transcript and session, untouched.
+        expect(source.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second`, `two`]);
+        expect(source.session.value).toMatchObject({ id: `s-1` });
+        expect(source.contextUsage.value).toMatchObject({ tokens: 500, contextWindow: 1000 });
     });
 
-    it(`editAndResend on the first user message clears the transcript and re-derives the title`, async () => {
-        const conversation = new Conversation(`c1`);
+    it(`a branch taken at the first message starts empty and names itself from the edited text`, async () => {
+        const source = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 { kind: `session`, sessionId: `s-1` },
                 { kind: `delta`, text: `hi!` },
             ]),
         );
-        await conversation.send(`original topic`, settings);
-        expect(conversation.title.value).toBe(`original topic`);
+        await source.send(`original topic`, settings);
+        expect(source.title.value).toBe(`original topic`);
 
+        const branch = new Conversation(`c2`);
+        branch.branchFrom(source, 0);
+        expect(branch.messages.value).toEqual([]);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
-        await conversation.editAndResend(conversation.messages.value[0]!.id, `new topic`, settings);
+        await branch.send(`new topic`, settings);
 
-        expect(conversation.title.value).toBe(`new topic`);
-        // Nothing preceded the cut, so the fresh session starts with neither a session id nor a history seed.
+        // Each tab is findable by its own name rather than two tabs sharing one.
+        expect(branch.title.value).toBe(`new topic`);
+        expect(source.title.value).toBe(`original topic`);
+        // Nothing preceded the branch point, so the fresh session gets neither a session id nor a history seed.
         const body = turnBodies()[1]!;
         expect(`sessionId` in body).toBe(false);
         expect(`history` in body).toBe(false);
     });
 
-    it(`editAndResend re-sends the original turn's attachments`, async () => {
-        const conversation = new Conversation(`c1`);
-        const attachments = [{ name: `spec.md`, path: `.intentic/attachments/u1/spec.md` }];
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.send(`look at this`, settings, attachments);
-
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
-        await conversation.editAndResend(conversation.messages.value[0]!.id, `look again`, settings);
-
-        const body = turnBodies()[1]!;
-        expect(body[`attachments`]).toEqual([`.intentic/attachments/u1/spec.md`]);
-        expect(conversation.messages.value[0]).toMatchObject({ role: `user`, text: `look again`, attachments });
-    });
-
-    it(`editAndResend removes a pending switch notice with the discarded tail`, async () => {
-        const conversation = new Conversation(`c1`);
+    it(`a branch carries the source's provider selection and drops its pending switch notice`, async () => {
+        const source = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 { kind: `session`, sessionId: `s-1` },
                 { kind: `delta`, text: `sure` },
             ]),
         );
-        await conversation.send(`first`, settings);
-        conversation.selectProvider(`codex`);
-        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
+        await source.send(`first`, settings);
+        source.selectProvider(`codex`);
+        expect(source.messages.value.at(-1)!.role).toBe(`notice`);
 
-        // The edit lands under the switched selection (useChat builds settings from the current picks).
+        // Branching before the notice leaves it behind — it belongs to the source's segment cut, not the branch.
+        const branch = new Conversation(`c2`);
+        branch.branchFrom(source, 0);
+        expect(branch.provider.value).toBe(`codex`);
+        expect(branch.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `thr-1` }]));
-        await conversation.editAndResend(conversation.messages.value[0]!.id, `first, revised`, { ...settings, agent: `codex`, model: `` });
-
-        expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+        await branch.send(`first, revised`, { ...settings, agent: `codex`, model: `` });
         const body = turnBodies()[1]!;
         expect(body[`agent`]).toBe(`codex`);
         expect(`sessionId` in body).toBe(false);
     });
-
-    it(`editAndResend guards: unknown id, non-user target, empty replacement, and mid-stream are no-ops`, async () => {
-        const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `answer` }]));
-        await conversation.send(`hello`, settings);
-        const before = conversation.messages.value;
-
-        await conversation.editAndResend(999, `x`, settings); // unknown id
-        await conversation.editAndResend(before[1]!.id, `x`, settings); // assistant bubble, not a user turn
-        await conversation.editAndResend(before[0]!.id, `   `, settings); // empty edit, no attachments — must NOT truncate
-        expect(conversation.messages.value).toEqual(before);
-        // One send = one start + one attach; the guarded edits added neither.
-        expect(sandboxRequestMock).toHaveBeenCalledTimes(2);
-
-        // Mid-stream the rewind is refused outright.
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `x` }], { stayOpen: true }));
-        const turn = conversation.send(`busy`, settings);
-        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
-        await conversation.editAndResend(before[0]!.id, `nope`, settings);
-        expect(conversation.messages.value.filter((message) => message.role === `user`).map((m) => m.text)).toEqual([`hello`, `busy`]);
-        conversation.stop();
-        await turn;
-    });
-
     it(`re-attaches from the seq cursor when the stream drops mid-turn and loses nothing`, async () => {
         const conversation = new Conversation(`c1`);
         const attachBodies: Record<string, unknown>[] = [];

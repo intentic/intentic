@@ -88,17 +88,30 @@ BASE_IMAGE="$IMAGE"
 overlay="$(mktemp)"
 trap 'rm -f "$overlay"' EXIT
 if docker cp "${CONTAINER}:${APPROVED_FILE}" "$overlay" >/dev/null 2>&1 && [ -s "$overlay" ]; then
-    # Belt-and-braces (the daemon enforced it at approval): the overlay must extend the official image, so the
-    # --pull build re-fetches that same base we just pulled.
-    if ! awk 'NF && $1 !~ /^#/ { ok = ($1 == "FROM" && $2 ~ /^registry\.gitlab\.com\/radarsu\/intentic\/sandbox:/); exit } END { exit ok ? 0 : 1 }' "$overlay"; then
-        echo "error: the approved overlay must start with FROM registry.gitlab.com/radarsu/intentic/sandbox:<tag>." >&2
+    # Belt-and-braces (the daemon enforced it at approval), matching rebuild.sh: the overlay may extend any
+    # OFFICIAL sandbox image, or the exact base this container was already created from (SANDBOX_BASE_IMAGE,
+    # set at `docker run` by whichever runner made it — not a value the agent can write). The --pull build then
+    # re-fetches that base.
+    BASE_IMAGE="$(awk 'NF && $1 !~ /^#/ { if ($1 == "FROM") print $2; exit }' "$overlay")"
+    CURRENT_BASE="$(docker exec "$CONTAINER" printenv SANDBOX_BASE_IMAGE 2>/dev/null || true)"
+    if [ -z "$BASE_IMAGE" ]; then
+        echo "error: the approved overlay has no FROM instruction." >&2
         exit 1
     fi
+    case "$BASE_IMAGE" in
+        registry.gitlab.com/radarsu/intentic/sandbox:?*) ;;
+        *)
+            if [ -z "$CURRENT_BASE" ] || [ "$BASE_IMAGE" != "$CURRENT_BASE" ]; then
+                echo "error: the approved overlay must start with FROM registry.gitlab.com/radarsu/intentic/sandbox:<tag>" >&2
+                echo "       (or FROM this sandbox's own base, ${CURRENT_BASE:-<none>}); found ${BASE_IMAGE}." >&2
+                exit 1
+            fi
+            ;;
+    esac
     # The full hash pins SANDBOX_ENVIRONMENT_HASH (so the daemon reports the overlay as Applied); the first 12
     # chars tag the built image — identical derivation to rebuild.sh.
     ENV_HASH="$({ sha256sum "$overlay" 2>/dev/null || shasum -a 256 "$overlay"; } | cut -c1-64)"
     TARGET_IMAGE="intentic-sandbox-env-${SLUG}:$(printf '%s' "$ENV_HASH" | cut -c1-12)"
-    BASE_IMAGE="$(awk 'NF && $1 !~ /^#/ { if ($1 == "FROM") print $2; exit }' "$overlay")"
     echo "intentic: rebuilding your environment overlay on the new base…"
     echo "== docker build --pull ${TARGET_IMAGE} ==" >>"$LOG"
     docker build --pull -t "$TARGET_IMAGE" - <"$overlay" 2>&1 | tee -a "$LOG" || true

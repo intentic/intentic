@@ -834,6 +834,10 @@ for _dns in $SANDBOX_DNS; do set -- "$@" --dns "$_dns"; done
 [ -n "$HOST_SSH_KEY" ] && set -- "$@" -e HOST_SSH_KEY="$HOST_SSH_KEY"
 [ -n "$SELF_HOST_USER" ] && set -- "$@" -e SELF_HOST_USER="$SELF_HOST_USER"
 [ -n "$INTENTIC_AGENT_AUTH_VOLUME" ] && set -- "$@" -v "${INTENTIC_AGENT_AUTH_VOLUME}:/agent-auth" -e AGENT_AUTH_DIR=/agent-auth
+# SANDBOX_BASE_IMAGE is set to the SAME value as SANDBOX_IMAGE below: on a fresh run the image being started
+# IS the base that any later environment overlay must extend. Naming it is what lets a sandbox started on a
+# non-release image (a pinned version, or a locally-built intentic-sandbox:dev) be rebuilt onto ITSELF rather
+# than silently onto :stable — which would swap its daemon for the last release behind the owner's back.
 echo "== docker run ${SANDBOX_IMAGE} ==" >>"$LOG"
 if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
     --network "$NETWORK" \
@@ -845,6 +849,7 @@ if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
     -v "${DOCKER_VOLUME}:/var/lib/docker" \
     -e SANDBOX_NAME="$CONTAINER" \
     -e SANDBOX_IMAGE="$SANDBOX_IMAGE" \
+    -e SANDBOX_BASE_IMAGE="$SANDBOX_IMAGE" \
     -e PREVIEW_PORT="$PREVIEW_PORT" \
     -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
     -e CONNECT_TOKEN="$CONNECT_TOKEN" \

@@ -34,6 +34,7 @@ import {
     selectedAccountId,
     turnDefaults,
 } from "./conversation";
+import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
@@ -66,7 +67,8 @@ const activeId = ref<string>(``);
 // --- Tab persistence ---------------------------------------------------------------------------
 // Each sandbox's open tabs — session/provider identity, title, and the composer draft (text + done-upload
 // metadata) — persist as one JSON blob, so a refresh or a switch back to the sandbox restores its open chats.
-// Transcripts are NOT persisted; the rehydration watch below re-fetches them from the daemon's session store.
+// Transcript CONTENT is not in this snapshot — it is mirrored to IndexedDB instead (see transcriptCache), so
+// a restored tab paints from disk at once and the rehydration watch below then reconciles it with the daemon.
 const chatTabsKey = (sandboxId: string): string => `intentic.chatTabs.${sandboxId}`;
 // Providers are an open string vocabulary (native ids + installed ACP agent ids) — a stored provider is valid
 // when non-empty; a since-removed ACP id degrades at send time (the daemon's unknown-provider error frame).
@@ -744,6 +746,9 @@ export const resetChat = (): void => {
     }
     convSeq = 1;
     conversations.value = restoreTabs();
+    // The new sandbox's tabs get the same instant paint a reload does; the mirror is keyed by sandbox, so a
+    // switch reads that sandbox's transcripts, never the one just left.
+    paintCachedTranscripts(conversations.value);
     sessions.value = [];
     providerAccounts.value = perProvider<readonly OauthAccount[]>(() => []);
     selectedAccountId.value = perProvider<string | undefined>(() => undefined);
@@ -778,6 +783,9 @@ const setActive = (id: string): void => {
 const closeTab = (id: string): void => {
     const closing = conversations.value.find((conversation) => conversation.id === id);
     closing?.abort();
+    if (closing !== undefined) {
+        void dropTranscript(closing.conversationId);
+    }
     let next = conversations.value.filter((conversation) => conversation.id !== id);
     if (next.length === 0) {
         next = [new Conversation(`c${convSeq++}`)];
@@ -813,18 +821,39 @@ const steer = (text: string): Promise<void> => {
     return active.value.steer(text);
 };
 
-// Edit a past user message and re-run from that point: the conversation truncates at the message, retires
-// its session, and re-sends the edited text (with the original turn's attachments) as a fresh turn.
-const editAndResend = (message: ChatMessage, text: string): Promise<void> => {
-    track(`message_sent`, { agent: active.value.provider.value, edited: true });
-    return active.value.editAndResend(message.id, text, {
-        agent: active.value.provider.value,
-        harness: active.value.harness.value,
-        account: active.value.account.value,
-        model: active.value.model.value,
-        effort: active.value.effort.value,
-        thinking: active.value.thinking.value,
-    });
+// Edit a past user message and re-run from that point — as a BRANCH, in a new tab. The turns before the
+// edited message are copied into a fresh conversation which sends the edited text (with the original turn's
+// attachments) as its first turn; the source conversation is untouched, so the answer being replaced is still
+// there to compare against and nothing is destroyed by an experiment. The branch's first send seeds a fresh
+// daemon session from the copied transcript, the same way a provider switch does.
+const editAndResend = async (message: ChatMessage, text: string): Promise<void> => {
+    const source = active.value;
+    const index = source.messages.value.findIndex((entry) => entry.id === message.id);
+    if (index === -1 || message.role !== `user` || source.streaming.value) {
+        return;
+    }
+    const attachments = message.attachments ?? [];
+    // Mirror send's own guard before opening a tab, so an empty edit doesn't leave an empty branch behind.
+    if (text.trim().length === 0 && attachments.length === 0) {
+        return;
+    }
+    const branch = new Conversation(`c${convSeq++}`);
+    branch.branchFrom(source, index);
+    conversations.value = [...conversations.value, branch];
+    activeId.value = branch.id;
+    track(`message_sent`, { agent: branch.provider.value, edited: true });
+    await branch.send(
+        text,
+        {
+            agent: branch.provider.value,
+            harness: branch.harness.value,
+            account: branch.account.value,
+            model: branch.model.value,
+            effort: branch.effort.value,
+            thinking: branch.thinking.value,
+        },
+        attachments,
+    );
 };
 
 const stop = (): void => {
@@ -938,12 +967,31 @@ const openConversation = async (id: string): Promise<void> => {
 // tabs restore their draft, title, and session but not the visible transcript — the next turn still resumes
 // the server thread.
 const hydrating = new WeakSet<Conversation>();
+// Conversations showing a locally cached transcript rather than a daemon-confirmed one. They still hydrate —
+// the cache decides what the user looks at during the round-trip, not whether the round-trip happens — so the
+// "already has messages, leave it alone" guard below must not mistake a painted mirror for live content.
+const painted = new WeakSet<Conversation>();
+
+// Paint every restored tab from the local mirror immediately, without waiting for the sandbox to be reachable
+// (see transcriptCache). This is the whole point of the cache: a reopened chat is readable at once instead of
+// after a probe, a tunnel round-trip, and a session-store read.
+const paintCachedTranscripts = (list: readonly Conversation[]): void => {
+    for (const conversation of list) {
+        void conversation.paintCached().then((didPaint) => {
+            if (didPaint) {
+                painted.add(conversation);
+            }
+        });
+    }
+};
+paintCachedTranscripts(conversations.value);
+
 watch([reachable, conversations], ([isReachable]) => {
     if (!isReachable) {
         return;
     }
     for (const conversation of conversations.value) {
-        if (conversation.messages.value.length > 0 || conversation.streaming.value || hydrating.has(conversation)) {
+        if ((conversation.messages.value.length > 0 && !painted.has(conversation)) || conversation.streaming.value || hydrating.has(conversation)) {
             continue;
         }
         hydrating.add(conversation);
