@@ -55,6 +55,16 @@ export const updatePresence = (identity: VerifiedIdentity, report: PresenceRepor
     broadcast();
 };
 
+// True when nobody is actively watching this sandbox: either no one is connected at all, or every connected
+// tab has reported itself idle. This is the gate on push notifications — telling someone their turn finished
+// while they sit watching it finish is noise, and the roster is exactly the fact needed to avoid it.
+//
+// Note it is a whole-sandbox verdict, not a per-recipient one: a subscription is a browser, and the daemon
+// has no way to match a push endpoint back to a presence entry (the endpoint is minted by the push service,
+// never by us). With members, one collaborator being present therefore suppresses everyone's notification —
+// the conservative direction, and the shared-sandbox case is rare enough not to warrant guessing.
+export const idleEverywhere = (): boolean => [...entries.values()].every((user) => user.idle);
+
 // Immediate snapshot on subscribe, so a fresh /events connection paints the roster without waiting for the
 // next change.
 export const subscribePresence = (listener: (users: PresenceUser[]) => void): (() => void) => {

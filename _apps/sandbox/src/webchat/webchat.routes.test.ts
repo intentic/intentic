@@ -19,6 +19,9 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
         activity: { append: async (e: Omit<ActivityEvent, "id" | "at">) => void appends.push(e as ActivityEvent), list: async () => [] },
         workspace: { root },
         logger: { error: () => {}, warn: () => {} },
+        // A held automation notifies the owner (scheduler.ts). Fire-and-forget there, so a missing stub
+        // surfaces only as an unhandled rejection — loud enough to poison a later test, quiet enough to hide.
+        pushSender: { notify: async () => {}, notifyIfAway: async () => {} },
     }) as unknown as Services;
 
 const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>

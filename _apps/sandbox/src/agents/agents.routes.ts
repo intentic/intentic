@@ -1,4 +1,4 @@
-import { agentsContract, type RepoChanges } from "@intentic/sandbox-contract";
+import { agentsContract, type AgentRepoChanges } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
@@ -47,7 +47,7 @@ export const createAgentsRoutes = (services: Services) => {
         // state, since clean turn completions auto-land; non-empty only after a conflict or an aborted turn.
         diff: i.diff.handler(async ({ input }) => {
             const entry = entryOf(input.id);
-            const repos: RepoChanges[] = [];
+            const repos: AgentRepoChanges[] = [];
             for (const { repo, base, landedTip } of entry.repos) {
                 try {
                     const changes = await services.git.changesAgainstBase(services.agentWorktrees.worktreeDir(entry.id, repo), landedTip ?? base);

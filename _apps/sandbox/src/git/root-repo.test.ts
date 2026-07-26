@@ -12,6 +12,13 @@ import { commitRootBaseline, ensureRootRepo } from "./root-repo.js";
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 
+// These assertions only care that the tree is clean overall — which side a change would have landed on is
+// changes.test.ts's subject, not this file's.
+const bothSides = async (dir: string): Promise<unknown[]> => {
+    const { staged, unstaged } = await changedFiles(dir);
+    return [...staged, ...unstaged];
+};
+
 const tempDirs: string[] = [];
 const tempBase = async (): Promise<{ work: string; historyRoot: string }> => {
     const base = await mkdtemp(join(tmpdir(), "intentic-root-repo-"));
@@ -43,7 +50,7 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
     expect(await readFile(join(historyRoot, "gits", "root", "info", "exclude"), "utf8")).toBe(`${rootExcludes(["intent"]).join("\n")}\n`);
     // The baseline commit captured the loose file but neither the repo dir nor .intentic/.
     expect(await sh(work, "ls-files")).toBe("notes.md");
-    expect((await changedFiles(work)).changes).toEqual([]);
+    expect(await bothSides(work)).toEqual([]);
 });
 
 test("daemon-owned skill files converged before the baseline read clean", async () => {
@@ -56,7 +63,7 @@ test("daemon-owned skill files converged before the baseline read clean", async 
     await commitRootBaseline(workspacePaths(work));
 
     expect(await sh(work, "ls-files")).toBe(".claude/skills/drafts/SKILL.md");
-    expect((await changedFiles(work)).changes).toEqual([]);
+    expect(await bothSides(work)).toEqual([]);
 });
 
 test("re-ensure is idempotent and heals a deleted .git pointer without a new baseline", async () => {

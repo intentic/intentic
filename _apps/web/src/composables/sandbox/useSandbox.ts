@@ -127,8 +127,8 @@ const update = async (input: { name?: string; image?: string }): Promise<void> =
 
 // Point a sandbox at a URL the owner runs it behind (setup's "I already have one running" path) and make it
 // active. The platform stamps lastSeenAt like an announce, so the returned row is immediately "connected".
-const attach = async (id: string, daemonUrl: string): Promise<void> => {
-    const updated = await apiClient.sandbox.attach({ sandboxId: id, daemonUrl });
+const attach = async (id: string, url: string): Promise<void> => {
+    const updated = await apiClient.sandbox.attach({ sandboxId: id, daemonUrl: url });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
     queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
         live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),

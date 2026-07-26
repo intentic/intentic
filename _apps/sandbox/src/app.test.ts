@@ -244,11 +244,21 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         status: async () => ({ branch: "main", dirty: false, files: [] }),
         listFiles: async () => [],
         commitAll: async () => false,
-        push: async () => {},
         clone: async () => {},
-        changedFiles: async () => ({ changes: [] }),
-        commitPaths: async () => false,
+        changedFiles: async () => ({ staged: [], unstaged: [] }),
+        stagePaths: async () => {},
+        unstagePaths: async () => {},
+        commitIndex: async () => false,
         discardPaths: async () => {},
+        listBranches: async () => [],
+        createBranch: async () => {},
+        deleteBranch: async () => {},
+        remoteState: async () => ({ ahead: 0, behind: 0 }),
+        fetchRemote: async () => ({ ok: true as const }),
+        pullRemote: async () => ({ ok: true as const }),
+        pushBranch: async () => ({ ok: true as const }),
+        stagedFileDiff: async () => ({}),
+        unstagedFileDiff: async () => ({}),
         fileDiff: async () => ({}),
         changesAgainstBase: async () => [],
     },
@@ -1666,7 +1676,6 @@ test("git.status resolves the repo dir, and rejects an unknown repo", async () =
                     },
                     listFiles: async () => [],
                     commitAll: async () => false,
-                    push: async () => {},
                     clone: async () => {},
                 },
             }),
@@ -1688,7 +1697,6 @@ test("git.files lists the repo's tracked files", async () => {
                     status: async () => ({ branch: "main", dirty: false, files: [] }),
                     listFiles: async (dir) => (dir === join(workspace.root, "intent") ? ["deploy.config.ts", "package.json"] : []),
                     commitAll: async () => false,
-                    push: async () => {},
                     clone: async () => {},
                 },
             }),
@@ -1749,12 +1757,12 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
                     ...services().git,
                     changedFiles: async (dir) => {
                         if (dir === workspace.root) {
-                            return { branch: "main", changes: [{ path: "notes.md", status: "added" as const }] };
+                            return { branch: "main", staged: [], unstaged: [{ path: "notes.md", status: "added" as const }] };
                         }
                         if (dir === join(workspace.root, "shop")) {
                             throw new Error("broken repo");
                         }
-                        return { changes: [] };
+                        return { staged: [], unstaged: [] };
                     },
                 },
             }),
@@ -1764,13 +1772,19 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
     // canceled upload is something the panel can show rather than a repo that silently vanished.
     expect(await client.git.changes()).toEqual({
         repos: [
-            { repo: "root", branch: "main", changes: [{ path: "notes.md", status: "added" }] },
-            { repo: "shop", changes: [], error: "broken repo" },
+            {
+                repo: "root",
+                branch: "main",
+                staged: [],
+                unstaged: [{ path: "notes.md", status: "added" }],
+                remote: { ahead: 0, behind: 0 },
+            },
+            { repo: "shop", staged: [], unstaged: [], error: "broken repo" },
         ],
     });
 });
 
-test("git.commit routes paths to the per-path commit and no paths to commit-all", async () => {
+test("git.commit records the index by default and stages everything first for `all`", async () => {
     const workspace = tempWorkspace([{ name: "intent" }]);
     const calls: string[] = [];
     const client = clientFor(
@@ -1783,17 +1797,19 @@ test("git.commit routes paths to the per-path commit and no paths to commit-all"
                         calls.push(`all ${dir} ${message}`);
                         return true;
                     },
-                    commitPaths: async (dir, message, paths) => {
-                        calls.push(`paths ${dir} ${message} ${paths.join(",")}`);
+                    commitIndex: async (dir, message) => {
+                        calls.push(`index ${dir} ${message}`);
                         return true;
                     },
                 },
             }),
         ),
     );
-    expect(await client.git.commit({ repo: "root", message: "m1", paths: ["notes.md"] })).toEqual({ committed: true });
-    expect(await client.git.commit({ repo: "intent", message: "m2" })).toEqual({ committed: true });
-    expect(calls).toEqual([`paths ${workspace.root} m1 notes.md`, `all ${join(workspace.root, "intent")} m2`]);
+    // A bare message commits exactly the index — the only thing the panel ever asks for, because staging IS
+    // how the user chose. There is no path-scoped shape to route to any more.
+    expect(await client.git.commit({ repo: "root", message: "m1" })).toEqual({ committed: true });
+    expect(await client.git.commit({ repo: "intent", message: "m2", all: true })).toEqual({ committed: true });
+    expect(calls).toEqual([`index ${workspace.root} m1`, `all ${join(workspace.root, "intent")} m2`]);
 });
 
 test("git.discard forwards paths and records the worktree change as a user write", async () => {
@@ -1818,19 +1834,23 @@ test("git.discard forwards paths and records the worktree change as a user write
     expect(notified).toBe(2);
 });
 
-test("git.fileDiff returns the working diff and BAD_REQUESTs a path escape", async () => {
+test("git.fileDiff routes each side to its own diff and BAD_REQUESTs a path escape", async () => {
     const client = clientFor(
         createApp(
             services({
                 git: {
                     ...services().git,
-                    fileDiff: async (_dir, path) => (path === "notes.md" ? { before: "one\n", after: "two\n" } : {}),
+                    // Two distinct comparisons, not one HEAD↔worktree diff dressed up twice: for a partially
+                    // staged file the row the user clicked is the only thing that says which one they meant.
+                    stagedFileDiff: async (_dir, path) => (path === "notes.md" ? { before: "one\n", after: "two\n" } : {}),
+                    unstagedFileDiff: async (_dir, path) => (path === "notes.md" ? { before: "two\n", after: "three\n" } : {}),
                 },
             }),
         ),
     );
-    expect(await client.git.fileDiff({ repo: "root", path: "notes.md" })).toEqual({ before: "one\n", after: "two\n" });
-    expect(await errorCode(client.git.fileDiff({ repo: "root", path: "../escape" }))).toBe("BAD_REQUEST");
+    expect(await client.git.fileDiff({ repo: "root", path: "notes.md", side: "staged" })).toEqual({ before: "one\n", after: "two\n" });
+    expect(await client.git.fileDiff({ repo: "root", path: "notes.md", side: "unstaged" })).toEqual({ before: "two\n", after: "three\n" });
+    expect(await errorCode(client.git.fileDiff({ repo: "root", path: "../escape", side: "staged" }))).toBe("BAD_REQUEST");
 });
 
 test("workspace.tree returns the full working tree from the walker", async () => {
@@ -2116,7 +2136,6 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
                     status: async () => ({ branch: "main", dirty: false, files: [] }),
                     listFiles: async () => [],
                     commitAll: async () => false,
-                    push: async () => {},
                     clone: async (parentDir, name, cloneUrl, options) => {
                         clones.push({
                             parentDir,

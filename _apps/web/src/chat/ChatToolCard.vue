@@ -1,57 +1,35 @@
 <script setup lang="ts">
-import type { IconName } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { ChatTool } from "../composables/chat/conversation";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import ChatToolDiff from "./ChatToolDiff.vue";
+import { present } from "./toolPresentation";
 
-/* One tool call in an assistant turn: category icon, name, target, live status (spinner while running, red
- * tint on failure), structured diff content rendered inline, and text output in a capped scroll box. File
- * locations are clickable — they open the file in the workspace at the reported line (QuickOpen's
- * navigation pattern, so it works from the shell-docked chat on any view). */
+/* One tool call in an assistant turn. All per-tool knowledge — icon, result summary, how the output is
+ * shaped, whether the card starts open — comes from the presentation registry (toolPresentation.ts); this
+ * component only renders what it returns and owns the interaction (fold, open-in-workspace). Adding a tool to
+ * the taxonomy is a table entry there, never a branch here. File locations are clickable and open in the
+ * workspace at the reported line (QuickOpen's navigation pattern, so it works from the shell-docked chat on
+ * any view). */
 
 const props = defineProps<{ tool: ChatTool }>();
 
 const router = useRouter();
 const { openFile, openAtLine } = useWorkspaceTabs();
 
-const CATEGORY_ICONS: Record<ChatTool[`category`], IconName> = {
-    read: `file`,
-    edit: `file-edit`,
-    delete: `trash`,
-    move: `forward`,
-    search: `search`,
-    execute: `code`,
-    think: `sparkles`,
-    fetch: `globe`,
-    other: `angle-right`,
-};
-
-const icon = computed<IconName>(() => CATEGORY_ICONS[props.tool.category]);
+const view = computed(() => present(props.tool));
 const running = computed(() => props.tool.status === `pending` || props.tool.status === `in_progress`);
 const failed = computed(() => props.tool.status === `failed`);
 
-const diffs = computed(() => (props.tool.content ?? []).filter((entry) => entry.type === `diff`));
-const text = computed(() =>
-    (props.tool.content ?? [])
-        .filter((entry) => entry.type === `text`)
-        .map((entry) => entry.text)
-        .join(``),
-);
+// Whether there's anything to fold — an output-less call (a pending tool, or a command that printed nothing)
+// shows just its header, no chevron.
+const hasContent = computed(() => view.value.diffs.length > 0 || view.value.body !== undefined);
 
-// Cap the text output so a large file read / chatty command can't bloat the DOM (the box scrolls anyway).
-// ponytail: 4k-char cap, raise it if real outputs get clipped.
-const cappedText = computed(() => (text.value.length > 4000 ? `${text.value.slice(0, 4000)}\n… (truncated)` : text.value));
-
-// Whether there's anything to fold — an output-less call (a pending tool, or a command that printed
-// nothing) shows just its header, no chevron.
-const hasContent = computed(() => diffs.value.length > 0 || cappedText.value.length > 0);
-
-// Output fold, mirroring the turn's Thinking block: expanded while the call runs (so live output is
-// visible), collapsed once it settles. A manual toggle overrides and sticks for the session.
+// Output fold, mirroring the turn's Thinking block. The registry decides the default (open while running or
+// on failure); a manual toggle overrides it and sticks for the session.
 const outputOverride = ref<boolean>();
-const isOpen = computed(() => outputOverride.value ?? running.value);
+const isOpen = computed(() => outputOverride.value ?? view.value.defaultOpen);
 const toggleOpen = (): void => {
     outputOverride.value = !isOpen.value;
 };
@@ -84,12 +62,12 @@ const open = (path: string, line?: number): void => {
             >
                 <Icon :name="isOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
                 <Icon v-if="running" name="spinner" class="text-2xs text-link" spin />
-                <Icon v-else :name="icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
+                <Icon v-else :name="view.icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
                 <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
             </button>
             <template v-else>
                 <Icon v-if="running" name="spinner" class="text-2xs text-link" spin />
-                <Icon v-else :name="icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
+                <Icon v-else :name="view.icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
                 <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
             </template>
             <button
@@ -102,10 +80,13 @@ const open = (path: string, line?: number): void => {
                 {{ tool.target ?? location.path }}
             </button>
             <span v-else-if="tool.target" class="truncate font-mono">{{ tool.target }}</span>
+            <!-- The result phrase stays visible while collapsed — a folded card should still say what
+                 happened. Pushed right so it reads as a trailing annotation, not part of the target. -->
+            <span v-if="view.summary" class="ml-auto shrink-0 tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{ view.summary }}</span>
         </div>
         <template v-if="isOpen">
             <ChatToolDiff
-                v-for="diff in diffs"
+                v-for="diff in view.diffs"
                 :key="diff.path"
                 :path="diff.path"
                 :old-text="diff.oldText"
@@ -113,11 +94,41 @@ const open = (path: string, line?: number): void => {
                 :truncated="diff.truncated"
                 @open="open(diff.path)"
             />
+            <!-- Three body shapes, chosen by the registry. `command` renders the invocation above its output
+                 so a Bash card reads like a terminal; `files` turns a path listing into rows that navigate. -->
+            <div v-if="view.body?.kind === 'command'" class="ml-4 overflow-hidden rounded border border-line bg-canvas">
+                <div v-if="view.body.command" class="flex gap-1.5 border-b border-line px-2 py-1 font-mono text-2xs text-muted">
+                    <span class="shrink-0 select-none text-subtle">$</span>
+                    <span class="whitespace-pre-wrap break-all">{{ view.body.command }}</span>
+                </div>
+                <pre
+                    v-if="view.body.output"
+                    class="scrollbar-thin max-h-40 overflow-auto whitespace-pre-wrap px-2 py-1 text-2xs leading-relaxed"
+                    :class="failed ? 'text-danger' : 'text-muted'"
+                    >{{ view.body.output }}</pre>
+            </div>
+            <div
+                v-else-if="view.body?.kind === 'files'"
+                class="scrollbar-thin ml-4 flex max-h-40 flex-col overflow-auto rounded border border-line bg-canvas px-1 py-1"
+            >
+                <button
+                    v-for="(entry, index) in view.body.entries"
+                    :key="`${entry.path}:${entry.line ?? ''}:${index}`"
+                    type="button"
+                    class="flex items-baseline gap-1.5 rounded px-1 py-0.5 text-left font-mono text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                    v-tooltip.top="'Open in workspace'"
+                    @click="open(entry.path, entry.line)"
+                >
+                    <span class="truncate">{{ entry.path }}</span>
+                    <span v-if="entry.line" class="shrink-0 text-subtle">:{{ entry.line }}</span>
+                </button>
+                <span v-if="view.body.hidden" class="px-1 py-0.5 text-2xs text-subtle">… {{ view.body.hidden }} more</span>
+            </div>
             <pre
-                v-if="cappedText"
+                v-else-if="view.body"
                 class="scrollbar-thin ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs leading-relaxed"
                 :class="failed ? 'text-danger' : 'text-muted'"
-                >{{ cappedText }}</pre>
+                >{{ view.body.text }}</pre>
         </template>
     </div>
 </template>

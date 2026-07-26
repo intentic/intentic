@@ -5,13 +5,14 @@ import { useRoute, useRouter } from "vue-router";
 import SettingsAppearance from "./settings/SettingsAppearance.vue";
 import SettingsData from "./settings/SettingsData.vue";
 import SettingsKeybindings from "./settings/SettingsKeybindings.vue";
+import SettingsNotifications from "./settings/SettingsNotifications.vue";
 import SettingsProfile from "./settings/SettingsProfile.vue";
 
 /* Personal preferences for the signed-in account (cross-sandbox). Reached from the account avatar. Tabbed like
  * the sandbox hub for symmetry; the selected tab lives in the URL (/settings/<tab>), default profile omits the
  * param. Sandbox-scoped settings (search past chats, import memory) live on the Sandbox ▸ Agent tab, not here. */
 
-const TABS = [`profile`, `appearance`, `keybindings`, `data`] as const;
+const TABS = [`profile`, `appearance`, `notifications`, `keybindings`, `data`] as const;
 type Tab = (typeof TABS)[number];
 const DEFAULT: Tab = `profile`;
 
@@ -26,6 +27,7 @@ const activeTab = computed<Tab>(() => {
 const options = [
     { label: `Profile`, value: `profile` as Tab },
     { label: `Appearance`, value: `appearance` as Tab },
+    { label: `Notifications`, value: `notifications` as Tab },
     { label: `Keybindings`, value: `keybindings` as Tab },
     { label: `Data`, value: `data` as Tab },
 ];
@@ -56,6 +58,7 @@ watch(
 
         <SettingsProfile v-if="activeTab === `profile`" />
         <SettingsAppearance v-else-if="activeTab === `appearance`" />
+        <SettingsNotifications v-else-if="activeTab === `notifications`" />
         <SettingsKeybindings v-else-if="activeTab === `keybindings`" />
         <SettingsData v-else-if="activeTab === `data`" />
     </Page>

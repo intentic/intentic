@@ -6,6 +6,7 @@ import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, watch } from "vue";
 import DiffStat from "../../components/DiffStat.vue";
+import BranchSwitcher from "./BranchSwitcher.vue";
 import { useGitLog } from "../../composables/workspace/useGitLog";
 import { useRepos } from "../../composables/workspace/useRepos";
 import { buildFileTree, flattenFileTree } from "./commitFileTree";
@@ -38,7 +39,9 @@ const laneX = (lane: number): number => LANE_W / 2 + lane * LANE_W;
 const layout = computed(() => computeGraphLayout(commits.value));
 const gutterWidth = computed(() => Math.max(1, layout.value.laneCount) * LANE_W);
 // rows and commits are index-aligned (the layout preserves order), so zip them for rendering.
-const graphRows = computed(() => layout.value.rows.map((row, index): { row: GraphRow; commit: GitCommit } => ({ row, commit: commits.value[index]! })));
+const graphRows = computed(() =>
+    layout.value.rows.map((row, index): { row: GraphRow; commit: GitCommit } => ({ row, commit: commits.value[index]! })),
+);
 
 // A ref decoration split into its kind — a branch pill vs a `tag: x` pill; HEAD is surfaced separately.
 const refBadge = (ref: string): { tag: boolean; label: string } =>
@@ -276,14 +279,12 @@ const runAction = (kind: ActionKind, commit: GitCommit, name: string): Promise<u
                 <Icon name="chevron-down" class="pointer-events-none absolute right-1.5 text-[0.5rem] text-subtle" />
             </div>
             <span v-else class="text-xs font-medium text-content">{{ repo }}</span>
-            <span
-                v-if="branch"
-                class="inline-flex min-w-0 shrink items-center gap-1 text-2xs text-subtle"
-                v-tooltip.bottom="'Checked-out branch'"
-            >
-                <Icon name="code" class="shrink-0 text-[0.6rem]" /><span class="truncate">{{ branch }}</span>
-            </span>
-            <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted" v-tooltip.bottom="'Commits shown'">{{ commits.length }}</span>
+            <!-- The checked-out branch, and the switch/create/delete popover behind it. A detached HEAD has
+                 no branch to show as a pill, but the switcher is still the way BACK onto one. -->
+            <BranchSwitcher :repo="repo" />
+            <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted" v-tooltip.bottom="'Commits shown'">{{
+                commits.length
+            }}</span>
             <span class="flex-1"></span>
             <Icon v-if="loading" name="spinner" class="shrink-0 text-2xs text-subtle" spin />
         </div>
@@ -367,7 +368,9 @@ const runAction = (kind: ActionKind, commit: GitCommit, name: string): Promise<u
                             <dd class="font-mono text-muted">{{ commit.parents.map((parent) => parent.slice(0, 8)).join(", ") }}</dd>
                         </template>
                         <dt class="text-subtle">Author</dt>
-                        <dd class="text-muted">{{ commit.author }}<span v-if="commit.email" class="text-subtle"> &lt;{{ commit.email }}&gt;</span></dd>
+                        <dd class="text-muted">
+                            {{ commit.author }}<span v-if="commit.email" class="text-subtle"> &lt;{{ commit.email }}&gt;</span>
+                        </dd>
                         <dt class="text-subtle">Date</dt>
                         <dd class="text-muted">{{ timeAgo(commit.at) }}</dd>
                     </dl>
@@ -391,7 +394,10 @@ const runAction = (kind: ActionKind, commit: GitCommit, name: string): Promise<u
                                         :style="{ paddingLeft: `${0.25 + row.depth * 0.85}rem` }"
                                         @click="toggleDir(row.path)"
                                     >
-                                        <Icon :name="row.expanded ? 'chevron-down' : 'chevron-right'" class="w-2.5 shrink-0 text-[0.55rem] text-subtle" />
+                                        <Icon
+                                            :name="row.expanded ? 'chevron-down' : 'chevron-right'"
+                                            class="w-2.5 shrink-0 text-[0.55rem] text-subtle"
+                                        />
                                         <Icon name="folder" class="shrink-0 text-[0.7rem] text-subtle" />
                                         <span class="min-w-0 flex-1 truncate">{{ row.name }}</span>
                                     </button>
@@ -436,7 +442,9 @@ const runAction = (kind: ActionKind, commit: GitCommit, name: string): Promise<u
             @update:visible="cancelAction"
         >
             <template v-if="pending">
-                <p class="text-xs text-content">{{ pending.commit.subject }} <span class="font-mono text-2xs text-subtle">{{ pending.commit.short }}</span></p>
+                <p class="text-xs text-content">
+                    {{ pending.commit.subject }} <span class="font-mono text-2xs text-subtle">{{ pending.commit.short }}</span>
+                </p>
                 <p v-if="pendingBody" class="mt-1.5 text-xs text-muted">{{ pendingBody }}</p>
 
                 <input

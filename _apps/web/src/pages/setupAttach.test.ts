@@ -65,6 +65,33 @@ test("an unreachable address (DNS, TLS, or a CORS-blocked daemon) reports unreac
     expect(await probeDaemon({ daemonUrl: `https://sandbox.example.com`, idToken: `id-tok` })).toEqual({ kind: `unreachable` });
 });
 
+test("every probe request carries a deadline, so a hang can never outlive it", async () => {
+    const signals: (AbortSignal | null | undefined)[] = [];
+    vi.stubGlobal(`fetch`, (_url: string, init?: RequestInit) => {
+        signals.push(init?.signal);
+        return Promise.resolve(new Response(`{}`, { status: 200 }));
+    });
+    await probeDaemon({ daemonUrl: `https://sandbox.example.com`, idToken: `id-tok` });
+    expect(signals).toHaveLength(2);
+    expect(signals.every((signal) => signal instanceof AbortSignal)).toBe(true);
+});
+
+test("a hang is reported as a timeout, not folded into the generic nothing-answered case", async () => {
+    // What AbortSignal.timeout rejects with once the deadline fires. The two must stay distinguishable: one
+    // means "wrong address", the other means "something is there but silent" — different next steps.
+    vi.stubGlobal(`fetch`, () => Promise.reject(new DOMException(`signal timed out`, `TimeoutError`)));
+    expect(await probeDaemon({ daemonUrl: `https://sandbox.example.com`, idToken: `id-tok` })).toEqual({ kind: `timeout` });
+});
+
+test("a tunnel with no sandbox behind it is named as such, not quoted back as a 530", async () => {
+    // Cloudflare's signature for a resumed sandbox whose container is gone: the edge is up, the origin isn't.
+    stubFetch({ "https://sandbox.example.com/health": { status: 530 } });
+    expect(await probeDaemon({ daemonUrl: `https://sandbox.example.com`, idToken: `id-tok` })).toEqual({ kind: `no-origin`, status: 530 });
+
+    stubFetch({ "https://sandbox.example.com/health": { status: 502 } });
+    expect(await probeDaemon({ daemonUrl: `https://sandbox.example.com`, idToken: `id-tok` })).toMatchObject({ kind: `no-origin` });
+});
+
 test("401 means the daemon is up but unclaimed — the actionable answer is its connection token", async () => {
     stubFetch({
         "https://sandbox.example.com/health": { status: 200 },
@@ -84,9 +111,9 @@ test("403 carries the daemon's own reason — it names the account the sandbox b
     });
 });
 
-test("something answering that isn't a healthy daemon is reported as such, with its status", async () => {
-    stubFetch({ "https://sandbox.example.com/health": { status: 502 } });
+test("something answering that isn't a daemon at all (a website on that domain) is reported with its status", async () => {
+    stubFetch({ "https://sandbox.example.com/health": { status: 404 } });
     const outcome = await probeDaemon({ daemonUrl: `https://sandbox.example.com`, idToken: `id-tok` });
     expect(outcome.kind).toBe(`rejected`);
-    expect(outcome).toMatchObject({ message: expect.stringContaining(`502`) });
+    expect(outcome).toMatchObject({ message: expect.stringContaining(`404`) });
 });

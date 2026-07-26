@@ -66,7 +66,10 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
                     return;
                 }
                 // 1. Preserve the worktree's uncommitted state as an agent-authored commit on its branch.
-                if ((await changedFiles(worktree, git)).changes.length > 0) {
+                // Dirty on EITHER side — the agent may have staged some of its work and left the rest loose;
+                // the commit below (`add -A`) sweeps up both, so the guard has to look at both.
+                const worktreeState = await changedFiles(worktree, git);
+                if (worktreeState.staged.length + worktreeState.unstaged.length > 0) {
                     await git(worktree, ["add", "-A"]);
                     await git(worktree, [...withAgentAuthor, "commit", "-q", "-m", `Agent: ${entry.title ?? entry.id}`]);
                 }
@@ -107,8 +110,11 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
                     // Best-effort conflict hint: the delta paths the user's uncommitted work also touches
                     // (rename `from` legs included); when that intersection is empty, name the whole delta.
                     const deltaPaths = (await git(main, ["diff", "--name-only", "-z", from, tip])).stdout.split("\0").filter((path) => path !== "");
+                    // Both sides: a path the user staged conflicts with the incoming patch exactly as much as
+                    // one they left unstaged, so the overlap test must consider the union.
+                    const mainState = await changedFiles(main, git);
                     const mainDirty = new Set<string>();
-                    for (const change of (await changedFiles(main, git)).changes) {
+                    for (const change of [...mainState.staged, ...mainState.unstaged]) {
                         mainDirty.add(change.path);
                         if (change.from !== undefined) {
                             mainDirty.add(change.from);

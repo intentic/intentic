@@ -4,8 +4,9 @@
         <meta charset="utf-8" />
         <title>intentic</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-        <!-- Installable PWA: standalone display, dark canvas chrome. No service worker — the app is a live
-             daemon client and installability no longer requires one. -->
+        <!-- Installable PWA: standalone display, dark canvas chrome. The service worker (public/sw.js) is
+             registered lazily, only when the user enables push notifications, and handles push alone — it
+             deliberately caches nothing, since the app is a live daemon client. -->
         <link rel="manifest" href="/manifest.webmanifest" />
         <!-- ponytail: approximates the dark canvas token oklch(16% 0.007 65); regenerate if themes.css changes. -->
         <meta name="theme-color" content="#141210" />

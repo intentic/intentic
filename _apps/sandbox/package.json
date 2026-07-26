@@ -51,6 +51,7 @@
         "playwright": "catalog:",
         "tar-stream": "catalog:",
         "tslib": "catalog:",
+        "web-push": "^3.6.7",
         "ws": "catalog:",
         "yaml": "catalog:",
         "zod": "catalog:"
@@ -63,12 +64,13 @@
         "@types/node": "catalog:",
         "@types/ssh2": "catalog:",
         "@types/tar-stream": "catalog:",
+        "@types/web-push": "^3.6.4",
         "@types/ws": "catalog:",
+        "@typescript/native-preview": "catalog:",
         "pino-pretty": "catalog:",
         "ssh2": "catalog:",
         "testcontainers": "catalog:",
         "tsx": "catalog:",
-        "@typescript/native-preview": "catalog:",
         "vitest": "catalog:"
     }
 }

@@ -117,6 +117,16 @@ survive reconnects. Its subsystems:
   `localhost:<other-port>` works untouched.
 - **Automations** — cron schedules, webhooks (`/automations/:id/fire`), and event listeners
   ([automations/](_apps/sandbox/src/automations/)).
+- **Push notifications** — the daemon is the sender, because it is the only tier that knows what the agent is
+  doing ([push/](_apps/sandbox/src/push/)). It owns a per-sandbox VAPID keypair and one subscription per
+  subscribed browser, stored on the **history volume** rather than under `/work/.intentic`: the private key can
+  forge notifications to the owner's devices, so it sits outside the agent's reach. Three moments notify — a
+  turn settled, a turn parked on the user (plan/question/permission), and an automation held for approval —
+  and every one is suppressed while anyone is present and non-idle on the sandbox (`idleEverywhere`, read off
+  the same presence roster `/events` maintains), so a turn you watch finish tells you nothing. The service
+  worker ([_apps/web/public/sw.js](_apps/web/public/sw.js)) is registered lazily and caches nothing; a
+  subscription is per-browser, and lives on the web origin while the sender is the daemon on its tunnel —
+  which works because a push endpoint is an absolute URL minted by the browser's own push service.
 - **Capabilities** — everything a user adds to the sandbox (connectors, vpn, mcp, plugins, …),
   one unified model with a per-kind handler ([capabilities/](_apps/sandbox/src/capabilities/)) — see
   [Capabilities](#capabilities).

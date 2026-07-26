@@ -5,7 +5,10 @@ import {
     DiscardSchema,
     FileDiffSchema,
     GitActionResultSchema,
+    GitBranchCreateAtSchema,
     GitBranchCreateSchema,
+    GitBranchDeleteSchema,
+    GitBranchesSchema,
     GitChangesSchema,
     GitCheckoutSchema,
     GitCommitActionSchema,
@@ -19,8 +22,10 @@ import {
     GitFileWriteSchema,
     GitLogQuerySchema,
     GitLogSchema,
+    GitRemoteStateSchema,
     GitReposSchema,
     GitResetSchema,
+    GitStageSchema,
     GitStatusSchema,
     GitTagCreateSchema,
     OkSchema,
@@ -57,7 +62,23 @@ export const gitContract = {
     status: oc.route({ method: "GET", path: "/git/{repo}/status" }).input(RepoParamSchema).output(GitStatusSchema),
     commit: oc.route({ method: "POST", path: "/git/{repo}/commit" }).input(CommitSchema).output(CommitResultSchema),
     discard: oc.route({ method: "POST", path: "/git/{repo}/discard" }).input(DiscardSchema).output(OkSchema),
-    push: oc.route({ method: "POST", path: "/git/{repo}/push" }).input(PushSchema).output(OkSchema),
+    // Index moves. Per-path, worktree untouched, so they need no checkpoint and can't fail destructively —
+    // git's own error (an unmatched pathspec) propagates.
+    stage: oc.route({ method: "POST", path: "/git/{repo}/stage" }).input(GitStageSchema).output(OkSchema),
+    unstage: oc.route({ method: "POST", path: "/git/{repo}/unstage" }).input(GitStageSchema).output(OkSchema),
+    // Local branch management for the switcher. `branches` also carries per-branch ahead/behind, so the list
+    // is enough to render sync state without a call per branch. Checkout is above (it moves HEAD, so it is
+    // checkpointed with the other HEAD-movers).
+    branches: oc.route({ method: "GET", path: "/git/{repo}/branches" }).input(RepoParamSchema).output(GitBranchesSchema),
+    createBranchAt: oc.route({ method: "POST", path: "/git/{repo}/branches" }).input(GitBranchCreateAtSchema).output(OkSchema),
+    deleteBranch: oc.route({ method: "POST", path: "/git/{repo}/branches/delete" }).input(GitBranchDeleteSchema).output(OkSchema),
+    // Remote sync. All three report a GitActionResult rather than throwing: no remote, no credentials and a
+    // non-fast-forwardable pull are ORDINARY outcomes the panel renders, not 500s. `remote` is the read
+    // (ahead/behind as of the last fetch — hence the Fetch button) the sync bar polls.
+    remote: oc.route({ method: "GET", path: "/git/{repo}/remote" }).input(RepoParamSchema).output(GitRemoteStateSchema),
+    fetch: oc.route({ method: "POST", path: "/git/{repo}/fetch" }).input(RepoParamSchema).output(GitActionResultSchema),
+    pull: oc.route({ method: "POST", path: "/git/{repo}/pull" }).input(RepoParamSchema).output(GitActionResultSchema),
+    push: oc.route({ method: "POST", path: "/git/{repo}/push" }).input(PushSchema).output(GitActionResultSchema),
     files: oc.route({ method: "GET", path: "/git/{repo}/files" }).input(RepoParamSchema).output(GitFilesSchema),
     readFile: oc.route({ method: "GET", path: "/git/{repo}/file" }).input(GitFileQuerySchema).output(GitFileSchema),
     writeFile: oc.route({ method: "PUT", path: "/git/{repo}/file" }).input(GitFileWriteSchema).output(OkSchema),

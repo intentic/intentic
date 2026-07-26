@@ -88,14 +88,16 @@ const headSha = async (dir: string, git: GitRunner): Promise<string | undefined>
     }
 };
 
-// Merge per-file +/- line counts onto a change list from `git diff --numstat -z <target>` (rename detection on,
-// so a rename's counts key on the new path — the shape parseNumstatZ handles). A change with no numstat entry
-// (untracked file with no blob at the target, or a binary file) keeps undefined counts, which the UI omits.
-const withLineStats = async (dir: string, target: string, changes: GitChange[], git: GitRunner): Promise<GitChange[]> => {
+// Merge per-file +/- line counts onto a change list from a `git diff --numstat -z` variant (rename detection
+// on, so a rename's counts key on the new path — the shape parseNumstatZ handles). `scope` is the diff's own
+// arguments, so the counts always come from the SAME comparison the name-status list did: index-vs-HEAD for the
+// staged side, worktree-vs-index for the unstaged side. A change with no numstat entry (an untracked file with
+// no blob on either side, or a binary file) keeps undefined counts, which the UI omits.
+const withLineStats = async (dir: string, scope: readonly string[], changes: GitChange[], git: GitRunner): Promise<GitChange[]> => {
     if (changes.length === 0) {
         return changes;
     }
-    const { stdout } = await git(dir, ["diff", "--numstat", "-z", "--find-renames", target]);
+    const { stdout } = await git(dir, ["diff", "--numstat", "-z", "--find-renames", ...scope]);
     const stats = parseNumstatZ(stdout);
     return changes.map((change) => {
         const stat = stats.get(change.path);
@@ -103,41 +105,51 @@ const withLineStats = async (dir: string, target: string, changes: GitChange[], 
     });
 };
 
-// One repo's uncommitted work via `git status --porcelain=v1 -z -uall`: -z gives exact NUL-delimited paths
-// (a rename is `R… new\0old`), -uall expands untracked dirs into real file paths (per-path actions need them).
-// info/exclude + .gitignore keep the scan off the repo dirs, .intentic/ and junk in the root repo.
-export const changedFiles = async (dir: string, git: GitRunner = defaultGit): Promise<{ branch?: string; changes: GitChange[] }> => {
-    const branch = (await git(dir, ["branch", "--show-current"])).stdout.trim();
-    const { stdout } = await git(dir, ["status", "--porcelain=v1", "-z", "-uall"]);
-    const parts = stdout.split("\0");
-    const changes: GitChange[] = [];
-    for (let index = 0; index < parts.length; index += 1) {
-        const entry = parts[index];
-        if (entry === undefined || entry.length < 4) {
-            continue;
+// One repo's uncommitted work, split the way git actually models it — and the way VSCode's SCM view renders it:
+//
+//   staged   = index vs HEAD          (`git diff --cached`) — what `git commit` would record right now
+//   unstaged = worktree vs index      (`git diff`) + untracked files
+//
+// The two sides are read as two real diffs rather than by collapsing `git status`'s two porcelain columns,
+// because a path can legitimately appear on BOTH with DIFFERENT statuses (a staged rename whose new file was
+// then edited, the classic `MM`). Collapsing them, as this used to, made a partially-staged file report one
+// status and one pair of line counts that matched neither side. Each side now gets its own name-status pass and
+// its own numstat pass, so every count describes the diff it is displayed under.
+//
+// -z gives exact NUL-delimited paths; untracked come from `ls-files --others --exclude-standard -z`, which
+// expands directories into real file paths (per-path actions need them). info/exclude + .gitignore keep the scan
+// off the nested repo dirs, .intentic/ and junk in the root repo.
+export const changedFiles = async (
+    dir: string,
+    git: GitRunner = defaultGit,
+): Promise<{ branch?: string; staged: GitChange[]; unstaged: GitChange[] }> => {
+    const [branchOut, head] = await Promise.all([git(dir, ["branch", "--show-current"]), headSha(dir, git)]);
+    const branch = branchOut.stdout.trim();
+    // On an unborn HEAD there is no commit to diff the index against — the empty tree stands in, so a repo
+    // whose first commit is still being composed reports its staged files instead of nothing.
+    const base = head ?? EMPTY_TREE;
+    // Three independent read-only spawns — the two name-status passes and the untracked walk don't touch the
+    // index, so they run concurrently.
+    const [stagedOut, unstagedOut, untrackedOut] = await Promise.all([
+        git(dir, ["diff", "--cached", "--name-status", "-z", "--find-renames", base]),
+        git(dir, ["diff", "--name-status", "-z", "--find-renames"]),
+        git(dir, ["ls-files", "--others", "--exclude-standard", "-z"]),
+    ]);
+    const stagedNames = parseNameStatusZ(stagedOut.stdout);
+    const unstagedNames = parseNameStatusZ(unstagedOut.stdout);
+    // Untracked files are unstaged by definition (nothing about them is in the index yet). Guarded against a
+    // path the worktree diff already reported, which can't normally happen but would double a row if it did.
+    const tracked = new Set(unstagedNames.map((change) => change.path));
+    for (const path of untrackedOut.stdout.split("\0")) {
+        if (path !== "" && !tracked.has(path)) {
+            unstagedNames.push({ path, status: "added" });
         }
-        const staged = entry[0] ?? " ";
-        const worktree = entry[1] ?? " ";
-        const path = entry.slice(3);
-        // A staged rename/copy consumes a second NUL record: the original path.
-        if (staged === "R" || staged === "C") {
-            index += 1;
-            const from = parts[index];
-            changes.push(
-                staged === "R" ? { path, status: "renamed", ...(from !== undefined && from !== "" ? { from } : {}) } : { path, status: "added" },
-            );
-            continue;
-        }
-        // Prefer the worktree column (the state the user sees); unknown codes (unmerged, gitlinks) degrade to
-        // modified rather than vanishing from review.
-        const letter = staged === "?" ? "A" : worktree !== " " ? worktree : staged;
-        changes.push({ path, status: STATUS_OF[letter] ?? "modified" });
     }
-    // Line counts for tracked changes come from one diff vs HEAD (staged + unstaged in a single pass); on an
-    // unborn HEAD there's nothing to diff against, so every file is a stat-less "added".
-    const head = await headSha(dir, git);
-    const withStats = head === undefined ? changes : await withLineStats(dir, "HEAD", changes, git);
-    return { ...(branch !== "" ? { branch } : {}), changes: withStats };
+    const [staged, unstaged] = await Promise.all([
+        withLineStats(dir, ["--cached", base], stagedNames, git),
+        withLineStats(dir, [], unstagedNames, git),
+    ]);
+    return { ...(branch !== "" ? { branch } : {}), staged, unstaged };
 };
 
 // A repo's cumulative delta vs a fixed base sha — committed work since the base PLUS staged and unstaged
@@ -155,31 +167,53 @@ export const changesAgainstBase = async (dir: string, base: string, git: GitRunn
     }
     // Same numstat pass as the working-tree review, keyed to the worktree's base — untracked files (added above)
     // carry no counts, matching the Changes panel.
-    return withLineStats(dir, base, [...changes.values()], git);
+    return withLineStats(dir, [base], [...changes.values()], git);
 };
 
-// Commit exactly `paths` — adds, edits AND deletions — leaving everything else uncommitted. The daemon owns
-// the index: reset first so agent-staged leftovers can't ride along. False ⇒ the paths hold nothing to commit.
-export const commitPaths = async (
+// Stage exactly `paths` — adds, edits AND deletions (`-A` covers a removed file, which a bare `add` skips).
+export const stagePaths = async (dir: string, paths: readonly string[], git: GitRunner = defaultGit): Promise<void> => {
+    if (paths.length === 0) {
+        return;
+    }
+    await git(dir, ["add", "-A", "--", ...paths]);
+};
+
+// Unstage exactly `paths`, leaving the worktree untouched. On an unborn HEAD there is nothing to reset TO, so
+// the index entry is dropped instead (`rm --cached`) — the file returns to untracked rather than erroring.
+export const unstagePaths = async (dir: string, paths: readonly string[], git: GitRunner = defaultGit): Promise<void> => {
+    if (paths.length === 0) {
+        return;
+    }
+    const head = await headSha(dir, git);
+    if (head !== undefined) {
+        await git(dir, ["reset", "-q", "--", ...paths]);
+    } else {
+        await git(dir, ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...paths]);
+    }
+};
+
+// Commit whatever is currently staged, touching neither the worktree nor any unstaged change — plain `git
+// commit`. This is the ONLY way the panel records a commit (commitAll stages everything first, then lands
+// here in spirit): the index is git's own answer to "what goes in", so nothing else needs to name paths.
+// False ⇒ the index is clean, so there was nothing to do.
+//
+// Being a whole-index commit is also what makes it work mid-merge. The `commit --only` this replaces could
+// not: git refuses a partial commit while MERGE_HEAD exists, and it refused only AFTER the paths had been
+// staged — a commit that never happened, leaving the index moved.
+export const commitIndex = async (
     dir: string,
     message: string,
-    paths: readonly string[],
     author: { readonly name: string; readonly email: string },
     git: GitRunner = defaultGit,
 ): Promise<boolean> => {
     const head = await headSha(dir, git);
-    if (head !== undefined) {
-        await git(dir, ["reset", "-q"]);
-    }
-    await git(dir, ["add", "-A", "--", ...paths]);
     try {
-        // Explicit tree argument so the check also works on an unborn HEAD. Exit 1 (throw) ⇒ index differs.
         await git(dir, ["diff", "--cached", "--quiet", head ?? EMPTY_TREE]);
         return false;
     } catch {
-        // Something is staged — fall through to commit.
+        // The index differs from HEAD — fall through to commit.
     }
-    await git(dir, ["-c", `user.name=${author.name}`, "-c", `user.email=${author.email}`, "commit", "-q", "-m", message]);
+    await git(dir, [...identity(author), "commit", "-q", "-m", message]);
     return true;
 };
 
@@ -198,10 +232,11 @@ export const discardPaths = async (dir: string, paths: readonly string[] | undef
         await git(dir, ["clean", "-q", "-f", "-f", "-d"]);
         return;
     }
-    // A staged rename spans two paths — discarding either leg must undo both.
-    const { changes } = await changedFiles(dir, git);
+    // A staged rename spans two paths — discarding either leg must undo both. Renames only ever appear on the
+    // staged side (git detects them against HEAD), so that is the side to read `from` off.
+    const { staged } = await changedFiles(dir, git);
     const targets = new Set<string>(paths);
-    for (const change of changes) {
+    for (const change of staged) {
         if (change.from !== undefined && targets.has(change.path)) {
             targets.add(change.from);
         }
@@ -217,7 +252,9 @@ export const discardPaths = async (dir: string, paths: readonly string[] | undef
     } else {
         await git(dir, ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...list]);
     }
-    const after = (await changedFiles(dir, git)).changes.filter((change) => targets.has(change.path));
+    // Everything the targets still hold is now on the unstaged side (they were just unstaged), so that is the
+    // only list to consult: "added" there means untracked (delete it), anything else is tracked (restore it).
+    const after = (await changedFiles(dir, git)).unstaged.filter((change) => targets.has(change.path));
     const tracked = after.filter((change) => change.status !== "added").map((change) => change.path);
     const untracked = after.filter((change) => change.status === "added").map((change) => change.path);
     if (tracked.length > 0) {
@@ -228,52 +265,69 @@ export const discardPaths = async (dir: string, paths: readonly string[] | undef
     }
 };
 
-// Both sides of one changed file — the `ref` blob (HEAD for the working-tree review, a conversation's base
-// sha for the agents review) vs the working tree — with the same size/NUL guards as the history diff. The
-// route has already validated that `path` stays inside `dir` (resolveWithin).
-export const workingFileDiff = async (dir: string, path: string, ref: string, git: GitRunner = defaultGit): Promise<FileDiff> => {
-    let before: string | undefined;
-    let after: string | undefined;
-    let binary = false;
-    let truncated = false;
+// One side of a file diff: its text, or the flag that stands in for text we won't ship (oversized, binary).
+// An absent side is the empty object — that is how an added or deleted file reports the leg it doesn't have.
+interface DiffSide {
+    readonly text?: string;
+    readonly binary?: boolean;
+    readonly truncated?: boolean;
+}
+
+// A blob at a git rev-spec — `HEAD:path` for the commit, `:0:path` for the index (stage 0, the unambiguous
+// spelling; a conflicted path has no stage 0 and reads as absent). Same size/NUL guards as the history diff.
+const blobSide = async (dir: string, spec: string, git: GitRunner): Promise<DiffSide> => {
     try {
-        const size = Number((await git(dir, ["cat-file", "-s", `${ref}:${path}`])).stdout.trim());
+        const size = Number((await git(dir, ["cat-file", "-s", spec])).stdout.trim());
         if (size > MAX_FILE_DIFF_BYTES) {
-            truncated = true;
-        } else {
-            const content = (await git(dir, ["cat-file", "-p", `${ref}:${path}`])).stdout;
-            if (content.includes("\0")) {
-                binary = true;
-            } else {
-                before = content;
-            }
+            return { truncated: true };
         }
+        const content = (await git(dir, ["cat-file", "-p", spec])).stdout;
+        return content.includes("\0") ? { binary: true } : { text: content };
     } catch {
-        // Absent at `ref` (an added file) or an unborn ref — no before side.
+        // Absent at that spec (an added file, an unborn ref, a path not in the index) — no side.
     }
-    const abs = join(dir, path);
-    const size = await statWorkspaceFileSize(abs);
-    if (size !== undefined) {
-        if (size > MAX_FILE_DIFF_BYTES) {
-            truncated = true;
-        } else {
-            const content = await readWorkspaceFile(abs);
-            if (content !== undefined) {
-                if (content.includes("\0")) {
-                    binary = true;
-                } else {
-                    after = content;
-                }
-            }
-        }
-    }
-    return {
-        ...(before !== undefined ? { before } : {}),
-        ...(after !== undefined ? { after } : {}),
-        ...(binary ? { binary: true } : {}),
-        ...(truncated ? { truncated: true } : {}),
-    };
+    return {};
 };
+
+// The file as it sits on disk. The route has already validated that `path` stays inside `dir` (resolveWithin).
+const worktreeSide = async (abs: string): Promise<DiffSide> => {
+    const size = await statWorkspaceFileSize(abs);
+    if (size === undefined) {
+        return {};
+    }
+    if (size > MAX_FILE_DIFF_BYTES) {
+        return { truncated: true };
+    }
+    const content = await readWorkspaceFile(abs);
+    if (content === undefined) {
+        return {};
+    }
+    return content.includes("\0") ? { binary: true } : { text: content };
+};
+
+// Either side being binary or truncated makes the whole diff so — there is no half-renderable diff.
+const bothSides = (before: DiffSide, after: DiffSide): FileDiff => ({
+    ...(before.text !== undefined ? { before: before.text } : {}),
+    ...(after.text !== undefined ? { after: after.text } : {}),
+    ...(before.binary === true || after.binary === true ? { binary: true } : {}),
+    ...(before.truncated === true || after.truncated === true ? { truncated: true } : {}),
+});
+
+// The `ref` blob (a conversation's base sha for the agents review) vs the working tree — the cumulative diff,
+// which is the only one a worktree the user never checks out can offer.
+export const workingFileDiff = async (dir: string, path: string, ref: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
+    bothSides(await blobSide(dir, `${ref}:${path}`, git), await worktreeSide(join(dir, path)));
+
+// Index vs HEAD — exactly the diff a Staged row is listed under, and exactly what a bare `git commit` would
+// record. NOT HEAD↔worktree: for a partially staged file those are different diffs, which is the whole reason
+// the panel lists the two sides separately.
+export const stagedFileDiff = async (dir: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
+    bothSides(await blobSide(dir, `HEAD:${path}`, git), await blobSide(dir, `:0:${path}`, git));
+
+// Worktree vs index — the diff an unstaged row is listed under. An untracked file has no index entry, so it
+// reports no before side and renders as the addition it is.
+export const unstagedFileDiff = async (dir: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
+    bothSides(await blobSide(dir, `:0:${path}`, git), await worktreeSide(join(dir, path)));
 
 // The commit context-menu actions (VSCode "Git Graph" parity). GitActionResult ok/conflict is the shape the
 // sequence + HEAD-moving ops return; the non-destructive ref ops (branch/tag/checkout/reset) let git's own

@@ -38,7 +38,15 @@ import { type AttachOutcome, daemonUrlProblem, nameFromDaemonUrl, normalizeDaemo
  * That is the PROVISION lane. There is a second, one-step ATTACH lane for a user whose sandbox is already running
  * behind a domain of their own: they paste the address, the browser probes it (setupAttach.ts), and sandbox.attach
  * records it — no tunnel to provision, no command to run, no announce to wait for, so steps 2-4 never render.
- * `lane` decides which spine step 1 is the head of. */
+ * `lane` decides which spine step 1 is the head of.
+ *
+ * The two lanes SHARE their state rather than mirroring it. Everything a lane owns is genuinely lane-specific
+ * (the reachability target, the command, the sync opt-in vs. the domain and the probe outcome); everything about
+ * the sandbox itself — its `name` and its `created` row — is one value read by both. That is what makes a lane
+ * switch lossless in either direction at any point: a name typed before switching survives, and a row created by
+ * an attach whose probe passed but whose attach then failed continues as the provision lane's sandbox instead of
+ * being stranded. `targetKey` is gated on the lane for the same reason in reverse — minting is what buys the
+ * Cloudflare tunnel, and an attached sandbox is reached over the user's own domain, so it must not mint. */
 
 const sandbox = useSandbox();
 const router = useRouter();
@@ -93,8 +101,12 @@ const syncEnabled = ref(true);
 const syncDir = computed(() => (created.value ? syncFolder(created.value.name, created.value.id) : ``));
 
 // --- attach lane (step 1's one-step alternative) ---
-// Which spine step 1 heads: `provision` (name → reachability → run → wait, steps 2-4) or `attach` (paste the
-// domain the sandbox is ALREADY reachable at → verify → workspace), which finishes inside step 1 itself.
+// Which spine step 1 heads: `provision` (reachability → run → wait, steps 2-4) or `attach` (paste the domain
+// the sandbox is ALREADY reachable at → verify → workspace), which finishes inside step 1 itself.
+//
+// Both lanes work on the SAME `name` and the SAME `created` row — a sandbox's name and identity are facts about
+// the sandbox, not about how the user chose to reach it. Duplicating either into lane-local state is what makes
+// a lane switch lose typing, so there is deliberately no `attachName`/`attachRow` here.
 const lane = ref<"provision" | "attach">(`provision`);
 const domain = ref(``);
 // The connection token the daemon was started with, revealed only after a `needs-token` probe. Used for that
@@ -103,24 +115,21 @@ const domain = ref(``);
 const attachToken = ref(``);
 const attaching = ref(false);
 const attachOutcome = ref<AttachOutcome | undefined>(undefined);
-// The row an attach attempt minted (or the resumed one it carried in). Kept across a failed attempt so a retry
-// re-uses it instead of minting a second sandbox against the plan's quota.
-const attachRow = ref<SandboxSummary | null>(null);
-const attachName = ref(``);
 
 const normalizedDomain = computed(() => normalizeDaemonUrl(domain.value));
 const domainProblem = computed(() => daemonUrlProblem(domain.value));
-// The name a bare paste gets, so the attach lane asks for one input and nothing else; the field overrides it.
+// What a bare paste would be named, so the attach lane can ask for the domain and nothing else. It only ever
+// fills the field's PLACEHOLDER — a name the user actually typed (in either lane) always wins.
 const derivedName = computed(() => (normalizedDomain.value === undefined ? `` : nameFromDaemonUrl(normalizedDomain.value)));
-const attachedName = computed(() => (attachName.value.trim() === `` ? derivedName.value : attachName.value.trim()));
+const attachedName = computed(() => (name.value.trim() === `` ? derivedName.value : name.value.trim()));
 
-// Step 1 collapses to a summary once the sandbox exists — its title carries the name. The attach lane owns the
-// whole flow, so its title names the outcome rather than the step.
+// Step 1 collapses to a summary once the sandbox exists — its title carries the name — in both lanes: an
+// already-named row is why the attach lane stops asking for a name at all.
 const step1Title = computed(() => {
-    if (lane.value === `attach`) {
-        return `Connect your sandbox`;
+    if (created.value !== null) {
+        return resuming.value && lane.value === `provision` ? `Reconnect "${name.value}"` : `Sandbox: ${name.value}`;
     }
-    return resuming.value ? `Reconnect "${name.value}"` : created.value ? `Sandbox: ${name.value}` : `Name your sandbox`;
+    return lane.value === `attach` ? `Connect your sandbox` : `Name your sandbox`;
 });
 
 // Step 3 shows one command at a time; the preferred OS is a persisted singleton shared across screens.
@@ -144,9 +153,13 @@ const target = computed<SetupCodeTarget | undefined>(() => {
 // (resume → "create a new one instead") invalidates the previous mint instead of showing sandbox A's command
 // for sandbox B. The sync choice is deliberately NOT part of this — it rides the command, not the code, so
 // toggling it never re-mints.
+// The LANE is part of the gate, not just the inputs: minting is what provisions the intentic tunnel + DNS, and
+// an attached sandbox reaches the browser over the user's own domain — so a code minted while in the attach
+// lane would buy Cloudflare infrastructure nothing will ever dial. Undefined here also re-arms the mint when the
+// user comes back: the key changes from undefined to a real one, which is exactly what the watcher fires on.
 const targetKey = computed<string | undefined>(() => {
     const chosen = target.value;
-    if (chosen === undefined || created.value === null) {
+    if (chosen === undefined || created.value === null || lane.value === `attach`) {
         return undefined;
     }
     return `${created.value.id}:${chosen.mode === `intentic` ? `intentic` : `own:${chosen.zone}:${chosen.subdomain}`}`;
@@ -285,14 +298,16 @@ const connectDomain = async (): Promise<void> => {
         // The pasted token wins: it is the one the daemon is actually gating first-bind on. Otherwise present
         // the row's token (a resumed sandbox whose daemon was started from this account's own setup code).
         const pasted = attachToken.value.trim();
-        const connectToken = pasted !== `` ? pasted : attachRow.value?.token;
+        const connectToken = pasted !== `` ? pasted : created.value?.token;
         const outcome = await probeDaemon({ daemonUrl: url, idToken, ...(connectToken !== undefined ? { connectToken } : {}) });
         if (outcome.kind !== `ok`) {
             attachOutcome.value = outcome;
             return;
         }
-        const row = attachRow.value ?? (await sandbox.create(attachedName.value));
-        attachRow.value = row;
+        // Reuses the row when there already is one — a resumed sandbox, or one a previous attempt created whose
+        // attach then failed — so retrying never mints a second sandbox against the plan's quota.
+        const row = created.value ?? (await sandbox.create(attachedName.value));
+        created.value = row;
         await sandbox.attach(row.id, url);
         // Same milestone as the provision lane's announce — the user has a live sandbox in the workspace.
         track(`sandbox_connected`, { resuming: resuming.value, attached: true });
@@ -307,29 +322,14 @@ const connectDomain = async (): Promise<void> => {
     }
 };
 
-// Switch step 1 to the attach lane. A resumed sandbox (?sandbox=) carries into it: its row already exists, so
-// pointing it at a domain is the same one-step action — no second sandbox and no re-mint.
-const startAttach = (): void => {
-    lane.value = `attach`;
-    attachOutcome.value = undefined;
-    error.value = null;
-    if (created.value !== null) {
-        attachRow.value = created.value;
-        attachName.value = created.value.name;
-    }
-};
-
-// Back to the provision lane. A row minted by a half-finished attach is a real sandbox — carry it over as the
-// created one instead of stranding it behind a create form that would mint a second.
-const cancelAttach = (): void => {
-    lane.value = `provision`;
+// Flip which lane step 1 heads. Nothing is copied across because nothing is duplicated: the typed name and any
+// row already created stay exactly where they were, so a switch in either direction is lossless — including
+// back out of a half-finished attach, whose created row simply continues as the provision lane's sandbox.
+const setLane = (next: "provision" | "attach"): void => {
+    lane.value = next;
     attachOutcome.value = undefined;
     attachToken.value = ``;
     error.value = null;
-    if (attachRow.value !== null) {
-        created.value = attachRow.value;
-        name.value = attachRow.value.name;
-    }
 };
 
 // Mint the setup code for the chosen target (the intentic path provisions the tunnel + DNS server-side before
@@ -469,9 +469,9 @@ const startFresh = (): void => {
     setupError.value = undefined;
     subdomain.value = ``;
     derivedPrefix.value = ``;
-    // The attach lane's row IS the sandbox being abandoned — carrying it over would attach the next domain to it.
-    attachRow.value = null;
-    attachName.value = ``;
+    // The attach lane's inputs described the sandbox being abandoned — a stale domain would otherwise be sitting
+    // in the field, ready to be attached to whichever sandbox is created next.
+    domain.value = ``;
     attachToken.value = ``;
     attachOutcome.value = undefined;
     void router.replace({ path: `/setup` }); // drop ?sandbox= so a reload doesn't re-resume
@@ -548,8 +548,15 @@ watch(commandReady, (ready) => {
                 </span>
                 <div>
                     <h1 class="text-2xl font-semibold">Set up your workspace</h1>
+                    <!-- The promise has to match the lane: "a few minutes" and "use intentic's domain" describe
+                         work the attach lane doesn't do. -->
                     <p class="text-sm text-muted">
-                        A few minutes to a live sandbox — no Cloudflare account required. Use intentic's domain, or bring your own.
+                        <template v-if="lane === `attach`"
+                            >Point intentic at the sandbox you're already running. One address, and you're in.</template
+                        >
+                        <template v-else
+                            >A few minutes to a live sandbox — no Cloudflare account required. Use intentic's domain, or bring your own.</template
+                        >
                     </p>
                 </div>
                 <!-- Escape hatch for a returning user: they already own a sandbox, so /'s requireSetup guard
@@ -567,8 +574,14 @@ watch(commandReady, (ready) => {
             </header>
 
             <!-- Step 1: name + create the sandbox (collapses to a summary once created), or — in the attach
-                 lane — the entire setup: one address for a sandbox that is already running and reachable. -->
-            <StepSection :step="1" :done="lane === `provision` && created !== null" :title="step1Title">
+                 lane — the entire setup: one address for a sandbox that is already running and reachable.
+                 The attach lane drops the "1" badge: it is the whole flow, not the first of four. -->
+            <StepSection
+                :step="lane === `provision` ? 1 : undefined"
+                :icon="lane === `attach` ? `link` : undefined"
+                :done="lane === `provision` && created !== null"
+                :title="step1Title"
+            >
                 <template v-if="lane === `attach`">
                     <p class="text-xs text-muted">
                         Already running the sandbox container behind a domain of your own? Give us the address it answers on — we'll check it, then
@@ -586,7 +599,15 @@ watch(commandReady, (ready) => {
                                 :class="cmp.input('w-full font-mono')"
                                 @keydown.enter="connectDomain"
                             />
-                            <Button label="Connect" :loading="attaching" :disabled="normalizedDomain === undefined" @click="connectDomain">
+                            <!-- `attaching` is in the disabled expression, not left to the loading prop: the
+                                 theme defines no disabled tokens, so a busy button would otherwise look and
+                                 feel live while a probe is in flight. -->
+                            <Button
+                                label="Connect"
+                                :loading="attaching"
+                                :disabled="attaching || normalizedDomain === undefined"
+                                @click="connectDomain"
+                            >
                                 <template #icon><Icon name="link" /></template>
                             </Button>
                         </div>
@@ -598,18 +619,25 @@ watch(commandReady, (ready) => {
                         <span v-else class="text-xs text-muted">The https address your sandbox already answers on — https:// is optional.</span>
                     </label>
 
-                    <!-- Only a switcher label, so it defaults off the domain rather than blocking the paste. -->
-                    <label class="ui-field">
+                    <!-- The SAME `name` the create form binds, so switching lanes never loses what was typed.
+                         Only a switcher label here, so the domain fills the placeholder rather than blocking the
+                         paste. Hidden once the row exists (resumed, or created by an earlier attempt) — that
+                         sandbox is already named, and the step title says so. -->
+                    <label v-if="created === null" class="ui-field">
                         <span class="ui-field-label">Name</span>
                         <input
-                            v-model="attachName"
+                            v-model="name"
                             autocomplete="off"
                             spellcheck="false"
                             :placeholder="derivedName === `` ? `e.g. work, staging, my-laptop` : derivedName"
                             :class="cmp.input('w-full font-mono')"
                             @keydown.enter="connectDomain"
                         />
-                        <span class="text-xs text-muted">Just so you can tell it apart in the switcher.</span>
+                        <span class="text-xs text-muted">
+                            Just so you can tell it apart in the switcher<template v-if="derivedName !== ``">
+                                — defaults to <span class="font-mono">{{ derivedName }}</span></template
+                            >.
+                        </span>
                     </label>
 
                     <!-- Each probe failure names the one thing the user can do about it. -->
@@ -618,6 +646,22 @@ watch(commandReady, (ready) => {
                         <span class="text-2xs opacity-80">
                             Check the sandbox is running and the domain points at it. If you set <code>WEB_ORIGIN</code> on the daemon, it has to be
                             this app's address — otherwise your browser blocks the call before it's sent.
+                        </span>
+                    </div>
+                    <div v-else-if="attachOutcome?.kind === `timeout`" :class="cmp.alertDanger('flex flex-col gap-1')">
+                        <span>That address accepted the connection but never answered.</span>
+                        <span class="text-2xs opacity-80">
+                            Something is listening, but it isn't replying — a sandbox still starting up, or a proxy pointed at the wrong port. Give it
+                            a moment and try again.
+                        </span>
+                    </div>
+                    <!-- The tunnel/proxy is alive but has no sandbox behind it — overwhelmingly the case when a
+                         resumed sandbox's container is gone, so name that instead of quoting a 530. -->
+                    <div v-else-if="attachOutcome?.kind === `no-origin`" :class="cmp.alertDanger('flex flex-col gap-1')">
+                        <span>That domain is live, but no sandbox is running behind it.</span>
+                        <span class="text-2xs opacity-80">
+                            Its tunnel or reverse proxy answered {{ attachOutcome.status }} with nothing to forward to. Start the sandbox
+                            container<template v-if="created !== null">, or get a domain from intentic and run the install command instead</template>.
                         </span>
                     </div>
                     <template v-else-if="attachOutcome?.kind === `needs-token`">
@@ -652,8 +696,10 @@ watch(commandReady, (ready) => {
                     <div v-else-if="attachOutcome?.kind === `rejected`" :class="cmp.alertDanger()">{{ attachOutcome.message }}</div>
 
                     <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
-                    <button type="button" class="self-start text-xs text-muted underline hover:text-content" @click="cancelAttach">
-                        ← Set one up for me instead
+                    <!-- With a row already in hand, going back CONTINUES that sandbox through steps 2-4 rather
+                         than setting a new one up — the label has to say which of the two it is. -->
+                    <button type="button" class="self-start text-xs text-muted underline hover:text-content" @click="setLane(`provision`)">
+                        {{ created === null ? `← Set one up for me instead` : `← Get a domain from intentic instead` }}
                     </button>
                 </template>
                 <template v-else-if="created === null">
@@ -684,31 +730,35 @@ watch(commandReady, (ready) => {
                         <div v-if="error" :class="cmp.alertDanger()">{{ error }}</div>
                         <!-- The one-step lane, kept to a single line: it costs the common path nothing and the
                              user who needs it is looking for exactly these words. -->
-                        <button type="button" class="self-start text-xs text-link hover:underline" @click="startAttach">
+                        <button type="button" class="self-start text-xs text-link hover:underline" @click="setLane(`attach`)">
                             Already running a sandbox somewhere? Connect it by domain →
                         </button>
                     </template>
                 </template>
-                <template v-else-if="resuming">
-                    <p class="text-xs text-muted">
-                        This sandbox still exists on the platform — the CLI cleanup only cleared its local container. Reconnect it below to start a
-                        fresh daemon<template v-if="!atLimit">, or create a new sandbox instead</template>.
-                    </p>
-                    <!-- Free-at-limit: the honest alternative is upgrading, not a create form that 402s. -->
-                    <button
-                        v-if="atLimit"
-                        type="button"
-                        class="self-start text-xs text-muted underline hover:text-content"
-                        @click="upgradeOpen = true"
-                    >
-                        Need another sandbox? Upgrade to Pro
-                    </button>
-                    <button v-else type="button" class="self-start text-xs text-muted underline hover:text-content" @click="startFresh">
-                        Not this one? Create a new sandbox instead
-                    </button>
-                    <!-- A resumed sandbox may already be running somewhere the platform never heard from (a
-                         daemon with no PLATFORM_URL). Attaching points THIS row at it — no second sandbox. -->
-                    <button type="button" class="self-start text-xs text-link hover:underline" @click="startAttach">
+                <template v-else>
+                    <template v-if="resuming">
+                        <p class="text-xs text-muted">
+                            This sandbox still exists on the platform — the CLI cleanup only cleared its local container. Reconnect it below to start
+                            a fresh daemon<template v-if="!atLimit">, or create a new sandbox instead</template>.
+                        </p>
+                        <!-- Free-at-limit: the honest alternative is upgrading, not a create form that 402s. -->
+                        <button
+                            v-if="atLimit"
+                            type="button"
+                            class="self-start text-xs text-muted underline hover:text-content"
+                            @click="upgradeOpen = true"
+                        >
+                            Need another sandbox? Upgrade to Pro
+                        </button>
+                        <button v-else type="button" class="self-start text-xs text-muted underline hover:text-content" @click="startFresh">
+                            Not this one? Create a new sandbox instead
+                        </button>
+                    </template>
+                    <!-- Offered from EVERY created state, not just a resumed one: the realisation that this
+                         sandbox is already running somewhere the platform never heard from (a daemon with no
+                         PLATFORM_URL) arrives just as often while staring at step 3's install command. Attaching
+                         points THIS row at the domain — it never mints a second sandbox. -->
+                    <button type="button" class="self-start text-xs text-link hover:underline" @click="setLane(`attach`)">
                         Already reachable at a domain? Connect it →
                     </button>
                 </template>

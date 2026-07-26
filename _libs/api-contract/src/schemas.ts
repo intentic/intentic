@@ -26,16 +26,23 @@ import {
     MarketplacePluginSchema,
     MarketplaceSchema,
     PanelSummarySchema,
+    PushConfigSchema,
     RepoAppSchema,
     SandboxSettingsSchema,
     ServiceKindSchema,
+    AgentChangesSchema,
+    AgentRepoChangesSchema,
     FileDiffSchema,
     GitActionResultSchema,
+    GitDiffSideSchema,
+    GitBranchesSchema,
+    GitBranchSchema,
     GitChangeSchema,
     GitChangesSchema,
     GitCommitDiffSchema,
     GitCommitSchema,
     GitLogSchema,
+    GitRemoteStateSchema,
     GitReposSchema,
     RepoChangesSchema,
     SnapshotChangeSchema,
@@ -101,6 +108,7 @@ export {
     MarketplaceSchema,
     PanelsListSchema,
     PanelSummarySchema,
+    PushConfigSchema,
     RepoAppSchema,
     SandboxSettingsSchema,
     ServiceEntrySchema,
@@ -198,6 +206,8 @@ export type SnapshotChange = z.infer<typeof SnapshotChangeSchema>;
 export type SnapshotDiffResponse = z.infer<typeof SnapshotDiffSchema>;
 // Shared by the snapshot file diff and the working-tree (Changes review) file diff.
 export type FileDiffResponse = z.infer<typeof FileDiffSchema>;
+// Which of the working tree's two diffs a Changes row opens — index-vs-HEAD or worktree-vs-index.
+export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
 
 // The Changes review (uncommitted work per repo, VSCode-SCM style).
 export type GitChange = z.infer<typeof GitChangeSchema>;
@@ -208,6 +218,15 @@ export type GitLogResponse = z.infer<typeof GitLogSchema>;
 export type GitCommitDiffResponse = z.infer<typeof GitCommitDiffSchema>;
 export type GitReposResponse = z.infer<typeof GitReposSchema>;
 export type GitActionResult = z.infer<typeof GitActionResultSchema>;
+// Web push: the VAPID public key a browser subscribes with, plus whether THIS browser is already registered.
+export type PushConfig = z.infer<typeof PushConfigSchema>;
+// Remote sync + branch management (the Changes panel's sync bar and the graph's branch switcher).
+export type GitRemoteState = z.infer<typeof GitRemoteStateSchema>;
+export type GitBranch = z.infer<typeof GitBranchSchema>;
+export type GitBranchesResponse = z.infer<typeof GitBranchesSchema>;
+// The per-agent worktree review — one flat change set per repo, NOT the working tree's staged/unstaged shape.
+export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
+export type AgentChangesResponse = z.infer<typeof AgentChangesSchema>;
 
 // ---- platform-native (owned by the platform; NOT daemon wire shapes) ----
 

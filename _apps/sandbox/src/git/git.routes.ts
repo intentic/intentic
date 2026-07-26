@@ -118,9 +118,16 @@ export const createGitRoutes = (services: Services) => {
             candidates.map(async (candidate): Promise<RepoChanges | undefined> => {
                 try {
                     await healPointer(candidate.repo, candidate.dir);
-                    const { branch, changes } = await services.git.changedFiles(candidate.dir);
-                    if (changes.length > 0) {
-                        return { repo: candidate.repo, ...(branch !== undefined ? { branch } : {}), changes };
+                    // The change scan and the remote read are independent (the latter never touches the index)
+                    // — one round-trip for both. `remote` is what the panel's sync bar renders per repo.
+                    const [{ branch, staged, unstaged }, remote] = await Promise.all([
+                        services.git.changedFiles(candidate.dir),
+                        services.git.remoteState(candidate.dir),
+                    ]);
+                    // A repo with a clean tree still belongs in the response when it is ahead of or behind its
+                    // upstream — there is real work to sync, which is exactly what the panel must not hide.
+                    if (staged.length > 0 || unstaged.length > 0 || remote.ahead > 0 || remote.behind > 0) {
+                        return { repo: candidate.repo, ...(branch !== undefined ? { branch } : {}), staged, unstaged, remote };
                     }
                     return undefined;
                 } catch (error) {
@@ -129,7 +136,7 @@ export const createGitRoutes = (services: Services) => {
                     // in the response. Debug, not warn: while a dropped repo's .git lands this fires on every poll
                     // and the client is already being told.
                     services.logger.debug({ err: error, repo: candidate.repo }, "git changes: repo unscannable");
-                    return { repo: candidate.repo, changes: [], error: scanFailure(error) };
+                    return { repo: candidate.repo, staged: [], unstaged: [], error: scanFailure(error) };
                 }
             }),
         );
@@ -162,10 +169,13 @@ export const createGitRoutes = (services: Services) => {
 
     return {
         changes: i.changes.handler(coalescedScan),
+        // One row's own diff. The side is the row's side, not a convenience: for a partially staged file
+        // HEAD↔worktree matches neither list, so opening it from either row would show a diff the panel never
+        // claimed. The agents review keeps its own ref-vs-worktree route — a worktree has no index to split.
         fileDiff: i.fileDiff.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
             guardRepoPath(dir, input.path);
-            return services.git.fileDiff(dir, input.path, "HEAD");
+            return input.side === "staged" ? services.git.stagedFileDiff(dir, input.path) : services.git.unstagedFileDiff(dir, input.path);
         }),
         // The git-history graph: every workspace repo (for the tree affordance + the graph's switcher), one
         // repo's commit log, and lazy per-commit detail. "root" is implicit for the switcher; discoverRepos
@@ -225,14 +235,71 @@ export const createGitRoutes = (services: Services) => {
             guarded(input.repo, `before rebase ${input.sha.slice(0, 8)}`, (dir) => services.git.rebaseOnto(dir, input.sha, AGENT_GIT_AUTHOR)),
         ),
         status: i.status.handler(async ({ input }) => services.git.status(await repoDir(input.repo))),
+        // Two commit shapes, both whole-repo (see CommitSchema): `all` stages every change first, otherwise the
+        // index is recorded as it stands. No path-scoped variant — staging is how the user chooses.
         commit: i.commit.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
             const committed =
-                input.paths !== undefined
-                    ? await services.git.commitPaths(dir, input.message, input.paths, AGENT_GIT_AUTHOR)
-                    : await services.git.commitAll(dir, input.message, AGENT_GIT_AUTHOR);
+                input.all === true
+                    ? await services.git.commitAll(dir, input.message, AGENT_GIT_AUTHOR)
+                    : await services.git.commitIndex(dir, input.message, AGENT_GIT_AUTHOR);
             invalidateScan();
             return { committed };
+        }),
+        // Index-only moves: the worktree is untouched, so no checkpoint and no history notification — only the
+        // panel's view of what's staged changes.
+        stage: i.stage.handler(async ({ input }) => {
+            await services.git.stagePaths(await repoDir(input.repo), input.paths);
+            invalidateScan();
+            return { ok: true } as const;
+        }),
+        unstage: i.unstage.handler(async ({ input }) => {
+            await services.git.unstagePaths(await repoDir(input.repo), input.paths);
+            invalidateScan();
+            return { ok: true } as const;
+        }),
+        branches: i.branches.handler(async ({ input }) => ({ branches: await services.git.listBranches(await repoDir(input.repo)) })),
+        // Creating a branch is non-destructive UNLESS it also checks out — that moves HEAD and the worktree,
+        // so it takes the same pre-action checkpoint every HEAD-mover does.
+        createBranchAt: i.createBranchAt.handler(async ({ input }) => {
+            const dir = await repoDir(input.repo);
+            if (input.checkout === true) {
+                await services.history.snapshot("user", `before new branch ${input.name}`);
+            }
+            await services.git.createBranch(dir, input.name, input.start, input.checkout === true);
+            if (input.checkout === true) {
+                invalidateScan();
+                services.history.notifyUserWrite();
+            }
+            return { ok: true } as const;
+        }),
+        // Deleting a branch touches no file. git refuses an unmerged branch without `force`; that error
+        // propagates so the UI can offer the deliberate retry rather than the daemon deciding for the user.
+        deleteBranch: i.deleteBranch.handler(async ({ input }) => {
+            await services.git.deleteBranch(await repoDir(input.repo), input.name, input.force === true);
+            return { ok: true } as const;
+        }),
+        // Remote sync. Each returns a GitActionResult, so "no remote" / "no upstream" / "won't fast-forward"
+        // arrive as reasons the panel renders instead of 500s. Only pull can change the worktree, so only pull
+        // checkpoints and refreshes.
+        remote: i.remote.handler(async ({ input }) => services.git.remoteState(await repoDir(input.repo))),
+        fetch: i.fetch.handler(async ({ input }) => {
+            const result = await services.git.fetchRemote(await repoDir(input.repo));
+            if (result.ok) {
+                // Fetch moves no file, but it does move ahead/behind — which the Changes response carries.
+                invalidateScan();
+            }
+            return result;
+        }),
+        pull: i.pull.handler(async ({ input }) => {
+            const dir = await repoDir(input.repo);
+            await services.history.snapshot("user", "before pull");
+            const result = await services.git.pullRemote(dir);
+            if (result.ok) {
+                invalidateScan();
+                services.history.notifyUserWrite();
+            }
+            return result;
         }),
         discard: i.discard.handler(async ({ input }) => {
             await services.git.discardPaths(await repoDir(input.repo), input.paths);
@@ -242,8 +309,12 @@ export const createGitRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         push: i.push.handler(async ({ input }) => {
-            await services.git.push(await repoDir(input.repo), input.branch);
-            return { ok: true } as const;
+            const result = await services.git.pushBranch(await repoDir(input.repo), input.branch !== undefined ? { branch: input.branch } : {});
+            if (result.ok) {
+                // Push changes nothing locally except ahead/behind, which rides the Changes response.
+                invalidateScan();
+            }
+            return result;
         }),
         files: i.files.handler(async ({ input }) => ({ files: await services.git.listFiles(await repoDir(input.repo)) })),
         readFile: i.readFile.handler(async ({ input }) => {

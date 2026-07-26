@@ -88,10 +88,6 @@ export const gitCommitAll = async (
     return true;
 };
 
-export const gitPush = async (dir: string, branch: string, git: GitRunner = defaultGit): Promise<void> => {
-    await git(dir, ["push", "origin", `HEAD:${branch}`]);
-};
-
 // Detached checkout of any ref — branch, tag, or commit sha — after a full clone (a shallow clone can't reach
 // an arbitrary sha, so clones that may be ref-pinned stay full).
 export const gitCheckout = async (dir: string, ref: string, git: GitRunner = defaultGit): Promise<void> => {
@@ -119,8 +115,9 @@ export type GitSyncResult =
 
 // Bring `dir` up to its upstream, but only when that's safe: fetch origin, then fast-forward ONLY a clean tree
 // that is strictly behind. A dirty tree (agent mid-edit), unpushed local commits (diverged), or a detached /
-// upstream-less checkout are left exactly as-is and reported — sync never clobbers work. Fetch auth rides on the
-// same remote gitPush uses, so wherever push works this works. Git errors (e.g. an unreachable remote) propagate;
+// upstream-less checkout are left exactly as-is and reported — sync never clobbers work. Fetch auth rides on
+// `origin` just as the daemon's push does, so wherever push works this works. Git errors (e.g. an unreachable
+// remote) propagate;
 // the turn-level caller (syncWorkspaceRepos) catches per-repo so one repo can't fail the turn.
 export const gitSync = async (dir: string, git: GitRunner = defaultGit): Promise<GitSyncResult> => {
     const remotes = (await git(dir, ["remote"])).stdout.split("\n").map((line) => line.trim());

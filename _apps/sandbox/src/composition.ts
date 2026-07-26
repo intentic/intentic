@@ -4,8 +4,10 @@ import type {
     AcpAgentConfig,
     AgentEvent,
     FileDiff,
+    GitBranch,
     GitChange,
     GitCommit,
+    GitRemoteState,
     IntenticLine,
     WorkspaceChildren,
     WorkspaceTree,
@@ -20,7 +22,6 @@ import {
     gitHead,
     gitInit,
     gitListFiles,
-    gitPush,
     gitStatus,
     gitSync,
 } from "@intentic/scaffold";
@@ -55,8 +56,8 @@ import {
     cherryPick,
     commitChanges,
     commitFileDiff,
+    commitIndex,
     commitLog,
-    commitPaths,
     createBranchAt,
     createTagAt,
     discardPaths,
@@ -65,8 +66,14 @@ import {
     rebaseOnto,
     resetTo,
     revertCommit,
+    stagePaths,
+    stagedFileDiff,
+    unstagePaths,
+    unstagedFileDiff,
     workingFileDiff,
 } from "./git/changes.js";
+import { createBranch, deleteBranch, listBranches } from "./git/branches.js";
+import { fetchRemote, pullRemote, pushBranch, remoteState } from "./git/remote.js";
 import { type GeminiCatalog, createGeminiCatalog } from "./gemini/gemini-catalog.js";
 import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
@@ -76,6 +83,8 @@ import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
 import { createPreviewRouteEnsurer } from "./panels/preview-route.js";
+import { type PushStore, filePushStore } from "./push/push-store.js";
+import { createPushSender, type PushSender } from "./push/push.js";
 import { type PortForwards, createPortForwards } from "./ports/port-forwards.js";
 import { type ListeningPort, scanListeningPorts } from "./ports/port-scan.js";
 import {
@@ -156,6 +165,12 @@ export interface Services {
     // Per-sandbox agent settings (.intentic/settings.json) — /settings edits it; streamAgent reads it to gate
     // per-turn agent behavior (iq plugin, hashline tools, output cleaning, prompt stability).
     readonly sandboxSettings: SandboxSettingsStore;
+    // Web-push state: this sandbox's VAPID keypair + one entry per subscribed browser. On the HISTORY volume,
+    // outside the agent's reach, because the private key can forge notifications to the owner's devices.
+    readonly push: PushStore;
+    // Sends those notifications. `notifyIfAway` (the turn/approval triggers) is suppressed while anyone is
+    // actively watching; `notify` (the settings test button) always fires.
+    readonly pushSender: PushSender;
     // Claude subscription accounts (one <id>.json per account under .intentic/claude), several per sandbox.
     readonly claudeStore: ClaudeStore;
     // The latest usage-window snapshot per Claude account (historyRoot/claude-usage.json). streamAgent records
@@ -212,16 +227,31 @@ export interface Services {
         readonly status: (dir: string) => Promise<GitStatus>;
         readonly listFiles: (dir: string) => Promise<string[]>;
         readonly commitAll: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;
-        readonly push: (dir: string, branch: string) => Promise<void>;
         readonly clone: (parentDir: string, name: string, cloneUrl: string, options?: GitCloneOptions) => Promise<void>;
         readonly checkout: (dir: string, ref: string) => Promise<void>;
         readonly head: (dir: string) => Promise<string>;
         readonly sync: (dir: string) => Promise<GitSyncResult>;
-        // The Changes review verbs (git/changes.ts): working-tree status, per-path commit/discard, HEAD↔worktree diff.
-        readonly changedFiles: (dir: string) => Promise<{ branch?: string; changes: GitChange[] }>;
-        readonly commitPaths: (dir: string, message: string, paths: readonly string[], author: { name: string; email: string }) => Promise<boolean>;
+        // The Changes review verbs (git/changes.ts): working-tree status split into the index and worktree sides,
+        // the index moves, the two whole-repo commit shapes, per-path discard, and the per-side file diffs.
+        readonly changedFiles: (dir: string) => Promise<{ branch?: string; staged: GitChange[]; unstaged: GitChange[] }>;
+        readonly stagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
+        readonly unstagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
+        readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;
         readonly discardPaths: (dir: string, paths?: readonly string[]) => Promise<void>;
-        // `ref` is the before side: HEAD for the working-tree review, a conversation's base sha for the agents review.
+        // Branches (git/branches.ts) and the remote (git/remote.ts). The remote verbs return an ActionResult
+        // because "no remote"/"no upstream"/"won't fast-forward" are ordinary outcomes, not exceptions.
+        readonly listBranches: (dir: string) => Promise<GitBranch[]>;
+        readonly createBranch: (dir: string, name: string, start: string | undefined, checkout: boolean) => Promise<void>;
+        readonly deleteBranch: (dir: string, name: string, force: boolean) => Promise<void>;
+        readonly remoteState: (dir: string) => Promise<GitRemoteState>;
+        readonly fetchRemote: (dir: string) => Promise<ActionResult>;
+        readonly pullRemote: (dir: string) => Promise<ActionResult>;
+        readonly pushBranch: (dir: string, options: { branch?: string }) => Promise<ActionResult>;
+        // The working tree's two diffs, one per side the Changes panel lists — a partially staged file has two
+        // of them, and HEAD↔worktree is neither. `fileDiff`'s `ref` is the before side for the AGENTS review,
+        // whose worktree has no index to split (a conversation's recorded base sha).
+        readonly stagedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
+        readonly unstagedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
         readonly fileDiff: (dir: string, path: string, ref: string) => Promise<FileDiff>;
         readonly changesAgainstBase: (dir: string, base: string) => Promise<GitChange[]>;
         // The git-history graph (read-only): one repo's commit log across all refs, and lazy per-commit detail
@@ -337,6 +367,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // same runner, so both must share one instance (and its `visible` gate).
     const terminalRun = createTerminalRunner();
     const acpConnections = createAcpConnections(logger, terminalRun);
+    // Hoisted: the store and the sender that reads it must be the same instance, or a subscription added
+    // through the routes would be invisible to the next send.
+    const pushStore = filePushStore(join(config.historyRoot, "push.json"));
 
     return {
         config,
@@ -359,6 +392,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         drafts: fileDraftsStore(join(workspace.root, ".intentic", "drafts")),
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(join(workspace.root, ".intentic", "settings.json")),
+        push: pushStore,
+        pushSender: createPushSender(pushStore, logger),
         claudeStore,
         claudeUsage: fileClaudeUsageStore(join(config.historyRoot, "claude-usage.json")),
         claudeModels: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
@@ -389,14 +424,24 @@ export const createServices = (config: Config, logger: Logger): Services => {
             status: gitStatus,
             listFiles: gitListFiles,
             commitAll: gitCommitAll,
-            push: gitPush,
             clone: gitClone,
             checkout: gitCheckout,
             head: gitHead,
             sync: gitSync,
             changedFiles,
-            commitPaths,
+            stagePaths,
+            unstagePaths,
+            commitIndex,
             discardPaths,
+            listBranches,
+            createBranch,
+            deleteBranch,
+            remoteState,
+            fetchRemote,
+            pullRemote,
+            pushBranch,
+            stagedFileDiff,
+            unstagedFileDiff,
             fileDiff: workingFileDiff,
             changesAgainstBase,
             commitLog,

@@ -437,19 +437,38 @@ export const IntenticRunSchema = z.object({ args: z.array(z.string()) });
 
 // ---- git ----
 
+// What a commit records — two shapes, each a real git spelling:
+//   all: true   ⇒ stage every change in the repo, then commit (`commit -a`; VSCode's "stage all and commit")
+//   absent      ⇒ commit whatever is staged (plain `git commit`)
+//
+// There is deliberately no `paths`. The index IS git's mechanism for choosing what a commit contains, so a
+// second path-selection channel alongside it can only disagree with it: a `commit --only` over a partially
+// staged file records the WORKTREE content while the row the user picked showed the INDEX content. Staging is
+// the selection; this endpoint only ever records it.
 export const CommitSchema = RepoParamSchema.extend({
     message: z.string().min(1),
-    // Repo-relative paths to commit; absent ⇒ commit everything changed in the repo.
-    paths: z.array(z.string().min(1)).max(500).optional(),
+    all: z.boolean().optional(),
 });
 export const DiscardSchema = RepoParamSchema.extend({
     // Repo-relative paths to discard; absent ⇒ discard every uncommitted change in the repo.
     paths: z.array(z.string().min(1)).max(500).optional(),
 });
-export const PushSchema = RepoParamSchema.extend({ branch: z.string().min(1) });
+// Index moves. Both are per-path and never touch the worktree, so they are always safe and need no checkpoint.
+export const GitStageSchema = RepoParamSchema.extend({ paths: z.array(z.string().min(1)).max(500) });
+// `branch` defaults to the checked-out one. There is deliberately no "set upstream" flag: the daemon publishes
+// (`push -u`) exactly when the branch has no upstream yet, which is never destructive and is the only way the
+// result is coherent — see pushBranch.
+export const PushSchema = RepoParamSchema.extend({ branch: z.string().min(1).optional() });
 export const GitFileQuerySchema = RepoParamSchema.extend({ path: z.string().min(1) });
 export const GitFileWriteSchema = RepoParamSchema.extend({ path: z.string().min(1), content: z.string() });
-export const GitFileDiffQuerySchema = RepoParamSchema.extend({ path: z.string().min(1) });
+// Which of the working tree's two diffs to open — the same split the Changes panel lists under. A path that
+// is staged AND edited again has two genuinely different diffs, so the side is required rather than defaulted:
+// a caller that doesn't say which one it means doesn't know what it is showing.
+//   staged   ⇒ index vs HEAD      (what a bare `git commit` would record)
+//   unstaged ⇒ worktree vs index  (untracked ⇒ no before side)
+export const GitDiffSideSchema = z.enum(["staged", "unstaged"]);
+export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
+export const GitFileDiffQuerySchema = RepoParamSchema.extend({ path: z.string().min(1), side: GitDiffSideSchema });
 export const GitStatusSchema = z.object({ branch: z.string(), dirty: z.boolean(), files: z.array(z.string()) });
 export const GitFilesSchema = z.object({ files: z.array(z.string()) });
 export const GitFileSchema = z.object({ path: z.string(), content: z.string() });
@@ -466,22 +485,90 @@ export const GitChangeSchema = z.object({
     deletions: z.number().optional(),
 });
 export type GitChange = z.infer<typeof GitChangeSchema>;
+
+// Where a repo's checked-out branch stands against its remote. Every field is optional-or-zero because every
+// one of them is legitimately absent in a healthy repo: no remote configured yet, a branch created locally and
+// never pushed, a detached HEAD. `ahead` = commits only we have; `behind` = commits only the upstream has,
+// which is meaningful only as of the last fetch — the panel's Fetch button is what refreshes it.
+export const GitRemoteStateSchema = z.object({
+    // The remote this branch pushes to: its OWN remote when it tracks one, else the first `git remote` lists
+    // (where a never-pushed branch would publish). Those differ in a fork — `origin` and `upstream` both
+    // configured — and pushing to the wrong one succeeds while leaving `ahead` stuck. Absent ⇒ no remote.
+    remote: z.string().optional(),
+    // The checked-out branch; absent on a detached HEAD or an unborn repo.
+    branch: z.string().optional(),
+    // The tracking ref ("origin/main"); absent ⇒ this branch has no upstream, so the next push publishes it.
+    upstream: z.string().optional(),
+    ahead: z.number(),
+    behind: z.number(),
+});
+export type GitRemoteState = z.infer<typeof GitRemoteStateSchema>;
+
+// A ref name (branch/tag), validated structurally — git enforces the rest of ref-name legality itself.
+const RefNameSchema = z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/)
+    .max(200);
+
+// One local branch, for the switcher. `at` is its tip's committer time in ms (the list sorts newest-first).
+export const GitBranchSchema = z.object({
+    name: z.string(),
+    current: z.boolean(),
+    upstream: z.string().optional(),
+    ahead: z.number(),
+    behind: z.number(),
+    // The configured upstream no longer exists on the remote (a merged PR's deleted branch) — distinct from
+    // "no upstream", and the signal that this local branch is safe to delete.
+    gone: z.boolean().optional(),
+    at: z.number(),
+});
+export type GitBranch = z.infer<typeof GitBranchSchema>;
+export const GitBranchesSchema = z.object({ branches: z.array(GitBranchSchema) });
+// Create at `start` (a sha or ref; absent ⇒ HEAD); `checkout` switches to it immediately (`git switch -c`).
+export const GitBranchCreateAtSchema = RepoParamSchema.extend({
+    name: RefNameSchema,
+    start: z.string().min(1).optional(),
+    checkout: z.boolean().optional(),
+});
+// `force` is the deliberate retry after git refuses to drop an unmerged branch.
+export const GitBranchDeleteSchema = RepoParamSchema.extend({ name: RefNameSchema, force: z.boolean().optional() });
+
 export const RepoChangesSchema = z.object({
     // The {repo} param the per-repo git routes accept: "root" or a repo id (its root-relative dir).
     repo: z.string(),
     // Absent on an unborn HEAD (a repo initialized but never committed).
     branch: z.string().optional(),
-    changes: z.array(GitChangeSchema),
+    // The two sides git actually models, kept apart because a path can appear on BOTH with different statuses
+    // (a staged edit that was then edited again — the classic `MM`). `staged` is index-vs-HEAD: exactly what a
+    // bare `git commit` would record. `unstaged` is worktree-vs-index plus untracked files. Each side's
+    // additions/deletions describe the diff it is listed under, never a conflation of the two.
+    staged: z.array(GitChangeSchema),
+    unstaged: z.array(GitChangeSchema),
+    // Where this repo stands against its remote; `ahead`/`behind` are 0 with no remote or no upstream.
+    remote: GitRemoteStateSchema.optional(),
     // Why the repo could not be scanned at all, condensed to git's own one-line reason ("fatal: bad object HEAD").
     // A repo left torn by a canceled or failed upload used to be dropped from the response entirely, so it just
-    // vanished from the panel with nothing to act on; it now arrives with empty `changes` and this set instead.
+    // vanished from the panel with nothing to act on; it now arrives with empty change lists and this set instead.
     error: z.string().optional(),
 });
 export type RepoChanges = z.infer<typeof RepoChangesSchema>;
-// The aggregated review set across every repo (root + every discovered repo); a repo appears when it has changes
-// or when it failed to scan.
+// The aggregated review set across every repo (root + every discovered repo); a repo appears when it has changes,
+// when it is out of sync with its remote, or when it failed to scan.
 export const GitChangesSchema = z.object({ repos: z.array(RepoChangesSchema) });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
+
+// An agent conversation-worktree's delta vs its recorded base — deliberately NOT RepoChanges. There is no index
+// side to speak of here: the question a fleet review answers is "what would landing bring into the main tree",
+// which is one flat set. Sharing the working-tree shape would have forced a meaningless empty `staged` on every
+// row and invited the panel to render a staging affordance that cannot work on a worktree the user never checks out.
+export const AgentRepoChangesSchema = z.object({
+    repo: z.string(),
+    branch: z.string().optional(),
+    changes: z.array(GitChangeSchema),
+});
+export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
+export const AgentChangesSchema = z.object({ repos: z.array(AgentRepoChangesSchema) });
+export type AgentChanges = z.infer<typeof AgentChangesSchema>;
 
 // ---- git history graph (the "Git Graph" view over a repo's real commits) ----
 // A hex sha (full or git-abbreviated): the only shape the graph ever sends back, so the per-commit routes
@@ -524,11 +611,8 @@ export const GitCommitFileDiffQuerySchema = RepoParamSchema.extend({ sha: ShaSch
 // merge / rebase / drop) add or replay commits and are auto-checkpointed daemon-side; a conflict aborts and
 // reports `ok:false` (an expected outcome, not a throw). Checkout and reset move HEAD (reset --hard discards
 // the worktree) — also auto-checkpointed. A `{repo, sha}` names the target commit for every commit-scoped
-// action; a ref name (branch/tag) is validated structurally, git enforces the rest of ref-name legality.
-const RefNameSchema = z
-    .string()
-    .regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/)
-    .max(200);
+// action; a ref name (branch/tag) is validated structurally, git enforces the rest of ref-name legality
+// (RefNameSchema is declared above, with the branch schemas that first use it).
 export const GitBranchCreateSchema = RepoParamSchema.extend({ sha: ShaSchema, name: RefNameSchema });
 export const GitTagCreateSchema = RepoParamSchema.extend({ sha: ShaSchema, name: RefNameSchema });
 export const GitCheckoutSchema = RepoParamSchema.extend({ ref: RefNameSchema });
@@ -1660,3 +1744,43 @@ export const PresenceReportSchema = z.object({
     path: z.string().optional(),
 });
 export type PresenceReport = z.infer<typeof PresenceReportSchema>;
+
+// ---- push: web-push notifications to the owner's devices ----
+// The daemon is the only tier that knows what the agent is doing, so it is the sender. Subscriptions are
+// per-BROWSER (the endpoint is minted by that browser's push service — Google's, Mozilla's, Apple's), which
+// is why they live here and not on the platform: the platform is off the command path and would have to be
+// told about every turn to be useful.
+
+// A browser's PushSubscription, in the exact shape `web-push` consumes — the browser produces it via
+// PushManager.subscribe() and the client posts it back verbatim, so the daemon never reshapes it.
+export const PushSubscriptionSchema = z.object({
+    endpoint: z.string().url(),
+    keys: z.object({
+        // The client's public key and auth secret for payload encryption (RFC 8291). Opaque base64url here.
+        p256dh: z.string().min(1),
+        auth: z.string().min(1),
+    }),
+});
+export type PushSubscription = z.infer<typeof PushSubscriptionSchema>;
+
+// What the service worker renders. `url` is the in-app route the notification opens (the click handler
+// focuses an existing tab there rather than spawning a new one); `tag` collapses repeats — a second
+// "waiting on you" for the same conversation REPLACES the first instead of stacking.
+export const PushNotificationSchema = z.object({
+    title: z.string().min(1),
+    body: z.string(),
+    url: z.string().optional(),
+    tag: z.string().optional(),
+    // Whether the notification stays on screen until dismissed. Set for the "agent is blocked on you" cases,
+    // where a notification that auto-dismisses is a request that silently went unanswered.
+    requireInteraction: z.boolean().optional(),
+});
+export type PushNotification = z.infer<typeof PushNotificationSchema>;
+
+// The VAPID public key a browser needs to subscribe, plus whether this browser's endpoint is already known —
+// so the settings toggle can render its true state instead of trusting the browser's permission alone (a
+// granted permission with no server-side row would notify nothing).
+export const PushConfigSchema = z.object({ publicKey: z.string(), subscribed: z.boolean() });
+export const PushEndpointSchema = z.object({ endpoint: z.string().url() });
+// `endpoint` identifies which browser is asking, so `subscribed` can be answered for THIS one.
+export const PushConfigQuerySchema = z.object({ endpoint: z.string().url().optional() });

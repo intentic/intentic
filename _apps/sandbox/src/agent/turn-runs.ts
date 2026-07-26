@@ -14,6 +14,19 @@ import { recordCommands } from "./agent-commands.js";
 // agent.routes (and swappable in tests).
 export type TurnFn = (input: AgentTurn, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
 
+// The two moments in a turn's life where the operator might want to be told, reported to whoever started the
+// run. Deliberately narrow and copy-free: this module knows WHEN a turn parks or settles, and nothing about
+// how that should read on a lock screen — agent.routes owns the wording (and the decision to send at all).
+// Both are fire-and-forget; an observer that throws must never affect the turn, so the pump guards them.
+export interface TurnObserver {
+    // The agent has stopped and is waiting for the user: a plan to approve, a question to answer, a tool
+    // permission to grant. May fire several times in one turn.
+    readonly awaiting: (kind: "plan" | "question" | "permission") => void;
+    // The run reached its end, exactly once. `error` is set only for a genuine failure — an abort via
+    // /agent/stop settles as a clean "done", because the user who pressed stop knows how it ended.
+    readonly settled: (outcome: { readonly ok: boolean; readonly error?: string }) => void;
+}
+
 const RETAIN_MS = 5 * 60_000;
 
 export class TurnRun {
@@ -92,7 +105,7 @@ const sweep = (): void => {
 // the client serializes its own turns, so a live run means another window/device is mid-turn). The pump owns
 // the generator: a thrown turn is folded into the log as an error frame (an abort — /agent/stop — as a clean
 // done), so followers always see the run settle.
-export function startTurnRun(turnFn: TurnFn, input: AgentTurn & { conversationId: string }): TurnRun | undefined {
+export function startTurnRun(turnFn: TurnFn, input: AgentTurn & { conversationId: string }, observer?: TurnObserver): TurnRun | undefined {
     sweep();
     const existing = runs.get(input.conversationId);
     if (existing !== undefined && !existing.done) {
@@ -101,13 +114,35 @@ export function startTurnRun(turnFn: TurnFn, input: AgentTurn & { conversationId
     const run = new TurnRun(input.prompt);
     runs.set(input.conversationId, run);
     const provider = input.agent ?? "claude";
+    // An observer is an optional side-channel, so it must be unable to break the turn — a throw from a
+    // notification hook cannot be allowed to abort a run that is otherwise fine.
+    const tell = (report: (target: TurnObserver) => void): void => {
+        if (observer === undefined) {
+            return;
+        }
+        try {
+            report(observer);
+        } catch {
+            // Nothing to do and nowhere to report it: the turn is the thing that matters.
+        }
+    };
     void (async () => {
+        // Set by the error frame below (or by a provider emitting one mid-stream), read once at settle.
+        let failure: string | undefined;
         try {
             for await (const event of turnFn(input, undefined)) {
                 // Every provider republishes its slash commands each turn; cache the latest so a conversation
                 // that hasn't run one yet still has a populated `/` popover (see agent-commands.ts).
                 if (event.kind === "commands") {
                     recordCommands(provider, event.items);
+                }
+                // The three frames that park the turn on the user. They keep the run's fetch open, so from the
+                // outside it still looks "live" — which is exactly why they need their own signal.
+                if (event.kind === "plan" || event.kind === "question" || event.kind === "permission") {
+                    tell((target) => target.awaiting(event.kind));
+                }
+                if (event.kind === "error") {
+                    failure = event.message;
                 }
                 run.push(event);
             }
@@ -116,11 +151,13 @@ export function startTurnRun(turnFn: TurnFn, input: AgentTurn & { conversationId
             // name, not instanceof: Node's DOMException AbortError does not inherit from Error.
             const aborted = typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError";
             if (!aborted) {
-                run.push({ kind: "error", message: error instanceof Error ? error.message : "agent turn failed" });
+                failure = error instanceof Error ? error.message : "agent turn failed";
+                run.push({ kind: "error", message: failure });
             }
             run.push({ kind: "done" });
         } finally {
             run.finish();
+            tell((target) => target.settled(failure === undefined ? { ok: true } : { ok: false, error: failure }));
         }
     })();
     return run;

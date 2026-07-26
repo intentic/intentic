@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { Cron } from "croner";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { Services } from "../composition.js";
+import { automationPending } from "../push/notifications.js";
 import type { AutomationRecord } from "./automations-store.js";
 
 const execFileAsync = promisify(execFile);
@@ -98,6 +99,9 @@ export const fireAutomation = async (
                         ...(automation.trigger.kind === "listener" ? { provider: automation.trigger.provider } : {}),
                     })
                     .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
+                // A held wake goes nowhere until the owner acts, and nothing else will tell them — an
+                // automation fires precisely when they are not looking. notifyIfAway keeps it quiet if they are.
+                void services.pushSender.notifyIfAway(automationPending(automation.id, automation.prompt));
                 return;
             }
         }

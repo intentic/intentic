@@ -12,20 +12,31 @@ import {
     cherryPick,
     commitChanges,
     commitFileDiff,
+    commitIndex,
     commitLog,
-    commitPaths,
     createBranchAt,
     createTagAt,
     discardPaths,
     dropCommit,
     resetTo,
     revertCommit,
+    stagePaths,
+    stagedFileDiff,
+    unstagePaths,
+    unstagedFileDiff,
     workingFileDiff,
 } from "./changes.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 const author = { name: "intentic", email: "agent@intentic.dev" };
+
+// For assertions that only care whether the tree is dirty at all — which side a change landed on is the
+// subject of the dedicated tests above, not of every discard/branch case.
+const bothSides = async (dir: string): Promise<unknown[]> => {
+    const { staged, unstaged } = await changedFiles(dir);
+    return [...staged, ...unstaged];
+};
 
 const tempDirs: string[] = [];
 afterEach(async () => {
@@ -58,13 +69,39 @@ test("changedFiles maps porcelain states, expands untracked dirs, and skips igno
     await writeFile(join(dir, "new", "b.txt"), "b\n"); // untracked, inside an untracked dir
     await writeFile(join(dir, ".env"), "SECRET=x\n"); // ignored
 
-    const { branch, changes } = await changedFiles(dir);
+    const { branch, staged, unstaged } = await changedFiles(dir);
     expect(branch).not.toBe("");
-    // Tracked changes carry numstat line counts (one diff vs HEAD); the untracked file has none (no HEAD blob).
-    expect(changes).toContainEqual({ path: "a.txt", status: "modified", additions: 1, deletions: 1 });
-    expect(changes).toContainEqual({ path: "old.txt", status: "deleted", additions: 0, deletions: 1 });
-    expect(changes).toContainEqual({ path: "new/b.txt", status: "added" });
-    expect(changes.some((change) => change.path.includes(".env"))).toBe(false);
+    // Nothing was `git add`ed, so every change is on the worktree side and the index side is empty.
+    expect(staged).toEqual([]);
+    // Tracked changes carry numstat line counts; the untracked file has none (no blob on either side).
+    expect(unstaged).toContainEqual({ path: "a.txt", status: "modified", additions: 1, deletions: 1 });
+    expect(unstaged).toContainEqual({ path: "old.txt", status: "deleted", additions: 0, deletions: 1 });
+    expect(unstaged).toContainEqual({ path: "new/b.txt", status: "added" });
+    expect(unstaged.some((change) => change.path.includes(".env"))).toBe(false);
+});
+
+test("changedFiles reports a partially staged file on BOTH sides, with each side's own line counts", async () => {
+    const dir = await tempRepo(); // a.txt = "one"
+    await writeFile(join(dir, "a.txt"), "two\n");
+    await sh(dir, "add", "a.txt"); // index now holds "two"
+    await writeFile(join(dir, "a.txt"), "three\n"); // worktree has moved on again — the classic `MM`
+
+    const { staged, unstaged } = await changedFiles(dir);
+    // The whole point of the split: one path, two different diffs, each with counts describing ITS diff.
+    // The old single-list shape had to pick one and reported a stat that matched neither.
+    expect(staged).toEqual([{ path: "a.txt", status: "modified", additions: 1, deletions: 1 }]);
+    expect(unstaged).toEqual([{ path: "a.txt", status: "modified", additions: 1, deletions: 1 }]);
+});
+
+test("changedFiles puts an added-then-staged file on the staged side only", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "fresh.txt"), "hello\n");
+    await sh(dir, "add", "fresh.txt");
+
+    const { staged, unstaged } = await changedFiles(dir);
+    expect(staged).toEqual([{ path: "fresh.txt", status: "added", additions: 1, deletions: 0 }]);
+    // It is no longer untracked, and the worktree matches the index — nothing left unstaged.
+    expect(unstaged).toEqual([]);
 });
 
 test("commitLog returns commits newest-first with parents, refs, and the HEAD flag", async () => {
@@ -133,7 +170,7 @@ test("createBranchAt points a new branch at a commit without moving HEAD or the 
     await createBranchAt(dir, "feature/x", root);
     expect(await sh(dir, "rev-parse", "feature/x")).toBe(root);
     expect(await sh(dir, "rev-parse", "HEAD")).toBe(headBefore); // HEAD unmoved
-    expect((await changedFiles(dir)).changes).toEqual([]); // worktree clean
+    expect(await bothSides(dir)).toEqual([]); // worktree clean
     // A duplicate name is git's error, surfaced by rejection (the route lets it propagate).
     await expect(createBranchAt(dir, "feature/x", root)).rejects.toThrow();
 });
@@ -168,7 +205,7 @@ test("revertCommit reports a conflict cleanly instead of leaving the worktree mi
     expect(result).toEqual({ ok: false, reason: "conflict" });
     // Aborted: no revert left in progress, worktree clean at "three".
     expect(existsSync(join(dir, ".git", "REVERT_HEAD"))).toBe(false);
-    expect((await changedFiles(dir)).changes).toEqual([]);
+    expect(await bothSides(dir)).toEqual([]);
 });
 
 test("createTagAt tags a commit", async () => {
@@ -233,18 +270,20 @@ test("dropCommit removes a commit, replaying later ones onto its parent", async 
 test("changedFiles reports a staged rename with its original path", async () => {
     const dir = await tempRepo();
     await sh(dir, "mv", "a.txt", "b.txt");
-    const { changes } = await changedFiles(dir);
-    // A pure rename moves no lines — numstat reports 0/0 (rename detection on).
-    expect(changes).toEqual([{ path: "b.txt", status: "renamed", from: "a.txt", additions: 0, deletions: 0 }]);
+    const { staged, unstaged } = await changedFiles(dir);
+    // `git mv` stages the rename, so it is an INDEX-side change — git only detects renames against HEAD.
+    // A pure rename moves no lines: numstat reports 0/0 (rename detection on).
+    expect(staged).toEqual([{ path: "b.txt", status: "renamed", from: "a.txt", additions: 0, deletions: 0 }]);
+    expect(unstaged).toEqual([]);
 });
 
 test("changedFiles leaves a binary file's counts undefined", async () => {
     const dir = await tempRepo();
     await writeFile(join(dir, "blob.bin"), Buffer.from([0, 1, 2, 0, 4]));
     await sh(dir, "add", "-A");
-    const { changes } = await changedFiles(dir);
+    const { staged } = await changedFiles(dir);
     // Git's numstat prints "-\t-" for a binary file; both counts stay undefined (the UI shows no stat).
-    expect(changes).toEqual([{ path: "blob.bin", status: "added" }]);
+    expect(staged).toEqual([{ path: "blob.bin", status: "added" }]);
 });
 
 test("changedFiles treats everything as added on an unborn HEAD", async () => {
@@ -252,29 +291,74 @@ test("changedFiles treats everything as added on an unborn HEAD", async () => {
     tempDirs.push(dir);
     await sh(dir, "init", "-q");
     await writeFile(join(dir, "a.txt"), "one\n");
-    expect((await changedFiles(dir)).changes).toEqual([{ path: "a.txt", status: "added" }]);
+    // Untracked, so it is unstaged — there is no index entry yet.
+    expect((await changedFiles(dir)).unstaged).toEqual([{ path: "a.txt", status: "added" }]);
+
+    // Staging it on an unborn HEAD must still report it: the index is diffed against the EMPTY TREE, not
+    // against a HEAD that does not exist, so a repo composing its very first commit is not reported as clean.
+    await sh(dir, "add", "a.txt");
+    const afterStage = await changedFiles(dir);
+    expect(afterStage.staged).toEqual([{ path: "a.txt", status: "added", additions: 1, deletions: 0 }]);
+    expect(afterStage.unstaged).toEqual([]);
 });
 
-test("commitPaths commits exactly the requested paths — deletions included — and resets stale staged state", async () => {
+test("commitIndex commits what is staged and leaves unstaged work untouched", async () => {
     const dir = await tempRepo();
-    await writeFile(join(dir, "picked.txt"), "picked\n");
-    await writeFile(join(dir, "left.txt"), "left\n");
-    await rm(join(dir, "a.txt"));
-    // An agent-staged leftover must not ride along with the picked paths.
-    await sh(dir, "add", "left.txt");
+    await writeFile(join(dir, "ready.txt"), "ready\n");
+    await writeFile(join(dir, "later.txt"), "later\n");
+    await sh(dir, "add", "ready.txt");
 
-    expect(await commitPaths(dir, "pick two", ["picked.txt", "a.txt"], author)).toBe(true);
-    expect(await sh(dir, "log", "-1", "--format=%s %an")).toBe("pick two intentic");
-    expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).not.toContain("a.txt");
-    const { changes } = await changedFiles(dir);
-    // commitPaths reset the index, so the stale staged left.txt is untracked again — no numstat vs HEAD.
-    expect(changes).toEqual([{ path: "left.txt", status: "added" }]);
+    expect(await commitIndex(dir, "staged only", author)).toBe(true);
+    expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).toContain("ready.txt");
+    const { staged, unstaged } = await changedFiles(dir);
+    expect(staged).toEqual([]);
+    expect(unstaged).toEqual([{ path: "later.txt", status: "added" }]);
 });
 
-test("commitPaths is a no-op false when the paths hold nothing to commit", async () => {
+test("commitIndex is a no-op false when nothing is staged, even with a dirty worktree", async () => {
     const dir = await tempRepo();
-    expect(await commitPaths(dir, "nothing", ["a.txt"], author)).toBe(false);
+    await writeFile(join(dir, "loose.txt"), "loose\n");
+    expect(await commitIndex(dir, "nothing staged", author)).toBe(false);
     expect(await sh(dir, "log", "--format=%s")).toBe("init");
+});
+
+test("stagePaths and unstagePaths move a path between the two sides without touching the worktree", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "a.txt"), "two\n");
+
+    await stagePaths(dir, ["a.txt"]);
+    const afterStage = await changedFiles(dir);
+    expect(afterStage.staged.map((change) => change.path)).toEqual(["a.txt"]);
+    expect(afterStage.unstaged).toEqual([]);
+
+    await unstagePaths(dir, ["a.txt"]);
+    const afterUnstage = await changedFiles(dir);
+    expect(afterUnstage.staged).toEqual([]);
+    expect(afterUnstage.unstaged.map((change) => change.path)).toEqual(["a.txt"]);
+    // The edit itself survived both moves — staging is an index operation, never a worktree one.
+    expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("two\n");
+});
+
+test("stagePaths stages a deletion, which a bare `git add` would skip", async () => {
+    const dir = await tempRepo();
+    await rm(join(dir, "a.txt"));
+    await stagePaths(dir, ["a.txt"]);
+    expect((await changedFiles(dir)).staged).toEqual([{ path: "a.txt", status: "deleted", additions: 0, deletions: 1 }]);
+});
+
+test("unstagePaths on an unborn HEAD returns the file to untracked instead of failing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "intentic-changes-"));
+    tempDirs.push(dir);
+    await sh(dir, "init", "-q");
+    await writeFile(join(dir, "a.txt"), "one\n");
+    await stagePaths(dir, ["a.txt"]);
+
+    // There is no HEAD to `reset` against — the index entry is dropped instead.
+    await unstagePaths(dir, ["a.txt"]);
+    const { staged, unstaged } = await changedFiles(dir);
+    expect(staged).toEqual([]);
+    expect(unstaged).toEqual([{ path: "a.txt", status: "added" }]);
+    expect(existsSync(join(dir, "a.txt"))).toBe(true);
 });
 
 test("discardPaths restores a tracked file, deletes an untracked one, and leaves the rest alone", async () => {
@@ -286,7 +370,7 @@ test("discardPaths restores a tracked file, deletes an untracked one, and leaves
     await discardPaths(dir, ["a.txt", "junk.txt"]);
     expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("one\n");
     expect(existsSync(join(dir, "junk.txt"))).toBe(false);
-    expect((await changedFiles(dir)).changes).toEqual([{ path: "kept.txt", status: "added" }]);
+    expect(await bothSides(dir)).toEqual([{ path: "kept.txt", status: "added" }]);
 });
 
 test("discardPaths undoes both legs of a staged rename from either path", async () => {
@@ -295,7 +379,7 @@ test("discardPaths undoes both legs of a staged rename from either path", async 
     await discardPaths(dir, ["b.txt"]);
     expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("one\n");
     expect(existsSync(join(dir, "b.txt"))).toBe(false);
-    expect((await changedFiles(dir)).changes).toEqual([]);
+    expect(await bothSides(dir)).toEqual([]);
 });
 
 test("discardPaths without paths discards everything but ignored files survive", async () => {
@@ -309,7 +393,7 @@ test("discardPaths without paths discards everything but ignored files survive",
     expect(await readFile(join(dir, "a.txt"), "utf8")).toBe("one\n");
     expect(existsSync(join(dir, "junk.txt"))).toBe(false);
     expect(await readFile(join(dir, ".env"), "utf8")).toBe("SECRET=x\n");
-    expect((await changedFiles(dir)).changes).toEqual([]);
+    expect(await bothSides(dir)).toEqual([]);
 });
 
 test("workingFileDiff ships both sides, one side for added/deleted, and flags binary", async () => {
@@ -325,6 +409,47 @@ test("workingFileDiff ships both sides, one side for added/deleted, and flags bi
 
     await writeFile(join(dir, "blob.bin"), Buffer.from([0, 1, 2]));
     expect(await workingFileDiff(dir, "blob.bin", "HEAD")).toEqual({ binary: true });
+});
+
+test("the two side diffs of a partially staged file are genuinely different — and neither is HEAD↔worktree", async () => {
+    const dir = await tempRepo(); // a.txt = "one"
+    await writeFile(join(dir, "a.txt"), "two\n");
+    await sh(dir, "add", "a.txt"); // index holds "two"
+    await writeFile(join(dir, "a.txt"), "three\n"); // worktree moved on again
+
+    // What a bare commit would record: HEAD → index.
+    expect(await stagedFileDiff(dir, "a.txt")).toEqual({ before: "one\n", after: "two\n" });
+    // What is still loose: index → worktree.
+    expect(await unstagedFileDiff(dir, "a.txt")).toEqual({ before: "two\n", after: "three\n" });
+    // The old single diff, which the panel used to open from BOTH rows: it matches neither list.
+    expect(await workingFileDiff(dir, "a.txt", "HEAD")).toEqual({ before: "one\n", after: "three\n" });
+});
+
+test("side diffs report the leg an added or deleted file doesn't have", async () => {
+    const dir = await tempRepo();
+    // Untracked: no index entry, so the unstaged diff has no before side and the staged diff has nothing at all.
+    await writeFile(join(dir, "fresh.txt"), "fresh\n");
+    expect(await unstagedFileDiff(dir, "fresh.txt")).toEqual({ after: "fresh\n" });
+    expect(await stagedFileDiff(dir, "fresh.txt")).toEqual({});
+
+    // Staged as new: now it is the staged side that has an after and no before.
+    await sh(dir, "add", "fresh.txt");
+    expect(await stagedFileDiff(dir, "fresh.txt")).toEqual({ after: "fresh\n" });
+    // Index and worktree agree, so the unstaged diff is a no-change pair rather than an absence.
+    expect(await unstagedFileDiff(dir, "fresh.txt")).toEqual({ before: "fresh\n", after: "fresh\n" });
+
+    // Staged deletion: a before side and no after.
+    await rm(join(dir, "a.txt"));
+    await stagePaths(dir, ["a.txt"]);
+    expect(await stagedFileDiff(dir, "a.txt")).toEqual({ before: "one\n" });
+});
+
+test("either side being binary flags the whole diff", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "blob.bin"), Buffer.from([0, 1, 2]));
+    await sh(dir, "add", "blob.bin");
+    expect(await stagedFileDiff(dir, "blob.bin")).toEqual({ binary: true });
+    expect(await unstagedFileDiff(dir, "blob.bin")).toEqual({ binary: true });
 });
 
 test("workingFileDiff against a fixed base sees committed work as changed", async () => {

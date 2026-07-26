@@ -21,6 +21,7 @@ import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
+import { turnAwaiting, turnFinished } from "../push/notifications.js";
 import { delegationNote } from "./delegation.js";
 
 // The upstream model id a routed turn (codex/grok under the Claude Code harness) hands the translator, which maps
@@ -663,7 +664,18 @@ export const createAgentRoutes = (services: Services) => {
             if (input.conversationId === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "conversationId required" });
             }
-            const run = startTurnRun((turn, signal) => streamAgent(services, turn, signal), { ...input, conversationId: input.conversationId });
+            const conversationId = input.conversationId;
+            // Push notifications ride the run's lifecycle, not this request's: the point is to reach a user
+            // whose tab is asleep or closed, which is exactly when nobody is reading the response. Every send
+            // goes through notifyIfAway, so a user watching the turn finish is told nothing.
+            const run = startTurnRun(
+                (turn, signal) => streamAgent(services, turn, signal),
+                { ...input, conversationId },
+                {
+                    awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),
+                    settled: (outcome) => void services.pushSender.notifyIfAway(turnFinished(conversationId, input.prompt, outcome)),
+                },
+            );
             if (run === undefined) {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
             }

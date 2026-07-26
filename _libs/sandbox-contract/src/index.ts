@@ -17,6 +17,7 @@ import { kimiContract } from "./contracts/kimi.contract.js";
 import { logsContract } from "./contracts/logs.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
+import { pushContract } from "./contracts/push.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
@@ -44,6 +45,7 @@ export { kimiContract } from "./contracts/kimi.contract.js";
 export { logsContract } from "./contracts/logs.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
+export { pushContract } from "./contracts/push.contract.js";
 export { secretsContract } from "./contracts/secrets.contract.js";
 export { sessionsContract } from "./contracts/sessions.contract.js";
 export { settingsContract } from "./contracts/settings.contract.js";
@@ -85,6 +87,7 @@ export const sandboxContract = {
     logs: logsContract,
     panels: panelsContract,
     ports: portsContract,
+    push: pushContract,
     secrets: secretsContract,
     system: systemContract,
     translator: translatorContract,
