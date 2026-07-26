@@ -613,11 +613,18 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                         </div>
 
                         <template v-for="change in section.changes" :key="`${group.repo}/${section.side}/${change.path}`">
-                            <!-- A selected row keeps its highlight without hover, so a multi-selection stays
-                                 visible while you reach for the action that will apply to all of it. -->
+                            <!-- Selection is the explorer's own primary tint (WorkspaceTree's .treerow-on), NOT the
+                                 overlay: the overlay IS this list's hover colour, so a selected row was drawn
+                                 exactly like whichever row the pointer happened to sit on — which made the click
+                                 read as doing nothing, and a multi-selection invisible. Hover keeps its own step
+                                 above the selected tint, so a selected row still answers the pointer. -->
                             <div
-                                class="group/file flex items-center gap-1 rounded transition-colors hover:bg-overlay"
-                                :class="{ 'bg-overlay': isSelected({ repo: group.repo, side: section.side, path: change.path }) }"
+                                class="group/file flex items-center gap-1 rounded transition-colors"
+                                :class="
+                                    isSelected({ repo: group.repo, side: section.side, path: change.path })
+                                        ? 'bg-primary-500/15 hover:bg-primary-500/25'
+                                        : 'hover:bg-overlay'
+                                "
                             >
                                 <button
                                     type="button"

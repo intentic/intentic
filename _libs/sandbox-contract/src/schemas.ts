@@ -574,14 +574,22 @@ export type RepoChanges = z.infer<typeof RepoChangesSchema>;
 export const GitChangesSchema = z.object({ repos: z.array(RepoChangesSchema) });
 export type GitChanges = z.infer<typeof GitChangesSchema>;
 
+// One file an agent touched, plus whether that change is ALREADY in the main tree. The review lists the
+// agent's CUMULATIVE output (base → worktree), not just the not-yet-landed remainder, because landing is not
+// the end of the review: a clean turn auto-lands within milliseconds, and a list scoped to the remainder shows
+// the user an empty panel for work they never got to look at. `landed` is what still separates the two — the
+// remainder is what "Land now" would apply, and the panel filters on exactly this flag.
+export const AgentChangeSchema = GitChangeSchema.extend({ landed: z.boolean() });
+export type AgentChange = z.infer<typeof AgentChangeSchema>;
+
 // An agent conversation-worktree's delta vs its recorded base — deliberately NOT RepoChanges. There is no index
-// side to speak of here: the question a fleet review answers is "what would landing bring into the main tree",
-// which is one flat set. Sharing the working-tree shape would have forced a meaningless empty `staged` on every
+// side to speak of here: the question a fleet review answers is "what did this agent write", which is one flat
+// set. Sharing the working-tree shape would have forced a meaningless empty `staged` on every
 // row and invited the panel to render a staging affordance that cannot work on a worktree the user never checks out.
 export const AgentRepoChangesSchema = z.object({
     repo: z.string(),
     branch: z.string().optional(),
-    changes: z.array(GitChangeSchema),
+    changes: z.array(AgentChangeSchema),
 });
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
 export const AgentChangesSchema = z.object({ repos: z.array(AgentRepoChangesSchema) });

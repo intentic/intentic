@@ -29,6 +29,7 @@ const {
     openPlanPreview,
     editAndResend,
     streaming: conversationStreaming,
+    awaitingDecision,
 } = useChat();
 const { mobile } = useDevice();
 
@@ -83,15 +84,6 @@ const toggleThinking = (): void => {
     thinkingOverride.value = !isThinkingOpen.value;
 };
 
-// A pending card is the one case where the turn is still streaming (its fetch stays open) but the user's
-// attention is required — the card itself is the prompt, so the loader must yield to it.
-const awaitingUser = computed(
-    () =>
-        props.message.plan?.status === `pending` ||
-        props.message.question?.status === `pending` ||
-        props.message.permission?.status === `pending`,
-);
-
 // The permission card's header line: the bridge's own rendered prompt sentence, else its short noun phrase,
 // else the bare tool name — so the card reads like Claude Code's prompt rather than a raw tool dump.
 const permissionTitle = computed(() => {
@@ -105,8 +97,15 @@ const permissionTitle = computed(() => {
 // Keep the loader visible for the whole live turn, not just before the first token. The model streams a
 // preamble sentence and then goes quiet while it runs tools and thinks — text is present but the turn isn't
 // done. Anchored at the bottom of the assistant stack, the loader tells the user work is still in flight;
-// it disappears only when streaming ends or a plan/question card takes over the prompt.
-const showTyping = computed(() => props.streaming && !awaitingUser.value);
+// it disappears only when streaming ends or a card takes over the prompt.
+//
+// A pending card is the one case where the turn is still streaming (its fetch stays open) while nothing is
+// being computed — the card is the prompt, so the loader must yield to it. Read the CONVERSATION's flag, not
+// this message's own cards: a card parks the whole turn but hangs on whichever bubble was current when it
+// arrived, which isn't always the bubble the loader trails (a plan nulls the turn's bubble, so later frames
+// open a fresh one below the card). Per-message, that left "Scheming… (107s)" ticking under a permission
+// prompt the agent was already blocked on.
+const showTyping = computed(() => props.streaming && !awaitingDecision.value);
 
 // Cycling status-word loader shown while the turn streams: tick once a second so the word cycles (every ~2s)
 // and the elapsed counter advances; torn down as soon as streaming stops.
@@ -403,6 +402,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     }}</span>
                     <span v-if="message.plan.status === 'approved'" class="text-2xs font-medium text-success">✓ Approved</span>
                     <span v-else-if="message.plan.status === 'rejected'" class="text-2xs font-medium text-muted">✕ Kept planning</span>
+                    <span v-else-if="message.plan.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Stopped</span>
                     <button
                         type="button"
                         class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"
@@ -505,6 +505,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     <span v-if="message.permission.status === 'allowed'" class="text-2xs font-medium text-success">✓ Allowed</span>
                     <span v-else-if="message.permission.status === 'always'" class="text-2xs font-medium text-success">✓ Always allowed</span>
                     <span v-else-if="message.permission.status === 'denied'" class="text-2xs font-medium text-muted">✕ Denied</span>
+                    <span v-else-if="message.permission.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Stopped</span>
                 </div>
 
                 <div class="flex flex-col gap-1 px-3.5 py-3">

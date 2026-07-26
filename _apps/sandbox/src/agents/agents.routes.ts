@@ -1,4 +1,4 @@
-import { agentsContract, type AgentRepoChanges } from "@intentic/sandbox-contract";
+import { agentsContract, type AgentChange, type AgentRepoChanges } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
@@ -43,17 +43,28 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        // The review shows the NOT-YET-LANDED remainder (`landedTip ?? base` → worktree) — empty in steady
-        // state, since clean turn completions auto-land; non-empty only after a conflict or an aborted turn.
+        // The review shows the agent's CUMULATIVE output (`base` → worktree), so work stays inspectable after
+        // it lands — which is the normal case, clean turn completions auto-landing within ms of finishing.
+        // What landing changes is per-file: a second pass from `landedTip` names the remainder still waiting
+        // for "Land now" (everything, when nothing has landed yet), and every other file is flagged `landed`.
         diff: i.diff.handler(async ({ input }) => {
             const entry = entryOf(input.id);
             const repos: AgentRepoChanges[] = [];
             for (const { repo, base, landedTip } of entry.repos) {
                 try {
-                    const changes = await services.git.changesAgainstBase(services.agentWorktrees.worktreeDir(entry.id, repo), landedTip ?? base);
-                    if (changes.length > 0) {
-                        repos.push({ repo, branch: entry.branch, changes });
+                    const worktree = services.agentWorktrees.worktreeDir(entry.id, repo);
+                    const changes = await services.git.changesAgainstBase(worktree, base);
+                    if (changes.length === 0) {
+                        continue;
                     }
+                    const pending =
+                        landedTip === undefined
+                            ? new Set(changes.map((change) => change.path))
+                            : new Set((await services.git.changesAgainstBase(worktree, landedTip)).map((change) => change.path));
+                    // Object.assign, not a spread: `changes` is this call's own freshly-parsed array, so the
+                    // flag goes onto the objects that are about to be serialized and nothing is copied.
+                    const flagged = changes.map((change): AgentChange => Object.assign(change, { landed: !pending.has(change.path) }));
+                    repos.push({ repo, branch: entry.branch, changes: flagged });
                 } catch (error) {
                     // One broken worktree (mid-repair, deleted dir) must not 500 the whole review.
                     services.logger.warn({ err: error, repo, id: entry.id }, "agents diff: repo skipped");
@@ -61,6 +72,9 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return { repos };
         }),
+        // Against `base`, matching the list: one row means one question — "what did this agent do to this
+        // file" — and its answer must not change the moment the work lands. (Diffing from `landedTip` would
+        // silently empty out every already-landed row.)
         fileDiff: i.fileDiff.handler(async ({ input }) => {
             const entry = entryOf(input.id);
             const composed = entry.repos.find((repo) => repo.repo === input.repo);
@@ -71,7 +85,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (resolveWithin(dir, input.path) === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
             }
-            return services.git.fileDiff(dir, input.path, composed.landedTip ?? composed.base);
+            return services.git.fileDiff(dir, input.path, composed.base);
         }),
         // Manual land — the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input }) => {

@@ -385,8 +385,22 @@ const canSend = computed(() => {
     }
     return true;
 });
-const sendHint = computed(() =>
-    pendingPlanMessage.value ? `Send as feedback (keep planning)` : streaming.value ? `Send to the running turn` : `Send`,
+const sendHint = computed(() => {
+    if (pendingPlanMessage.value) {
+        return `Send as feedback (keep planning)`;
+    }
+    // A question / permission card IS the input surface while it's open — say so, rather than leaving a
+    // disabled button that reads as "Send" and does nothing.
+    if (streaming.value && awaitingDecision.value) {
+        return `Answer the request above, or stop the turn`;
+    }
+    return streaming.value ? `Send to the running turn` : `Send`;
+});
+// Stop is offered for every live turn, including one parked on a card — that state is the most common reason to
+// want out (a permission the user won't grant, a plan they'd rather restate from scratch), and until now the
+// card's own buttons were the only way forward. Name the consequence there: the parked request goes with it.
+const stopHint = computed(() =>
+    awaitingDecision.value ? `Stop the turn — discards the request above` : mobile.value ? `Stop generating` : `Stop generating (Esc)`,
 );
 // While a plan awaits a decision, typing revises it (reject-with-feedback); while a steerable turn runs,
 // typing steers it — the placeholder says which.
@@ -394,7 +408,10 @@ const composerPlaceholder = computed(() => {
     if (pendingPlanMessage.value) {
         return `Reply to revise the plan…`;
     }
-    if (streaming.value && steerable.value && !awaitingDecision.value) {
+    if (streaming.value && awaitingDecision.value) {
+        return `Answer the request above…`;
+    }
+    if (streaming.value && steerable.value) {
         return `Steer ${providerName.value} mid-turn…`;
     }
     return `Ask ${providerName.value}…`;
@@ -414,9 +431,14 @@ watch([active, history], (_current, [, previousHistory]) => {
 // The one hint slot under the composer. An empty box can't take a newline but CAN take a recall, so it
 // advertises whichever of the two is live. Recomputed as the draft empties — which is exactly when a send has
 // just filled the ring.
-const composerHint = computed(() =>
-    draft.value === `` && history.value?.recallable === true ? `↑ for previous message` : `Shift+Enter for new line`,
-);
+const composerHint = computed(() => {
+    // While the agent is generating, the shortcut worth the slot is the way out of it — the same slot is how
+    // the user learns Escape does this at all.
+    if (streaming.value && !awaitingDecision.value) {
+        return `Esc to stop`;
+    }
+    return draft.value === `` && history.value?.recallable === true ? `↑ for previous message` : `Shift+Enter for new line`;
+});
 
 const submit = (): void => {
     // canSend covers all the gates: empty composer, uploads still in flight, unsteerable mid-generation.
@@ -596,6 +618,15 @@ const onKeydown = (event: KeyboardEvent): void => {
     // After the popovers: an open @/-list owns the arrows for the token being typed, and recall's own Escape
     // must not pre-empt dismissing that list.
     if (recallKeydown(event)) {
+        return;
+    }
+    // Escape interrupts the turn (Claude Code's shortcut), once the popovers and message recall have had their
+    // claim on the key. Only while it's GENERATING: a turn parked on a card is spending nothing, and losing a
+    // plan the user is still reading to a stray Escape costs far more than the keystroke saves — the Stop
+    // button is the deliberate way out of that one.
+    if (event.key === `Escape` && streaming.value && !awaitingDecision.value) {
+        event.preventDefault();
+        stop();
         return;
     }
     if (event.key !== `Enter`) {
@@ -930,25 +961,31 @@ watch(keyboardInset, () => {
                                 <Icon name="microphone" class="text-xs max-md:text-base" />
                             </button>
 
+                            <!-- Stop is present for the whole live turn — generating OR parked on a plan /
+                                 question / permission card. A parked turn still holds the conversation's run
+                                 lock, so without this the user's only exits were answering a card they didn't
+                                 want to answer or closing the tab. -->
                             <button
-                                v-if="streaming && !awaitingDecision"
+                                v-if="streaming"
                                 type="button"
                                 class="composer-send composer-stop shrink-0"
                                 @click="stop"
-                                v-tooltip.top="'Stop generating'"
-                                aria-label="Stop generating"
+                                v-tooltip.top="stopHint"
+                                :aria-label="stopHint"
                             >
                                 <Icon name="stop" class="text-sm" />
                             </button>
                             <!-- Send stays alongside Stop while a steerable turn runs — typed text is
-                                 injected into the running turn instead of waiting for it. -->
+                                 injected into the running turn instead of waiting for it. It drops out
+                                 entirely mid-turn on an unsteerable provider: there is nowhere for the text
+                                 to go, so Stop is the only button in the corner. -->
                             <button
                                 v-if="!streaming || awaitingDecision || steerable"
                                 type="submit"
                                 class="composer-send shrink-0"
                                 :disabled="!canSend"
                                 v-tooltip.top="sendHint"
-                                aria-label="Send"
+                                :aria-label="sendHint"
                             >
                                 <Icon name="send" class="text-sm" />
                             </button>

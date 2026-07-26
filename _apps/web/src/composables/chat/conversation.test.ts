@@ -561,6 +561,34 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Stopped.` });
     });
 
+    it(`stop() cancels the cards a parked turn was waiting on, so the composer isn't wedged on a dead run`, async () => {
+        const conversation = new Conversation(`c1`);
+        const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
+        sandboxRequestMock.mockImplementation(
+            sseResponse(
+                [
+                    { kind: `plan`, requestId: `d1`, text: `the plan` },
+                    { kind: `question`, requestId: `q1`, questions },
+                    { kind: `permission`, requestId: `p1`, toolName: `Bash` },
+                ],
+                { stayOpen: true },
+            ),
+        );
+
+        const turn = conversation.send(`go`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        conversation.stop();
+        await turn;
+
+        expect(conversation.awaitingDecision.value).toBe(false);
+        expect(conversation.pendingPlanMessage.value).toBeUndefined();
+        expect(conversation.status.value).toBe(`idle`);
+        const cards = conversation.messages.value.flatMap((message) =>
+            [message.plan?.status, message.question?.status, message.permission?.status].filter((status) => status !== undefined),
+        );
+        expect(cards).toEqual([`cancelled`, `cancelled`, `cancelled`]);
+    });
+
     it(`branchFrom copies the turns before the edit and seeds a fresh session from them`, async () => {
         const source = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

@@ -12,11 +12,11 @@ import {
 } from "../schemas.js";
 
 // The fleet: every registered conversation-agent (see AgentSummarySchema). `diff` is the conversation
-// worktree's multi-repo delta vs its recorded per-repo bases — one flat change set per repo (AgentChanges),
-// deliberately not the working tree's staged/unstaged shape: a worktree the user never checks out has no index
-// they could stage into. `land` merges the worktree branches into the main
-// tree (per-repo, conflicts reported, nothing lost on failure); `discard` removes worktrees + branches +
-// registry entry. An unknown {id} is NOT_FOUND; land/discard while the agent's turn is running is CONFLICT.
+// worktree's CUMULATIVE multi-repo delta vs its recorded per-repo bases — one flat change set per repo
+// (AgentChanges), each file flagged `landed` or not, deliberately not the working tree's staged/unstaged
+// shape: a worktree the user never checks out has no index they could stage into. `land` merges the worktree
+// branches into the main tree (per-repo, conflicts reported, nothing lost on failure); `discard` removes
+// worktrees + branches + registry entry. An unknown {id} is NOT_FOUND; land/discard while the turn runs is CONFLICT.
 // `rename` sets the user-chosen display title — legal mid-turn (it touches no worktree state).
 export const agentsContract = {
     list: oc.route({ method: "GET", path: "/agents" }).output(AgentsListSchema),

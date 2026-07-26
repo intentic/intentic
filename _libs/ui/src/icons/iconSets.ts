@@ -45,6 +45,7 @@ export type IconName =
     | "desktop"
     | "download"
     | "envelope"
+    | "eraser"
     | "exclamation-circle"
     | "exclamation-triangle"
     | "external-link"
@@ -145,6 +146,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         desktop: "ph:monitor",
         download: "ph:download-simple",
         envelope: "ph:envelope",
+        eraser: "ph:eraser",
         "exclamation-circle": "ph:warning-circle",
         "exclamation-triangle": "ph:warning",
         "external-link": "ph:arrow-square-out",
@@ -240,6 +242,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         desktop: "solar:monitor-linear",
         download: "solar:download-linear",
         envelope: "solar:letter-linear",
+        eraser: "solar:eraser-linear",
         "exclamation-circle": "solar:danger-circle-linear",
         "exclamation-triangle": "solar:danger-triangle-linear",
         "external-link": "solar:arrow-right-up-linear",
@@ -335,6 +338,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         desktop: "ri:computer-line",
         download: "ri:download-line",
         envelope: "ri:mail-line",
+        eraser: "ri:eraser-line",
         "exclamation-circle": "ri:error-warning-line",
         "exclamation-triangle": "ri:alert-line",
         "external-link": "ri:external-link-line",
@@ -430,6 +434,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         desktop: "hugeicons:computer",
         download: "hugeicons:download-01",
         envelope: "hugeicons:mail-01",
+        eraser: "hugeicons:eraser-01",
         "exclamation-circle": "hugeicons:alert-circle",
         "exclamation-triangle": "hugeicons:alert-02",
         "external-link": "hugeicons:square-arrow-up-right",
@@ -525,6 +530,7 @@ export const ICON_SETS: Record<IconSet, Record<IconName, string>> = {
         desktop: "prime:desktop",
         download: "prime:download",
         envelope: "prime:envelope",
+        eraser: "prime:eraser",
         "exclamation-circle": "prime:exclamation-circle",
         "exclamation-triangle": "prime:exclamation-triangle",
         "external-link": "prime:external-link",

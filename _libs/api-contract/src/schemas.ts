@@ -30,6 +30,7 @@ import {
     RepoAppSchema,
     SandboxSettingsSchema,
     ServiceKindSchema,
+    AgentChangeSchema,
     AgentChangesSchema,
     AgentRepoChangesSchema,
     FileDiffSchema,
@@ -225,6 +226,8 @@ export type GitRemoteState = z.infer<typeof GitRemoteStateSchema>;
 export type GitBranch = z.infer<typeof GitBranchSchema>;
 export type GitBranchesResponse = z.infer<typeof GitBranchesSchema>;
 // The per-agent worktree review — one flat change set per repo, NOT the working tree's staged/unstaged shape.
+// A row is the agent's cumulative change to that file, flagged with whether it has already landed in the main tree.
+export type AgentChange = z.infer<typeof AgentChangeSchema>;
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
 export type AgentChangesResponse = z.infer<typeof AgentChangesSchema>;
 

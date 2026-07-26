@@ -136,8 +136,9 @@ export const providerTabs: readonly { value: AgentProvider; label: string }[] = 
 ];
 
 // A proposed plan awaiting the user's decision (the agent called ExitPlanMode). 'pending' shows the
-// approve/keep-planning buttons; once decided the choice is frozen into the transcript.
-export type PlanStatus = "pending" | "approved" | "rejected";
+// approve/keep-planning buttons; once decided the choice is frozen into the transcript. 'cancelled' is the
+// user stopping the turn out from under the card instead of answering it.
+export type PlanStatus = "pending" | "approved" | "rejected" | "cancelled";
 
 export interface PlanRequest {
     readonly requestId: string;
@@ -168,8 +169,9 @@ export interface QuestionRequest {
 }
 
 // A tool call awaiting the user's approval (the daemon's canUseTool gate). 'pending' shows the buttons; the
-// answer then freezes into the transcript so the turn reads back as a record of what was allowed.
-export type PermissionStatus = "pending" | "allowed" | "always" | "denied";
+// answer then freezes into the transcript so the turn reads back as a record of what was allowed. 'cancelled'
+// is the user stopping the turn instead of answering — the tool never ran, and nobody denied it either.
+export type PermissionStatus = "pending" | "allowed" | "always" | "denied" | "cancelled";
 
 export interface PermissionRequest extends PermissionAsk {
     readonly requestId: string;
@@ -815,15 +817,37 @@ export class Conversation {
         }
     }
 
-    // User-initiated Stop button: record a muted notice, hard-cancel the turn daemon-side (/agent/stop —
-    // fire-and-forget; NOT_FOUND just means it already settled), then abort the local stream.
+    // User-initiated Stop button: retire any card the turn was parked on, record a muted notice, hard-cancel
+    // the turn daemon-side (/agent/stop — fire-and-forget; NOT_FOUND just means it already settled), then
+    // abort the local stream.
     stop(): void {
         if (!this.streaming.value) {
             return;
         }
+        this.cancelPendingCards();
         this.appendNotice(`Stopped.`);
         void this.postTurnControl(`/agent/stop`, { conversationId: this.conversationId });
         this.abort();
+        this.persist();
+    }
+
+    // Freeze whatever the stopped turn was parked on. Stop is offered WHILE a plan / question / permission card
+    // is open — a turn holding the user's attention is exactly when they most want out — and the daemon settles
+    // its own waiter with an abort reply, so the local card must stop asking too: /agent/reply would 404 from
+    // here on, and a card left `pending` would keep awaitingDecision (and with it the composer's plan-feedback
+    // routing and the tab's "awaiting" status) wedged on a turn that no longer exists.
+    private cancelPendingCards(): void {
+        if (!this.awaitingDecision.value) {
+            return;
+        }
+        this.messages.value = this.messages.value.map((message) => {
+            const cancelled: Pick<ChatMessage, "plan" | "question" | "permission"> = {
+                ...(message.plan?.status === `pending` ? { plan: { ...message.plan, status: `cancelled` } } : {}),
+                ...(message.question?.status === `pending` ? { question: { ...message.question, status: `cancelled` } } : {}),
+                ...(message.permission?.status === `pending` ? { permission: { ...message.permission, status: `cancelled` } } : {}),
+            };
+            return Object.keys(cancelled).length > 0 ? { ...message, ...cancelled } : message;
+        });
     }
 
     // Aborts this tab's attach stream; whatever streamed so far stays in the transcript. The run itself is

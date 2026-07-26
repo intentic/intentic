@@ -99,9 +99,11 @@ const applyBridge = (monaco: typeof Monaco, core: NonNullable<ShikiCore>): void 
 
 const init = async (): Promise<typeof Monaco> => {
     const monaco = await import(`monaco-editor-core`);
-    const { default: EditorWorker } = await import(`monaco-editor-core/esm/vs/editor/editor.worker.start?worker`);
+    const { default: EditorWorker } = await import(`./editorWorker?worker`);
     // Ship ONLY the editor worker — it also runs the diff algorithm. No TS/CSS/HTML language workers (Shiki
     // tokenizes, and we want no IntelliSense), which keeps the multi-MB language workers out of the build.
+    // The entry is ours (editorWorker.ts) rather than monaco's own module: monaco-editor-core only EXPORTS the
+    // worker's start(), never calls it, so loading it straight left the worker deaf — see that file.
     self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 
     bridge = (await import(`@shikijs/monaco`)).shikiToMonaco;

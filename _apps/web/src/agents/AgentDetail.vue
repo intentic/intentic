@@ -3,6 +3,7 @@ import { Segmented, useDevice } from "@intentic-app/ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ChatPanel from "../chat/ChatPanel.vue";
+import { agentStatusMeta } from "../composables/agents/agentStatus";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
@@ -69,6 +70,10 @@ const edit = createTitleEdit(
     () => agentId.value,
     () => fleetAgent.value?.title ?? conversation.value?.title.value ?? undefined,
 );
+
+// The card's own status glyph, carried into the header — the one piece of fleet state the review below can't
+// tell you (it reports the work, not whether the agent is still writing it).
+const status = computed(() => (fleetAgent.value === undefined ? undefined : agentStatusMeta(fleetAgent.value.status)));
 </script>
 
 <template>
@@ -106,9 +111,22 @@ const edit = createTitleEdit(
                     <Icon name="pencil" class="text-xs" />
                 </button>
             </template>
-            <span v-if="fleetAgent?.branch !== undefined" class="truncate font-mono text-2xs text-subtle">{{ fleetAgent.branch }}</span>
+            <span
+                v-if="fleetAgent?.branch !== undefined"
+                class="hidden max-w-[16rem] shrink-0 items-center gap-1 rounded bg-overlay px-1.5 py-px font-mono text-2xs text-subtle md:inline-flex"
+                v-tooltip.bottom="'The isolated branch this agent works on'"
+            >
+                <Icon name="code" class="text-2xs" /><span class="truncate">{{ fleetAgent.branch }}</span>
+            </span>
+            <span
+                v-if="status !== undefined"
+                class="inline-flex shrink-0 items-center gap-1 text-2xs"
+                :class="status.class"
+                v-tooltip.bottom="status.label"
+            >
+                <Icon :name="status.icon" :spin="status.spin" class="text-2xs" />{{ status.label }}
+            </span>
             <Segmented v-if="mobile" v-model="view" :options="viewOptions" />
-            <span v-else class="text-2xs uppercase tracking-wide text-subtle">Review</span>
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
         <ChatPanel v-if="mobile && view === 'chat'" class="min-h-0 flex-1" />

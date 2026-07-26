@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useDevice } from "@intentic-app/ui";
 import type * as Monaco from "monaco-editor-core";
-import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useMonaco } from "../../../composables/workspace/useMonaco";
 import { langFromShebang, resolveFile } from "../fileType";
 
@@ -11,9 +11,12 @@ import { langFromShebang, resolveFile } from "../fileType";
  * to prev/next buttons there). Read-only; an absent side (added/deleted file) is an empty pane. Uncontrolled —
  * the parent remounts per file via :key. */
 
-const { before, after, path } = defineProps<{ before?: string; after?: string; path: string }>();
+// `sideBySide` pins the layout for a caller that offers its own Split|Unified control (the agent review, whose
+// pane is narrower than the editor area); left unset, the form factor decides.
+const { before, after, path, sideBySide } = defineProps<{ before?: string; after?: string; path: string; sideBySide?: boolean }>();
 
 const { mobile } = useDevice();
+const split = computed(() => sideBySide ?? !mobile.value);
 const { ensureMonaco, ensureLanguage } = useMonaco();
 
 const host = ref<HTMLElement>();
@@ -38,7 +41,7 @@ onMounted(async () => {
         readOnly: true,
         originalEditable: false,
         automaticLayout: true,
-        renderSideBySide: !mobile.value,
+        renderSideBySide: split.value,
         minimap: { enabled: true },
         // Minimap slider + diff overview ruler cover vertical navigation; the per-pane scrollbars are
         // redundant next to them. Horizontal stays for long lines. Size 0 too: `hidden` alone still
@@ -63,8 +66,9 @@ onMounted(async () => {
     modifiedEditor.addCommand(m.KeyMod.Shift | m.KeyCode.F7, () => editor.goToDiff(`previous`));
 });
 
-// Crossing the breakpoint (rotation, split-screen) swaps side-by-side ↔ unified in place — no rebuild.
-watch(mobile, (isMobile) => diff.value?.updateOptions({ renderSideBySide: !isMobile }));
+// Crossing the breakpoint (rotation, split-screen) or flipping the caller's toggle swaps side-by-side ↔
+// unified in place — no rebuild.
+watch(split, (on) => diff.value?.updateOptions({ renderSideBySide: on }));
 
 onBeforeUnmount(() => {
     disposed = true;

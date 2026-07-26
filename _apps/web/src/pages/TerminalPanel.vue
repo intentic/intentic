@@ -20,8 +20,9 @@ import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
  * multi-selects pills, right-click opens the action menu (split / join / unsplit / kill, and per-terminal
  * rename / color / icon overrides from terminalMeta). Right-click on the bar's empty space pops the whole
  * panel out into a floating window (Document PiP, like the chat strip); the shell owns the teleport.
- * Every tab gets the hover-×; restart is shell-only (a dev-server tab is re-run via Start, or ↑ at its
- * prompt). Managed background processes (extension gateways, dockerd) never tab by themselves — they live in
+ * Every tab gets the hover-×; a finished tab (dimmed, running:false) also sweeps out in bulk via the toolbar's
+ * eraser / the menu's "Clear N finished terminals". Restart is shell-only (a dev-server tab is re-run via
+ * Start, or ↑ at its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves — they live in
  * the toolbar's processes popover, and their × only hides the read-only log view. `initial` is an object so
  * re-requesting the same session still refocuses. Height and collapse persist per storageKey;
  * `resizable: false` pins the panel to its container (the mobile route, and the pop-out window). */
@@ -136,6 +137,27 @@ const onSegmentClick = (event: MouseEvent, groupIndex: number, name: string): vo
     switchTab(name);
 };
 
+// --- Finished terminals: the one-click sweep ---------------------------------------------------
+// Finished sessions (running:false — a completed job's lingering shell, a stopped dev server) never leave on
+// their own: the daemon still lists their tmux session, so the strip silts up and the live tabs scroll out of
+// reach. `dead` is the sweep set — every dimmed tab EXCEPT a process log view, whose lifecycle belongs to the
+// processes popover (its × only hides the view, so sweeping one would be a no-op that lies about the count).
+// The action reaches the user the same three ways every other strip action does: a toolbar button that exists
+// only while there IS something to sweep (the toolbar stays quiet at rest), a right-click item (where the hand
+// already goes), and a palette command. No confirm dialog — nothing is running, and hovering the button
+// red-tints exactly the pills it would take, which answers "what will this remove?" without a modal.
+const dead = computed(() => new Set(order.value.filter((tab) => tab.running === false && tab.kind !== `process`).map((tab) => tab.name)));
+const sweepPreview = ref(false);
+const clearFinishedLabel = computed(() => `Clear ${dead.value.size} finished terminal${dead.value.size === 1 ? `` : `s`}`);
+const clearFinished = (): void => {
+    if (killTabs === undefined || dead.value.size === 0) {
+        return;
+    }
+    killTabs([...dead.value]);
+    selectedKeys.value = [];
+    sweepPreview.value = false;
+};
+
 // --- Rename / color / icon (per-terminal overrides, terminalMeta) ------------------------------
 const customize = ref<{ name: string; mode: `rename` | `color` | `icon` } | undefined>(undefined);
 const renameInput = ref(``);
@@ -195,6 +217,14 @@ const openTabMenu = (event: MouseEvent, groupIndex: number, name: string): void 
     menu.value?.show(event);
 };
 
+// The sweep row, appended to whichever branch of the menu is showing — it's about the strip as a whole, so it
+// reads the same next to the single-tab actions and the multi-selection's mass ones. Absent when nothing is
+// finished, so the menu never offers a no-op.
+const clearFinishedItems = (): MenuItem[] =>
+    killTabs === undefined || dead.value.size === 0
+        ? []
+        : [{ label: clearFinishedLabel.value, shortcut: commandShortcut(`terminal.clearFinished`), command: clearFinished }];
+
 const menuItems = computed<MenuItem[]>(() => {
     const target = menuTarget.value;
     if (target === undefined) {
@@ -227,6 +257,7 @@ const menuItems = computed<MenuItem[]>(() => {
                         selectedKeys.value = [];
                     },
                 },
+                ...clearFinishedItems(),
             );
         }
         return items;
@@ -254,6 +285,7 @@ const menuItems = computed<MenuItem[]>(() => {
                 shortcut: commandShortcut(`terminal.kill`),
                 command: () => closeTab(name),
             },
+            ...clearFinishedItems(),
         );
     }
     if (popout.supported) {
@@ -377,6 +409,16 @@ const registerPanelCommands = (): void => {
                     closeTab(activeName.value);
                 }
             },
+        });
+    }
+    if (killTabs !== undefined) {
+        // Unbound by default, like the cosmetic pickers: a strip-hygiene sweep is too rare to earn a global
+        // chord, and its toolbar button is one click away. Rebindable in Settings → Keybindings.
+        entries.push({
+            command: `terminal.clearFinished`,
+            title: `Clear Finished Terminals`,
+            icon: `eraser`,
+            handler: clearFinished,
         });
     }
     commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
@@ -605,7 +647,7 @@ const endResize = (event: PointerEvent): void => {
                         <span v-if="si > 0" class="h-3.5 w-px shrink-0 bg-line"></span>
                         <div
                             class="flex h-full items-center gap-1.5 pl-2 pr-1.5 text-2xs"
-                            :class="{ 'opacity-60': tabByName.get(name)?.running === false }"
+                            :class="{ 'opacity-60': tabByName.get(name)?.running === false, 'tterm-doomed': sweepPreview && dead.has(name) }"
                             v-tooltip.top="segmentTooltip(name)"
                             @click="onSegmentClick($event, gi, name)"
                             @dblclick.prevent.stop="openCustomize(name, `rename`)"
@@ -650,6 +692,20 @@ const endResize = (event: PointerEvent): void => {
                 </button>
             </div>
             <span class="flex-1"></span>
+            <!-- The sweep: only rendered while finished tabs exist, and hovering it previews the exact set it
+                 would kill (see .tterm-doomed) instead of asking for a confirmation. -->
+            <button
+                v-if="dead.size > 0 && killTabs !== undefined"
+                type="button"
+                class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-danger"
+                @click="clearFinished()"
+                @pointerenter="sweepPreview = true"
+                @pointerleave="sweepPreview = false"
+                v-tooltip.top="withShortcut(clearFinishedLabel, 'terminal.clearFinished')"
+                :aria-label="clearFinishedLabel"
+            >
+                <Icon name="eraser" class="text-xs" />
+            </button>
             <BackgroundProcesses :tabs="tabs" />
             <button
                 v-if="restart !== undefined && activeShell"
@@ -869,6 +925,14 @@ const endResize = (event: PointerEvent): void => {
 .tterm-selected {
     background: color-mix(in srgb, var(--color-primary-500) 14%, transparent);
     color: var(--color-content);
+}
+/* Sweep preview: while the toolbar's clear button is hovered, every segment it would kill lights up danger-red
+   at full strength (overriding the finished dimming) — the "are you sure?" answered on the strip itself. */
+.tterm-doomed {
+    opacity: 1;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-danger) 22%, transparent);
+    color: var(--color-danger);
 }
 
 /* Split cells (built by useTerminal's mount — plain elements, hence :deep): equal flex columns with a hairline
