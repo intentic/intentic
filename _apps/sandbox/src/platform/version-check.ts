@@ -1,15 +1,17 @@
 // The daemon compares its own baked version (version.ts) to the latest published release so the web can offer
 // a non-blocking update, surfaced on /info. Version strings, not registry digests: the sandbox has no Docker
-// socket. Source is the GitLab Releases API `permalink/latest` — a release moves the image `:stable` tag onto
-// the new version, so the latest release's version IS what registry.gitlab.com/radarsu/intentic/sandbox:stable
-// resolves to. Plain global fetch (not the node:https of announce.ts, whose only reason is per-host TLS skip).
+// socket. Source is the PUBLIC npm dist-tag `@intentic/sync@latest` — the GitLab Releases API can't be used
+// because the project's Releases feature is member-only, so an anonymous sandbox gets 403. Every first-party
+// package is stamped to the same release version and a release moves the image `:stable` tag onto that version,
+// so `@intentic/sync@latest`'s version IS what registry.gitlab.com/radarsu/intentic/sandbox:stable resolves to.
+// Plain global fetch (not the node:https of announce.ts, whose only reason is per-host TLS skip).
 //
 // The fetch runs on a boot-started background timer (startVersionCheck), NEVER on the /info request path:
-// /info reads the cached value synchronously via latestVersion(), so a hot route is never coupled to GitLab
-// and unit tests (which build the app without running main.ts) see a cold cache and no network.
+// /info reads the cached value synchronously via latestVersion(), so a hot route is never coupled to the
+// registry and unit tests (which build the app without running main.ts) see a cold cache and no network.
 
-const LATEST_URL = "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/releases/permalink/latest";
-// A moved release isn't urgent, so refresh cheaply: ~1 request/sandbox/hour to GitLab.
+const LATEST_URL = "https://registry.npmjs.org/@intentic/sync/latest";
+// A moved release isn't urgent, so refresh cheaply: ~1 request/sandbox/hour to npm.
 const REFRESH_MS = 60 * 60_000;
 
 // The last successfully-fetched latest version, or undefined until the first success. A failed refresh leaves
@@ -33,16 +35,16 @@ export const isNewer = (a: string, b: string): boolean => {
 // A synchronous snapshot of the cache, for the /info handler. Undefined until the first refresh succeeds.
 export const latestVersion = (): string | undefined => latest;
 
-// Fetch the latest release version once and update the cache. Never throws — any failure (offline, GitLab
-// down, shape change) keeps the previous value so /info degrades to "no update known". The release tag is
-// `v${version}` (tagFormat), so strip the leading `v`.
+// Fetch the latest published version once and update the cache. Never throws — any failure (offline, npm
+// down, shape change) keeps the previous value so /info degrades to "no update known". The npm packument's
+// `version` is already the plain numeric release version (no `v` prefix to strip).
 export const refreshLatestVersion = async (): Promise<void> => {
     try {
         const response = await fetch(LATEST_URL);
         if (response.ok) {
-            const body = (await response.json()) as { tag_name?: unknown };
-            if (typeof body.tag_name === "string") {
-                latest = body.tag_name.replace(/^v/, "");
+            const body = (await response.json()) as { version?: unknown };
+            if (typeof body.version === "string") {
+                latest = body.version;
             }
         }
     } catch {

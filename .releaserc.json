@@ -16,14 +16,7 @@
             "@semantic-release/gitlab",
             {
                 "successComment": false,
-                "failComment": false,
-                "assets": [
-                    { "path": "_apps/sync/dist-bin/intentic-sync-linux-amd64", "filepath": "/bin/intentic-sync-linux-amd64" },
-                    { "path": "_apps/sync/dist-bin/intentic-sync-linux-arm64", "filepath": "/bin/intentic-sync-linux-arm64" },
-                    { "path": "_apps/sync/dist-bin/intentic-sync-darwin-amd64", "filepath": "/bin/intentic-sync-darwin-amd64" },
-                    { "path": "_apps/sync/dist-bin/intentic-sync-darwin-arm64", "filepath": "/bin/intentic-sync-darwin-arm64" },
-                    { "path": "_apps/sync/dist-bin/intentic-sync-windows-amd64.exe", "filepath": "/bin/intentic-sync-windows-amd64.exe" }
-                ]
+                "failComment": false
             }
         ]
     ]

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # semantic-release prepareCmd: build the release closure, stamp versions, cross-compile the sync binaries,
-# publish to npm. Two ordering rules keep this fast:
+# publish to npm + the binaries to the public package registry. Two ordering rules keep this fast:
 #   1. Build BEFORE stamping. Versions live only in package.json (read at runtime, never compiled into dist),
 #      but package.json is a turbo hash input — stamping first invalidates the whole closure and forces the
 #      release to rebuild what release:verify just built. Building first replays verify's cache instead.
@@ -21,4 +21,5 @@ pnpm turbo run build "${filters[@]}"
 
 bash "$DIR/set-versions.sh" "$VERSION"
 bash _apps/sync/scripts/build-binaries.sh
+bash _apps/sync/scripts/publish-binaries.sh "$VERSION"
 bash "$DIR/publish-npm.sh" "$VERSION"

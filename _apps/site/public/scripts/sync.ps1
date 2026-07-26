@@ -29,7 +29,7 @@ if (-not $bin) {
     New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
     Write-Host 'Downloading the intentic-sync agent…'
     try {
-        Invoke-WebRequest -UseBasicParsing -Uri "https://gitlab.com/radarsu/intentic/-/releases/permalink/latest/downloads/bin/intentic-sync-windows-$arch.exe" -OutFile $dest
+        Invoke-WebRequest -UseBasicParsing -Uri "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-sync/latest/intentic-sync-windows-$arch.exe" -OutFile $dest
         $bin = $dest
     } catch {
         if (Get-Command npx -ErrorAction SilentlyContinue) { $bin = 'npx' } else { Write-Error 'Could not download the agent and no npx fallback (install Node.js, or see the docs).'; exit 1 }

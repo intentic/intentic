@@ -94,7 +94,7 @@ const startAgent = (): void => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+        <div class="flex h-9 shrink-0 items-center gap-2 border-b border-line px-3">
             <span class="text-sm font-semibold text-content">Agents</span>
             <span v-if="attention > 0" class="rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">
                 {{ attention }} need{{ attention === 1 ? "s" : "" }} you

@@ -159,13 +159,13 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                     </ul>
                 </div>
 
-                <!-- How it works, in one glance: a task → a specialized agent (its own equipped sandbox) → the whole job shipped -->
+                <!-- The IDE you share, in one glance: two operators — you (change any layer) and the agent (works inside it) — around one shared environment -->
                 <div class="animate-fade-in-up" style="animation-delay: 60ms">
                     <div class="relative mx-auto max-w-md">
-                        <!-- Stage 1 · the task you hand it -->
+                        <!-- Stage 1 · you, the operator who can open and change every layer -->
                         <div class="card bg-card/70 p-3.5 shadow-lg shadow-black/20">
-                            <div class="eyebrow mb-1.5">You hand it a task</div>
-                            <p class="text-sm leading-relaxed text-content">{content.hero.spec.task}</p>
+                            <div class="eyebrow mb-1.5">You</div>
+                            <p class="text-sm leading-relaxed text-content">{content.hero.spec.edit}</p>
                         </div>
 
                         <svg class="mx-auto text-subtle" width="22" height="34" viewBox="0 0 22 34" fill="none" aria-hidden="true">
@@ -212,9 +212,9 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                             <path d="M6 21.5 11 28l5-6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
 
-                        <!-- Stage 3 · the whole job shipped, as real artifacts -->
+                        <!-- Stage 3 · your agent, working inside that same environment -->
                         <div class="card border-success/30 bg-success/[0.05] p-3.5">
-                            <div class="eyebrow mb-2 text-success">It does the whole job</div>
+                            <div class="eyebrow mb-2 text-success">Your agent</div>
                             <div class="flex flex-col gap-1.5">
                                 {
                                     content.hero.spec.outcome.split(" · ").map((step) => (
@@ -227,6 +227,7 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                                     ))
                                 }
                             </div>
+                            <div class="mt-2.5 border-t border-line pt-2.5 text-2xs text-subtle">{content.hero.spec.scale}</div>
                         </div>
                     </div>
                 </div>

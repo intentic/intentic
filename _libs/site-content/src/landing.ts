@@ -15,13 +15,17 @@ export interface AgentSpecRow {
     items: string[];
 }
 
-/** The hero visual: a specialized agent as a configured worker, not a chat window. */
+/** The hero visual: a shared environment with two operators — you, who can change every layer, and the agent that works inside it. */
 export interface AgentSpec {
     name: string;
     role: string;
     rows: AgentSpecRow[];
-    task: string;
+    /** Top of the figure — you, the operator who can open and change any layer of the environment. */
+    edit: string;
+    /** Bottom of the figure — what the agent does inside that same environment (split on " · "). */
     outcome: string;
+    /** The scale note under the outcome — one agent, or a whole fleet. */
+    scale: string;
 }
 
 /** One side of the "a prompt vs the whole environment" comparison. */
@@ -123,8 +127,9 @@ export const landingContent: LandingContent = {
                 { label: "Connected", items: ["GitHub", "Sentry", "Discord", "prod db · read"] },
                 { label: "Context", items: ["repo: platform", "6 skills", "release runbook", "house style"] },
             ],
-            task: "Cut the 2.4 release and post the changelog.",
-            outcome: "tag pushed · changelog drafted · deploy watched",
+            edit: "See and change every layer of it — nothing here is fixed.",
+            outcome: "cuts the release · drafts the changelog · watches the deploy",
+            scale: "one agent, or ten in parallel",
         },
     },
     tour: {

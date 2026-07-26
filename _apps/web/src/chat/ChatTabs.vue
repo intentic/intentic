@@ -54,8 +54,13 @@ const openHistory = (event: Event): void => {
 </script>
 
 <template>
-    <header class="flex items-center gap-1 border-b border-line px-1.5 py-1">
-        <div class="scrollbar-thin flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" @contextmenu="onContextMenu">
+    <header class="flex min-h-9 items-center gap-1 border-b border-line px-1.5 py-1">
+        <!-- Tabs fill one row, then wrap to a second; only past two rows (max-h-14) does the strip scroll
+             vertically. It never scrolls sideways, so no tab hides off the right edge. -->
+        <div
+            class="scrollbar-thin flex max-h-14 min-w-0 flex-1 flex-wrap items-center gap-1 overflow-x-hidden overflow-y-auto"
+            @contextmenu="onContextMenu"
+        >
             <button
                 v-for="c in conversations"
                 :key="c.id"

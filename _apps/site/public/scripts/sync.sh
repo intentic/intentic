@@ -44,8 +44,8 @@ case "$arch" in
         ;;
 esac
 
-# Resolve the agent: an explicit AGENT_BIN (local dev), else an installed `intentic-sync`, else the released
-# binary, else npx (when Node is present).
+# Resolve the agent: an explicit AGENT_BIN (local dev), else an installed `intentic-sync`, else the published
+# binary from the package registry, else npx (when Node is present).
 BIN="${AGENT_BIN:-$(command -v intentic-sync || true)}"
 if [ -z "$BIN" ]; then
     dest="${HOME}/.intentic/sync/bin/intentic-sync"
@@ -53,7 +53,7 @@ if [ -z "$BIN" ]; then
     echo "Downloading the intentic-sync agent…"
     # The download error stays visible (a masked network/permission failure used to silently drop to npx);
     # a partial file is removed before falling back.
-    if curl -fsSL "https://gitlab.com/radarsu/intentic/-/releases/permalink/latest/downloads/bin/intentic-sync-${os}-${arch}" -o "$dest"; then
+    if curl -fsSL "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-sync/latest/intentic-sync-${os}-${arch}" -o "$dest"; then
         chmod +x "$dest"
         BIN="$dest"
         # Put `intentic-sync` on PATH for the status/pause/resume commands the setup output suggests.
