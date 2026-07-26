@@ -52,7 +52,7 @@ const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, 
             @mousedown.prevent="emit('pick', path)"
         >
             <Icon name="file" class="shrink-0 text-2xs text-subtle" />
-            <span class="truncate text-sm text-content">{{ basename(path) }}</span>
+            <span class="truncate text-xs text-content">{{ basename(path) }}</span>
             <span v-if="parentDir(path)" class="truncate text-2xs text-subtle">{{ parentDir(path) }}</span>
         </button>
     </div>

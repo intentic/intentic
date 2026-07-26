@@ -7,7 +7,6 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { decryptSecret, encryptSecret } from "../crypto.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
 import {
-    CloudflareApiError,
     CloudflareTokenError,
     deleteSandboxTunnel,
     listZoneNames,
@@ -123,32 +122,27 @@ export const sandboxRoutes = {
         });
         return toSummary(sandbox, `owner`, context);
     }),
-    // Remove an owned sandbox (cascades its member grants) AND its intentic-provided Cloudflare tunnel +
-    // DNS — the platform destroys everything it provisioned (own-CF tunnels are the user's, untouched).
+    // Remove an owned sandbox (cascades its member grants) AND its intentic-provided Cloudflare tunnel + DNS —
+    // the platform destroys everything it provisioned (own-CF tunnels are the user's, untouched). The row goes
+    // FIRST, and the teardown is best-effort after it: the row is the only thing the browser reads
+    // (sandbox.list), while the teardown is a stack of Cloudflare round-trips — tearing down first kept a
+    // just-removed sandbox visible to any reload during those seconds, and made every Cloudflare hiccup fail a
+    // removal the user already confirmed. A failed teardown just orphans an intentic-owned tunnel, which the
+    // daily reaper deletes along with its DNS once the connector detaches (the common case: a host whose
+    // cloudflared is still connected refuses the delete with 1022 until cleanup.sh runs there).
     // The daemon keeps running on its host until cleanup.sh tears it down there.
     delete: os.sandbox.delete.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        if (sandbox.tunnelToken !== null) {
-            const { apiToken, zone } = context.config.intenticCloudflare;
-            try {
-                await deleteSandboxTunnel({ apiToken, zone, connectToken: decryptSecret(context.config, sandbox.token) });
-            } catch (error) {
-                // The host's cloudflared is still connected (cleanup.sh not run yet), so Cloudflare won't
-                // delete the tunnel (1022) even after clearing stale connections. Orphan it — the daily reaper
-                // deletes it + its DNS once the connector detaches — and still remove the sandbox now. Other
-                // Cloudflare failures surface WHY like setupCode/hostTunnel instead of a bare 500.
-                if (error instanceof CloudflareApiError && error.codes.includes(1022)) {
-                    context.logger.warn({ sandboxId: input.sandboxId }, `sandbox tunnel still connected; orphaned for the reaper`);
-                } else if (error instanceof CloudflareTokenError) {
-                    throw new ORPCError(`BAD_REQUEST`, { message: error.message });
-                } else if (error instanceof Error) {
-                    throw new ORPCError(`BAD_GATEWAY`, { message: error.message });
-                } else {
-                    throw error;
-                }
-            }
-        }
         await context.prisma.sandbox.delete({ where: { id: input.sandboxId } });
+        if (sandbox.tunnelToken === null) {
+            return { ok: true };
+        }
+        const { apiToken, zone } = context.config.intenticCloudflare;
+        try {
+            await deleteSandboxTunnel({ apiToken, zone, connectToken: decryptSecret(context.config, sandbox.token) });
+        } catch (error) {
+            context.logger.warn({ err: error, sandboxId: input.sandboxId }, `sandbox tunnel teardown failed; orphaned for the reaper`);
+        }
         return { ok: true };
     }),
     // Drop the caller's OWN member grant — a member removing a shared sandbox from their account. The sandbox,

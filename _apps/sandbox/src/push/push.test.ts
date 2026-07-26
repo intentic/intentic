@@ -2,7 +2,10 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PushSubscription } from "@intentic/sandbox-contract";
+import type { Logger } from "pino";
 import { afterEach, expect, test, vi } from "vitest";
+import webpush, { WebPushError } from "web-push";
+import { createPushSender } from "./push.js";
 import { filePushStore } from "./push-store.js";
 import { turnAwaiting, turnFinished } from "./notifications.js";
 
@@ -89,6 +92,60 @@ test("a corrupt store file is replaced rather than crashing the daemon", async (
     const keys = await filePushStore(path).keys();
     expect(keys.publicKey).not.toBe("");
     expect(JSON.parse(await readFile(path, "utf8")).subscriptions).toEqual([]);
+});
+
+const silentLogger = { debug: () => undefined, warn: () => undefined } as unknown as Logger;
+
+// Stubs every send, refusing the endpoints named in `refusals` with the given status.
+const stubSends = (refusals: Record<string, number>): void => {
+    vi.spyOn(webpush, "setVapidDetails").mockImplementation(() => undefined);
+    vi.spyOn(webpush, "sendNotification").mockImplementation(async (target) => {
+        const status = refusals[target.endpoint];
+        if (status !== undefined) {
+            throw new WebPushError("refused", status, {}, "", target.endpoint);
+        }
+        return { statusCode: 201, body: "", headers: {} };
+    });
+};
+
+const sample = { title: "intentic", body: "done", tag: "t" };
+
+test("a 403 drops the subscription — a recreated sandbox's stale endpoints must not be retried forever", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+    await store.add(subscription("https://push.example/stale"));
+    await store.add(subscription("https://push.example/live"));
+    // 403 is the push service saying "this endpoint was minted for a different VAPID key". Our key never
+    // rotates back, so the row is dead — and keeping it would let the settings toggle keep claiming "on".
+    stubSends({ "https://push.example/stale": 403 });
+
+    await createPushSender(store, silentLogger).notify(sample);
+
+    expect((await store.list()).map((entry) => entry.endpoint)).toEqual(["https://push.example/live"]);
+});
+
+test("a transient 500 keeps the subscription and does not fail the caller", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+    await store.add(subscription("https://push.example/flaky"));
+    stubSends({ "https://push.example/flaky": 500 });
+
+    // A turn must complete identically whether the push service is up, down, or slow.
+    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toBeUndefined();
+    expect(await store.list()).toHaveLength(1);
+});
+
+test("one dead endpoint does not stop the others being notified", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+    await store.add(subscription("https://push.example/gone"));
+    await store.add(subscription("https://push.example/live"));
+    stubSends({ "https://push.example/gone": 410 });
+
+    await createPushSender(store, silentLogger).notify(sample);
+
+    expect(vi.mocked(webpush.sendNotification)).toHaveBeenCalledTimes(2);
+    expect((await store.list()).map((entry) => entry.endpoint)).toEqual(["https://push.example/live"]);
 });
 
 test("a finished turn notification carries the prompt, trimmed at a word boundary", () => {

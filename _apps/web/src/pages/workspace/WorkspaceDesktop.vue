@@ -319,6 +319,9 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     { command: `workspace.showChanges`, title: `Show Changes`, icon: `check-square`, keybinding: `Ctrl+Shift+D`, handler: openReview },
     { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
     { command: `workspace.showHistory`, title: `Show Checkpoints`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
+    // The workspace root's commit graph. Root is a repo like any other but owns no tree row, so this is its
+    // keyboard/palette route to the graph — the same target the explorer toolbar's icon opens.
+    { command: `workspace.gitHistory`, title: `Show Git History`, icon: `sitemap`, handler: () => openGraph(`root`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => layout.toggleSidebar() },
     { command: `workspace.nextTab`, title: `Next Tab`, keybinding: `Alt+PageDown`, handler: () => cycleTab(1) },
     { command: `workspace.previousTab`, title: `Previous Tab`, keybinding: `Alt+PageUp`, handler: () => cycleTab(-1) },
@@ -398,6 +401,7 @@ const tooltipWithChord = (label: string, command: string): string => {
     return chord === undefined ? label : `${label} (${chord})`;
 };
 const explorerTooltip = computed(() => tooltipWithChord(layout.sidebarCollapsed.value ? `Show explorer` : `Hide explorer`, `workspace.toggleSidebar`));
+const rootHistoryTooltip = computed(() => tooltipWithChord(`Git history of the workspace root`, `workspace.gitHistory`));
 const terminalTooltip = computed(() => tooltipWithChord(`Toggle terminal`, `terminal.toggle`));
 
 const startResize = (event: PointerEvent): void => {
@@ -538,6 +542,20 @@ const endResize = (event: PointerEvent): void => {
                         >
                             <Icon class="text-2xs" :name="layout.includeIgnored.value ? `eye` : `eye-slash`" />
                             Ignored
+                        </button>
+                        <!-- The /work repo's git history. Root IS a repo (ensureRootRepo versions the whole
+                             workspace), but the tree draws no row for it, so its git-history affordance can't ride a
+                             row the way a nested repo's does — it belongs on the explorer's own root-scoped toolbar,
+                             the same sitemap glyph one level up. Not tree-scoped like Collapse All, so it stays in
+                             both search scopes. -->
+                        <button
+                            type="button"
+                            class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
+                            v-tooltip.bottom="rootHistoryTooltip"
+                            aria-label="Open git history of the workspace root"
+                            @click="openGraph('root')"
+                        >
+                            <Icon name="sitemap" class="text-xs" />
                         </button>
                         <!-- Collapse every open folder. Tree scope only (content search shows a flat match list);
                              inert while a name filter is active (a filter force-expands matches) or nothing is open. -->

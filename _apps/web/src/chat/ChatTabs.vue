@@ -125,7 +125,7 @@ const openHistory = (event: Event): void => {
                             "
                         >
                             <span class="flex items-center gap-1.5">
-                                <span class="min-w-0 flex-1 truncate text-sm text-content">{{ session.title }}</span>
+                                <span class="min-w-0 flex-1 truncate text-xs text-content">{{ session.title }}</span>
                                 <!-- Members with this session open right now. -->
                                 <PresenceAvatars :viewers="viewersOfSession(session.id)" label="in this chat" />
                             </span>

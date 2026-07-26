@@ -46,6 +46,16 @@ const CLAUDE_ALIAS_MODELS: readonly Model[] = [
     { id: "haiku", label: "Haiku" },
 ];
 
+// The one row the CLI publishes that names no model at all: a "Default (recommended)" alias whose actual target
+// is buried in prose inside `description` ("Opus 4.8 with 1M context"). Every other row identifies either a tier
+// ("Opus") or a version ("Claude Opus 5"), so this is the only pick that can leave the composer's chip unable to
+// say what will run — and it is the pick a fresh session lands on, since the CLI lists it first. Dropping it moves
+// models[0] to the CLI's next preference: still the provider's own opinion, still tracking releases the way this
+// row did, and finally nameable. A stale selection repoints itself — routedModel validates catalog membership
+// daemon-side, and loadProviderModels does the same in the picker.
+const UNNAMED_ALIAS_ID = "default";
+const named = (models: readonly Model[]): Model[] => models.filter((model) => model.id !== UNNAMED_ALIAS_ID);
+
 const ANTHROPIC_MODELS_URL = "https://api.anthropic.com/v1/models?limit=100";
 
 // A streaming-input source that stays open (yields nothing) until aborted. supportedModels() is a control
@@ -129,7 +139,7 @@ const discoverApiModels = async (oauthToken: string | undefined, fetchImpl: type
 };
 
 // Aliases lead: theirs is the CLI's own preference order, they carry the effort tiers and capability badges only
-// supportedModels() publishes, and keeping them first means models[0] stays the CLI's recommended default. The
+// supportedModels() publishes, and keeping them first means models[0] stays the CLI's top preference. The
 // versioned rows follow in the API's own order (newest first). Ids never collide in practice — an alias is a
 // bare tier ("opus"), a REST row is versioned ("claude-opus-5") — but dedup by id anyway so one source adopting
 // the other's naming can only ever drop a duplicate row, never render the picker twice over.
@@ -201,7 +211,7 @@ export const createClaudeCatalog = (
             // Both catalogs answer for the same account and neither gates the other: one is a process spawn, the
             // other a fetch, so they run concurrently and either alone still yields a usable list.
             const [aliases, versioned] = await Promise.all([discover(token, cwd).catch(() => []), discoverApiModels(token, fetchImpl)]);
-            const merged = mergeCatalogs(aliases, versioned);
+            const merged = named(mergeCatalogs(aliases, versioned));
             if (merged.length > 0) {
                 await writePersisted(merged);
                 const value = withDefault(merged);
@@ -210,7 +220,7 @@ export const createClaudeCatalog = (
             }
             // No live catalog: serve the last-known-good, else the alias floor. Uncached either way, so both
             // sources are re-probed on the next read instead of pinning a degraded list for the daemon's lifetime.
-            const persisted = await readPersisted();
+            const persisted = named(await readPersisted());
             return withDefault(persisted.length > 0 ? persisted : [...CLAUDE_ALIAS_MODELS]);
         },
     };

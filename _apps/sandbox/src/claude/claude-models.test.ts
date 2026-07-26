@@ -59,10 +59,7 @@ test("merges the REST catalog's versioned models in after the CLI's tier aliases
     // The regression this merge exists for: supportedModels() publishes only tier ALIASES, and an alias lags a
     // release — `opus` still resolved to claude-opus-4-8 while claude-opus-5 had shipped and was already serving
     // turns — so a picker sourced from the CLI alone could not reach the new model at all.
-    const aliases: Model[] = [
-        { id: "default", label: "Default (recommended)", description: "Opus 4.8 with 1M context" },
-        { id: "opus", label: "Opus", description: "Opus 4.8 with 1M context" },
-    ];
+    const aliases: Model[] = [{ id: "opus", label: "Opus", description: "Opus 4.8 with 1M context" }];
     const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
     const catalog = await createClaudeCatalog(
         emptyStore,
@@ -76,11 +73,37 @@ test("merges the REST catalog's versioned models in after the CLI's tier aliases
         ]),
     ).models();
 
-    // Aliases lead (their order is the CLI's own, so models[0] stays its recommended default); the versioned rows
+    // Aliases lead (their order is the CLI's own, so models[0] stays its top preference); the versioned rows
     // follow, and they are the only rung that carries a version in the NAME rather than buried in a description.
-    expect(catalog.models.map((model) => model.id)).toEqual(["default", "opus", "claude-opus-5", "claude-opus-4-8"]);
+    expect(catalog.models.map((model) => model.id)).toEqual(["opus", "claude-opus-5", "claude-opus-4-8"]);
     expect(catalog.models.find((model) => model.id === "claude-opus-5")?.label).toBe("Claude Opus 5");
-    expect(catalog.default).toBe("default");
+    expect(catalog.default).toBe("opus");
+});
+
+test("drops the CLI's nameless `default` alias, so no pick can leave the chip unable to say what runs", async () => {
+    // The CLI lists "Default (recommended)" FIRST and names no model in it — the version it resolves to is prose
+    // inside `description`. Left in, it is both an unreadable row in the picker and the id every fresh session
+    // lands on. Dropping it hands models[0] to the next alias, which still names its tier and still tracks
+    // releases. Asserted at both live rungs: the merge below, and the persisted read further down.
+    const aliases: Model[] = [
+        { id: "default", label: "Default (recommended)", description: "Opus 4.8 with 1M context" },
+        { id: "opus", label: "Opus" },
+        { id: "haiku", label: "Haiku" },
+    ];
+    const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+    const persistPath = join(dir, "models.json");
+
+    const catalog = await createClaudeCatalog(emptyStore, containerToken, dir, persistPath, async () => aliases, apiFails).models();
+
+    expect(catalog.models.map((model) => model.id)).toEqual(["opus", "haiku"]);
+    expect(catalog.default).toBe("opus");
+
+    // A file recorded by an older build still carries the row; it is filtered on the way out too, so the offline
+    // rung can't reintroduce what the live one just dropped.
+    await writeFile(persistPath, JSON.stringify(aliases));
+    const offline = await createClaudeCatalog(emptyStore, noContainerToken, dir, persistPath, discoveryFails, apiFails).models();
+
+    expect(offline.models.map((model) => model.id)).toEqual(["opus", "haiku"]);
 });
 
 test("a REST failure costs the versioned rows, never the aliases the CLI already returned", async () => {

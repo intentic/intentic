@@ -47,10 +47,11 @@ defineExpose({ move, pickActive });
             :class="{ 'bg-overlay': index === activeIndex }"
             @mousedown.prevent="emit('pick', command.name)"
         >
-            <!-- text-xs, not the text-sm its sibling popovers use for a primary: this one is MONO, which at a
-                 given size reads wider and heavier than proportional text, so a step down is what makes it
-                 optically match the mention/model rows — and the composer's own 0.75rem text below it. -->
-            <span class="shrink-0 font-mono text-xs text-content">/{{ command.name }}</span>
+            <!-- Meta tier, one step under the body tier its sibling popovers use for a primary: this one is
+                 MONO, which at a given size reads wider and heavier than proportional text, so the step down
+                 is what makes it optically match the mention/model rows. Same rule as .chat-markdown code.
+                 Hierarchy against the hint/description beside it is carried by color, not size. -->
+            <span class="shrink-0 font-mono text-2xs text-content">/{{ command.name }}</span>
             <span v-if="command.hint" class="shrink-0 font-mono text-2xs text-subtle">{{ command.hint }}</span>
             <span class="truncate text-2xs text-subtle">{{ command.description }}</span>
         </button>

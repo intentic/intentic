@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ProgressRing, useDevice } from "@intentic-app/ui";
 import { computed } from "vue";
+import { useRouter } from "vue-router";
 import ProviderLogo from "../chat/ProviderLogo.vue";
 import {
     activityIcon,
@@ -27,6 +28,7 @@ const emit = defineEmits<{ open: []; grab: [event: PointerEvent, card: HTMLEleme
 
 const { mobile } = useDevice();
 const meta = computed(() => agentStatusMeta(props.agent.status));
+const router = useRouter();
 const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
@@ -128,7 +130,18 @@ const grab = (event: PointerEvent): void => {
                 <Icon name="arrow-circle-up" class="mr-0.5 text-2xs" />{{ formatTokens(agent.inputTokens)
                 }}<template v-if="agent.outputTokens !== undefined"> / {{ formatTokens(agent.outputTokens) }}</template>
             </span>
-            <span v-if="agent.costUsd !== undefined" v-tooltip.top="'Cost across this agent\'s turns'">{{ formatCost(agent.costUsd) }}</span>
+            <!-- The card's cost is this agent's lifetime total; the Usage tab is where it breaks down by day
+                 and model. A nested button, so the click opens the breakdown instead of the agent (the drag
+                 gesture already excludes buttons). -->
+            <button
+                v-if="agent.costUsd !== undefined"
+                type="button"
+                class="cursor-pointer transition-colors hover:text-content hover:underline"
+                v-tooltip.top="'Cost across this agent\'s turns — open the usage breakdown'"
+                @click.stop="router.push({ name: `sandbox`, params: { tab: `usage` }, query: { agent: agent.id } })"
+            >
+                {{ formatCost(agent.costUsd) }}
+            </button>
             <span v-if="agent.diff !== undefined && agent.diff.files > 0" v-tooltip.top="'Files the agent changed'">
                 <Icon name="copy" class="mr-0.5 text-2xs" />{{ agent.diff.files }}
             </span>

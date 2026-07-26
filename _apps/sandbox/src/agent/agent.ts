@@ -19,7 +19,16 @@ import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { agentSessionName, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
+import { EventQueue } from "./event-queue.js";
 import { editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
+
+// Which half of an imp-mode turn this request is (see agent/imp.ts); absent ⇒ the ordinary single-agent turn,
+// which holds BOTH the full tool surface and the interactive one.
+//   architect — reasons and writes, and holds no tools at all beyond the two interactive built-ins (planning
+//               is a conversation with the user, not a tool). Its imp does every mechanical thing.
+//   imp       — the architect's hands: the full tool surface, but nothing user-facing. It reports to the
+//               architect, not to the user, so it gets neither the ask tool nor the plan tools.
+export type AgentRole = "architect" | "imp";
 
 export interface AgentRequest {
     readonly prompt: string;
@@ -91,6 +100,8 @@ export interface AgentRequest {
     // Mid-turn steering: when present, the turn runs in the SDK's streaming-input mode and messages pushed
     // onto this queue (via /agent/steer) are injected between tool calls. Absent ⇒ single-message mode.
     readonly steering?: SteeringQueue;
+    // Which half of an imp-mode turn this is; absent ⇒ an ordinary turn. See AgentRole.
+    readonly role?: AgentRole;
 }
 
 // What a turn needs from the SDK: the message stream, plus the session's slash-command list. The real
@@ -547,6 +558,28 @@ const INTERACTIVE_GUIDANCE = [
     "When a request is large, risky, or underspecified, call EnterPlanMode first, investigate read-only, then ExitPlanMode to get your plan approved before changing anything.",
 ].join("\n\n");
 
+// The two built-ins that are a conversation with the USER rather than an action on the workspace. They are the
+// architect's whole tool surface, and precisely what an imp must not hold: an imp reports to the architect, so
+// a plan of its own would be a proposal nobody reads.
+const PLAN_TOOLS = ["EnterPlanMode", "ExitPlanMode"];
+
+// The tool surface a request's role gets. An ARCHITECT's built-ins are the interactive pair alone — it reads,
+// runs and edits nothing itself; an IMP loses that pair and keeps everything else. `tools` is the SDK's
+// base-set selector, so this decides which tools EXIST for the model rather than denying calls it makes —
+// and MCP servers are a separate axis, which is how mcp__ui__ask survives for the tool-less architect.
+// `disallowedTools` also carries the caller's own list (hashlineEdits drops the native Edit/Write).
+//
+// A turn that ALREADY starts in plan mode doesn't offer EnterPlanMode: entering a mode you are in is a no-op
+// call, and a no-op call is precisely the tool-selection noise a tool-less architect exists to be free of.
+const roleOptions = (request: AgentRequest, permissionMode: PermissionMode): Pick<Options, "tools" | "disallowedTools"> => {
+    const disallowedTools = [...(request.disallowedTools ?? []), ...(request.role === "imp" ? PLAN_TOOLS : [])];
+    const architectTools = permissionMode === "plan" ? ["ExitPlanMode"] : [...PLAN_TOOLS];
+    return {
+        ...(request.role === "architect" ? { tools: architectTools } : {}),
+        ...(disallowedTools.length > 0 ? { disallowedTools } : {}),
+    };
+};
+
 // Base SDK options for the turn.
 const baseOptions = (request: AgentRequest, abortController: AbortController, permissionMode: PermissionMode, tmuxEnabled: boolean): Options => ({
     cwd: request.cwd,
@@ -558,7 +591,12 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
     systemPrompt: {
         type: "preset",
         preset: "claude_code",
-        append: request.systemAppend !== undefined ? `${INTERACTIVE_GUIDANCE}\n\n${request.systemAppend}` : INTERACTIVE_GUIDANCE,
+        // The interactive guidance is about widgets an imp does not have — it reports to the architect, not to
+        // the user — so an imp is told its own role and nothing about asking or planning.
+        append: [
+            ...(request.role === "imp" ? [] : [INTERACTIVE_GUIDANCE]),
+            ...(request.systemAppend !== undefined ? [request.systemAppend] : []),
+        ].join("\n\n"),
     },
     // Load the workspace's .claude/ config: CLAUDE.md memory, skills, subagents (.claude/agents), settings,
     // hooks, and .mcp.json — plus the user tier. The SDK default is [] (loads nothing), so every filesystem
@@ -600,7 +638,7 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
     ...(request.plugins !== undefined ? { plugins: request.plugins.map((path) => ({ type: "local" as const, path })) } : {}),
     ...(request.effort !== undefined ? { effort: request.effort as EffortLevel } : {}),
     ...(request.thinking !== undefined ? { thinking: request.thinking ? { type: "adaptive" } : { type: "disabled" } } : {}),
-    ...(request.disallowedTools !== undefined ? { disallowedTools: [...request.disallowedTools] } : {}),
+    ...roleOptions(request, permissionMode),
 });
 
 // The `ask` tool behind AskUserQuestion. It is an SDK MCP tool rather than the built-in of the same name
@@ -713,7 +751,10 @@ const permissionGate =
         });
         const reply = await wait(request.signal);
         if (reply.decision === "deny") {
-            return { behavior: "deny", message: reply.feedback?.trim() || `The user declined ${toolName}. Do not retry it; find another way or ask.` };
+            return {
+                behavior: "deny",
+                message: reply.feedback?.trim() || `The user declined ${toolName}. Do not retry it; find another way or ask.`,
+            };
         }
         return {
             behavior: "allow",
@@ -722,8 +763,6 @@ const permissionGate =
             ...(reply.decision === "always" && suggestions.length > 0 ? { updatedPermissions: suggestions } : {}),
         };
     };
-
-const noop = (): void => {};
 
 // Run one agent turn over `request.cwd`, streaming typed events. ONE path for every permission mode: the
 // interactive surface (question cards, plan approval, per-tool permission prompts) is always wired, and which
@@ -741,13 +780,8 @@ export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaul
         request.signal.addEventListener("abort", () => abortController.abort(), { once: true });
     }
 
-    const queue: AgentEvent[] = [];
-    let wake: () => void = noop;
-    let finished = false;
-    const push = (event: AgentEvent): void => {
-        queue.push(event);
-        wake();
-    };
+    const queue = new EventQueue<AgentEvent>();
+    const push = (event: AgentEvent): void => queue.push(event);
 
     const permissionMode: PermissionMode = request.permissionMode ?? "bypassPermissions";
     const tmuxEnabled = tmuxRunEnabled();
@@ -759,8 +793,13 @@ export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaul
             stderr += data;
         },
         // The `ui` server backs AskUserQuestion; the agent's remote MCP tools are merged in alongside it (a
-        // same-named tool would override `ui`, but `ui` is reserved).
-        mcpServers: { ui: askServer(request, push), ...request.sdkServers, ...mcpServersOf(request.tools ?? []) },
+        // same-named tool would override `ui`, but `ui` is reserved). An imp gets no `ui`: it answers to the
+        // architect, so a question of its own would be asked of a user who is not in that conversation.
+        mcpServers: {
+            ...(request.role === "imp" ? {} : { ui: askServer(request, push) }),
+            ...request.sdkServers,
+            ...mcpServersOf(request.tools ?? []),
+        },
         toolAliases: { AskUserQuestion: "mcp__ui__ask" },
         // Our card renders markdown, so option previews should arrive as markdown (the CLI default, pinned
         // here because the web-SDK default is HTML and would render as escaped source in the card).
@@ -780,25 +819,12 @@ export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaul
         } finally {
             // Ends the streaming input, so the SDK subprocess settles; late steer pushes then report undelivered.
             request.steering?.close();
-            finished = true;
-            wake();
+            queue.end();
         }
     })();
 
     try {
-        for (;;) {
-            if (queue.length > 0) {
-                yield queue.shift() as AgentEvent;
-                continue;
-            }
-            if (finished) {
-                break;
-            }
-            await new Promise<void>((resolve) => {
-                wake = resolve;
-            });
-            wake = noop;
-        }
+        yield* queue;
     } finally {
         await pump;
     }

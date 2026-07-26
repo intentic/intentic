@@ -296,7 +296,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     ref="editInput"
                     v-model="editText"
                     rows="1"
-                    class="chat-surface scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto rounded-lg px-3.5 py-2.5 text-base leading-6 text-content focus:outline-none md:text-sm"
+                    class="chat-surface scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto rounded-lg px-3 py-2 text-base leading-relaxed text-content focus:outline-none md:text-xs"
                     @input="growEdit"
                     @keydown="onEditKeydown"
                 ></textarea>
@@ -345,14 +345,14 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </button>
                 <div
                     v-if="message.text"
-                    class="chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-[0.75rem] leading-[1.6] text-content/90"
+                    class="chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content/90"
                 >
                     {{ message.text }}
                 </div>
             </div>
         </div>
         <div v-else-if="message.role === 'notice'" class="flex items-center gap-2 self-center py-0.5 text-2xs text-subtle">
-            <Icon name="info-circle" class="text-[0.65rem]" />
+            <Icon name="info-circle" class="text-2xs" />
             <span>{{ message.text }}</span>
         </div>
         <template v-else>
@@ -401,8 +401,8 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.bottom="planTitle(message.plan)">{{
                         planTitle(message.plan)
                     }}</span>
-                    <span v-if="message.plan.status === 'approved'" class="text-xs font-medium text-success">✓ Approved</span>
-                    <span v-else-if="message.plan.status === 'rejected'" class="text-xs font-medium text-muted">✕ Kept planning</span>
+                    <span v-if="message.plan.status === 'approved'" class="text-2xs font-medium text-success">✓ Approved</span>
+                    <span v-else-if="message.plan.status === 'rejected'" class="text-2xs font-medium text-muted">✕ Kept planning</span>
                     <button
                         type="button"
                         class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"
@@ -438,15 +438,15 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         v-tooltip.bottom="message.question.questions[0]?.question ?? ''"
                         >{{ message.question.questions[0]?.question }}</span
                     >
-                    <span v-if="message.question.status === 'answered'" class="text-xs font-medium text-success">✓ Answered</span>
-                    <span v-else-if="message.question.status === 'cancelled'" class="text-xs font-medium text-muted">✕ Dismissed</span>
+                    <span v-if="message.question.status === 'answered'" class="text-2xs font-medium text-success">✓ Answered</span>
+                    <span v-else-if="message.question.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Dismissed</span>
                 </div>
 
                 <div class="flex flex-col gap-4 px-3.5 py-3">
                     <div v-for="(question, index) in message.question.questions" :key="index" class="flex flex-col gap-2">
                         <div class="flex flex-col gap-0.5">
                             <span class="text-2xs uppercase tracking-wide text-subtle">{{ question.header }}</span>
-                            <span v-if="message.question.questions.length > 1" class="text-sm font-medium text-content">{{ question.question }}</span>
+                            <span v-if="message.question.questions.length > 1" class="text-xs font-medium text-content">{{ question.question }}</span>
                         </div>
 
                         <div v-if="message.question.status === 'pending'" class="flex flex-col gap-1.5">
@@ -460,24 +460,25 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                 @click="toggleOption(question, index, option.label)"
                             >
                                 <Icon
-                                    class="mt-0.5 text-xs"
+                                    class="mt-0.5 text-2xs"
                                     :name="isSelected(index, option.label) ? 'check-circle' : 'circle'"
                                     :class="isSelected(index, option.label) ? 'text-primary-500' : 'text-subtle'"
                                 />
                                 <span class="flex min-w-0 flex-col">
-                                    <span class="text-sm text-content">{{ option.label }}</span>
+                                    <span class="text-xs text-content">{{ option.label }}</span>
                                     <span class="text-2xs text-subtle">{{ option.description }}</span>
                                 </span>
                             </button>
+                            <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
                             <input
                                 type="text"
                                 :value="otherValue(index)"
                                 @input="setOther(index, ($event.target as HTMLInputElement).value)"
                                 placeholder="Other…"
-                                class="rounded-lg border border-line bg-card px-2.5 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                                class="rounded-lg border border-line bg-card px-2.5 py-1.5 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none md:text-xs"
                             />
                         </div>
-                        <span v-else class="text-sm text-content/85">{{ answerSummary(question) || "—" }}</span>
+                        <span v-else class="text-xs text-content/85">{{ answerSummary(question) || "—" }}</span>
                     </div>
 
                     <div v-if="message.question.status === 'pending'" class="flex items-center gap-2 pt-1">
@@ -501,13 +502,13 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.bottom="permissionTitle">{{
                         permissionTitle
                     }}</span>
-                    <span v-if="message.permission.status === 'allowed'" class="text-xs font-medium text-success">✓ Allowed</span>
-                    <span v-else-if="message.permission.status === 'always'" class="text-xs font-medium text-success">✓ Always allowed</span>
-                    <span v-else-if="message.permission.status === 'denied'" class="text-xs font-medium text-muted">✕ Denied</span>
+                    <span v-if="message.permission.status === 'allowed'" class="text-2xs font-medium text-success">✓ Allowed</span>
+                    <span v-else-if="message.permission.status === 'always'" class="text-2xs font-medium text-success">✓ Always allowed</span>
+                    <span v-else-if="message.permission.status === 'denied'" class="text-2xs font-medium text-muted">✕ Denied</span>
                 </div>
 
                 <div class="flex flex-col gap-1 px-3.5 py-3">
-                    <span v-if="message.permission.description" class="text-sm text-content/85">{{ message.permission.description }}</span>
+                    <span v-if="message.permission.description" class="text-xs text-content/85">{{ message.permission.description }}</span>
                     <span v-if="message.permission.path" class="font-mono text-2xs text-subtle">{{ message.permission.path }}</span>
                     <span v-if="message.permission.reason" class="text-2xs text-subtle">Requested because: {{ message.permission.reason }}</span>
                 </div>
@@ -536,11 +537,10 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
             </div>
 
-            <div
-                v-if="showTyping"
-                class="flex items-center gap-2 rounded-lg bg-overlay px-3.5 py-2.5 text-sm text-muted"
-            >
-                <Icon name="spinner" class="text-xs text-link" spin />
+            <!-- The loader is a status line, not a message: it sits at the meta tier with the tool cards it
+                 trails, and takes the assistant bubble's padding so the stack keeps one left edge. -->
+            <div v-if="showTyping" class="flex items-center gap-2 self-start rounded-lg bg-overlay px-3 py-2 text-2xs text-muted">
+                <Icon name="spinner" class="text-2xs text-link" spin />
                 <span
                     >{{ loaderWord }}… <span class="text-subtle">({{ loaderSeconds }}s)</span></span
                 >

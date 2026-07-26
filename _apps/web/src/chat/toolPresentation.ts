@@ -137,6 +137,10 @@ const PRESENTERS: Record<string, Presenter> = {
     // A subagent's own transcript renders in the parent turn (frames carry parentToolUseId); the card is just
     // the delegation marker, so it gets a distinct icon and no output shaping.
     task: { icon: `users` },
+    // One imp-mode dispatch (see the daemon's agent/imp.ts): the card's target is the block of the architect's
+    // writing the imp reacted to, its body is the report handed back, and the tool calls it made render beneath
+    // it like a subagent's. Its own icon, because it is the one card the user did not ask any agent to make.
+    imp: { icon: `bolt`, summary: (text) => (text === `` ? undefined : `reported back`) },
     websearch: { icon: `search` },
     webfetch: { icon: `globe` },
 };

@@ -409,8 +409,10 @@ const listTunnels = async (apiToken: string, accountId: string): Promise<z.infer
     return tunnels;
 };
 
-// Delete the dangling proxied CNAMEs (sandbox-<id>, ssh-<id>) that point at a reaped tunnel, found by content
-// so we need no record of the hostnames — they all resolve to <tunnelId>.cfargotunnel.com.
+// Delete the dangling proxied CNAMEs (sandbox-<id>, ssh-<id>, one per port slot, one per preview panel) that
+// point at a reaped tunnel, found by content so we need no record of the hostnames — they all resolve to
+// <tunnelId>.cfargotunnel.com. Concurrent: provisioning mints a record per PORT_SLOT, so a sandbox carries a
+// dozen-plus of them and sequencing the deletes made a removal take that many Cloudflare round-trips.
 const deleteTunnelDns = async (apiToken: string, zoneId: string, tunnelId: string): Promise<void> => {
     const content = cfargotunnelCname(tunnelId);
     const records = await cfCall(
@@ -418,12 +420,13 @@ const deleteTunnelDns = async (apiToken: string, zoneId: string, tunnelId: strin
         `/zones/${encodeURIComponent(zoneId)}/dns_records?type=CNAME&content=${encodeURIComponent(content)}`,
         z.array(z.object({ id: z.string() })),
     );
-    for (const record of records) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of records per tunnel; sequenced to keep deletes simple
-        await cfCall(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(record.id)}`, z.unknown(), {
-            method: "DELETE",
-        });
-    }
+    await Promise.all(
+        records.map((record) =>
+            cfCall(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(record.id)}`, z.unknown(), {
+                method: "DELETE",
+            }),
+        ),
+    );
 };
 
 // Tear down one tunnel by id — the shared destroy primitive for deleteSandboxTunnel and the reaper. Clear the

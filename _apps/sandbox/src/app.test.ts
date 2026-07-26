@@ -196,6 +196,8 @@ const services = (overrides: Partial<Services> = {}): Services => ({
             outputCleaners: "",
             outputHoldout: 0,
             filterBackend: "native" as const,
+            impMode: false,
+            impModel: "",
         }),
         set: async () => {},
     },
@@ -224,6 +226,9 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     geminiModels: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },
     history: fakeHistory(),
     agent: async function* () {
+        yield { kind: "done" };
+    },
+    impAgent: async function* () {
         yield { kind: "done" };
     },
     codexAgent: async function* () {
@@ -1891,6 +1896,56 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
             { repo: "shop", conflicted: [], staged: [], unstaged: [], error: "broken repo" },
         ],
     });
+});
+
+// The graph's own routes, over the scope that has no directory of its own: "root" IS the /work repo, so every
+// verb the graph offers has to resolve it to the workspace root rather than to a dir named "root" — which is
+// exactly what the explorer's root git-history icon and the Changes header both open.
+test("the git-history graph resolves the 'root' scope to /work — reads, and a HEAD-mover that checkpoints first", async () => {
+    const workspace = tempWorkspace([{ name: "intent" }]);
+    const calls: string[] = [];
+    const snapshots: string[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                history: fakeHistory({
+                    snapshot: async (trigger, label) => {
+                        snapshots.push(`${trigger} ${label}`);
+                        return undefined;
+                    },
+                }),
+                git: {
+                    ...services().git,
+                    commitLog: async (dir, limit) => {
+                        calls.push(`log ${dir} ${limit}`);
+                        return { branch: "main", commits: [] };
+                    },
+                    commitChanges: async (dir, sha) => {
+                        calls.push(`commit-diff ${dir} ${sha}`);
+                        return [];
+                    },
+                    checkoutRef: async (dir, ref) => {
+                        calls.push(`checkout ${dir} ${ref}`);
+                    },
+                },
+            }),
+        ),
+    );
+    expect(await client.git.log({ repo: "root" })).toEqual({ repo: "root", branch: "main", commits: [] });
+    expect(await client.git.commitDiff({ repo: "root", sha: "abcdef1" })).toEqual({ files: [] });
+    expect(await client.git.checkout({ repo: "root", ref: "abcdef1" })).toEqual({ ok: true });
+    expect(await client.git.log({ repo: "intent" })).toEqual({ repo: "intent", branch: "main", commits: [] });
+    expect(calls).toEqual([
+        `log ${workspace.root} 300`,
+        `commit-diff ${workspace.root} abcdef1`,
+        `checkout ${workspace.root} abcdef1`,
+        `log ${join(workspace.root, "intent")} 300`,
+    ]);
+    // A HEAD-mover checkpoints BEFORE it runs for root too, so a checkout off the workspace repo stays
+    // reversible from the Checkpoints timeline.
+    expect(snapshots).toEqual(["user before checkout abcdef1"]);
+    expect(await errorCode(client.git.log({ repo: "nope" }))).toBe("NOT_FOUND");
 });
 
 test("git.commit records the index by default and stages everything first for `all`", async () => {

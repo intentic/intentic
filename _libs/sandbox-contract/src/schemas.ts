@@ -400,18 +400,34 @@ export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTrans
 //   filterBackend     — which cleaner runs the compression: "native" (agent-output-filter, default) or "rtk"
 //                        (the rtk binary from its installed extension, rewritten at the PreToolUse hook) — an
 //                        A/B backend switch, so native and rtk can be benchmarked head-to-head.
+//   impMode           — splits every Claude Code turn in two: an ARCHITECT that reasons and writes but holds no
+//                        tools, and an IMP — a cheaper agent with the full tool surface — that reads each block
+//                        the architect writes, does what it calls for, and hands the results back. Inverted
+//                        delegation: the architect never spawns a search agent, the imp delivers unasked.
+//   impModel          — the model each imp dispatch runs on; empty ⇒ the `haiku` tier alias on a native Claude
+//                        turn, and the turn's own routed model when a translator serves the harness (no cheaper
+//                        id is knowable there). Only read while impMode is on.
 // The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "off" (cleaning off),
 // outputHoldout 0, filterBackend "native" — a fresh sandbox starts with cleaning and iq off until the owner enables them.
-
+//
+// Every field carries that default IN THE SCHEMA, so a settings object written before a field existed still
+// parses — the absent key reads as its default. That is not a compatibility layer, it is the seam this shape
+// spans: the browser ships with the platform while the daemon ships inside the user's sandbox image, so a web
+// build is routinely NEWER than the daemon answering it. Requiring the key instead makes the whole settings
+// surface fail to parse the moment a toggle is added — which reaches the user as a page of switches that are
+// silently dead, not as an error. It also means an older on-disk manifest keeps the owner's other picks rather
+// than being discarded whole.
 export const SandboxSettingsSchema = z.object({
-    stableSystemPrompt: z.boolean(),
-    skills: z.array(z.string()),
-    hashlineEdits: z.boolean(),
-    terseOutput: z.boolean(),
-    iqSearch: z.boolean(),
-    outputCleaners: z.string(),
-    outputHoldout: z.number().min(0).max(1),
-    filterBackend: z.enum(["native", "rtk"]),
+    stableSystemPrompt: z.boolean().default(false),
+    skills: z.array(z.string()).default([]),
+    hashlineEdits: z.boolean().default(false),
+    terseOutput: z.boolean().default(false),
+    iqSearch: z.boolean().default(false),
+    outputCleaners: z.string().default("off"),
+    outputHoldout: z.number().min(0).max(1).default(0),
+    filterBackend: z.enum(["native", "rtk"]).default("native"),
+    impMode: z.boolean().default(false),
+    impModel: z.string().default(""),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 
@@ -1719,8 +1735,6 @@ export const UsageTurnSchema = z.object({
     model: z.string().optional(),
     harness: z.string(),
     // The conversation this turn belonged to, so spend can join to a fleet agent. Absent on a main-tree turn.
-    // Not part of the rollup key (per-agent totals come off the fleet registry, which already carries them) —
-    // stamped here so per-agent-over-time needs no schema change later.
     conversationId: z.string().optional(),
     // The provider's own turn count for the request (a Claude "turn" can be several under the hood), so turns
     // and cost stay comparable across providers. 1 when the provider reported none.
@@ -1734,15 +1748,21 @@ export const UsageTurnSchema = z.object({
 });
 export type UsageTurn = z.infer<typeof UsageTurnSchema>;
 
-// The ledger grouped by day × provider × account × model × harness — the finest grouping any dashboard panel
-// needs, and ~2–5 rows per active day instead of one per turn, so a year of history is a few hundred KB over
-// the tunnel. Every panel (spend per day, cost by model, cost by provider) is a projection of these.
+// The ledger grouped by day × provider × account × model × harness × conversation — the finest grouping any
+// dashboard panel needs, and a handful of rows per active day instead of one per turn, so a year of history is
+// well under a MB over the tunnel. Every panel (spend per day, cost by model, cost by agent, cache hit rate) is
+// a projection of these.
+// The conversation is in the KEY, not merely along for the ride, because cost-by-agent has to answer within the
+// same window as every other panel on the screen. The fleet registry also carries a per-agent total, but only a
+// cumulative, all-time one — reading it beside a "last 7 days" filter would print an all-time number under a
+// windowed heading, which is the shrinking-totals bug wearing a different hat.
 export const UsageRollupRowSchema = z.object({
     day: z.string(),
     provider: z.string(),
     account: z.string().optional(),
     model: z.string().optional(),
     harness: z.string(),
+    conversationId: z.string().optional(),
     turns: z.number(),
     inputTokens: z.number(),
     outputTokens: z.number(),

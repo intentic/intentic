@@ -75,6 +75,17 @@
     --color-success:     var(--role-success);
     --color-warning:     var(--role-warning);
     --color-info:        var(--role-info);
+
+    /* Chart series identity — five categorical slots plus the tail. Assign a slot to an ENTITY once
+     * and never by rank, so filtering a series out can't repaint the survivors. `series-other` is
+     * deliberately achromatic: it is the fold-to bucket past slot 5, and a sixth generated hue is the
+     * thing the fold exists to avoid. */
+    --color-series-1:     var(--role-series-1);
+    --color-series-2:     var(--role-series-2);
+    --color-series-3:     var(--role-series-3);
+    --color-series-4:     var(--role-series-4);
+    --color-series-5:     var(--role-series-5);
+    --color-series-other: var(--role-series-other);
 }
 
 /* Light scheme (default). */
@@ -92,6 +103,12 @@
     --role-success:     var(--color-success-600);
     --role-warning:     var(--color-warning-600);
     --role-info:        var(--color-info-600);
+    --role-series-1:     var(--color-series-1-light);
+    --role-series-2:     var(--color-series-2-light);
+    --role-series-3:     var(--color-series-3-light);
+    --role-series-4:     var(--color-series-4-light);
+    --role-series-5:     var(--color-series-5-light);
+    --role-series-other: var(--color-surface-400);
 }
 
 /* Dark scheme. */
@@ -109,4 +126,10 @@
     --role-success:     var(--color-success-500);
     --role-warning:     var(--color-warning-500);
     --role-info:        var(--color-info-500);
+    --role-series-1:     var(--color-series-1-dark);
+    --role-series-2:     var(--color-series-2-dark);
+    --role-series-3:     var(--color-series-3-dark);
+    --role-series-4:     var(--color-series-4-dark);
+    --role-series-5:     var(--color-series-5-dark);
+    --role-series-other: var(--color-surface-500);
 }

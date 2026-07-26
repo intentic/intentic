@@ -36,7 +36,7 @@ const accountLabel = computed(() => ACCOUNT_LABEL[provider.value] ?? `Claude`);
 <template>
     <div v-if="!connected" class="flex flex-col items-center gap-3 rounded-2xl border border-line bg-overlay/40 px-4 py-7 text-center">
         <Icon name="sparkles" class="text-xl text-link" />
-        <p class="text-sm text-muted">
+        <p class="text-xs text-muted">
             <template v-if="subscription && subscriptionCopy">
                 Connect your {{ subscriptionCopy.account }} to run {{ subscriptionCopy.runs }}.
             </template>
@@ -50,7 +50,7 @@ const accountLabel = computed(() => ACCOUNT_LABEL[provider.value] ?? `Claude`);
                 v-for="tab in providerTabs"
                 :key="tab.value"
                 type="button"
-                class="composer-ghost h-7 shrink-0 whitespace-nowrap px-2.5 text-xs font-medium"
+                class="composer-ghost h-7 shrink-0 whitespace-nowrap px-2.5 text-2xs font-medium"
                 :class="{ 'composer-active': provider === tab.value }"
                 @click="selectProvider(tab.value)"
                 :aria-pressed="provider === tab.value"

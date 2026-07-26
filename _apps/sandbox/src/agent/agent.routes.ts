@@ -17,10 +17,12 @@ import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { landAgent } from "../agents/land.js";
 import type { AgentRequest } from "./agent.js";
+import { IMP_DEFAULT_MODEL } from "./imp.js";
 import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
+import { sumUsage, type UsageFrame } from "./turn-usage.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
 import { delegationNote } from "./delegation.js";
 
@@ -455,7 +457,7 @@ async function* runTurn(
         // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the
         // provider prompt cache survives the turn — the cross-provider delegation note then rides the user
         // message instead of the system prompt.
-        const { stableSystemPrompt, hashlineEdits, iqSearch, outputCleaners, outputHoldout, filterBackend, terseOutput } =
+        const { stableSystemPrompt, hashlineEdits, iqSearch, outputCleaners, outputHoldout, filterBackend, terseOutput, impMode, impModel } =
             await services.sandboxSettings.get();
         // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
         // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle
@@ -519,7 +521,14 @@ async function* runTurn(
         // system+tools prefix intact (the point of stableSystemPrompt).
         const systemAppend =
             [...(note !== undefined && !stableSystemPrompt ? [note] : []), ...(terseOutput ? [TERSE_NOTE] : [])].join("\n\n") || undefined;
-        run = services.agent;
+        // Imp mode splits this turn in two (agent/imp.ts): the request below describes the turn as a whole, and
+        // the orchestrator divides it — reasoning and credentials to the tool-less architect, the tool surface
+        // (plugins, MCP servers, shell env, cleaner settings) to the imps. The imp's model is the setting's when
+        // it names one; otherwise the cheap `haiku` alias natively, and the turn's own routed model when a
+        // translator serves the harness — no cheaper id is knowable through it.
+        run = impMode
+            ? (turnRequest) => services.impAgent({ model: impModel !== "" ? impModel : (endpoint?.model ?? IMP_DEFAULT_MODEL) }, turnRequest)
+            : services.agent;
         request = {
             ...base,
             prompt,
@@ -592,9 +601,10 @@ async function* runTurn(
     const provider = input.agent ?? "claude";
     let sessionId = input.sessionId;
     let usageExtra: Record<string, unknown> | undefined;
-    // The turn's usage frame, kept typed (unlike usageExtra, which is the activity log's opaque `extra`) so the
-    // spend ledger below appends numbers rather than re-narrowing unknowns.
-    let usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
+    // The turn's usage, kept typed (unlike usageExtra, which is the activity log's opaque `extra`) so the spend
+    // ledger below appends numbers rather than re-narrowing unknowns. SUMMED, not last-wins: a turn emits one
+    // frame per SDK turn, and a steered follow-up or an imp-mode round is a second one — the money is the total.
+    let usage: UsageFrame | undefined;
     const record = (event: Omit<ActivityEvent, "id" | "at" | "provider" | "direction">): void => {
         void services.activity
             .append({
@@ -617,9 +627,9 @@ async function* runTurn(
             if (event.kind === "session") {
                 sessionId = event.sessionId;
             } else if (event.kind === "usage") {
-                const { kind: _kind, ...rest } = event;
+                usage = sumUsage(usage, event);
+                const { kind: _kind, ...rest } = usage;
                 usageExtra = rest;
-                usage = event;
                 // Attribute the per-turn totals (and the account-wide rate-limit snapshot) to the account that
                 // served the turn, so the client keys its usage displays by account.
                 yield { ...event, ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}) };

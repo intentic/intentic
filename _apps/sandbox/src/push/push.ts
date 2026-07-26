@@ -14,10 +14,15 @@ import type { PushStore } from "./push-store.js";
  * 2. Never let a push failure touch the thing that triggered it. Every send is fire-and-forget from the
  *    caller's perspective: a turn must complete identically whether the push service is up, down, or slow. */
 
-// A dead subscription is a normal, permanent outcome — the browser was uninstalled, the permission revoked,
-// the endpoint rotated. The push services signal it with these codes, and the only correct response is to
-// forget the row (retrying forever would be the bug).
-const GONE = new Set([404, 410]);
+// A subscription we can never send to again. Two permanent outcomes, both normal:
+//   404/410 — the endpoint is gone: the browser was uninstalled, the permission revoked, the endpoint rotated.
+//   403     — the endpoint is alive but was minted for a DIFFERENT VAPID key. This is the easier one to miss,
+//             and it happens whenever the sandbox is recreated: push-store mints a fresh keypair while browsers
+//             keep subscriptions bound to the old one. Our key never rotates back, so this endpoint will refuse
+//             every send forever.
+// Either way the only correct response is to forget the row — retrying forever would be the bug, and keeping it
+// would let the settings toggle keep claiming "on" for a device that can no longer be reached.
+const DEAD = new Set([403, 404, 410]);
 
 export interface PushSender {
     // Fan out to every subscribed device. Resolves once every send settles; never rejects.
@@ -44,9 +49,12 @@ export const createPushSender = (store: PushStore, logger: Logger): PushSender =
                 try {
                     await webpush.sendNotification(subscription, payload, { TTL: 600 });
                 } catch (error) {
-                    if (error instanceof WebPushError && GONE.has(error.statusCode)) {
+                    if (error instanceof WebPushError && DEAD.has(error.statusCode)) {
                         await store.remove(subscription.endpoint).catch(() => undefined);
-                        logger.debug({ endpoint: subscription.endpoint }, "push: dropped a dead subscription");
+                        logger.debug(
+                            { endpoint: subscription.endpoint, statusCode: error.statusCode },
+                            "push: dropped a subscription we can no longer send to",
+                        );
                         return;
                     }
                     // Anything else is transient (a 5xx, a timeout). Warn and move on: there is nothing to

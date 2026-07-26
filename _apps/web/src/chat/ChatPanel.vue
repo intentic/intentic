@@ -758,8 +758,8 @@ watch(keyboardInset, () => {
                 <template v-if="messages.length > 0">
                     <ChatMessageView v-for="message in messages" :key="message.id" :message="message" :streaming="isStreaming(message)" />
                 </template>
-                <p v-else class="m-auto max-w-[80%] text-center text-sm text-muted">Start a conversation with {{ providerName }}.</p>
-                <p v-if="activeError" class="text-sm text-danger">{{ activeError }}</p>
+                <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">Start a conversation with {{ providerName }}.</p>
+                <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
             </div>
         </div>
 
@@ -847,14 +847,16 @@ watch(keyboardInset, () => {
                                 ></div>
                             </div>
                         </div>
-                        <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
+                        <!-- Body tier on desktop: what you type must read at the size it will land in the
+                             transcript. text-base below md: 16px is the iOS threshold under which focusing
+                             zooms the page. -->
                         <textarea
                             ref="input"
                             rows="1"
                             v-model="draft"
                             name="draft"
                             :placeholder="composerPlaceholder"
-                            class="scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 py-3 text-[0.75rem] leading-6 text-content placeholder:text-subtle focus:outline-none md:text-sm"
+                            class="scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 py-3 text-base leading-relaxed text-content placeholder:text-subtle focus:outline-none md:text-xs"
                             @input="onInput"
                             @keydown="onKeydown"
                             @keyup="syncCaret"
@@ -865,7 +867,7 @@ watch(keyboardInset, () => {
                         <div class="flex items-center gap-1 px-2.5 pb-2.5">
                             <button
                                 type="button"
-                                class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-xs font-medium max-md:h-11"
+                                class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                 @click="mobile ? (modelSheetOpen = true) : providerModel?.toggle($event)"
                                 v-tooltip.top="activeModel ?? `${providerName} · ${modelLabelText}`"
                                 aria-label="Provider and model"
@@ -893,7 +895,7 @@ watch(keyboardInset, () => {
 
                             <button
                                 type="button"
-                                class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-xs font-medium max-md:h-11"
+                                class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                 @click="mobile ? (modeSheetOpen = true) : modeMenu?.toggle($event)"
                                 v-tooltip.top="modeDescription"
                                 aria-label="Agent mode"
@@ -912,7 +914,7 @@ watch(keyboardInset, () => {
                                 :aria-pressed="followAlong.enabled.value"
                                 aria-label="Follow agent edits"
                             >
-                                <Icon :name="followAlong.enabled.value ? 'eye' : 'eye-slash'" class="text-sm max-md:text-base" />
+                                <Icon :name="followAlong.enabled.value ? 'eye' : 'eye-slash'" class="text-xs max-md:text-base" />
                             </button>
 
                             <button
@@ -925,7 +927,7 @@ watch(keyboardInset, () => {
                                 :aria-pressed="listening"
                                 aria-label="Dictate"
                             >
-                                <Icon name="microphone" class="text-sm max-md:text-base" />
+                                <Icon name="microphone" class="text-xs max-md:text-base" />
                             </button>
 
                             <button
@@ -965,10 +967,18 @@ watch(keyboardInset, () => {
                                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
                                 <span class="@max-xs:hidden">{{ contextRing.label }}</span>
                             </span>
-                            <span v-if="usageRing" class="inline-flex items-center gap-1" v-tooltip.top="usageRing.tooltip">
+                            <!-- The chip answers "am I about to get rate-limited"; a click goes to the screen
+                                 that answers "and what has it cost me". -->
+                            <button
+                                v-if="usageRing"
+                                type="button"
+                                class="inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-content"
+                                v-tooltip.top="usageRing.tooltip"
+                                @click="router.push('/sandbox/usage')"
+                            >
                                 <ProgressRing :value="usageRing.value" :class="usageRing.warn ? 'text-warning' : 'text-primary-500'" />
                                 <span class="@max-xs:hidden">{{ usageRing.label }}</span>
-                            </span>
+                            </button>
                             <button
                                 type="button"
                                 class="inline-flex items-center gap-1 transition-colors hover:text-content"
@@ -1028,9 +1038,22 @@ watch(keyboardInset, () => {
     background: color-mix(in srgb, var(--color-overlay) 35%, transparent);
     border: 1px solid var(--color-line);
 }
+/* Chat type scale — three tiers, and nothing else in the chat column:
+     meta   0.6875rem  (text-2xs)  tool cards, timestamps, badges, hints, descriptions, code
+     body   0.75rem    (text-xs)   all prose and controls: bubbles, markdown, composer, menu rows
+     title  0.875rem   (text-sm)   card header lines only (plan / question / permission)
+   Touch bumps a step, so shared surfaces are written as a pair — `text-base md:text-xs` on inputs
+   (16px is iOS's zoom threshold), `text-sm md:text-xs` on menu rows. The `md:` half is always a tier
+   from this table; the mobile-only components (ChatTabsMobile) sit at the touch sizes throughout.
+   Labelled .composer-ghost buttons are chrome, not content: they take the meta tier wherever they
+   appear (the composer's model/mode row, the picker's footer, the connect gate's provider tabs), so
+   the controls framing the input never out-weigh the message being written in it.
+   Mono runs a tier below its sans context — it reads optically larger at the same nominal size.
+   The rules below are stated in `em` so the prose scales with the body tier instead of pinning a
+   second, absolute scale beside it. */
 .chat-markdown {
     font-size: 0.75rem;
-    line-height: 1.6;
+    line-height: 1.625;
 }
 .chat-markdown > :first-child {
     margin-top: 0;
@@ -1063,16 +1086,16 @@ watch(keyboardInset, () => {
     line-height: 1.3;
 }
 .chat-markdown h1 {
-    font-size: 1.2rem;
+    font-size: 1.45em;
 }
 .chat-markdown h2 {
-    font-size: 1.1rem;
+    font-size: 1.25em;
 }
 .chat-markdown h3 {
-    font-size: 1.02rem;
+    font-size: 1.1em;
 }
 .chat-markdown h4 {
-    font-size: 0.95rem;
+    font-size: 1em;
 }
 .chat-markdown ul,
 .chat-markdown ol {
@@ -1111,13 +1134,14 @@ watch(keyboardInset, () => {
 .chat-markdown pre code {
     background: transparent;
     padding: 0;
-    font-size: 0.8125rem;
 }
 /* Fenced code blocks are substituted as raw markup by markdownCode and styled app-wide in styles.css — the
-   workspace markdown preview renders the same markup from the same renderer. */
+   workspace markdown preview renders the same markup from the same renderer.
+   One size for inline and fenced code: the meta tier, which lands a step under the prose because mono runs
+   optically larger than the sans body at the same nominal size. */
 .chat-markdown code {
     font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 0.85em;
+    font-size: 0.6875rem;
     background: color-mix(in srgb, var(--color-content) 9%, transparent);
     padding: 0.1em 0.34em;
     border-radius: var(--radius-xs);
@@ -1133,7 +1157,7 @@ watch(keyboardInset, () => {
     width: 100%;
     margin: 0.7rem 0;
     border-collapse: collapse;
-    font-size: 0.875rem;
+    font-size: 0.6875rem;
 }
 .chat-markdown th,
 .chat-markdown td {
@@ -1149,7 +1173,7 @@ watch(keyboardInset, () => {
 .chat-markdown-compact h2,
 .chat-markdown-compact h3,
 .chat-markdown-compact h4 {
-    font-size: 0.875rem;
+    font-size: 1.1em;
     margin: 0.7rem 0 0.35rem;
 }
 .chat-markdown-compact p {
@@ -1160,10 +1184,10 @@ watch(keyboardInset, () => {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    height: 2.25rem;
-    padding: 0 1rem;
+    height: 2rem;
+    padding: 0 0.85rem;
     border-radius: var(--radius-md);
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
     font-weight: 600;
     cursor: pointer;
     transition:

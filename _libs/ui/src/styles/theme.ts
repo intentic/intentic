@@ -64,6 +64,20 @@ const custom = {
                 borderRadius: `var(--ui-radius)`,
             },
         },
+        toggleswitch: {
+            colorScheme: {
+                // Aura's dark disabled state pairs a surface-600 track with a surface-900 handle — a knob the
+                // same value as the card it sits on — and then fades the whole control to 0.6. The switch
+                // doesn't read as "disabled", it reads as MISSING: an empty gap where a control was. Any
+                // moment a toggle is briefly disabled (settings still loading, sandbox offline) therefore
+                // looks like the UI dropped it. Hold the track at the same shade as the OFF state and lift the
+                // handle to surface-500, so the shape survives the fade and only its contrast drops.
+                dark: {
+                    root: { disabledBackground: `var(--color-surface-700)` },
+                    handle: { disabledBackground: `var(--color-surface-500)` },
+                },
+            },
+        },
         tooltip: {
             root: {
                 // Shrink the box to match the smaller text-xs label (≈ py-1 px-2).

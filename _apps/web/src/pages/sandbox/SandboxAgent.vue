@@ -5,7 +5,7 @@ import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { providerTabs } from "../../composables/chat/conversation";
+import { modelOptionsFor, providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { errorMessage } from "../../composables/useAsyncAction";
@@ -163,8 +163,22 @@ const finishConnect = async (): Promise<void> => {
 
 // --- Agent behavior toggles (per-sandbox, daemon .intentic/settings.json) ----------------------------------
 // The daemon overwrites the whole settings object, so each toggle spreads the current settings and flips just
-// its flag. Toggles are disabled until settings load, so a defined value is guaranteed by the time one fires.
-const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
+// its flag. Toggles are disabled until settings load, so a defined value is guaranteed by the time one fires —
+// which is exactly why a failed read has to SAY so (settingsError below): the same disabled state otherwise
+// reads as a page of switches that simply don't respond to clicks.
+const { settings: sandboxSettings, error: settingsError, save: saveSandboxSettings } = useSandboxSettings();
+// Only states that need explaining: a failed read, or a sandbox that isn't answering. The first-load moment is
+// deliberately silent — the controls are disabled for it either way, and a line that appears and then vanishes
+// would shove every row down and back on each visit.
+const settingsBlocked = computed(() => {
+    if (sandboxSettings.value !== undefined) {
+        return undefined;
+    }
+    if (settingsError.value !== undefined) {
+        return settingsError.value;
+    }
+    return sandbox.reachable.value ? undefined : `Your sandbox is offline — its settings can't be read or changed from here.`;
+});
 
 // Output cleaning is a spec string ("" = all cleaners on, "off" = disabled), not a bool; this toggle covers the
 // common on/off. A finer spec (e.g. "-cap", "git,pnpm") for benchmarking specific cleaners is set via /settings.
@@ -193,6 +207,26 @@ const toggleIqSearch = (value: boolean): void => {
     }
     saveSandboxSettings.mutate({ ...current, iqSearch: value });
 };
+
+// Imp mode: split each turn into a tool-less architect and a cheaper imp that reads what the architect writes,
+// does it, and reports back. The imp's model is a second setting — empty means the daemon's cheap default.
+const toggleImpMode = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, impMode: value });
+};
+const setImpModel = (model: string): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, impModel: model });
+};
+// The Claude catalog the chat's picker uses (live daemon discovery, static tiers as the pre-load floor), so
+// the imp can run any model the account can drive; the blank option leaves the choice to the daemon.
+const impModelOptions = computed(() => modelOptionsFor(`claude`));
 
 // --- Per-cleaner toggles (the `outputCleaners` spec, edited as a checklist) ---------------------------------
 // Every cleaner id + a short label, in the order of bin/cleaners.mjs CLEANERS (keep in sync). Each renders one
@@ -537,6 +571,10 @@ const importMemory = async (): Promise<void> => {
             </div>
         </Card>
 
+        <!-- Why every control below is inert, whenever it is: a settings read that hasn't landed (or failed)
+             disables all of them, and an unexplained dead switch is indistinguishable from a broken page. -->
+        <p v-if="settingsBlocked" :class="settingsError ? cmp.alertDanger() : 'px-0.5 text-xs text-muted'">{{ settingsBlocked }}</p>
+
         <!-- Command output — the shell-output filter (master toggle + per-cleaner checklist + holdout), its A/B
              backend, and the realized-savings report. One grouped section instead of a card per toggle. -->
         <RowGroup label="Command output">
@@ -650,6 +688,41 @@ const importMemory = async (): Promise<void> => {
                         :disabled="sandboxSettings === undefined"
                         @update:model-value="toggleIqSearch"
                     />
+                </template>
+            </Row>
+
+            <!-- Imp mode — the architect/imp split (daemon: agent/imp.ts). The main model holds no tools and just
+                 thinks out loud; a cheaper imp reads each block it writes, does what that block calls for, and
+                 hands the results back. Claude Code harness only (any provider running on it). -->
+            <Row
+                icon="sitemap"
+                title="Imp mode"
+                description="Let the assistant think without tools while a cheaper imp reads along, does what it asks for, and delivers the results. Claude Code harness only."
+            >
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="sandboxSettings?.impMode ?? false"
+                        :disabled="sandboxSettings === undefined"
+                        @update:model-value="toggleImpMode"
+                    />
+                </template>
+                <template v-if="sandboxSettings?.impMode === true" #below>
+                    <label class="flex items-center justify-between gap-3">
+                        <span class="flex min-w-0 flex-col">
+                            <span class="text-xs text-content">Imp model</span>
+                            <span class="text-2xs text-muted"
+                                >The model the imp runs on — the cheap half of the pair. The default suits every provider.</span
+                            >
+                        </span>
+                        <select
+                            :value="sandboxSettings.impModel"
+                            :class="cmp.input('w-44 shrink-0 text-xs')"
+                            @change="(event: Event) => setImpModel((event.target as HTMLSelectElement).value)"
+                        >
+                            <option value="">Haiku (default)</option>
+                            <option v-for="model in impModelOptions" :key="model.value" :value="model.value">{{ model.label }}</option>
+                        </select>
+                    </label>
                 </template>
             </Row>
         </RowGroup>

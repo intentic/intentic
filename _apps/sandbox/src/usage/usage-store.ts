@@ -19,7 +19,8 @@ export interface UsageStore {
     // Fills `at` + `day`. Called once per turn from the turn-end path; a failure surfaces to its caller (which
     // logs and moves on) and never poisons later appends.
     readonly record: (turn: Omit<UsageTurn, "at" | "day">) => Promise<void>;
-    // Grouped by day × provider × account × model × harness, oldest day first. Inclusive UTC day bounds.
+    // Grouped by day × provider × account × model × harness × conversation, oldest day first. Inclusive UTC
+    // day bounds.
     readonly rollup: (query: { from?: string | undefined; to?: string | undefined }) => Promise<UsageRollupRow[]>;
 }
 
@@ -31,8 +32,8 @@ export const utcDay = (at: number): string => new Date(at).toISOString().slice(0
 
 // The rollup's grouping key. JSON of the tuple rather than a string join: model and account ids are provider
 // data, and a separator-based key would collide the moment one contained the separator.
-const groupKey = (row: Pick<UsageTurn, "day" | "provider" | "account" | "model" | "harness">): string =>
-    JSON.stringify([row.day, row.provider, row.account, row.model, row.harness]);
+const groupKey = (row: Pick<UsageTurn, "day" | "provider" | "account" | "model" | "harness" | "conversationId">): string =>
+    JSON.stringify([row.day, row.provider, row.account, row.model, row.harness, row.conversationId]);
 
 export const fileUsageStore = (path: string, now: () => number = Date.now): UsageStore => {
     let queue: Promise<unknown> = Promise.resolve();
@@ -87,6 +88,7 @@ export const fileUsageStore = (path: string, now: () => number = Date.now): Usag
                         ...(turn.account !== undefined ? { account: turn.account } : {}),
                         ...(turn.model !== undefined ? { model: turn.model } : {}),
                         harness: turn.harness,
+                        ...(turn.conversationId !== undefined ? { conversationId: turn.conversationId } : {}),
                         turns: turn.turns,
                         inputTokens: turn.inputTokens,
                         outputTokens: turn.outputTokens,

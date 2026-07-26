@@ -88,6 +88,28 @@ test("an unattributed turn groups separately from an attributed one on the same 
     expect(await store.rollup({})).toHaveLength(2);
 });
 
+test("the conversation is part of the key, so cost-by-agent is answerable within a window", async () => {
+    let clock = DAY_ONE;
+    const store = fileUsageStore(storePath(), () => clock);
+    await store.record(turn({ conversationId: "agent-a", costUsd: 1 }));
+    await store.record(turn({ conversationId: "agent-a", costUsd: 2 }));
+    await store.record(turn({ conversationId: "agent-b", costUsd: 4 }));
+    // A main-tree turn belongs to no agent — it stays its own row rather than pooling under a blank id.
+    await store.record(turn({ costUsd: 8 }));
+    clock = DAY_TWO;
+    await store.record(turn({ conversationId: "agent-a", costUsd: 16 }));
+
+    const all = await store.rollup({});
+    expect(all).toHaveLength(4);
+    expect(all.filter((row) => row.conversationId === "agent-a").map((row) => row.costUsd)).toEqual([3, 16]);
+    expect(all.find((row) => row.conversationId === undefined)).toMatchObject({ costUsd: 8 });
+    expect("conversationId" in (all.find((row) => row.costUsd === 8) ?? {})).toBe(false);
+
+    // The point of keying on it: day two alone reports agent-a's day-two spend, not its lifetime total.
+    const dayTwo = await store.rollup({ from: "2026-07-21" });
+    expect(dayTwo).toEqual([expect.objectContaining({ conversationId: "agent-a", costUsd: 16 })]);
+});
+
 test("a corrupt line is skipped, never the ledger", async () => {
     const path = storePath();
     const store = fileUsageStore(path, () => DAY_ONE);

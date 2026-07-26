@@ -78,6 +78,33 @@
     --color-blue-900: oklch(36% 0.10  255);
     --color-blue-950: oklch(27% 0.075 255);
 
+    /* Categorical series (hues 55 / 255 / 190 / 295 / 345) — chart IDENTITY, nothing else.
+     * The five ramps above are all spoken for: brand orange means "action", and red/green/amber
+     * are status-reserved, so a series painted in one would read as an error or a success. These
+     * are five single steps rather than ramps, because a categorical slot needs exactly one.
+     *
+     * Two steps per slot, light and dark, SELECTED for each surface rather than flipped: dark
+     * needs its own lightness band, not an inversion. The values are not taste — they are the
+     * output of the palette validator (colorblind separation, lightness band, chroma floor)
+     * against the real card surfaces, #fdfbfa and #201c19:
+     *   light — worst adjacent CVD ΔE 12.5 (protan), normal-vision 21.8
+     *   dark  — worst adjacent CVD ΔE  9.1 (protan), normal-vision 17.7
+     * Adjacency is what was measured, so THE SLOT ORDER IS PART OF THE RESULT. Series render in
+     * slot order (see PROVIDER_SERIES in usageChart.ts); permuting them breaks the guarantee —
+     * swapping slots 3 and 4 alone drops the worst pair to ΔE 4.0 and fails the check.
+     * Slots 1 and 3 (light) and slot 4 (dark) sit under 3:1 against their surface: legal for
+     * fills, and the reason every chart using them ships direct labels and a table view. */
+    --color-series-1-light: oklch(70.0% 0.170  55.0); /* orange  #ec7c0e */
+    --color-series-2-light: oklch(52.1% 0.169 254.8); /* blue    #0367c7 */
+    --color-series-3-light: oklch(66.9% 0.116 189.6); /* teal    #00aba4 */
+    --color-series-4-light: oklch(45.0% 0.169 294.8); /* violet  #5f38a7 */
+    --color-series-5-light: oklch(62.1% 0.191 345.1); /* magenta #d14ba0 */
+    --color-series-1-dark:  oklch(67.0% 0.161  54.6); /* orange  #de7514 */
+    --color-series-2-dark:  oklch(55.0% 0.180 255.0); /* blue    #026fd7 */
+    --color-series-3-dark:  oklch(65.4% 0.113 189.5); /* teal    #01a69f */
+    --color-series-4-dark:  oklch(51.9% 0.180 294.9); /* violet  #734ac3 */
+    --color-series-5-dark:  oklch(60.0% 0.191 344.9); /* magenta #ca449a */
+
     /* Amber (hue 88) — warning / caution. Pushed toward golden-yellow so it stays clearly
      * distinct from the brand orange (hue 55). */
     --color-amber-0:   oklch(98% 0.02 88);

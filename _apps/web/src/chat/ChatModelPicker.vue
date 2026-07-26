@@ -12,7 +12,7 @@ import ProviderLogo from "./ProviderLogo.vue";
 /* The unified model picker (search + provider rail + one grouped list + session-control footer) — width-
  * agnostic so the desktop panel hosts it in a Popover and the mobile panel in a BottomSheet. Rows span every
  * provider and are MODELS ONLY: picking one applies provider+model (useChat.selectModel), keeping the current
- * harness. The harness (Default / Claude Code) is a separate axis, chosen via the footer chips — codex/grok run
+ * harness. The harness (the provider's own / Claude Code) is a separate axis, chosen via the footer chips — codex/grok run
  * the same subscription model ids under either harness. A mid-chat cross-provider pick just re-points the
  * selection — the fresh session starts lazily at the next send. The rail is a FILTER, never a switcher. Both
  * hosts remount the body per open, so the query/rail reset and the catalogs refresh on every open. */
@@ -22,12 +22,13 @@ const emit = defineEmits<{ selected: [] }>();
 const { provider, harness, selectHarness, model, thinking, streaming, messages, account, selectAccount, accounts, selectModel } = useChat();
 const { mobile } = useDevice();
 
-// The harness axis, shown as footer chips for codex/grok (claude is always its own loop). "Default" is the
-// provider's native runtime; "Claude Code" runs its model through the Claude Code harness.
-const HARNESS_OPTIONS: readonly { label: string; value: AgentHarness }[] = [
-    { label: `Default`, value: `native` },
+// The harness axis, shown as footer chips for codex/grok (claude is always its own loop). Both chips NAME the
+// runtime they select — the native one is labelled for the provider whose loop it actually is ("ChatGPT", "Grok"),
+// never "Default", which would say nothing about what runs while sitting opposite a chip that does.
+const harnessOptions = computed<readonly { label: string; value: AgentHarness }[]>(() => [
+    { label: providerDisplayLabel(provider.value), value: `native` },
     { label: `Claude Code`, value: `claude-code` },
-];
+]);
 const harnessChoosable = computed(() => provider.value === `codex` || provider.value === `grok`);
 
 const query = ref(``);
@@ -69,7 +70,12 @@ const sections = computed<
         // search deliberately spans the WHOLE catalog: a version outside the collapsed head is exactly what
         // someone reaches for the search box to find, so hiding it behind a disclosure would defeat both.
         return [
-            { rows: withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]), hidden: 0, expanded: false, collapsible: false },
+            {
+                rows: withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]),
+                hidden: 0,
+                expanded: false,
+                collapsible: false,
+            },
         ];
     }
     return pickerSections(pickerEntries.value, provider.value, rail.value).map((section) => {
@@ -158,9 +164,7 @@ const stateFor = (target: AgentProvider) => providerModelsState.value[target];
 // always highlights the one in effect, even before the user touches it.
 const activeAccountId = computed(() => account.value ?? accounts.value[0]?.id);
 
-const footerVisible = computed(
-    () => accounts.value.length > 1 || provider.value === `claude` || harnessChoosable.value || messages.value.length > 0,
-);
+const footerVisible = computed(() => accounts.value.length > 1 || provider.value === `claude` || harnessChoosable.value || messages.value.length > 0);
 
 // The account rows, each decorated with how much of its usage window is spent — the whole point of the account
 // list being a list: with several connected, "which one has room left" is the actual question, and answering it
@@ -191,13 +195,14 @@ onMounted(() => {
 <template>
     <div role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Model picker">
         <div class="relative border-b border-line">
-            <Icon name="search" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-subtle" aria-hidden="true" />
+            <Icon name="search" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-subtle" aria-hidden="true" />
+            <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
             <input
                 ref="searchInput"
                 v-model="query"
                 type="text"
                 placeholder="Search models…"
-                class="w-full min-w-0 bg-transparent py-2.5 pl-9 pr-3 text-base text-content placeholder:text-subtle focus:outline-none md:text-sm"
+                class="w-full min-w-0 bg-transparent py-2.5 pl-9 pr-3 text-base text-content placeholder:text-subtle focus:outline-none md:text-xs"
                 role="searchbox"
                 aria-controls="model-picker-list"
                 :aria-activedescendant="flat.length > 0 ? `model-picker-opt-${activeIndex}` : undefined"
@@ -257,7 +262,12 @@ onMounted(() => {
             <!-- Fixed height on desktop so the popover's overall size never changes as the rail filters between
                  sparse and dense providers — a variable height makes the bottom-anchored popover grow upward and
                  the rail icons jump under the cursor. Mobile keeps its flexible max-height inside the sheet. -->
-            <div id="model-picker-list" class="scrollbar-thin h-80 min-w-0 flex-1 overflow-y-auto py-1 max-md:h-auto max-md:max-h-80" role="listbox" aria-label="Models">
+            <div
+                id="model-picker-list"
+                class="scrollbar-thin h-80 min-w-0 flex-1 overflow-y-auto py-1 max-md:h-auto max-md:max-h-80"
+                role="listbox"
+                aria-label="Models"
+            >
                 <template v-for="section in sections" :key="section.provider ?? `search`">
                     <p
                         v-if="section.provider !== undefined"
@@ -268,7 +278,7 @@ onMounted(() => {
                         <Icon
                             v-if="providerNeedsReauth(section.provider)"
                             name="exclamation-triangle"
-                            class="text-[0.6rem] text-warning"
+                            class="text-2xs text-warning"
                             v-tooltip.top="'This account needs to be reconnected'"
                         />
                     </p>
@@ -289,10 +299,10 @@ onMounted(() => {
                     >
                         <ProviderLogo
                             :provider="row.entry.provider"
-                            class="shrink-0 text-sm"
+                            class="shrink-0 text-xs"
                             :class="isSelected(row.entry) ? 'text-primary-500' : 'text-muted'"
                         />
-                        <span class="max-w-[55%] shrink-0 truncate text-sm" :class="isSelected(row.entry) ? 'text-link' : 'text-content'">
+                        <span class="max-w-[55%] shrink-0 truncate text-sm md:text-xs" :class="isSelected(row.entry) ? 'text-link' : 'text-content'">
                             {{ row.entry.label }}
                         </span>
                         <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ row.entry.description }}</span>
@@ -316,7 +326,11 @@ onMounted(() => {
                         type="button"
                         class="mp-row flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-2xs text-subtle max-md:min-h-11"
                         :aria-expanded="section.expanded"
-                        :aria-label="section.expanded ? `Show fewer ${providerDisplayLabel(section.provider)} models` : `Show ${section.hidden} more ${providerDisplayLabel(section.provider)} models`"
+                        :aria-label="
+                            section.expanded
+                                ? `Show fewer ${providerDisplayLabel(section.provider)} models`
+                                : `Show ${section.hidden} more ${providerDisplayLabel(section.provider)} models`
+                        "
                         @click="toggleExpanded(section.provider)"
                     >
                         <Icon :name="section.expanded ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
@@ -349,7 +363,14 @@ onMounted(() => {
              harness axis (codex/grok), Claude's extended-thinking knob, and the mid-chat switch hint. -->
         <div v-if="footerVisible" class="flex flex-col gap-2 border-t border-line p-2">
             <template v-if="accounts.length > 1">
-                <span class="text-2xs font-medium uppercase tracking-wide text-muted">Account</span>
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">Account</span>
+                    <!-- The percent beside each row is a snapshot floor; the Usage tab is where the windows,
+                         their reset times, and what has been spent against them actually live. -->
+                    <RouterLink to="/sandbox/usage#accounts" class="text-2xs text-link hover:underline" @click="emit(`selected`)"
+                        >Headroom</RouterLink
+                    >
+                </div>
                 <div class="flex flex-col gap-1">
                     <button
                         v-for="a in accountRows"
@@ -381,16 +402,16 @@ onMounted(() => {
                 </div>
             </template>
 
-            <!-- Harness axis (codex/grok): Default = the provider's own runtime; Claude Code = its model through
-                 the Claude Code harness. Separate from the model — the same subscription ids run under either. -->
+            <!-- Harness axis (codex/grok): the provider's own runtime, or its model through the Claude Code
+                 harness. Separate from the model — the same subscription ids run under either. -->
             <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
                 <span class="text-2xs font-medium uppercase tracking-wide text-muted">Harness</span>
                 <div class="flex items-center gap-1">
                     <button
-                        v-for="h in HARNESS_OPTIONS"
+                        v-for="h in harnessOptions"
                         :key="h.value"
                         type="button"
-                        class="composer-ghost h-7 gap-1 px-2.5 text-xs font-medium max-md:h-10"
+                        class="composer-ghost h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
                         :class="{ 'composer-active': harness === h.value }"
                         :disabled="streaming"
                         :aria-pressed="harness === h.value"
@@ -406,7 +427,7 @@ onMounted(() => {
                 <span class="text-2xs font-medium uppercase tracking-wide text-muted">Extended thinking</span>
                 <button
                     type="button"
-                    class="composer-ghost h-7 gap-1 px-2.5 text-xs font-medium max-md:h-10"
+                    class="composer-ghost h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
                     :class="{ 'composer-active': thinking }"
                     @click="thinking = !thinking"
                     :aria-pressed="thinking"

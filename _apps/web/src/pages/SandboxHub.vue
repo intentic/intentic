@@ -11,6 +11,7 @@ import SandboxExtensions from "./sandbox/SandboxExtensions.vue";
 import SandboxOverview from "./sandbox/SandboxOverview.vue";
 import SandboxStatus from "./sandbox/SandboxStatus.vue";
 import SandboxSync from "./sandbox/SandboxSync.vue";
+import SandboxUsage from "./sandbox/SandboxUsage.vue";
 
 /* The sandbox hub: one tabbed home for everything about the active sandbox, reached from the rail's sandbox
  * chip. The selected tab lives in the URL (/sandbox/<tab>) so a reload or a shared link reopens it; the default
@@ -18,7 +19,7 @@ import SandboxSync from "./sandbox/SandboxSync.vue";
  * correctly drives each tab's side-effecting lifecycles (desktop-sync start/stop, the agent's account surface);
  * the underlying composables are module singletons / vue-query caches, so remounting a tab is cheap. */
 
-const TABS = [`overview`, `status`, `environment`, `access`, `agent`, `extensions`, `sync`] as const;
+const TABS = [`overview`, `status`, `usage`, `environment`, `access`, `agent`, `extensions`, `sync`] as const;
 type Tab = (typeof TABS)[number];
 const DEFAULT: Tab = `overview`;
 
@@ -35,6 +36,7 @@ const activeTab = computed<Tab>(() => {
 const options = computed(() => [
     { label: `Overview`, value: `overview` as Tab },
     { label: `Status`, value: `status` as Tab, badge: runningCount.value },
+    { label: `Usage`, value: `usage` as Tab },
     { label: `Environment`, value: `environment` as Tab },
     { label: `Access`, value: `access` as Tab },
     { label: `Agent`, value: `agent` as Tab },
@@ -71,6 +73,7 @@ watch(
 
         <SandboxOverview v-if="activeTab === `overview`" />
         <SandboxStatus v-else-if="activeTab === `status`" />
+        <SandboxUsage v-else-if="activeTab === `usage`" />
         <SandboxEnvironment v-else-if="activeTab === `environment`" />
         <SandboxAccess v-else-if="activeTab === `access`" />
         <SandboxAgent v-else-if="activeTab === `agent`" />

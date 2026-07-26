@@ -321,16 +321,43 @@ describe(`sandbox routes`, () => {
         expect(ctx.logger.warn).toHaveBeenCalled();
     });
 
-    it(`delete surfaces a non-1022 Cloudflare failure as BAD_GATEWAY and keeps the sandbox`, async () => {
+    it(`delete removes the sandbox even when the tunnel teardown fails outright`, async () => {
         stubTunnelDeleteFailure(() => cfErr(1000, `internal`, 500));
         const deleteRow = vi.fn().mockResolvedValue({});
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(providedRow), delete: deleteRow } });
+        const ctx = context({ prisma, config: providedConfig });
 
-        await expectOrpcCode(
-            call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: providedConfig }) }),
-            `BAD_GATEWAY`,
-        );
-        expect(deleteRow).not.toHaveBeenCalled();
+        // A confirmed removal must never be undone by a Cloudflare failure: the row goes regardless, and the
+        // orphaned intentic-owned tunnel is the reaper's problem.
+        expect(await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: ctx })).toEqual({ ok: true });
+        expect(deleteRow).toHaveBeenCalledWith({ where: { id: `s1` } });
+        expect(ctx.logger.warn).toHaveBeenCalled();
+    });
+
+    it(`delete drops the row BEFORE the Cloudflare teardown, so a reload mid-teardown never sees it`, async () => {
+        const order: string[] = [];
+        vi.stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
+            order.push(`cf`);
+            if (url.includes(`/zones?name=`)) {
+                return Promise.resolve(cfOk([{ id: `z1`, account: { id: `a1` } }]));
+            }
+            if ((init?.method ?? `GET`) === `GET` && url.includes(`/cfd_tunnel?name=`)) {
+                return Promise.resolve(cfOk([]));
+            }
+            throw new Error(`unexpected fetch: ${init?.method ?? `GET`} ${url}`);
+        });
+        const prisma = fakePrisma({
+            sandbox: {
+                findFirst: vi.fn().mockResolvedValue(providedRow),
+                delete: vi.fn().mockImplementation(() => {
+                    order.push(`row`);
+                    return Promise.resolve({});
+                }),
+            },
+        });
+
+        await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: providedConfig }) });
+        expect(order[0]).toBe(`row`);
     });
 
     it(`gates create at the free plan's sandbox limit and lets pro through`, async () => {

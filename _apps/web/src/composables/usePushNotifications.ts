@@ -43,6 +43,55 @@ const decodeKey = (base64Url: string): Uint8Array<ArrayBuffer> => {
 
 const supported = (): boolean => `serviceWorker` in navigator && `PushManager` in window && `Notification` in window;
 
+// `options.applicationServerKey` is the raw key the subscription was minted with, so comparing it against the
+// daemon's current one answers exactly the question that matters: can the daemon still send to this endpoint?
+const boundTo = (subscription: PushSubscription, publicKey: string): boolean => {
+    const bound = subscription.options.applicationServerKey;
+    if (bound === null) {
+        return false;
+    }
+    const current = decodeKey(publicKey);
+    const bytes = new Uint8Array(bound);
+    return bytes.length === current.length && bytes.every((byte, index) => byte === current[index]);
+};
+
+// Brave exposes this and nothing else does. It ships with Google's push service disabled, and since web push
+// has no other transport, subscribing cannot succeed until that setting is on — worth detecting, because the
+// fix is a specific toggle we can name instead of a shrug.
+const isBrave = async (): Promise<boolean> => {
+    const { brave } = navigator as Navigator & { brave?: { isBrave: () => Promise<boolean> } };
+    return brave !== undefined && (await brave.isBrave());
+};
+
+/* Why subscribe() gets its own diagnosis: it fails independently of the permission the user just granted, and
+ * the browser's own message for it ("Registration failed - push service error") names nothing anyone can act
+ * on. Worse, it surfaces on a page about this sandbox, so it reads as "the sandbox broke" when the daemon was
+ * never involved — the browser could not register with its push service at all. */
+const pushServiceAdvice = async (): Promise<string> =>
+    (await isBrave())
+        ? `Brave ships with push messaging turned off. Enable "Use Google services for push messaging" in brave://settings/privacy, restart Brave, then try again.`
+        : `Your browser's push service refused to register this browser — nothing on the sandbox side can fix it. A VPN or firewall blocking the browser's push connection is the usual cause.`;
+
+// The browser's half of turning it on. Reuse an existing subscription where possible — re-subscribing mints a
+// new endpoint and orphans the old row — but ONLY when it is still bound to the daemon's key. A recreated
+// sandbox generates a fresh VAPID pair, and an endpoint bound to the old one is refused on every send while
+// the toggle happily reports "on"; dropping it and minting a new one is the only repair.
+const mint = async (manager: PushManager, publicKey: string): Promise<PushSubscription> => {
+    const existing = await manager.getSubscription();
+    if (existing !== null) {
+        if (boundTo(existing, publicKey)) {
+            return existing;
+        }
+        await existing.unsubscribe();
+    }
+    try {
+        // `userVisibleOnly` is mandatory in Chrome — silent push is not permitted.
+        return await manager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(publicKey) });
+    } catch (cause) {
+        throw new Error(await pushServiceAdvice(), { cause });
+    }
+};
+
 export function usePushNotifications() {
     const { reachable } = useSandbox();
     const state = ref<PushState>(supported() ? `off` : `unsupported`);
@@ -74,9 +123,10 @@ export function usePushNotifications() {
             const existing = await localSubscription();
             const query = existing === null ? `` : `?endpoint=${encodeURIComponent(existing.endpoint)}`;
             const config = await sandboxJson<PushConfig>(`/push/config${query}`);
-            // "On" requires BOTH halves. A browser subscription the daemon has forgotten would notify
-            // nothing, and reporting that as on is exactly the silent failure this feature can't afford.
-            state.value = existing !== null && config.subscribed ? `on` : `off`;
+            // "On" requires all three. A browser subscription the daemon has forgotten would notify nothing,
+            // and one minted for a key the daemon no longer holds is refused on every send — both are exactly
+            // the silent failure this feature can't afford to report as working.
+            state.value = existing !== null && config.subscribed && boundTo(existing, config.publicKey) ? `on` : `off`;
         } catch {
             // A daemon that can't be read tells us nothing about the subscription — leave the last known
             // state rather than flipping the toggle under the user on a transient blip.
@@ -94,11 +144,7 @@ export function usePushNotifications() {
             }
             const config = await sandboxJson<PushConfig>(`/push/config`);
             const manager = (await registration()).pushManager;
-            // Reuse an existing subscription when there is one: re-subscribing mints a new endpoint and
-            // orphans the old row. `userVisibleOnly` is mandatory in Chrome — silent push is not permitted.
-            const subscription =
-                (await manager.getSubscription()) ??
-                (await manager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(config.publicKey) }));
+            const subscription = await mint(manager, config.publicKey);
             await sandboxJson(`/push/subscribe`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },

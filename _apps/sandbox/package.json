@@ -11,13 +11,14 @@
         "directory": "_apps/sandbox"
     },
     "scripts": {
-        "build": "tsgo",
+        "build": "tsgo && tsgo -p tsconfig.bench.json",
         "watch": "tsgo --build --watch",
         "dev": "tsx watch ./src/main.ts",
         "test": "vitest run",
         "test:watch": "vitest",
         "e2e": "INTENTIC_E2E=1 vitest run e2e",
-        "bench:cleaners": "node bench/cleaner-bench.mjs"
+        "bench:cleaners": "node bench/cleaner-bench.mjs",
+        "bench:imp": "tsx bench/imp-bench.ts"
     },
     "dependencies": {
         "@agentclientprotocol/sdk": "catalog:",

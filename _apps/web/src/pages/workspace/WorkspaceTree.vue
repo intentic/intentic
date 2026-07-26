@@ -55,8 +55,9 @@ const {
     // such a row also opens its operator tab, and the row shows a cog affordance.
     manageableDirs?: ReadonlySet<string>;
     // Directory paths that are git repos (nested under /work). Each shows a git-history affordance that opens
-    // its commit graph as a tab — the per-repo entry point for the graph (root's is the Changes header). This
-    // is where the multi-repo axis surfaces: a repo nested in the workspace gets its own history right here.
+    // its commit graph as a tab — the per-repo entry point for the graph (root has no row, so its own icon sits
+    // on the explorer toolbar). This is where the multi-repo axis surfaces: a repo nested in the workspace gets
+    // its own history right here.
     repoDirs?: ReadonlySet<string>;
 }>();
 const emit = defineEmits<{ openFile: [path: string]; openDirectory: [path: string]; openGraph: [path: string] }>();
@@ -762,7 +763,8 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         class="shrink-0 text-2xs text-subtle"
                     />
                     <!-- Git repo: a git-history affordance opens its commit graph as a tab — the per-repo entry
-                         point, sibling to the management cog (root's graph opens from the Changes header). -->
+                         point, sibling to the management cog (root has no row; its graph opens from the explorer
+                         toolbar or the Changes header). -->
                     <Icon
                         v-if="row.entry.type === 'dir' && repoDirs.has(row.entry.path)"
                         name="sitemap"

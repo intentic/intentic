@@ -360,7 +360,8 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
             <span class="flex-1"></span>
             <Icon name="spinner" v-if="changes.actionBusy.value" v-tooltip.top="'Working…'" class="text-xs text-muted" spin />
             <!-- Git history: the committed side of this same real-git story (uncommitted work is above). Opens
-                 the /work root repo's graph; nested repos open theirs from their file-tree row. -->
+                 the /work root repo's graph — as does the Files toolbar's icon, root having no tree row of its
+                 own; nested repos open theirs from their file-tree row. -->
             <button
                 v-if="showHistory"
                 type="button"
