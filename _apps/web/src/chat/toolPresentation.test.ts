@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatTool } from "../composables/chat/conversation";
-import { present, TEXT_CAP } from "./toolPresentation";
+import { numberedFileBody, present, TEXT_CAP } from "./toolPresentation";
 
 // A completed call with no output, spread over per-case.
 const tool = (over: Partial<ChatTool> & Pick<ChatTool, "name">): ChatTool => ({
@@ -11,6 +11,10 @@ const tool = (over: Partial<ChatTool> & Pick<ChatTool, "name">): ChatTool => ({
 });
 
 const withText = (name: string, text: string, over: Partial<ChatTool> = {}): ChatTool => tool({ name, content: [{ type: `text`, text }], ...over });
+
+// The SDK's numbered file view a Read returns: a right-padded line number, an arrow (or tab), then the content.
+const numbered = (lines: string[], start = 1, sep = `→`): string =>
+    lines.map((line, index) => `${String(start + index).padStart(6)}${sep}${line}`).join(`\n`);
 
 describe(`present: icons`, () => {
     it(`falls back to the ACP category when no presenter claims the name`, () => {
@@ -87,6 +91,69 @@ describe(`present: bodies`, () => {
     it(`truncates a huge text body`, () => {
         const body = present(withText(`Read`, `x`.repeat(TEXT_CAP + 500))).body;
         expect(body).toEqual({ kind: `text`, text: `${`x`.repeat(TEXT_CAP)}\n… (truncated)` });
+    });
+});
+
+describe(`present: read code body`, () => {
+    it(`strips the SDK line-number gutter and resolves the lang from the read path`, () => {
+        const text = numbered([`export const x = 1;`, `const y = 2;`]);
+        const body = present(withText(`Read`, text, { locations: [{ path: `src/a.ts` }] })).body;
+        expect(body).toEqual({ kind: `code`, code: `export const x = 1;\nconst y = 2;`, lang: `typescript`, firstLine: 1 });
+    });
+
+    it(`keeps the file's own first line number (Read honors an offset)`, () => {
+        const text = numbered([`def f():`, `    return 1`], 40);
+        const body = present(withText(`Read`, text, { locations: [{ path: `app/main.py` }] })).body;
+        expect(body).toEqual({ kind: `code`, code: `def f():\n    return 1`, lang: `python`, firstLine: 40 });
+    });
+
+    it(`falls back to the target path for the lang when no locations are carried`, () => {
+        const text = numbered([`body { color: red; }`]);
+        const body = present(withText(`Read`, text, { target: `site/app.css` })).body;
+        expect(body).toEqual({ kind: `code`, code: `body { color: red; }`, lang: `css`, firstLine: 1 });
+    });
+
+    it(`still shows a code body (uncolored) for a file whose extension we ship no grammar for`, () => {
+        const text = numbered([`alpha`, `beta`]);
+        const body = present(withText(`Read`, text, { locations: [{ path: `notes.xyz` }] })).body;
+        expect(body).toEqual({ kind: `code`, code: `alpha\nbeta`, lang: undefined, firstLine: 1 });
+    });
+
+    it(`degrades a non-numbered read (an image/PDF read) to a plain text body`, () => {
+        expect(present(withText(`Read`, `[image]`, { locations: [{ path: `logo.png` }] })).body).toEqual({ kind: `text`, text: `[image]` });
+    });
+
+    it(`does not treat non-contiguous numbered prose as a file`, () => {
+        const text = `1→first point\n3→third point`;
+        expect(present(withText(`Read`, text, { locations: [{ path: `a.ts` }] })).body).toEqual({ kind: `text`, text });
+    });
+
+    it(`starts a settled read collapsed like any other body`, () => {
+        expect(present(withText(`Read`, numbered([`x`]), { locations: [{ path: `a.ts` }] })).defaultOpen).toBe(false);
+    });
+});
+
+describe(`numberedFileBody`, () => {
+    it(`strips an arrow-separated gutter and reports the first line`, () => {
+        expect(numberedFileBody(`     1→a\n     2→b`)).toEqual({ code: `a\nb`, firstLine: 1 });
+    });
+
+    it(`accepts a tab-separated gutter too`, () => {
+        expect(numberedFileBody(`1\ta\n2\tb`)).toEqual({ code: `a\nb`, firstLine: 1 });
+    });
+
+    it(`preserves blank lines inside the file`, () => {
+        expect(numberedFileBody(`1→a\n2→\n3→c`)).toEqual({ code: `a\n\nc`, firstLine: 1 });
+    });
+
+    it(`tolerates a trailing truncation marker`, () => {
+        expect(numberedFileBody(`1→a\n2→b\n… (truncated)`)).toEqual({ code: `a\nb\n… (truncated)`, firstLine: 1 });
+    });
+
+    it(`rejects anything that is not a numbered file view`, () => {
+        expect(numberedFileBody(``)).toBeUndefined();
+        expect(numberedFileBody(`just some prose\nmore prose`)).toBeUndefined();
+        expect(numberedFileBody(`1→a\n3→b`)).toBeUndefined();
     });
 });
 

@@ -1,6 +1,7 @@
 import type { IconName } from "@intentic-app/ui";
 import type { ToolCallContent } from "@intentic/sandbox-contract";
 import type { ChatTool } from "../composables/chat/conversation";
+import { codeLangForPath } from "../pages/workspace/fileType";
 import { diffStat } from "./chatToolDiff";
 
 /* How one tool call renders — the single table the chat's tool cards consult, so per-tool knowledge lives in
@@ -16,6 +17,11 @@ import { diffStat } from "./chatToolDiff";
 // `files` turns a path listing into clickable rows; `command` splits a shell invocation from its output.
 export type ToolBody =
     | { readonly kind: "text"; readonly text: string }
+    // A file's contents to syntax-highlight, as a Read card shows. `code` has the SDK's line-number gutter
+    // stripped (see numberedFileBody); `firstLine` is the original number of its first line (Read honors an
+    // offset), which the card restores as a real gutter. `lang` is the Shiki id from the path, or undefined
+    // (unknown extension / no grammar) — then it renders as plain, still-numbered monospace.
+    | { readonly kind: "code"; readonly code: string; readonly lang: string | undefined; readonly firstLine: number }
     | { readonly kind: "files"; readonly entries: readonly ToolFileEntry[]; readonly hidden: number }
     | { readonly kind: "command"; readonly command: string; readonly output: string };
 
@@ -94,8 +100,9 @@ const filesBody = (text: string): ToolBody => {
 // that differ from the category default, never to restate it.
 interface Presenter {
     readonly icon?: IconName;
-    // Shapes the tool's joined text output. Absent ⇒ the plain text box.
-    readonly body?: (text: string, tool: ChatTool) => ToolBody;
+    // Shapes the tool's joined text output. Absent ⇒ the plain text box; returning undefined ⇒ no body at all
+    // (a bare header), same as a tool with no presenter and empty output.
+    readonly body?: (text: string, tool: ChatTool) => ToolBody | undefined;
     // The header's result phrase, from the joined text and the call itself. Absent ⇒ no summary.
     readonly summary?: (text: string, tool: ChatTool) => string | undefined;
 }
@@ -122,12 +129,69 @@ const diffSummary = (_text: string, tool: ChatTool): string | undefined => {
     return `+${additions} −${deletions}`;
 };
 
+// A `Read` result is the SDK's numbered file view: every line is `<spaces><line no><sep><content>`, the
+// separator an arrow (→) or a tab. Strip that gutter so the content can be highlighted (and the numbers shown
+// in a real gutter instead), returning the bare code and the first line's number (Read honors an offset, so it
+// isn't always 1). Returns undefined unless the body really is that shape — a strictly +1 run over the bulk of
+// the lines — so an image/PDF read (`[image]`) or any other non-numbered output falls through to the plain text
+// box rather than being mangled. A trailing note (the `… (truncated)` marker present() appends past TEXT_CAP, or
+// a final blank line) rides along as content once the run has started.
+const NUMBERED_LINE = /^ *(\d+)(?:→|\t)(.*)$/;
+export const numberedFileBody = (text: string): { readonly code: string; readonly firstLine: number } | undefined => {
+    const lines = text.split(`\n`);
+    const code: string[] = [];
+    let firstLine: number | undefined;
+    let next = 0;
+    let matched = 0;
+    for (const line of lines) {
+        const parsed = NUMBERED_LINE.exec(line);
+        if (parsed === null) {
+            if (firstLine === undefined) {
+                return undefined; // the very first line isn't numbered — not a file view
+            }
+            code.push(line); // a trailing marker / blank tail inside an already-established run
+            continue;
+        }
+        const n = Number(parsed[1]);
+        if (firstLine === undefined) {
+            firstLine = n;
+        } else if (n !== next) {
+            return undefined; // a break in the +1 sequence — arbitrary numeric text, not a file view
+        }
+        next = n + 1;
+        matched += 1;
+        code.push(parsed[2] ?? ``);
+    }
+    // Require the numbered run to be the clear majority, so a couple of coincidentally-numbered prose lines
+    // don't read as a file.
+    if (firstLine === undefined || matched * 2 < lines.length) {
+        return undefined;
+    }
+    return { code: code.join(`\n`), firstLine };
+};
+
 // Per-tool presenters, keyed by lowercased display name. Names are the daemon's normalized display names
 // (displayNameOf in agent/tool-calls.ts), so one entry covers every backend that maps onto it.
 const PRESENTERS: Record<string, Presenter> = {
     bash: { body: commandBody, summary: (text) => (text === `` ? `no output` : plural(countLines(text), `line`)) },
     bashoutput: { body: commandBody },
-    read: { summary: (text) => (text === `` ? undefined : plural(countLines(text), `line`)) },
+    read: {
+        // A Read shows a file: color it from the path's extension (the workspace viewer's own resolution) with
+        // the SDK's line-number gutter stripped for clean highlighting. A non-file read (image/PDF ⇒ `[image]`)
+        // or an unknown extension degrades to plain — see numberedFileBody / the code body's fallback.
+        body: (text, tool) => {
+            if (text === ``) {
+                return undefined;
+            }
+            const parsed = numberedFileBody(text);
+            if (parsed === undefined) {
+                return { kind: `text`, text };
+            }
+            const path = tool.locations?.[0]?.path ?? tool.target;
+            return { kind: `code`, code: parsed.code, lang: path === undefined ? undefined : codeLangForPath(path), firstLine: parsed.firstLine };
+        },
+        summary: (text) => (text === `` ? undefined : plural(countLines(text), `line`)),
+    },
     grep: { body: filesBody, summary: (text) => (text === `` ? `no matches` : plural(countLines(text), `match`)) },
     glob: { body: filesBody, summary: (text) => (text === `` ? `no matches` : plural(countLines(text), `file`)) },
     edit: { summary: diffSummary },

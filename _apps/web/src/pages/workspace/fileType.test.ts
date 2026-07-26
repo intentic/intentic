@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { langFromShebang, RAW_MAX_BYTES, resolveFile } from "./fileType";
+import { codeLangForPath, langFromShebang, RAW_MAX_BYTES, resolveFile } from "./fileType";
 
 // Empty (0-byte) files: text types stay editable (code/markdown); non-text preview types show the "empty" fallback.
 describe(`resolveFile empty files`, () => {
@@ -104,5 +104,27 @@ describe(`langFromShebang`, () => {
         expect(langFromShebang(``)).toBeUndefined();
         expect(langFromShebang(`#!/usr/bin/env perl`)).toBeUndefined();
         expect(langFromShebang(`#!`)).toBeUndefined();
+    });
+});
+
+// The path→lang resolver the chat's Read cards share with the workspace viewer: the same extension table and
+// dockerfile/.env/ignore specials as resolveFile, but from a bare path (no size gate, no content shebang).
+describe(`codeLangForPath`, () => {
+    it(`resolves by extension, ignoring the directory prefix`, () => {
+        expect(codeLangForPath(`src/app/main.ts`)).toBe(`typescript`);
+        expect(codeLangForPath(`a/b/c/styles.scss`)).toBe(`scss`);
+        expect(codeLangForPath(`main.py`)).toBe(`python`);
+    });
+
+    it(`matches the extensionless specials by name`, () => {
+        expect(codeLangForPath(`services/Dockerfile`)).toBe(`docker`);
+        expect(codeLangForPath(`.env.local`)).toBe(`dotenv`);
+        expect(codeLangForPath(`.dockerignore`)).toBe(`gitignore`);
+        expect(codeLangForPath(`Makefile`)).toBe(`make`);
+    });
+
+    it(`returns undefined for an extension we ship no grammar for`, () => {
+        expect(codeLangForPath(`notes.xyz`)).toBeUndefined();
+        expect(codeLangForPath(`LICENSE`)).toBeUndefined();
     });
 });

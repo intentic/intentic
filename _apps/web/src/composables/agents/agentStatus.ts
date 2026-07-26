@@ -69,6 +69,40 @@ export const attentionReason = (agent: {
     return undefined;
 };
 
+// The card's drill-in affordance label (desktop) — the verb that names what the review detail opens onto, so
+// the button reads as a destination rather than a generic "open". A DRAFT has no worktree/diff yet, so it has
+// no review detail (returns undefined): its click only focuses the docked chat. Everything registered has a
+// destination; the label leads with why-you'd-go — pending approval/question first, then a land conflict or
+// error, then a diff to look over, falling back to a plain "Review" for a running agent with nothing yet.
+export const reviewAction = (agent: {
+    readonly status: AgentStatus | "draft";
+    readonly attention: { plan: boolean; question: boolean; permission: boolean; conflict: boolean };
+    readonly diff?: { files: number };
+}): string | undefined => {
+    if (agent.status === `draft`) {
+        return undefined;
+    }
+    if (agent.attention.plan) {
+        return `Review plan`;
+    }
+    if (agent.attention.question) {
+        return `Answer`;
+    }
+    if (agent.attention.permission) {
+        return `Approve`;
+    }
+    if (agent.attention.conflict || agent.status === `conflict`) {
+        return `Resolve conflict`;
+    }
+    if (agent.status === `error`) {
+        return `View error`;
+    }
+    if (agent.diff !== undefined && agent.diff.files > 0) {
+        return `Review changes`;
+    }
+    return `Review`;
+};
+
 // The activity line's icon by tool family — a glanceable "what is it doing" glyph, mock-style.
 export const activityIcon = (tool: string | undefined): IconName => {
     if (tool === undefined) {

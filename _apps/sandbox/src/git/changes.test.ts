@@ -49,7 +49,10 @@ const conflictedRepo = async (): Promise<string> => {
     await sh(dir, "checkout", "-q", trunk);
     await writeFile(join(dir, "a.txt"), "ours\n");
     await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "ours");
-    await sh(dir, "merge", "side").catch(() => undefined);
+    // `git merge` needs a committer identity even when it stops at a conflict (it validates identity up front),
+    // so it carries the same `-c user.*` the commits do — without it, a machine with no global git identity gets
+    // "Committer identity unknown", the merge is a no-op, and `.catch` swallows it into a NON-conflicted repo.
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "merge", "side").catch(() => undefined);
     return dir;
 };
 
