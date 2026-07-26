@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { GitActionResult, GitChange, GitCommit } from "@intentic-app/api-contract";
-import { Segmented, timeAgo } from "@intentic-app/ui";
+import { cmp, Segmented, timeAgo } from "@intentic-app/ui";
 import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
@@ -488,8 +488,7 @@ const runAction = (kind: ActionKind, commit: GitCommit, name: string): Promise<u
                 <button
                     v-if="pending"
                     type="button"
-                    class="rounded px-3 py-1 text-xs font-medium text-white transition-colors disabled:opacity-40"
-                    :class="ACTIONS[pending.kind].danger ? 'bg-warning hover:bg-warning/85' : 'bg-success hover:bg-success/85'"
+                    :class="ACTIONS[pending.kind].danger ? cmp.buttonWarning('rounded px-3 py-1') : cmp.buttonSuccess('rounded px-3 py-1')"
                     :disabled="acting || (ACTIONS[pending.kind].needsName && nameInput.trim() === '')"
                     @click="runPending"
                 >

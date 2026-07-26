@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { BottomSheet, PullToRefresh, Segmented } from "@intentic-app/ui";
+import { BottomSheet, cmp, PullToRefresh, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -345,7 +345,7 @@ const onPick = (event: Event): void => {
                 <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
                 <button
                     type="button"
-                    class="absolute bottom-4 right-4 z-10 flex h-13 w-13 items-center justify-center rounded-full bg-primary-700 text-white shadow-lg transition-colors active:bg-primary-600"
+                    :class="cmp.buttonPrimary('absolute bottom-4 right-4 z-10 h-13 w-13 rounded-full px-0 py-0 shadow-lg')"
                     aria-label="Upload files here"
                     @click="fileInput?.click()"
                 >

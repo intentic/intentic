@@ -50,10 +50,18 @@
     --color-danger-900: var(--color-red-900);
     --color-danger-950: var(--color-red-950);
 
+    --color-success-300: var(--color-green-300);
+    --color-success-400: var(--color-green-400);
     --color-success-500: var(--color-green-500);
     --color-success-600: var(--color-green-600);
+    --color-success-700: var(--color-green-700);
+    --color-success-800: var(--color-green-800);
+    --color-warning-300: var(--color-amber-300);
+    --color-warning-400: var(--color-amber-400);
     --color-warning-500: var(--color-amber-500);
     --color-warning-600: var(--color-amber-600);
+    --color-warning-700: var(--color-amber-700);
+    --color-warning-800: var(--color-amber-800);
     --color-info-500:    var(--color-blue-500);
     --color-info-600:    var(--color-blue-600);
 
@@ -75,6 +83,23 @@
     --color-success:     var(--role-success);
     --color-warning:     var(--role-warning);
     --color-info:        var(--role-info);
+
+    /* Filled-control fills — the ONE recipe every solid call-to-action uses (cmp.button*, PrimeVue's
+     * <Button> via theme.ts, the composer send button). Separate from the role tokens above because
+     * those are tuned to read as TEXT on the canvas, so they LIGHTEN in dark mode: a filled button
+     * keeping a white label on top of one lands at 2.6–3.2:1. These flip the other way — each scheme
+     * picks the fill and the label that sits on it TOGETHER, so every filled action clears WCAG AA
+     * (4.5:1) in all four themes and GAINS contrast on hover instead of losing it (light darkens,
+     * dark lightens). `fill-content` is shared: one label color reads on all four fills. */
+    --color-primary-fill:       var(--role-primary-fill);
+    --color-primary-fill-hover: var(--role-primary-fill-hover);
+    --color-success-fill:       var(--role-success-fill);
+    --color-success-fill-hover: var(--role-success-fill-hover);
+    --color-warning-fill:       var(--role-warning-fill);
+    --color-warning-fill-hover: var(--role-warning-fill-hover);
+    --color-danger-fill:        var(--role-danger-fill);
+    --color-danger-fill-hover:  var(--role-danger-fill-hover);
+    --color-fill-content:       var(--role-fill-content);
 
     /* Chart series identity — five categorical slots plus the tail. Assign a slot to an ENTITY once
      * and never by rank, so filtering a series out can't repaint the survivors. `series-other` is
@@ -103,6 +128,17 @@
     --role-success:     var(--color-success-600);
     --role-warning:     var(--color-warning-600);
     --role-info:        var(--color-info-600);
+    /* Deep fill, white label: primary 4.5:1 (ember) … 6.5:1 (meadow), success 6.2:1, warning 4.9:1,
+     * danger 6.7:1. Hover darkens the fill, so the label only gains contrast. */
+    --role-primary-fill:       var(--color-primary-700);
+    --role-primary-fill-hover: var(--color-primary-800);
+    --role-success-fill:       var(--color-success-700);
+    --role-success-fill-hover: var(--color-success-800);
+    --role-warning-fill:       var(--color-warning-700);
+    --role-warning-fill-hover: var(--color-warning-800);
+    --role-danger-fill:        var(--color-danger-700);
+    --role-danger-fill-hover:  var(--color-danger-800);
+    --role-fill-content:       var(--color-white);
     --role-series-1:     var(--color-series-1-light);
     --role-series-2:     var(--color-series-2-light);
     --role-series-3:     var(--color-series-3-light);
@@ -126,6 +162,19 @@
     --role-success:     var(--color-success-500);
     --role-warning:     var(--color-warning-500);
     --role-info:        var(--color-info-500);
+    /* Bright fill, surface-900 label: 6.5:1 (meadow) … 8.3:1 (honey). Inverted rather than reusing the
+     * light scheme's deep fill because a deep fill under white clears AA by a hair (~4.5:1) and this
+     * is the shade PrimeVue's buttons already paint in dark — inverting is what makes them all match.
+     * Hover lightens the fill here, which is again the direction that raises label contrast. */
+    --role-primary-fill:       var(--color-primary-400);
+    --role-primary-fill-hover: var(--color-primary-300);
+    --role-success-fill:       var(--color-success-400);
+    --role-success-fill-hover: var(--color-success-300);
+    --role-warning-fill:       var(--color-warning-400);
+    --role-warning-fill-hover: var(--color-warning-300);
+    --role-danger-fill:        var(--color-danger-400);
+    --role-danger-fill-hover:  var(--color-danger-300);
+    --role-fill-content:       var(--color-surface-900);
     --role-series-1:     var(--color-series-1-dark);
     --role-series-2:     var(--color-series-2-dark);
     --role-series-3:     var(--color-series-3-dark);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic-app/ui";
+import { cmp, useDevice } from "@intentic-app/ui";
 import type { GitChange } from "@intentic-app/api-contract";
 import { computed, ref, toRef } from "vue";
 import { useRouter } from "vue-router";
@@ -73,7 +73,7 @@ const pendingDiscard = ref(false);
                 </button>
                 <button
                     type="button"
-                    class="inline-flex items-center whitespace-nowrap rounded-md bg-success px-2.5 py-1 text-2xs font-medium text-white transition-colors hover:bg-success/85 disabled:opacity-40"
+                    :class="cmp.buttonSuccess('gap-0 whitespace-nowrap px-2.5 py-1 text-2xs')"
                     :disabled="changes.actionBusy.value || streaming || changes.count.value === 0"
                     @click="changes.land()"
                     v-tooltip.top="streaming ? 'Wait for the agent turn to finish' : 'Apply the remaining changes to your workspace'"

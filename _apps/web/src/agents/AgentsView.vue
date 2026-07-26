@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic-app/ui";
+import { cmp, useDevice } from "@intentic-app/ui";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { dropActionLabel, dropRejection } from "../composables/agents/laneDrop";
@@ -100,11 +100,7 @@ const startAgent = (): void => {
                 {{ attention }} need{{ attention === 1 ? "s" : "" }} you
             </span>
             <span class="flex-1"></span>
-            <button
-                type="button"
-                class="inline-flex items-center gap-1 rounded-md bg-primary-600 px-2.5 py-1 text-2xs font-medium text-white transition-colors hover:bg-primary-600/85"
-                @click="startAgent"
-            >
+            <button type="button" :class="cmp.buttonPrimary('gap-1 px-2.5 py-1 text-2xs')" @click="startAgent">
                 <Icon name="plus" class="text-2xs" />New agent
             </button>
         </div>
@@ -124,13 +120,7 @@ const startAgent = (): void => {
                 No agents yet. Each agent works on its own isolated branch — run several in parallel and their finished work lands in your workspace
                 automatically.
             </p>
-            <button
-                type="button"
-                class="rounded-md bg-primary-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary-600/85"
-                @click="startAgent"
-            >
-                Start an agent
-            </button>
+            <button type="button" :class="cmp.buttonPrimary()" @click="startAgent">Start an agent</button>
         </div>
 
         <div v-else class="scrollbar-thin min-h-0 flex-1 overflow-auto p-3">
@@ -188,7 +178,7 @@ const startAgent = (): void => {
             </div>
             <p
                 class="mt-1 inline-block rounded px-2 py-1 text-2xs font-medium"
-                :class="action !== undefined ? 'bg-primary-600 text-white' : 'bg-overlay text-subtle'"
+                :class="action !== undefined ? 'bg-primary-fill text-fill-content' : 'bg-overlay text-subtle'"
             >
                 {{ hint }}
             </p>

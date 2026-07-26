@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { GitChange, GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
+import { cmp } from "@intentic-app/ui";
 import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
 import DiffStat from "../../components/DiffStat.vue";
@@ -418,7 +419,7 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                 </span>
                 <button
                     type="button"
-                    class="inline-flex shrink-0 items-center whitespace-nowrap rounded-md bg-success px-2 py-1 text-2xs font-medium text-white transition-colors hover:bg-success/85 disabled:opacity-40"
+                    :class="cmp.buttonSuccess('shrink-0 gap-0 whitespace-nowrap px-2 py-1 text-2xs')"
                     :disabled="!commitReady"
                     @click="doCommit"
                     v-tooltip.top="
@@ -694,12 +695,7 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                 <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingDiscard = undefined">
                     Cancel
                 </button>
-                <button
-                    type="button"
-                    class="rounded bg-danger px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-danger/85 disabled:opacity-40"
-                    :disabled="changes.actionBusy.value"
-                    @click="confirmDiscard"
-                >
+                <button type="button" :class="cmp.buttonDanger('rounded px-3 py-1')" :disabled="changes.actionBusy.value" @click="confirmDiscard">
                     Discard
                 </button>
             </template>

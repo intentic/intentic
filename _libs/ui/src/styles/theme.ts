@@ -20,15 +20,29 @@ const ramp = (name: string) => ({
     950: `var(--color-${name}-950)`,
 });
 
+/* Every solid PrimeVue accent — Button, Checkbox, RadioButton, ToggleSwitch, Slider, Tabs — paints
+ * with `primary.color` and labels it with `primary.contrastColor`, so pointing that pair at the
+ * `*-fill` tokens puts <Button> and cmp.buttonPrimary on ONE recipe. Aura's own values fail WCAG AA
+ * in light mode (primary-500 under white = 2.6:1); the fill tokens flip per scheme and clear 4.5:1.
+ * Identical in both blocks on purpose — the CSS variable does the flipping, not the preset. */
+const accent = {
+    color: `var(--color-primary-fill)`,
+    contrastColor: `var(--color-fill-content)`,
+    hoverColor: `var(--color-primary-fill-hover)`,
+    activeColor: `var(--color-primary-fill-hover)`,
+};
+
 const custom = {
     semantic: {
         primary: ramp(`primary`),
         colorScheme: {
             light: {
                 surface: ramp(`surface`),
+                primary: accent,
             },
             dark: {
                 surface: ramp(`surface`),
+                primary: accent,
             },
         },
     },
@@ -43,19 +57,6 @@ const custom = {
                     paddingY: `calc(var(--spacing) * 1.5)`,
                     paddingX: `calc(var(--spacing) * 2.5)`,
                     iconOnlyWidth: `2.125rem`,
-                },
-            },
-            colorScheme: {
-                // Aura darkens buttons toward black on hover, which vanishes against the
-                // surface-950 canvas — lighten to primary-500. Set the border to the same
-                // shade as the fill so no mismatched 1px ring animates in (reads as a flicker).
-                dark: {
-                    root: {
-                        primary: {
-                            hoverBackground: `var(--color-primary-500)`,
-                            hoverBorderColor: `var(--color-primary-500)`,
-                        },
-                    },
                 },
             },
         },

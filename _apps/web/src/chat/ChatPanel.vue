@@ -1196,12 +1196,12 @@ watch(keyboardInset, () => {
         border-color 0.15s;
 }
 .plan-approve {
-    background: var(--color-primary-700);
-    color: var(--color-surface-0);
+    background: var(--color-primary-fill);
+    color: var(--color-fill-content);
     border: 1px solid transparent;
 }
 .plan-approve:hover {
-    background: var(--color-primary-600);
+    background: var(--color-primary-fill-hover);
 }
 .plan-reject {
     background: transparent;
@@ -1296,15 +1296,15 @@ watch(keyboardInset, () => {
     height: 2rem;
     width: 2rem;
     border-radius: 9999px;
-    background: var(--color-primary-700);
-    color: var(--color-surface-0);
+    background: var(--color-primary-fill);
+    color: var(--color-fill-content);
     cursor: pointer;
     transition:
         background-color 0.15s,
         opacity 0.15s;
 }
 .composer-send:hover {
-    background: var(--color-primary-600);
+    background: var(--color-primary-fill-hover);
 }
 .composer-send:disabled {
     background: var(--color-overlay);
