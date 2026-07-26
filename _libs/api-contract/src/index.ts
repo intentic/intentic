@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
     CfTokenSchema,
     CfZonesSchema,
+    DaemonUrlSchema,
     ImageDataUrlSchema,
     InviteListSchema,
     InvitePreviewSchema,
@@ -30,7 +31,9 @@ export const meContract = {
 // the Cloudflare zones a pasted token can see so the picker can choose one before the install command is revealed
 // — the token is used for that one call and discarded (never persisted/logged). `setupCode` mints the short-lived
 // code the install one-liner carries (a pure DB write — the intentic tunnel is provisioned lazily at claim time);
-// the connect script redeems it at the public POST /setup/claim. `leave` drops the
+// the connect script redeems it at the public POST /setup/claim. `attach` is the mirror image of the daemon's
+// announce for a sandbox the user already runs behind a domain of their own: the OWNER asserts where it lives,
+// after their BROWSER verified it answers (the platform never calls into a sandbox). `leave` drops the
 // caller's own membership. Inviting/managing teammates lives in inviteContract below. Every sandbox-scoped route
 // takes a `sandboxId`; owner-only ones reject non-owners.
 const sandboxIdInput = z.object({ sandboxId: z.string() });
@@ -53,6 +56,10 @@ export const sandboxContract = {
         .route({ method: "POST", path: "/sandbox/setup-code" })
         .input(z.object({ sandboxId: z.string(), target: SetupCodeTargetSchema }))
         .output(SetupCodeSchema),
+    attach: oc
+        .route({ method: "POST", path: "/sandbox/attach" })
+        .input(z.object({ sandboxId: z.string(), daemonUrl: DaemonUrlSchema }))
+        .output(SandboxSummarySchema),
     leave: oc
         .route({ method: "POST", path: "/sandbox/leave" })
         .input(sandboxIdInput)

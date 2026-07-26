@@ -296,6 +296,23 @@ export const SandboxSummarySchema = z.object({
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 
+// The sandbox's public base URL as the OWNER asserts it (sandbox.attach) instead of the daemon announcing it —
+// the "I already run my sandbox behind a domain that works" path, where nothing ever phones home. https only:
+// the web app is served over HTTPS, so a browser blocks every call to an http:// daemon as mixed content.
+// Trailing slashes are dropped because each daemon call appends an absolute path (`${daemonUrl}/health`); a
+// path prefix is kept, so a sandbox served under `https://example.com/sandbox` works behind the user's proxy.
+export const DaemonUrlSchema = z
+    .string()
+    .max(255)
+    .transform((value) => value.trim().replace(/\/+$/, ``))
+    .refine((value) => {
+        try {
+            return new URL(value).protocol === "https:";
+        } catch {
+            return false;
+        }
+    }, "must be an https:// URL");
+
 // ---- invites: sharing a sandbox with teammates by email ----
 
 // A row in the owner's access roster: an email plus its derived state. `pending` = invited, link not yet

@@ -113,6 +113,42 @@ describe(`sandbox routes`, () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(null) } });
         await expectOrpcCode(call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) }), `NOT_FOUND`);
         await expectOrpcCode(call(sandboxRoutes.update, { sandboxId: `s1`, name: `renamed` }, { context: context({ prisma }) }), `NOT_FOUND`);
+        await expectOrpcCode(
+            call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl: `https://sandbox.example.com` }, { context: context({ prisma }) }),
+            `NOT_FOUND`,
+        );
+    });
+
+    it(`attach records the owner-asserted URL and stamps lastSeenAt like an announce`, async () => {
+        const daemonUrl = `https://sandbox.example.com`;
+        const update = vi.fn().mockResolvedValue({ ...sandboxRow, daemonUrl, lastSeenAt: new Date(`2026-07-26T10:00:00.000Z`) });
+        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
+
+        const summary = await call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl }, { context: context({ prisma }) });
+        expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl, lastSeenAt: expect.any(Date) } });
+        expect(summary).toMatchObject({ id: `s1`, daemonUrl, lastSeenAt: `2026-07-26T10:00:00.000Z` });
+    });
+
+    it(`attach rejects a URL the browser could never call: http, junk, or a trailing slash`, async () => {
+        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update: vi.fn() } });
+        // The web app is HTTPS, so an http:// daemon would be blocked as mixed content on every call.
+        await expectOrpcCode(
+            call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl: `http://sandbox.example.com` }, { context: context({ prisma }) }),
+            `BAD_REQUEST`,
+        );
+        await expectOrpcCode(call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl: `nonsense` }, { context: context({ prisma }) }), `BAD_REQUEST`);
+        // A trailing slash is normalized away rather than rejected — daemon calls append an absolute path.
+        const update = vi.fn().mockResolvedValue({ ...sandboxRow, daemonUrl: `https://sandbox.example.com` });
+        const normalizing = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
+        await call(
+            sandboxRoutes.attach,
+            { sandboxId: `s1`, daemonUrl: `https://sandbox.example.com/` },
+            { context: context({ prisma: normalizing }) },
+        );
+        expect(update).toHaveBeenCalledWith({
+            where: { id: `s1` },
+            data: { daemonUrl: `https://sandbox.example.com`, lastSeenAt: expect.any(Date) },
+        });
     });
 
     it(`update writes only the provided fields and returns the summary with the logo`, async () => {

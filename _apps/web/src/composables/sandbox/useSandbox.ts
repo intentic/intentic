@@ -125,6 +125,17 @@ const update = async (input: { name?: string; image?: string }): Promise<void> =
     );
 };
 
+// Point a sandbox at a URL the owner runs it behind (setup's "I already have one running" path) and make it
+// active. The platform stamps lastSeenAt like an announce, so the returned row is immediately "connected".
+const attach = async (id: string, daemonUrl: string): Promise<void> => {
+    const updated = await apiClient.sandbox.attach({ sandboxId: id, daemonUrl });
+    await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
+    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
+        live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
+    );
+    persistActive(updated.id);
+};
+
 // Remove a sandbox from this account: owners drop the platform row + its intentic-provided tunnel (member
 // grants cascade), members drop their own grant. The local containers keep running — cleanup.sh's job.
 const remove = async (id: string): Promise<void> => {
@@ -154,5 +165,5 @@ const remove = async (id: string): Promise<void> => {
 };
 
 export function useSandbox() {
-    return { sandboxes, activeSandboxId, active, daemonUrl, reachable, denied, probeError, list, refresh, select, create, update, remove };
+    return { sandboxes, activeSandboxId, active, daemonUrl, reachable, denied, probeError, list, refresh, select, create, update, attach, remove };
 }

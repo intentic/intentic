@@ -18,6 +18,7 @@ import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { useLayout } from "../composables/useLayout";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { collectDroppedFiles } from "../pages/workspace/dropEntries";
+import { inputHistoryFor, onFirstLine, onLastLine } from "../composables/chat/inputHistory";
 import { insertMention, mentionQueryAt } from "../composables/chat/useMentions";
 import ChatAccountPanel from "./ChatAccountPanel.vue";
 import ChatCommandPopover from "./ChatCommandPopover.vue";
@@ -74,7 +75,7 @@ const router = useRouter();
 const layout = useLayout();
 const followAlong = useFollowAlong();
 const { overlayTarget, poppedOut } = useChatPopout();
-const { reachable, denied } = useSandbox();
+const { activeSandboxId, reachable, denied } = useSandbox();
 const { mobile, keyboardInset } = useDevice();
 
 // True while the user is dragging the left-edge handle to resize the panel.
@@ -399,6 +400,24 @@ const composerPlaceholder = computed(() => {
     return `Ask ${providerName.value}…`;
 });
 
+// The sandbox's message-recall ring (↑ / ↓ / Escape in the composer — see the Message recall section below).
+// Resolved per active sandbox rather than held, so switching sandboxes switches rings.
+const history = computed(() => (activeSandboxId.value === undefined ? undefined : inputHistoryFor(activeSandboxId.value)));
+
+// A tab or sandbox switch swaps the composer's draft out from under a half-finished recall — drop it on both
+// the outgoing and incoming ring so ↓/Escape can never paste one tab's draft into another's composer.
+watch([active, history], (_current, [, previousHistory]) => {
+    previousHistory?.reset();
+    history.value?.reset();
+});
+
+// The one hint slot under the composer. An empty box can't take a newline but CAN take a recall, so it
+// advertises whichever of the two is live. Recomputed as the draft empties — which is exactly when a send has
+// just filled the ring.
+const composerHint = computed(() =>
+    draft.value === `` && history.value?.recallable === true ? `↑ for previous message` : `Shift+Enter for new line`,
+);
+
 const submit = (): void => {
     // canSend covers all the gates: empty composer, uploads still in flight, unsteerable mid-generation.
     if (!connected.value || !canSend.value) {
@@ -438,6 +457,9 @@ const submit = (): void => {
         attachments.value = [];
         includeEditorContext.value = false;
     }
+    // Every branch above sends `text` somewhere (a turn, a steer, a plan revision), so every branch earns a
+    // slot in the recall ring.
+    history.value?.record(text);
     draft.value = ``;
     // Snap the box back to one line and keep the cursor ready for the next message.
     void nextTick(() => {
@@ -457,6 +479,10 @@ const syncCaret = (): void => {
 const onInput = (): void => {
     grow();
     syncCaret();
+    // Typing makes the text the user's own again — a recalled message they have started editing is a draft, so
+    // the stashed one it displaced is no longer anyone's to restore. Only real keystrokes land here: the
+    // programmatic draft writes (recall, mention/command picks) go through v-model and fire no input event.
+    history.value?.reset();
 };
 const popoverDismissed = ref(false);
 const activeMention = computed(() => mentionQueryAt(draft.value, caret.value));
@@ -504,6 +530,44 @@ const pickCommand = (name: string): void => {
     applyDraftEdit(`${inserted}${rest.startsWith(` `) ? rest.slice(1) : rest}`, inserted.length);
 };
 
+// --- Message recall --------------------------------------------------------------------------
+// Put a recalled message in the composer with the caret at its end, ready to send or edit.
+const recallInto = (text: string): void => {
+    applyDraftEdit(text, text.length);
+    // A recalled message is complete — a leading `/` or an @-path in it must not pop an autocomplete list open
+    // over it. Dismissed on the next tick, after the query watch above has re-armed on the new draft.
+    void nextTick(() => {
+        popoverDismissed.value = true;
+    });
+};
+
+// Returns true when recall consumed the key. The arrows are claimed only when the caret has nowhere left to go
+// in that direction, so a recalled MULTI-LINE message can still be walked and edited natively before sending.
+// The live element is read rather than the `caret` ref, which only tracks keyup/click and so goes stale under
+// an auto-repeating arrow — exactly the case that decides when the caret reaches the first line.
+const recallKeydown = (event: KeyboardEvent): boolean => {
+    const past = history.value;
+    const el = input.value;
+    if (past === undefined || el === undefined || el.selectionStart !== el.selectionEnd) {
+        return false;
+    }
+    const at = el.selectionStart;
+    const recalled =
+        event.key === `ArrowUp` && onFirstLine(draft.value, at)
+            ? past.previous(draft.value)
+            : event.key === `ArrowDown` && past.recalling && onLastLine(draft.value, at)
+              ? past.next()
+              : event.key === `Escape` && past.recalling
+                ? past.cancel()
+                : undefined;
+    if (recalled === undefined) {
+        return false;
+    }
+    event.preventDefault();
+    recallInto(recalled);
+    return true;
+};
+
 const onKeydown = (event: KeyboardEvent): void => {
     // Never submit mid-IME-composition (CJK candidates confirm with Enter).
     if (event.isComposing) {
@@ -528,6 +592,11 @@ const onKeydown = (event: KeyboardEvent): void => {
                 return;
             }
         }
+    }
+    // After the popovers: an open @/-list owns the arrows for the token being typed, and recall's own Escape
+    // must not pre-empt dismissing that list.
+    if (recallKeydown(event)) {
+        return;
     }
     if (event.key !== `Enter`) {
         return;
@@ -888,8 +957,9 @@ watch(keyboardInset, () => {
 
                     <div class="flex items-center gap-2 px-1 text-2xs text-subtle">
                         <!-- Keyboard hint is meaningless on a virtual keyboard (Enter is a newline there),
-                             and doesn't earn its width in a narrow panel. -->
-                        <span v-if="!mobile" class="@max-md:hidden">Shift+Enter for new line</span>
+                             and doesn't earn its width in a narrow panel. An empty composer is the one moment
+                             message recall is available, so the slot advertises it instead. -->
+                        <span v-if="!mobile" class="@max-md:hidden">{{ composerHint }}</span>
                         <div class="ml-auto flex items-center gap-3">
                             <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />

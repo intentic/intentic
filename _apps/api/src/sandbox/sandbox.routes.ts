@@ -228,4 +228,18 @@ export const sandboxRoutes = {
         });
         return { code, hostname, expiresAt: expiresAt.toISOString() };
     }),
+    // Record where a sandbox the user ALREADY runs is reachable — the owner-asserted counterpart to the daemon's
+    // POST /sandbox/announce, for a daemon that never phones home (no PLATFORM_URL, or a network that can't
+    // reach us). The browser has already probed the URL and been authorized by the daemon before calling this,
+    // which is the only verification that means anything: the platform never calls into a sandbox (so it can't
+    // check, and probing an arbitrary owner-supplied URL from here would be an SSRF hole). lastSeenAt is stamped
+    // like an announce so the wizard's "connected" test and the switcher read it the same way.
+    attach: os.sandbox.attach.handler(async ({ context, input }) => {
+        await requireOwnedSandbox(context, input.sandboxId);
+        const sandbox = await context.prisma.sandbox.update({
+            where: { id: input.sandboxId },
+            data: { daemonUrl: input.daemonUrl, lastSeenAt: new Date() },
+        });
+        return toSummary(sandbox, `owner`, context);
+    }),
 };
