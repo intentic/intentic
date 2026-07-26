@@ -400,13 +400,6 @@ export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTrans
 //   filterBackend     — which cleaner runs the compression: "native" (agent-output-filter, default) or "rtk"
 //                        (the rtk binary from its installed extension, rewritten at the PreToolUse hook) — an
 //                        A/B backend switch, so native and rtk can be benchmarked head-to-head.
-//   impMode           — splits every Claude Code turn in two: an ARCHITECT that reasons and writes but holds no
-//                        tools, and an IMP — a cheaper agent with the full tool surface — that reads each block
-//                        the architect writes, does what it calls for, and hands the results back. Inverted
-//                        delegation: the architect never spawns a search agent, the imp delivers unasked.
-//   impModel          — the model each imp dispatch runs on; empty ⇒ the `haiku` tier alias on a native Claude
-//                        turn, and the turn's own routed model when a translator serves the harness (no cheaper
-//                        id is knowable there). Only read while impMode is on.
 // The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "off" (cleaning off),
 // outputHoldout 0, filterBackend "native" — a fresh sandbox starts with cleaning and iq off until the owner enables them.
 //
@@ -426,8 +419,6 @@ export const SandboxSettingsSchema = z.object({
     outputCleaners: z.string().default("off"),
     outputHoldout: z.number().min(0).max(1).default(0),
     filterBackend: z.enum(["native", "rtk"]).default("native"),
-    impMode: z.boolean().default(false),
-    impModel: z.string().default(""),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 

@@ -7,7 +7,8 @@ import { SandboxSettingsSchema } from "./schemas.js";
  * failure — because failing instead reaches the user as a settings page whose switches silently do nothing. */
 
 test("a payload from a build that predates a toggle parses, with the new toggle at its default", () => {
-    // Exactly what a daemon built before imp mode answers with.
+    // What a daemon built before the output-cleaner backend switch answers with: every key it knew, and
+    // nothing for the one added after it shipped.
     const older = {
         stableSystemPrompt: false,
         skills: [],
@@ -16,9 +17,8 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
         iqSearch: true,
         outputCleaners: "-cap",
         outputHoldout: 0.1,
-        filterBackend: "rtk",
     };
-    expect(SandboxSettingsSchema.parse(older)).toEqual({ ...older, impMode: false, impModel: "" });
+    expect(SandboxSettingsSchema.parse(older)).toEqual({ ...older, filterBackend: "native" });
 });
 
 test("an empty object is the full default settings object", () => {
@@ -31,8 +31,6 @@ test("an empty object is the full default settings object", () => {
         outputCleaners: "off",
         outputHoldout: 0,
         filterBackend: "native",
-        impMode: false,
-        impModel: "",
     });
 });
 

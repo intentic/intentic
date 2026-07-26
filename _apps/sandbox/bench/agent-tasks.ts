@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/* The tasks imp-bench runs, and the only thing that decides whether a run passed. Every task grades
+/* The tasks agent-bench runs, and the only thing that decides whether a run passed. Every task grades
  * MECHANICALLY — an exact grid, an exact integer — because an LLM judge would put the thing under test on both
  * sides of the measurement, and because a benchmark you re-run weekly has to be free.
  *
@@ -275,10 +275,9 @@ const importClosure = async (workspace: string, entry: string): Promise<Set<stri
 
 // The task frontier models are expected to struggle with, and the one imp mode should be best placed to win:
 // the ANSWER is a single number, but reaching it means opening ~93 of the tree's 198 files and keeping a
-// running graph straight. A single agent's context fills with source it must then reason over; an architect
-// with no tools never sees a byte of it — only the imp's summary — so its context stays the size of the
-// problem rather than the size of the codebase. Answering from the entry file alone gives 25, so a run that
-// never went transitive is unmistakable in the result rather than merely wrong.
+// running graph straight, so a single context fills with source it must then reason over. Answering from the
+// entry file alone gives 25, so a run that never went transitive is unmistakable in the result rather than
+// merely wrong.
 const depsTask: BenchTask = {
     id: "deps",
     title: `count the transitive relative-import closure of ${DEPS_ENTRY}`,
@@ -320,12 +319,6 @@ const depsTask: BenchTask = {
 // contradicted by intent that is visible right where it sits — a comment, a name, or the obvious purpose of the
 // function. None is findable by pattern: no regex knows that slicing 6 characters contradicts a comment saying
 // 8, so an agent has to READ and UNDERSTAND, across a tree far too large to hold at once.
-//
-// This is the task built for the question "does splitting thinking from doing raise frontier intelligence" —
-// the one to run as Opus architect + Opus imp against an Opus orchestrator spawning Opus subagents, since with
-// model strength held equal on both halves the only variable left is who holds the tools:
-//
-//   bench:imp --tasks defects --model opus --imp-model opus --arms subagent,duo
 //
 // Anchors are exact source strings, and prepare() THROWS if one no longer matches, so an edit upstream breaks
 // the benchmark loudly instead of silently planting three defects and grading against four.

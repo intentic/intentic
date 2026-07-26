@@ -2,13 +2,13 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { countWord, stripComments, taskFor } from "./imp-tasks.js";
+import { countWord, stripComments, taskFor } from "./agent-tasks.js";
 
 /* The bench's grading is the one part of it that must be right: a scorer that is wrong turns every number the
  * benchmark prints into a confident lie, and unlike the runs themselves it costs nothing to test. Nothing here
  * spawns an agent or touches the network — the ARC task is served from its on-disk cache. */
 
-const workspace = async (): Promise<string> => mkdtemp(join(tmpdir(), "imp-bench-test-"));
+const workspace = async (): Promise<string> => mkdtemp(join(tmpdir(), "agent-bench-test-"));
 
 test("the comment scanner keeps strings and drops comments — the distinction the sweep task is built on", () => {
     expect(stripComments(`const a = 1; // sessionId here\n`)).toBe(`const a = 1; \n`);

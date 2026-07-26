@@ -105,16 +105,6 @@ survive reconnects. Its subsystems:
   frames land in a seq-stamped log, which any number of clients render via `/agent/attach`
   (replay-from-cursor, then live) — so a turn survives reloads and dropped connections, and every window or
   device on the conversation streams it concurrently. Only `/agent/stop` cancels it.
-  **Imp mode** ([agent/imp.ts](_apps/sandbox/src/agent/imp.ts), off by default, Claude Code harness only) runs a
-  turn as two agents instead of one: an **architect** holding no tools, which reasons and writes what it needs in
-  plain words (never as commands — picking tools is not its job), and an **imp** on a cheaper model holding the
-  whole tool surface, which reads that message, chooses the tools that serve it, and reports back. The report is
-  the architect's next message — delegation inverted, so the strong model spends its context on design rather
-  than on deciding to search. One imp per architect round, and the round waits for it; a dispatch that runs no
-  tools ends the turn, because the architect asked for nothing and so was answering. An imp never raises a
-  permission card (it is a mechanical executor with no user of its own, and the container is the isolation
-  boundary); plan mode reaches it as withheld editing tools rather than as a prompt per call, while the approval
-  the user does give is the architect's plan.
 - **Terminals** — interactive PTYs over WebSocket ([terminal/terminal.ts](_apps/sandbox/src/terminal/terminal.ts)).
 - **Panels & previews** — per-repo dev servers behind `preview-<panel>-<id>.<zone>` hostnames
   ([panels/](_apps/sandbox/src/panels/)); plus generic **port forwarding** for anything run in a terminal

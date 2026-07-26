@@ -196,8 +196,6 @@ const services = (overrides: Partial<Services> = {}): Services => ({
             outputCleaners: "",
             outputHoldout: 0,
             filterBackend: "native" as const,
-            impMode: false,
-            impModel: "",
         }),
         set: async () => {},
     },
@@ -226,9 +224,6 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     geminiModels: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },
     history: fakeHistory(),
     agent: async function* () {
-        yield { kind: "done" };
-    },
-    impAgent: async function* () {
         yield { kind: "done" };
     },
     codexAgent: async function* () {

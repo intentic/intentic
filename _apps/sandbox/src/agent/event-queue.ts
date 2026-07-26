@@ -1,7 +1,7 @@
 /* An unbounded push/pull queue bridging concurrent producers into one async iteration. A turn's frames come
- * from several places at once — the SDK message pump, the permission gate's cards, an imp dispatch running
- * beside the architect — and every one of them is a plain callback, not a generator. Each pushes here; the
- * turn generator pulls. end() closes it, so a drained queue finishes iteration instead of blocking forever. */
+ * from several places at once — the SDK message pump and the permission gate's cards — and every one of them
+ * is a plain callback, not a generator. Each pushes here; the turn generator pulls. end() closes it, so a
+ * drained queue finishes iteration instead of blocking forever. */
 export class EventQueue<T> implements AsyncIterable<T> {
     private readonly buffer: T[] = [];
     private ended = false;

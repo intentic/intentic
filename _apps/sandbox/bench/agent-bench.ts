@@ -4,50 +4,38 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { type AgentRequest, runAgent } from "../src/agent/agent.js";
-import { IMP_DEFAULT_MODEL, runImpMode } from "../src/agent/imp.js";
 import { sumUsage, type UsageFrame } from "../src/agent/turn-usage.js";
-import { type BenchTask, taskFor } from "./imp-tasks.js";
+import { type BenchTask, taskFor } from "./agent-tasks.js";
 
-/* IMP-MODE A/B BENCHMARK — is the architect/imp pair smarter, cheaper, or neither?
+/* AGENT-ARCHITECTURE A/B BENCHMARK — does delegating the tedious work beat one agent doing all of it?
  *
- *   pnpm --filter @intentic/sandbox bench:imp                          # both tasks, both arms, 3 runs each
- *   pnpm --filter @intentic/sandbox bench:imp --tasks sweep --runs 5
- *   pnpm --filter @intentic/sandbox bench:imp --tasks arc:135a2760 --model opus --imp-model haiku
- *   pnpm --filter @intentic/sandbox bench:imp --arms duo --json out.json --transcripts ./bench-runs
- *   pnpm --filter @intentic/sandbox bench:imp --model haiku --arms solo   # the controlled third arm: see below
- *   pnpm --filter @intentic/sandbox bench:imp --tasks defects --model opus --imp-model opus --arms subagent,duo
- *       ^ the frontier question: with Opus on BOTH halves, does forcing the split beat an Opus orchestrator
- *         spawning Opus subagents? Model strength is held equal, so the only variable left is who holds tools.
+ *   pnpm --filter @intentic/sandbox bench:agents                        # both tasks, both arms, 1 run each
+ *   pnpm --filter @intentic/sandbox bench:agents --tasks sweep --runs 5
+ *   pnpm --filter @intentic/sandbox bench:agents --tasks arc:135a2760 --model opus
+ *   pnpm --filter @intentic/sandbox bench:agents --tasks defects --model opus --timeout 1200 --transcripts ./bench-runs
  *
- * It drives runAgent (arm `solo`) and runImpMode (arm `duo`) DIRECTLY — no daemon, no tunnel, no browser — so
- * the only difference between arms is the thing under test. Everything else (task, prompt, workspace, model,
- * effort, posture) is held identical, each run gets a fresh throwaway workspace, and grading is mechanical.
+ * Both arms run runAgent directly — no daemon, no tunnel, no browser — on the same task, prompt, workspace,
+ * model, effort and posture. The ONLY difference is whether the agent may spawn subagents. Each run gets a
+ * fresh throwaway workspace and grading is mechanical.
  *
- * Needs a Claude credential in the environment (CLAUDE_CODE_OAUTH_TOKEN, or ANTHROPIC_API_KEY) — the same
- * fallback a turn uses when the daemon has no stored account. It spends real tokens: two agents per duo run,
- * `--runs` repetitions per arm. Start with `--runs 1 --tasks sweep`.
+ * Needs a Claude credential (CLAUDE_CODE_OAUTH_TOKEN, or ANTHROPIC_API_KEY); it asks for one if neither is set
+ * and checks it before spending anything. It spends real tokens — start with `--runs 1 --tasks sweep`.
  *
  * READ THE NUMBERS HONESTLY.
  *
- * Three runs per arm is enough to catch a big effect and nowhere near enough to call a small one — the per-run
- * lines are printed for that reason, and `--transcripts` keeps the frames so a surprising result can be read
- * back rather than re-run.
+ * One run per arm catches a big effect and nowhere near a small one — the per-run lines are printed for that
+ * reason, and `--transcripts` keeps the frames so a surprising result can be read back rather than re-run.
  *
- * `solo` vs `duo` alone CANNOT tell you whether an architect calls tools better than an imp: with the default
- * model, solo is the big model doing its own tool calls while duo is the big model directing a Haiku imp, so
- * "which half called tools better" is confounded with "which model called tools". The controlled third arm is
- * `--model haiku --arms solo` — Haiku doing everything. Read it as: duo vs solo-haiku isolates what the
- * architect's direction is worth; duo vs solo-default is what the whole arrangement costs you in quality.
- *
- * Cost is the headline efficiency figure because it already prices the two halves running on different models.
- * `ctx` is everything fed IN (fresh input plus both cache buckets) — under prompt caching the fresh-input
- * number alone is near zero, so a plain input+output "tokens" figure can fall while real context consumption
- * grows.
+ * `fed` is every token sent to a model summed over every request, which is what you are billed for; it climbs
+ * with the NUMBER of requests as much as with context size, since an agent that reads files one at a time
+ * re-sends everything read so far on each later call. `peak` is how full the window actually got. They can
+ * differ by 50x, and only one of them is the thing people mean by "context". A caveat on `fed`: a subagent
+ * runs in its own session, so what IT spends may not appear in the parent's accounting — cost, which comes
+ * from the SDK's own total, is the figure to trust when the two arms disagree.
  */
 
 // How the mainstream harnesses steer delegation: the model keeps every tool and decides for itself when to
-// hand tedious work to a subagent. Deliberately the same ARGUMENT imp mode makes — keep the reasoning context
-// clean — reached the opposite way, by the architect asking rather than being served unasked.
+// hand tedious work to a subagent, so its own reasoning context stays on the problem.
 const SUBAGENT_NUDGE = [
     "Delegate the tedious parts. When a step is mechanical — sweeping the tree, reading many files, gathering facts — spawn a subagent with the Agent tool to do it and report back, so your own context stays on the problem instead of filling with raw output.",
     "Do the reasoning yourself: decide what is needed and what the results mean. A subagent gathers; it does not decide.",
@@ -57,25 +45,23 @@ const SUBAGENT_NUDGE = [
 const SUBAGENT_TOOLS = ["Agent", "Task"];
 
 interface Arm {
-    readonly name: "solo" | "subagent" | "duo";
+    readonly name: "solo" | "subagent";
     // One line for the run header, so a table read months later says what was actually compared.
     readonly what: string;
-    readonly run: (request: AgentRequest, impModel: string) => AsyncGenerator<AgentEvent>;
+    readonly run: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
 }
 
 const ARMS: readonly Arm[] = [
     // Withheld so this really is ONE agent: the preset offers subagents, and a solo run that quietly spawned
-    // them would be the `subagent` arm under a different name — the one comparison that must not blur. BOTH
-    // names are listed because the SDK calls this tool `Agent` (its input type is AgentInput/subagent_type)
-    // while older harnesses called it `Task`; disallowing only `Task` silently blocked nothing at all, which
-    // is exactly the bug this list exists to prevent recurring.
+    // them would be the `subagent` arm under a different name — the comparison that must not blur. BOTH names
+    // are listed because the SDK calls this tool `Agent` (its input type is AgentInput/subagent_type) while
+    // older harnesses called it `Task`; disallowing only `Task` silently blocked nothing at all.
     { name: "solo", what: "one agent, every tool, no delegation", run: (request) => runAgent({ ...request, disallowedTools: SUBAGENT_TOOLS }) },
     {
         name: "subagent",
         what: "one agent that spawns subagents for the tedious work (the mainstream approach)",
         run: (request) => runAgent({ ...request, systemAppend: SUBAGENT_NUDGE }),
     },
-    { name: "duo", what: "tool-less architect + cheap imp (imp mode)", run: (request, impModel) => runImpMode({ model: impModel }, request) },
 ];
 
 interface RunResult {
@@ -91,13 +77,14 @@ interface RunResult {
     readonly cacheCreationTokens: number;
     readonly costUsd: number;
     readonly toolCalls: number;
-    readonly impDispatches: number;
     // Auto-compactions: the harness ran out of context window and threw history away. The clearest signal
     // that an arm is drowning in its own tool output rather than reasoning about the problem.
     readonly compactions: number;
-    // Which tools were reached for, by name. The point of the comparison: a solo agent and an imp have the
-    // SAME tool surface, so if one of them answers with `Grep` where the other shells out to `Bash`, that is
-    // a difference in tool selection rather than in the task — and it is invisible in a bare call count.
+    // High-water context fill seen mid-turn, the one accounting figure that survives a timeout.
+    readonly contextPeak: number;
+    // Which tools were reached for, by name. Both arms hold the same surface bar delegation, so a difference
+    // here — `Grep` where the other shells out to `Bash`, or how often `Agent` appears — is a difference in
+    // tool SELECTION rather than in the task, and it is invisible in a bare call count.
     readonly toolsByName: Record<string, number>;
     readonly errors: number;
     // The FIRST error the run reported, verbatim. Counting errors and dropping their text turns every failure
@@ -112,7 +99,6 @@ interface Options {
     readonly arms: string[];
     readonly runs: number;
     readonly model: string | undefined;
-    readonly impModel: string;
     readonly effort: string | undefined;
     readonly timeoutMs: number;
     readonly json: string | undefined;
@@ -136,12 +122,11 @@ const parseArgs = (argv: readonly string[]): Options => {
     };
     return {
         tasks: list("tasks", ["sweep", "arc"]),
-        arms: list("arms", ["solo", "subagent", "duo"]),
+        arms: list("arms", ["solo", "subagent"]),
         runs: Number(flags.get("runs") ?? 1),
         model: flags.get("model"),
-        impModel: flags.get("imp-model") ?? IMP_DEFAULT_MODEL,
         effort: flags.get("effort"),
-        timeoutMs: Number(flags.get("timeout") ?? 600) * 1000,
+        timeoutMs: Number(flags.get("timeout") ?? 900) * 1000,
         json: flags.get("json"),
         transcripts: flags.get("transcripts"),
         keep: flags.get("keep") === "true",
@@ -151,15 +136,15 @@ const parseArgs = (argv: readonly string[]): Options => {
 // One run: fresh workspace, one turn, mechanical grade. Never throws for an agent-side failure — a crashed or
 // timed-out run is a data point (scored 0), not a reason to abandon the sweep.
 const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Options): Promise<RunResult> => {
-    const dir = await mkdtemp(join(tmpdir(), `imp-bench-${task.id.replace(/[^a-z0-9]+/gi, "-")}-`));
+    const dir = await mkdtemp(join(tmpdir(), `agent-bench-${task.id.replace(/[^a-z0-9]+/gi, "-")}-`));
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), options.timeoutMs);
     const started = Date.now();
     let usage: UsageFrame | undefined;
     let toolCalls = 0;
-    let impDispatches = 0;
     let errors = 0;
     let compactions = 0;
+    let contextPeak = 0;
     let error: string | undefined;
     const toolsByName: Record<string, number> = {};
     const frames: AgentEvent[] = [];
@@ -169,25 +154,26 @@ const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Option
             prompt: prepared.prompt,
             cwd: dir,
             signal: controller.signal,
-            // Nothing can answer a permission card here, and a parked turn would burn the timeout instead of
-            // producing a data point — so both arms run the sandbox's own autonomous posture.
+            // Nothing here can answer a card, so say so: an agent that reaches for a plan approval or a
+            // question would otherwise park until the timeout and score as a failure that never happened. A
+            // run measured before this flag existed did exactly that — EnterPlanMode, work, ExitPlanMode,
+            // then 600s of waiting for a user who was never there.
             permissionMode: "bypassPermissions",
+            unattended: true,
             ...(options.model !== undefined ? { model: options.model } : {}),
             ...(options.effort !== undefined ? { effort: options.effort } : {}),
         };
-        for await (const event of arm.run(request, options.impModel)) {
+        for await (const event of arm.run(request)) {
             if (options.transcripts !== undefined) {
                 frames.push(event);
             }
             if (event.kind === "usage") {
                 usage = sumUsage(usage, event);
             } else if (event.kind === "tool_call") {
-                if (event.name === "Imp") {
-                    impDispatches += 1;
-                } else {
-                    toolCalls += 1;
-                    toolsByName[event.name] = (toolsByName[event.name] ?? 0) + 1;
-                }
+                toolCalls += 1;
+                toolsByName[event.name] = (toolsByName[event.name] ?? 0) + 1;
+            } else if (event.kind === "context_usage") {
+                contextPeak = Math.max(contextPeak, event.tokens);
             } else if (event.kind === "compact") {
                 compactions += 1;
             } else if (event.kind === "error") {
@@ -196,8 +182,8 @@ const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Option
             }
         }
         const graded = await prepared.grade();
-        // The whole event stream, so a surprising result can be read back instead of re-run: what the
-        // architect asked for, what the imp reported, and which tools it actually chose.
+        // The whole event stream, so a surprising result can be read back instead of re-run: what the agent
+        // asked for, what came back, and which tools it actually chose.
         if (options.transcripts !== undefined) {
             await mkdir(options.transcripts, { recursive: true });
             const name = `${task.id.replace(/[^a-z0-9]+/gi, "-")}-${arm.name}-${index}.jsonl`;
@@ -216,8 +202,8 @@ const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Option
             cacheCreationTokens: usage?.cacheCreationTokens ?? 0,
             costUsd: usage?.costUsd ?? 0,
             toolCalls,
-            impDispatches,
             compactions,
+            contextPeak,
             toolsByName,
             errors,
             error,
@@ -232,8 +218,11 @@ const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Option
     }
 };
 
-// Everything fed INTO the models: fresh input plus both cache buckets. Under prompt caching the fresh-input
-// number alone is near zero and says nothing about how much context a run actually consumed.
+// Everything fed INTO the models across the WHOLE run: fresh input plus both cache buckets, summed over every
+// request. This is what you are billed for, and it grows with the NUMBER of requests as much as with context
+// size — an agent that reads 18 files one at a time re-sends everything it has read on each subsequent call,
+// so `fed` climbs quadratically while the window itself is nowhere near full. `contextPeak` is the other
+// half of the story: how full the window actually got.
 const context = (result: RunResult): number => result.inputTokens + result.cacheReadTokens + result.cacheCreationTokens;
 
 // Means over runs that actually finished. A timed-out run has no accounting at all — the SDK reports usage
@@ -257,9 +246,9 @@ const report = (results: readonly RunResult[]): void => {
         groups.set(key, [...(groups.get(key) ?? []), result]);
     }
     process.stdout.write(
-        `\n${pad("task", 18)}${pad("arm", 10)}${pad("solved", 9)}${pad("score", 8)}${pad("ctx", 9)}${pad("out", 8)}${pad("$", 9)}${pad("tools", 7)}${pad("imps", 6)}${pad("cmpct", 7)}${pad("t/o", 5)}${pad("wall", 8)}\n`,
+        `\n${pad("task", 18)}${pad("arm", 10)}${pad("solved", 9)}${pad("score", 8)}${pad("fed", 9)}${pad("peak", 8)}${pad("out", 8)}${pad("$", 9)}${pad("tools", 7)}${pad("cmpct", 7)}${pad("t/o", 5)}${pad("wall", 8)}\n`,
     );
-    process.stdout.write(`${"-".repeat(104)}\n`);
+    process.stdout.write(`${"-".repeat(106)}\n`);
     for (const [, runs] of groups) {
         const { task, arm } = runs[0]!;
         const solved = runs.filter((result) => result.solved).length;
@@ -285,7 +274,6 @@ const report = (results: readonly RunResult[]): void => {
                     9,
                 ),
                 pad(mean(runs.map((result) => result.toolCalls)).toFixed(1), 7),
-                pad(mean(runs.map((result) => result.impDispatches)).toFixed(1), 6),
                 pad(mean(runs.map((result) => result.compactions)).toFixed(1), 7),
                 pad(`${runs.filter((result) => result.timedOut).length}/${runs.length}`, 5),
                 pad(`${(mean(runs.map((result) => result.wallMs)) / 1000).toFixed(0)}s`, 8),
@@ -319,7 +307,7 @@ const report = (results: readonly RunResult[]): void => {
         if (solo.length === 0) {
             continue;
         }
-        for (const arm of ["subagent", "duo"]) {
+        for (const arm of ["subagent"]) {
             const runs = results.filter((result) => result.task === task && result.arm === arm);
             if (runs.length === 0) {
                 continue;
@@ -339,7 +327,7 @@ const report = (results: readonly RunResult[]): void => {
             // reason a bare "tokens" number misleads: under prompt caching almost all input arrives as cache
             // reads, so input-plus-output can fall while the context actually fed to the models grows.
             process.stdout.write(
-                `\n${task}: ${arm} vs solo — cost ${delta((result) => result.costUsd)} · context ${delta(context)} · output ${delta((result) => result.outputTokens)} · solved ${solveDelta > 0 ? "+" : ""}${Math.round(solveDelta * 100)}pp\n`,
+                `\n${task}: ${arm} vs solo — cost ${delta((result) => result.costUsd)} · fed ${delta(context)} · peak ${delta((result) => result.contextPeak)} · output ${delta((result) => result.outputTokens)} · solved ${solveDelta > 0 ? "+" : ""}${Math.round(solveDelta * 100)}pp\n`,
             );
         }
     }
@@ -467,7 +455,7 @@ const main = async (): Promise<void> => {
     const results: RunResult[] = [];
     const worstCaseMinutes = Math.round((tasks.length * arms.length * options.runs * options.timeoutMs) / 60_000);
     process.stdout.write(
-        `imp-bench · ${tasks.length} task(s) × ${arms.length} arm(s) × ${options.runs} run(s) · architect=${options.model ?? "account default"} imp=${options.impModel}\n` +
+        `imp-bench · ${tasks.length} task(s) × ${arms.length} arm(s) × ${options.runs} run(s) · model=${options.model ?? "account default"}\n` +
             `timeout ${options.timeoutMs / 1000}s per run — up to ${worstCaseMinutes} min if everything runs long. Ctrl-C is safe; nothing is written outside temp dirs.\n`,
     );
     for (const task of tasks) {
@@ -479,7 +467,7 @@ const main = async (): Promise<void> => {
                 const result = await runOnce(task, arm, index, options);
                 results.push(result);
                 process.stdout.write(
-                    `\r  ${pad(`${arm.name} #${index}`, 12)}${result.solved ? "PASS" : "FAIL"} · ${result.detail} · ${result.timedOut ? "no accounting (TIMED OUT)" : `${short(context(result))} ctx / ${short(result.outputTokens)} out`} · ${result.toolCalls} tools${result.impDispatches > 0 ? ` · ${result.impDispatches} imps` : ""}${result.compactions > 0 ? ` · ${result.compactions} compactions` : ""}\n`,
+                    `\r  ${pad(`${arm.name} #${index}`, 12)}${result.solved ? "PASS" : "FAIL"} · ${result.detail} · ${result.timedOut ? `TIMED OUT, context reached ${short(result.contextPeak)}` : `${short(context(result))} ctx / ${short(result.outputTokens)} out`} · ${result.toolCalls} tools${result.compactions > 0 ? ` · ${result.compactions} compactions` : ""}\n`,
                 );
                 if (result.error !== undefined) {
                     process.stdout.write(`             ↳ ${result.errors > 1 ? `${result.errors} errors, first: ` : ""}${result.error}\n`);

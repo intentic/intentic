@@ -1,16 +1,15 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 
-// The turn's accounting frame. A turn can emit several — one per steered follow-up turn, one per imp-mode
-// round — and every consumer that answers "what did this turn cost" (the spend ledger, the activity log, the
-// merged frame imp mode sends the client) wants their SUM, not the last one.
+// The turn's accounting frame. A turn can emit several — one per steered follow-up turn — and every consumer
+// that answers "what did this turn cost" (the spend ledger, the activity log) wants their SUM, not the last.
 export type UsageFrame = Extract<AgentEvent, { kind: "usage" }>;
 
 const add = (a: number | undefined, b: number | undefined): number | undefined => (a === undefined ? b : b === undefined ? a : a + b);
 
 // Add two accounting frames. Every field is optional per provider, so a field is present iff either side
-// reported it. `durationMs` sums as compute time spent, not wall clock — concurrent agents (an imp working
-// beside its architect) genuinely each spent theirs. Adding to a running total that may not exist yet is the
-// common call, so a defined addend gives a defined total (the first overload) with no re-narrowing at the site.
+// reported it. `durationMs` sums as compute time spent rather than wall clock. Adding to a running total that
+// may not exist yet is the common call, so a defined addend gives a defined total (the first overload) with no
+// re-narrowing at the site.
 export function sumUsage(a: UsageFrame | undefined, b: UsageFrame): UsageFrame;
 export function sumUsage(a: UsageFrame | undefined, b: UsageFrame | undefined): UsageFrame | undefined;
 export function sumUsage(a: UsageFrame | undefined, b: UsageFrame | undefined): UsageFrame | undefined {

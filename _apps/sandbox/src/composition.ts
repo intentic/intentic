@@ -32,7 +32,6 @@ import { type AcpConnections, createAcpConnections } from "./acp/acp-connection.
 import { type BridgeTokens, fileBridgeTokens } from "./auth/bridge-tokens.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/agent.js";
-import { type ImpConfig, runImpMode } from "./agent/imp.js";
 import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
@@ -222,9 +221,6 @@ export interface Services {
     readonly history: WorkspaceHistory;
     // The provider adapters — one function shape, three native agent runtimes. streamAgent picks per turn.
     readonly agent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
-    // The imp-mode orchestrator (the impMode setting): the same Claude Code turn, run as a tool-less architect
-    // with a cheap tool-holding imp doing the doing. Replaces `agent` for the turn when the setting is on.
-    readonly impAgent: (imp: ImpConfig, request: AgentRequest) => AsyncGenerator<AgentEvent>;
     readonly codexAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
     readonly grokAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
     // The generic ACP adapter serving every `agent`-kind capability (any provider id outside NATIVE_PROVIDERS);
@@ -424,7 +420,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
         authRoot,
         history: createWorkspaceHistory({ workspace, historyRoot: config.historyRoot, logger }),
         agent: runAgent,
-        impAgent: runImpMode,
         codexAgent: createCodexAgent(codexBase),
         grokAgent: createGrokAgent(createGrokRunner(openCode)),
         acpAgent: createAcpAgent(acpConnections),

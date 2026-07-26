@@ -5,7 +5,7 @@ import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { modelOptionsFor, providerTabs } from "../../composables/chat/conversation";
+import { providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { errorMessage } from "../../composables/useAsyncAction";
@@ -207,26 +207,6 @@ const toggleIqSearch = (value: boolean): void => {
     }
     saveSandboxSettings.mutate({ ...current, iqSearch: value });
 };
-
-// Imp mode: split each turn into a tool-less architect and a cheaper imp that reads what the architect writes,
-// does it, and reports back. The imp's model is a second setting — empty means the daemon's cheap default.
-const toggleImpMode = (value: boolean): void => {
-    const current = sandboxSettings.value;
-    if (current === undefined) {
-        return;
-    }
-    saveSandboxSettings.mutate({ ...current, impMode: value });
-};
-const setImpModel = (model: string): void => {
-    const current = sandboxSettings.value;
-    if (current === undefined) {
-        return;
-    }
-    saveSandboxSettings.mutate({ ...current, impModel: model });
-};
-// The Claude catalog the chat's picker uses (live daemon discovery, static tiers as the pre-load floor), so
-// the imp can run any model the account can drive; the blank option leaves the choice to the daemon.
-const impModelOptions = computed(() => modelOptionsFor(`claude`));
 
 // --- Per-cleaner toggles (the `outputCleaners` spec, edited as a checklist) ---------------------------------
 // Every cleaner id + a short label, in the order of bin/cleaners.mjs CLEANERS (keep in sync). Each renders one
@@ -688,41 +668,6 @@ const importMemory = async (): Promise<void> => {
                         :disabled="sandboxSettings === undefined"
                         @update:model-value="toggleIqSearch"
                     />
-                </template>
-            </Row>
-
-            <!-- Imp mode — the architect/imp split (daemon: agent/imp.ts). The main model holds no tools and just
-                 thinks out loud; a cheaper imp reads each block it writes, does what that block calls for, and
-                 hands the results back. Claude Code harness only (any provider running on it). -->
-            <Row
-                icon="sitemap"
-                title="Imp mode"
-                description="Let the assistant think without tools while a cheaper imp reads along, does what it asks for, and delivers the results. Claude Code harness only."
-            >
-                <template #control>
-                    <ToggleSwitch
-                        :model-value="sandboxSettings?.impMode ?? false"
-                        :disabled="sandboxSettings === undefined"
-                        @update:model-value="toggleImpMode"
-                    />
-                </template>
-                <template v-if="sandboxSettings?.impMode === true" #below>
-                    <label class="flex items-center justify-between gap-3">
-                        <span class="flex min-w-0 flex-col">
-                            <span class="text-xs text-content">Imp model</span>
-                            <span class="text-2xs text-muted"
-                                >The model the imp runs on — the cheap half of the pair. The default suits every provider.</span
-                            >
-                        </span>
-                        <select
-                            :value="sandboxSettings.impModel"
-                            :class="cmp.input('w-44 shrink-0 text-xs')"
-                            @change="(event: Event) => setImpModel((event.target as HTMLSelectElement).value)"
-                        >
-                            <option value="">Haiku (default)</option>
-                            <option v-for="model in impModelOptions" :key="model.value" :value="model.value">{{ model.label }}</option>
-                        </select>
-                    </label>
                 </template>
             </Row>
         </RowGroup>

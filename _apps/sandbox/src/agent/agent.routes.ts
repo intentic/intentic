@@ -17,7 +17,6 @@ import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { landAgent } from "../agents/land.js";
 import type { AgentRequest } from "./agent.js";
-import { IMP_DEFAULT_MODEL } from "./imp.js";
 import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
@@ -457,7 +456,7 @@ async function* runTurn(
         // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the
         // provider prompt cache survives the turn — the cross-provider delegation note then rides the user
         // message instead of the system prompt.
-        const { stableSystemPrompt, hashlineEdits, iqSearch, outputCleaners, outputHoldout, filterBackend, terseOutput, impMode, impModel } =
+        const { stableSystemPrompt, hashlineEdits, iqSearch, outputCleaners, outputHoldout, filterBackend, terseOutput } =
             await services.sandboxSettings.get();
         // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
         // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle
@@ -521,14 +520,7 @@ async function* runTurn(
         // system+tools prefix intact (the point of stableSystemPrompt).
         const systemAppend =
             [...(note !== undefined && !stableSystemPrompt ? [note] : []), ...(terseOutput ? [TERSE_NOTE] : [])].join("\n\n") || undefined;
-        // Imp mode splits this turn in two (agent/imp.ts): the request below describes the turn as a whole, and
-        // the orchestrator divides it — reasoning and credentials to the tool-less architect, the tool surface
-        // (plugins, MCP servers, shell env, cleaner settings) to the imps. The imp's model is the setting's when
-        // it names one; otherwise the cheap `haiku` alias natively, and the turn's own routed model when a
-        // translator serves the harness — no cheaper id is knowable through it.
-        run = impMode
-            ? (turnRequest) => services.impAgent({ model: impModel !== "" ? impModel : (endpoint?.model ?? IMP_DEFAULT_MODEL) }, turnRequest)
-            : services.agent;
+        run = services.agent;
         request = {
             ...base,
             prompt,

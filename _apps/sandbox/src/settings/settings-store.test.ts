@@ -22,8 +22,6 @@ const ALL_OFF: SandboxSettings = {
     outputCleaners: "off",
     outputHoldout: 0,
     filterBackend: "native",
-    impMode: false,
-    impModel: "",
 };
 
 test("get defaults to every flag off when the file is absent", async () => {

@@ -22,14 +22,6 @@ import { agentSessionName, bashTmuxHooks, tmuxRunEnabled } from "./agent-termina
 import { EventQueue } from "./event-queue.js";
 import { editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 
-// Which half of an imp-mode turn this request is (see agent/imp.ts); absent ⇒ the ordinary single-agent turn,
-// which holds BOTH the full tool surface and the interactive one.
-//   architect — reasons and writes, and holds no tools at all beyond the two interactive built-ins (planning
-//               is a conversation with the user, not a tool). Its imp does every mechanical thing.
-//   imp       — the architect's hands: the full tool surface, but nothing user-facing. It reports to the
-//               architect, not to the user, so it gets neither the ask tool nor the plan tools.
-export type AgentRole = "architect" | "imp";
-
 export interface AgentRequest {
     readonly prompt: string;
     // Absolute paths of user-attached files, consumed by the CODEX adapter (images ride as native
@@ -100,8 +92,12 @@ export interface AgentRequest {
     // Mid-turn steering: when present, the turn runs in the SDK's streaming-input mode and messages pushed
     // onto this queue (via /agent/steer) are injected between tool calls. Absent ⇒ single-message mode.
     readonly steering?: SteeringQueue;
-    // Which half of an imp-mode turn this is; absent ⇒ an ordinary turn. See AgentRole.
-    readonly role?: AgentRole;
+    // Nobody is watching this turn: it was started by a benchmark, a schedule or another program rather than
+    // by someone sitting in front of the chat. The interactive surface is then not merely useless but a
+    // DEADLOCK — a plan approval or a question card parks the turn on an answer that can never arrive, and the
+    // turn burns until something aborts it. So an unattended turn is given no plan tools and no ask tool, and
+    // its permission gate refuses rather than waits.
+    readonly unattended?: boolean;
 }
 
 // What a turn needs from the SDK: the message stream, plus the session's slash-command list. The real
@@ -558,27 +554,16 @@ const INTERACTIVE_GUIDANCE = [
     "When a request is large, risky, or underspecified, call EnterPlanMode first, investigate read-only, then ExitPlanMode to get your plan approved before changing anything.",
 ].join("\n\n");
 
-// The two built-ins that are a conversation with the USER rather than an action on the workspace. They are the
-// architect's whole tool surface, and precisely what an imp must not hold: an imp reports to the architect, so
-// a plan of its own would be a proposal nobody reads.
+// The two built-ins that are a conversation with the USER rather than an action on the workspace — which is
+// why an unattended turn cannot have them.
 const PLAN_TOOLS = ["EnterPlanMode", "ExitPlanMode"];
 
-// The tool surface a request's role gets. An ARCHITECT's built-ins are the interactive pair alone — it reads,
-// runs and edits nothing itself; an IMP loses that pair and keeps everything else. `tools` is the SDK's
-// base-set selector, so this decides which tools EXIST for the model rather than denying calls it makes —
-// and MCP servers are a separate axis, which is how mcp__ui__ask survives for the tool-less architect.
-// `disallowedTools` also carries the caller's own list (hashlineEdits drops the native Edit/Write).
-//
-// A turn that ALREADY starts in plan mode doesn't offer EnterPlanMode: entering a mode you are in is a no-op
-// call, and a no-op call is precisely the tool-selection noise a tool-less architect exists to be free of.
-const roleOptions = (request: AgentRequest, permissionMode: PermissionMode): Pick<Options, "tools" | "disallowedTools"> => {
-    const disallowedTools = [...(request.disallowedTools ?? []), ...(request.role === "imp" ? PLAN_TOOLS : [])];
-    const architectTools = permissionMode === "plan" ? ["ExitPlanMode"] : [...PLAN_TOOLS];
-    return {
-        ...(request.role === "architect" ? { tools: architectTools } : {}),
-        ...(disallowedTools.length > 0 ? { disallowedTools } : {}),
-    };
-};
+// Tools removed from the model's context: the caller's own list (hashlineEdits drops the native Edit/Write),
+// plus — on an unattended turn — the plan tools, which would park the turn on an approval nobody can give.
+const disallowedToolsOf = (request: AgentRequest): string[] => [
+    ...(request.disallowedTools ?? []),
+    ...(request.unattended === true ? PLAN_TOOLS : []),
+];
 
 // Base SDK options for the turn.
 const baseOptions = (request: AgentRequest, abortController: AbortController, permissionMode: PermissionMode, tmuxEnabled: boolean): Options => ({
@@ -591,10 +576,10 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
     systemPrompt: {
         type: "preset",
         preset: "claude_code",
-        // The interactive guidance is about widgets an imp does not have — it reports to the architect, not to
-        // the user — so an imp is told its own role and nothing about asking or planning.
+        // The interactive guidance describes widgets an unattended turn does not have, so it is told nothing
+        // about asking or planning.
         append: [
-            ...(request.role === "imp" ? [] : [INTERACTIVE_GUIDANCE]),
+            ...(request.unattended === true ? [] : [INTERACTIVE_GUIDANCE]),
             ...(request.systemAppend !== undefined ? [request.systemAppend] : []),
         ].join("\n\n"),
     },
@@ -638,7 +623,7 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
     ...(request.plugins !== undefined ? { plugins: request.plugins.map((path) => ({ type: "local" as const, path })) } : {}),
     ...(request.effort !== undefined ? { effort: request.effort as EffortLevel } : {}),
     ...(request.thinking !== undefined ? { thinking: request.thinking ? { type: "adaptive" } : { type: "disabled" } } : {}),
-    ...roleOptions(request, permissionMode),
+    ...(disallowedToolsOf(request).length > 0 ? { disallowedTools: disallowedToolsOf(request) } : {}),
 });
 
 // The `ask` tool behind AskUserQuestion. It is an SDK MCP tool rather than the built-in of the same name
@@ -705,6 +690,11 @@ const relativePath = (absolute: string | undefined, cwd: string): string | undef
 const permissionGate =
     (request: AgentRequest, push: (event: AgentEvent) => void): CanUseTool =>
     async (toolName, input, options) => {
+        // Nobody can answer, so refuse rather than park: a card raised here would hang the turn until its
+        // timeout, which reads as the agent freezing rather than as a decision nobody was there to make.
+        if (request.unattended === true) {
+            return { behavior: "deny", message: `${toolName} needs a person to answer, and this turn is running unattended. Proceed another way.` };
+        }
         if (toolName === "ExitPlanMode") {
             const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
             push({ kind: "plan", requestId: id, text: String((input as { plan?: unknown }).plan ?? "") });
@@ -793,10 +783,10 @@ export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaul
             stderr += data;
         },
         // The `ui` server backs AskUserQuestion; the agent's remote MCP tools are merged in alongside it (a
-        // same-named tool would override `ui`, but `ui` is reserved). An imp gets no `ui`: it answers to the
-        // architect, so a question of its own would be asked of a user who is not in that conversation.
+        // same-named tool would override `ui`, but `ui` is reserved). An unattended turn gets no `ui`: a
+        // question would be asked of a user who is not there, and the turn would wait for them forever.
         mcpServers: {
-            ...(request.role === "imp" ? {} : { ui: askServer(request, push) }),
+            ...(request.unattended === true ? {} : { ui: askServer(request, push) }),
             ...request.sdkServers,
             ...mcpServersOf(request.tools ?? []),
         },
