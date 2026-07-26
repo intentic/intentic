@@ -10,10 +10,19 @@ Companion docs: [messaging.md](messaging.md) (what we say), [landing-blueprint.m
 
 ## What it is
 
-**intentic runs specialized agents — autonomous employees.** A specialized agent is more than a
-prompt: it's a purpose-built **sandbox** on hardware *you* own, with its dev-tools really installed,
-wired to your systems through **capabilities**, its context curated for one job, running on your own
-Claude/Codex/Grok subscription. Run one, or a whole team.
+**intentic is a shared IDE for you and your agents — one workspace, two kinds of operator.**
+Everywhere else the prompt is the only layer of an agent you can change. Here every layer is visible
+and yours to edit: the image its dev-tools are really installed in, the systems it may reach
+(**capabilities**), the context it loads every turn. What you build in that workspace is a
+**specialized agent** — an autonomous employee in a purpose-built **sandbox** on hardware *you* own,
+running on your own Claude/Codex/Grok subscription. Run one, or ten in parallel.
+
+"Shared" is literal. You and the agent drive the same surfaces, by construction: one implementation of
+what connecting a VPN means (the browser on `/vpn`, the agent on `/usr/local/bin/vpn` — the tunnel it
+dials appears in your UI with nothing syncing the two), one `tmux` server behind your terminals and
+its shell commands, one `iq` index behind `/workspace/search` and its Bash calls, and one tree — each
+agent on its own git worktree, landing its delta into your Changes panel as the review boundary
+(`_apps/sandbox/src/agents/worktrees.ts`, `land.ts`).
 
 But an autonomous agent is not fire-and-forget. AI still needs its context configured, its work
 supervised, and a human in the loop for the decisions that matter. So every agent is **co-piloted**
@@ -77,9 +86,11 @@ payment event, a GitHub push, a new email — with a guard command deciding whet
 
 ## Selling points, ranked
 
-1. **Specialized agents, not a chat box** — each agent is a purpose-built sandbox: its dev-tools
-   really installed, wired to your systems (capabilities), context curated for one job, on your own
-   Claude/Codex/Grok subscription. A specialized agent beats a generic one. (P2)
+1. **The whole environment is editable, not just the prompt** — everyone lets you tune a system
+   prompt; intentic opens the image the dev-tools are installed in (owner-approved overlay), the
+   systems the agent may reach (capabilities, with a "this will add to your sandbox" effects panel
+   before you commit), and the context it loads each turn. You can't make the model smarter; you can
+   make it better informed and better equipped. One workspace, two operators. (P2)
 2. **Ownership without giving up the cloud UX** — the moat: the only agent workspace where the
    vendor is architecturally *unable* to read your code or drive your sandbox (identity-only hub,
    off the command path; secrets AES-256-GCM at rest with no decrypt path, `_apps/api/src/crypto.ts`). (P1)

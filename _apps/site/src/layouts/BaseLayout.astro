@@ -1,7 +1,7 @@
 ---
 import "../styles/global.css";
 import { getPageMeta } from "@intentic-dev/site-content/page-meta";
-import { ORG_DESCRIPTION, ORG_NAME, SITE_URL } from "@intentic-dev/site-content/site";
+import { ORG_DESCRIPTION, ORG_NAME, ORG_TAGLINE, SITE_URL } from "@intentic-dev/site-content/site";
 import { buildFAQPageSchema, buildOrganizationSchema, buildWebPageSchema, buildWebSiteSchema } from "@intentic-dev/site-content/structured-data";
 import { lastModForUrl } from "@intentic-dev/astro-integrations";
 
@@ -17,7 +17,7 @@ interface Props {
 const path = Astro.url.pathname.endsWith("/") ? Astro.url.pathname : `${Astro.url.pathname}/`;
 const meta = getPageMeta(path);
 
-const title = Astro.props.title ?? meta?.title ?? `${ORG_NAME} — Specialized agents that own their workspace`;
+const title = Astro.props.title ?? meta?.title ?? `${ORG_NAME} — ${ORG_TAGLINE}`;
 const description = Astro.props.description ?? meta?.description ?? ORG_DESCRIPTION;
 const datePublished = meta?.datePublished;
 const dateModified = lastModForUrl(`${SITE_URL}${path}`) ?? undefined;

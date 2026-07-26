@@ -22,10 +22,18 @@ open source on GitLab — the trust layer you can read and run yourself.
 
 ## Message hierarchy
 
-**The one thing the page sells:** **co-piloted specialized agents — autonomous employees on hardware
-you own.** A specialized agent is more than a prompt: it's a purpose-built sandbox with its dev-tools
-really installed, wired to your systems (capabilities), its context curated for one job, running on
-your own Claude/Codex/Grok subscription. Run one, or a whole team.
+**The one thing the page sells:** **a shared IDE for you and your agents — one workspace, two kinds
+of operator.** Everywhere else the prompt is the only layer of an agent you can change; here every
+layer is visible and yours to edit: the image its dev-tools are really installed in, the systems it's
+allowed to reach (capabilities), the context it loads every turn. The agents that workspace is built
+for are **co-piloted specialized agents** — autonomous employees, each a purpose-built sandbox on
+hardware you own, running on your own Claude/Codex/Grok subscription. Run one, or ten in parallel.
+
+The claim is literal, not a metaphor, and that is what makes it defensible: you and the agent drive
+the *same* surfaces. One implementation of what connecting a VPN means (`/vpn` for the browser,
+`/usr/local/bin/vpn` for the agent); one shared `tmux` server behind your terminals and its shell
+commands; one `iq` index behind `/workspace/search` and its Bash calls; one tree, where each agent
+works on its own git worktree and lands its delta into your Changes panel for review.
 
 An autonomous agent is not fire-and-forget. AI still needs (a) its context configured, (b) its work
 supervised, and (c) a human in the loop for the decisions that matter. So every agent is
@@ -50,15 +58,20 @@ Change copy there, not in the `.astro` files.
 (gitlab.com/radarsu/intentic) — the trust-through-transparency path.
 
 Retired framing (do not bring back): "Your coding agent. Out of the terminal.", "Build software with
-intent." as the definition, and "An AI-native workspace for infra, data, apps, and code…". The brand
-tagline is now "Specialized agents that own their workspace" (org metadata, `_libs/site-content/src/site.ts`).
+intent." as the definition, "An AI-native workspace for infra, data, apps, and code…", "Specialized
+agents that own their workspace", and **"A specialized agent is more than a prompt."** as the
+headline — it argued against a strawman nobody's pain matches, restated the contrast band 1500px
+early, and filed us with prompt-builders instead of Cursor/Codespaces/Devin. "specialized agent"
+survives as *mechanism* vocabulary (see the glossary); it is no longer the headline claim. The brand
+tagline is now "A shared IDE for you and your agents" (org metadata,
+`_libs/site-content/src/site.ts`), rendered as the hero `The IDE you share / with your agents.`
 
 ## Section order
 
 The page is a single continuous scroll; the full section-by-section blueprint (ids, jobs, accuracy
 rules) lives in [landing-blueprint.md](landing-blueprint.md). At the message level the order tells
 one story: **state the thesis** (Hero) → **show it's real** (the product tour of screenshots) →
-**argue specialized beats generic** (prompt-vs-agent contrast) → **break one agent down** (anatomy,
+**the prompt is the only layer anyone else opens** (contrast) → **break one agent down** (anatomy,
 inside a sandbox) → **wire it to your systems** (integrations hub) → **scale to a team** (workforce,
 Discord teammate) → **carry the trust** (ownership, shared safely) → **zoom out to a company**
 (the whole picture) → **the deal** (economics) → **get connected** → **final CTA**. Each pain from
@@ -74,8 +87,11 @@ team sharing). Do not reintroduce a pricing section.
 ## Glossary (use these words, exactly)
 
 - **specialized agent** (a.k.a. **autonomous employee**) — a coding agent given its own sandbox for
-  one job: dev-tools really installed, wired to your systems, context curated for that role. More
-  than a prompt. This is the subject of the whole page.
+  one job: dev-tools really installed, wired to your systems, context curated for that role. A
+  *mechanism* word — what you build in the shared IDE — never the headline claim.
+- **the environment** — the sum of the layers a prompt can't reach: the image the tools are installed
+  in, the capabilities the agent may use, the context it loads each turn. The page's real subject,
+  because intentic's differentiator is that all of it is **visible and editable**, not that it exists.
 - **co-piloted** — the working stance: the agent runs autonomously, but you configure its context,
   supervise its work, and stay in the loop for the decisions that matter. Never "fire-and-forget",
   never "fully autonomous" without this qualifier.
@@ -147,10 +163,11 @@ team sharing). Do not reintroduce a pricing section.
 - The landing is a single page — its title/description are **not** per-variant. Fallback
   (`_libs/site-content/src/page-meta.ts`): `intentic — Specialized agents that own their workspace`.
 - Org description (`_libs/site-content/src/site.ts`, JSON-LD) — the canonical product sentence; keep
-  the site and these docs in sync with it verbatim: `A specialized agent is more than a prompt.
-  intentic gives each coding agent — Claude Code, Codex, or Grok — its own sandbox: the libraries,
-  dev-tools, and integrations its job needs, plus curated context, on hardware you own. Run one, or
-  a whole team. Free to start.`
-- Keywords to carry naturally: specialized agent, autonomous agent, AI employee, agent workforce,
-  coding agent, Claude Code, Codex, Grok, agent sandbox, AI workspace in the browser, self-hosted AI
-  agent, Devin alternative, own your code.
+  the site and these docs in sync with it verbatim: `A shared IDE for you and your agents. intentic
+  gives each coding agent — Claude Code, Codex, or Grok — its own sandbox on hardware you own: the
+  dev-tools its job needs really installed, wired to your systems, its context curated for one job —
+  and every layer of that environment visible and yours to change. Run one, or ten in parallel. Free
+  to start.`
+- Keywords to carry naturally: AI IDE, agent IDE, shared workspace, specialized agent, autonomous
+  agent, AI employee, agent workforce, coding agent, Claude Code, Codex, Grok, agent sandbox, AI
+  workspace in the browser, self-hosted AI agent, Devin alternative, own your code.

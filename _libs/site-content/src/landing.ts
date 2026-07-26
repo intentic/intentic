@@ -24,7 +24,7 @@ export interface AgentSpec {
     outcome: string;
 }
 
-/** One side of the "prompt vs specialized agent" comparison. */
+/** One side of the "a prompt vs the whole environment" comparison. */
 export interface LandingContrastColumn {
     label: string;
     caption: string;
@@ -98,21 +98,22 @@ export interface LandingContent {
     finalCta: { heading: string; sub: string };
 }
 
-// One thesis, told once: a specialized agent is more than a prompt — it owns an environment (a
-// sandbox, real dev-tools, access to your systems, curated context), which is why it beats a
-// generic assistant, and why you can hand it real work and compose a team of them. Every claim maps
-// to a shipping mechanism: environment overlays, capabilities/connectors, agent plugins/skills,
-// sandboxes (Pro = many), and automations.
+// One thesis, told once: this is one workspace with two kinds of operator — you and your agents — and
+// every layer of the environment they work in is visible and yours to change. Elsewhere the prompt is
+// the only editable part; here it's the image the tools are installed in, the systems the agent may
+// reach, and the context it loads each turn. Every claim maps to a shipping mechanism: environment
+// overlays, capabilities/connectors, agent plugins/skills, isolated worktrees + land, sandboxes
+// (Pro = many), and automations.
 export const landingContent: LandingContent = {
     meta: {
-        title: "intentic — Specialized agents that own their workspace",
+        title: "intentic — A shared IDE for you and your agents",
         description:
-            "A specialized agent is more than a prompt. intentic gives each coding agent its own sandbox — the libraries, dev-tools, and integrations its job needs, plus curated context — on hardware you own. Works with Claude Code, Codex, Grok, Kimi Code, and Gemini. Free to start.",
+            "A shared IDE for you and your agents. Every agent gets its own sandbox on hardware you own — its dev-tools really installed, wired to your systems, its context curated for one job — and you can see and change every layer of it. Works with Claude Code, Codex, Grok, Kimi Code, and Gemini. Free to start.",
     },
     hero: {
-        headlineLines: ["A specialized agent is", "more than a prompt."],
+        headlineLines: ["The IDE you share", "with your agents."],
         subhead:
-            "Give each agent its own sandbox — your libraries, your dev-tools, the systems you already run on, and the context only its job needs. Specialized agents beat generic ones. Run one, or a whole team, on hardware you own.",
+            "Everyone else lets you edit the prompt. intentic lets you see and change the whole environment your agents work in — the dev-tools really installed, the systems they can reach, the context they load every turn. Run one, or ten in parallel, on hardware you own.",
         chips: ["Free plan", "Bring your own agent", "Runs on your hardware"],
         spec: {
             name: "release-captain",
@@ -170,9 +171,9 @@ export const landingContent: LandingContent = {
         ],
     },
     contrast: {
-        eyebrow: "Why specialized",
-        heading: "A markdown file is not an agent.",
-        sub: "The usual “custom agent” is a paragraph of instructions bolted onto a generic assistant. It can describe your stack; it can't run it. A specialized agent owns the whole environment the work happens in.",
+        eyebrow: "The difference",
+        heading: "Everyone else lets you edit the prompt.",
+        sub: "The prompt is the one layer you can already change anywhere. intentic opens the rest: the image its tools are installed in, the systems it's allowed to reach, the skills and runbooks it loads every turn — each layer visible in the workspace and yours to change. You can't make the model smarter. You can make it better informed and better equipped.",
         prompt: {
             label: "A prompt",
             caption: "a system prompt and a few .md files",
@@ -184,8 +185,8 @@ export const landingContent: LandingContent = {
             ],
         },
         agent: {
-            label: "A specialized agent",
-            caption: "a sandbox of its own",
+            label: "The whole environment",
+            caption: "a sandbox you can open and change",
             points: [
                 "Its dev-tools and libraries are really installed.",
                 "Wired to your repos, databases, and services.",
@@ -196,8 +197,8 @@ export const landingContent: LandingContent = {
     },
     anatomy: {
         eyebrow: "Anatomy",
-        heading: "Four things a prompt can't give it.",
-        sub: "Specializing an agent isn't writing a longer prompt — it's giving it an environment. The same four things you'd give a new hire on day one.",
+        heading: "Four layers you can open.",
+        sub: "Specializing an agent isn't writing a longer prompt — it's building it an environment. These are its four layers, and every one is visible in the workspace and editable by you.",
         pillars: [
             {
                 title: "Its own sandbox",
@@ -366,7 +367,7 @@ export const landingContent: LandingContent = {
         commandNote: "Nothing deployed, nothing exposed — just a workspace your agent can call home.",
     },
     finalCta: {
-        heading: "Stop writing prompts. Start building agents.",
+        heading: "Stop editing prompts. Start editing environments.",
         sub: "One command to a live sandbox. Free to start, on your hardware.",
     },
 };

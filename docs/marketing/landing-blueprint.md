@@ -5,9 +5,10 @@ thing sold (co-piloted **specialized agents** — autonomous employees on hardwa
 rules, the glossary, and the objection bank live in [messaging.md](messaging.md); personas and pains
 (P1–P7) in [positioning.md](positioning.md).
 
-**Core thesis (the spine):** a specialized agent is more than a prompt. The page proves that one idea
-end to end — show real agents, argue specialized beats generic, break one down, wire it to your
-systems, scale it to a workforce, and carry the ownership + co-piloting story throughout. It is a
+**Core thesis (the spine):** intentic is a shared IDE for you and your agents — and everywhere else
+the prompt is the only layer of an agent you can change. The page proves that one idea end to end —
+show the real workspace, name the layers nobody else opens, break one agent down into them, wire it to
+your systems, scale it to a workforce, and carry the ownership + co-piloting story throughout. It is a
 **single page**: one continuous scroll, no variants.
 
 **Deployment is not part of the product (do not re-add).** The monorepo happens to include a
@@ -48,17 +49,19 @@ this page.
 
 One page, one continuous scroll. Section ids in parens; copy per section in `landing.ts`.
 
-1. **Hero (`#hero`)** — the thesis in one line ("A specialized agent is more than a prompt.") +
-   subhead + CTAs + chips, with a visual of a specialized agent as a *configured worker*, not a chat
-   window. States the one thing sold. (P1, P2)
+1. **Hero (`#hero`)** — the thesis in one line ("The IDE you share with your agents.") + the subhead
+   that carries the argument ("Everyone else lets you edit the prompt…") + CTAs + chips, with a visual
+   of a specialized agent as a *configured worker*, not a chat window. States the one thing sold.
+   (P1, P2)
 2. **The product / tour (`#tour`)** — a tour of real product screenshots: the workspace, chat, the
    fleet board, and the co-piloting surfaces (plan mode, diff review). The UI is the credibility
    device — prove the workspace exists before claiming anything about it. (P2, P4)
-3. **Why specialized / prompt-vs-agent (`#contrast`)** — the core argument: a paragraph of
-   instructions bolted onto a generic assistant vs. an agent that owns the environment the work
-   happens in. Specialized beats generic. (P2)
-4. **Anatomy (`#anatomy`)** — break one specialized agent into its parts: the sandbox, the installed
-   toolchain, the capabilities wiring, the curated context that loads every turn. (P2, P5)
+3. **The difference (`#contrast`)** — the core argument: the prompt is the one layer everyone lets you
+   edit, versus the layers intentic opens (image, capabilities, per-turn context). Lands on the honest
+   line: you can't make the model smarter, you can make it better informed and better equipped. (P2)
+4. **Anatomy (`#anatomy`)** — the four layers of that environment, each one openable in the workspace:
+   the sandbox, the installed toolchain, the capabilities wiring, the curated context that loads every
+   turn. (P2, P5)
 5. **Inside a sandbox (`#sandbox`)** — what actually runs on your hardware: a container with the
    job's toolchain baked in and genuinely runnable, its context loaded on every turn. (P2, P1)
 6. **Connected / integrations hub (`#integrations`)** — capabilities: how an agent is wired to your
