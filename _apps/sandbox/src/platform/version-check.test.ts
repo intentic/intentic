@@ -14,14 +14,14 @@ test("isNewer compares dotted numeric versions", () => {
     expect(isNewer("1.2", "1.2.0")).toBe(false); // missing segment treated as 0
 });
 
-test("refreshLatestVersion populates the cache from the release tag_name, stripping the leading v", async () => {
-    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ tag_name: "v9.9.9" }), { status: 200 }));
+test("refreshLatestVersion populates the cache from the npm packument version", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ version: "9.9.9" }), { status: 200 }));
     await refreshLatestVersion();
     expect(latestVersion()).toBe("9.9.9");
 });
 
 test("a failed refresh keeps the previous cached value", async () => {
-    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ tag_name: "v9.9.9" }), { status: 200 }));
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ version: "9.9.9" }), { status: 200 }));
     await refreshLatestVersion();
     vi.stubGlobal("fetch", async () => {
         throw new Error("offline");
