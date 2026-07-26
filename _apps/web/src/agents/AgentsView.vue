@@ -67,18 +67,26 @@ const LANES: readonly { key: FleetLane; label: string; dot: string; empty: strin
 
 const total = computed(() => LANES.reduce((sum, lane) => sum + lanes.value[lane.key].length, 0));
 
-// Card click: focus the conversation in the docked chat (the ONE desktop chat surface) and — when there is
-// something to review — open the review detail. A draft has no worktree/diff yet, so on desktop its click
-// only focuses the dock; on mobile the detail IS the chat, so every card navigates.
-const openAgent = (agent: FleetAgent): void => {
+// Card click FOCUSES, it does not navigate: on desktop it only points the docked chat (the ONE chat surface)
+// at this agent and highlights the card — cheap and reversible, so the user can click down a lane to skim.
+// The view-change to the review detail is a deliberate, separate act (reviewAgent, below). Mobile has no dock,
+// so a tap there IS the way into the conversation — it navigates.
+const focusAgent = (agent: FleetAgent): void => {
     // A drag's pointerup arrives here as a click on the card it started from; it must not also open the agent.
     if (consumeSuppressedOpen()) {
         return;
     }
     open(agent);
-    if (!mobile.value && agent.status === `draft`) {
-        return;
+    if (mobile.value) {
+        void router.push(`/agents/${encodeURIComponent(agent.id)}`);
     }
+};
+
+// The deliberate view-change: focus the dock AND swap the surface to the agent's review detail. Fired by the
+// card's contextual affordance or its double-click accelerator (never a plain click); the card only offers it
+// for a registered agent, so there is always a detail to land on.
+const reviewAgent = (agent: FleetAgent): void => {
+    open(agent);
     void router.push(`/agents/${encodeURIComponent(agent.id)}`);
 };
 
@@ -146,7 +154,9 @@ const startAgent = (): void => {
                             :now="now"
                             :dragging="draggedId === agent.id && dragging"
                             :busy="busyId === agent.id"
-                            @open="openAgent(agent)"
+                            :selected="!mobile && active.conversationId === agent.id"
+                            @open="focusAgent(agent)"
+                            @review="reviewAgent(agent)"
                             @grab="(event, card) => begin(event, agent, card)"
                         />
                     </TransitionGroup>

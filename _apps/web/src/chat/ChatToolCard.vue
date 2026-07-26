@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { ChatTool } from "../composables/chat/conversation";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
+import ChatCodeBody from "./ChatCodeBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";
 import { present } from "./toolPresentation";
 
@@ -124,6 +125,9 @@ const open = (path: string, line?: number): void => {
                 </button>
                 <span v-if="view.body.hidden" class="px-1 py-0.5 text-2xs text-subtle">… {{ view.body.hidden }} more</span>
             </div>
+            <!-- A Read's file contents: syntax-highlighted with a line-number gutter (toolPresentation shapes the
+                 `code` body; ChatCodeBody colors it via the shared Shiki highlighter, like the workspace viewer). -->
+            <ChatCodeBody v-else-if="view.body?.kind === 'code'" :code="view.body.code" :lang="view.body.lang" :first-line="view.body.firstLine" />
             <pre
                 v-else-if="view.body"
                 class="scrollbar-thin ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs leading-relaxed"

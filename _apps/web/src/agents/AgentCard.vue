@@ -11,6 +11,7 @@ import {
     formatCost,
     formatElapsed,
     formatTokens,
+    reviewAction,
 } from "../composables/agents/agentStatus";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { laneOf, type FleetAgent } from "../composables/agents/useAgents";
@@ -23,14 +24,17 @@ import { modelLabelFor } from "../composables/chat/conversation";
  * elapsed readout advances together without per-card timers. The title renames in place (hover pencil →
  * inline input); the root is a div-button, not a <button>, so the nested pencil/input stay valid HTML. */
 
-const props = defineProps<{ agent: FleetAgent; now: number; dragging?: boolean; busy?: boolean }>();
-const emit = defineEmits<{ open: []; grab: [event: PointerEvent, card: HTMLElement] }>();
+const props = defineProps<{ agent: FleetAgent; now: number; dragging?: boolean; busy?: boolean; selected?: boolean }>();
+const emit = defineEmits<{ open: []; review: []; grab: [event: PointerEvent, card: HTMLElement] }>();
 
 const { mobile } = useDevice();
 const meta = computed(() => agentStatusMeta(props.agent.status));
 const router = useRouter();
 const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
+// The drill-in label, or undefined for a draft (nothing to review — a click only focuses the docked chat).
+// Desktop only: on mobile the detail IS the chat, so a tap navigates and no separate affordance is needed.
+const review = computed(() => (mobile.value ? undefined : reviewAction(props.agent)));
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
 const model = computed(() => (props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.model) : undefined));
 const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
@@ -39,12 +43,21 @@ const edit = createTitleEdit(
     () => props.agent.id,
     () => props.agent.title,
 );
-// A blur-commit's click on the card body must commit the rename, not also open the agent.
+// A blur-commit's click on the card body must commit the rename, not also focus the agent.
 const openCard = (): void => {
     if (edit.editing || edit.consumeSuppressedOpen()) {
         return;
     }
     emit(`open`);
+};
+
+// The view-change is deliberate, never a side effect of a plain click: the contextual affordance below fires
+// it, and double-clicking the body is its power-user accelerator (same guard as openCard).
+const reviewCard = (): void => {
+    if (edit.editing || review.value === undefined) {
+        return;
+    }
+    emit(`review`);
 };
 
 // Offer the card to the board's drag as long as the press starts on the card BODY — the rename pencil and its
@@ -64,15 +77,20 @@ const grab = (event: PointerEvent): void => {
     <div
         role="button"
         tabindex="0"
-        :aria-label="`Open agent: ${displayTitle}`"
+        :aria-label="`Focus agent: ${displayTitle}`"
         class="group flex w-full cursor-pointer select-none flex-col gap-1.5 rounded-lg border bg-card p-3 text-left outline-none transition-colors hover:bg-overlay focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
-            lane === 'attention' ? 'border-warning/50 hover:border-warning/80' : 'border-line hover:border-line-strong',
+            selected
+                ? 'border-primary-500/70 ring-1 ring-primary-500/40'
+                : lane === 'attention'
+                  ? 'border-warning/50 hover:border-warning/80'
+                  : 'border-line hover:border-line-strong',
             dragging ? 'opacity-40' : '',
             busy ? 'pointer-events-none opacity-60' : '',
         ]"
         @pointerdown="grab"
         @click="openCard"
+        @dblclick="reviewCard"
         @keydown.enter.self.prevent="openCard"
         @keydown.space.self.prevent="openCard"
     >
@@ -164,7 +182,20 @@ const grab = (event: PointerEvent): void => {
         </p>
 
         <div class="flex items-center gap-2 text-2xs text-subtle">
-            <span v-if="lane === 'finished' && agent.status !== 'draft'" class="inline-flex items-center gap-1 text-muted">
+            <!-- The deliberate view-change: a contextual CTA that names its destination, so a plain card click
+                 stays a lightweight focus. Persistent when the agent needs the user (attention lane); a quiet
+                 hover-reveal otherwise — the rename-pencil pattern. Absent for drafts (review is undefined). -->
+            <button
+                v-if="review !== undefined"
+                type="button"
+                v-tooltip.top="'Open the review detail (or double-click the card)'"
+                class="inline-flex items-center gap-1 rounded font-medium text-link transition-opacity hover:underline"
+                :class="lane === 'attention' ? '' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
+                @click.stop="reviewCard"
+            >
+                {{ review }}<Icon name="arrow-right" class="text-2xs" />
+            </button>
+            <span v-else-if="lane === 'finished' && agent.status !== 'draft'" class="inline-flex items-center gap-1 text-muted">
                 <Icon name="check" class="text-2xs" />Completed
             </span>
             <span class="flex-1"></span>

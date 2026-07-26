@@ -152,6 +152,14 @@ const NAME_LANG: Record<string, string> = {
     makefile: "make",
 };
 
+// Lowercased basename + extension of a path. dot > 0 so a dotfile (".gitignore") keeps an empty extension
+// rather than "gitignore".
+const nameExt = (path: string): { name: string; ext: string } => {
+    const name = path.slice(path.lastIndexOf("/") + 1).toLowerCase();
+    const dot = name.lastIndexOf(".");
+    return { name, ext: dot > 0 ? name.slice(dot + 1) : "" };
+};
+
 // The Shiki lang id for a file, accounting for extensionless special files (Dockerfile, .env variants,
 // config dotfiles).
 const langFor = (name: string, ext: string): string | undefined => {
@@ -167,6 +175,15 @@ const langFor = (name: string, ext: string): string | undefined => {
         return "gitignore";
     }
     return NAME_LANG[name] ?? EXT_LANG[ext];
+};
+
+// The Shiki lang id for a file PATH — the same extension/filename resolution the workspace code viewer applies
+// (langFor: extension table, well-known filenames, and the dockerfile/.env/ignore specials). Exposed so the
+// chat's Read tool cards color file contents from the same source of truth as the /workspace editor. Content-
+// based shebang detection stays out here: it needs the file bytes (see langFromShebang), which a card lacks.
+export const codeLangForPath = (path: string): string | undefined => {
+    const { name, ext } = nameExt(path);
+    return langFor(name, ext);
 };
 
 // Shebang interpreter basename → Shiki lang id, for extensionless scripts whose name carries no clue
@@ -204,18 +221,19 @@ export const langFromShebang = (content: string): string | undefined => {
         return undefined;
     }
     const newline = content.indexOf("\n");
-    const tokens = (newline === -1 ? content : content.slice(0, newline))
-        .slice(2)
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
+    const tokens = (newline === -1 ? content : content.slice(0, newline)).slice(2).trim().split(/\s+/).filter(Boolean);
     const first = tokens[0];
     if (first === undefined) {
         return undefined;
     }
     // `env` execs the first following non-flag argument (so skip `-S` and friends); otherwise the path itself.
     const interpreter =
-        basename(first) === "env" ? tokens.slice(1).map(basename).find((token) => !token.startsWith("-")) : basename(first);
+        basename(first) === "env"
+            ? tokens
+                  .slice(1)
+                  .map(basename)
+                  .find((token) => !token.startsWith("-"))
+            : basename(first);
     if (interpreter === undefined) {
         return undefined;
     }
@@ -226,10 +244,7 @@ export const langFromShebang = (content: string): string | undefined => {
 // Resolve how to render `path` given its byte size (undefined when unknown — the tree cap, or stat failed; we
 // then proceed optimistically and let the post-read NUL check / daemon 413 catch the rare bad case).
 export const resolveFile = (path: string, size: number | undefined): FileResolution => {
-    const name = path.slice(path.lastIndexOf("/") + 1).toLowerCase();
-    const dot = name.lastIndexOf(".");
-    // dot > 0 so a dotfile (".gitignore") keeps an empty extension rather than "gitignore".
-    const ext = dot > 0 ? name.slice(dot + 1) : "";
+    const { name, ext } = nameExt(path);
     const tooBig = (limit: number): boolean => size !== undefined && size > limit;
     // An empty file has nothing to preview — but text types (code/markdown, incl. unknown/dotfiles) still fall
     // through to their editable blank editor. Only the non-text preview types below short-circuit to "empty".

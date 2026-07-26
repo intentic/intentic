@@ -130,8 +130,13 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     for (const agent of fleet.value) {
         grouped[laneOf(agent)].push(agent);
     }
-    // Fresh drafts lead the active lane (they're what the user just created); everything else newest-first.
-    grouped.active.sort((a, b) => Number(b.status === `draft`) - Number(a.status === `draft`) || b.updatedAt - a.updatedAt);
+    // Fresh drafts lead the active lane (they're what the user just created). Below them, order by startedAt —
+    // a turn's start is FIXED for its whole life, so a running agent holds its slot instead of jumping to the
+    // top on every activity frame (updatedAt ticks every second, which churns the lane when many run at once).
+    // Oldest-running leads; a draft has no startedAt, so it falls back to updatedAt but is already sorted ahead.
+    grouped.active.sort(
+        (a, b) => Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt),
+    );
     grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt);
     grouped.finished.sort((a, b) => b.updatedAt - a.updatedAt);
     return grouped;

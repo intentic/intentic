@@ -28,11 +28,14 @@ const tempRepo = async (): Promise<string> => {
 
 test("defaultGit reads git output past execFile's 1 MiB default instead of rejecting", async () => {
     const dir = await tempRepo();
-    // ~1.4 MB of paths — over the default, far under our cap. A workspace with an un-gitignored node_modules or
-    // a build dir clears this trivially, and the old runner turned that into ERR_CHILD_PROCESS_STDIO_MAXBUFFER,
-    // which the Changes scan reported as "this repo cannot be read".
-    await Promise.all(Array.from({ length: 30000 }, (_unused, index) => writeFile(join(dir, `file_with_a_reasonably_long_name_${index}.txt`), "x")));
-    const { stdout } = await defaultGit(dir, ["ls-files", "--others", "--exclude-standard", "-z"]);
+    // 2 MiB of output — over execFile's 1 MiB default, far under our cap. In production the overflow comes from
+    // `ls-files`/`status` over a large untracked tree (an un-gitignored node_modules, a build dir), which the old
+    // runner turned into ERR_CHILD_PROCESS_STDIO_MAXBUFFER and the Changes scan reported as "this repo cannot be
+    // read". A single large blob reproduces that overflow deterministically, without the tens of thousands of
+    // file writes that make listing-based repros slow enough to time out on a loaded CI runner.
+    await writeFile(join(dir, "big.txt"), "x".repeat(2 * 1024 * 1024));
+    await defaultGit(dir, ["add", "big.txt"]);
+    const { stdout } = await defaultGit(dir, ["cat-file", "-p", ":big.txt"]);
     expect(stdout.length).toBeGreaterThan(1024 * 1024);
 });
 
