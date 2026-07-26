@@ -24,6 +24,7 @@ import { createSecretsRoutes } from "./secrets/secrets.routes.js";
 import { createSessionsRoutes } from "./sessions/sessions.routes.js";
 import { createSettingsRoutes } from "./settings/settings.routes.js";
 import { createSystemRoutes } from "./system/system.routes.js";
+import { createUsageRoutes } from "./usage/usage.routes.js";
 import { createVpnRoutes } from "./vpn/vpn.routes.js";
 import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
 
@@ -56,5 +57,6 @@ export const createRouter = (services: Services) => ({
     translator: createTranslatorRoutes(services),
     secrets: createSecretsRoutes(services),
     system: createSystemRoutes(services),
+    usage: createUsageRoutes(services),
     vpn: createVpnRoutes(services),
 });

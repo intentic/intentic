@@ -14,6 +14,7 @@ import {
     commitFileDiff,
     commitIndex,
     commitLog,
+    conflictedFileDiff,
     createBranchAt,
     createTagAt,
     discardPaths,
@@ -31,11 +32,25 @@ const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 const author = { name: "intentic", email: "agent@intentic.dev" };
 
-// For assertions that only care whether the tree is dirty at all — which side a change landed on is the
+// For assertions that only care whether the tree is dirty at all — which list a change landed in is the
 // subject of the dedicated tests above, not of every discard/branch case.
 const bothSides = async (dir: string): Promise<unknown[]> => {
-    const { staged, unstaged } = await changedFiles(dir);
-    return [...staged, ...unstaged];
+    const { conflicted, staged, unstaged } = await changedFiles(dir);
+    return [...conflicted, ...staged, ...unstaged];
+};
+
+// A repo stopped mid-merge on one conflicted file, `a.txt`, with "ours" = main and "theirs" = side.
+const conflictedRepo = async (): Promise<string> => {
+    const dir = await tempRepo(); // a.txt = "one"
+    const trunk = await sh(dir, "branch", "--show-current");
+    await sh(dir, "checkout", "-q", "-b", "side");
+    await writeFile(join(dir, "a.txt"), "theirs\n");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "theirs");
+    await sh(dir, "checkout", "-q", trunk);
+    await writeFile(join(dir, "a.txt"), "ours\n");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "ours");
+    await sh(dir, "merge", "side").catch(() => undefined);
+    return dir;
 };
 
 const tempDirs: string[] = [];
@@ -102,6 +117,56 @@ test("changedFiles puts an added-then-staged file on the staged side only", asyn
     expect(staged).toEqual([{ path: "fresh.txt", status: "added", additions: 1, deletions: 0 }]);
     // It is no longer untracked, and the worktree matches the index — nothing left unstaged.
     expect(unstaged).toEqual([]);
+});
+
+test("an unmerged path is its own third list, in NEITHER of the two sides", async () => {
+    const dir = await conflictedRepo();
+
+    const { conflicted, staged, unstaged } = await changedFiles(dir);
+    // The whole point: it is not a staged change and not an unstaged one. Reported as staged (which the `U`
+    // letter falling through to "modified" used to do) it claimed to be ready to commit, which git flatly
+    // refuses while a path is unmerged.
+    expect(conflicted).toEqual([{ path: "a.txt", status: "conflicted" }]);
+    expect(staged).toEqual([]);
+    expect(unstaged).toEqual([]);
+});
+
+test("`git diff` reports an unmerged path twice — the second record must not overwrite the conflict", async () => {
+    const dir = await conflictedRepo();
+    // Not a synthetic worry: the worktree pass emits `U a.txt` AND `M a.txt` for the same path, so a plain
+    // last-record-wins parse downgrades every conflict to a modification.
+    const raw = await sh(dir, "diff", "--name-status");
+    expect(raw.split("\n").length).toBe(2);
+
+    expect((await changedFiles(dir)).conflicted).toEqual([{ path: "a.txt", status: "conflicted" }]);
+});
+
+test("staging an unmerged path resolves it — it moves out of `conflicted` and into `staged`", async () => {
+    const dir = await conflictedRepo();
+    await writeFile(join(dir, "a.txt"), "resolved\n");
+    // `git add` on an unmerged path IS the resolve gesture; the panel's "Mark resolved" is this request.
+    await stagePaths(dir, ["a.txt"]);
+
+    const { conflicted, staged } = await changedFiles(dir);
+    expect(conflicted).toEqual([]);
+    expect(staged).toEqual([{ path: "a.txt", status: "modified", additions: 1, deletions: 1 }]);
+    // …and only now will git commit it.
+    expect(await commitIndex(dir, "resolve the merge", author)).toBe(true);
+});
+
+test("conflictedFileDiff shows HEAD vs the worktree, because an unmerged path has no stage 0", async () => {
+    const dir = await conflictedRepo();
+
+    // `:0:a.txt` does not exist mid-conflict — the index holds stages 1/2/3 — so the index side comes back
+    // absent and the diff reads as a DELETION: before HEAD's content, after nothing. That is what the panel
+    // used to render for a conflict, and it is worse than showing nothing, because it looks like an answer.
+    expect(await stagedFileDiff(dir, "a.txt")).toEqual({ before: "ours\n" });
+
+    const diff = await conflictedFileDiff(dir, "a.txt");
+    expect(diff.before).toBe("ours\n");
+    // The worktree side carries git's conflict markers, which is the thing the user has to act on.
+    expect(diff.after).toContain("<<<<<<<");
+    expect(diff.after).toContain("theirs");
 });
 
 test("commitLog returns commits newest-first with parents, refs, and the HEAD flag", async () => {

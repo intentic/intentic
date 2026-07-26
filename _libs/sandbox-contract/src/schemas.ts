@@ -461,12 +461,14 @@ export const GitStageSchema = RepoParamSchema.extend({ paths: z.array(z.string()
 export const PushSchema = RepoParamSchema.extend({ branch: z.string().min(1).optional() });
 export const GitFileQuerySchema = RepoParamSchema.extend({ path: z.string().min(1) });
 export const GitFileWriteSchema = RepoParamSchema.extend({ path: z.string().min(1), content: z.string() });
-// Which of the working tree's two diffs to open — the same split the Changes panel lists under. A path that
-// is staged AND edited again has two genuinely different diffs, so the side is required rather than defaulted:
-// a caller that doesn't say which one it means doesn't know what it is showing.
-//   staged   ⇒ index vs HEAD      (what a bare `git commit` would record)
-//   unstaged ⇒ worktree vs index  (untracked ⇒ no before side)
-export const GitDiffSideSchema = z.enum(["staged", "unstaged"]);
+// Which of the working tree's diffs to open — the same split the Changes panel lists under. A path that is
+// staged AND edited again has genuinely different diffs, so the side is required rather than defaulted: a
+// caller that doesn't say which one it means doesn't know what it is showing.
+//   staged     ⇒ index vs HEAD      (what a bare `git commit` would record)
+//   unstaged   ⇒ worktree vs index  (untracked ⇒ no before side)
+//   conflicted ⇒ HEAD vs worktree   (what you had vs what the merge left, markers included — an unmerged path
+//                                    has no stage 0, so the index is not a side it can be diffed against)
+export const GitDiffSideSchema = z.enum(["staged", "unstaged", "conflicted"]);
 export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
 export const GitFileDiffQuerySchema = RepoParamSchema.extend({ path: z.string().min(1), side: GitDiffSideSchema });
 export const GitStatusSchema = z.object({ branch: z.string(), dirty: z.boolean(), files: z.array(z.string()) });
@@ -479,7 +481,10 @@ export const CommitResultSchema = z.object({ committed: z.boolean() });
 export const GitChangeSchema = z.object({
     // Repo-relative path with forward slashes; for "renamed" the NEW path (`from` carries the old one).
     path: z.string(),
-    status: z.enum(["added", "modified", "deleted", "renamed", "type-changed"]),
+    // "conflicted" is git's unmerged state (`U`), and it is not a kind of modification: the index holds "ours"
+    // and "theirs" at stages 2/3 with NO stage 0, so there is nothing a commit could record for this path and
+    // git refuses to commit while one exists. It belongs to neither side — see RepoChanges.conflicted.
+    status: z.enum(["added", "modified", "deleted", "renamed", "type-changed", "conflicted"]),
     from: z.string().optional(),
     additions: z.number().optional(),
     deletions: z.number().optional(),
@@ -538,6 +543,11 @@ export const RepoChangesSchema = z.object({
     repo: z.string(),
     // Absent on an unborn HEAD (a repo initialized but never committed).
     branch: z.string().optional(),
+    // Unmerged paths — a merge, rebase, cherry-pick or pull that git could not finish. First, because until
+    // they are resolved nothing else in this repo can be committed at all: git refuses outright. Held apart
+    // from the two sides rather than listed in them, because "staged or not" is not a question an unmerged path
+    // has an answer to. Staging one (`git add`) is exactly how you tell git it is resolved.
+    conflicted: z.array(GitChangeSchema),
     // The two sides git actually models, kept apart because a path can appear on BOTH with different statuses
     // (a staged edit that was then edited again — the classic `MM`). `staged` is index-vs-HEAD: exactly what a
     // bare `git commit` would record. `unstaged` is worktree-vs-index plus untracked files. Each side's
@@ -1689,9 +1699,71 @@ export const ActivityStatusSchema = z.object({
 });
 export type ActivityStatus = z.infer<typeof ActivityStatusSchema>;
 
+// ---- usage: the durable spend ledger ----
+// One row per attributed turn, appended at turn end and NEVER pruned. This exists because the activity log
+// can't answer a money question: it prunes to its most recent entries, so a month's spend is unanswerable and
+// — worse for a cost readout — the totals SHRINK as newer turns evict older ones. The ledger keeps the raw
+// per-turn facts and the rollup projects them on read, so a new grouping (by day, by model, by conversation)
+// needs no new storage and no migration.
+export const UsageTurnSchema = z.object({
+    // Epoch ms at turn end. Kept alongside `day` so a future timezone-aware rollup is a pure change over data
+    // already on disk.
+    at: z.number(),
+    // The UTC calendar day (YYYY-MM-DD) `at` fell in — precomputed so a rollup never re-derives a timezone.
+    day: z.string(),
+    provider: z.string(),
+    // Absent on an env-token turn, which has no account to attribute to (same rule as the activity log).
+    account: z.string().optional(),
+    // The model the turn ACTUALLY ran, resolved past the client's pick and every provider default. Absent only
+    // when the provider's own subscription default served it without the daemon naming one.
+    model: z.string().optional(),
+    harness: z.string(),
+    // The conversation this turn belonged to, so spend can join to a fleet agent. Absent on a main-tree turn.
+    // Not part of the rollup key (per-agent totals come off the fleet registry, which already carries them) —
+    // stamped here so per-agent-over-time needs no schema change later.
+    conversationId: z.string().optional(),
+    // The provider's own turn count for the request (a Claude "turn" can be several under the hood), so turns
+    // and cost stay comparable across providers. 1 when the provider reported none.
+    turns: z.number(),
+    inputTokens: z.number(),
+    outputTokens: z.number(),
+    cacheReadTokens: z.number(),
+    cacheCreationTokens: z.number(),
+    costUsd: z.number(),
+    durationMs: z.number(),
+});
+export type UsageTurn = z.infer<typeof UsageTurnSchema>;
+
+// The ledger grouped by day × provider × account × model × harness — the finest grouping any dashboard panel
+// needs, and ~2–5 rows per active day instead of one per turn, so a year of history is a few hundred KB over
+// the tunnel. Every panel (spend per day, cost by model, cost by provider) is a projection of these.
+export const UsageRollupRowSchema = z.object({
+    day: z.string(),
+    provider: z.string(),
+    account: z.string().optional(),
+    model: z.string().optional(),
+    harness: z.string(),
+    turns: z.number(),
+    inputTokens: z.number(),
+    outputTokens: z.number(),
+    cacheReadTokens: z.number(),
+    cacheCreationTokens: z.number(),
+    costUsd: z.number(),
+    durationMs: z.number(),
+});
+export type UsageRollupRow = z.infer<typeof UsageRollupRowSchema>;
+// Inclusive UTC day bounds (YYYY-MM-DD). Both absent ⇒ the whole ledger.
+export const UsageRollupQuerySchema = z.object({
+    from: z.string().optional(),
+    to: z.string().optional(),
+});
+export type UsageRollupQuery = z.infer<typeof UsageRollupQuerySchema>;
+export const UsageRollupSchema = z.object({ rows: z.array(UsageRollupRowSchema) });
+
 // ---- usage: per-account token/cost totals ----
-// Aggregated from the activity log's turn.completed events (their `usage` extra), grouped by provider+account.
-// Totals cover the retained log window (the log prunes to its most recent entries), not all-time.
+// The account picker's headroom readout, folded from the ledger above (all-time, not a log window), grouped by
+// provider+account. `account` is the attribution key, so env-token turns are excluded rather than pooled under
+// a blank id — an unattributed turn belongs to no account's total.
 export const UsageAccountSchema = z.object({
     provider: z.string(),
     account: z.string(),

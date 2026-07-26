@@ -1,11 +1,11 @@
 import type { FileDiffResponse, GitActionResult, GitChangesResponse, GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
-import { useAsyncAction } from "../useAsyncAction";
+import { errorMessage } from "../useAsyncAction";
 import { resetEditBuffers } from "./useEditBuffers";
 
 /* The Changes review — VSCode's SCM model over the workspace's real repos, including git's index: each repo
@@ -34,8 +34,73 @@ watch(streaming, (now, was) => {
     }
 });
 
-// Batch mutations report through one shared busy span + error line, so N per-repo requests read as one action.
-const { busy: actionBusy, error: actionError, run } = useAsyncAction();
+/* --- action state -------------------------------------------------------------------------------------------
+ * Every mutation below reports through `runBatch`: one busy span for the whole batch, and any failure filed
+ * under the SCOPE the user fired it from — a repo id for the per-repo verbs, COMMIT_SCOPE for the commit box
+ * that spans them. Scoped, not panel-wide: a fetch that failed on `intentic` has nothing to say about `root`,
+ * and the single shared error line this replaces rendered at the top of the panel naming neither the repo nor
+ * the verb, so a failed fetch read as a stray red sentence with no visible cause.
+ *
+ * The verb is kept apart from git's words for the same reason. "Fetch failed" is what the user needs to read
+ * first; `fatal: could not read Username for 'https://github.com'` is the detail underneath it. */
+export interface ActionFailure {
+    // The verb that failed, in the user's terms — "Fetch failed", "Discard failed".
+    readonly action: string;
+    // git's own account of why, verbatim.
+    readonly detail: string;
+}
+
+// The commit box spans every repo, so its failures cannot belong to any one of them.
+export const COMMIT_SCOPE = `commit`;
+
+interface ScopedTask {
+    readonly scope: string;
+    readonly action: string;
+    readonly run: () => Promise<void>;
+}
+
+const actionBusy = ref(false);
+const failures = ref<ReadonlyMap<string, ActionFailure>>(new Map());
+
+const dismissFailure = (scope: string): void => {
+    if (!failures.value.has(scope)) {
+        return;
+    }
+    const next = new Map(failures.value);
+    next.delete(scope);
+    failures.value = next;
+};
+
+// One busy span over a batch of per-scope tasks. A failure is filed against its own scope and the batch CARRIES
+// ON: the repos are independent, so aborting root's discard because intentic's remote is unreachable would
+// strand work the user asked for behind a failure they cannot act on. Re-entry while busy is a no-op, so a
+// double-click fires once. `settle` runs whatever happened — the cache must match the worktree even when only
+// half the batch landed.
+const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unknown>): Promise<void> => {
+    if (actionBusy.value) {
+        return;
+    }
+    actionBusy.value = true;
+    // Clear every scope this batch touches up front rather than per task: several repos committing under the
+    // one COMMIT_SCOPE would otherwise have the second repo's start erase the first repo's failure.
+    const scopes = new Set(tasks.map((task) => task.scope));
+    failures.value = new Map([...failures.value].filter(([scope]) => !scopes.has(scope)));
+    try {
+        for (const task of tasks) {
+            try {
+                await task.run();
+            } catch (caught) {
+                failures.value = new Map(failures.value).set(task.scope, {
+                    action: task.action,
+                    detail: errorMessage(caught, `git gave no reason.`),
+                });
+            }
+        }
+        await settle();
+    } finally {
+        actionBusy.value = false;
+    }
+};
 
 // The diff of the ROW that was clicked, not of the file in general: `staged` is index-vs-HEAD, `unstaged` is
 // worktree-vs-index. A partially staged file has both, and they differ — showing one for the other would be a
@@ -65,57 +130,78 @@ const post = <T>(repo: string, action: string, body: Record<string, unknown>): P
 // There is no per-path variant, deliberately: the index is what decides a commit's contents, so the panel's
 // job is to make staging easy, not to maintain a second answer to the same question.
 const commitRepos = (repos: readonly string[], message: string, stageFirst: boolean): Promise<void> =>
-    run(async () => {
-        for (const repo of repos) {
-            await post(repo, `commit`, { message, ...(stageFirst ? { all: true } : {}) });
-        }
-        await invalidateChanges();
-    }, `Commit failed.`);
+    runBatch(
+        repos.map((repo) => ({
+            scope: COMMIT_SCOPE,
+            action: `Commit failed`,
+            run: async (): Promise<void> => {
+                await post(repo, `commit`, { message, ...(stageFirst ? { all: true } : {}) });
+            },
+        })),
+        invalidateChanges,
+    );
 
 // Discard a selection: tracked content returns to HEAD, untracked files are deleted. A group with no `paths`
 // discards the whole repo. Drop edit buffers + refresh the tree (the worktree changed under any open file).
 const discardGroups = (groups: readonly RepoPaths[]): Promise<void> =>
-    run(async () => {
-        for (const group of groups) {
-            await post(group.repo, `discard`, group.paths !== undefined ? { paths: group.paths } : {});
-        }
-        // Stale buffers would silently resurrect discarded files on save. RAW prefix for the tree — its keys
-        // carry an "all"/"filtered" discriminator before the appended sandbox id, so sandboxKey("workspace",
-        // "tree") would NOT prefix-match them (see useSandbox).
-        resetEditBuffers();
-        await Promise.all([queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }), invalidateChanges()]);
-    }, `Discard failed.`);
+    runBatch(
+        groups.map((group) => ({
+            scope: group.repo,
+            action: `Discard failed`,
+            run: async (): Promise<void> => {
+                await post(group.repo, `discard`, group.paths !== undefined ? { paths: group.paths } : {});
+            },
+        })),
+        () => {
+            // Stale buffers would silently resurrect discarded files on save. RAW prefix for the tree — its keys
+            // carry an "all"/"filtered" discriminator before the appended sandbox id, so sandboxKey("workspace",
+            // "tree") would NOT prefix-match them (see useSandbox).
+            resetEditBuffers();
+            return Promise.all([queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] }), invalidateChanges()]);
+        },
+    );
 
 // Index moves. The worktree is untouched, so unlike discard there is nothing to reset or re-read beyond the
 // review set itself — no buffer drop, no tree refetch.
 const stageGroups = (groups: readonly RepoPaths[], staged: boolean): Promise<void> =>
-    run(
-        async () => {
-            for (const group of groups) {
-                if (group.paths !== undefined && group.paths.length > 0) {
+    runBatch(
+        groups
+            .filter((group) => group.paths !== undefined && group.paths.length > 0)
+            .map((group) => ({
+                scope: group.repo,
+                action: staged ? `Stage failed` : `Unstage failed`,
+                run: async (): Promise<void> => {
                     await post(group.repo, staged ? `stage` : `unstage`, { paths: group.paths });
-                }
-            }
-            await invalidateChanges();
-        },
-        staged ? `Stage failed.` : `Unstage failed.`,
+                },
+            })),
+        invalidateChanges,
     );
 
 // Remote sync, per repo. Each reports a GitActionResult rather than throwing, so "won't fast-forward" or a
 // credential failure surfaces as git's own reason on the action line instead of a generic request error.
 const syncRepo = (repo: string, action: "fetch" | "pull" | "push", label: string): Promise<void> =>
-    run(async () => {
-        const result = await post<GitActionResult>(repo, action, {});
-        if (!result.ok) {
-            throw new Error(result.reason ?? `${label} failed.`);
-        }
-        // Pull is the only one that can change files under an open editor.
-        if (action === `pull`) {
-            resetEditBuffers();
-            await queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
-        }
-        await Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: [`git`, `log`] })]);
-    }, `${label} failed.`);
+    runBatch(
+        [
+            {
+                scope: repo,
+                action: `${label} failed`,
+                run: async (): Promise<void> => {
+                    const result = await post<GitActionResult>(repo, action, {});
+                    if (!result.ok) {
+                        // git's own reason, which the daemon already condensed to its verdict line. Empty falls
+                        // through to runBatch's fallback rather than being papered over with the verb again.
+                        throw new Error(result.reason);
+                    }
+                    // Pull is the only one that can change files under an open editor.
+                    if (action === `pull`) {
+                        resetEditBuffers();
+                        await queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
+                    }
+                },
+            },
+        ],
+        () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: [`git`, `log`] })]),
+    );
 
 export function useChanges() {
     const { query, error } = useSandboxQuery({
@@ -152,6 +238,8 @@ export function useChanges() {
         pullRepo: (repo: string) => syncRepo(repo, `pull`, `Pull`),
         pushRepo: (repo: string) => syncRepo(repo, `push`, `Push`),
         actionBusy,
-        actionError,
+        // Keyed by repo id (the per-repo verbs) or COMMIT_SCOPE — the panel renders each one where it happened.
+        failures,
+        dismissFailure,
     };
 }

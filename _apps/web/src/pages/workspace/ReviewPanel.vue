@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { GitChange, GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
+import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
 import DiffStat from "../../components/DiffStat.vue";
 import { useChat } from "../../composables/chat/useChat";
-import { type RepoPaths, useChanges } from "../../composables/workspace/useChanges";
+import { COMMIT_SCOPE, type RepoPaths, useChanges } from "../../composables/workspace/useChanges";
 import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
 
 /* The Changes review — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
@@ -26,8 +27,16 @@ import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTab
  * one labelled button per row — the primary one — and icons with tooltips for everything else. Status text
  * truncates; action clusters never shrink; nothing is allowed to push the primary action off the edge.
  *
- * Clicking a file opens the diff of THAT ROW's side; discard restores the worktree from HEAD. The per-repo sync
- * bar carries fetch/pull/push with ahead/behind. The History panel stays the safety timeline. */
+ * Clicking a file opens the diff of THAT ROW's side; discard restores the worktree from HEAD. The History panel
+ * stays the safety timeline.
+ *
+ * Two rules earn the panel its quiet, and both replace something that shouted:
+ *   - SYNC STATE IS THE SYNC CONTROL. Ahead/behind ride the repo row as pills that ARE pull and push, so a
+ *     repo in sync spends no pixels saying so. This replaces a full-width bar under every repo that mostly
+ *     rendered a zero and three icons.
+ *   - A FAILURE RENDERS WHERE IT HAPPENED. Errors are keyed by repo (or the commit box) in useChanges and drawn
+ *     against the row that caused them, naming the verb. The one shared red line this replaces sat at the top
+ *     of the panel naming neither, so a failed fetch read as a stray sentence with no visible cause. */
 
 const changes = useChanges();
 // A commit mid-turn would sweep the agent's half-finished work into the repo — hold committing until it ends.
@@ -57,19 +66,20 @@ const toggleGroup = (repo: string): void => {
 
 const changeLabel = (repo: string, change: GitChange): string => (repo === `root` ? change.path : `${repo}/${change.path}`);
 
-// The two lists a repo group renders, staged first — VSCode's order, and the one that matches what a bare
-// commit would take. An empty side renders nothing at all rather than an empty header. "Unstaged", not
-// VSCode's bare "Changes": this panel is itself titled Changes, so that label collided with its own header.
+// The lists a repo group renders. Conflicts first because they BLOCK everything below them — git will not
+// commit while one exists — then staged, then unstaged (VSCode's order, staged being what a bare commit takes).
+// An empty section renders nothing at all rather than an empty header. "Unstaged", not VSCode's bare "Changes":
+// this panel is itself titled Changes, so that label collided with its own header.
 const sidesOf = (repo: RepoChanges): readonly { side: GitDiffSide; label: string; changes: readonly GitChange[] }[] =>
     [
+        { side: `conflicted` as const, label: `Conflicts`, changes: repo.conflicted },
         { side: `staged` as const, label: `Staged`, changes: repo.staged },
         { side: `unstaged` as const, label: `Unstaged`, changes: repo.unstaged },
     ].filter((section) => section.changes.length > 0);
 
-// A side's own count only earns its pixels when there are two sides to tell apart. With one side it is the
-// repo row's badge repeated verbatim one line below it — the same number twice, in a panel that already shows
-// it a third time in the header.
-const sidesSplit = (repo: RepoChanges): boolean => repo.staged.length > 0 && repo.unstaged.length > 0;
+// A section's own count only earns its pixels when there is more than one section to tell apart. Alone it is
+// the repo row's badge repeated verbatim one line below it — the same number twice, one line apart.
+const sidesSplit = (repo: RepoChanges): boolean => sidesOf(repo).length > 1;
 
 // This panel lives in a ~270px sidebar, so labelled secondary buttons don't fit — four of them pushed the
 // primary Commit off the edge entirely. Everything secondary is a 24px icon with a tooltip and an aria-label;
@@ -191,8 +201,17 @@ const commitMessage = ref(``);
 const stagedRepos = computed(() => scannable.value.filter((repo) => repo.staged.length > 0).map((repo) => repo.repo));
 const commitAll = computed(() => stagedRepos.value.length === 0 && changes.count.value > 0);
 const commitTarget = computed(() => (commitAll.value ? scannable.value.map((repo) => repo.repo) : stagedRepos.value));
+// An unresolved conflict in ANY repo blocks the button, not just in the repo that has it: a commit here is one
+// commit per repo sharing a message, and git would refuse the conflicted one halfway through — leaving the
+// others committed under a message that describes work that didn't all land. Better to not start.
+const blockedByConflicts = computed(() => scannable.value.some((repo) => repo.conflicted.length > 0));
 const commitReady = computed(
-    () => commitTarget.value.length > 0 && commitMessage.value.trim().length > 0 && !streaming.value && !changes.actionBusy.value,
+    () =>
+        commitTarget.value.length > 0 &&
+        commitMessage.value.trim().length > 0 &&
+        !blockedByConflicts.value &&
+        !streaming.value &&
+        !changes.actionBusy.value,
 );
 const commitLabel = computed(() => (commitAll.value ? `Commit all` : `Commit`));
 const doCommit = async (): Promise<void> => {
@@ -200,39 +219,95 @@ const doCommit = async (): Promise<void> => {
         return;
     }
     await changes.commitRepos(commitTarget.value, commitMessage.value, commitAll.value);
-    if (changes.actionError.value === undefined) {
+    // Keep the message on failure — it is the one thing here the user typed by hand.
+    if (!changes.failures.value.has(COMMIT_SCOPE)) {
         commitMessage.value = ``;
     }
 };
 
 // --- stage / unstage ---------------------------------------------------------------------------------------
+// `staged` is the one side that moves BACK out of the index; the other two move in. For a conflict that inward
+// move is `git add`, which is precisely how you tell git the merge is resolved — same request, different word
+// on the button.
+const movesIntoIndex = (side: GitDiffSide): boolean => side !== `staged`;
+const changesOn = (repo: RepoChanges, side: GitDiffSide): readonly GitChange[] =>
+    side === `conflicted` ? repo.conflicted : side === `staged` ? repo.staged : repo.unstaged;
+
+// What that inward/outward move is CALLED, per side. A conflict says "resolve", not "stage": `git add` on an
+// unmerged path is not putting a change in the index, it is telling git you have settled which side wins. Same
+// request either way, and calling it staging would hide the only thing the user actually needs to understand.
+const INDEX_VERB: Record<GitDiffSide, { readonly one: string; readonly all: string; readonly icon: "plus" | "undo" | "check" }> = {
+    conflicted: { one: `Mark resolved`, all: `Mark all resolved`, icon: `check` },
+    unstaged: { one: `Stage`, all: `Stage all`, icon: `plus` },
+    staged: { one: `Unstage`, all: `Unstage all`, icon: `undo` },
+};
+
 // Row action: moves the acting rows across the index, in the direction their side implies.
-const stageRow = (row: Row): Promise<void> => changes.stageGroups(byRepo(actingRows(row, true)), row.side === `unstaged`);
+const stageRow = (row: Row): Promise<void> => changes.stageGroups(byRepo(actingRows(row, true)), movesIntoIndex(row.side));
 // Section action: the whole side, regardless of selection — VSCode's "Stage All Changes" / "Unstage All".
 const stageSide = (repo: RepoChanges, side: GitDiffSide): Promise<void> =>
-    changes.stageGroups(
-        [{ repo: repo.repo, paths: (side === `staged` ? repo.staged : repo.unstaged).map((change) => change.path) }],
-        side === `unstaged`,
-    );
+    changes.stageGroups([{ repo: repo.repo, paths: changesOn(repo, side).map((change) => change.path) }], movesIntoIndex(side));
 
 // --- discard -----------------------------------------------------------------------------------------------
-// Two-step confirm, and the target is RESOLVED when the user arms it: the prompt's wording and the action can
-// never disagree, and a background poll landing between the two clicks cannot change what gets destroyed.
-// `at` is the row (or repo) the confirm renders under.
-const pendingDiscard = ref<{ at: string; label: string; groups: readonly RepoPaths[] } | undefined>(undefined);
-const isDiscarding = (at: string): boolean => pendingDiscard.value?.at === at;
+// A modal confirm, like every other destructive git action in this app (GitGraph's checkout/reset/drop), rather
+// than the inline warning strip this replaces: that one wedged itself between the repo row and the file list,
+// shoved everything below it down, and read as an error that had already happened rather than a question.
+//
+// The target is RESOLVED when the user arms it — the prompt's wording and the action can never disagree, and a
+// background poll landing between the two clicks cannot change what gets destroyed. That is also what lets the
+// copy be specific: the old prompt said "Untracked files are deleted" unconditionally, crying wolf on every
+// repo that had none, so the one case where a file really was about to be deleted looked like all the others.
+interface DiscardTarget {
+    // The heading's object — "every uncommitted change in intentic", "3 selected files", a single path.
+    readonly what: string;
+    // Untracked paths, which are DELETED rather than reverted: nothing in the object store holds them, so they
+    // are the only part of a discard the user cannot get back from git itself.
+    readonly deletes: readonly string[];
+    // Distinct tracked paths returning to their last committed state.
+    readonly restores: number;
+    readonly groups: readonly RepoPaths[];
+}
+const pendingDiscard = ref<DiscardTarget | undefined>(undefined);
+
+// "added" on the UNSTAGED side means untracked — the worktree has a file the index does not. A tracked file can
+// never report added there (it is already in the index), so this is exact, not a heuristic.
+const untrackedIn = (repo: string): ReadonlySet<string> =>
+    new Set(
+        scannable.value
+            .find((candidate) => candidate.repo === repo)
+            ?.unstaged.filter((change) => change.status === `added`)
+            .map((change) => change.path) ?? [],
+    );
+
 const askDiscardRow = (row: Row, change: GitChange): void => {
-    const rows = actingRows(row, false);
+    const groups = byRepo(actingRows(row, false));
+    const deletes = groups.flatMap((group) => {
+        const untracked = untrackedIn(group.repo);
+        return (group.paths ?? []).filter((path) => untracked.has(path)).map((path) => (group.repo === `root` ? path : `${group.repo}/${path}`));
+    });
+    // byRepo already deduped a path selected on both sides, so this counts worktree paths, not rows.
+    const paths = groups.reduce((total, group) => total + (group.paths?.length ?? 0), 0);
     pendingDiscard.value = {
-        at: rowKey(row),
-        label: rows.length > 1 ? `${rows.length} selected files` : change.path,
-        groups: byRepo(rows),
+        what: paths > 1 ? `${paths} selected files` : changeLabel(row.repo, change),
+        deletes,
+        restores: paths - deletes.length,
+        groups,
     };
 };
-const askDiscardRepo = (repo: string): void => {
-    // No `paths` ⇒ the daemon discards everything uncommitted in that repo.
-    pendingDiscard.value = { at: `repo:${repo}`, label: `all changes in ${repo}`, groups: [{ repo }] };
+
+const askDiscardRepo = (repo: RepoChanges): void => {
+    const deletes = repo.unstaged.filter((change) => change.status === `added`).map((change) => change.path);
+    // Distinct paths: a path staged AND edited again is two rows but one file on disk, and the prompt is
+    // counting what happens to the disk. No `paths` in the group ⇒ the daemon discards the whole repo.
+    const paths = new Set([...repo.conflicted, ...repo.staged, ...repo.unstaged].map((change) => change.path));
+    pendingDiscard.value = {
+        what: `every uncommitted change in ${repo.repo}`,
+        deletes,
+        restores: paths.size - deletes.length,
+        groups: [{ repo: repo.repo }],
+    };
 };
+
 const confirmDiscard = async (): Promise<void> => {
     const target = pendingDiscard.value;
     pendingDiscard.value = undefined;
@@ -242,15 +317,46 @@ const confirmDiscard = async (): Promise<void> => {
 };
 
 // --- remote sync ------------------------------------------------------------------------------------------
-// A repo's sync bar shows only when it has a remote at all; a purely local repo gets no dead controls.
+// Sync affordances show only for a repo that actually has a remote; a purely local repo gets no dead controls.
+// Each verb then earns its place from state: pull when behind, push when ahead, Publish when the branch has no
+// upstream at all. Fetch is the exception — it is what MAKES ahead/behind trustworthy, so it is always offered.
 const syncable = (repo: RepoChanges): boolean => repo.remote?.remote !== undefined;
+const unpublished = (repo: RepoChanges): boolean => syncable(repo) && repo.remote?.upstream === undefined;
+const ahead = (repo: RepoChanges): number => repo.remote?.ahead ?? 0;
+const behind = (repo: RepoChanges): number => repo.remote?.behind ?? 0;
+
+// The pills carry only a direction and a number, so the tooltip is where the whole sentence goes — including
+// WHICH ref is involved, which the folded row no longer spends a line printing.
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? `` : `s`}`;
+const pullHint = (repo: RepoChanges): string =>
+    `Pull ${plural(behind(repo), `commit`)} from ${repo.remote?.upstream} — fast-forward only; a diverged history is reported, never auto-merged`;
+const pushHint = (repo: RepoChanges): string => `Push ${plural(ahead(repo), `commit`)} to ${repo.remote?.upstream}`;
+
+// Ahead/behind are only ever as fresh as the last fetch, which is why fetch is offered even when both read
+// zero — the zero itself is the claim most likely to be stale.
+const SYNC_PILL = `flex h-5 shrink-0 items-center gap-0.5 rounded px-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40`;
+// Hover-revealed, but always laid out: revealing on hover must not move anything, or the button slides out
+// from under the cursor that summoned it. Touch has no hover, so mobile keeps them visible.
+const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group-hover/repo:opacity-100 max-md:opacity-100`;
+
+// A repo's own change count, for the row badge — every side, distinct paths.
+const repoCount = (repo: RepoChanges): number => repo.conflicted.length + repo.staged.length + repo.unstaged.length;
+
+// Where a failed action gets drawn: the repo's own row, or the commit box for a commit that spans repos.
+const failureIn = (scope: string) => changes.failures.value.get(scope);
+
+// Shared shells for the two things this panel says when something is wrong. A notice is a contained block with
+// a border, not loose coloured text — the old bare red sentence at the top of the panel was indistinguishable
+// from the panel's own content, which is most of why a git message read as gibberish rather than as an error.
+const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-danger/10 px-2 py-1.5`;
 </script>
 
 <template>
     <div class="flex min-h-0 flex-1 flex-col">
+        <!-- No count badge here: the Changes tab directly above this row already carries it, and repeating it
+             one line below was the same number twice before a single file had been named. -->
         <div class="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
             <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Changes</span>
-            <span v-if="changes.count.value > 0" class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ changes.count.value }}</span>
             <span class="flex-1"></span>
             <Icon name="spinner" v-if="changes.actionBusy.value" v-tooltip.top="'Working…'" class="text-xs text-muted" spin />
             <!-- Git history: the committed side of this same real-git story (uncommitted work is above). Opens
@@ -276,15 +382,17 @@ const syncable = (repo: RepoChanges): boolean => repo.remote?.remote !== undefin
             </button>
         </div>
 
-        <p v-if="changes.error.value" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.bottom="changes.error.value">
-            {{ changes.error.value }}
-        </p>
-        <p v-if="changes.actionError.value" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.bottom="changes.actionError.value">
-            {{ changes.actionError.value }}
-        </p>
+        <!-- The ONE genuinely panel-wide failure: the review set itself could not be read, so nothing below is
+             trustworthy. Every other error belongs to a repo row or the commit box and is drawn there. -->
+        <div v-if="changes.error.value" :class="[NOTICE, 'mx-2 mt-2 shrink-0']">
+            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
+            <div class="min-w-0 flex-1">
+                <p class="text-2xs font-medium text-danger">Couldn't read changes</p>
+                <p class="break-words text-2xs text-muted">{{ changes.error.value }}</p>
+            </div>
+        </div>
 
-        <!-- Commit box (VSCode places it at the top). With nothing ticked it commits WHAT IS STAGED; tick any
-             subset and it commits exactly those instead, leaving the rest of the index untouched. -->
+        <!-- Commit box (VSCode places it at the top). It records the index — staging is the selection. -->
         <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 border-b border-line p-2">
             <input
                 v-model="commitMessage"
@@ -295,9 +403,13 @@ const syncable = (repo: RepoChanges): boolean => repo.remote?.remote !== undefin
                 @keydown.meta.enter="doCommit"
             />
             <!-- What the commit will record, then the one button that records it. No checkboxes: the sentence
-                 on the left is a readout of the index, not a control. -->
+                 on the left is a readout of the index, not a control. A conflict replaces it outright — nothing
+                 about the index matters while git is refusing to commit at all. -->
             <div class="flex items-center gap-1">
-                <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
+                <span v-if="blockedByConflicts" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-danger">
+                    Resolve conflicts first
+                </span>
+                <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
                     <template v-if="changes.stagedCount.value > 0"
                         >{{ changes.stagedCount.value }} staged<span v-if="stagedRepos.length > 1"> · {{ stagedRepos.length }} repos</span></template
                     >
@@ -309,14 +421,36 @@ const syncable = (repo: RepoChanges): boolean => repo.remote?.remote !== undefin
                     :disabled="!commitReady"
                     @click="doCommit"
                     v-tooltip.top="
-                        streaming
-                            ? 'Wait for the agent turn to finish'
-                            : commitAll
-                              ? 'Nothing is staged — stage every change and commit it'
-                              : 'Commit the staged changes, one commit per repo'
+                        blockedByConflicts
+                            ? 'git cannot commit while a path is unmerged — resolve the conflicts (stage each file to mark it resolved)'
+                            : streaming
+                              ? 'Wait for the agent turn to finish'
+                              : commitAll
+                                ? 'Nothing is staged — stage every change and commit it'
+                                : 'Commit the staged changes, one commit per repo'
                     "
                 >
                     <Icon name="check" class="mr-1 text-2xs" />{{ commitLabel }}
+                </button>
+            </div>
+            <!-- A commit spans every staged repo, so its failure belongs to the box that fired it — under the
+                 button, where the user is already looking, with the message they typed still in the input. -->
+            <div v-if="failureIn(COMMIT_SCOPE)" :class="NOTICE">
+                <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
+                <div class="min-w-0 flex-1">
+                    <p class="text-2xs font-medium text-danger">{{ failureIn(COMMIT_SCOPE)!.action }}</p>
+                    <p class="line-clamp-4 break-words text-2xs text-muted" :title="failureIn(COMMIT_SCOPE)!.detail">
+                        {{ failureIn(COMMIT_SCOPE)!.detail }}
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
+                    @click="changes.dismissFailure(COMMIT_SCOPE)"
+                    v-tooltip.top="'Dismiss'"
+                    aria-label="Dismiss commit error"
+                >
+                    <Icon name="times" class="text-2xs" />
                 </button>
             </div>
         </div>
@@ -330,37 +464,95 @@ const syncable = (repo: RepoChanges): boolean => repo.remote?.remote !== undefin
                 No uncommitted changes. Edits by you or the agent show up here to review, commit, or discard.
             </p>
 
-            <!-- Repos git refused to scan. Same row rhythm as a real group, with git's reason where the file
-                 list would be — there is nothing here to stage, commit or discard. -->
+            <!-- Repos git refused to scan. Same row rhythm as a real group — the repo still gets its name on a
+                 row, because dropping it from the list is the silent disappearance this reports instead — with
+                 git's reason in the same notice every other failure here uses. There is nothing to stage,
+                 commit or discard, so the row carries no actions at all. -->
             <div v-for="group in unscannable" :key="group.repo" class="border-b border-line/50">
-                <div class="flex min-w-0 items-center gap-2 py-1.5 pl-2 pr-1">
+                <div class="flex min-w-0 items-center gap-1.5 py-1.5 pl-2 pr-1">
                     <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-danger" />
-                    <span class="shrink-0 truncate text-xs font-medium text-content">{{ group.repo }}</span>
-                    <span class="min-w-0 flex-1 truncate text-2xs text-danger" v-tooltip.bottom="group.error">{{ group.error }}</span>
+                    <span class="min-w-0 truncate text-xs font-medium text-content">{{ group.repo }}</span>
+                </div>
+                <div :class="[NOTICE, 'mx-2 mb-1.5']">
+                    <div class="min-w-0 flex-1">
+                        <p class="text-2xs font-medium text-danger">Couldn't read this repo</p>
+                        <p class="line-clamp-4 break-words text-2xs text-muted" :title="group.error">{{ group.error }}</p>
+                    </div>
                 </div>
             </div>
 
             <div v-for="group in scannable" :key="group.repo" class="group/repo border-b border-line/50">
+                <!-- One row per repo, carrying everything about it: identity on the left, then sync state, the
+                     change count, and the two actions that don't depend on state. The pills ARE the verbs —
+                     clicking "↓2" pulls those two commits — so a repo that is in sync costs exactly this row
+                     and no more, where it used to cost this row plus a full-width bar mostly reading zero. -->
                 <div class="flex items-center gap-1 pr-1 transition-colors hover:bg-overlay">
                     <button
                         type="button"
-                        class="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2 text-left max-md:min-h-11"
+                        class="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-2 text-left max-md:min-h-11"
                         @click="toggleGroup(group.repo)"
                     >
                         <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
-                        <span class="truncate text-xs font-medium text-content">{{ group.repo }}</span>
-                        <span v-if="group.branch !== undefined" class="truncate text-2xs text-subtle">{{ group.branch }}</span>
-                        <span
-                            v-if="group.staged.length + group.unstaged.length > 0"
-                            class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted"
-                            >{{ group.staged.length + group.unstaged.length }}</span
-                        >
+                        <span class="shrink-0 truncate text-xs font-medium text-content">{{ group.repo }}</span>
+                        <span v-if="group.branch !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{ group.branch }}</span>
+                    </button>
+
+                    <button
+                        v-if="behind(group) > 0"
+                        type="button"
+                        :class="SYNC_PILL"
+                        :disabled="changes.actionBusy.value"
+                        @click="changes.pullRepo(group.repo)"
+                        v-tooltip.top="pullHint(group)"
+                        :aria-label="`Pull ${group.repo}`"
+                    >
+                        <Icon name="arrow-down-left" class="text-[0.6rem]" />{{ behind(group) }}
+                    </button>
+                    <!-- Publish keeps its word where the pills stay numeric: a branch with no upstream is a
+                         one-off state most people meet rarely, and "↑3" would not tell them the push also has
+                         to CREATE the branch on the remote. -->
+                    <button
+                        v-if="unpublished(group)"
+                        type="button"
+                        class="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded border border-line px-1.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
+                        :disabled="changes.actionBusy.value"
+                        @click="changes.pushRepo(group.repo)"
+                        v-tooltip.top="'Push and start tracking this branch on the remote'"
+                    >
+                        <Icon name="cloud-upload" class="mr-1 text-[0.6rem]" />Publish
+                    </button>
+                    <button
+                        v-else-if="ahead(group) > 0"
+                        type="button"
+                        :class="SYNC_PILL"
+                        :disabled="changes.actionBusy.value"
+                        @click="changes.pushRepo(group.repo)"
+                        v-tooltip.top="pushHint(group)"
+                        :aria-label="`Push ${group.repo}`"
+                    >
+                        <Icon name="arrow-up-right" class="text-[0.6rem]" />{{ ahead(group) }}
+                    </button>
+
+                    <span v-if="repoCount(group) > 0" class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{
+                        repoCount(group)
+                    }}</span>
+
+                    <button
+                        v-if="syncable(group)"
+                        type="button"
+                        :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
+                        :disabled="changes.actionBusy.value"
+                        @click="changes.fetchRepo(group.repo)"
+                        v-tooltip.top="'Fetch — refresh what this repo knows about its remote'"
+                        :aria-label="`Fetch ${group.repo}`"
+                    >
+                        <Icon name="sync" class="text-2xs" />
                     </button>
                     <button
                         type="button"
-                        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/repo:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
-                        :disabled="changes.actionBusy.value || group.staged.length + group.unstaged.length === 0"
-                        @click="askDiscardRepo(group.repo)"
+                        :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
+                        :disabled="changes.actionBusy.value || repoCount(group) === 0"
+                        @click="askDiscardRepo(group)"
                         v-tooltip.top="'Discard all changes in this repo'"
                         aria-label="Discard all changes in this repo"
                     >
@@ -368,94 +560,39 @@ const syncable = (repo: RepoChanges): boolean => repo.remote?.remote !== undefin
                     </button>
                 </div>
 
-                <!-- Sync bar: only for a repo that actually has a remote, so a purely local repo shows no dead
-                     controls. Ahead/behind are as of the last fetch — which is why Fetch is always offered. -->
-                <div v-if="syncable(group)" class="flex items-center gap-1.5 px-2 pb-1.5 pl-7">
-                    <span
-                        v-if="group.remote!.behind > 0"
-                        class="flex items-center gap-0.5 text-2xs text-muted"
-                        v-tooltip.top="'Commits on the upstream you don\'t have'"
-                    >
-                        <Icon name="arrow-down-left" class="text-[0.6rem]" />{{ group.remote!.behind }}
-                    </span>
-                    <span
-                        v-if="group.remote!.ahead > 0"
-                        class="flex items-center gap-0.5 text-2xs text-muted"
-                        v-tooltip.top="'Commits you haven\'t pushed'"
-                    >
-                        <Icon name="arrow-up-right" class="text-[0.6rem]" />{{ group.remote!.ahead }}
-                    </span>
-                    <span v-if="group.remote!.upstream" class="min-w-0 truncate text-2xs text-subtle">{{ group.remote!.upstream }}</span>
-                    <span class="flex-1"></span>
-                    <!-- Icons, for the same reason the toolbar above uses them: three labelled verbs plus the
-                         upstream ref do not fit a sidebar. Publish is the exception — it is a one-off state
-                         most people meet rarely, so it keeps its words even at this width. -->
-                    <button
-                        type="button"
-                        :class="ICON_BUTTON"
-                        :disabled="changes.actionBusy.value"
-                        @click="changes.fetchRepo(group.repo)"
-                        v-tooltip.top="'Fetch — update remote-tracking refs (refreshes ahead/behind)'"
-                        :aria-label="`Fetch ${group.repo}`"
-                    >
-                        <Icon name="sync" class="text-2xs" />
-                    </button>
-                    <button
-                        v-if="group.remote!.behind > 0"
-                        type="button"
-                        :class="ICON_BUTTON"
-                        :disabled="changes.actionBusy.value"
-                        @click="changes.pullRepo(group.repo)"
-                        v-tooltip.top="'Pull — fast-forward to the upstream; a diverged history is reported, never auto-merged'"
-                        :aria-label="`Pull ${group.repo}`"
-                    >
-                        <Icon name="download" class="text-2xs" />
-                    </button>
-                    <button
-                        v-if="group.remote!.upstream === undefined"
-                        type="button"
-                        class="inline-flex shrink-0 items-center whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
-                        :disabled="changes.actionBusy.value"
-                        @click="changes.pushRepo(group.repo)"
-                        v-tooltip.top="'Push and start tracking this branch on the remote'"
-                    >
-                        <Icon name="cloud-upload" class="mr-1 text-2xs" />Publish
-                    </button>
-                    <button
-                        v-else-if="group.remote!.ahead > 0"
-                        type="button"
-                        :class="ICON_BUTTON"
-                        :disabled="changes.actionBusy.value"
-                        @click="changes.pushRepo(group.repo)"
-                        v-tooltip.top="'Push your commits'"
-                        :aria-label="`Push ${group.repo}`"
-                    >
-                        <Icon name="upload" class="text-2xs" />
-                    </button>
-                </div>
-
-                <div v-if="isDiscarding(`repo:${group.repo}`)" class="flex flex-col gap-1.5 px-2 pb-2">
-                    <span class="text-2xs text-warning">Discard {{ pendingDiscard!.label }}? Untracked files are deleted.</span>
-                    <div class="flex items-center justify-end gap-2">
-                        <button type="button" class="text-2xs text-muted hover:text-content" @click="pendingDiscard = undefined">Cancel</button>
-                        <button
-                            type="button"
-                            class="rounded border border-danger/50 px-2 py-0.5 text-2xs text-danger transition-colors hover:bg-danger/10"
-                            :disabled="changes.actionBusy.value"
-                            @click="confirmDiscard"
-                        >
-                            Discard
-                        </button>
+                <!-- A failed fetch/pull/push/discard/stage for THIS repo, under the row that caused it and
+                     naming the verb. The message it carries is git's own verdict line. -->
+                <div v-if="failureIn(group.repo)" :class="[NOTICE, 'mx-2 mb-1.5']">
+                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
+                    <div class="min-w-0 flex-1">
+                        <p class="text-2xs font-medium text-danger">{{ failureIn(group.repo)!.action }}</p>
+                        <p class="line-clamp-4 break-words text-2xs text-muted" :title="failureIn(group.repo)!.detail">
+                            {{ failureIn(group.repo)!.detail }}
+                        </p>
                     </div>
+                    <button
+                        type="button"
+                        class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
+                        @click="changes.dismissFailure(group.repo)"
+                        v-tooltip.top="'Dismiss'"
+                        :aria-label="`Dismiss error for ${group.repo}`"
+                    >
+                        <Icon name="times" class="text-2xs" />
+                    </button>
                 </div>
 
                 <div v-if="!collapsed.has(group.repo)" class="pb-1 pl-2 pr-1">
-                    <!-- One block per git side. Staged first: it is what a bare commit would record. The header's
-                         action is whole-side and ignores the selection (VSCode's "Stage All Changes"). -->
+                    <!-- One block per git side: conflicts (blocking), then staged (what a bare commit records),
+                         then unstaged. The header's action is whole-side and ignores the row selection, which is
+                         VSCode's "Stage All Changes" / "Unstage All". -->
                     <template v-for="section in sidesOf(group)" :key="`${group.repo}/${section.side}`">
                         <div class="group/side flex items-center gap-1 pl-2 pt-1">
-                            <span class="truncate text-2xs font-medium uppercase tracking-wide text-subtle">{{ section.label }}</span>
-                            <!-- Only when there are two sides to tell apart; otherwise it repeats the repo badge. -->
+                            <span
+                                class="truncate text-2xs font-medium uppercase tracking-wide"
+                                :class="section.side === 'conflicted' ? 'text-danger' : 'text-subtle'"
+                                >{{ section.label }}</span
+                            >
+                            <!-- Only when there is more than one section to tell apart; alone it repeats the repo badge. -->
                             <span v-if="sidesSplit(group)" class="shrink-0 text-2xs text-subtle">{{ section.changes.length }}</span>
                             <span class="flex-1"></span>
                             <button
@@ -466,10 +603,10 @@ const syncable = (repo: RepoChanges): boolean => repo.remote?.remote !== undefin
                                 ]"
                                 :disabled="changes.actionBusy.value"
                                 @click="stageSide(group, section.side)"
-                                v-tooltip.top="section.side === 'unstaged' ? 'Stage all' : 'Unstage all'"
-                                :aria-label="section.side === 'unstaged' ? `Stage all in ${group.repo}` : `Unstage all in ${group.repo}`"
+                                v-tooltip.top="INDEX_VERB[section.side].all"
+                                :aria-label="`${INDEX_VERB[section.side].all} in ${group.repo}`"
                             >
-                                <Icon :name="section.side === 'unstaged' ? 'plus' : 'undo'" class="text-2xs" />
+                                <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
                             </button>
                         </div>
 
@@ -497,10 +634,10 @@ const syncable = (repo: RepoChanges): boolean => repo.remote?.remote !== undefin
                                     class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
                                     :disabled="changes.actionBusy.value"
                                     @click="stageRow({ repo: group.repo, side: section.side, path: change.path })"
-                                    v-tooltip.top="section.side === 'unstaged' ? 'Stage' : 'Unstage'"
-                                    :aria-label="section.side === 'unstaged' ? `Stage ${change.path}` : `Unstage ${change.path}`"
+                                    v-tooltip.top="INDEX_VERB[section.side].one"
+                                    :aria-label="`${INDEX_VERB[section.side].one}: ${change.path}`"
                                 >
-                                    <Icon :name="section.side === 'unstaged' ? 'plus' : 'undo'" class="text-2xs" />
+                                    <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
                                 </button>
                                 <button
                                     type="button"
@@ -513,32 +650,58 @@ const syncable = (repo: RepoChanges): boolean => repo.remote?.remote !== undefin
                                     <Icon name="trash" class="text-2xs" />
                                 </button>
                             </div>
-
-                            <div
-                                v-if="isDiscarding(rowKey({ repo: group.repo, side: section.side, path: change.path }))"
-                                class="flex flex-col gap-1.5 px-1 pb-1.5"
-                            >
-                                <span class="break-all text-2xs text-warning">
-                                    Discard {{ pendingDiscard!.label }}?{{ change.status === "added" ? " The file is deleted." : "" }}
-                                </span>
-                                <div class="flex items-center justify-end gap-2">
-                                    <button type="button" class="text-2xs text-muted hover:text-content" @click="pendingDiscard = undefined">
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="rounded border border-danger/50 px-2 py-0.5 text-2xs text-danger transition-colors hover:bg-danger/10"
-                                        :disabled="changes.actionBusy.value"
-                                        @click="confirmDiscard"
-                                    >
-                                        Discard
-                                    </button>
-                                </div>
-                            </div>
                         </template>
                     </template>
                 </div>
             </div>
         </div>
+
+        <!-- The destructive confirm, in the same modal every other irreversible git action in this app uses.
+             It states the two OUTCOMES separately, because they are genuinely different: tracked files go back
+             to their last commit (git could return them anyway), untracked files leave the disk (git could
+             not). The old prompt asserted the second unconditionally, so the case where it was true looked
+             exactly like the many where it wasn't. -->
+        <Dialog
+            :visible="pendingDiscard !== undefined"
+            :modal="true"
+            :draggable="false"
+            :dismissable-mask="true"
+            :style="{ width: '24rem' }"
+            header="Discard changes"
+            @update:visible="pendingDiscard = undefined"
+        >
+            <template v-if="pendingDiscard">
+                <p class="break-words text-xs text-content">Discard {{ pendingDiscard.what }}?</p>
+                <p v-if="pendingDiscard.restores > 0" class="mt-2 text-xs text-muted">
+                    {{ plural(pendingDiscard.restores, "file") }} return to their last committed state.
+                </p>
+                <div v-if="pendingDiscard.deletes.length > 0" class="mt-2">
+                    <p class="text-xs text-danger">
+                        {{ plural(pendingDiscard.deletes.length, "untracked file") }} leave the disk — they were never committed, so git has no copy:
+                    </p>
+                    <ul class="mt-1 max-h-24 overflow-auto">
+                        <li v-for="path in pendingDiscard.deletes" :key="path" class="truncate font-mono text-2xs text-muted" dir="rtl">
+                            {{ path }}
+                        </li>
+                    </ul>
+                </div>
+                <p class="mt-3 text-2xs text-subtle">
+                    <Icon name="shield" class="mr-0.5 text-[0.6rem]" />A checkpoint is saved first, so this is reversible from Checkpoints.
+                </p>
+            </template>
+            <template #footer>
+                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingDiscard = undefined">
+                    Cancel
+                </button>
+                <button
+                    type="button"
+                    class="rounded bg-danger px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-danger/85 disabled:opacity-40"
+                    :disabled="changes.actionBusy.value"
+                    @click="confirmDiscard"
+                >
+                    Discard
+                </button>
+            </template>
+        </Dialog>
     </div>
 </template>

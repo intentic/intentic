@@ -17,9 +17,6 @@ import { workspaceIdentity } from "./workspace-identity.js";
 
 const execFileAsync = promisify(execFile);
 
-// Coerce a possibly-missing activity `extra` field to a number for usage summing.
-const usageNum = (value: unknown): number => (typeof value === "number" ? value : 0);
-
 // Long-lived events stream the browser holds open: heartbeat frames every ~2s (detect the sandbox dying — the
 // tunnel drops the proxied response when the origin goes away — and trip a client watchdog) INTERLEAVED with
 // workspaceChanged batches from the filesystem watcher (live tree/viewer refresh) and presence roster
@@ -148,21 +145,21 @@ export const createSystemRoutes = (services: Services) => {
             }
             return HostTunnelSchema.parse(json);
         }),
-        // Per-account token/cost totals, aggregated from the activity log's turn.completed events. Covers the
-        // retained log window (the log prunes to its most recent entries), not all-time — the ponytail choice
-        // that reuses the existing durable trail instead of a new usage table.
+        // Per-account token/cost totals, folded from the spend ledger (usage/usage-store.ts) — ALL-TIME, because
+        // that ledger is never pruned. This used to aggregate the activity log's turn.completed events, so the
+        // totals covered only that log's retained window: a busy week evicted the older turns and the number a
+        // user reads as "what this account has cost me" silently went DOWN. Unattributed turns (an env-token turn
+        // has no account) are skipped rather than pooled under a blank id — they belong to no account's total.
         usage: i.usage.handler(async () => {
-            const events = await services.activity.list({ limit: 100_000 });
             const totals = new Map<string, UsageAccount>();
-            for (const event of events) {
-                if (event.type !== "turn.completed" || event.provider === undefined || event.account === undefined) {
+            for (const row of await services.usage.rollup({})) {
+                if (row.account === undefined) {
                     continue;
                 }
-                const key = `${event.provider} ${event.account}`;
-                const extra = event.extra ?? {};
+                const key = `${row.provider}\u0000${row.account}`;
                 const current = totals.get(key) ?? {
-                    provider: event.provider,
-                    account: event.account,
+                    provider: row.provider,
+                    account: row.account,
                     turns: 0,
                     inputTokens: 0,
                     outputTokens: 0,
@@ -173,12 +170,12 @@ export const createSystemRoutes = (services: Services) => {
                 totals.set(key, {
                     provider: current.provider,
                     account: current.account,
-                    turns: current.turns + 1,
-                    inputTokens: current.inputTokens + usageNum(extra["inputTokens"]),
-                    outputTokens: current.outputTokens + usageNum(extra["outputTokens"]),
-                    cacheReadTokens: current.cacheReadTokens + usageNum(extra["cacheReadTokens"]),
-                    cacheCreationTokens: current.cacheCreationTokens + usageNum(extra["cacheCreationTokens"]),
-                    costUsd: current.costUsd + usageNum(extra["costUsd"]),
+                    turns: current.turns + row.turns,
+                    inputTokens: current.inputTokens + row.inputTokens,
+                    outputTokens: current.outputTokens + row.outputTokens,
+                    cacheReadTokens: current.cacheReadTokens + row.cacheReadTokens,
+                    cacheCreationTokens: current.cacheCreationTokens + row.cacheCreationTokens,
+                    costUsd: current.costUsd + row.costUsd,
                 });
             }
             return { accounts: [...totals.values()] };

@@ -9,11 +9,15 @@ import { readWorkspaceFile, statWorkspaceFileSize } from "../workspace/workspace
 // history, these are the user's own branches, so commit here IS the review's "approve". All functions take the
 // injectable GitRunner (defaultGit shells out) so command sequences are unit-testable without a real repo.
 
-const STATUS_OF: Record<string, GitChange["status"]> = { A: "added", M: "modified", D: "deleted", T: "type-changed" };
+// `U` is git's unmerged marker — a path the merge could not resolve, which is neither staged nor unstaged but
+// its own third state (there is no stage 0 for it at all; the index holds stages 1/2/3 instead).
+const STATUS_OF: Record<string, GitChange["status"]> = { A: "added", M: "modified", D: "deleted", T: "type-changed", U: "conflicted" };
 
 // Parse `--name-status -z` output (from `git diff` or `git diff-tree`) into GitChanges. NUL-separated records
 // are `STATUS\0path\0`, except renames/copies which span three fields (`R<score>\0old\0new\0`) — a cursor walk,
-// not a fixed stride. Keyed by the (new) path so a later record for the same path wins.
+// not a fixed stride. Keyed by the (new) path so a later record for the same path wins — EXCEPT that
+// "conflicted" is sticky: `git diff` emits an unmerged path twice (`U` then `M`), and letting the second record
+// win is what used to make a conflict render as an ordinary modification.
 const parseNameStatusZ = (stdout: string): GitChange[] => {
     const parts = stdout.split("\0");
     const changes = new Map<string, GitChange>();
@@ -34,6 +38,9 @@ const parseNameStatusZ = (stdout: string): GitChange[] => {
             continue;
         }
         cursor += 2;
+        if (changes.get(path)?.status === "conflicted") {
+            continue;
+        }
         changes.set(path, { path, status: STATUS_OF[status[0] ?? ""] ?? "modified" });
     }
     return [...changes.values()];
@@ -107,14 +114,20 @@ const withLineStats = async (dir: string, scope: readonly string[], changes: Git
 
 // One repo's uncommitted work, split the way git actually models it — and the way VSCode's SCM view renders it:
 //
-//   staged   = index vs HEAD          (`git diff --cached`) — what `git commit` would record right now
-//   unstaged = worktree vs index      (`git diff`) + untracked files
+//   conflicted = unmerged paths        (`U` on either side) — a merge git could not finish
+//   staged     = index vs HEAD         (`git diff --cached`) — what `git commit` would record right now
+//   unstaged   = worktree vs index     (`git diff`) + untracked files
 //
-// The two sides are read as two real diffs rather than by collapsing `git status`'s two porcelain columns,
+// The two clean sides are read as two real diffs rather than by collapsing `git status`'s two porcelain columns,
 // because a path can legitimately appear on BOTH with DIFFERENT statuses (a staged rename whose new file was
 // then edited, the classic `MM`). Collapsing them, as this used to, made a partially-staged file report one
-// status and one pair of line counts that matched neither side. Each side now gets its own name-status pass and
-// its own numstat pass, so every count describes the diff it is displayed under.
+// status and one pair of line counts that matched neither side. Each side gets its own name-status pass and its
+// own numstat pass, so every count describes the diff it is displayed under.
+//
+// Conflicts come OUT of both sides and into their own list. They are not a third opinion about staging: an
+// unmerged path has no stage 0 at all, so "what would a commit record" has no answer for it — git refuses to
+// commit while one exists. Listing it as staged (which the `U` letter, read as a fallback "modified", used to
+// do) claimed it was ready to commit and offered an index-vs-HEAD diff that cannot be computed.
 //
 // -z gives exact NUL-delimited paths; untracked come from `ls-files --others --exclude-standard -z`, which
 // expands directories into real file paths (per-path actions need them). info/exclude + .gitignore keep the scan
@@ -122,7 +135,7 @@ const withLineStats = async (dir: string, scope: readonly string[], changes: Git
 export const changedFiles = async (
     dir: string,
     git: GitRunner = defaultGit,
-): Promise<{ branch?: string; staged: GitChange[]; unstaged: GitChange[] }> => {
+): Promise<{ branch?: string; conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[] }> => {
     const [branchOut, head] = await Promise.all([git(dir, ["branch", "--show-current"]), headSha(dir, git)]);
     const branch = branchOut.stdout.trim();
     // On an unborn HEAD there is no commit to diff the index against — the empty tree stands in, so a repo
@@ -135,21 +148,34 @@ export const changedFiles = async (
         git(dir, ["diff", "--name-status", "-z", "--find-renames"]),
         git(dir, ["ls-files", "--others", "--exclude-standard", "-z"]),
     ]);
-    const stagedNames = parseNameStatusZ(stagedOut.stdout);
-    const unstagedNames = parseNameStatusZ(unstagedOut.stdout);
+    // An unmerged path shows up as `U` on whichever pass sees it (usually both) — one entry per path, and it
+    // wins over any clean status the same path also reported.
+    const conflicted = new Map<string, GitChange>();
+    const clean = (changes: readonly GitChange[]): GitChange[] =>
+        changes.filter((change) => {
+            if (change.status !== "conflicted") {
+                return true;
+            }
+            conflicted.set(change.path, change);
+            return false;
+        });
+    const stagedNames = clean(parseNameStatusZ(stagedOut.stdout));
+    const unstagedNames = clean(parseNameStatusZ(unstagedOut.stdout));
     // Untracked files are unstaged by definition (nothing about them is in the index yet). Guarded against a
-    // path the worktree diff already reported, which can't normally happen but would double a row if it did.
-    const tracked = new Set(unstagedNames.map((change) => change.path));
+    // path either tracked list already reported, which can't normally happen but would double a row if it did.
+    const seen = new Set([...unstagedNames.map((change) => change.path), ...conflicted.keys()]);
     for (const path of untrackedOut.stdout.split("\0")) {
-        if (path !== "" && !tracked.has(path)) {
+        if (path !== "" && !seen.has(path)) {
             unstagedNames.push({ path, status: "added" });
         }
     }
+    // No numstat for a conflict: "how many lines changed" has no answer across three stages, and the row shows
+    // no diffstat rather than an invented one.
     const [staged, unstaged] = await Promise.all([
         withLineStats(dir, ["--cached", base], stagedNames, git),
         withLineStats(dir, [], unstagedNames, git),
     ]);
-    return { ...(branch !== "" ? { branch } : {}), staged, unstaged };
+    return { ...(branch !== "" ? { branch } : {}), conflicted: [...conflicted.values()], staged, unstaged };
 };
 
 // A repo's cumulative delta vs a fixed base sha — committed work since the base PLUS staged and unstaged
@@ -328,6 +354,13 @@ export const stagedFileDiff = async (dir: string, path: string, git: GitRunner =
 // reports no before side and renders as the addition it is.
 export const unstagedFileDiff = async (dir: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
     bothSides(await blobSide(dir, `:0:${path}`, git), await worktreeSide(join(dir, path)));
+
+// An unmerged path, HEAD vs the worktree — which is to say: what you had, against what the merge left you,
+// conflict markers and all. `:0:` is deliberately NOT used: there is no stage 0 for an unmerged path (the index
+// holds "ours" and "theirs" at stages 2 and 3 instead), so asking for it returns nothing and the row renders a
+// blank diff. HEAD is the honest before side — it is the state resolving the conflict is moving away from.
+export const conflictedFileDiff = async (dir: string, path: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
+    bothSides(await blobSide(dir, `HEAD:${path}`, git), await worktreeSide(join(dir, path)));
 
 // The commit context-menu actions (VSCode "Git Graph" parity). GitActionResult ok/conflict is the shape the
 // sequence + HEAD-moving ops return; the non-destructive ref ops (branch/tag/checkout/reset) let git's own

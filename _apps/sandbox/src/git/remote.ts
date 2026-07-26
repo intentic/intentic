@@ -2,6 +2,7 @@ import type { GitRemoteState } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { upstreamOf } from "./branches.js";
 import type { ActionResult } from "./changes.js";
+import { gitFailureReason } from "./git.js";
 
 /* Talking to the remote: where the current branch stands relative to its upstream, and the three verbs that
  * move work across it. Everything here can fail for ordinary, expected reasons — no remote configured, no
@@ -11,27 +12,12 @@ import type { ActionResult } from "./changes.js";
  * Nothing here ever prompts: `GIT_TERMINAL_PROMPT=0` is not set here because the daemon's git runs non-
  * interactively already (piped stdio), so a credential-less fetch fails fast instead of hanging on a prompt. */
 
-// git's own message for a failed remote op, condensed to its last non-empty line — the "fatal: …" verdict
-// rather than the progress noise above it. execFile rejects with the whole command line in `message`, so
-// stderr is strongly preferred when present (the same reduction git.routes' scanFailure makes).
-const reason = (error: unknown): string => {
-    const stderr = (error as { stderr?: unknown }).stderr;
-    const text = typeof stderr === "string" && stderr.trim() !== "" ? stderr : error instanceof Error ? error.message : String(error);
-    return (
-        text
-            .split("\n")
-            .map((line) => line.trim())
-            .filter((line) => line !== "")
-            .at(-1) ?? "git failed"
-    );
-};
-
 const run = async (dir: string, args: readonly string[], git: GitRunner): Promise<ActionResult> => {
     try {
         await git(dir, args);
         return { ok: true };
     } catch (error) {
-        return { ok: false, reason: reason(error) };
+        return { ok: false, reason: gitFailureReason(error, "git failed") };
     }
 };
 

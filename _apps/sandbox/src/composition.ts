@@ -66,6 +66,7 @@ import {
     rebaseOnto,
     resetTo,
     revertCommit,
+    conflictedFileDiff,
     stagePaths,
     stagedFileDiff,
     unstagePaths,
@@ -100,6 +101,7 @@ import { postToPlatform, type PlatformResponse } from "./platform/platform-clien
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
 import { version } from "./version.js";
 import { type AgentTool, internalTools } from "./agent/agent-tools.js";
+import { type UsageStore, fileUsageStore } from "./usage/usage-store.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace/workspace.js";
 import {
     copyWorkspacePath,
@@ -162,6 +164,10 @@ export interface Services {
     // The activity audit log (historyRoot/activity.jsonl, outside the agent's reach): inbound wakes,
     // sniffed outbound provider calls, voice sessions, failures. /activity reads it; only the daemon appends.
     readonly activity: ActivityStore;
+    // The durable spend ledger (historyRoot/usage.jsonl, outside the agent's reach): one row per attributed
+    // turn, NEVER pruned — unlike the activity log, whose rolling window makes spend totals shrink over time.
+    // streamAgent appends at turn end; /usage/rollup and /system/usage project it.
+    readonly usage: UsageStore;
     // Per-sandbox agent settings (.intentic/settings.json) — /settings edits it; streamAgent reads it to gate
     // per-turn agent behavior (iq plugin, hashline tools, output cleaning, prompt stability).
     readonly sandboxSettings: SandboxSettingsStore;
@@ -233,7 +239,7 @@ export interface Services {
         readonly sync: (dir: string) => Promise<GitSyncResult>;
         // The Changes review verbs (git/changes.ts): working-tree status split into the index and worktree sides,
         // the index moves, the two whole-repo commit shapes, per-path discard, and the per-side file diffs.
-        readonly changedFiles: (dir: string) => Promise<{ branch?: string; staged: GitChange[]; unstaged: GitChange[] }>;
+        readonly changedFiles: (dir: string) => Promise<{ branch?: string; conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[] }>;
         readonly stagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         readonly unstagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;
@@ -252,6 +258,7 @@ export interface Services {
         // whose worktree has no index to split (a conversation's recorded base sha).
         readonly stagedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
         readonly unstagedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
+        readonly conflictedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
         readonly fileDiff: (dir: string, path: string, ref: string) => Promise<FileDiff>;
         readonly changesAgainstBase: (dir: string, base: string) => Promise<GitChange[]>;
         // The git-history graph (read-only): one repo's commit log across all refs, and lazy per-commit detail
@@ -391,6 +398,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         approvals: fileApprovalsStore(join(workspace.root, ".intentic", "approvals")),
         drafts: fileDraftsStore(join(workspace.root, ".intentic", "drafts")),
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
+        usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(join(workspace.root, ".intentic", "settings.json")),
         push: pushStore,
         pushSender: createPushSender(pushStore, logger),
@@ -442,6 +450,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             pushBranch,
             stagedFileDiff,
             unstagedFileDiff,
+            conflictedFileDiff,
             fileDiff: workingFileDiff,
             changesAgainstBase,
             commitLog,

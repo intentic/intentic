@@ -185,6 +185,7 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     capabilities: memoryCapabilitiesStore(),
     automations: memoryAutomationsStore(),
     activity: { append: async () => {}, list: async () => [] },
+    usage: { record: async () => {}, rollup: async () => [] },
     sandboxSettings: {
         get: async () => ({
             stableSystemPrompt: false,
@@ -245,7 +246,7 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         listFiles: async () => [],
         commitAll: async () => false,
         clone: async () => {},
-        changedFiles: async () => ({ staged: [], unstaged: [] }),
+        changedFiles: async () => ({ conflicted: [], staged: [], unstaged: [] }),
         stagePaths: async () => {},
         unstagePaths: async () => {},
         commitIndex: async () => false,
@@ -586,6 +587,113 @@ test("ports.forward on a loopback sandbox (no zone/token) still maps the slot bu
 test("system.terminals lists every attachable web-*/panel-* tmux session (none in the test env)", async () => {
     const client = clientFor(createApp(services()));
     expect(await client.system.terminals()).toEqual({ sessions: [] });
+});
+
+test("usage.rollup round-trips the ledger's rows and forwards the day bounds to the store", async () => {
+    const asked: { from?: string | undefined; to?: string | undefined }[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                usage: {
+                    record: async () => {},
+                    rollup: async (query) => {
+                        asked.push(query);
+                        return [
+                            {
+                                day: "2026-07-20",
+                                provider: "claude",
+                                account: "work",
+                                model: "opus-5",
+                                harness: "native",
+                                turns: 2,
+                                inputTokens: 200,
+                                outputTokens: 100,
+                                cacheReadTokens: 20,
+                                cacheCreationTokens: 10,
+                                costUsd: 0.5,
+                                durationMs: 2_000,
+                            },
+                        ];
+                    },
+                },
+            }),
+        ),
+    );
+
+    const result = await client.usage.rollup({ from: "2026-07-01", to: "2026-07-31" });
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({ day: "2026-07-20", model: "opus-5", costUsd: 0.5, turns: 2 });
+    // The query reaches the store as day strings, so the store owns the range semantics (inclusive bounds).
+    expect(asked).toEqual([{ from: "2026-07-01", to: "2026-07-31" }]);
+});
+
+test("system.usage folds the LEDGER (all-time, never pruned) per provider+account and skips unattributed turns", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                usage: {
+                    record: async () => {},
+                    // Two days on one account plus an unattributed env-token turn, which belongs to no account.
+                    rollup: async () => [
+                        {
+                            day: "2026-07-20",
+                            provider: "claude",
+                            account: "work",
+                            harness: "native",
+                            turns: 1,
+                            inputTokens: 100,
+                            outputTokens: 50,
+                            cacheReadTokens: 10,
+                            cacheCreationTokens: 5,
+                            costUsd: 0.25,
+                            durationMs: 1_000,
+                        },
+                        {
+                            day: "2026-07-21",
+                            provider: "claude",
+                            account: "work",
+                            harness: "native",
+                            turns: 3,
+                            inputTokens: 300,
+                            outputTokens: 150,
+                            cacheReadTokens: 30,
+                            cacheCreationTokens: 15,
+                            costUsd: 0.75,
+                            durationMs: 3_000,
+                        },
+                        {
+                            day: "2026-07-21",
+                            provider: "claude",
+                            harness: "native",
+                            turns: 9,
+                            inputTokens: 900,
+                            outputTokens: 900,
+                            cacheReadTokens: 0,
+                            cacheCreationTokens: 0,
+                            costUsd: 9,
+                            durationMs: 9_000,
+                        },
+                    ],
+                },
+            }),
+        ),
+    );
+
+    // Both of the account's days summed into one row; the unattributed turn's $9 is excluded, not pooled.
+    expect(await client.system.usage()).toEqual({
+        accounts: [
+            {
+                provider: "claude",
+                account: "work",
+                turns: 4,
+                inputTokens: 400,
+                outputTokens: 200,
+                cacheReadTokens: 40,
+                cacheCreationTokens: 20,
+                costUsd: 1,
+            },
+        ],
+    });
 });
 
 test("system.killTerminal routes a panel-* session through the process manager, so `running` unmaps immediately", async () => {
@@ -1757,12 +1865,12 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
                     ...services().git,
                     changedFiles: async (dir) => {
                         if (dir === workspace.root) {
-                            return { branch: "main", staged: [], unstaged: [{ path: "notes.md", status: "added" as const }] };
+                            return { branch: "main", conflicted: [], staged: [], unstaged: [{ path: "notes.md", status: "added" as const }] };
                         }
                         if (dir === join(workspace.root, "shop")) {
                             throw new Error("broken repo");
                         }
-                        return { staged: [], unstaged: [] };
+                        return { conflicted: [], staged: [], unstaged: [] };
                     },
                 },
             }),
@@ -1775,11 +1883,12 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
             {
                 repo: "root",
                 branch: "main",
+                conflicted: [],
                 staged: [],
                 unstaged: [{ path: "notes.md", status: "added" }],
                 remote: { ahead: 0, behind: 0 },
             },
-            { repo: "shop", staged: [], unstaged: [], error: "broken repo" },
+            { repo: "shop", conflicted: [], staged: [], unstaged: [], error: "broken repo" },
         ],
     });
 });

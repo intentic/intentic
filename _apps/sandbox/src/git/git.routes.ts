@@ -8,25 +8,11 @@ import { repoGitDir, syncRootExcludes } from "../history/history.js";
 import { discoverRepos, isValidRepoId } from "../workspace/repo-discovery.js";
 import { isControlPlanePath, resolveWithin } from "../workspace/workspace-files.js";
 import type { ActionResult } from "./changes.js";
-import { AGENT_GIT_AUTHOR } from "./git.js";
+import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
 
 // How long one Changes scan's result stands in for the next caller's. Long enough to swallow the browser's
 // per-batch refetch storm, short enough that a save still shows up in the panel as it happens.
 const COALESCE_MS = 500;
-
-// Why a repo could not be scanned, in one line for the panel. execFile rejects with the whole command line in
-// `message`, so prefer git's own stderr and keep its last line — the `fatal:` verdict, not the noise above it.
-const scanFailure = (error: unknown): string => {
-    const stderr = (error as { stderr?: unknown }).stderr;
-    const text = typeof stderr === "string" && stderr.trim() !== "" ? stderr : error instanceof Error ? error.message : String(error);
-    return (
-        text
-            .split("\n")
-            .map((line) => line.trim())
-            .filter((line) => line !== "")
-            .at(-1) ?? "git could not read this repo"
-    );
-};
 
 const exists = async (path: string): Promise<boolean> => {
     try {
@@ -120,14 +106,14 @@ export const createGitRoutes = (services: Services) => {
                     await healPointer(candidate.repo, candidate.dir);
                     // The change scan and the remote read are independent (the latter never touches the index)
                     // — one round-trip for both. `remote` is what the panel's sync bar renders per repo.
-                    const [{ branch, staged, unstaged }, remote] = await Promise.all([
+                    const [{ branch, conflicted, staged, unstaged }, remote] = await Promise.all([
                         services.git.changedFiles(candidate.dir),
                         services.git.remoteState(candidate.dir),
                     ]);
                     // A repo with a clean tree still belongs in the response when it is ahead of or behind its
                     // upstream — there is real work to sync, which is exactly what the panel must not hide.
-                    if (staged.length > 0 || unstaged.length > 0 || remote.ahead > 0 || remote.behind > 0) {
-                        return { repo: candidate.repo, ...(branch !== undefined ? { branch } : {}), staged, unstaged, remote };
+                    if (conflicted.length > 0 || staged.length > 0 || unstaged.length > 0 || remote.ahead > 0 || remote.behind > 0) {
+                        return { repo: candidate.repo, ...(branch !== undefined ? { branch } : {}), conflicted, staged, unstaged, remote };
                     }
                     return undefined;
                 } catch (error) {
@@ -136,7 +122,13 @@ export const createGitRoutes = (services: Services) => {
                     // in the response. Debug, not warn: while a dropped repo's .git lands this fires on every poll
                     // and the client is already being told.
                     services.logger.debug({ err: error, repo: candidate.repo }, "git changes: repo unscannable");
-                    return { repo: candidate.repo, staged: [], unstaged: [], error: scanFailure(error) };
+                    return {
+                        repo: candidate.repo,
+                        conflicted: [],
+                        staged: [],
+                        unstaged: [],
+                        error: gitFailureReason(error, "git could not read this repo"),
+                    };
                 }
             }),
         );
@@ -175,7 +167,11 @@ export const createGitRoutes = (services: Services) => {
         fileDiff: i.fileDiff.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
             guardRepoPath(dir, input.path);
-            return input.side === "staged" ? services.git.stagedFileDiff(dir, input.path) : services.git.unstagedFileDiff(dir, input.path);
+            if (input.side === "staged") {
+                return services.git.stagedFileDiff(dir, input.path);
+            }
+            // An unmerged path is diffed against HEAD, not the index — it has no stage 0 to compare with.
+            return input.side === "conflicted" ? services.git.conflictedFileDiff(dir, input.path) : services.git.unstagedFileDiff(dir, input.path);
         }),
         // The git-history graph: every workspace repo (for the tree affordance + the graph's switcher), one
         // repo's commit log, and lazy per-commit detail. "root" is implicit for the switcher; discoverRepos
@@ -239,12 +235,23 @@ export const createGitRoutes = (services: Services) => {
         // index is recorded as it stands. No path-scoped variant — staging is how the user chooses.
         commit: i.commit.handler(async ({ input }) => {
             const dir = await repoDir(input.repo);
-            const committed =
-                input.all === true
-                    ? await services.git.commitAll(dir, input.message, AGENT_GIT_AUTHOR)
-                    : await services.git.commitIndex(dir, input.message, AGENT_GIT_AUTHOR);
-            invalidateScan();
-            return { committed };
+            // git's own refusals are the useful ones here — "Committing is not possible because you have unmerged
+            // files", a pre-commit hook's failure, a missing identity. Carried as a CONFLICT with git's verdict
+            // line so the panel prints the reason; a bare throw would reach the browser as an opaque 500 and the
+            // user would read "Commit failed." with nothing to act on.
+            try {
+                const committed =
+                    input.all === true
+                        ? await services.git.commitAll(dir, input.message, AGENT_GIT_AUTHOR)
+                        : await services.git.commitIndex(dir, input.message, AGENT_GIT_AUTHOR);
+                invalidateScan();
+                return { committed };
+            } catch (error) {
+                // The index may have moved even on a failure (`commit -a` stages before it commits), so the
+                // panel's view is stale either way.
+                invalidateScan();
+                throw new ORPCError("CONFLICT", { message: gitFailureReason(error, "git refused the commit") });
+            }
         }),
         // Index-only moves: the worktree is untouched, so no checkpoint and no history notification — only the
         // panel's view of what's staged changes.
@@ -302,7 +309,15 @@ export const createGitRoutes = (services: Services) => {
             return result;
         }),
         discard: i.discard.handler(async ({ input }) => {
-            await services.git.discardPaths(await repoDir(input.repo), input.paths);
+            const dir = await repoDir(input.repo);
+            // The checkpoint goes BEFORE the destruction. Discard is the one verb in this router git itself
+            // cannot walk back — untracked files are deleted outright, and a tracked file's worktree state was
+            // never in the object store to reflog back to — so the snapshot that makes it recoverable has to
+            // record the tree that is about to go. `notifyUserWrite` below records the RESULT, which is the
+            // timeline's other half and no safety net at all; the sequence verbs get this via `guarded`, and
+            // discard sat outside it purely because it reports no ActionResult.
+            await services.history.snapshot("user", `before discard in ${input.repo}`);
+            await services.git.discardPaths(dir, input.paths);
             invalidateScan();
             // The worktree changed under the user's feet — record it on the safety timeline like any user write.
             services.history.notifyUserWrite();

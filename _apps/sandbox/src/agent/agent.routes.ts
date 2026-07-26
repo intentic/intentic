@@ -592,6 +592,9 @@ async function* runTurn(
     const provider = input.agent ?? "claude";
     let sessionId = input.sessionId;
     let usageExtra: Record<string, unknown> | undefined;
+    // The turn's usage frame, kept typed (unlike usageExtra, which is the activity log's opaque `extra`) so the
+    // spend ledger below appends numbers rather than re-narrowing unknowns.
+    let usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
     const record = (event: Omit<ActivityEvent, "id" | "at" | "provider" | "direction">): void => {
         void services.activity
             .append({
@@ -616,6 +619,7 @@ async function* runTurn(
             } else if (event.kind === "usage") {
                 const { kind: _kind, ...rest } = event;
                 usageExtra = rest;
+                usage = event;
                 // Attribute the per-turn totals (and the account-wide rate-limit snapshot) to the account that
                 // served the turn, so the client keys its usage displays by account.
                 yield { ...event, ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}) };
@@ -642,6 +646,31 @@ async function* runTurn(
         }
     } finally {
         record({ type: "turn.completed", ...(usageExtra !== undefined ? { extra: usageExtra } : {}) });
+        // The spend ledger — the durable, never-pruned record the cost dashboard reads. Only turns the provider
+        // actually billed land here: no usage frame means no spend to attribute, and a zero row would inflate
+        // the turn count with turns that cost nothing (the activity log already carries those for the audit
+        // trail). Aborted turns DO land — a cancelled turn still spent what it spent before the stop.
+        // `request.model` is the model resolved past the client's pick and every provider default, which is the
+        // one the money was spent on; `harness` and the conversation make cost-by-model and cost-by-agent
+        // answerable without a second source. Fire-and-forget, same contract as every other turn-end write.
+        if (usage !== undefined) {
+            services.usage
+                .record({
+                    provider,
+                    ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
+                    ...(request.model !== undefined ? { model: request.model } : {}),
+                    harness,
+                    ...(conversation !== undefined ? { conversationId: conversation.id } : {}),
+                    turns: usage.numTurns ?? 1,
+                    inputTokens: usage.inputTokens ?? 0,
+                    outputTokens: usage.outputTokens ?? 0,
+                    cacheReadTokens: usage.cacheReadTokens ?? 0,
+                    cacheCreationTokens: usage.cacheCreationTokens ?? 0,
+                    costUsd: usage.costUsd ?? 0,
+                    durationMs: usage.durationMs ?? 0,
+                })
+                .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));
+        }
         sniffer.flush();
         // Fire-and-forget workspace snapshot at turn end (aborted turns included) — history must never delay
         // or fail a turn. The raw prompt (not the enriched request) labels the checkpoint in the user's words.
