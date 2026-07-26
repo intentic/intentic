@@ -3,6 +3,7 @@ import { Segmented } from "@intentic-app/ui";
 import { computed, ref, watch } from "vue";
 import { copyCodeFromEvent } from "../../../composables/markdownCode";
 import { renderMarkdown } from "../../../composables/renderMarkdown";
+import { openFileRefFromEvent } from "../../../composables/workspace/openFileRef";
 import type { LineJump } from "../workspaceTabs";
 import CodeView from "./CodeView.vue";
 
@@ -13,7 +14,10 @@ import CodeView from "./CodeView.vue";
 
 // `line` = a content-search match landing here: open on (or switch to) the Source view so the hit is visible —
 // rendered prose has no stable line mapping.
-const { source, line } = defineProps<{ source: string; line?: LineJump }>();
+// `path` is the document's own workspace path, present when this is a FILE (absent for the chat's plan preview,
+// whose references are already workspace-root-relative). Its directory is what the file links inside resolve
+// against, so `docs/a.md` linking `./b.md` opens `docs/b.md`.
+const { source, path, line } = defineProps<{ source: string; path?: string; line?: LineJump }>();
 const view = ref<`preview` | `source`>(line !== undefined ? `source` : `preview`);
 watch(
     () => line,
@@ -24,7 +28,15 @@ watch(
     },
 );
 
-const rendered = computed<string>(() => renderMarkdown(source));
+const rendered = computed<string>(() => renderMarkdown(source, path === undefined ? undefined : path.slice(0, path.lastIndexOf(`/`) + 1)));
+
+// One delegated listener for every control the rendered markdown carries — a code block's copy button and the
+// file links a mentioned path becomes. Both live inside v-html, so neither can hold a component of its own.
+// A doc that cross-references its neighbours (README → ARCHITECTURE.md) now navigates like one.
+const onMarkdownClick = (event: MouseEvent): void => {
+    copyCodeFromEvent(event);
+    openFileRefFromEvent(event);
+};
 </script>
 
 <template>
@@ -39,8 +51,8 @@ const rendered = computed<string>(() => renderMarkdown(source));
             />
         </div>
         <div class="min-h-0 flex-1">
-            <!-- Delegated click: the code blocks' copy buttons live inside v-html (see copyCodeFromEvent). -->
-            <div v-if="view === 'preview'" class="scrollbar-thin h-full overflow-auto bg-canvas px-6 py-5" @click="copyCodeFromEvent">
+            <!-- Delegated click: the copy buttons and file links live inside v-html (see onMarkdownClick). -->
+            <div v-if="view === 'preview'" class="scrollbar-thin h-full overflow-auto bg-canvas px-6 py-5" @click="onMarkdownClick">
                 <div class="md-prose mx-auto max-w-3xl text-content/90" v-html="rendered"></div>
             </div>
             <CodeView v-else :code="source" lang="markdown" :scroll-to-line="line" />
@@ -141,6 +153,17 @@ const rendered = computed<string>(() => renderMarkdown(source));
 }
 .md-prose a:hover {
     text-decoration: underline;
+}
+/* A file this document names, linkified by markdownFileLinks — clicking opens it in the editor. The dotted rule
+   is the affordance: a path reads as "opens here" before it is hovered, and stays distinguishable from an
+   outbound link, which is undecorated until hover. Written one level more specific than the rule above so it
+   wins the text-decoration regardless of stylesheet order. */
+.md-prose a.md-file-link {
+    text-decoration: underline dotted color-mix(in srgb, var(--color-link) 45%, transparent);
+    text-underline-offset: 0.2em;
+}
+.md-prose a.md-file-link:hover {
+    text-decoration: underline solid var(--color-link);
 }
 .md-prose table {
     width: 100%;

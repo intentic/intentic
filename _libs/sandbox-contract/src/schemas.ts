@@ -222,9 +222,11 @@ export type TranslatorAccounts = z.infer<typeof TranslatorAccountsSchema>;
 // clarifying questions, a per-tool permission prompt — parks on the SAME registry keyed by `requestId`, so
 // one route resolves all three; the `kind` says which card answered and carries its payload.
 export const AgentReplySchema = z.discriminatedUnion("kind", [
-    // ExitPlanMode approval. `mode` is the posture to execute the approved plan in — Claude Code's "yes, and
-    // auto-accept edits" (acceptEdits) vs "yes, and manually approve edits" (default); it rides back to the SDK
-    // as a session setMode. Rejection feedback loops back into the model as the denial reason.
+    // ExitPlanMode approval. `mode` is the posture to execute the approved plan in — auto-accept edits
+    // (acceptEdits), approve each one (default), or run everything (bypassPermissions); it rides back to the SDK
+    // as a session setMode. Absent, the turn returns to the posture it STARTED in, so an agent that put itself
+    // into plan mode does not cost the user the permissions they granted. Rejection feedback loops back into the
+    // model as the denial reason.
     z.object({
         kind: z.literal("plan"),
         requestId: z.string().min(1),
@@ -240,8 +242,9 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
         answers: z.record(z.string(), z.array(z.string())).optional(),
         cancelled: z.boolean().optional(),
     }),
-    // A per-tool permission prompt. 'once' allows this call only; 'always' also persists the SDK's suggested
-    // rules so the same tool stops asking; 'deny' blocks it and feeds `feedback` back as the reason.
+    // A per-tool permission prompt. 'once' allows this call only; 'always' allows the whole TOOL for the rest
+    // of the session (plus the SDK's own narrower suggestions), which is what the card's label promises;
+    // 'deny' blocks it and feeds `feedback` back as the reason.
     z.object({
         kind: z.literal("permission"),
         requestId: z.string().min(1),
@@ -563,6 +566,13 @@ export const RepoChangesSchema = z.object({
     unstaged: z.array(GitChangeSchema),
     // Where this repo stands against its remote; `ahead`/`behind` are 0 with no remote or no upstream.
     remote: GitRemoteStateSchema.optional(),
+    // WHICH AGENT PUT IT THERE: repo-relative path → the agent ids that landed it, newest land first. Keyed by
+    // PATH rather than carried on each GitChange because a path can be listed on two sides at once (staged and
+    // edited again) and its origin is the same fact for both. Only agents can appear here — a main-tree turn,
+    // a terminal edit and your own typing never pass through land, so they are simply absent (see
+    // agents/origins.ts), which is why the panel badges an agent and says nothing at all for anyone else.
+    // Ids, not titles: every client already mirrors the fleet registry and can resolve one to the other.
+    origins: z.record(z.string(), z.array(z.string())).optional(),
     // Why the repo could not be scanned at all, condensed to git's own one-line reason ("fatal: bad object HEAD").
     // A repo left torn by a canceled or failed upload used to be dropped from the response entirely, so it just
     // vanished from the panel with nothing to act on; it now arrives with empty change lists and this set instead.

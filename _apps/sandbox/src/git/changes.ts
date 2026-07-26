@@ -86,8 +86,9 @@ const parseNumstatZ = (stdout: string): Map<string, { additions?: number; deleti
 };
 
 // HEAD's sha; undefined on an unborn HEAD (a repo initialized but never committed) — everything is "added"
-// there and the index-reset verbs need a different spelling.
-const headSha = async (dir: string, git: GitRunner): Promise<string | undefined> => {
+// there and the index-reset verbs need a different spelling. Exported for land/origins, which record and then
+// re-check it to decide whether an agent's landed work is still the uncommitted content of the main tree.
+export const headSha = async (dir: string, git: GitRunner = defaultGit): Promise<string | undefined> => {
     try {
         return (await git(dir, ["rev-parse", "-q", "--verify", "HEAD"])).stdout.trim();
     } catch {

@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { type ChatMessage, planParts, type PlanRequest } from "../composables/chat/conversation";
 import { copyCodeFromEvent } from "../composables/markdownCode";
 import { useMarkdown } from "../composables/useMarkdown";
+import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { restoreSnapshot } from "../composables/workspace/useHistory";
 import { useChat } from "../composables/chat/useChat";
 import ChatImageThumb from "./ChatImageThumb.vue";
@@ -23,6 +24,7 @@ const props = defineProps<{
 
 const {
     decidePlan,
+    planApprovals,
     answerQuestion,
     cancelQuestion,
     decidePermission,
@@ -74,6 +76,13 @@ const todoIcon = (todo: TodoItem): { name: IconName; spin?: boolean; class: stri
 const todoText = (todo: TodoItem): string => (todo.status === `in_progress` && todo.activeForm ? todo.activeForm : todo.content);
 
 const planTitle = (request: PlanRequest): string => planParts(request.text).title ?? `Proposed plan`;
+
+// One delegated listener for every control the rendered markdown carries — a code block's copy button and the
+// file links a mentioned path becomes. Both live inside v-html, so neither can hold a component of its own.
+const onMarkdownClick = (event: MouseEvent): void => {
+    copyCodeFromEvent(event);
+    openFileRefFromEvent(event);
+};
 
 // --- Thinking fold / typing loader -----------------------------------------------------------
 // Manual override of the thinking section's expanded state. When unset, it defaults to expanded while the
@@ -275,9 +284,9 @@ const onEditKeydown = (event: KeyboardEvent): void => {
 </script>
 
 <template>
-    <!-- The click handler is delegated for the code-block copy buttons: they live inside v-html, so they can
-         hold no component of their own (see copyCodeFromEvent). -->
-    <div class="chat-message flex flex-col gap-1" :class="{ 'items-end': message.role === 'user' }" @click="copyCodeFromEvent">
+    <!-- The click handler is delegated for the markdown's own controls — copy buttons and file links — which
+         live inside v-html and so can hold no component of their own (see onMarkdownClick). -->
+    <div class="chat-message flex flex-col gap-1" :class="{ 'items-end': message.role === 'user' }" @click="onMarkdownClick">
         <div v-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
             <!-- The chip/thumbnail row stays visible in edit mode (read-only — the attachments ride the re-run). -->
             <div v-if="message.attachments?.length" class="flex flex-wrap justify-end gap-1.5">
@@ -415,13 +424,17 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
                 <div class="chat-markdown chat-markdown-compact px-3.5 py-3 text-content/85" v-html="plan.settled"></div>
                 <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
-                    <button type="button" class="plan-approve" @click="decidePlan(message, true, 'acceptEdits')">
+                    <!-- The first approval restores the posture the conversation was in before it planned; the
+                         rest are the other two postures, so any of them is one click away. -->
+                    <button
+                        v-for="(approval, index) in planApprovals"
+                        :key="approval.mode"
+                        type="button"
+                        :class="index === 0 ? 'plan-approve' : 'plan-reject'"
+                        @click="decidePlan(message, true, approval.mode)"
+                    >
                         <Icon name="check" class="text-xs" />
-                        Yes, and auto-accept edits
-                    </button>
-                    <button type="button" class="plan-reject" @click="decidePlan(message, true, 'default')">
-                        <Icon name="check" class="text-xs" />
-                        Yes, and approve each edit
+                        {{ approval.label }}
                     </button>
                     <button type="button" class="plan-reject" @click="decidePlan(message, false, 'plan')">
                         <Icon name="pencil" class="text-xs" />

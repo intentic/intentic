@@ -32,8 +32,10 @@ import {
     rememberedAccountFor,
     rememberedModelFor,
     selectedAccountId,
+    startingMode,
     turnDefaults,
 } from "./conversation";
+import { approvalsFor } from "./catalog";
 import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
@@ -148,6 +150,9 @@ const restoreTabs = (): Conversation[] => {
     const restored = stored.tabs.map((tab) => {
         const conversation = new Conversation(`c${convSeq++}`, tab.conversationId);
         conversation.isolated.value = tab.isolated ?? tab.session === undefined;
+        // The posture isn't part of the snapshot (it is a per-task choice, not a preference) — a restored tab
+        // starts from the mode its tree calls for, same as a fresh one.
+        conversation.mode.value = startingMode(conversation.isolated.value);
         conversation.draft.value = tab.draft;
         conversation.attachments.value = tab.attachments.map((file) => ({
             id: crypto.randomUUID(),
@@ -277,15 +282,20 @@ watch(
 
 const activeModel = computed(() => active.value.activeModel.value);
 const contextUsage = computed(() => active.value.contextUsage.value);
-// The active conversation's permission mode (read + write) — the composer's mode pill drives it. Like the
-// turn settings below, a pick writes through to the persisted defaults so the next new chat inherits it.
+// The active conversation's permission mode (read + write) — the composer's mode pill drives it. Reads the
+// RUNNING turn's posture while one is live (the agent can enter plan mode on its own, and the pill must not
+// claim otherwise); a pick replaces it, because from that click on the user's choice is the truth. Not written
+// through to the persisted defaults: the posture belongs to the conversation, not to the next one.
 const mode = computed<PermissionMode>({
-    get: () => active.value.mode.value,
+    get: () => active.value.liveMode.value ?? active.value.mode.value,
     set: (value) => {
         active.value.mode.value = value;
-        turnDefaults.mode.value = value;
+        active.value.liveMode.value = undefined;
     },
 });
+
+// The plan card's approve buttons for the active conversation, the posture it will RESTORE first.
+const planApprovals = computed(() => approvalsFor(active.value.mode.value));
 
 // Active-conversation turn settings (read+write) — the composer binds these; they forward to the active tab
 // so switching tabs shows that chat's provider/model/effort/thinking. All of it is switchable mid-chat: a
@@ -1206,6 +1216,7 @@ export function useChat() {
         activeModel,
         contextUsage,
         mode,
+        planApprovals,
         provider,
         selectProvider,
         harness,

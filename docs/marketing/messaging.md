@@ -107,8 +107,10 @@ team sharing). Do not reintroduce a pricing section.
   specific capability).
 - **automation** — a rule that wakes the agent (schedule / event / listen), optionally gated by a
   **guard command**. Never "cron job" or "workflow".
-- **plan mode** — the default agent permission mode: propose, then wait for approval. Also:
-  accept edits / ask before edits / auto.
+- **plan mode** — the permission mode where the agent proposes and waits for approval; the default
+  for a chat on the shared workspace tree, one click away everywhere else. An agent working in its
+  own branch defaults to **auto** (it owns that worktree; its output is reviewed as a diff, not
+  approved command by command). Also: accept edits / ask before edits.
 - **desktop sync** — two-way near-real-time folder sync between the user's editor and the sandbox.
 - **agent** — the coding agent working inside the sandbox (Claude Code, Codex, Grok, …). Name
   providers as examples; never "our AI", never one provider as the brand.

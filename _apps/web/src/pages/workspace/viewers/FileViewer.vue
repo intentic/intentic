@@ -388,7 +388,7 @@ const onEditorSave = (value: string): void =>
             </div>
             <template v-else>
                 <CodeView v-if="mode === 'code' && text !== null" :path="path" :code="text" :lang="lang" :scroll-to-line="line" />
-                <MarkdownViewer v-else-if="mode === 'markdown' && text !== null" :source="text" :line="line" />
+                <MarkdownViewer v-else-if="mode === 'markdown' && text !== null" :source="text" :path="path" :line="line" />
                 <SvgViewer v-else-if="mode === 'svg' && text !== null && blobUrl" :src="blobUrl" :source="text ?? ''" />
                 <div
                     v-else-if="mode === 'image' && blobUrl"

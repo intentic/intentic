@@ -399,8 +399,9 @@ const sendHint = computed(() => {
 // Stop is offered for every live turn, including one parked on a card — that state is the most common reason to
 // want out (a permission the user won't grant, a plan they'd rather restate from scratch), and until now the
 // card's own buttons were the only way forward. Name the consequence there: the parked request goes with it.
+const stopLabel = computed(() => (awaitingDecision.value ? `Stop the turn` : `Stop generating`));
 const stopHint = computed(() =>
-    awaitingDecision.value ? `Stop the turn — discards the request above` : mobile.value ? `Stop generating` : `Stop generating (Esc)`,
+    awaitingDecision.value ? `Stop the turn — discards the request above` : mobile.value ? stopLabel.value : `${stopLabel.value} (Esc)`,
 );
 // While a plan awaits a decision, typing revises it (reject-with-feedback); while a steerable turn runs,
 // typing steers it — the placeholder says which.
@@ -971,7 +972,7 @@ watch(keyboardInset, () => {
                                 class="composer-send composer-stop shrink-0"
                                 @click="stop"
                                 v-tooltip.top="stopHint"
-                                :aria-label="stopHint"
+                                :aria-label="stopLabel"
                             >
                                 <Icon name="stop" class="text-sm" />
                             </button>
@@ -985,7 +986,7 @@ watch(keyboardInset, () => {
                                 class="composer-send shrink-0"
                                 :disabled="!canSend"
                                 v-tooltip.top="sendHint"
-                                :aria-label="sendHint"
+                                aria-label="Send"
                             >
                                 <Icon name="send" class="text-sm" />
                             </button>
@@ -1189,6 +1190,17 @@ watch(keyboardInset, () => {
 }
 .chat-markdown a:hover {
     text-decoration: underline;
+}
+/* A file the agent named, linkified by markdownFileLinks — clicking opens it in the Workspace. The dotted rule
+   is the affordance: a path reads as "opens here" before it is hovered, and stays distinguishable from an
+   outbound link, which is undecorated until hover. Written one level more specific than the rule above so it
+   wins the text-decoration regardless of stylesheet order. */
+.chat-markdown a.md-file-link {
+    text-decoration: underline dotted color-mix(in srgb, var(--color-link) 45%, transparent);
+    text-underline-offset: 0.2em;
+}
+.chat-markdown a.md-file-link:hover {
+    text-decoration: underline solid var(--color-link);
 }
 .chat-markdown table {
     width: 100%;

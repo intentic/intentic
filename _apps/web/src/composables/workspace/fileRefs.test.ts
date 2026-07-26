@@ -1,16 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// The module reaches for the workspace-tree query (container root), the tab opener, and the router at import
-// time — stub all three so the pure path helpers can be exercised without the app graph. `queryData` is the
-// seam the container-root lookup reads.
+// The module reaches for the workspace-tree query (container root) at import time — stub it so the path helpers
+// can be exercised without the app graph. `queryData` is the seam the container-root lookup reads.
 let queryData: { root?: string }[] = [];
 vi.mock("../queryPersistence", () => ({
     queryClient: { getQueriesData: () => queryData.map((data) => [[], data] as const) },
 }));
-vi.mock("../workspace/useWorkspaceTabs", () => ({ useWorkspaceTabs: () => ({ openFile: vi.fn(), openAtLine: vi.fn() }) }));
-vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 
-const { parseRef, toWorkspacePath } = await import("./terminalFileLinks");
+const { FILE_REF, parseRef, toWorkspacePath } = await import("./fileRefs");
 
 beforeEach(() => {
     queryData = [];
@@ -46,9 +43,34 @@ describe(`toWorkspacePath`, () => {
         queryData = [{ root: `/work` }];
         expect(toWorkspacePath(`/work/src/foo.ts`)).toBe(`src/foo.ts`);
         expect(toWorkspacePath(`/usr/lib/node.js`)).toBeUndefined();
+        // A sibling directory whose name merely starts with the root is not inside it.
+        expect(toWorkspacePath(`/workspace/src/foo.ts`)).toBeUndefined();
     });
 
     it(`can't map an absolute path until the tree (container root) has loaded`, () => {
         expect(toWorkspacePath(`/work/src/foo.ts`)).toBeUndefined();
+    });
+});
+
+/* The grammar is shared by the terminal's link addon and the chat's markdown linkifier, so what it does and
+ * does NOT match is a contract of its own: too loose and ordinary prose sprouts dead links. */
+describe(`FILE_REF`, () => {
+    const matchOf = (text: string): string | undefined => FILE_REF.exec(text)?.[0];
+
+    it(`matches the reference forms tools and agents emit`, () => {
+        expect(matchOf(`see src/foo.ts for details`)).toBe(`src/foo.ts`);
+        expect(matchOf(`at ./src/foo.ts:42`)).toBe(`./src/foo.ts:42`);
+        expect(matchOf(`/work/src/foo.ts:12:3`)).toBe(`/work/src/foo.ts:12:3`);
+        expect(matchOf(`src/foo.ts(12,4)`)).toBe(`src/foo.ts(12,4)`);
+    });
+
+    it(`needs a directory segment and an extension, so ordinary words are never links`, () => {
+        expect(matchOf(`run package.json through it`)).toBeUndefined();
+        expect(matchOf(`import from @intentic-app/ui`)).toBeUndefined();
+        expect(matchOf(`the and/or case`)).toBeUndefined();
+    });
+
+    it(`does not start mid-token inside a URL — the URL linker owns that`, () => {
+        expect(matchOf(`https://example.com/foo.ts`)).toBeUndefined();
     });
 });

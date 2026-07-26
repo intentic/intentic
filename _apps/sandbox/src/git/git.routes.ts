@@ -104,16 +104,41 @@ export const createGitRoutes = (services: Services) => {
             candidates.map(async (candidate): Promise<RepoChanges | undefined> => {
                 try {
                     await healPointer(candidate.repo, candidate.dir);
-                    // The change scan and the remote read are independent (the latter never touches the index)
-                    // — one round-trip for both. `remote` is what the panel's sync bar renders per repo.
-                    const [{ branch, conflicted, staged, unstaged }, remote] = await Promise.all([
+                    // The change scan, the remote read and the agent attribution are independent (none touches
+                    // the index) — one round-trip for all three. `remote` is what the panel's sync bar renders
+                    // per repo; `landed` is which agent landed each path this repo has ever received.
+                    const [{ branch, conflicted, staged, unstaged }, remote, landed] = await Promise.all([
                         services.git.changedFiles(candidate.dir),
                         services.git.remoteState(candidate.dir),
+                        // Attribution is the only part of this scan the panel can do without: it decorates the
+                        // rows, it isn't the rows. A failure here degrades to "nobody landed anything" rather
+                        // than joining the catch below and reporting the whole repo as unreadable.
+                        services.agentOrigins.forRepo(candidate.repo, candidate.dir).catch((error: unknown) => {
+                            services.logger.debug({ err: error, repo: candidate.repo }, "git changes: origins unavailable");
+                            return {};
+                        }),
                     ]);
                     // A repo with a clean tree still belongs in the response when it is ahead of or behind its
                     // upstream — there is real work to sync, which is exactly what the panel must not hide.
                     if (conflicted.length > 0 || staged.length > 0 || unstaged.length > 0 || remote.ahead > 0 || remote.behind > 0) {
-                        return { repo: candidate.repo, ...(branch !== undefined ? { branch } : {}), conflicted, staged, unstaged, remote };
+                        // Narrowed to the paths this scan actually reports: an agent's landed delta outlives the
+                        // review (the paths stay in `base..landedTip` until the branch goes), so shipping it
+                        // whole would attribute files that are no longer changed at all.
+                        const dirty = new Set(
+                            [...conflicted, ...staged, ...unstaged].flatMap((change) =>
+                                change.from === undefined ? [change.path] : [change.path, change.from],
+                            ),
+                        );
+                        const origins = Object.fromEntries(Object.entries(landed).filter(([path]) => dirty.has(path)));
+                        return {
+                            repo: candidate.repo,
+                            ...(branch !== undefined ? { branch } : {}),
+                            conflicted,
+                            staged,
+                            unstaged,
+                            remote,
+                            ...(Object.keys(origins).length > 0 ? { origins } : {}),
+                        };
                     }
                     return undefined;
                 } catch (error) {

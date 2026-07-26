@@ -25,9 +25,21 @@ export const PersistedAgentSchema = z.object({
     sessionId: z.string().optional(),
     // The worktree composition: each workspace repo ("root" or a repo id — its root-relative dir) with the full
     // base sha its worktree branched from, and the branch tip whose delta has already LANDED into the main
-    // tree (absent ⇒ nothing landed yet — the base is the reference). Diff/land read `landedTip ?? base`, so
-    // the review shows only the not-yet-landed remainder and each land applies only the new delta.
-    repos: z.array(z.object({ repo: z.string(), base: z.string(), landedTip: z.string().optional() })),
+    // tree (absent ⇒ nothing landed yet — the base is the reference). Land applies `landedTip → tip`, so each
+    // land carries only the new delta; the review reads `base` and flags each file against `landedTip`.
+    //
+    // `landedHead`/`landedAt` are that land's provenance in the MAIN tree: the commit HEAD stood on and when.
+    // They are what lets the Changes panel say which agent an uncommitted file came from — `base → landedTip`
+    // names the paths, and a HEAD that has since moved retires the claim (see agents/origins.ts).
+    repos: z.array(
+        z.object({
+            repo: z.string(),
+            base: z.string(),
+            landedTip: z.string().optional(),
+            landedHead: z.string().optional(),
+            landedAt: z.number().optional(),
+        }),
+    ),
     status: PersistedAgentStatusSchema,
     costUsd: z.number(),
     inputTokens: z.number(),

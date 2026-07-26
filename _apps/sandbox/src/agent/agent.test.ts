@@ -1,7 +1,8 @@
-import type { Options, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { type AgentQuery, type QueryFn, runAgent } from "./agent.js";
+import { resolveRequest } from "./agent-requests.js";
 import { SteeringQueue } from "./agent-steering.js";
 
 // Build a fake QueryFn yielding canned SDK messages (cast to SDKMessage — tests exercise only the fields
@@ -170,6 +171,76 @@ test("plugin checkout dirs are passed to the SDK as local plugins", async () => 
     captured = undefined;
     await collect(request, capture);
     expect(captured?.plugins).toBeUndefined();
+});
+
+// Drive the permission gate end-to-end: the fake query calls `canUseTool` mid-stream, the test answers the card
+// the way the browser does (POST /agent/reply → resolveRequest), and the gate's decision comes back to assert on.
+const decide = async (
+    turn: Parameters<typeof runAgent>[0],
+    call: { tool: string; input?: Record<string, unknown>; suggestions?: PermissionUpdate[] },
+    answer: (event: AgentEvent) => AgentReply,
+): Promise<{ result: PermissionResult; card: AgentEvent }> => {
+    let result: PermissionResult | undefined;
+    let card: AgentEvent | undefined;
+    const query: QueryFn = async function* (args) {
+        const gate = args.options.canUseTool!;
+        result = await gate(call.tool, call.input ?? {}, { signal: turn.signal, suggestions: call.suggestions } as never);
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    for await (const event of runAgent(turn, query)) {
+        if (event.kind === "permission" || event.kind === "plan") {
+            card = event;
+            resolveRequest(answer(event));
+        }
+    }
+    return { result: result!, card: card! };
+};
+
+test("'always' grants the whole tool for the session, alongside whatever the SDK suggested", async () => {
+    const suggestion: PermissionUpdate = {
+        type: "addRules",
+        rules: [{ toolName: "Bash", ruleContent: "pnpm install:*" }],
+        behavior: "allow",
+        destination: "localSettings",
+    };
+    const { result, card } = await decide(
+        { ...request, permissionMode: "acceptEdits" },
+        { tool: "Bash", input: { command: "pnpm install" }, suggestions: [suggestion] },
+        (event) => ({ kind: "permission", requestId: event.requestId, decision: "always" }),
+    );
+
+    expect(card).toMatchObject({ kind: "permission", toolName: "Bash", alwaysLabel: "Don't ask again for Bash" });
+    // The SDK's own suggestion is command-scoped — the next command would ask again — so the tool-wide rule the
+    // button's wording promises rides with it.
+    expect(result).toMatchObject({
+        behavior: "allow",
+        decisionClassification: "user_permanent",
+        updatedPermissions: [suggestion, { type: "addRules", rules: [{ toolName: "Bash" }], behavior: "allow", destination: "session" }],
+    });
+});
+
+test("a card with no SDK suggestions still offers 'always', and 'once' persists nothing", async () => {
+    const { result, card } = await decide({ ...request, permissionMode: "default" }, { tool: "WebFetch" }, (event) => ({
+        kind: "permission",
+        requestId: event.requestId,
+        decision: "once",
+    }));
+
+    expect(card).toMatchObject({ alwaysLabel: "Don't ask again for WebFetch" });
+    expect(result).toEqual({ behavior: "allow", updatedInput: {}, decisionClassification: "user_temporary" });
+});
+
+test("an approved plan returns to the posture the turn started in when the reply names none", async () => {
+    const approve = (event: AgentEvent): AgentReply => ({ kind: "plan", requestId: event.requestId, approve: true });
+
+    // The agent put ITSELF into plan mode (EnterPlanMode) on a turn the user started in Auto — approving must
+    // hand those permissions back, not demote the rest of the session to per-command prompts.
+    const auto = await decide({ ...request, permissionMode: "bypassPermissions" }, { tool: "ExitPlanMode", input: { plan: "# Plan" } }, approve);
+    expect(auto.result).toMatchObject({ updatedPermissions: [{ type: "setMode", mode: "bypassPermissions", destination: "session" }] });
+
+    // A turn that started in plan mode has nothing to restore; auto-accepting edits is the floor.
+    const planned = await decide({ ...request, permissionMode: "plan" }, { tool: "ExitPlanMode", input: { plan: "# Plan" } }, approve);
+    expect(planned.result).toMatchObject({ updatedPermissions: [{ type: "setMode", mode: "acceptEdits", destination: "session" }] });
 });
 
 test("a non-success result becomes an error followed by done", async () => {

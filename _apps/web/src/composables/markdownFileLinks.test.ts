@@ -1,0 +1,115 @@
+// @vitest-environment jsdom
+//
+// Both the linkifier and DOMPurify need a real document (see renderMarkdown.test.ts for why jsdom rather than
+// happy-dom). Asserted end-to-end through renderMarkdown, because the seam being pinned is the ORDER — marked
+// parses, DOMPurify sanitizes, then the file links go in — and a unit test of the walker alone would not catch
+// it moving.
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// The container-root lookup reads the workspace-tree query; `queryData` is that seam.
+let queryData: { root?: string }[] = [];
+vi.mock("./queryPersistence", () => ({
+    queryClient: { getQueriesData: () => queryData.map((data) => [[], data] as const) },
+}));
+
+const { renderMarkdown } = await import("./renderMarkdown");
+
+beforeEach(() => {
+    queryData = [];
+});
+
+// The rendered anchor for `path`, or undefined — parsed back out of the HTML so the assertions read as "what
+// the DOM ends up being" rather than as string matching.
+const linkTo = (html: string, path: string): HTMLAnchorElement | undefined => {
+    const holder = document.createElement(`div`);
+    holder.innerHTML = html;
+    return holder.querySelector<HTMLAnchorElement>(`a[data-file="${path}"]`) ?? undefined;
+};
+
+describe(`file mentions in agent prose`, () => {
+    it(`linkifies a bare path, carrying the workspace route and the line`, () => {
+        const link = linkTo(renderMarkdown(`Fixed it in src/foo.ts:42 today.`), `src/foo.ts`);
+        expect(link?.textContent).toBe(`src/foo.ts:42`);
+        expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts`);
+        expect(link?.dataset[`line`]).toBe(`42`);
+        expect(link?.classList.contains(`md-file-link`)).toBe(true);
+    });
+
+    it(`linkifies a path in backticks — the form agents reach for most`, () => {
+        const html = renderMarkdown("See the `src/chat/useChat.ts` singleton.");
+        const link = linkTo(html, `src/chat/useChat.ts`);
+        expect(link).toBeDefined();
+        // The inline-code styling survives: the anchor goes INSIDE the <code>, not around it.
+        expect(link?.closest(`code`)).not.toBeNull();
+    });
+
+    it(`retargets a relative markdown link at the workspace route, line tail and all`, () => {
+        // Left alone this would be a browser navigation to a relative URL the SPA has no route for.
+        const link = linkTo(renderMarkdown(`[the config](./src/foo.ts:42)`), `src/foo.ts`);
+        expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts`);
+        expect(link?.dataset[`line`]).toBe(`42`);
+    });
+
+    it(`keeps the prose as the link text when markdown named the file`, () => {
+        const link = linkTo(renderMarkdown(`[the config](src/foo.ts)`), `src/foo.ts`);
+        expect(link?.textContent).toBe(`the config`);
+        // The path is only visible on hover, so it has to be in the tooltip.
+        expect(link?.getAttribute(`title`)).toBe(`src/foo.ts`);
+    });
+
+    it(`maps an absolute container path back to the workspace-relative one`, () => {
+        queryData = [{ root: `/work` }];
+        expect(linkTo(renderMarkdown(`crashed at /work/src/foo.ts:7`), `src/foo.ts`)?.dataset[`line`]).toBe(`7`);
+    });
+
+    it(`leaves a path outside the workspace as plain text`, () => {
+        queryData = [{ root: `/work` }];
+        const html = renderMarkdown(`thrown from /usr/lib/node.js:120`);
+        expect(html).toContain(`/usr/lib/node.js:120`);
+        expect(html).not.toContain(`md-file-link`);
+    });
+
+    it(`never linkifies inside a fenced code block`, () => {
+        const html = renderMarkdown("```ts\nimport x from 'src/foo.ts';\n```");
+        expect(html).not.toContain(`md-file-link`);
+    });
+
+    it(`sends an outbound link to its own tab so following it can't tear the chat down`, () => {
+        const holder = document.createElement(`div`);
+        holder.innerHTML = renderMarkdown(`see [the docs](https://example.com/guide.html)`);
+        const link = holder.querySelector(`a`);
+        expect(link?.getAttribute(`target`)).toBe(`_blank`);
+        expect(link?.getAttribute(`rel`)).toBe(`noopener noreferrer`);
+        expect(link?.classList.contains(`md-file-link`)).toBe(false);
+    });
+
+    it(`still strips active markup — linkifying must not reopen the sanitizer's hole`, () => {
+        const html = renderMarkdown(`<img src=x onerror="alert(1)"> and src/foo.ts`);
+        expect(html).not.toContain(`onerror`);
+        expect(html).toContain(`md-file-link`);
+    });
+});
+
+/* A markdown FILE names its neighbours relative to itself, so the same reference means a different file
+ * depending on where the document lives — the distinction agent prose (always workspace-root-relative) does
+ * not have. Resolving it wrong is worse than not linking at all: the click lands on a file that isn't there. */
+describe(`references inside a previewed document`, () => {
+    it(`resolves a relative reference against the document's own directory`, () => {
+        const html = renderMarkdown(`see [b](./b.md) and docs/deep/c.md`, `docs/`);
+        expect(linkTo(html, `docs/b.md`)).toBeDefined();
+        expect(linkTo(html, `docs/docs/deep/c.md`)).toBeDefined();
+    });
+
+    it(`walks ../ back up out of the document's directory`, () => {
+        expect(linkTo(renderMarkdown(`[root](../../README.md)`, `docs/guides/`), `README.md`)).toBeDefined();
+    });
+
+    it(`leaves a root-level document's references alone`, () => {
+        expect(linkTo(renderMarkdown(`[arch](./ARCHITECTURE.md)`, ``), `ARCHITECTURE.md`)).toBeDefined();
+    });
+
+    it(`does not re-root an absolute container path against the document`, () => {
+        queryData = [{ root: `/work` }];
+        expect(linkTo(renderMarkdown(`/work/src/foo.ts`, `docs/`), `src/foo.ts`)).toBeDefined();
+    });
+});

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LandResult } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { changedFiles } from "../git/changes.js";
+import { changedFiles, headSha } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import type { PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
@@ -99,6 +99,7 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
                     // A net-zero delta — the agent reverted everything it did since the last land. There is
                     // nothing to apply (`git apply` rejects an empty patch), but the tip must still advance,
                     // or every future land re-reports this range as a phantom conflict nothing can resolve.
+                    // No provenance: nothing of this agent's is in the main tree to attribute.
                     next = { repo, base, landedTip: tip };
                     return;
                 }
@@ -125,7 +126,13 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
                     return;
                 }
                 await git(main, ["apply", patchPath]);
-                next = { repo, base, landedTip: tip };
+                // 3. Record where the main tree stood when this delta went in. It is what dates the per-file
+                // attribution the Changes panel draws: while HEAD still stands here, this agent's delta IS part
+                // of the repo's uncommitted content, so those paths can be credited to it. Once the user
+                // commits, HEAD moves and the claim expires rather than following a path they may since have
+                // re-edited themselves (agents/origins.ts). An unborn HEAD records none, and claims nothing.
+                const landedHead = await headSha(main, git);
+                next = { repo, base, landedTip: tip, ...(landedHead !== undefined ? { landedHead } : {}), landedAt: Date.now() };
             });
             repos.push(next);
         }

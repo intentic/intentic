@@ -47,6 +47,7 @@ import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
 import { fileAgentsStore } from "./agents/agents-store.js";
+import { createAgentOrigins, type AgentOrigins } from "./agents/origins.js";
 import { createAgentWorktrees, type AgentWorktrees } from "./agents/worktrees.js";
 import {
     type ActionResult,
@@ -284,6 +285,8 @@ export interface Services {
     readonly agents: AgentsRegistry;
     // The per-conversation worktree compositions on /history/worktrees (create/repair/remove/prune).
     readonly agentWorktrees: AgentWorktrees;
+    // Which agent an uncommitted main-tree file came from, derived from the landed shas (agents/origins.ts).
+    readonly agentOrigins: AgentOrigins;
     readonly files: {
         readonly read: (absPath: string) => Promise<string | undefined>;
         readonly write: (absPath: string, content: string | Uint8Array) => Promise<void>;
@@ -377,6 +380,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the store and the sender that reads it must be the same instance, or a subscription added
     // through the routes would be invisible to the next send.
     const pushStore = filePushStore(join(config.historyRoot, "push.json"));
+    // Hoisted: the Changes scan's per-file attribution reads the SAME registry the turns write to — a
+    // second instance would answer from a stale agents.json.
+    const agents = createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json")));
 
     return {
         config,
@@ -466,8 +472,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
             rebaseOnto,
             dropCommit,
         },
-        agents: createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json"))),
+        agents,
         agentWorktrees: createAgentWorktrees({ workspace, worktreesRoot: join(config.historyRoot, "worktrees"), logger }),
+        agentOrigins: createAgentOrigins({ agents, logger }),
         files: {
             read: readWorkspaceFile,
             write: writeWorkspaceFile,

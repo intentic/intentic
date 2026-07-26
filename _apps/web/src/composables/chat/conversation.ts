@@ -265,11 +265,18 @@ export interface TurnSettings {
     readonly thinking: boolean;
 }
 
-// The persisted turn prefs, one JSON blob. Restored values are validated per field (enum for provider/mode,
-// boolean for thinking) so a stale or hand-edited entry degrades to the defaults; model/effort stay plain
-// strings — the Conversation constructor does the semantic clamping (codex model/effort scoping).
+// The posture a conversation STARTS in, by where it works. An isolated conversation owns a throwaway worktree
+// inside the sandbox container — the container is the isolation boundary, so it runs unattended and never asks;
+// a main-tree conversation edits the workspace the user is looking at, so it proposes a plan first.
+// Deliberately NOT persisted with the other turn prefs: the permission mode is a per-task posture, and the
+// agent moves it mid-turn (EnterPlanMode), so a remembered value means one agent's escalation silently becomes
+// every later agent's starting mode.
+export const startingMode = (isolated: boolean): PermissionMode => (isolated ? `bypassPermissions` : `plan`);
+
+// The persisted turn prefs, one JSON blob. Restored values are validated per field (enum for provider, boolean
+// for thinking) so a stale or hand-edited entry degrades to the defaults; model/effort stay plain strings — the
+// Conversation constructor does the semantic clamping (codex model/effort scoping).
 const TURN_DEFAULTS_KEY = `intentic.turnDefaults`;
-const MODES: ReadonlySet<PermissionMode> = new Set([`plan`, `acceptEdits`, `default`, `bypassPermissions`]);
 
 interface TurnDefaults {
     readonly provider: AgentProvider;
@@ -277,7 +284,6 @@ interface TurnDefaults {
     readonly models: Record<AgentProvider, string>;
     readonly effort: string;
     readonly thinking: boolean;
-    readonly mode: PermissionMode;
 }
 
 // Per-provider NATIVE model map: a stored string per provider, each degrading to that provider's native default
@@ -295,7 +301,6 @@ const readTurnDefaults = (): TurnDefaults => {
         models: readModels(undefined),
         effort: `xhigh`,
         thinking: true,
-        mode: `plan`,
     };
     try {
         const raw = localStorage.getItem(TURN_DEFAULTS_KEY);
@@ -311,7 +316,6 @@ const readTurnDefaults = (): TurnDefaults => {
             models: readModels(stored[`models`]),
             effort: typeof stored[`effort`] === `string` ? stored[`effort`] : fallback.effort,
             thinking: typeof stored[`thinking`] === `boolean` ? stored[`thinking`] : fallback.thinking,
-            mode: MODES.has(stored[`mode`] as PermissionMode) ? (stored[`mode`] as PermissionMode) : fallback.mode,
         };
     } catch {
         return fallback;
@@ -321,22 +325,22 @@ const readTurnDefaults = (): TurnDefaults => {
 const seed = readTurnDefaults();
 
 // The turn prefs a NEW conversation seeds from, persisted across reloads. A fresh-conversation provider pick
-// writes back here (see Conversation.selectProvider), and useChat's facade setters write model/effort/
-// thinking/mode through, so the next new chat — and the next session — inherit the last-used settings.
+// writes back here (see Conversation.selectProvider), and useChat's facade setters write model/effort/thinking
+// through, so the next new chat — and the next session — inherit the last-used settings. The permission mode is
+// NOT one of them; it comes from startingMode() per conversation.
 export const turnDefaults = {
     provider: ref<AgentProvider>(seed.provider),
     harness: ref<AgentHarness>(seed.harness),
     models: ref<Record<AgentProvider, string>>(seed.models),
     effort: ref<string>(seed.effort),
     thinking: ref<boolean>(seed.thinking),
-    mode: ref<PermissionMode>(seed.mode),
 };
 
 watch(
-    [turnDefaults.provider, turnDefaults.harness, turnDefaults.models, turnDefaults.effort, turnDefaults.thinking, turnDefaults.mode],
-    ([provider, harness, models, effort, thinking, mode]) => {
+    [turnDefaults.provider, turnDefaults.harness, turnDefaults.models, turnDefaults.effort, turnDefaults.thinking],
+    ([provider, harness, models, effort, thinking]) => {
         try {
-            localStorage.setItem(TURN_DEFAULTS_KEY, JSON.stringify({ provider, harness, models, effort, thinking, mode }));
+            localStorage.setItem(TURN_DEFAULTS_KEY, JSON.stringify({ provider, harness, models, effort, thinking }));
         } catch {
             // Storage may be unavailable (private mode); the in-memory refs still hold.
         }
@@ -444,9 +448,15 @@ export class Conversation {
     // updated at the end of each turn. Per-conversation, so the composer shows the active chat's meter.
     readonly contextUsage = ref<ContextUsage | undefined>();
 
-    // Agent permission mode for this conversation, sent with each turn. Seeded from the persisted default
-    // (plan — propose → approve — until the user picks otherwise).
-    readonly mode = ref<PermissionMode>(turnDefaults.mode.value);
+    // The user's permission posture for this conversation — the composer's pick, sent as every turn's STARTING
+    // mode. Seeded by where the conversation works (startingMode); only the user writes it.
+    readonly mode = ref<PermissionMode>(startingMode(true));
+
+    // The posture the RUNNING turn is actually in, from the turn's `mode` frames — the agent's own
+    // EnterPlanMode, or the mode a plan approval landed in. Display-only (the composer shows it so the pill
+    // never lies mid-turn) and cleared at each send: an agent that escalates itself into planning must not
+    // leave the user's standing pick demoted for every turn after it.
+    readonly liveMode = ref<PermissionMode | undefined>();
 
     // What this conversation is doing, for the tab's status icon.
     readonly status = computed<ConversationStatus>(() => {
@@ -669,6 +679,8 @@ export class Conversation {
         // History-menu sessions live in the MAIN tree's session namespace — resuming one in a worktree would
         // miss it. The fleet's own open path rehydrates isolated conversations separately.
         this.isolated.value = false;
+        // ...and a turn on the tree the user is looking at plans before it touches anything.
+        this.mode.value = startingMode(false);
         // The history menu lists Claude sessions only, so a restored conversation resumes on Claude, under the
         // current default Claude account (the transcript carries no account of its own).
         const account = rememberedAccountFor(`claude`);
@@ -719,6 +731,9 @@ export class Conversation {
         const assistantId = this.nextId++;
         this.append({ id: assistantId, role: `assistant`, text: ``, thinking: `` });
         const turn: TurnContext = { id: assistantId, userMessageId, provider: agent, account, harness };
+        // This turn starts from the user's pick; the previous turn's live posture (a plan it entered, a mode an
+        // approval landed in) is history, and the daemon will echo this one back at init.
+        this.liveMode.value = undefined;
         this.streaming.value = true;
         this.turnStartedAt.value = Date.now();
         const controller = new AbortController();
@@ -1193,8 +1208,9 @@ export class Conversation {
             }
             case `mode`:
                 // The turn's live posture — the user's pick echoed back at init, or a move the AGENT made
-                // (EnterPlanMode / a plan approval). Drives the composer's selector so it never lies.
-                this.mode.value = event.mode;
+                // (EnterPlanMode / a plan approval). Drives the composer's selector so it never lies, without
+                // overwriting the pick the NEXT turn starts from.
+                this.liveMode.value = event.mode;
                 return;
             case `session`:
                 // Captured with the turn's provider/account so a later mismatch (a mid-chat switch) is

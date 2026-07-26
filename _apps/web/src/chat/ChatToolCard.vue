@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
 import type { ChatTool } from "../composables/chat/conversation";
-import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
+import { openWorkspaceRef } from "../composables/workspace/openFileRef";
 import ChatCodeBody from "./ChatCodeBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";
 import { present } from "./toolPresentation";
@@ -15,9 +14,6 @@ import { present } from "./toolPresentation";
  * any view). */
 
 const props = defineProps<{ tool: ChatTool }>();
-
-const router = useRouter();
-const { openFile, openAtLine } = useWorkspaceTabs();
 
 const view = computed(() => present(props.tool));
 const running = computed(() => props.tool.status === `pending` || props.tool.status === `in_progress`);
@@ -37,16 +33,6 @@ const toggleOpen = (): void => {
 
 // The card's clickable location chip: the first workspace file this call touches.
 const location = computed(() => props.tool.locations?.[0]);
-
-const open = (path: string, line?: number): void => {
-    if (line !== undefined) {
-        openAtLine(path, line);
-    } else {
-        openFile(path);
-    }
-    // Bring the workspace into view (no-op when already there — the route watchers' equality guards hold).
-    void router.push({ name: `workspace`, params: { path: path.split(`/`) } });
-};
 </script>
 
 <template>
@@ -76,7 +62,7 @@ const open = (path: string, line?: number): void => {
                 type="button"
                 class="truncate font-mono transition-colors hover:text-content hover:underline"
                 v-tooltip.top="'Open in workspace'"
-                @click="open(location.path, location.line)"
+                @click="openWorkspaceRef(location.path, location.line)"
             >
                 {{ tool.target ?? location.path }}
             </button>
@@ -93,7 +79,7 @@ const open = (path: string, line?: number): void => {
                 :old-text="diff.oldText"
                 :new-text="diff.newText"
                 :truncated="diff.truncated"
-                @open="open(diff.path)"
+                @open="openWorkspaceRef(diff.path)"
             />
             <!-- Three body shapes, chosen by the registry. `command` renders the invocation above its output
                  so a Bash card reads like a terminal; `files` turns a path listing into rows that navigate. -->
@@ -118,7 +104,7 @@ const open = (path: string, line?: number): void => {
                     type="button"
                     class="flex items-baseline gap-1.5 rounded px-1 py-0.5 text-left font-mono text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
                     v-tooltip.top="'Open in workspace'"
-                    @click="open(entry.path, entry.line)"
+                    @click="openWorkspaceRef(entry.path, entry.line)"
                 >
                     <span class="truncate">{{ entry.path }}</span>
                     <span v-if="entry.line" class="shrink-0 text-subtle">:{{ entry.line }}</span>

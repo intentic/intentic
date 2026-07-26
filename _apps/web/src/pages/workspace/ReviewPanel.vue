@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import type { GitChange, GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
-import { cmp } from "@intentic-app/ui";
+import { cmp, useDevice } from "@intentic-app/ui";
 import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
+import ProviderLogo from "../../chat/ProviderLogo.vue";
 import DiffStat from "../../components/DiffStat.vue";
+import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
+import { useLayout } from "../../composables/useLayout";
+import { originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
 import { COMMIT_SCOPE, type RepoPaths, useChanges } from "../../composables/workspace/useChanges";
 import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
 
@@ -66,17 +70,77 @@ const toggleGroup = (repo: string): void => {
 };
 
 const changeLabel = (repo: string, change: GitChange): string => (repo === `root` ? change.path : `${repo}/${change.path}`);
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? `` : `s`}`;
+
+/* --- who landed it ------------------------------------------------------------------------------------------
+ * The daemon reports, per repo, which agent landed each uncommitted path (changeOrigins.ts). Two things are
+ * drawn from it, and the split is deliberate:
+ *   - PER ROW, a colour rail + a provider chip. Colour, because the question "did an agent write this?" is
+ *     asked while SCANNING, and a hue registers before a word does; the chip carries the identity for the one
+ *     row you then stop on. In a sidebar this wide, that is the whole budget — hence no inline name until the
+ *     user has actually widened the panel (`wide`).
+ *   - PER PANEL, a legend that IS the filter. Grouping the list by agent would be the obvious move and it is
+ *     the wrong one: a file two agents landed would have to be duplicated or arbitrarily assigned, and the
+ *     repo → conflicted/staged/unstaged hierarchy underneath is not decoration — it is what staging means.
+ *     Filtering keeps one row per file and still answers "show me only this agent's work".
+ * Nothing is drawn for a file with no agent origin. A "you" badge on nine rows in ten is noise, and the daemon
+ * cannot see terminal edits or main-tree turns anyway — the legend states that once, for all of them. */
+const { fleet } = useAgents();
+const { mobile } = useDevice();
+const layout = useLayout();
+
+const legend = computed(() => summarizeOrigins(scannable.value));
+const originFilter = ref<string | undefined>(undefined);
+// The filter outlives neither the agent's work nor a commit that swept it away.
+watch(legend, ({ agents, yours }) => {
+    if (originFilter.value === undefined) {
+        return;
+    }
+    const stillHasWork = originFilter.value === YOURS ? yours > 0 : agents.some((entry) => entry.id === originFilter.value);
+    if (!stillHasWork) {
+        originFilter.value = undefined;
+    }
+});
+const toggleOrigin = (id: string): void => {
+    originFilter.value = originFilter.value === id ? undefined : id;
+};
+
+// The fleet roster is already mirrored in this browser, so the wire carries ids and the name is resolved here.
+// An id with no card (a discarded agent, a roster that hasn't painted yet) still gets a chip — it is a real
+// origin, and hiding it would silently re-attribute the file to the user.
+const agentOf = (id: string) => fleet.value.find((agent) => agent.id === id);
+const originLabel = (id: string): string => agentOf(id)?.title ?? `Agent ${id.slice(0, 6)}`;
+const originTitle = (ids: readonly string[]): string =>
+    ids.length === 1 ? `Landed by ${originLabel(ids[0]!)}` : `Landed by ${ids.map((id) => originLabel(id)).join(` · `)}`;
+// The name only rides the row once the panel is wide enough to hold it without evicting the path — and on
+// mobile, where this panel is the whole screen.
+const wide = computed(() => mobile.value || layout.sidebarWidth.value >= 320);
+
+const matchesFilter = (repo: RepoChanges, change: GitChange): boolean => {
+    if (originFilter.value === undefined) {
+        return true;
+    }
+    const ids = originsOf(repo, change.path);
+    return originFilter.value === YOURS ? ids.length === 0 : ids.includes(originFilter.value);
+};
 
 // The lists a repo group renders. Conflicts first because they BLOCK everything below them — git will not
 // commit while one exists — then staged, then unstaged (VSCode's order, staged being what a bare commit takes).
 // An empty section renders nothing at all rather than an empty header. "Unstaged", not VSCode's bare "Changes":
 // this panel is itself titled Changes, so that label collided with its own header.
+//
+// The origin filter applies HERE, so everything downstream inherits it from one place: the rows, the range
+// selection, the section verbs and the repo's Discard all. A "Stage all" under an active filter stages that
+// agent's files and only those — which is the action the filter existed to make possible.
 const sidesOf = (repo: RepoChanges): readonly { side: GitDiffSide; label: string; changes: readonly GitChange[] }[] =>
     [
         { side: `conflicted` as const, label: `Conflicts`, changes: repo.conflicted },
         { side: `staged` as const, label: `Staged`, changes: repo.staged },
         { side: `unstaged` as const, label: `Unstaged`, changes: repo.unstaged },
-    ].filter((section) => section.changes.length > 0);
+    ].flatMap((section) => {
+        const shown = section.changes.filter((change) => matchesFilter(repo, change));
+        return shown.length === 0 ? [] : [{ side: section.side, label: section.label, changes: shown }];
+    });
 
 // A section's own count only earns its pixels when there is more than one section to tell apart. Alone it is
 // the repo row's badge repeated verbatim one line below it — the same number twice, one line apart.
@@ -200,7 +264,11 @@ const commitMessage = ref(``);
 // becomes "Commit all" — VSCode's "would you like to stage all your changes and commit them directly?", made
 // an explicit label instead of a dialog, and served by the daemon's `all` shape.
 const stagedRepos = computed(() => scannable.value.filter((repo) => repo.staged.length > 0).map((repo) => repo.repo));
-const commitAll = computed(() => stagedRepos.value.length === 0 && changes.count.value > 0);
+// Never while an origin filter is on: "Commit all" stages EVERYTHING first, and a user who has narrowed the
+// list to one agent would be recording the other agents' work under a message about this one. The filter
+// narrows the list, not the index — so with nothing staged it stays a plain (disabled) Commit, and the way to
+// commit that agent's work is the Stage all the filter has already narrowed for them.
+const commitAll = computed(() => originFilter.value === undefined && stagedRepos.value.length === 0 && changes.count.value > 0);
 const commitTarget = computed(() => (commitAll.value ? scannable.value.map((repo) => repo.repo) : stagedRepos.value));
 // An unresolved conflict in ANY repo blocks the button, not just in the repo that has it: a commit here is one
 // commit per repo sharing a message, and git would refuse the conflicted one halfway through — leaving the
@@ -231,8 +299,9 @@ const doCommit = async (): Promise<void> => {
 // move is `git add`, which is precisely how you tell git the merge is resolved — same request, different word
 // on the button.
 const movesIntoIndex = (side: GitDiffSide): boolean => side !== `staged`;
+// Read through sidesOf, so a section verb can only ever touch the rows the section is actually showing.
 const changesOn = (repo: RepoChanges, side: GitDiffSide): readonly GitChange[] =>
-    side === `conflicted` ? repo.conflicted : side === `staged` ? repo.staged : repo.unstaged;
+    sidesOf(repo).find((section) => section.side === side)?.changes ?? [];
 
 // What that inward/outward move is CALLED, per side. A conflict says "resolve", not "stage": `git add` on an
 // unmerged path is not putting a change in the index, it is telling git you have settled which side wins. Same
@@ -296,16 +365,22 @@ const askDiscardRow = (row: Row, change: GitChange): void => {
     };
 };
 
+// The repo's own Discard. Under an origin filter it narrows to that origin's files — the row it hangs off is
+// showing that subset, and wiping another agent's work from a list that isn't displaying it would be the worst
+// kind of surprise. Unfiltered it stays the whole repo (no `paths` in the group ⇒ the daemon discards it all).
 const askDiscardRepo = (repo: RepoChanges): void => {
-    const deletes = repo.unstaged.filter((change) => change.status === `added`).map((change) => change.path);
     // Distinct paths: a path staged AND edited again is two rows but one file on disk, and the prompt is
-    // counting what happens to the disk. No `paths` in the group ⇒ the daemon discards the whole repo.
-    const paths = new Set([...repo.conflicted, ...repo.staged, ...repo.unstaged].map((change) => change.path));
+    // counting what happens to the disk.
+    const paths = new Set(sidesOf(repo).flatMap((section) => section.changes.map((change) => change.path)));
+    const deletes = repo.unstaged.filter((change) => change.status === `added` && paths.has(change.path)).map((change) => change.path);
     pendingDiscard.value = {
-        what: `every uncommitted change in ${repo.repo}`,
+        what:
+            originFilter.value === undefined
+                ? `every uncommitted change in ${repo.repo}`
+                : `${plural(paths.size, `file`)} from ${originFilter.value === YOURS ? `you` : originLabel(originFilter.value)} in ${repo.repo}`,
         deletes,
         restores: paths.size - deletes.length,
-        groups: [{ repo: repo.repo }],
+        groups: [originFilter.value === undefined ? { repo: repo.repo } : { repo: repo.repo, paths: [...paths] }],
     };
 };
 
@@ -328,7 +403,6 @@ const behind = (repo: RepoChanges): number => repo.remote?.behind ?? 0;
 
 // The pills carry only a direction and a number, so the tooltip is where the whole sentence goes — including
 // WHICH ref is involved, which the folded row no longer spends a line printing.
-const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? `` : `s`}`;
 const pullHint = (repo: RepoChanges): string =>
     `Pull ${plural(behind(repo), `commit`)} from ${repo.remote?.upstream} — fast-forward only; a diverged history is reported, never auto-merged`;
 const pushHint = (repo: RepoChanges): string => `Push ${plural(ahead(repo), `commit`)} to ${repo.remote?.upstream}`;
@@ -340,8 +414,9 @@ const SYNC_PILL = `flex h-5 shrink-0 items-center gap-0.5 rounded px-1 text-2xs 
 // from under the cursor that summoned it. Touch has no hover, so mobile keeps them visible.
 const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group-hover/repo:opacity-100 max-md:opacity-100`;
 
-// A repo's own change count, for the row badge — every side, distinct paths.
-const repoCount = (repo: RepoChanges): number => repo.conflicted.length + repo.staged.length + repo.unstaged.length;
+// A repo's own change count, for the row badge — every side it is SHOWING, so under an origin filter the badge
+// counts what the list holds rather than advertising rows the filter is hiding.
+const repoCount = (repo: RepoChanges): number => sidesOf(repo).reduce((total, section) => total + section.changes.length, 0);
 
 // Where a failed action gets drawn: the repo's own row, or the commit box for a commit that spans repos.
 const failureIn = (scope: string) => changes.failures.value.get(scope);
@@ -455,6 +530,40 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                     <Icon name="times" class="text-2xs" />
                 </button>
             </div>
+        </div>
+
+        <!-- WHOSE WORK IS IN MY TREE — one line, only when an agent actually landed something. Each entry is a
+             filter: it narrows the list (and every section verb below it) to that origin's files, so "stage
+             everything this agent did" is two clicks and no path-picking. "you" is the complement — the files
+             no agent landed, which is also every terminal edit and anything the daemon can't attribute. -->
+        <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
+            <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">From</span>
+            <button
+                v-for="entry in legend.agents"
+                :key="entry.id"
+                type="button"
+                class="flex min-w-0 max-w-full shrink items-center gap-1 rounded-full py-px pl-1 pr-1.5 text-2xs transition-opacity"
+                :class="[originHue(entry.id).chip, originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '']"
+                @click="toggleOrigin(entry.id)"
+                v-tooltip.top="
+                    originFilter === entry.id ? 'Showing only this agent — click to clear' : `Show only what ${originLabel(entry.id)} landed`
+                "
+            >
+                <ProviderLogo v-if="agentOf(entry.id)" :provider="agentOf(entry.id)!.provider" class="shrink-0 text-2xs" />
+                <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
+                <span class="min-w-0 truncate">{{ originLabel(entry.id) }}</span>
+                <span class="shrink-0 opacity-70">{{ entry.files }}</span>
+            </button>
+            <button
+                v-if="legend.yours > 0"
+                type="button"
+                class="flex shrink-0 items-center gap-1 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted transition-opacity"
+                :class="originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : ''"
+                @click="toggleOrigin(YOURS)"
+                v-tooltip.top="'Files no agent landed — your own edits, the terminal, a main-tree chat'"
+            >
+                you <span class="opacity-70">{{ legend.yours }}</span>
+            </button>
         </div>
 
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
@@ -626,9 +735,17 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                                         : 'hover:bg-overlay'
                                 "
                             >
+                                <!-- The origin rail: 2px of the landing agent's hue, always laid out (transparent
+                                     for a file nobody landed) so no row shifts when one appears. This is the part
+                                     that works at a glance — an agent's batch reads as a colour block long before
+                                     any of the names below are legible. -->
+                                <span
+                                    class="h-4 w-0.5 shrink-0 rounded-full"
+                                    :class="originsOf(group, change.path)[0] ? originHue(originsOf(group, change.path)[0]!).rail : 'bg-transparent'"
+                                ></span>
                                 <button
                                     type="button"
-                                    class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-2 text-left max-md:min-h-11"
+                                    class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-0.5 text-left max-md:min-h-11"
                                     @click="clickRow({ repo: group.repo, side: section.side, path: change.path }, change, $event)"
                                     :title="changeLabel(group.repo, change)"
                                 >
@@ -636,6 +753,34 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                                         STATUS_LETTER[change.status]
                                     }}</span>
                                     <span class="min-w-0 flex-1 truncate text-2xs text-muted max-md:text-xs" dir="rtl">{{ change.path }}</span>
+                                    <!-- Who landed it: a provider chip per agent (two, then a count), and the name
+                                         itself only once the panel is wide enough to hold it AND the file has a
+                                         single owner — the path keeps first claim on the width. -->
+                                    <span
+                                        v-if="originsOf(group, change.path).length > 0"
+                                        class="flex shrink-0 items-center gap-0.5"
+                                        v-tooltip.left="originTitle(originsOf(group, change.path))"
+                                    >
+                                        <span
+                                            v-if="wide && originsOf(group, change.path).length === 1"
+                                            class="max-w-24 truncate text-2xs"
+                                            :class="originHue(originsOf(group, change.path)[0]!).text"
+                                        >
+                                            {{ originLabel(originsOf(group, change.path)[0]!) }}
+                                        </span>
+                                        <span
+                                            v-for="id in originsOf(group, change.path).slice(0, 2)"
+                                            :key="id"
+                                            class="flex h-3.5 w-3.5 items-center justify-center rounded-full"
+                                            :class="originHue(id).chip"
+                                        >
+                                            <ProviderLogo v-if="agentOf(id)" :provider="agentOf(id)!.provider" class="text-[0.55rem]" />
+                                            <Icon v-else name="sparkles" class="text-[0.55rem]" />
+                                        </span>
+                                        <span v-if="originsOf(group, change.path).length > 2" class="text-2xs text-subtle">
+                                            +{{ originsOf(group, change.path).length - 2 }}
+                                        </span>
+                                    </span>
                                     <DiffStat :additions="change.additions" :deletions="change.deletions" />
                                 </button>
                                 <button

@@ -276,6 +276,8 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         prune: async () => {},
         withRepoLock: (_repo, task) => task(),
     },
+    // No agent has landed anything into these fake repos, so every changed file is the user's.
+    agentOrigins: { forRepo: async () => ({}) },
     files: fakeFiles(),
     workspaceTree: async () => ({ root: "/work", tree: [], truncated: false }),
     // Inert resident search — no index, no rg. The search route test overrides `run` with a canned outcome.

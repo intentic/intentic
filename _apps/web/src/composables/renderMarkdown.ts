@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import { type CodeBlock, codeBlockHtml, escapeHtml } from "./markdownCode";
+import { linkifyFileRefs } from "./markdownFileLinks";
 
 /* Render untrusted markdown (workspace files, agent chat output) to SANITIZED HTML for v-html. Vue's v-html
  * does NOT sanitize, so we must do it ourselves — marked passes inline HTML through, so without this a
@@ -40,14 +41,23 @@ const EMPTY: MarkdownParts = { html: ``, blocks: [] };
 let parses = 0;
 export const markdownParseCount = (): number => parses;
 
-// Never let a markdown/sanitizer edge case (or a non-string slipping in mid-stream) crash the surrounding
-// component — a chat bubble re-runs this on every streamed delta, so a single throw would blank the turn.
-// On any failure, fall back to the raw text, HTML-escaped, so the content still shows (just unstyled).
-const parseParts = (text: string): MarkdownParts => {
+/* Never let a markdown/sanitizer edge case (or a non-string slipping in mid-stream) crash the surrounding
+ * component — a chat bubble re-runs this on every streamed delta, so a single throw would blank the turn.
+ * On any failure, fall back to the raw text, HTML-escaped, so the content still shows (just unstyled).
+ *
+ * Sanitizing to a FRAGMENT rather than a string is what lets file mentions be linkified (markdownFileLinks)
+ * without a second parse: DOMPurify builds this DOM either way and would only have serialized it for us to
+ * re-parse. Linkifying after the sanitizer has run — never before — also keeps the anchors it adds exactly as
+ * written, which is safe precisely because we, not the markdown, author them. */
+const parseParts = (text: string, dir: string | undefined): MarkdownParts => {
     parses += 1;
     collected = [];
     try {
-        return { html: DOMPurify.sanitize(marked.parse(text, { async: false })), blocks: collected };
+        const fragment = DOMPurify.sanitize(marked.parse(text, { async: false }), { RETURN_DOM_FRAGMENT: true });
+        linkifyFileRefs(fragment, dir);
+        const holder = document.createElement(`div`);
+        holder.append(fragment);
+        return { html: holder.innerHTML, blocks: collected };
     } catch {
         return { html: escapeHtml(text), blocks: [] };
     }
@@ -65,8 +75,12 @@ const substitute = (parts: MarkdownParts, colour: boolean): string =>
 
 const asText = (source: string): string => (typeof source === `string` ? source : String(source ?? ``));
 
-// Whole-message render: everything is finished text, so every code block is worth colouring.
-export const renderMarkdown = (source: string): string => substitute(parseParts(asText(source)), true);
+/* Whole-message render: everything is finished text, so every code block is worth colouring.
+ *
+ * `dir` is the directory a relative file reference resolves against — a previewed document's own, so its links
+ * to its neighbours land on the right files. Agent prose omits it: an agent names files from the workspace
+ * root, and the streaming path below never takes one for the same reason. */
+export const renderMarkdown = (source: string, dir?: string): string => substitute(parseParts(asText(source), dir), true);
 
 /* Streaming split — the answer a turn is still writing is re-rendered on every animation frame (the
  * typewriter loop appends a few characters per frame), and re-parsing + re-sanitizing the WHOLE message each
@@ -182,11 +196,11 @@ export const createStreamingMarkdown = (): StreamingMarkdown => {
                 // the cut, a reference-style link defined earlier) then still does, and any seam artifact in
                 // the tail heals the moment it settles. This runs once per completed block — not per frame,
                 // which is the entire point.
-                settledParts = parseParts(settledSource);
+                settledParts = parseParts(settledSource, undefined);
             }
             // The tail is not coloured: its text changes every frame, so highlighting it would thrash the
             // cache for a block that is about to settle and be highlighted exactly once.
-            return { settled: substitute(settledParts, true), tail: substitute(parseParts(text.slice(boundary)), false) };
+            return { settled: substitute(settledParts, true), tail: substitute(parseParts(text.slice(boundary), undefined), false) };
         },
     };
 };

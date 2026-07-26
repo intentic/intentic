@@ -66,12 +66,12 @@ const reviewPlan = async (ctx: AgentContext, sessionId: string, daemon: DaemonCl
     const approved = response.outcome.outcome === "selected" && response.outcome.optionId === "approve";
     // Rejection feedback is canned — permission prompts carry no free text (documented loss; the daemon
     // loops another planning turn on the same stream).
+    // No mode: this single-option card can't ask which posture to execute in, so the daemon restores the one
+    // the turn started with (auto-accept edits when it started in plan mode).
     await daemon.postReply({
         kind: "plan",
         requestId: event.requestId,
         approve: approved,
-        // Approving here means "execute it" — acceptEdits is the posture the web card's primary button picks.
-        mode: approved ? "acceptEdits" : "plan",
         ...(approved ? {} : { feedback: "Revise the plan." }),
     });
     await ctx.notify(methods.client.session.update, {

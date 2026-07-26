@@ -5,6 +5,7 @@ import {
     type McpSdkServerConfigWithInstance,
     type McpServerConfig,
     type Options,
+    type PermissionUpdate,
     query,
     type SDKMessage,
     type SDKUserMessage,
@@ -670,9 +671,24 @@ const askServer = (request: AgentRequest, push: (event: AgentEvent) => void): Mc
 // the agent deferring TO the user. Prompting for permission to prompt would be a dead end.
 const UNGATED = new Set(["mcp__ui__ask", "AskUserQuestion", "EnterPlanMode"]);
 
-// The mode the SDK lands in when a plan is approved without the card naming one (the client always names one;
-// this covers a reply that predates the field, e.g. the ACP bridge's single-option approval).
-const DEFAULT_POST_PLAN_MODE: PermissionMode = "acceptEdits";
+// The mode a plan approval lands in when the reply names none (the ACP bridge's single-option approval): the
+// posture the turn STARTED in, so approving a plan RESTORES the permissions the agent had before it decided to
+// plan — planning is an escalation the agent makes on its own, and it must not cost the user the posture they
+// picked. A turn that started in plan mode has nothing to restore, so auto-accepting edits is the floor.
+const postPlanMode = (starting: PermissionMode | undefined): PermissionMode =>
+    starting === undefined || starting === "plan" ? "acceptEdits" : starting;
+
+// What "always" persists on top of the SDK's own suggestions: allow this TOOL, for the rest of the session.
+// The suggestions are narrowly scoped — for Bash they carry the command prefix (`pnpm install:*`), so the next
+// command re-asks — which is not what a button reading "Don't ask again for Bash" promises. The container IS
+// the isolation boundary here, so the tool-wide grant is the honest reading of the button. Session-scoped: a
+// settings-file rule would be written into a throwaway worktree nobody reads twice.
+const toolWideAllow = (toolName: string): PermissionUpdate => ({
+    type: "addRules",
+    rules: [{ toolName }],
+    behavior: "allow",
+    destination: "session",
+});
 
 // A workspace-root-relative path for the permission card, matching the tree/file route space the rest of the
 // UI uses. A path outside the workspace (rare — an additionalDirectories read) stays absolute.
@@ -702,9 +718,9 @@ const permissionGate =
             if (!reply.approve) {
                 return { behavior: "deny", message: reply.feedback?.trim() || "Keep refining the plan — do not exit plan mode yet." };
             }
-            // Approval carries the posture to execute in (auto-accept edits vs approve each one). Setting it
-            // on the session is what actually moves the SDK out of plan mode for the rest of the turn.
-            const mode = reply.mode ?? DEFAULT_POST_PLAN_MODE;
+            // Approval carries the posture to execute in (auto-accept edits vs approve each one vs run
+            // everything). Setting it on the session is what actually moves the SDK out of plan mode.
+            const mode = reply.mode ?? postPlanMode(request.permissionMode);
             push({ kind: "mode", mode });
             return {
                 behavior: "allow",
@@ -735,9 +751,9 @@ const permissionGate =
             ...(options.description !== undefined ? { description: options.description } : {}),
             ...(options.decisionReason !== undefined ? { reason: options.decisionReason } : {}),
             ...(path !== undefined ? { path } : {}),
-            // Only offer "always" when the SDK gave us rules to persist — otherwise the button would promise
-            // a memory that nothing writes.
-            ...(suggestions.length > 0 ? { alwaysLabel: `Don't ask again for ${options.displayName ?? toolName}` } : {}),
+            // Always offered: the tool-wide rule below is a memory we can write for any tool, with or without
+            // the SDK suggesting one of its own.
+            alwaysLabel: `Don't ask again for ${options.displayName ?? toolName}`,
         });
         const reply = await wait(request.signal);
         if (reply.decision === "deny") {
@@ -750,7 +766,9 @@ const permissionGate =
             behavior: "allow",
             updatedInput: input,
             decisionClassification: reply.decision === "always" ? "user_permanent" : "user_temporary",
-            ...(reply.decision === "always" && suggestions.length > 0 ? { updatedPermissions: suggestions } : {}),
+            // The SDK's own suggestions ride along with the tool-wide grant: they carry the directory adds a
+            // blocked path needs, which a tool rule alone does not cover.
+            ...(reply.decision === "always" ? { updatedPermissions: [...suggestions, toolWideAllow(toolName)] } : {}),
         };
     };
 

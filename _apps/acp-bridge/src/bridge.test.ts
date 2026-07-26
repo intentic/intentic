@@ -100,7 +100,8 @@ test("a plan frame round-trips through request_permission: approve posts the dec
     await conn.agent.request(methods.agent.session.setMode, { sessionId, modeId: "plan" });
     const response = await conn.agent.request(methods.agent.session.prompt, { sessionId, prompt: [{ type: "text", text: "plan me" }] });
     expect(response.stopReason).toBe("end_turn");
-    expect(daemon.replies).toEqual([{ kind: "plan", requestId: "d1", approve: true, mode: "acceptEdits" }]);
+    // No mode named: the daemon restores the posture the turn started in (this card has no room to ask).
+    expect(daemon.replies).toEqual([{ kind: "plan", requestId: "d1", approve: true }]);
     // The plan text rode a Review-plan tool call, completed on approval.
     const kinds = updates.map((update) => update.update.sessionUpdate);
     expect(kinds).toEqual(["tool_call", "tool_call_update", "agent_message_chunk"]);
@@ -115,7 +116,7 @@ test("a plan rejection posts approve:false with the canned feedback", async () =
     const conn = connect();
     const sessionId = await newSession(conn);
     await conn.agent.request(methods.agent.session.prompt, { sessionId, prompt: [{ type: "text", text: "go" }] });
-    expect(daemon.replies).toEqual([{ kind: "plan", requestId: "d2", approve: false, mode: "plan", feedback: "Revise the plan." }]);
+    expect(daemon.replies).toEqual([{ kind: "plan", requestId: "d2", approve: false, feedback: "Revise the plan." }]);
 });
 
 test("questions become one permission prompt each; a pick answers, a dismiss cancels", async () => {

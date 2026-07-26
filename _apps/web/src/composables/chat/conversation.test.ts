@@ -397,6 +397,30 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Plan approved.` });
     });
 
+    it(`keeps the user's posture when the AGENT enters plan mode mid-turn`, async () => {
+        const conversation = new Conversation(`c1`);
+        // An isolated conversation (its own worktree in the sandbox container) runs unattended by default.
+        expect(conversation.mode.value).toBe(`bypassPermissions`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `mode`, mode: `plan` },
+                { kind: `delta`, text: `planning` },
+            ]),
+        );
+
+        await conversation.send(`something big`, settings);
+
+        // The composer follows the running turn, but the pick the NEXT turn starts from is untouched — an agent
+        // that decides to plan must not cost the user the permissions they gave it.
+        expect(conversation.liveMode.value).toBe(`plan`);
+        expect(conversation.mode.value).toBe(`bypassPermissions`);
+
+        await conversation.send(`carry on`, settings);
+        const [first, second] = turnBodies();
+        expect(first![`permissionMode`]).toBe(`bypassPermissions`);
+        expect(second![`permissionMode`]).toBe(`bypassPermissions`);
+    });
+
     it(`parks the turn on a question card and submits answers over the side channel`, async () => {
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
