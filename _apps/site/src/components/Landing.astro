@@ -45,8 +45,6 @@ const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="
 const botGlyph = icon('<rect x="5" y="8.5" width="14" height="10.5" rx="2"/><path d="M12 8.5V5M12 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M9.5 13v1.5M14.5 13v1.5"/>');
 const lockGlyph = icon('<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>');
 const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
-// The hero pipeline's middle card labels each equipment row: environment / connected / context.
-const heroRowIcons = [anatomyIcons[1], anatomyIcons[2], anatomyIcons[3]];
 
 // Integrations-hub logos. Brand paths are verbatim simple-icons (CC0) — invisible-on-dark brands render
 // monochrome, so no per-brand colour fitting; ssh/mcp are in-house stroke glyphs in the site's line motif.
@@ -159,78 +157,39 @@ const hubNodes = content.integrations.nodes.map((node, i) => {
                     </ul>
                 </div>
 
-                <!-- The IDE you share, in one glance: two operators — you (change any layer) and the agent (works inside it) — around one shared environment -->
-                <div class="animate-fade-in-up" style="animation-delay: 60ms">
-                    <div class="relative mx-auto max-w-md">
-                        <!-- Stage 1 · you, the operator who can open and change every layer -->
-                        <div class="card bg-card/70 p-3.5 shadow-lg shadow-black/20">
-                            <div class="eyebrow mb-1.5">You</div>
-                            <p class="text-sm leading-relaxed text-content">{content.hero.spec.edit}</p>
+                <!-- The claim, proven immediately: the real fleet board. The frame crops the full-width
+                     screenshot to its Attention + Active lanes so agent cards stay legible beside the copy;
+                     the third lane bleeds past the right edge, and section 2 shows the whole board. -->
+                <!-- Capped until the hero splits into two columns: the crop scales with the frame, so a
+                     full-width frame on a tablet would blow the screenshot up to twice its intended size. -->
+                <figure class="animate-fade-in-up m-0 w-full max-w-[34rem] lg:mx-0 lg:max-w-none" style="animation-delay: 60ms">
+                    <div class="overflow-hidden rounded-xl border border-line bg-card shadow-2xl shadow-black/50">
+                        <div class="flex items-center gap-2 border-b border-line bg-overlay/40 px-4 py-2.5">
+                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
+                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
+                            <span class="h-2.5 w-2.5 rounded-full bg-line-strong"></span>
+                            <span class="ml-3 rounded-md border border-line bg-canvas/60 px-3 py-1 font-mono text-2xs text-subtle">{content.hero.shot.frameLabel}</span>
                         </div>
-
-                        <svg class="mx-auto text-subtle" width="22" height="34" viewBox="0 0 22 34" fill="none" aria-hidden="true">
-                            <line x1="11" y1="2" x2="11" y2="23" class="hero-flow-line" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2.5 4" />
-                            <path d="M6 21.5 11 28l5-6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-
-                        <!-- Stage 2 · the specialized agent — its own equipped sandbox (the centerpiece) -->
-                        <div class="card border-primary-600/30 bg-primary-600/[0.04] p-4 shadow-2xl shadow-black/50">
-                            <div class="flex items-center justify-between border-b border-line pb-3">
-                                <div class="flex items-center gap-2">
-                                    <span class="h-2 w-2 rounded-full bg-success"></span>
-                                    <span class="font-mono text-sm text-content">{content.hero.spec.name}</span>
-                                </div>
-                                <span class="text-2xs text-subtle">{content.hero.spec.role}</span>
-                            </div>
-                            <div class="mt-3.5 space-y-3">
-                                {
-                                    content.hero.spec.rows.map((row, i) => (
-                                        <div class="flex items-start gap-2.5">
-                                            <span class="mt-0.5 shrink-0 text-link [&>svg]:h-4 [&>svg]:w-4">
-                                                <Fragment set:html={heroRowIcons[i]} />
-                                            </span>
-                                            <div class="min-w-0 flex-1">
-                                                <div class="eyebrow">{row.label}</div>
-                                                <div class="mt-1 flex flex-wrap gap-1.5">
-                                                    {row.items.map((item) => (
-                                                        <span class="rounded-md border border-line bg-canvas/60 px-2 py-0.5 font-mono text-2xs text-muted">{item}</span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))
-                                }
-                            </div>
-                            <div class="mt-3.5 flex items-center gap-2 border-t border-line pt-3 text-2xs text-subtle">
-                                <span class="shrink-0 text-link [&>svg]:h-3.5 [&>svg]:w-3.5"><Fragment set:html={factIcons[0]} /></span>
-                                on hardware you own · reached over a private tunnel
-                            </div>
-                        </div>
-
-                        <svg class="mx-auto text-subtle" width="22" height="34" viewBox="0 0 22 34" fill="none" aria-hidden="true">
-                            <line x1="11" y1="2" x2="11" y2="23" class="hero-flow-line" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2.5 4" />
-                            <path d="M6 21.5 11 28l5-6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-
-                        <!-- Stage 3 · your agent, working inside that same environment -->
-                        <div class="card border-success/30 bg-success/[0.05] p-3.5">
-                            <div class="eyebrow mb-2 text-success">Your agent</div>
-                            <div class="flex flex-col gap-1.5">
-                                {
-                                    content.hero.spec.outcome.split(" · ").map((step) => (
-                                        <div class="flex items-center gap-2 text-sm text-content">
-                                            <span class="shrink-0 text-success [&>svg]:h-3.5 [&>svg]:w-3.5">
-                                                <Fragment set:html={checkIcon} />
-                                            </span>
-                                            {step}
-                                        </div>
-                                    ))
-                                }
-                            </div>
-                            <div class="mt-2.5 border-t border-line pt-2.5 text-2xs text-subtle">{content.hero.spec.scale}</div>
+                        <!-- Crop window. The width percentages pick how much of the 2152px-wide shot shows:
+                             275% ≈ the Attention lane alone (phones), 203% ≈ Attention + Active (from sm up).
+                             Each aspect ratio is the matching slice of the source, so the image fills the box. -->
+                        <div class="aspect-[5/6] overflow-hidden sm:aspect-[53/45]">
+                            <img
+                                src={content.hero.shot.src}
+                                alt={content.hero.shot.alt}
+                                width="2152"
+                                height="940"
+                                fetchpriority="high"
+                                decoding="async"
+                                class="w-[275%] max-w-none sm:w-[203%]"
+                            />
                         </div>
                     </div>
-                </div>
+                    <figcaption class="mt-3 flex items-center gap-2 text-xs text-subtle">
+                        <span class="shrink-0 text-link [&>svg]:h-3.5 [&>svg]:w-3.5"><Fragment set:html={factIcons[0]} /></span>
+                        {content.hero.shot.caption}
+                    </figcaption>
+                </figure>
             </div>
         </section>
 

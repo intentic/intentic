@@ -2,7 +2,7 @@ import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LandResult } from "@intentic/sandbox-contract";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
 import { changedFiles, headSha } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import type { PersistedAgent } from "./agents-store.js";
@@ -26,8 +26,6 @@ const exists = async (path: string): Promise<boolean> => {
         return false;
     }
 };
-
-const withAgentAuthor = ["-c", `user.name=${AGENT_GIT_AUTHOR.name}`, "-c", `user.email=${AGENT_GIT_AUTHOR.email}`];
 
 // The wire LandResult plus what the registry persists: `changed` distinguishes "nothing to land" (no frame,
 // no status change) from a real outcome, `repos` carries the advanced landedTips, and `diff` is the agent's
@@ -65,14 +63,14 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
                     changed = true;
                     return;
                 }
-                // 1. Preserve the worktree's uncommitted state as an agent-authored commit on its branch.
-                // Dirty on EITHER side — the agent may have staged some of its work and left the rest loose;
-                // the commit below (`add -A`) sweeps up both, so the guard has to look at both.
-                const worktreeState = await changedFiles(worktree, git);
-                if (worktreeState.staged.length + worktreeState.unstaged.length > 0) {
-                    await git(worktree, ["add", "-A"]);
-                    await git(worktree, [...withAgentAuthor, "commit", "-q", "-m", `Agent: ${entry.title ?? entry.id}`]);
-                }
+                // 1. Preserve the worktree's uncommitted state as an agent-authored commit on its branch —
+                // staged, unstaged and untracked alike (`add -A` sweeps all three), and a no-op when staging
+                // leaves the index empty. That last case is the ROOT repo of a workspace whose only change
+                // lives inside a NESTED repo of the composition: root sees "modified: <repo> (modified
+                // content)" but can stage nothing, because a gitlink moves only when that repo's own HEAD
+                // does. The nested repo lands its own work below; root's gitlink follows whenever someone
+                // commits there.
+                await gitCommitAll(worktree, `Agent: ${entry.title ?? entry.id}`, AGENT_GIT_AUTHOR, git);
                 const tip = (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim();
                 // Cumulative diffstat vs the BASE (not landedTip) — the agent's total output for the card.
                 if (tip !== base) {

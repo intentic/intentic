@@ -71,9 +71,12 @@ export const gitStatus = async (dir: string, git: GitRunner = defaultGit): Promi
     return { branch, dirty: files.length > 0, files };
 };
 
-// Stage everything and commit; returns false (no commit) when the tree is clean, so callers can commit freely
-// without erroring on a no-op. Credentials never touch this — push auth rides on the remote the runner
-// configured when it cloned.
+// Stage everything and commit; returns false (no commit) when there was nothing to commit, so callers can
+// commit freely without erroring on a no-op. The gate is the INDEX after staging, never the worktree: `git
+// status` also reports dirt that `add -A` cannot stage — modified content inside a NESTED repo, whose gitlink
+// moves only when that repo's own HEAD does — and committing on that verdict fails outright ("no changes added
+// to commit"). Credentials never touch this — push auth rides on the remote the runner configured when it
+// cloned.
 export const gitCommitAll = async (
     dir: string,
     message: string,
@@ -81,7 +84,9 @@ export const gitCommitAll = async (
     git: GitRunner = defaultGit,
 ): Promise<boolean> => {
     await git(dir, ["add", "-A"]);
-    if (porcelainFiles((await git(dir, ["status", "--porcelain"])).stdout).length === 0) {
+    // Unborn HEAD included: with no commit to diff against, `--cached` falls back to the empty tree, so a
+    // repo's first commit reports its staged files rather than reading as nothing to do.
+    if ((await git(dir, ["diff", "--cached", "--name-only", "-z"])).stdout === "") {
         return false;
     }
     await git(dir, ["-c", `user.name=${author.name}`, "-c", `user.email=${author.email}`, "commit", "-m", message]);

@@ -1,6 +1,6 @@
 import { access, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
@@ -193,21 +193,13 @@ export const createAgentWorktrees = (
                     // (The full changedFiles read this replaced cost five to seven spawns to say the same thing,
                     // per repo, per agent — the single biggest chunk of an archive's wall clock.) Porcelain
                     // covers staged, unstaged AND untracked, which is exactly what `add -A` below would sweep.
+                    // It also OVER-reports — dirty content inside a nested repo stages as nothing — which is
+                    // why the commit itself is gitCommitAll's call, on the index, and not this probe's.
                     const { stdout } = await git(worktree, ["status", "--porcelain", "-z"]);
                     if (stdout === "") {
                         return;
                     }
-                    await git(worktree, ["add", "-A"]);
-                    await git(worktree, [
-                        "-c",
-                        `user.name=${AGENT_GIT_AUTHOR.name}`,
-                        "-c",
-                        `user.email=${AGENT_GIT_AUTHOR.email}`,
-                        "commit",
-                        "-q",
-                        "-m",
-                        `Agent: ${title ?? id}`,
-                    ]);
+                    await gitCommitAll(worktree, `Agent: ${title ?? id}`, AGENT_GIT_AUTHOR, git);
                 }),
             );
             // PASS 2 does need the lock (worktree admin area), but only per repo — so the nested repos run

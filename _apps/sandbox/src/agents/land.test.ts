@@ -142,6 +142,35 @@ test("a user edit ELSEWHERE in the same file still lands (patch context, not pat
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe(body({ 1: "line 1 AGENT", 12: "line 12 USER" }));
 });
 
+test("a delta living only in a NESTED repo lands — root has nothing it can stage, and says so quietly", async () => {
+    const { work, worktrees } = await setup();
+    // A workspace repo cloned under /work: the root repo tracks it as a gitlink, so root's view of the agent's
+    // work is "modified: inner (modified content)" — dirt `git add -A` can stage nothing for, because a
+    // gitlink moves only when the nested repo's own HEAD does. Root is landed FIRST (the composition is
+    // ["root", ...discovered]), so committing on that verdict used to abort the whole land with git's "no
+    // changes added to commit" — a 500 on POST /agents/{id}/land, with the agent's work stranded.
+    const inner = join(work, "inner");
+    await mkdir(inner, { recursive: true });
+    await writeFile(join(inner, "lib.ts"), "inner one\ninner two\n");
+    await sh(inner, "init", "-q", "--initial-branch=main");
+    await sh(inner, "add", "-A");
+    await sh(inner, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "inner baseline");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "add inner");
+
+    const conversation = await worktrees.ensure("c2", []);
+    expect(conversation.repos.map(({ repo }) => repo)).toEqual(["root", "inner"]);
+    await writeFile(join(worktrees.worktreeDir("c2", "inner"), "lib.ts"), "inner one EDITED\ninner two\n");
+
+    const result = await landAgent(worktrees, { ...entryFor(conversation.repos), id: "c2", branch: "agent/c2" });
+    expect(result.landed).toBe(true);
+    expect(result.conflicts).toBeUndefined();
+    expect(await readFile(join(inner, "lib.ts"), "utf8")).toBe("inner one EDITED\ninner two\n");
+    // Root landed nothing and claims nothing: its worktree branch never moved, so landedTip stays unset.
+    expect(result.repos.find((repo) => repo.repo === "root")?.landedTip).toBeUndefined();
+    expect(result.repos.find((repo) => repo.repo === "inner")?.landedTip).toBe(await sh(worktrees.worktreeDir("c2", "inner"), "rev-parse", "HEAD"));
+});
+
 test("a discard fired during an in-flight land queues behind the repo lock — land finishes first", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");

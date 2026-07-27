@@ -3,14 +3,15 @@ import { type GitRunner } from "@intentic/scaffold";
 import { expect, test } from "vitest";
 import { adoptRepos } from "./adopt.js";
 
-// A git runner that records every invocation and answers the two queries adopt makes (status + remote) from
-// the supplied maps, defaulting to empty (clean tree, no remotes) so the happy path is the default.
-const recordingGit = (answers: { status?: string; remotes?: string } = {}): { git: GitRunner; calls: string[][] } => {
+// A git runner that records every invocation and answers the two queries adopt makes (the staged-index read
+// that gates its commit, + remote) from the supplied maps, defaulting to empty (nothing to commit, no remotes)
+// so the happy path is the default.
+const recordingGit = (answers: { staged?: string; remotes?: string } = {}): { git: GitRunner; calls: string[][] } => {
     const calls: string[][] = [];
     const git: GitRunner = async (dir, args) => {
         calls.push([dir, ...args]);
-        if (args[0] === "status") {
-            return { stdout: answers.status ?? "", stderr: "" };
+        if (args[0] === "diff" && args[1] === "--cached") {
+            return { stdout: answers.staged ?? "", stderr: "" };
         }
         if (args[0] === "remote" && args.length === 1) {
             return { stdout: answers.remotes ?? "", stderr: "" };
@@ -34,7 +35,7 @@ test("creates the repo when missing, commits a dirty tree, adds the public origi
             return { cloneUrl: "x", sshUrl: "y" };
         },
     });
-    const { git, calls } = recordingGit({ status: " M desired-state.json\n" });
+    const { git, calls } = recordingGit({ staged: "desired-state.json\0" });
     const pushed = await adoptRepos({ baseUrl, originBaseUrl, user: "intentic", password: "pw", repos, log: () => {}, api, git });
 
     expect(created).toMatchObject({ owner: "intentic", name: "intent", private: true, autoInit: false });

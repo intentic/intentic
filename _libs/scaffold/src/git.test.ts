@@ -84,17 +84,20 @@ test("gitStatus on a clean tree is not dirty", async () => {
 });
 
 test("gitCommitAll stages, commits with the author identity, and reports a commit was made", async () => {
-    const { git, calls } = recordingGit({ "status --porcelain": " M src/app.ts\n" });
+    const { git, calls } = recordingGit({ "diff --cached --name-only -z": "src/app.ts\0" });
     const committed = await gitCommitAll("/work/app", "agent edit", { name: "intentic", email: "agent@intentic.dev" }, git);
     expect(committed).toBe(true);
     expect(calls).toContainEqual(["/work/app", "add", "-A"]);
     expect(calls).toContainEqual(["/work/app", "-c", "user.name=intentic", "-c", "user.email=agent@intentic.dev", "commit", "-m", "agent edit"]);
 });
 
-test("gitCommitAll is a no-op (returns false, never commits) on a clean tree", async () => {
-    const { git, calls } = recordingGit({ "status --porcelain": "" });
+// The INDEX decides, so both "clean tree" and "dirty but nothing `add -A` can stage" (modified content inside
+// a nested repo — the case that used to fail the commit outright) are the same no-op path.
+test("gitCommitAll is a no-op (returns false, never commits) when staging leaves the index empty", async () => {
+    const { git, calls } = recordingGit({ "status --porcelain": " m nested\n", "diff --cached --name-only -z": "" });
     const committed = await gitCommitAll("/work/app", "agent edit", { name: "intentic", email: "agent@intentic.dev" }, git);
     expect(committed).toBe(false);
+    expect(calls).toContainEqual(["/work/app", "add", "-A"]);
     expect(calls.some((call) => call.includes("commit"))).toBe(false);
 });
 

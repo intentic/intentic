@@ -9,23 +9,20 @@ export interface LandingSectionIntro {
     sub: string;
 }
 
-/** A labeled row of tags in the hero's specialized-agent card (e.g. "Environment" → toolchain). */
+/** A labeled row of tags in the sandbox figure (e.g. "Environment" → toolchain). */
 export interface AgentSpecRow {
     label: string;
     items: string[];
 }
 
-/** The hero visual: a shared environment with two operators — you, who can change every layer, and the agent that works inside it. */
-export interface AgentSpec {
-    name: string;
-    role: string;
-    rows: AgentSpecRow[];
-    /** Top of the figure — you, the operator who can open and change any layer of the environment. */
-    edit: string;
-    /** Bottom of the figure — what the agent does inside that same environment (split on " · "). */
-    outcome: string;
-    /** The scale note under the outcome — one agent, or a whole fleet. */
-    scale: string;
+/** The hero visual: the real fleet board, cropped by the frame to its Attention and Active lanes. */
+export interface HeroShot {
+    src: string;
+    alt: string;
+    /** The pill in the frame's title bar — where in the app this shot was taken. */
+    frameLabel: string;
+    /** One line under the frame; carries the ownership claim the hero copy leaves out. */
+    caption: string;
 }
 
 /** One side of the "a prompt vs the whole environment" comparison. */
@@ -74,7 +71,7 @@ export interface LandingContent {
         headlineLines: string[];
         subhead: string;
         chips: string[];
-        spec: AgentSpec;
+        shot: HeroShot;
     };
     // The product tour: real screenshots of the workspace — the fleet board, the chat, diff review, and the
     // integrations catalog — so a visitor sees exactly what they'd be using, not just diagrams.
@@ -119,17 +116,11 @@ export const landingContent: LandingContent = {
         subhead:
             "Everyone else lets you edit the prompt. intentic lets you see and change the whole environment your agents work in — the dev-tools really installed, the systems they can reach, the context they load every turn. Run one, or ten in parallel, on hardware you own.",
         chips: ["Free plan", "Bring your own agent", "Runs on your hardware"],
-        spec: {
-            name: "release-captain",
-            role: "Owns the weekly release",
-            rows: [
-                { label: "Environment", items: ["node 24", "pnpm", "docker", "psql"] },
-                { label: "Connected", items: ["GitHub", "Sentry", "Discord", "prod db · read"] },
-                { label: "Context", items: ["repo: platform", "6 skills", "release runbook", "house style"] },
-            ],
-            edit: "See and change every layer of it — nothing here is fixed.",
-            outcome: "cuts the release · drafts the changelog · watches the deploy",
-            scale: "one agent, or ten in parallel",
+        shot: {
+            src: "/assets/product/agents-fleet.png",
+            alt: "The intentic fleet board: an agent waiting on approval for a Stripe billing change and another with a question for you, beside three agents actively drafting a changelog and migrating queries — each card showing its model, branch, cost and diff stats.",
+            frameLabel: "intentic · /agents",
+            caption: "Five agents, five sandboxes, one board — running on hardware you own.",
         },
     },
     tour: {
