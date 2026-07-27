@@ -1,6 +1,7 @@
 import { sep } from "node:path";
 import { watch } from "chokidar";
 import type { Logger } from "pino";
+import { IQ_DIR } from "@intentic/iq-engine";
 import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, toRelPath } from "@intentic/workspace-ignore";
 
 // Live file-change push. The agent edits /work out-of-band (its own Write/Edit/Bash tools — never the daemon's
@@ -17,11 +18,32 @@ import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, toRelPath } fr
 //           still emits and just triggers a harmless tree refetch. A change inside a lazy-loaded ignored dir
 //           won't push live — re-expanding that dir re-fetches it. Upgrade only if that ever matters.
 const IGNORE_SEGMENTS = new Set(IGNORED_DIRS);
+
+// The daemon's OWN machine state under .intentic/ — watching it is a feedback loop, not a change feed:
+// - the iq index is a SQLite db whose WAL is rewritten continuously for MINUTES whenever a rebuilt daemon
+//   re-parses (PARSER_VERSION) or re-embeds (MODEL_ID) the workspace. Every write used to come back as a
+//   change batch, which re-marked the engine dirty (main.ts) — a full /work sweep every couple of seconds —
+//   and cost every connected browser a tree refetch plus a manifest invalidation, four times a second, for as
+//   long as the rebuild took. The engine already excludes the dir from its own views (isIqDenied).
+// - the agent session transcripts (.intentic/claude/...) are rewritten on every streamed token, so the same
+//   storm ran through every turn.
+// Neither is source and nothing derives from watching them. The .intentic/ MANIFESTS (capabilities,
+// automations, settings, the environment Dockerfiles, approvals, drafts) stay watched — those changes are
+// exactly how another member's write reaches this browser.
+const DAEMON_STATE_DIRS = new Set([IQ_DIR, ".intentic/claude"]);
+const isDaemonStatePath = (abs: string): boolean => {
+    const segments = abs.split(sep);
+    const index = segments.indexOf(".intentic");
+    return index !== -1 && DAEMON_STATE_DIRS.has(segments.slice(index, index + 2).join("/"));
+};
+
 export const isWatchIgnored = (abs: string): boolean => {
     const segments = abs.split(sep);
     // The browser-login profile churns constantly (Chromium rewrites Cookies etc.), and agent worktrees are
     // whole checkouts an agent edits at full speed — never watch either, or every write fires a tree refetch.
-    return segments.some((segment) => IGNORE_SEGMENTS.has(segment)) || isBrowserProfilePath(abs) || isAgentWorktreePath(abs);
+    return (
+        segments.some((segment) => IGNORE_SEGMENTS.has(segment)) || isBrowserProfilePath(abs) || isAgentWorktreePath(abs) || isDaemonStatePath(abs)
+    );
 };
 
 // One batch fires 250ms after the FIRST change of a window (not reset per event), so latency is bounded to

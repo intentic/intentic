@@ -22,6 +22,14 @@ test("isWatchIgnored skips junk dirs (incl. .git) + browser profiles, but not so
     // Agent worktrees are full checkouts an agent edits at speed — never watched; sibling .claude config is.
     expect(isWatchIgnored(at("app", ".claude", "worktrees", "fix", "src", "main.ts"))).toBe(true);
     expect(isWatchIgnored(at("app", ".claude", "settings.json"))).toBe(false);
+    // The daemon's own state: the iq index's WAL churns for minutes through a rebuild's re-embed, and the agent
+    // transcripts churn through every turn — watching either feeds the daemon (and every browser) its own noise.
+    expect(isWatchIgnored(at(".intentic", "iq", "index.db-wal"))).toBe(true);
+    expect(isWatchIgnored(at(".intentic", "claude", "projects", "-work", "session.jsonl"))).toBe(true);
+    // The manifests next to them still push: that's how another member's capability write reaches this browser.
+    expect(isWatchIgnored(at(".intentic", "capabilities.json"))).toBe(false);
+    expect(isWatchIgnored(at(".intentic", "environment.Dockerfile"))).toBe(false);
+    expect(isWatchIgnored(at(".intentic", "approvals", "wake-1.json"))).toBe(false);
     // No security floor: secret files are watched now, so a change to .env pushes a refresh like any other file.
     expect(isWatchIgnored(at("app", ".env"))).toBe(false);
     expect(isWatchIgnored(at("app", ".env.example"))).toBe(false);

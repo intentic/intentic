@@ -24,6 +24,20 @@ const CHANGES_REFRESH_MS = 1000;
 
 const refreshChanges = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: [`git`, `changes`] }), CHANGES_REFRESH_MS);
 
+// Which .intentic/ manifest backs which queries. The daemon-internal churn under .intentic/ (its iq index, the
+// agent transcripts) is unwatched at the source now, but this stays a per-file map rather than a prefix test:
+// one stray write under .intentic/ must never cost every one of these queries a refetch — that amplification is
+// what turned an index rebuild into an endless request storm. Prefixes, so environment.{,custom.,approved.}
+// Dockerfile and the one-file-per-approval dir each match with a single entry.
+const MANIFEST_QUERIES: readonly { readonly prefix: string; readonly keys: readonly string[] }[] = [
+    // A capability add/remove recomposes the environment overlay and can add or drop a repo's panel.
+    { prefix: `.intentic/capabilities.json`, keys: [`capabilities`, `environment`, `panels`] },
+    { prefix: `.intentic/environment.`, keys: [`environment`] },
+    { prefix: `.intentic/automations.json`, keys: [`automations`] },
+    { prefix: `.intentic/approvals/`, keys: [`automation-approvals`] },
+    { prefix: `.intentic/settings.json`, keys: [`settings`] },
+];
+
 /* Keeps useSandbox().reachable live by holding a single long-lived SSE stream open to the sandbox daemon
  * (`/events`), instead of polling. A killed sandbox breaks the stream — detected instantly (or within the
  * watchdog window for a silent half-open) — and the reconnect loop recovers once the sandbox is back. Started
@@ -154,9 +168,13 @@ const stream = async (): Promise<void> => {
             markWorkspaceChanged(changed);
             // Cross-user freshness for the .intentic/-backed views: another member's capability/automation/
             // setting write lands as a file change here, but those queries only refetch on their OWN mutations —
-            // invalidate them so every connected browser converges without a remount.
-            if (changed.some((path) => path.startsWith(`.intentic/`))) {
-                for (const key of [`capabilities`, `environment`, `panels`, `automations`, `automation-approvals`, `settings`]) {
+            // invalidate the ones whose manifest actually changed, so every connected browser converges without
+            // a remount.
+            for (const { prefix, keys } of MANIFEST_QUERIES) {
+                if (!changed.some((path) => path.startsWith(prefix))) {
+                    continue;
+                }
+                for (const key of keys) {
                     void queryClient.invalidateQueries({ queryKey: [key] });
                 }
             }
