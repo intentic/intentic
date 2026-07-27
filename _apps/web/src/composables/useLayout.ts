@@ -21,8 +21,8 @@ const DEFAULT_SIDEBAR_WIDTH = 256;
 const MIN_SIDEBAR_WIDTH = 180;
 const MAX_SIDEBAR_WIDTH = 600;
 
-// Workspace terminal — the bottom panel inside the /workspace view. Only the OPEN state lives here (the
-// toolbar button + Ctrl+` toggle it); height/collapse belong to the shared TerminalPanel, persisted per surface.
+// The global terminal — the panel the shell mounts below every view. Only the OPEN state lives here (the rail's
+// terminal button + Ctrl+` toggle it); height/collapse belong to the shared TerminalPanel, persisted per surface.
 const TERMINAL_OPEN_KEY = `ui-workspace-terminal-open`;
 
 // Which panel the workspace sidebar shows (files | changes | history). Persists like the terminal's open state.

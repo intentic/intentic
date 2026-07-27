@@ -7,7 +7,7 @@ import { disposeAllSessions, type TerminalTabsSource } from "./useTerminal";
 
 /* The ONE global terminal panel's controls + session source. Terminals are sandbox-global facts (tmux sessions
  * on one machine), so the panel lives in the shell — below every view — and any surface opens/focuses it with
- * one call: extensions start sessions and `openFocused` them, the workspace toolbar and Ctrl+` toggle it. The
+ * one call: extensions start sessions and `openFocused` them, the rail's terminal button and Ctrl+` toggle it. The
  * daemon's GET /system/terminals is the single tab list: web-* shells (numbered) beside panel-* dev servers
  * (labeled, started via Start) — every tab ×-closable, untracked sessions dimmed. */
 

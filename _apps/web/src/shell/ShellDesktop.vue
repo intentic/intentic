@@ -6,7 +6,9 @@ import { useAgents } from "../composables/agents/useAgents";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useDrafts } from "../composables/extensions/useDrafts";
 import { globalTerminalSource, useTerminalPanel } from "../composables/terminal/useTerminalPanel";
+import { useTerminalActivity } from "../composables/terminal/useTerminalActivity";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
+import { commandShortcut } from "../composables/commands/useCommands";
 import { detectActivations, extensionPath } from "../core-views/registry";
 import TerminalPanel from "../pages/TerminalPanel.vue";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -119,6 +121,16 @@ const gridStyle = computed(() => ({ "--chat-width": poppedOut.value ? `0px` : `$
 // shells and dev servers stay visible while navigating. Ctrl+` toggles it from anywhere in the shell.
 const terminal = useTerminalPanel();
 const terminalMaximized = ref(false);
+// The rail's terminal entry: the ONLY visible affordance for the panel (the Workspace view no longer carries a
+// toggle — terminals are sandbox-global, so their control belongs on the sandbox-global surface). It doubles as
+// an indicator: the badge counts live sessions and the tooltip names them, so the shells and dev servers the
+// agent and the extensions started are legible with the panel closed.
+const terminalActivity = useTerminalActivity();
+const terminalLabel = computed(() => {
+    const chord = commandShortcut(`terminal.toggle`);
+    const what = terminalActivity.summary.value === undefined ? `Terminal` : `Terminal — ${terminalActivity.summary.value} running`;
+    return chord === undefined ? what : `${what} (${chord})`;
+});
 // Like the chat, the whole panel can float in its own pip window (right-click its tab strip) — teleported
 // there, docked back on window close. Maximized makes no sense while floating (the panel isn't over the
 // workspace), and a hidden RouterView must not linger, so popping out resets it.
@@ -207,6 +219,28 @@ onUnmounted(() => {
             >
                 <Icon name="shield" class="text-lg" />
             </RouterLink>
+
+            <!-- The terminal: toggles the one global panel from any view, highlighted while it is open, badged
+                 with the number of live sessions (shells, dev servers, agent shells, jobs — background
+                 processes are excluded, they never idle). Inert while the daemon is unreachable, like the view
+                 tiles: every session lives on that machine, so there is nothing to open without it. -->
+            <button
+                type="button"
+                class="relative flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
+                :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': terminal.open.value }"
+                :tabindex="reachable ? undefined : -1"
+                :aria-disabled="!reachable"
+                :aria-label="terminalLabel"
+                v-tooltip.right="terminalLabel"
+                @click="terminal.toggle()"
+            >
+                <Icon name="code" class="text-lg" />
+                <span
+                    v-if="terminalActivity.count.value > 0"
+                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
+                    >{{ terminalActivity.count.value > 99 ? "99+" : terminalActivity.count.value }}</span
+                >
+            </button>
 
             <!-- Add a capability (a repo / internal tool / external tool) — the /capabilities page; every "add"
                  is a write to the sandbox's deploy.config.ts or a clone into /work, never platform storage. -->

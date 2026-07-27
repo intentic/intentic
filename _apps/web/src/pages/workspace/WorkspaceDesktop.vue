@@ -6,7 +6,6 @@ import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
 import { commandShortcut, registerCommand, type RegisteredCommand } from "../../composables/commands/useCommands";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
@@ -43,7 +42,8 @@ import { closeTabs } from "./workspaceTabs";
 /* The Workspace area: a VSCode-like, full-height explorer + viewer of the /work filesystem the agent sees
  * ("what the LLM sees"), read DIRECTLY from the sandbox daemon (no platform state, see CLAUDE.md). A resizable
  * file tree on the left, open-file tabs + a syntax-highlighted / image / PDF / markdown viewer on the right, and
- * a collapsible terminal panel along the bottom. Read-only — editing happens via the agent in chat. */
+ * Read-only — editing happens via the agent in chat. The terminal panel below is the SHELL's (sandbox-global),
+ * toggled from the rail — this view owns no control for it. */
 
 const layout = useLayout();
 const { tree, truncated, error, isLoading, refetch, entry, expanded, collapseAll, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
@@ -53,7 +53,6 @@ const changes = useChanges();
 // Every git repo under /work (root + nested). Marks the tree rows that get a git-history affordance, and feeds
 // the graph's repo switcher — the multi-repo axis of the workspace ("root is a repo; it may contain repos").
 const { repoDirs } = useRepos();
-const router = useRouter();
 
 // The active nudge: once a turn leaves uncommitted changes, show a banner until the user opens Changes or
 // dismisses it. Each finished agent turn (streaming falls) re-arms it, so every round of work surfaces once.
@@ -236,12 +235,12 @@ const openTabMenu = (id: string, event: Event): void => {
 // Ctrl+Shift+X (the × glyph), "," and "." (reads ">") aim Close Others / Close to the Right (physical-key
 // matched, see keybindings' CODE_TO_KEY), Close All is Ctrl+Shift+Backspace, and tab cycling sits on
 // Alt+PageUp/PageDown — free in every browser, and unlike Ctrl+Shift+[/] not a Monaco fold chord, so it
-// still works while editing. The SHELL: a bound chord is FORWARDED off a focused terminal (terminalSession's
-// key hook), so a bare-Ctrl chord would steal a readline/tmux key — Mod+F carries a `when` gate that leaves
-// the keystroke with a focused terminal (^F), Mod+B (VSCode's sidebar toggle) IS the tmux prefix so the
-// explorer toggles on Ctrl+Shift+B instead, and everything else stays in the Ctrl+Shift family the terminal
-// panel's commands established. MONACO: Mod+F while the editor is focused belongs to its find widget — the
-// same `when` gate steps aside, mirroring VSCode's contextual Ctrl+F. Changes opens on Ctrl+Shift+D
+// still works while editing. Mod+F is deliberately left UNBOUND: it belongs to the browser's own find-in-page
+// (and, with the editor focused, to Monaco's find widget) — workspace search lives on Mod+Shift+F alone, so
+// nothing has to guess whether a Ctrl+F was meant for us. The SHELL: a bound chord is FORWARDED off a focused
+// terminal (terminalSession's key hook), so a bare-Ctrl chord would steal a readline/tmux key; Mod+B (VSCode's
+// sidebar toggle) IS the tmux prefix so the explorer toggles on Ctrl+Shift+B instead, and everything else
+// stays in the Ctrl+Shift family the terminal panel's commands established. Changes opens on Ctrl+Shift+D
 // (D = diff; VSCode's Ctrl+Shift+G is terminal.join's "G = group"); Show Files / Checkpoints / Refresh ship
 // unbound (palette-only), as VSCode leaves rarely-chorded views.
 const closeActiveTab = (): void => {
@@ -274,11 +273,6 @@ const closeAllTabs = (): void => {
         requestClose(new Set(tabs.value.map((tab) => tab.id)));
     }
 };
-// A keydown targets the focused element, so `event.target` outside the selector means neither Monaco nor a
-// terminal owns the keystroke — read off the event (not `document.activeElement`) so the gate is also correct
-// inside a picture-in-picture pop-out window.
-const keyOutside = (event: KeyboardEvent, selector: string): boolean => !(event.target instanceof Element) || event.target.closest(selector) === null;
-
 const filterInput = ref<HTMLInputElement>();
 // Reveal the Files sidebar with the cursor in its search input, selecting any previous query (VSCode's find
 // flow). Plain find keeps the scope the user last chose; Search in Files forces content scope. The nextTick
@@ -307,21 +301,8 @@ const cycleTab = (delta: number): void => {
     }
 };
 const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
-    {
-        command: `workspace.search`,
-        title: `Search Workspace…`,
-        icon: `search`,
-        keybinding: `Mod+F`,
-        when: (event) => keyOutside(event, `.monaco-editor, .xterm`),
-        handler: () => focusSearch(),
-    },
-    {
-        command: `workspace.searchContent`,
-        title: `Search in Files…`,
-        icon: `search`,
-        keybinding: `Mod+Shift+F`,
-        handler: () => focusSearch(`content`),
-    },
+    { command: `workspace.search`, title: `Search Workspace…`, icon: `search`, handler: () => focusSearch() },
+    { command: `workspace.searchContent`, title: `Search in Files…`, icon: `search`, keybinding: `Mod+Shift+F`, handler: () => focusSearch(`content`) },
     { command: `workspace.showChanges`, title: `Show Changes`, icon: `check-square`, keybinding: `Ctrl+Shift+D`, handler: openReview },
     { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
     { command: `workspace.showHistory`, title: `Show Checkpoints`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
@@ -410,7 +391,6 @@ const explorerTooltip = computed(() =>
     tooltipWithChord(layout.sidebarCollapsed.value ? `Show explorer` : `Hide explorer`, `workspace.toggleSidebar`),
 );
 const rootHistoryTooltip = computed(() => tooltipWithChord(`Git history of the workspace root`, `workspace.gitHistory`));
-const terminalTooltip = computed(() => tooltipWithChord(`Toggle terminal`, `terminal.toggle`));
 
 const startResize = (event: PointerEvent): void => {
     event.preventDefault();
@@ -635,37 +615,11 @@ const endResize = (event: PointerEvent): void => {
                         <span v-if="actionError" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom="actionError">{{
                             actionError
                         }}</span>
-                        <Icon name="spinner" v-if="busy" v-tooltip.bottom="'Working…'" class="text-sm text-muted" spin />
+                        <!-- The lone remaining status: one spinner for both a running file action and a tree
+                             (re)load — the Refresh button that used to spin is now only the command. -->
+                        <Icon name="spinner" v-if="busy || isLoading" v-tooltip.bottom="'Working…'" class="text-sm text-muted" spin />
                         <span v-if="error" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom="error">{{ error }}</span>
-                        <button
-                            type="button"
-                            class="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                            :class="{ 'bg-primary-600/15 text-link': layout.terminalOpen.value }"
-                            @click="layout.toggleTerminalVisibility()"
-                            v-tooltip.bottom="terminalTooltip"
-                            aria-label="Toggle terminal"
-                        >
-                            <Icon name="code" class="text-sm" />
-                        </button>
-                        <button
-                            type="button"
-                            class="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                            @click="router.push({ name: 'sandbox', params: { tab: 'sync' }, query: { enable: 'desktop-sync' } })"
-                            v-tooltip.bottom="'Edit locally — sync these files to your computer'"
-                            aria-label="Edit locally with desktop sync"
-                        >
-                            <Icon name="desktop" class="text-sm" />
-                        </button>
                         <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
-                        <button
-                            type="button"
-                            class="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                            @click="refetch()"
-                            v-tooltip.bottom="'Refresh'"
-                            aria-label="Refresh"
-                        >
-                            <Icon name="refresh" class="text-sm" :spin="isLoading" />
-                        </button>
                     </div>
                 </div>
                 <template v-if="activeFile">
