@@ -8,6 +8,7 @@ import { afterEach, expect, test } from "vitest";
 import {
     changedFiles,
     changesAgainstBase,
+    changesBetweenRefs,
     checkoutRef,
     cherryPick,
     commitChanges,
@@ -19,6 +20,7 @@ import {
     createTagAt,
     discardPaths,
     dropCommit,
+    refFileDiff,
     resetTo,
     revertCommit,
     stagePaths,
@@ -563,4 +565,39 @@ test("changesAgainstBase reports a committed rename with its original path", asy
     await sh(dir, "mv", "a.txt", "b.txt");
     await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "rename");
     expect(await changesAgainstBase(dir, base)).toEqual([{ path: "b.txt", status: "renamed", from: "a.txt", additions: 0, deletions: 0 }]);
+});
+
+// An ARCHIVED agent's review runs on these two: the worktree is gone, so both sides come from refs. They must
+// answer what the worktree pair answered, because the panel is the same panel.
+test("changesBetweenRefs reads the same delta from a branch that changesAgainstBase read from a checkout", async () => {
+    const dir = await tempRepo();
+    const base = await sh(dir, "rev-parse", "HEAD");
+    await sh(dir, "checkout", "-q", "-b", "agent/c1");
+    await writeFile(join(dir, "a.txt"), "agent edit\n");
+    await writeFile(join(dir, "fresh.txt"), "fresh\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "Agent: work");
+    const fromCheckout = await changesAgainstBase(dir, base);
+    // Back on the base, as the main repo would be — the branch is all that is left of the agent.
+    await sh(dir, "checkout", "-q", "-");
+
+    const fromRefs = await changesBetweenRefs(dir, base, "agent/c1");
+    expect(fromRefs).toEqual(fromCheckout);
+    expect(fromRefs).toContainEqual({ path: "a.txt", status: "modified", additions: 1, deletions: 1 });
+    expect(fromRefs).toContainEqual({ path: "fresh.txt", status: "added", additions: 1, deletions: 0 });
+});
+
+test("refFileDiff pairs the base blob with the branch blob, and handles a one-sided file", async () => {
+    const dir = await tempRepo();
+    const base = await sh(dir, "rev-parse", "HEAD");
+    await sh(dir, "checkout", "-q", "-b", "agent/c1");
+    await writeFile(join(dir, "a.txt"), "agent edit\n");
+    await writeFile(join(dir, "added.txt"), "new\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "Agent: work");
+    await sh(dir, "checkout", "-q", "-");
+
+    expect(await refFileDiff(dir, "a.txt", base, "agent/c1")).toEqual({ before: "one\n", after: "agent edit\n" });
+    // Added by the agent: no before side, exactly as the working-tree pair reports it.
+    expect(await refFileDiff(dir, "added.txt", base, "agent/c1")).toEqual({ after: "new\n" });
 });

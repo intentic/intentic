@@ -25,13 +25,20 @@ import { modelLabelFor } from "../composables/chat/conversation";
  * inline input); the root is a div-button, not a <button>, so the nested pencil/input stay valid HTML. */
 
 const props = defineProps<{ agent: FleetAgent; now: number; dragging?: boolean; busy?: boolean; selected?: boolean }>();
-const emit = defineEmits<{ open: []; review: []; grab: [event: PointerEvent, card: HTMLElement] }>();
+const emit = defineEmits<{ open: []; review: []; archive: []; restore: []; grab: [event: PointerEvent, card: HTMLElement] }>();
 
 const { mobile } = useDevice();
 const meta = computed(() => agentStatusMeta(props.agent.status));
 const router = useRouter();
 const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
+// Archiving is offered exactly where it means something: a card in the FINISHED lane. That lane is
+// landed-or-idle by definition, which is the same set the daemon will accept — so the affordance never
+// appears on an agent whose archive would be refused, and never on one still holding a question for the user.
+// It sits beside the rename pencil rather than behind the drag gesture: this is the routine way to end an
+// agent (nothing is lost — the branch, transcript and counters all stay), so it has to be reachable by touch
+// and by keyboard, which a drag to a zone that only exists mid-drag never was.
+const archivable = computed(() => props.agent.archivedAt === undefined && props.agent.status !== `draft` && lane.value === `finished`);
 // The drill-in label, or undefined for a draft (nothing to review — a click only focuses the docked chat).
 // Desktop only: on mobile the detail IS the chat, so a tap navigates and no separate affordance is needed.
 const review = computed(() => (mobile.value ? undefined : reviewAction(props.agent)));
@@ -69,6 +76,10 @@ const reviewCard = (): void => {
     }
     emit(`review`);
 };
+
+// The header's quiet icon affordances (rename, archive, restore) — one class string, since they differ only
+// in glyph and in the opacity rule the template applies per form factor.
+const HOVER_ACTION = `flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-opacity hover:bg-overlay hover:text-content`;
 
 // Offer the card to the board's drag as long as the press starts on the card BODY — the rename pencil and its
 // input run their own pointer gestures, and a press while renaming belongs to the input's caret.
@@ -125,11 +136,30 @@ const grab = (event: PointerEvent): void => {
                     type="button"
                     aria-label="Rename agent"
                     v-tooltip.top="'Rename'"
-                    class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-opacity hover:bg-overlay hover:text-content"
-                    :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
+                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="edit.begin()"
                 >
                     <Icon name="pencil" class="text-2xs" />
+                </button>
+                <button
+                    v-if="archivable"
+                    type="button"
+                    aria-label="Archive agent"
+                    v-tooltip.top="'Archive — takes it off the board. The branch, the diff and the conversation are kept.'"
+                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
+                    @click.stop="emit(`archive`)"
+                >
+                    <Icon name="box" class="text-2xs" />
+                </button>
+                <button
+                    v-if="agent.archivedAt !== undefined"
+                    type="button"
+                    aria-label="Restore agent"
+                    v-tooltip.top="'Put this agent back on the board'"
+                    :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
+                    @click.stop="emit(`restore`)"
+                >
+                    <Icon name="undo" class="text-2xs" />
                 </button>
             </template>
             <Icon v-if="busy" name="spinner" spin class="shrink-0 text-xs text-link" />
@@ -215,6 +245,12 @@ const grab = (event: PointerEvent): void => {
             </span>
             <span class="flex-1"></span>
             <span v-if="agent.startedAt !== undefined" class="text-link">{{ formatElapsed(agent.startedAt, now) }}</span>
+            <!-- An archived card is read as a record, so it dates itself by when it LEFT the board — "last
+                 active 3d ago" is the same fact its neighbours already show and answers a question nobody in
+                 an archive is asking. -->
+            <span v-else-if="agent.archivedAt !== undefined" v-tooltip.top="`Last active ${relativeTime(agent.updatedAt)}`">
+                Archived {{ relativeTime(agent.archivedAt) }}
+            </span>
             <span v-else-if="agent.updatedAt > 0">{{ relativeTime(agent.updatedAt) }}</span>
         </div>
     </div>

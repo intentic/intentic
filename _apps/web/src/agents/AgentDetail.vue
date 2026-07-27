@@ -19,11 +19,19 @@ import AgentReviewPanel from "./AgentReviewPanel.vue";
 const route = useRoute();
 const router = useRouter();
 const { mobile } = useDevice();
-const { fleet, open } = useAgents();
+const { fleet, open, agentById, archived, loadArchived } = useAgents();
 const { conversations, setActive } = useChat();
 
 const agentId = computed(() => (typeof route.params[`id`] === `string` ? route.params[`id`] : ``));
-const fleetAgent = computed(() => fleet.value.find((agent) => agent.id === agentId.value));
+// Across both halves of the fleet: an ARCHIVED agent is off the board's roster but keeps its branch, diff and
+// transcript, so this page is still its destination — from the board's archive, from a bookmarked URL, and
+// from the moment the review panel's own Archive button fires under the user's cursor.
+const fleetAgent = computed(() => agentById(agentId.value));
+// A deep link can land here before the archive has ever been asked for (the board's mount is what usually
+// loads it), which would read as an unknown id and bounce. One request settles it.
+if (archived.value.length === 0) {
+    void loadArchived();
+}
 // Registered = has run a turn (a worktree + diff exist). Drafts are fleet-only client cards.
 const registered = computed(() => fleetAgent.value !== undefined && fleetAgent.value.status !== `draft`);
 const conversation = computed(() => conversations.value.find((candidate) => candidate.conversationId === agentId.value));
@@ -32,9 +40,11 @@ const conversation = computed(() => conversations.value.find((candidate) => cand
 // already-open conversation. Desktop additionally requires a REGISTERED agent (there must be a diff to
 // review); a draft or unknown id bounces back to the board. Keyed on the id + the roster SIZE, not the
 // fleetAgent computed — its per-recompute object identity (and markSeen's write into the fleet source)
-// would refire this watch forever.
+// would refire this watch forever. The archive counts toward that size: archiving the agent under review
+// shrinks the roster by one and grows the archive by one, and only watching the first would bounce the user
+// off the page they are reading.
 watch(
-    [agentId, () => fleet.value.length],
+    [agentId, () => fleet.value.length + archived.value.length],
     ([id], [previousId] = [undefined, 0]) => {
         if (id === `` || (id === previousId && conversation.value !== undefined && (mobile.value || registered.value))) {
             return;

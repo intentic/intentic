@@ -193,10 +193,23 @@ export const AgentSummarySchema = z.object({
     // The agent's cumulative output (base → branch tip across every repo), refreshed on each land —
     // the card's "12 files · +412 −96" readout. Independent of what has landed.
     diff: z.object({ files: z.number(), insertions: z.number(), deletions: z.number() }).optional(),
+    // When the agent was ARCHIVED (ms epoch) — off the board, but nothing lost: its checkout was retired
+    // (worktree removed) while the agent/<id> branch, the transcript, and every counter stayed. Absent ⇒ live
+    // on the board. Archived agents are excluded from the roster the fleet renders; `agents.archived` lists
+    // them, `agents.unarchive` brings one back, and the next turn re-attaches its worktree from the branch.
+    archivedAt: z.number().optional(),
 });
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
 export const AgentsListSchema = z.object({ agents: z.array(AgentSummarySchema) });
 export const AgentIdSchema = z.object({ id: z.string().min(1) });
+// archive's input: the agents to take off the board. Absent `ids` ⇒ every finished agent that is archivable
+// right now (the lane header's "Clear"); unarchive always names its ids (a restore, or a bulk archive's undo).
+export const AgentArchiveSchema = z.object({ ids: z.array(z.string().min(1)).max(500).optional() });
+export const AgentIdsSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(500) });
+// The roster after the change PLUS the ids that actually moved — the board needs those to offer "Undo",
+// since "archive everything finished" can't be inverted by re-reading the list afterwards.
+export const AgentArchiveResultSchema = z.object({ agents: z.array(AgentSummarySchema), archived: z.array(z.string()) });
+export type AgentArchiveResult = z.infer<typeof AgentArchiveResultSchema>;
 // rename's input: the user-chosen display title (bounded like sanitizeTitle's cap).
 export const AgentRenameSchema = z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(80) });
 export const AgentFileDiffQuerySchema = z.object({ id: z.string().min(1), repo: z.string().min(1), path: z.string().min(1) });
@@ -448,6 +461,11 @@ export const SandboxSettingsSchema = z.object({
     outputCleaners: z.string().default("off"),
     outputHoldout: z.number().min(0).max(1).default(0),
     filterBackend: z.enum(["native", "rtk"]).default("native"),
+    // How long a finished agent stays on the board before it is archived automatically (days; 0 ⇒ never).
+    // Unlike every other flag here this one defaults ON, because the lane it governs is the board's only
+    // terminal state: without a sweep the Finished lane grows for the life of the sandbox, and each card it
+    // holds is a live worktree checkout, not just a row.
+    agentRetentionDays: z.number().min(0).max(365).default(3),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 

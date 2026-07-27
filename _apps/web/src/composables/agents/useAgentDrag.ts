@@ -21,14 +21,13 @@ import { useAgents, type FleetAgent } from "./useAgents";
 // Far enough that a click with a shaky hand still opens the card.
 const DRAG_THRESHOLD_PX = 5;
 
-const { fleet, refresh } = useAgents();
+const { fleet, refresh, notice } = useAgents();
 
 const draggedId = ref<string | undefined>(undefined);
 const dragging = ref(false);
 const pointer = ref({ x: 0, y: 0 });
 const over = ref<DropTarget | undefined>(undefined);
 const busyId = ref<string | undefined>(undefined);
-const error = ref<string | undefined>(undefined);
 const ghostWidth = ref(0);
 
 // Resolved live against the roster rather than snapshotted at grab time: a turn that ends mid-drag must
@@ -82,7 +81,7 @@ const cancel = (): void => {
 // shows as busy in place, so a slow daemon reads as "working", never as a card teleporting back.
 const perform = async (id: string, chosen: DropAction): Promise<void> => {
     busyId.value = id;
-    error.value = undefined;
+    notice.value = undefined;
     try {
         if (chosen === `stop`) {
             await stopAgent(id);
@@ -90,7 +89,7 @@ const perform = async (id: string, chosen: DropAction): Promise<void> => {
             const result = await landAgent(id);
             await invalidateAgentAction(id);
             if (!result.landed) {
-                error.value = `Landing hit a conflict — open the agent to resolve it.`;
+                notice.value = { message: `Landing hit a conflict — open the agent to resolve it.`, tone: `error` };
             }
         } else {
             await discardAgent(id);
@@ -99,7 +98,7 @@ const perform = async (id: string, chosen: DropAction): Promise<void> => {
         // The action's own roster frame is already on its way; this just closes the gap on a quiet stream.
         await refresh();
     } catch (caught) {
-        error.value = errorMessage(caught, `That didn't work.`);
+        notice.value = { message: errorMessage(caught, `That didn't work.`), tone: `error` };
     } finally {
         busyId.value = undefined;
     }
@@ -155,7 +154,7 @@ const begin = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): void 
     ghostWidth.value = rect.width;
     draggedId.value = agent.id;
     dragging.value = false;
-    error.value = undefined;
+    notice.value = undefined;
     listeners = new AbortController();
     const { signal } = listeners;
     window.addEventListener(`pointermove`, onMove, { signal });
@@ -164,10 +163,6 @@ const begin = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): void 
     window.addEventListener(`keydown`, onKey, { signal });
 };
 
-const dismissError = (): void => {
-    error.value = undefined;
-};
-
 export function useAgentDrag() {
-    return { dragged, dragging, draggedId, over, action, accepts, busyId, error, ghostStyle, begin, consumeSuppressedOpen, dismissError };
+    return { dragged, dragging, draggedId, over, action, accepts, busyId, ghostStyle, begin, consumeSuppressedOpen };
 }

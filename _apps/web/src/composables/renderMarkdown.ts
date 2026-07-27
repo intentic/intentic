@@ -41,6 +41,19 @@ const EMPTY: MarkdownParts = { html: ``, blocks: [] };
 let parses = 0;
 export const markdownParseCount = (): number => parses;
 
+// Markup that IS the content, so a block holding one of these is visible even with no text in it. Anything
+// else empty of text renders as nothing at all — see `vanished`.
+const SELF_SHOWING = `img, hr, svg, video, audio, canvas, input`;
+
+/* Whether a parse turned prose into markup the user cannot see: text went in, no text (and no code block, and
+ * nothing self-showing) came out. A short answer that is nothing BUT a block marker does exactly that — a bare
+ * "4." is a valid ordered-list item with empty content, so `<ol start="4"><li></li></ol>` is all that reaches
+ * the bubble and the turn reads as if the model never answered. The caller then falls back to the escaped
+ * source, which is what the model meant by it. Also covers a lone "#", "-", "1)", ">" and the streaming tail
+ * frame where a list marker has arrived but its content has not. */
+const vanished = (holder: HTMLElement, text: string): boolean =>
+    collected.length === 0 && text.trim() !== `` && (holder.textContent ?? ``).trim() === `` && holder.querySelector(SELF_SHOWING) === null;
+
 /* Never let a markdown/sanitizer edge case (or a non-string slipping in mid-stream) crash the surrounding
  * component — a chat bubble re-runs this on every streamed delta, so a single throw would blank the turn.
  * On any failure, fall back to the raw text, HTML-escaped, so the content still shows (just unstyled).
@@ -57,7 +70,7 @@ const parseParts = (text: string, dir: string | undefined): MarkdownParts => {
         linkifyFileRefs(fragment, dir);
         const holder = document.createElement(`div`);
         holder.append(fragment);
-        return { html: holder.innerHTML, blocks: collected };
+        return vanished(holder, text) ? { html: escapeHtml(text), blocks: [] } : { html: holder.innerHTML, blocks: collected };
     } catch {
         return { html: escapeHtml(text), blocks: [] };
     }

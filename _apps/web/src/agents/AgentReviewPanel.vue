@@ -308,6 +308,20 @@ const confirmDiscard = (): void => {
             >
                 <Icon name="refresh" class="text-2xs" :spin="changes.loading.value" />
             </button>
+            <!-- Two endings, and the copy is what keeps them apart: archive KEEPS everything and only takes the
+                 agent off the board, discard is the one that throws work away. The safe one goes first and
+                 asks nothing; the destructive one keeps its dialog. -->
+            <button
+                type="button"
+                class="inline-flex items-center whitespace-nowrap rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
+                :disabled="changes.actionBusy.value || streaming"
+                @click="changes.archive()"
+                v-tooltip.bottom="
+                    streaming ? 'Wait for the agent turn to finish' : 'Take this agent off the board. Its branch, diff and conversation are kept.'
+                "
+            >
+                <Icon name="box" class="mr-1 text-2xs" />Archive
+            </button>
             <button
                 type="button"
                 class="inline-flex items-center whitespace-nowrap rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"

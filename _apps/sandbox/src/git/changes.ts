@@ -197,6 +197,19 @@ export const changesAgainstBase = async (dir: string, base: string, git: GitRunn
     return withLineStats(dir, [base], [...changes.values()], git);
 };
 
+// The same cumulative delta as changesAgainstBase, read from two REFS instead of a checkout — what an ARCHIVED
+// agent's review runs on, since archiving retires the worktree and keeps only the agent/<id> branch. Run
+// against the MAIN repo dir: a worktree shares its object store, so every sha the branch names is still
+// readable there after the checkout is gone.
+//
+// No untracked pass, and that is not an omission: archiving commits whatever the worktree still held onto the
+// branch first (agents/archive.ts), so `tip` already contains everything a `ls-files --others` walk would have
+// found. Nothing on disk is left to consult.
+export const changesBetweenRefs = async (dir: string, base: string, tip: string, git: GitRunner = defaultGit): Promise<GitChange[]> => {
+    const { stdout } = await git(dir, ["diff", "--name-status", "-z", "--find-renames", base, tip]);
+    return withLineStats(dir, [base, tip], parseNameStatusZ(stdout), git);
+};
+
 // Stage exactly `paths` — adds, edits AND deletions (`-A` covers a removed file, which a bare `add` skips).
 export const stagePaths = async (dir: string, paths: readonly string[], git: GitRunner = defaultGit): Promise<void> => {
     if (paths.length === 0) {
@@ -344,6 +357,12 @@ const bothSides = (before: DiffSide, after: DiffSide): FileDiff => ({
 // which is the only one a worktree the user never checks out can offer.
 export const workingFileDiff = async (dir: string, path: string, ref: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
     bothSides(await blobSide(dir, `${ref}:${path}`, git), await worktreeSide(join(dir, path)));
+
+// Two blobs, no disk — workingFileDiff's counterpart for an ARCHIVED agent, whose checkout is gone and whose
+// after-side therefore lives on the agent/<id> branch. Same pairing as changesBetweenRefs, so a row and the
+// diff it opens always describe the same comparison.
+export const refFileDiff = async (dir: string, path: string, base: string, tip: string, git: GitRunner = defaultGit): Promise<FileDiff> =>
+    bothSides(await blobSide(dir, `${base}:${path}`, git), await blobSide(dir, `${tip}:${path}`, git));
 
 // Index vs HEAD — exactly the diff a Staged row is listed under, and exactly what a bare `git commit` would
 // record. NOT HEAD↔worktree: for a partially staged file those are different diffs, which is the whole reason

@@ -2,6 +2,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { openAgentConversation, useChat } from "../chat/useChat";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { errorMessage } from "../useAsyncAction";
 
 /* The fleet store — the daemon's agent registry mirrored into the browser. Fed two ways: the /events stream's
  * `agents` roster snapshots (last frame wins, the presence pattern — see useSandboxLiveness) and an explicit
@@ -58,6 +59,12 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly open: boolean;
     readonly unread: boolean;
 }
+
+// How many finished agents the lane shows before the rest collapse behind one row. The lane's job is to
+// CONFIRM what just completed, not to be the sandbox's permanent record — everything older is still one click
+// away, and the daemon's retention sweep is what eventually retires it. Also the thing standing between the
+// board and a TransitionGroup running FLIP over several hundred cards.
+export const FINISHED_WINDOW = 6;
 
 // "Blocked on you" — the agent literally cannot go on (or has failed) until you act. Deliberately NOT the same
 // thing as unread, which only says you haven't looked at it yet: a board that tells the user seven finished
@@ -179,6 +186,111 @@ const refresh = async (): Promise<void> => {
     }
 };
 
+/* --- Archive ---------------------------------------------------------------------------------------------
+ * The board's exit. Archiving takes an agent off the lanes and reclaims its worktree checkout, keeping the
+ * branch, the transcript and every counter — so it is the ROUTINE action (no confirmation, undoable, bulk),
+ * and discard stays the destructive one. See the daemon's agents/archive.ts for what it actually costs.
+ *
+ * Archived agents are absent from the roster the /events stream carries, which is the point: the board's live
+ * state stays the size of the work in flight. They load on demand instead, when the archive is opened. */
+const archived = ref<FleetAgent[]>([]);
+const archiveLoading = ref(false);
+
+const loadArchived = async (): Promise<void> => {
+    archiveLoading.value = true;
+    try {
+        const body = await sandboxJson<{ agents: AgentSummary[] }>(`/agents/archived`);
+        // Widened to FleetAgent here rather than at render: an archived agent has no open tab and nothing
+        // unread by construction (it left the board), so the two card fields are constants, not a merge.
+        // Object.assign, not a spread — this array is this call's own freshly-parsed JSON.
+        archived.value = body.agents.map((agent) => Object.assign(agent, { open: false, unread: false }));
+    } catch {
+        // Leave whatever was listed last; the view reports its own emptiness.
+    } finally {
+        archiveLoading.value = false;
+    }
+};
+
+// The board's ONE inline report — it has no toast surface, so an action that needs to say something (a failed
+// drop, or an archive offering its way back) says it in a strip under the header. An `undo` makes it the
+// board's undo affordance; `tone` is the only thing that distinguishes a failure from a receipt.
+export interface FleetNotice {
+    readonly message: string;
+    readonly tone: "error" | "info";
+    readonly undo?: () => Promise<void>;
+}
+const notice = ref<FleetNotice | undefined>(undefined);
+const busyIds = ref<readonly string[]>([]);
+
+const dismissNotice = (): void => {
+    notice.value = undefined;
+};
+
+// Archive the named agents, or — with no ids — every finished agent that is archivable right now (the lane
+// header's "Clear"). The daemon answers with the ids that actually moved, which is what the undo is built
+// from: "everything finished" cannot be re-derived once the lane is empty.
+const archive = async (ids?: readonly string[]): Promise<void> => {
+    // The bulk press has no ids of its own, so it borrows the lane's — otherwise "Clear" would sit silent
+    // through the round-trip while the cards it is about to take carried on looking untouched.
+    busyIds.value = ids ?? lanes.value.finished.map((agent) => agent.id);
+    notice.value = undefined;
+    try {
+        const result = await sandboxJson<{ agents: AgentSummary[]; archived: string[] }>(`/agents/archive`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify(ids === undefined ? {} : { ids }),
+        });
+        registry.value = result.agents;
+        if (result.archived.length === 0) {
+            notice.value = { message: `Nothing to archive — every finished agent is already off the board.`, tone: `info` };
+            return;
+        }
+        notice.value = {
+            message: `${result.archived.length} agent${result.archived.length === 1 ? `` : `s`} archived. Their work and transcripts are kept.`,
+            tone: `info`,
+            undo: () => restore(result.archived),
+        };
+        // Unconditionally, not "only when the archive is already showing": an agent's detail page resolves it
+        // through `agentById`, so archiving one WHILE reviewing it must leave it findable rather than bounce
+        // the user back to the board mid-read.
+        await loadArchived();
+    } catch (error) {
+        notice.value = { message: errorMessage(error, `Couldn't archive that.`), tone: `error` };
+    } finally {
+        busyIds.value = [];
+    }
+};
+
+// Put agents back on the board — a per-card restore, and the inverse an archive's undo runs. The checkout is
+// not rebuilt here (the daemon does that lazily on the agent's next turn), so this is as cheap for a hundred
+// agents as for one.
+const restore = async (ids: readonly string[]): Promise<void> => {
+    busyIds.value = ids;
+    try {
+        registry.value = (
+            await sandboxJson<{ agents: AgentSummary[] }>(`/agents/unarchive`, {
+                method: `POST`,
+                headers: { "content-type": `application/json` },
+                body: JSON.stringify({ ids }),
+            })
+        ).agents;
+        notice.value = undefined;
+        archived.value = archived.value.filter((agent) => !ids.includes(agent.id));
+    } catch (error) {
+        notice.value = { message: errorMessage(error, `Couldn't restore that.`), tone: `error` };
+    } finally {
+        busyIds.value = [];
+    }
+};
+
+// Resolve one agent by id across BOTH halves of the fleet. The board's roster deliberately drops archived
+// agents, but a surface addressed by id — the /agents/:id detail and its review — must still find one: an
+// archived agent keeps its branch, its diff and its transcript, so its detail page is a real destination and
+// not a 404. (The archive half is only populated once loadArchived has run; callers that can be deep-linked
+// into ask for it themselves.)
+const agentById = (id: string): FleetAgent | undefined =>
+    fleet.value.find((agent) => agent.id === id) ?? archived.value.find((agent) => agent.id === id);
+
 // Rename an agent: sync the open conversation's title ref first (docked tab, detail header, and the
 // localStorage tab snapshot all follow it), then write the registry through the daemon. A card with no
 // registry entry is a draft — its title lives client-side and rides the next turn body — but the POST still
@@ -237,5 +349,25 @@ const open = (agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId
 };
 
 export function useAgents() {
-    return { fleet, lanes, attention, blocking, unread, refresh, open, markSeen, markAllSeen, rename };
+    return {
+        fleet,
+        lanes,
+        attention,
+        blocking,
+        unread,
+        refresh,
+        open,
+        markSeen,
+        markAllSeen,
+        rename,
+        agentById,
+        archived,
+        archiveLoading,
+        loadArchived,
+        archive,
+        restore,
+        notice,
+        dismissNotice,
+        busyIds,
+    };
 }

@@ -99,6 +99,53 @@ test("remove tears down worktrees and branches; prune sweeps orphan dirs", async
     expect(existsSync(orphan)).toBe(false);
 });
 
+// The property archiving rests on: retiring a checkout must cost NOTHING but the checkout. If the branch did
+// not capture the worktree's uncommitted state first, an automatic sweep would be a data-loss bug on a timer.
+test("retire commits the worktree's uncommitted state onto the branch and keeps it", async () => {
+    const { work, worktrees } = await setup();
+    const conversation = await worktrees.ensure("c1", []);
+    await writeFile(join(conversation.cwd, "new-file.md"), "agent file\n");
+    await writeFile(join(conversation.cwd, "intent", "deploy.config.ts"), "agent edit\n");
+
+    await worktrees.retire("c1", conversation.repos, "Fix the parser");
+
+    // The checkout is gone — that is the whole point, one file tree per repo reclaimed.
+    expect(existsSync(conversation.cwd)).toBe(false);
+    // Both branches survive, and both hold the work the worktree was holding loose.
+    expect(await sh(work, "rev-parse", "-q", "--verify", "refs/heads/agent/c1")).not.toBe("");
+    expect(await sh(work, "show", "agent/c1:new-file.md")).toBe("agent file");
+    expect(await sh(join(work, "intent"), "show", "agent/c1:deploy.config.ts")).toBe("agent edit");
+    expect(await sh(work, "log", "-1", "--format=%s", "agent/c1")).toBe("Agent: Fix the parser");
+    // And the main tree is untouched by any of it.
+    expect(await sh(work, "status", "--porcelain")).toBe("");
+});
+
+test("a retired agent's checkout comes back from its branch, with its work", async () => {
+    const { worktrees } = await setup();
+    const created = await worktrees.ensure("c1", []);
+    await writeFile(join(created.cwd, "new-file.md"), "agent file\n");
+    await worktrees.retire("c1", created.repos, undefined);
+
+    // What the next turn does: ensure() against the recorded composition re-attaches from the surviving branch.
+    const restored = await worktrees.ensure("c1", created.repos);
+    expect(restored.repos).toEqual(created.repos);
+    expect(await sh(restored.cwd, "branch", "--show-current")).toBe("agent/c1");
+    expect(await readFile(join(restored.cwd, "new-file.md"), "utf8")).toBe("agent file\n");
+    expect(await readFile(join(restored.cwd, "intent", "deploy.config.ts"), "utf8")).toBe("v1\n");
+});
+
+test("retire is a no-op on a clean worktree beyond dropping the checkout", async () => {
+    const { work, worktrees } = await setup();
+    const conversation = await worktrees.ensure("c1", []);
+    const tip = await sh(work, "rev-parse", "agent/c1");
+
+    await worktrees.retire("c1", conversation.repos, "nothing to do");
+
+    expect(existsSync(conversation.cwd)).toBe(false);
+    // No empty "Agent:" commit — the branch still points where it did.
+    expect(await sh(work, "rev-parse", "agent/c1")).toBe(tip);
+});
+
 test("an unborn-HEAD repo is excluded from the composition", async () => {
     const { work, historyRoot, worktrees } = await setup();
     const empty = join(work, "empty-repo");

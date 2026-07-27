@@ -1,15 +1,16 @@
-import { agentsContract, type AgentChange, type AgentRepoChanges } from "@intentic/sandbox-contract";
+import { agentsContract, type AgentChange, type AgentRepoChanges, type GitChange } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import type { PersistedAgent } from "./agents-store.js";
+import { archivable, archiveAgents } from "./archive.js";
 import { landAgent } from "./land.js";
 
 // The fleet routes: list/get the registry, review a conversation worktree's delta vs its recorded bases
-// (the same GitChanges shape the Changes panel renders), land it into the main tree, or discard it. An
-// unknown {id} is NOT_FOUND; land/discard while the conversation's turn is running is CONFLICT — the
-// worktree is the turn's live working state.
+// (the same GitChanges shape the Changes panel renders), land it into the main tree, archive it off the board,
+// or discard it. An unknown {id} is NOT_FOUND; land/discard/archive while the conversation's turn is running
+// is CONFLICT — the worktree is the turn's live working state.
 export const createAgentsRoutes = (services: Services) => {
     const i = implement(agentsContract).$context<OrpcContext>();
     const entryOf = (id: string): PersistedAgent => {
@@ -26,6 +27,7 @@ export const createAgentsRoutes = (services: Services) => {
     };
     return {
         list: i.list.handler(() => ({ agents: services.agents.list() })),
+        archived: i.archived.handler(() => ({ agents: services.agents.listArchived() })),
         get: i.get.handler(({ input }) => {
             const summary = services.agents.get(input.id);
             if (summary === undefined) {
@@ -63,17 +65,23 @@ export const createAgentsRoutes = (services: Services) => {
         diff: i.diff.handler(async ({ input }) => {
             const entry = entryOf(input.id);
             const repos: AgentRepoChanges[] = [];
+            // An ARCHIVED agent has no checkout, so its review reads the two refs out of the main repo instead
+            // (the object store is shared, and archiving committed the worktree's remainder onto the branch —
+            // so this is the same delta the worktree would have shown, not a lesser one).
+            const archived = entry.archivedAt !== undefined;
             for (const { repo, base, landedTip } of entry.repos) {
                 try {
-                    const worktree = services.agentWorktrees.worktreeDir(entry.id, repo);
-                    const changes = await services.git.changesAgainstBase(worktree, base);
+                    const dir = archived ? services.agentWorktrees.mainDir(repo) : services.agentWorktrees.worktreeDir(entry.id, repo);
+                    const against = (from: string): Promise<GitChange[]> =>
+                        archived ? services.git.changesBetweenRefs(dir, from, entry.branch) : services.git.changesAgainstBase(dir, from);
+                    const changes = await against(base);
                     if (changes.length === 0) {
                         continue;
                     }
                     const pending =
                         landedTip === undefined
                             ? new Set(changes.map((change) => change.path))
-                            : new Set((await services.git.changesAgainstBase(worktree, landedTip)).map((change) => change.path));
+                            : new Set((await against(landedTip)).map((change) => change.path));
                     // Object.assign, not a spread: `changes` is this call's own freshly-parsed array, so the
                     // flag goes onto the objects that are about to be serialized and nothing is copied.
                     const flagged = changes.map((change): AgentChange => Object.assign(change, { landed: !pending.has(change.path) }));
@@ -93,6 +101,16 @@ export const createAgentsRoutes = (services: Services) => {
             const composed = entry.repos.find((repo) => repo.repo === input.repo);
             if (composed === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "repo not in this agent's composition" });
+            }
+            // Archived: both sides are blobs, read from the main repo (see diff above). The path guard still
+            // applies — it is validating the REQUEST, not the disk, and a `..` here would escape into rev-spec
+            // territory just as readily.
+            if (entry.archivedAt !== undefined) {
+                const main = services.agentWorktrees.mainDir(input.repo);
+                if (resolveWithin(main, input.path) === undefined) {
+                    throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
+                }
+                return services.git.refFileDiff(main, input.path, composed.base, entry.branch);
             }
             const dir = services.agentWorktrees.worktreeDir(entry.id, input.repo);
             if (resolveWithin(dir, input.path) === undefined) {
@@ -119,6 +137,37 @@ export const createAgentsRoutes = (services: Services) => {
             await services.agentWorktrees.remove(entry.id, entry.repos);
             await services.agents.remove(entry.id);
             return { ok: true } as const;
+        }),
+        // Named ids archive whatever the user pointed at (a card, or a bulk undo's inverse); no ids means
+        // "clear the Finished lane" — every agent that is archivable RIGHT NOW, ignoring the retention clock.
+        // Either way the response names what actually moved, because that list is what "Undo" needs and it is
+        // not recoverable from the roster afterwards.
+        archive: i.archive.handler(async ({ input }) => {
+            if (input.ids !== undefined) {
+                for (const id of input.ids) {
+                    entryOf(id);
+                    notRunning(id);
+                }
+            }
+            const targets =
+                input.ids ??
+                services.agents
+                    .ids()
+                    .map((id) => services.agents.entry(id))
+                    .filter((entry) => entry !== undefined)
+                    .filter((entry) => archivable(entry, services.agents.running(entry.id)))
+                    .map((entry) => entry.id);
+            const archived = await archiveAgents(services, targets, Date.now());
+            return { agents: services.agents.list(), archived };
+        }),
+        unarchive: i.unarchive.handler(async ({ input }) => {
+            for (const id of input.ids) {
+                entryOf(id);
+            }
+            // No worktree restore: the next turn's ensure() rebuilds the checkout from the branch, so putting a
+            // card back is a registry write and nothing else.
+            await services.agents.clearArchived(input.ids);
+            return { agents: services.agents.list() };
         }),
     };
 };

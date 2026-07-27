@@ -54,6 +54,7 @@ import {
     type ActionResult,
     changedFiles,
     changesAgainstBase,
+    changesBetweenRefs,
     checkoutRef,
     cherryPick,
     commitChanges,
@@ -69,6 +70,7 @@ import {
     resetTo,
     revertCommit,
     conflictedFileDiff,
+    refFileDiff,
     stagePaths,
     stagedFileDiff,
     unstagePaths,
@@ -262,6 +264,10 @@ export interface Services {
         readonly conflictedFileDiff: (dir: string, path: string) => Promise<FileDiff>;
         readonly fileDiff: (dir: string, path: string, ref: string) => Promise<FileDiff>;
         readonly changesAgainstBase: (dir: string, base: string) => Promise<GitChange[]>;
+        // The same two reads for an ARCHIVED agent, whose checkout is retired: both sides come from refs in the
+        // main repo (shared object store) rather than from a working tree that no longer exists.
+        readonly changesBetweenRefs: (dir: string, base: string, tip: string) => Promise<GitChange[]>;
+        readonly refFileDiff: (dir: string, path: string, base: string, tip: string) => Promise<FileDiff>;
         // The git-history graph (read-only): one repo's commit log across all refs, and lazy per-commit detail
         // (changed files, then a file's before/after AT the commit).
         readonly commitLog: (dir: string, limit: number) => Promise<{ branch?: string; commits: GitCommit[] }>;
@@ -459,6 +465,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
             conflictedFileDiff,
             fileDiff: workingFileDiff,
             changesAgainstBase,
+            changesBetweenRefs,
+            refFileDiff,
             commitLog,
             commitChanges,
             commitFileDiff,

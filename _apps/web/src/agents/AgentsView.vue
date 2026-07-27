@@ -4,7 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { dropActionLabel, dropRejection } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
-import { type FleetAgent, type FleetLane, useAgents } from "../composables/agents/useAgents";
+import { FINISHED_WINDOW, type FleetAgent, type FleetLane, useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
 import AgentCard from "./AgentCard.vue";
 
@@ -18,13 +18,64 @@ import AgentCard from "./AgentCard.vue";
  * Cards drag between lanes, but because the lanes are projections a drop can't assign a status — it runs the
  * action that causes one (laneDrop): onto Finished stops a running turn or lands a conflicted one, and the
  * drop zone that appears mid-drag discards outright. Targets with no action behind them dim and explain why
- * on the drag hint instead of silently bouncing the card. */
+ * on the drag hint instead of silently bouncing the card.
+ *
+ * FINISHED is the one lane with no way out of its own — nothing transitions off landed/idle — so it needs the
+ * three affordances the other two get for free from the status machine:
+ *   · a WINDOW (FINISHED_WINDOW), because the lane's job is confirming what just completed, not holding the
+ *     sandbox's whole history; everything older collapses behind one row rather than being hidden
+ *   · "Clear", which archives the lane in one press, undoable from the notice strip
+ *   · the ARCHIVE itself, which the lane header flips to in place — a separate route would be a bigger
+ *     promise than a pile of retired agents deserves
+ * Archiving is lossless (branch, transcript and counters all stay — see the daemon's agents/archive.ts), so
+ * none of it asks for confirmation. Discard, which is not, keeps its drag gesture and its dialog. */
 
 const router = useRouter();
 const { mobile } = useDevice();
-const { lanes, blocking, unread, refresh, open, markAllSeen } = useAgents();
+const {
+    lanes,
+    blocking,
+    unread,
+    refresh,
+    open,
+    markAllSeen,
+    archived,
+    archiveLoading,
+    loadArchived,
+    archive,
+    restore,
+    notice,
+    dismissNotice,
+    busyIds,
+} = useAgents();
 const { newChat, active } = useChat();
-const { dragged, dragging, draggedId, over, action, accepts, busyId, error, ghostStyle, begin, consumeSuppressedOpen, dismissError } = useAgentDrag();
+const { dragged, dragging, draggedId, over, action, accepts, busyId, ghostStyle, begin, consumeSuppressedOpen } = useAgentDrag();
+
+// The Finished lane's two extra states. Both live here rather than in the store: they are how this ONE board
+// is being looked at, and a second surface opening the fleet should not inherit a scroll-position-like choice.
+const showAllFinished = ref(false);
+const archiveOpen = ref(false);
+
+// The lane's visible cards. Finished shows its window (or the archive, when open); the other two lanes are
+// self-emptying and show everything.
+const cardsFor = (lane: FleetLane): FleetAgent[] => {
+    if (lane !== `finished`) {
+        return lanes.value[lane];
+    }
+    if (archiveOpen.value) {
+        return archived.value;
+    }
+    return showAllFinished.value ? lanes.value.finished : lanes.value.finished.slice(0, FINISHED_WINDOW);
+};
+
+const hiddenFinished = computed(() => Math.max(0, lanes.value.finished.length - FINISHED_WINDOW));
+
+const toggleArchive = (): void => {
+    archiveOpen.value = !archiveOpen.value;
+    if (archiveOpen.value) {
+        void loadArchived();
+    }
+};
 
 // A lane's drop affordance, as ONE class string per state — two ring widths or two min-heights in the same
 // list would resolve by Tailwind's emit order rather than by intent. The min-height only exists mid-drag, to
@@ -33,7 +84,9 @@ const laneDropClass = (lane: FleetLane): string => {
     if (!dragging.value) {
         return ``;
     }
-    if (!accepts(lane)) {
+    // While the archive occupies the Finished column it isn't a lane — it has no `data-drop`, so it must not
+    // advertise one either.
+    if (!accepts(lane) || (lane === `finished` && archiveOpen.value)) {
         return `min-h-24 opacity-40`;
     }
     return over.value === lane ? `min-h-24 bg-primary-600/5 ring-2 ring-primary-500/60` : `min-h-24 ring-1 ring-line-strong/60`;
@@ -55,6 +108,10 @@ const now = ref(Date.now());
 let ticker: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
     void refresh();
+    // The archive is off the live roster, so its size has to be asked for. Worth the one request at mount:
+    // without a count the Finished header can only offer an archive the user has no reason to believe holds
+    // anything, and an empty board would hide every agent they ever ran behind an unlabelled button.
+    void loadArchived();
     ticker = setInterval(() => (now.value = Date.now()), 1000);
 });
 onUnmounted(() => clearInterval(ticker));
@@ -66,6 +123,10 @@ const LANES: readonly { key: FleetLane; label: string; dot: string; empty: strin
 ];
 
 const total = computed(() => LANES.reduce((sum, lane) => sum + lanes.value[lane.key].length, 0));
+
+// "Clear" only appears when it would do something — the Finished lane holds the archivable set exactly (it is
+// landed-or-idle by construction), so its length is the answer.
+const clearable = computed(() => lanes.value.finished.length);
 
 // Card click FOCUSES, it does not navigate: on desktop it only points the docked chat (the ONE chat surface)
 // at this agent and highlights the card — cheap and reversible, so the user can click down a lane to skim.
@@ -127,22 +188,46 @@ const startAgent = (): void => {
             </button>
         </div>
 
-        <!-- A drop's action failed (or landed with conflicts) — the board has no toast, so it reports in place. -->
-        <p v-if="error !== undefined" class="flex shrink-0 items-center gap-2 border-b border-line bg-danger/10 px-3 py-1.5 text-2xs text-danger">
-            <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
-            <span class="min-w-0 flex-1">{{ error }}</span>
-            <button type="button" aria-label="Dismiss" class="shrink-0 rounded p-0.5 hover:bg-danger/15" @click="dismissError">
+        <!-- The board has no toast, so both things it ever has to say land here: an action that failed (a drop,
+             an archive) and an action that succeeded but should be reversible. The Undo is the whole reason a
+             bulk archive needs no confirmation up front — the cheaper apology, rather than the dialog. -->
+        <p
+            v-if="notice !== undefined"
+            class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs"
+            :class="notice.tone === 'error' ? 'bg-danger/10 text-danger' : 'bg-overlay text-muted'"
+        >
+            <Icon :name="notice.tone === 'error' ? 'exclamation-triangle' : 'box'" class="shrink-0 text-2xs" />
+            <span class="min-w-0 flex-1">{{ notice.message }}</span>
+            <button
+                v-if="notice.undo !== undefined"
+                type="button"
+                class="shrink-0 rounded px-1.5 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
+                @click="notice.undo"
+            >
+                Undo
+            </button>
+            <button type="button" aria-label="Dismiss" class="shrink-0 rounded p-0.5 hover:bg-overlay" @click="dismissNotice">
                 <Icon name="times" class="text-2xs" />
             </button>
         </p>
 
-        <div v-if="total === 0" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
+        <!-- Nothing on the board AND nothing archived is the only true empty state. With an archive behind it,
+             the same screen would otherwise be a dead end: every agent the user ever ran, and no door to it. -->
+        <div v-if="total === 0 && !archiveOpen" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
             <Icon name="sparkles" class="text-3xl text-subtle" />
             <p class="max-w-sm text-xs text-muted">
                 No agents yet. Each agent works on its own isolated branch — run several in parallel and their finished work lands in your workspace
                 automatically.
             </p>
             <button type="button" :class="cmp.buttonPrimary()" @click="startAgent">Start an agent</button>
+            <button
+                v-if="archived.length > 0"
+                type="button"
+                class="inline-flex items-center gap-1 text-2xs text-link transition-colors hover:underline"
+                @click="toggleArchive"
+            >
+                <Icon name="history" class="text-2xs" />{{ archived.length }} archived agent{{ archived.length === 1 ? "" : "s" }}
+            </button>
         </div>
 
         <div v-else class="scrollbar-thin min-h-0 flex-1 overflow-auto p-3">
@@ -150,30 +235,87 @@ const startAgent = (): void => {
                 <section
                     v-for="lane in LANES"
                     :key="lane.key"
-                    :data-drop="lane.key"
+                    :data-drop="lane.key === 'finished' && archiveOpen ? undefined : lane.key"
                     class="flex min-w-0 flex-col rounded-xl bg-canvas/60 transition-colors"
                     :class="[!dragging && !mobile ? 'min-h-0' : '', laneDropClass(lane.key)]"
                 >
+                    <!-- The Finished lane doubles as the archive's window, so its header is the one that
+                         changes: in archive mode it swaps its dot and label and grows a way back. -->
                     <header class="flex items-center gap-2 px-3 py-2">
-                        <span class="h-2 w-2 rounded-full" :class="lane.dot"></span>
-                        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
-                        <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ lanes[lane.key].length }}</span>
+                        <template v-if="lane.key === 'finished' && archiveOpen">
+                            <button
+                                type="button"
+                                aria-label="Back to finished agents"
+                                v-tooltip.bottom="'Back to finished'"
+                                class="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content"
+                                @click="toggleArchive"
+                            >
+                                <Icon name="arrow-left" class="text-2xs" />
+                            </button>
+                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Archived</span>
+                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ archived.length }}</span>
+                            <Icon v-if="archiveLoading" name="spinner" spin class="text-2xs text-muted" />
+                        </template>
+                        <template v-else>
+                            <span class="h-2 w-2 rounded-full" :class="lane.dot"></span>
+                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
+                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ lanes[lane.key].length }}</span>
+                        </template>
+                        <span class="flex-1"></span>
+                        <template v-if="lane.key === 'finished' && !archiveOpen">
+                            <button
+                                v-if="archived.length > 0"
+                                type="button"
+                                :aria-label="`Open the archive (${archived.length})`"
+                                v-tooltip.bottom="'Agents taken off the board. Their branches and conversations are kept.'"
+                                class="inline-flex shrink-0 items-center gap-1 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                                @click="toggleArchive"
+                            >
+                                <Icon name="history" class="text-2xs" />{{ archived.length }}
+                            </button>
+                            <button
+                                v-if="clearable > 0"
+                                type="button"
+                                aria-label="Archive every finished agent"
+                                v-tooltip.bottom="`Archive all ${clearable} — nothing is lost, and you can undo it`"
+                                class="shrink-0 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                                @click="archive()"
+                            >
+                                Clear
+                            </button>
+                        </template>
                     </header>
-                    <p v-if="lanes[lane.key].length === 0" class="px-3 pb-3 text-2xs text-subtle">{{ lane.empty }}</p>
+                    <p v-if="lane.key === 'finished' && archiveOpen && archived.length === 0" class="px-3 pb-3 text-2xs text-subtle">
+                        Nothing archived yet. Finished agents land here on their own after a few quiet days.
+                    </p>
+                    <p v-else-if="cardsFor(lane.key).length === 0" class="px-3 pb-3 text-2xs text-subtle">{{ lane.empty }}</p>
                     <TransitionGroup v-else tag="div" name="lane" class="relative flex flex-col gap-2 px-2 pb-2">
                         <AgentCard
-                            v-for="agent in lanes[lane.key]"
+                            v-for="agent in cardsFor(lane.key)"
                             :key="agent.id"
                             :agent="agent"
                             :now="now"
                             :dragging="draggedId === agent.id && dragging"
-                            :busy="busyId === agent.id"
+                            :busy="busyId === agent.id || busyIds.includes(agent.id)"
                             :selected="!mobile && active.conversationId === agent.id"
                             @open="focusAgent(agent)"
                             @review="reviewAgent(agent)"
+                            @archive="archive([agent.id])"
+                            @restore="restore([agent.id])"
                             @grab="(event, card) => begin(event, agent, card)"
                         />
                     </TransitionGroup>
+                    <!-- The lane's tail, not a pager: the count is the point ("there are 12 more"), and the row
+                         is what keeps them one press away instead of gone. -->
+                    <button
+                        v-if="lane.key === 'finished' && !archiveOpen && hiddenFinished > 0"
+                        type="button"
+                        class="mx-2 mb-2 inline-flex items-center justify-center gap-1 rounded-lg border border-dashed border-line py-1.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
+                        @click="showAllFinished = !showAllFinished"
+                    >
+                        <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                        {{ showAllFinished ? "Show fewer" : `${hiddenFinished} earlier` }}
+                    </button>
                 </section>
             </div>
         </div>

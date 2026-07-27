@@ -12,8 +12,10 @@ const tempStore = () => {
     return { store: fileSandboxSettingsStore(path), path };
 };
 
-// Every flag off — the store's DEFAULTS, and the full shape get() must always return.
-const ALL_OFF: SandboxSettings = {
+// The store's DEFAULTS, and the full shape get() must always return. Every agent-behaviour flag is opt-in and
+// so defaults off; `agentRetentionDays` is the exception and defaults ON, because the lane it governs has no
+// exit of its own — left alone it grows a worktree checkout per agent for the life of the sandbox.
+const DEFAULTS: SandboxSettings = {
     stableSystemPrompt: false,
     skills: [],
     hashlineEdits: false,
@@ -22,29 +24,30 @@ const ALL_OFF: SandboxSettings = {
     outputCleaners: "off",
     outputHoldout: 0,
     filterBackend: "native",
+    agentRetentionDays: 3,
 };
 
-test("get defaults to every flag off when the file is absent", async () => {
+test("get returns the defaults when the file is absent", async () => {
     const { store } = tempStore();
-    expect(await store.get()).toEqual(ALL_OFF);
+    expect(await store.get()).toEqual(DEFAULTS);
 });
 
 test("set then get round-trips the full settings object", async () => {
     const { store } = tempStore();
-    const enabled: SandboxSettings = { ...ALL_OFF, iqSearch: true, hashlineEdits: true };
+    const enabled: SandboxSettings = { ...DEFAULTS, iqSearch: true, hashlineEdits: true, agentRetentionDays: 0 };
     await store.set(enabled);
     expect(await store.get()).toEqual(enabled);
-    await store.set(ALL_OFF);
-    expect(await store.get()).toEqual(ALL_OFF);
+    await store.set(DEFAULTS);
+    expect(await store.get()).toEqual(DEFAULTS);
 });
 
 test("a corrupt or schema-invalid manifest reads as the defaults rather than throwing", async () => {
     const { store, path } = tempStore();
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, "{ not valid json");
-    expect(await store.get()).toEqual(ALL_OFF);
+    expect(await store.get()).toEqual(DEFAULTS);
     await writeFile(path, JSON.stringify({ iqSearch: "yes" }));
-    expect(await store.get()).toEqual(ALL_OFF);
+    expect(await store.get()).toEqual(DEFAULTS);
 });
 
 // A manifest written before a flag existed is missing that key, which the schema fills with the flag's own
@@ -53,5 +56,5 @@ test("an older manifest missing a flag keeps its picks and defaults the new one"
     const { store, path } = tempStore();
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, JSON.stringify({ iqSearch: true }));
-    expect(await store.get()).toEqual({ ...ALL_OFF, iqSearch: true });
+    expect(await store.get()).toEqual({ ...DEFAULTS, iqSearch: true });
 });

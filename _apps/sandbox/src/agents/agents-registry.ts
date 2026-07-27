@@ -70,7 +70,11 @@ export type AgentTurnIdentity = Pick<AgentTurn, "prompt" | "title" | "model" | "
 export interface AgentsRegistry {
     readonly init: () => Promise<void>;
     readonly ids: () => string[];
+    // The BOARD's roster — live agents only. Archived ones are excluded here (and from every broadcast) so a
+    // sandbox with a thousand retired agents still streams a roster the size of the work in flight.
     readonly list: () => AgentSummary[];
+    // The cold half, newest-archived first. Read on demand by the board's archive view; never broadcast.
+    readonly listArchived: () => AgentSummary[];
     readonly get: (id: string) => AgentSummary | undefined;
     // The persisted entry — the worktree composition (per-repo bases) diff/land need.
     readonly entry: (id: string) => PersistedAgent | undefined;
@@ -102,6 +106,10 @@ export interface AgentsRegistry {
     // `outcome` carries the auto-land verdict of a clean turn — it wins over the default idle status
     // (an observed error frame still wins over everything).
     readonly finish: (id: string, now: number, outcome?: "landed" | "conflict") => Promise<void>;
+    // Stamp/clear the archive marker. Both take the ids that ALREADY had their checkout retired (or restored)
+    // — the registry owns the marker, agents/archive.ts owns the git side and the order between them.
+    readonly setArchived: (ids: readonly string[], now: number) => Promise<void>;
+    readonly clearArchived: (ids: readonly string[]) => Promise<void>;
     readonly remove: (id: string) => Promise<void>;
     // Immediate snapshot on subscribe, so a fresh /events connection paints the fleet without waiting.
     readonly subscribe: (listener: (agents: AgentSummary[]) => void) => () => void;
@@ -156,6 +164,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             ...(state?.activity !== undefined ? { activity: state.activity } : {}),
             ...(state?.running === true && state.startedAt !== undefined ? { startedAt: state.startedAt } : {}),
             ...(entry.seenAt !== undefined ? { seenAt: entry.seenAt } : {}),
+            ...(entry.archivedAt !== undefined ? { archivedAt: entry.archivedAt } : {}),
             ...(entry.turns !== undefined ? { turns: entry.turns } : {}),
             // Live count: the running turn's tool calls show on the card as they happen.
             ...((entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) > 0 ? { toolUses: (entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) } : {}),
@@ -165,7 +174,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
         };
     };
 
-    const list = (): AgentSummary[] => entries.map(summaryOf);
+    const list = (): AgentSummary[] => entries.filter((entry) => entry.archivedAt === undefined).map(summaryOf);
 
     const broadcast = (): void => {
         const agents = list();
@@ -188,6 +197,11 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
         },
         ids: () => entries.map((entry) => entry.id),
         list,
+        listArchived: () =>
+            entries
+                .filter((entry) => entry.archivedAt !== undefined)
+                .toSorted((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
+                .map(summaryOf),
         get: (id) => {
             const entry = entryOf(id);
             return entry === undefined ? undefined : summaryOf(entry);
@@ -221,6 +235,9 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 // The read marker survives the rebuild too — a new turn makes the agent unread again (updatedAt
                 // now outruns it), but WHEN it was last opened is what tells "New" from "Updated".
                 ...(existing?.seenAt !== undefined ? { seenAt: existing.seenAt } : {}),
+                // `archivedAt` is deliberately NOT carried across: sending an archived agent a message is how
+                // you un-archive it, so the entry rebuilt here is a live one again. The checkout follows
+                // immediately — the ensure() right after this re-attaches it from the surviving branch.
                 // Lifetime counters + diffstat survive the per-turn entry rebuild.
                 ...(existing?.turns !== undefined ? { turns: existing.turns } : {}),
                 ...(existing?.toolUses !== undefined ? { toolUses: existing.toolUses } : {}),
@@ -385,6 +402,26 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 ...entry,
                 repos: [...repos],
                 ...(diff !== undefined ? { diffFiles: diff.files, diffInsertions: diff.insertions, diffDeletions: diff.deletions } : {}),
+            });
+            await persist();
+            broadcast();
+        },
+        setArchived: async (ids, now) => {
+            const targets = new Set(ids);
+            entries = entries.map((entry) => (targets.has(entry.id) ? { ...entry, archivedAt: now } : entry));
+            await persist();
+            // The roster this broadcasts no longer contains them — which IS how every connected surface learns
+            // the cards left the board.
+            broadcast();
+        },
+        clearArchived: async (ids) => {
+            const targets = new Set(ids);
+            entries = entries.map((entry) => {
+                if (!targets.has(entry.id)) {
+                    return entry;
+                }
+                const { archivedAt: _archived, ...live } = entry;
+                return live;
             });
             await persist();
             broadcast();

@@ -208,6 +208,25 @@ const toggleIqSearch = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, iqSearch: value });
 };
 
+// How long a finished agent stays on the fleet board before the daemon archives it (and reclaims its worktree
+// checkout). Days, because the sweep runs hourly and the whole point is "after you've stopped thinking about
+// it"; 0 turns the sweep off entirely.
+// Segmented speaks strings, the setting is a number of days — so the option values are the decimal spellings
+// and this is where they come back.
+const setAgentRetentionDays = (days: string): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, agentRetentionDays: Number(days) });
+};
+const retentionOptions = [
+    { label: `1 day`, value: `1` },
+    { label: `3 days`, value: `3` },
+    { label: `1 week`, value: `7` },
+    { label: `Never`, value: `0` },
+];
+
 // --- Per-cleaner toggles (the `outputCleaners` spec, edited as a checklist) ---------------------------------
 // Every cleaner id + a short label, in the order of bin/cleaners.mjs CLEANERS (keep in sync). Each renders one
 // switch; the checklist round-trips through the spec string the daemon already threads to the filter, so every
@@ -667,6 +686,24 @@ const importMemory = async (): Promise<void> => {
                         :model-value="sandboxSettings?.iqSearch ?? false"
                         :disabled="sandboxSettings === undefined"
                         @update:model-value="toggleIqSearch"
+                    />
+                </template>
+            </Row>
+
+            <!-- Agent retention — how long a finished agent keeps its card AND its worktree checkout. The
+                 Finished lane has no exit of its own, so without this the board (and the disk behind it) grows
+                 for the life of the sandbox. Archiving is lossless, which is what makes an automatic sweep
+                 acceptable at all: "Never" is offered, but it costs a checkout per agent forever. -->
+            <Row
+                icon="box"
+                title="Archive finished agents"
+                description="Take a finished agent off the board after it has been quiet this long, and reclaim its worktree. Its branch, diff and conversation are kept — restore it any time from the board's archive."
+            >
+                <template #control>
+                    <Segmented
+                        :model-value="String(sandboxSettings?.agentRetentionDays ?? 3)"
+                        :options="retentionOptions"
+                        @update:model-value="setAgentRetentionDays"
                     />
                 </template>
             </Row>

@@ -6,6 +6,7 @@ import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { useAsyncAction } from "../useAsyncAction";
 import { discardAgent, invalidateAgentAction, landAgent } from "./agentActions";
+import { useAgents } from "./useAgents";
 
 /* Per-agent isolated review — one conversation worktree's CUMULATIVE output (GET /agents/{id}/diff, the
  * AgentChanges wire shape: one flat set per repo, no staged/unstaged split, because a worktree the user never
@@ -111,6 +112,11 @@ export function useAgentChanges(agentId: Ref<string>) {
             await invalidateAgentAction(agentId.value);
         }, `Discard failed.`);
 
+    // Finishing WITH an agent, as opposed to finishing its work — the panel's counterpart to the board's
+    // archive affordance, offered here because the review is where a user decides they are done looking. The
+    // diff survives archiving (it is re-read from the branch), so the panel keeps rendering afterwards.
+    const archive = (): Promise<void> => run(() => useAgents().archive([agentId.value]), `Archive failed.`);
+
     return {
         repos,
         files,
@@ -127,6 +133,7 @@ export function useAgentChanges(agentId: Ref<string>) {
         setViewed,
         land,
         discard,
+        archive,
         conflicts,
         actionBusy,
         actionError,

@@ -2,6 +2,8 @@ import { access, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
+import { changedFiles } from "../git/changes.js";
+import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 
@@ -32,6 +34,10 @@ export interface AgentWorktrees {
     readonly ensure: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<ConversationWorktree>;
     // Tear down: worktree remove (before branch -D — git refuses to delete a checked-out branch), then the dir.
     readonly remove: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<void>;
+    // Retire the CHECKOUT and keep the branch — what archiving an agent costs. Everything the worktree still
+    // held is committed onto agent/<id> first (land's move, same author), so the branch is a complete record
+    // and `ensure` can restore the checkout from it whenever the agent runs again.
+    readonly retire: (id: string, recorded: readonly { repo: string; base: string }[], title: string | undefined) => Promise<void>;
     // Boot sweep: delete conversation dirs with no registry entry, then `git worktree prune` every repo.
     readonly prune: (knownIds: readonly string[]) => Promise<void>;
     // Serialize git ops that touch a repo's shared worktree admin area / main index (create/remove/land).
@@ -162,6 +168,45 @@ export const createAgentWorktrees = (
                         git(main, ["worktree", "prune"]).catch(() => undefined),
                     );
                     await git(main, ["branch", "-D", `agent/${id}`]).catch(() => undefined);
+                });
+            }
+            await rm(conversationDir(id), { recursive: true, force: true });
+        },
+        retire: async (id, recorded, title) => {
+            // Two passes on purpose. EVERY repo is committed before ANY checkout goes, so a failure partway
+            // through leaves worktrees standing rather than a branch that is missing the work its checkout held.
+            for (const { repo } of recorded) {
+                await withRepoLock(repo, async () => {
+                    const worktree = worktreeDir(id, repo);
+                    if (!(await exists(join(worktree, ".git")))) {
+                        return; // Never created, or already retired — nothing to preserve.
+                    }
+                    // Dirty on either side, exactly like land: the agent may have staged part of its work and
+                    // left the rest loose, and `add -A` below sweeps up both.
+                    const state = await changedFiles(worktree, git);
+                    if (state.staged.length + state.unstaged.length === 0) {
+                        return;
+                    }
+                    await git(worktree, ["add", "-A"]);
+                    await git(worktree, [
+                        "-c",
+                        `user.name=${AGENT_GIT_AUTHOR.name}`,
+                        "-c",
+                        `user.email=${AGENT_GIT_AUTHOR.email}`,
+                        "commit",
+                        "-q",
+                        "-m",
+                        `Agent: ${title ?? id}`,
+                    ]);
+                });
+            }
+            for (const { repo } of recorded) {
+                await withRepoLock(repo, async () => {
+                    const main = mainDir(repo);
+                    // No `branch -D` — the branch IS the archive. Only the checkout is reclaimed.
+                    await git(main, ["worktree", "remove", "--force", worktreeDir(id, repo)]).catch(() =>
+                        git(main, ["worktree", "prune"]).catch(() => undefined),
+                    );
                 });
             }
             await rm(conversationDir(id), { recursive: true, force: true });

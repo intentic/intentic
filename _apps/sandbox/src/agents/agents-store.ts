@@ -57,6 +57,10 @@ export const PersistedAgentSchema = z.object({
     // a browser so it survives a cache wipe and holds across every device the fleet is driven from. Absent ⇒
     // never opened.
     seenAt: z.number().optional(),
+    // When the agent was archived (ms epoch) — off the board, checkout retired, branch kept. Absent ⇒ live.
+    // The entry survives archiving in full: this is a presentation state plus a disk reclaim, not a deletion,
+    // so cost/usage/attribution keep answering for it and a new turn clears the stamp (see registry.begin).
+    archivedAt: z.number().optional(),
 });
 export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
 

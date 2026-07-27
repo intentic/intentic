@@ -4,6 +4,7 @@ import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
+import { sweepAgedAgents } from "./agents/archive.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { startTranslator } from "./agent/translator.js";
@@ -88,6 +89,11 @@ const main = async (): Promise<void> => {
         .init()
         .then(async () => {
             for (const id of services.agents.ids()) {
+                // An ARCHIVED entry is *supposed* to have no worktree — that is what archiving reclaimed. It is
+                // held by its branch instead, so it must never look like the vanished-worktree case below.
+                if (services.agents.entry(id)?.archivedAt !== undefined) {
+                    continue;
+                }
                 if (!(await services.agentWorktrees.exists(id))) {
                     await services.agents.remove(id);
                 }
@@ -95,6 +101,18 @@ const main = async (): Promise<void> => {
             await services.agentWorktrees.prune(services.agents.ids());
         })
         .catch((error: unknown) => logger.warn({ err: error }, "agents registry not initialized — the fleet starts empty"));
+
+    // Keep the Finished lane from becoming the sandbox's permanent record: archive agents that have sat
+    // finished past the retention window (settings.agentRetentionDays; 0 ⇒ never). Once at boot, then hourly —
+    // the window is measured in days, so nothing finer is worth a timer. Losslessly: see agents/archive.ts.
+    const sweepArchive = (): Promise<void> =>
+        services.sandboxSettings
+            .get()
+            .then((settings) => sweepAgedAgents(services, Date.now(), settings.agentRetentionDays * 24 * 60 * 60 * 1000))
+            .then(() => undefined)
+            .catch((error: unknown) => logger.warn({ err: error }, "agents: archive sweep failed"));
+    void sweepArchive();
+    setInterval(() => void sweepArchive(), 60 * 60 * 1000).unref();
 
     // Recompose the environment overlay from the manifest — converges fragment drift (a daemon update that
     // changes a capability's fragment flips the derived state to "pending rebuild"); no-op on fresh sandboxes.

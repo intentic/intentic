@@ -6,6 +6,7 @@
 // on the latter — it strips every tag and keeps <script> CONTENT, which would make these tests worse than
 // useless. This is the only file that needs a document; the rest of the suite stays on `node`.
 import { describe, expect, it, test } from "vitest";
+import { escapeHtml } from "./markdownCode";
 import { createStreamingMarkdown, markdownParseCount, renderMarkdown, settledEnd } from "./renderMarkdown";
 
 // The one invariant that keeps a streamed chat bubble alive: renderMarkdown must NEVER throw and must always
@@ -64,6 +65,37 @@ describe(`code blocks`, () => {
         expect(html).toContain(`first();`);
         expect(html).toContain(`second()`);
         expect(html).not.toContain(`data-md-code`);
+    });
+});
+
+/* A whole answer that is nothing but a block marker parses to markup with no text in it, and the bubble then
+ * renders an empty box — the turn reads as if the model never replied. Observed with a Haiku turn whose entire
+ * answer was "4."; these pin the fallback that shows the source instead, and the markup it must NOT swallow. */
+describe(`markup that would render invisibly`, () => {
+    it(`shows a bare ordered-list marker as the text it is`, () => {
+        expect(renderMarkdown(`4.`)).toContain(`4.`);
+        expect(renderMarkdown(`4.`)).not.toContain(`<ol`);
+    });
+
+    it(`covers the other markers a one-line answer can be`, () => {
+        for (const source of [`#`, `-`, `1)`, `>`]) {
+            expect(renderMarkdown(source)).toContain(escapeHtml(source));
+        }
+    });
+
+    it(`recovers the same way on a streaming tail frame`, () => {
+        expect(createStreamingMarkdown().render(`4.`).tail).toContain(`4.`);
+    });
+
+    it(`leaves markup that is visible without text alone`, () => {
+        expect(renderMarkdown(`---`)).toContain(`<hr>`);
+        expect(renderMarkdown(`![a](x.png)`)).toContain(`<img`);
+        expect(renderMarkdown("```\n\n```")).toContain(`md-code`);
+    });
+
+    it(`leaves ordinary prose and real lists alone`, () => {
+        expect(renderMarkdown(`4. four`)).toContain(`<ol`);
+        expect(renderMarkdown(`Done.`)).toBe(`<p>Done.</p>\n`);
     });
 });
 
