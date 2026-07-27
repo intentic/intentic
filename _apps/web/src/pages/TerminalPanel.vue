@@ -4,7 +4,7 @@ import type { Disposable } from "@intentic/extension-api";
 import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
 import { commandShortcut, registerCommand, type RegisteredCommand } from "../composables/commands/useCommands";
 import { setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
@@ -158,20 +158,44 @@ const clearFinished = (): void => {
     sweepPreview.value = false;
 };
 
-// --- Rename / color / icon (per-terminal overrides, terminalMeta) ------------------------------
-const customize = ref<{ name: string; mode: `rename` | `color` | `icon` } | undefined>(undefined);
-const renameInput = ref(``);
-const openCustomize = (name: string, mode: `rename` | `color` | `icon`): void => {
-    renameInput.value = terminalMeta(name).label ?? ``;
-    customize.value = { name, mode };
+// --- Rename (inline, in the strip) -------------------------------------------------------------
+// The pill's label edits IN PLACE — the same gesture as a chat tab and a workspace-tree file, and for the same
+// reason: renaming is a one-field edit of something already on screen, so a modal that hides the strip it
+// renames is pure ceremony. Enter commits, Esc cancels, blur commits, and an EMPTY name clears the override
+// back to the default label (that's the reset, hence no silent-cancel-on-empty here).
+const renamingName = ref<string | undefined>(undefined);
+const renameDraft = ref(``);
+const beginRename = (name: string): void => {
+    renameDraft.value = terminalMeta(name).label ?? ``;
+    renamingName.value = name;
 };
-const applyRename = (): void => {
-    if (customize.value === undefined) {
-        return;
+const commitRename = (): void => {
+    const name = renamingName.value;
+    renamingName.value = undefined;
+    if (name === undefined) {
+        return; // Enter already committed; the input's unmount blur must not commit again
     }
-    const trimmed = renameInput.value.trim();
-    setTerminalMeta(customize.value.name, { label: trimmed === `` ? undefined : trimmed });
-    customize.value = undefined;
+    const trimmed = renameDraft.value.trim();
+    setTerminalMeta(name, { label: trimmed === `` ? undefined : trimmed });
+};
+const cancelRename = (): void => {
+    renamingName.value = undefined;
+};
+// Focus + select the field the moment it mounts (the @vue:mounted trick, see WorkspaceTree).
+const focusRename = (vnode: VNode): void => {
+    const el = vnode.el as HTMLInputElement;
+    el.focus();
+    el.select();
+};
+// The default label a cleared name falls back to — the input's placeholder, so "empty resets" is visible.
+const defaultLabel = (name: string): string => tabByName.value.get(name)?.label ?? `Terminal ${stripIndex.value.get(name) ?? ``}`;
+
+// --- Color / icon (per-terminal overrides, terminalMeta) ---------------------------------------
+// These two stay in a dialog: a swatch grid is a picker, not a text field, and it has nowhere to live in a
+// 6px-tall pill.
+const customize = ref<{ name: string; mode: `color` | `icon` } | undefined>(undefined);
+const openCustomize = (name: string, mode: `color` | `icon`): void => {
+    customize.value = { name, mode };
 };
 const applyColor = (color: TerminalColor | undefined): void => {
     if (customize.value === undefined) {
@@ -188,20 +212,9 @@ const applyIcon = (icon: IconName | undefined): void => {
     customize.value = undefined;
 };
 const colorOptions = Object.entries(TERMINAL_COLORS) as [TerminalColor, string][];
-const customizeHeader = computed(() => {
-    if (customize.value === undefined) {
-        return ``;
-    }
-    return { rename: `Rename terminal`, color: `Terminal color`, icon: `Terminal icon` }[customize.value.mode];
-});
-// The default label shown as the rename placeholder — clearing the input returns to it.
-const customizeFallback = computed(() => {
-    const name = customize.value?.name;
-    if (name === undefined) {
-        return ``;
-    }
-    return tabByName.value.get(name)?.label ?? `Terminal ${stripIndex.value.get(name) ?? ``}`;
-});
+const customizeHeader = computed(() =>
+    customize.value === undefined ? `` : { color: `Terminal color`, icon: `Terminal icon` }[customize.value.mode],
+);
 
 // --- Context menu (right-click a pill) ---------------------------------------------------------
 const menu = ref<{ show: (event: Event) => void } | undefined>();
@@ -273,7 +286,7 @@ const menuItems = computed<MenuItem[]>(() => {
         items.push({ separator: true });
     }
     items.push(
-        { label: `Rename…`, shortcut: commandShortcut(`terminal.rename`), command: () => openCustomize(name, `rename`) },
+        { label: `Rename`, shortcut: commandShortcut(`terminal.rename`), command: () => beginRename(name) },
         { label: `Change color…`, shortcut: commandShortcut(`terminal.changeColor`), command: () => openCustomize(name, `color`) },
         { label: `Change icon…`, shortcut: commandShortcut(`terminal.changeIcon`), command: () => openCustomize(name, `icon`) },
     );
@@ -301,10 +314,54 @@ const menuItems = computed<MenuItem[]>(() => {
     return items;
 });
 
-// The panel element — the resize drag measures it, and terminal.rename's `when` gate asks it whether a
-// keystroke came from inside this panel (it declares here, above that gate, rather than beside the other
-// template refs below).
+// --- Panel geometry ----------------------------------------------------------------------------
+// Persisted per surface (maximized deliberately isn't — restoring a full-screen terminal across reloads would
+// be hostile). Height is clamped to a floor and ~80% of the viewport. Declared above the commands below, which
+// expand a collapsed panel and measure the root.
+const HEIGHT_KEY = `ui-${storageKey}-terminal-height`;
+const COLLAPSED_KEY = `ui-${storageKey}-terminal-collapsed`;
+const DEFAULT_HEIGHT = 240;
+const MIN_HEIGHT = 96;
+const clampHeight = (px: number): number => Math.round(Math.max(MIN_HEIGHT, Math.min(px, window.innerHeight * 0.8)));
+const readHeight = (): number => {
+    try {
+        const parsed = Number.parseInt(localStorage.getItem(HEIGHT_KEY) ?? ``, 10);
+        return Number.isFinite(parsed) ? clampHeight(parsed) : DEFAULT_HEIGHT;
+    } catch {
+        return DEFAULT_HEIGHT;
+    }
+};
+const readCollapsed = (): boolean => {
+    try {
+        return localStorage.getItem(COLLAPSED_KEY) === `1`;
+    } catch {
+        return false;
+    }
+};
+const write = (key: string, value: string): void => {
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        // Storage may be unavailable (private mode); the in-memory ref still holds.
+    }
+};
+
 const root = ref<HTMLElement>();
+const height = ref(readHeight());
+const collapsed = ref(readCollapsed());
+// A fixed surface (the mobile route, the pop-out window) has no collapse chevron, so honoring a collapsed
+// flag persisted from the docked panel would strand an empty pane there — ignore it while !resizable.
+const effectiveCollapsed = computed(() => collapsed.value && resizable);
+// Modeled so a parent can react (the workspace hides its file viewer while the panel is maximized).
+const maximized = defineModel<boolean>(`maximized`, { default: false });
+const setHeight = (px: number): void => {
+    height.value = clampHeight(px);
+    write(HEIGHT_KEY, String(height.value));
+};
+const setCollapsed = (value: boolean): void => {
+    collapsed.value = value;
+    write(COLLAPSED_KEY, value ? `1` : `0`);
+};
 
 // --- Palette commands + shortcuts --------------------------------------------------------------
 // Every strip action is also a registered command, so it lives in `>` (Ctrl+P) and on a shortcut. Registered
@@ -333,7 +390,7 @@ const registerPanelCommands = (): void => {
     const entries: Omit<RegisteredCommand, `owner`>[] = [
         {
             command: `terminal.rename`,
-            title: `Rename Terminal…`,
+            title: `Rename Terminal`,
             icon: `pencil`,
             // F2 — the rename key everywhere else in the app (the workspace tree's, the chat strip's) — gated to
             // a keystroke that came from INSIDE this panel. Outside it the chord stays free (the tree renames
@@ -343,8 +400,14 @@ const registerPanelCommands = (): void => {
             keybinding: `F2`,
             when: (event): boolean => event.target instanceof Node && root.value?.contains(event.target) === true,
             handler: (): void => {
+                if (renamingName.value !== undefined) {
+                    return; // already editing (F2 lands in the field) — restarting would wipe the draft
+                }
+                // The strip renames the ACTIVE terminal — collapsed, its pill (and the field) isn't on screen,
+                // so expand first rather than edit something invisible.
                 if (activeName.value !== undefined) {
-                    openCustomize(activeName.value, `rename`);
+                    setCollapsed(false);
+                    beginRename(activeName.value);
                 }
             },
         },
@@ -494,52 +557,6 @@ const EXTRA_KEYS: readonly { label: string; data: string }[] = [
 // pointerdown (not click) with preventDefault: keep the xterm textarea focused so the soft keyboard stays up.
 const pressKey = (data: string): void => tabs.sendInput(data);
 
-// Panel geometry, persisted per surface (maximized deliberately isn't — restoring a full-screen terminal
-// across reloads would be hostile). Height is clamped to a floor and ~80% of the viewport.
-const HEIGHT_KEY = `ui-${storageKey}-terminal-height`;
-const COLLAPSED_KEY = `ui-${storageKey}-terminal-collapsed`;
-const DEFAULT_HEIGHT = 240;
-const MIN_HEIGHT = 96;
-const clampHeight = (px: number): number => Math.round(Math.max(MIN_HEIGHT, Math.min(px, window.innerHeight * 0.8)));
-const readHeight = (): number => {
-    try {
-        const parsed = Number.parseInt(localStorage.getItem(HEIGHT_KEY) ?? ``, 10);
-        return Number.isFinite(parsed) ? clampHeight(parsed) : DEFAULT_HEIGHT;
-    } catch {
-        return DEFAULT_HEIGHT;
-    }
-};
-const readCollapsed = (): boolean => {
-    try {
-        return localStorage.getItem(COLLAPSED_KEY) === `1`;
-    } catch {
-        return false;
-    }
-};
-const write = (key: string, value: string): void => {
-    try {
-        localStorage.setItem(key, value);
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds.
-    }
-};
-
-const height = ref(readHeight());
-const collapsed = ref(readCollapsed());
-// A fixed surface (the mobile route, the pop-out window) has no collapse chevron, so honoring a collapsed
-// flag persisted from the docked panel would strand an empty pane there — ignore it while !resizable.
-const effectiveCollapsed = computed(() => collapsed.value && resizable);
-// Modeled so a parent can react (the workspace hides its file viewer while the panel is maximized).
-const maximized = defineModel<boolean>(`maximized`, { default: false });
-const setHeight = (px: number): void => {
-    height.value = clampHeight(px);
-    write(HEIGHT_KEY, String(height.value));
-};
-const setCollapsed = (value: boolean): void => {
-    collapsed.value = value;
-    write(COLLAPSED_KEY, value ? `1` : `0`);
-};
-
 const container = ref<HTMLElement>();
 
 // The spawn-hook disposer (registered after attach, so a mid-attach "New Terminal" lands in the pending flag
@@ -659,9 +676,9 @@ const endResize = (event: PointerEvent): void => {
                         <div
                             class="flex h-full items-center gap-1.5 pl-2 pr-1.5 text-2xs"
                             :class="{ 'opacity-60': tabByName.get(name)?.running === false, 'tterm-doomed': sweepPreview && dead.has(name) }"
-                            v-tooltip.top="segmentTooltip(name)"
+                            v-tooltip.top="renamingName === name ? undefined : segmentTooltip(name)"
                             @click="onSegmentClick($event, gi, name)"
-                            @dblclick.prevent.stop="openCustomize(name, `rename`)"
+                            @dblclick.prevent.stop="beginRename(name)"
                             @contextmenu.prevent.stop="openTabMenu($event, gi, name)"
                         >
                             <Icon
@@ -676,9 +693,27 @@ const endResize = (event: PointerEvent): void => {
                                 "
                                 :style="segmentColor(name) === undefined ? undefined : { color: segmentColor(name) }"
                             />
-                            <span>{{ segmentLabel(name) }}</span>
+                            <!-- The label edits in place. The field sizes itself to the pill (a fixed w-24 —
+                                 the strip must not jump as you type) and swallows the clicks it sits on, so a
+                                 caret drag isn't also a tab switch. -->
+                            <input
+                                v-if="renamingName === name"
+                                v-model="renameDraft"
+                                type="text"
+                                maxlength="40"
+                                aria-label="Terminal name"
+                                :placeholder="defaultLabel(name)"
+                                class="w-24 min-w-0 select-text rounded bg-canvas px-1 text-2xs text-content outline-none ring-1 ring-line-strong placeholder:text-subtle"
+                                @click.stop
+                                @dblclick.stop
+                                @keydown.enter.stop.prevent="commitRename"
+                                @keydown.esc.stop.prevent="cancelRename"
+                                @blur="commitRename"
+                                @vue:mounted="focusRename"
+                            />
+                            <span v-else>{{ segmentLabel(name) }}</span>
                             <span
-                                v-if="closeTab !== undefined"
+                                v-if="closeTab !== undefined && renamingName !== name"
                                 class="relative flex h-3 w-3 shrink-0 items-center justify-center"
                                 @click.stop="closeTab(name)"
                                 aria-label="Close tab"
@@ -810,8 +845,8 @@ const endResize = (event: PointerEvent): void => {
             </template>
         </ContextMenu>
 
-        <!-- One dialog for rename / color / icon. Rename applies on Enter (empty resets to the default label);
-             color and icon apply on click, with a leading "default" swatch that clears the override. -->
+        <!-- One dialog for the two pickers, color and icon: both apply on click, with a leading "default"
+             swatch that clears the override. (Rename is inline in the strip, not here.) -->
         <Dialog
             :visible="customize !== undefined"
             :modal="true"
@@ -823,16 +858,7 @@ const endResize = (event: PointerEvent): void => {
             @update:visible="customize = undefined"
         >
             <template v-if="customize">
-                <input
-                    v-if="customize.mode === 'rename'"
-                    v-model="renameInput"
-                    type="text"
-                    :placeholder="customizeFallback"
-                    class="w-full rounded-md border border-line bg-canvas px-2 py-1 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                    @keydown.enter="applyRename"
-                    autofocus
-                />
-                <div v-else-if="customize.mode === 'color'" class="flex flex-wrap items-center gap-2">
+                <div v-if="customize.mode === 'color'" class="flex flex-wrap items-center gap-2">
                     <button
                         type="button"
                         class="flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-line text-subtle transition-colors hover:border-line-strong hover:text-content"
@@ -874,22 +900,6 @@ const endResize = (event: PointerEvent): void => {
                         @click="applyIcon(icon)"
                     >
                         <Icon :name="icon" class="text-sm" />
-                    </button>
-                </div>
-                <div v-if="customize.mode === 'rename'" class="mt-3 flex justify-end gap-2">
-                    <button
-                        type="button"
-                        class="rounded-md px-2.5 py-1 text-xs text-muted transition-colors hover:bg-overlay hover:text-content"
-                        @click="customize = undefined"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        class="rounded-md bg-primary-600/15 px-2.5 py-1 text-xs font-medium text-link transition-colors hover:bg-primary-600/25"
-                        @click="applyRename"
-                    >
-                        Rename
                     </button>
                 </div>
             </template>

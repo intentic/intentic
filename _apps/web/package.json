@@ -61,6 +61,7 @@
         "@tailwindcss/vite": "catalog:",
         "@types/node": "catalog:",
         "@vitejs/plugin-vue": "catalog:",
+        "@xterm/headless": "catalog:",
         "esbuild": "catalog:",
         "jsdom": "catalog:",
         "tailwindcss": "catalog:",

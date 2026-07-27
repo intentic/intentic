@@ -1,13 +1,14 @@
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/xterm";
-import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/sandbox-contract";
+import { useDevice } from "@intentic-app/ui";
 import { boundCommand } from "../commands/useCommands";
 import { isApplePlatform } from "../commands/keybindings";
 import { useGoogleIdentity } from "../useGoogleIdentity";
 import { useSandbox } from "../sandbox/useSandbox";
 import { registerFilePathLinks } from "./terminalFileLinks";
+import { registerUrlLinks } from "./terminalUrlLinks";
 import { openLoopbackPreview, parseLoopbackLink } from "./portPreview";
 import "@xterm/xterm/css/xterm.css";
 
@@ -63,11 +64,13 @@ export type TerminalSession = {
 // Ctrl/Cmd+click opens a link (VSCode's terminal gesture) — a plain click must stay a click/selection
 // gesture (createTerminalSession's drag gate routes it to tmux). Ctrl+click bypasses that gate, so the
 // linkifier's mouseup here is the trusted event: real modifier state, and the user activation that keeps
-// popup blockers quiet. A localhost link names the SANDBOX's loopback (the printing process runs inside the
-// remote container), so it opens as a forwarded-port preview instead of a dead tab. Any other URI is arbitrary
-// program output — the new tab gets no opener.
+// popup blockers quiet. A coarse pointer has no modifier to hold and no way to select wrapped text, so there a
+// tap IS the gesture — otherwise the link a phone needs most (the agent's OAuth URL) is the one it can't reach.
+// A localhost link names the SANDBOX's loopback (the printing process runs inside the remote container), so it
+// opens as a forwarded-port preview instead of a dead tab. Any other URI is arbitrary program output — the new
+// tab gets no opener.
 const openLink = (event: MouseEvent, uri: string): void => {
-    if (!event.ctrlKey && !event.metaKey) {
+    if (!event.ctrlKey && !event.metaKey && !useDevice().coarse.value) {
         return;
     }
     const loopback = parseLoopbackLink(uri);
@@ -407,11 +410,13 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     term.attachCustomKeyEventHandler((event) => event.type !== `keydown` || boundCommand(event, isMac) === undefined);
     const serialize = new SerializeAddon();
     term.loadAddon(serialize);
-    // Plain-text URLs in output (a dev server's localhost line, pnpm's changelog link) become Ctrl/Cmd+clickable.
-    term.loadAddon(new WebLinksAddon(openLink));
+    // Plain-text URLs in output (a dev server's localhost line, pnpm's changelog link, an agent's OAuth URL)
+    // become Ctrl/Cmd+clickable — including the ones a program hard-wrapped across rows, which xterm's own
+    // web-links addon cannot rejoin (see terminalUrlLinks).
+    registerUrlLinks(term, openLink);
     // File references in output (tsc/eslint/vitest errors, node stack traces) become Ctrl/Cmd+clickable, opening
-    // in the workspace editor at the referenced line. Registered after the URL addon so a URL's path tail stays
-    // owned by the URL provider.
+    // in the workspace editor at the referenced line. Registered after the URL provider so a URL's path tail
+    // stays owned by it.
     registerFilePathLinks(term);
     // tmux runs with `set-clipboard on`, so a copy in copy-mode (`y`, …) arrives here as OSC 52
     // with a base64 payload — land it in the browser clipboard, which xterm otherwise ignores. `?` asks to
