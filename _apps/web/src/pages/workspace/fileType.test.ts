@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeLangForPath, langFromShebang, RAW_MAX_BYTES, resolveFile } from "./fileType";
+import { codeLangForPath, langFromShebang, RAW_MAX_BYTES, rendersAsBytes, resolveFile } from "./fileType";
 
 // Empty (0-byte) files: text types stay editable (code/markdown); non-text preview types show the "empty" fallback.
 describe(`resolveFile empty files`, () => {
@@ -126,5 +126,31 @@ describe(`codeLangForPath`, () => {
     it(`returns undefined for an extension we ship no grammar for`, () => {
         expect(codeLangForPath(`notes.xyz`)).toBeUndefined();
         expect(codeLangForPath(`LICENSE`)).toBeUndefined();
+    });
+});
+
+// Which diffs the byte viewer takes over. The daemon's `binary` flag answers for a file whose extension says
+// nothing; the PATH answers for the case that flag misses entirely — an image over the 512 KiB text-diff cap,
+// which arrives flagged `truncated` and is nonetheless perfectly showable.
+describe(`rendersAsBytes`, () => {
+    it(`takes the daemon's word when a file has NUL bytes and no telling extension`, () => {
+        expect(rendersAsBytes(`data`, true)).toBe(true);
+        expect(rendersAsBytes(`notes.txt`, true)).toBe(true);
+    });
+
+    it(`claims every non-text path regardless of what the response said`, () => {
+        // The case this exists for: a big screenshot, reported truncated rather than binary.
+        expect(rendersAsBytes(`shots/rg-2.png`, undefined)).toBe(true);
+        expect(rendersAsBytes(`doc.pdf`, undefined)).toBe(true);
+        expect(rendersAsBytes(`fonts/Inter.woff2`, undefined)).toBe(true);
+        expect(rendersAsBytes(`bundle.zip`, undefined)).toBe(true);
+    });
+
+    it(`leaves text to the text diff, including the genuinely oversized kind`, () => {
+        expect(rendersAsBytes(`src/main.ts`, undefined)).toBe(false);
+        expect(rendersAsBytes(`README.md`, undefined)).toBe(false);
+        // SVG is text and gets a source toggle in the viewer — it is diffable as lines.
+        expect(rendersAsBytes(`icon.svg`, undefined)).toBe(false);
+        expect(rendersAsBytes(`LICENSE`, undefined)).toBe(false);
     });
 });

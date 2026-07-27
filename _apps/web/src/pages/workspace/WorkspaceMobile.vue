@@ -14,7 +14,9 @@ import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute
 import { useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
+import BinaryDiffView from "./viewers/BinaryDiffView.vue";
 import DiffView from "./viewers/DiffView.vue";
+import { rendersAsBytes } from "./fileType";
 import type { DiffTabPayload } from "./workspaceTabs";
 import { filesToEntries } from "./dropEntries";
 import { iconForEntry } from "@intentic-app/ui";
@@ -225,7 +227,15 @@ const onPick = (event: Event): void => {
             </div>
             <div class="min-h-0 flex-1">
                 <template v-if="diffTab">
-                    <p v-if="diffTab.binary" class="p-4 text-xs text-subtle">Binary file — no text diff to show.</p>
+                    <!-- No text to diff is not the same as nothing to see: an image renders as its two sides
+                         (stacked here — two panes don't fit a phone). -->
+                    <BinaryDiffView
+                        v-if="rendersAsBytes(diffTab.path, diffTab.binary)"
+                        :key="diffTab.id"
+                        :path="diffTab.path"
+                        :before="diffTab.beforeRaw"
+                        :after="diffTab.afterRaw"
+                    />
                     <p v-else-if="diffTab.truncated" class="p-4 text-xs text-subtle">File too large to diff in the browser.</p>
                     <DiffView v-else :key="diffTab.id" :before="diffTab.before" :after="diffTab.after" :path="diffTab.path" />
                 </template>

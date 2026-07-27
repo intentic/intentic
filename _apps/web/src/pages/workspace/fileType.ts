@@ -281,3 +281,18 @@ export const resolveFile = (path: string, size: number | undefined): FileResolut
     }
     return { mode: "code", lang: tooBig(HIGHLIGHT_MAX_BYTES) ? undefined : langFor(name, ext) };
 };
+
+// The render modes that are TEXT — the ones a line-by-line diff is the right tool for.
+const TEXT_MODES: ReadonlySet<ViewMode> = new Set<ViewMode>(["code", "markdown", "svg"]);
+
+// Is a DIFF of this path one to show as bytes rather than as text? Two independent answers, and both are
+// needed:
+//   - the daemon read NUL bytes out of a file whose extension told us nothing (`binary` on the response), or
+//   - the path itself says there was never any text here — a .png, a .pdf, a .zip.
+// The second is what stops an image from falling into the "too large to diff" message. The daemon flags a side
+// over its 512 KiB text cap as `truncated` BEFORE it ever looks for NUL bytes, so a megabyte screenshot arrives
+// claiming to be an oversized text file. It isn't one, and /diff/raw serves it to 25 MiB — the size that
+// matters for showing a picture, not the size that matters for tokenizing source. `truncated` keeps its
+// meaning for what it actually describes: a genuinely huge TEXT file, which this leaves alone.
+export const rendersAsBytes = (path: string, binary: boolean | undefined): boolean =>
+    binary === true || !TEXT_MODES.has(resolveFile(path, undefined).mode);

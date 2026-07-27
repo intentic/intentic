@@ -1,8 +1,10 @@
+import { execFile } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { createResidentEngine, type QueryRequest } from "@intentic/iq-engine";
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
 import { portUrl, sandboxContract } from "@intentic/sandbox-contract";
@@ -2556,4 +2558,86 @@ test("capabilities.add composes the entry's image fragment into the overlay and 
     // Removing the last fragment-bearing capability recomposes the overlay away (stock container, no custom).
     await client.capabilities.remove({ id: "office" });
     expect(disk.get("/work/.intentic/environment.approved.Dockerfile")).toBeUndefined();
+});
+
+// The binary side of a diff, which the JSON file-diff routes can only FLAG. Two things are load-bearing and
+// neither is visible from the JSON side: the blob comes back as BYTES (a utf8 decode would replace every byte
+// above 0x7f, which is most of a PNG), and the rev-spec pair matches the row the reviewer clicked.
+test("GET /diff/raw streams a diff side's bytes: blob for the index side, disk for the worktree side", async () => {
+    const root = await mkdtemp(join(tmpdir(), "intentic-diff-raw-"));
+    const git = (...args: string[]): Promise<unknown> =>
+        promisify(execFile)("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-C", root, ...args]);
+    // Bytes git cannot round-trip as text: a NUL, a lone 0x80 (invalid utf8 on its own), and 0xff.
+    const committed = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x80, 0xff]);
+    const edited = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x81, 0xfe, 0x01]);
+    try {
+        await git("init", "-q");
+        await writeFile(join(root, "logo.png"), committed);
+        await git("add", "-A");
+        await git("commit", "-q", "-m", "init");
+        await writeFile(join(root, "logo.png"), edited);
+
+        const app = createApp(
+            services({
+                workspace: workspacePaths(root),
+                // The worktree side reads through the same file service /workspace/raw uses.
+                files: fakeFiles({
+                    readBytes: async (absPath) => (absPath === join(root, "logo.png") ? edited : undefined),
+                    size: async (absPath) => (absPath === join(root, "logo.png") ? edited.byteLength : undefined),
+                }),
+            }),
+        );
+        const raw = (query: string): Promise<Response> => app.request(`/diff/raw?source=working&repo=root&path=logo.png&${query}`);
+
+        // Unstaged: before is the index blob, after is the file on disk — the same pair unstagedFileDiff reads.
+        const before = await raw("side=unstaged&which=before");
+        expect(before.status).toBe(200);
+        expect(before.headers.get("content-type")).toBe("image/png");
+        expect(new Uint8Array(await before.arrayBuffer())).toEqual(new Uint8Array(committed));
+        expect(new Uint8Array(await (await raw("side=unstaged&which=after")).arrayBuffer())).toEqual(new Uint8Array(edited));
+
+        // Staged: nothing has been staged, so the index still holds the committed blob on BOTH sides — which is
+        // exactly what a staged row would diff (HEAD↔index), and not what the unstaged row above showed.
+        expect(new Uint8Array(await (await raw("side=staged&which=after")).arrayBuffer())).toEqual(new Uint8Array(committed));
+
+        // A side the file never had (this path is in no commit) is a 404, not an empty body a browser would
+        // render as a corrupt image.
+        expect((await app.request("/diff/raw?source=working&repo=root&path=fresh.png&side=unstaged&which=before")).status).toBe(404);
+        // The guards every file surface here applies, plus the two this route adds of its own.
+        expect((await raw("side=unstaged&which=sideways")).status).toBe(400);
+        expect((await raw("side=nonsense&which=before")).status).toBe(400);
+        expect((await app.request("/diff/raw?source=nonsense&repo=root&path=logo.png&which=before")).status).toBe(400);
+        expect((await app.request("/diff/raw?source=working&repo=root&path=../../etc/passwd&side=unstaged&which=after")).status).toBe(400);
+        expect((await app.request("/diff/raw?source=working&repo=nope&path=logo.png&side=unstaged&which=before")).status).toBe(404);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+// A commit's own two sides, from the graph. The sha is the one identifier that reaches git's rev-spec parser
+// from the wire, so it is held to the contract's sha shape before it gets there.
+test("GET /diff/raw serves a commit's before/after blobs and refuses a sha that isn't one", async () => {
+    const root = await mkdtemp(join(tmpdir(), "intentic-diff-raw-commit-"));
+    const git = (...args: string[]): Promise<{ stdout: string }> =>
+        promisify(execFile)("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-C", root, ...args]);
+    const first = Buffer.from([0x00, 0x80, 0x01]);
+    const second = Buffer.from([0x00, 0xff, 0x02, 0x03]);
+    try {
+        await git("init", "-q");
+        await writeFile(join(root, "icon.png"), first);
+        await git("add", "-A");
+        await git("commit", "-q", "-m", "one");
+        await writeFile(join(root, "icon.png"), second);
+        await git("add", "-A");
+        await git("commit", "-q", "-m", "two");
+        const sha = (await git("rev-parse", "HEAD")).stdout.trim();
+
+        const app = createApp(services({ workspace: workspacePaths(root) }));
+        const raw = (which: string): Promise<Response> => app.request(`/diff/raw?source=commit&repo=root&sha=${sha}&path=icon.png&which=${which}`);
+        expect(new Uint8Array(await (await raw("before")).arrayBuffer())).toEqual(new Uint8Array(first));
+        expect(new Uint8Array(await (await raw("after")).arrayBuffer())).toEqual(new Uint8Array(second));
+        expect((await app.request(`/diff/raw?source=commit&repo=root&sha=HEAD~1&path=icon.png&which=after`)).status).toBe(400);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
 });

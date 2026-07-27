@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { SnapshotChange, SnapshotTrigger, WorkspaceSnapshot } from "@intentic-app/api-contract";
 import { ref } from "vue";
+import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { useHistory } from "../../composables/workspace/useHistory";
 import { type IconName, timeAgo } from "@intentic-app/ui";
 import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
@@ -58,7 +59,17 @@ const openDiff = (change: SnapshotChange): void => {
         return;
     }
     void fileDiff(snapshotId, change.scope, change.path).then((body) => {
-        emit(`open-diff`, { key: snapshotId, scope: change.scope, label: changeLabel(change), status: change.status, path: change.path, ...body });
+        emit(`open-diff`, {
+            key: snapshotId,
+            scope: change.scope,
+            label: changeLabel(change),
+            status: change.status,
+            path: change.path,
+            ...body,
+            // A checkpoint over an image ships no text either — the bytes come from /diff/raw, against this same
+            // checkpoint so the preview shows what the row is about, not the file's current state on disk.
+            ...diffRawUrls({ source: `checkpoint`, snapshot: snapshotId, scope: change.scope }, change.path, change.status),
+        });
     });
 };
 

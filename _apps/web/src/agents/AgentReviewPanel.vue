@@ -7,8 +7,11 @@ import { useRouter } from "vue-router";
 import DiffStat from "../components/DiffStat.vue";
 import { type AgentReviewFile, useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useChat } from "../composables/chat/useChat";
+import { diffRawUrls } from "../composables/workspace/diffRaw";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
+import BinaryDiffView from "../pages/workspace/viewers/BinaryDiffView.vue";
 import DiffView from "../pages/workspace/viewers/DiffView.vue";
+import { rendersAsBytes } from "../pages/workspace/fileType";
 import { STATUS_CLASS, STATUS_LETTER } from "../pages/workspace/workspaceTabs";
 
 /* One agent's work, as a REVIEW: the file list on the left, that file's diff on the right, in this view — the
@@ -223,6 +226,15 @@ watch(
     { immediate: true },
 );
 
+// Where the selected file's BYTES live, for the sides the response can only flag as binary. Derived from the
+// row rather than fetched: a binary diff carries no content to infer the sides from, and the status letter
+// already says which of them the file has.
+const rawSides = computed(() =>
+    selected.value === undefined
+        ? {}
+        : diffRawUrls({ source: `agent`, agent: props.agentId, repo: selected.value.repo }, selected.value.change.path, selected.value.change.status),
+);
+
 // The escape hatch to the full editor: the same diff as a workspace tab, where it gets the whole area, the
 // tab bar, and the file tree next to it. Deliberately not what a row click does any more.
 const openInWorkspace = (file: AgentReviewFile): void => {
@@ -237,6 +249,7 @@ const openInWorkspace = (file: AgentReviewFile): void => {
         status: file.change.status,
         path: file.change.path,
         ...body,
+        ...diffRawUrls({ source: `agent`, agent: props.agentId, repo: file.repo }, file.change.path, file.change.status),
     });
     void router.push({ name: `workspace` });
 };
@@ -532,7 +545,16 @@ const confirmDiscard = (): void => {
                         <p v-else-if="diff === undefined" class="p-4 text-xs text-subtle">
                             <Icon v-if="diffLoading" name="spinner" spin class="mr-1 text-xs" />Loading the diff…
                         </p>
-                        <p v-else-if="diff.binary" class="p-4 text-xs text-subtle">Binary file — no text diff to show.</p>
+                        <!-- No text to diff is not the same as nothing to see: an image renders as its two
+                             sides, which is most of what reviewing an agent's asset change consists of. -->
+                        <BinaryDiffView
+                            v-else-if="rendersAsBytes(selected.change.path, diff.binary)"
+                            :key="diffKey"
+                            :path="selected.change.path"
+                            :before="rawSides.beforeRaw"
+                            :after="rawSides.afterRaw"
+                            :side-by-side="mobile ? false : layout === 'split'"
+                        />
                         <p v-else-if="diff.truncated" class="p-4 text-xs text-subtle">File too large to diff in the browser.</p>
                         <DiffView
                             v-else

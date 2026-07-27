@@ -11,6 +11,7 @@ import { fireAutomation, PAYLOAD_MAX } from "./automations/scheduler.js";
 import { extensionDir, extensionRootOf, readExtensionManifest } from "./capabilities/extension-dirs.js";
 import type { Services } from "./composition.js";
 import { type AppEnv, buildOrpcContext } from "./context.js";
+import { createDiffRawRoute } from "./git/diff-raw.js";
 import { enrollHost } from "./inventory/enroll-host.js";
 import { createRouter } from "./router.js";
 import {
@@ -198,6 +199,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     }
 
     app.get("/health", (c) => c.json({ ok: true }));
+
+    // The same bytes, for one side of a diff rather than a file in the tree — an image the review surfaces can
+    // only flag as `binary` over the JSON contract. Mounted here beside /workspace/raw for the same reason it
+    // is not an oRPC route: the body is a streamed binary, not JSON.
+    app.route("/", createDiffRawRoute(services));
 
     // Raw bytes for any file under /work, with a Content-Type by extension — the browser previews images/PDF
     // here (the text route utf8-decodes and would corrupt them). Same guards/order as workspace.file: 400 on

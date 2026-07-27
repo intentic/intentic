@@ -7,6 +7,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, watch } from "vue";
 import DiffStat from "../../components/DiffStat.vue";
 import BranchSwitcher from "./BranchSwitcher.vue";
+import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { useGitLog } from "../../composables/workspace/useGitLog";
 import { useRepos } from "../../composables/workspace/useRepos";
 import { buildFileTree, flattenFileTree } from "./commitFileTree";
@@ -103,6 +104,9 @@ const openFileDiff = (commit: GitCommit, change: GitChange): void => {
             status: change.status,
             path: change.path,
             ...body,
+            // The image the commit's diff can only flag — fetched per side from /diff/raw, at this commit and
+            // its first parent, the same pair the text diff above compares.
+            ...diffRawUrls({ source: `commit`, repo, sha: commit.sha }, change.path, change.status),
         });
     });
 };

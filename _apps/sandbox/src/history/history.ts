@@ -117,6 +117,11 @@ export interface WorkspaceHistory {
     // undefined ⇒ unknown snapshot id (routes map it to NOT_FOUND). What the snapshot changed vs its parent.
     readonly diff: (id: string) => Promise<SnapshotChange[] | undefined>;
     readonly fileDiff: (id: string, scope: string, path: string) => Promise<FileDiff | undefined>;
+    // Where one side of that same diff's BYTES live — the bare scope repo and the rev-spec inside it — for the
+    // raw route that serves what fileDiff refuses to ship (an image, which the browser renders from the bytes
+    // and fileDiff can only flag as binary). Reading them is the route's job, so every diff source funnels
+    // through one size guard and one 404. undefined ⇒ unknown checkpoint/scope, or a side this file never had.
+    readonly fileBlob: (id: string, scope: string, path: string, side: "before" | "after") => Promise<{ dir: string; spec: string } | undefined>;
     readonly restore: (id: string) => Promise<boolean>;
 }
 
@@ -557,6 +562,23 @@ export const createWorkspaceHistory = (
                 ...(before?.binary === true || after?.binary === true ? { binary: true } : {}),
                 ...(before?.truncated === true || after?.truncated === true ? { truncated: true } : {}),
             };
+        },
+        // The same two commits fileDiff pairs, handed over as rev-specs instead of read as text — so the raw
+        // route serves exactly the side the checkpoint's diff was showing, never a neighbouring capture's.
+        // Bare repos take a plain `-C <gitdir>`, so the spec pairs with the scope's dir like any other source.
+        fileBlob: async (id, scopeName, path, side) => {
+            const group = await findGroup(id);
+            if (group === undefined) {
+                return undefined;
+            }
+            const scope = scopeOf(scopeName);
+            if (side === "after") {
+                const to = await stateAt(scope, group);
+                return to === undefined ? undefined : { dir: scope.gitDir, spec: `${to}:${path}` };
+            }
+            const base = await previousVisible(group);
+            const from = base !== undefined ? await stateAt(scope, base) : undefined;
+            return from === undefined ? undefined : { dir: scope.gitDir, spec: `${from}:${path}` };
         },
         restore: async (id) => {
             const group = await findGroup(id);

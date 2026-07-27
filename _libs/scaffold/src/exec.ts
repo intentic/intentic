@@ -45,6 +45,18 @@ const isLockContention = (error: unknown): boolean => {
 // Runs a git subcommand inside `dir`; injectable so git operations are unit-testable without a real repo.
 // Shared between the sandbox's git module and the CLI's adopt.
 export type GitRunner = (dir: string, args: readonly string[]) => Promise<{ readonly stdout: string; readonly stderr: string }>;
+
+// git's stdout as RAW BYTES, for `cat-file -p` on a blob that is not text — an image side of a diff, which the
+// browser renders from the bytes themselves. GitRunner cannot serve that read at all: it decodes stdout as
+// utf8, which replaces every invalid sequence with U+FFFD, so a PNG comes back corrupted rather than merely
+// unreadable. `maxBytes` is the caller's own cap (the route 413s above it), not this module's policy.
+//
+// No lock retry, unlike defaultGit: the object store is append-only and a worktree file read takes no lock, so
+// there is no index.lock contention to lose.
+export const gitBytes = async (dir: string, args: readonly string[], maxBytes: number): Promise<Buffer> => {
+    const { stdout } = await exec("git", [...GIT_GLOBAL_ARGS, "-C", dir, ...args], { maxBuffer: maxBytes, encoding: "buffer" });
+    return stdout;
+};
 export const defaultGit: GitRunner = async (dir, args) => {
     for (let attempt = 1; ; attempt += 1) {
         try {

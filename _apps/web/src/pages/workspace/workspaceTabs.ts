@@ -18,6 +18,14 @@ export interface LineJump {
     readonly seq: number;
 }
 
+// A binary diff ships no text, so its two sides ride the tab as the daemon URLs their BYTES are fetched from
+// (see diffRaw.ts) — the panel that opened the tab is the one that knows which diff source the row came from.
+// An absent url means that side does not exist (an added file has no before).
+export interface DiffRawSides {
+    readonly beforeRaw?: string;
+    readonly afterRaw?: string;
+}
+
 export type WorkspaceTab =
     | { readonly kind: "file"; readonly id: string; readonly path: string }
     | {
@@ -30,6 +38,8 @@ export type WorkspaceTab =
           readonly after?: string;
           readonly binary?: boolean;
           readonly truncated?: boolean;
+          readonly beforeRaw?: string;
+          readonly afterRaw?: string;
       }
     | { readonly kind: "plan"; readonly id: string; readonly title: string; readonly text: string }
     | { readonly kind: "directory"; readonly id: string; readonly dir: string }
@@ -37,7 +47,7 @@ export type WorkspaceTab =
 
 // What the Changes/History panels hand up when a changed file is clicked; Workspace derives the diff tab's id
 // from it. `key` is the diff source's identity: a snapshot id, or `working:<repo>` for an uncommitted change.
-export interface DiffTabPayload {
+export interface DiffTabPayload extends DiffRawSides {
     readonly key: string;
     readonly scope: string;
     readonly label: string;

@@ -9,6 +9,7 @@ import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useLayout } from "../../composables/useLayout";
 import { originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
+import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
 import { COMMIT_SCOPE, type RepoPaths, useChanges } from "../../composables/workspace/useChanges";
 import { useRepos } from "../../composables/workspace/useRepos";
@@ -153,7 +154,8 @@ const ICON_BUTTON = `flex h-6 w-6 shrink-0 items-center justify-center rounded-m
 
 // Opens the diff of the ROW, not of the file: a staged row shows index-vs-HEAD, an unstaged row
 // worktree-vs-index. The side rides the tab key too, so a partially staged file's two diffs open as two tabs
-// instead of one silently replacing the other.
+// instead of one silently replacing the other. A binary row carries its two sides' byte URLs as well — the
+// response flags an image, it cannot contain one, and this row is what knows which diff to fetch it from.
 const openDiff = (repo: string, side: GitDiffSide, change: GitChange): void => {
     void changes.fileDiff(repo, change.path, side).then((body) => {
         emit(`open-diff`, {
@@ -163,6 +165,7 @@ const openDiff = (repo: string, side: GitDiffSide, change: GitChange): void => {
             status: change.status,
             path: change.path,
             ...body,
+            ...diffRawUrls({ source: `working`, repo, side }, change.path, change.status),
         });
     });
 };

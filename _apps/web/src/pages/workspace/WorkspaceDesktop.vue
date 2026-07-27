@@ -23,6 +23,7 @@ import { useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSear
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { filesToEntries } from "./dropEntries";
+import BinaryDiffView from "./viewers/BinaryDiffView.vue";
 import DiffView from "./viewers/DiffView.vue";
 import DirectoryOperator from "./DirectoryOperator.vue";
 import DirectoryUiHost from "./DirectoryUiHost.vue";
@@ -37,6 +38,7 @@ import UploadProgress from "./UploadProgress.vue";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 import WorkspaceTree from "./WorkspaceTree.vue";
+import { rendersAsBytes } from "./fileType";
 import { closeTabs } from "./workspaceTabs";
 
 /* The Workspace area: a VSCode-like, full-height explorer + viewer of the /work filesystem the agent sees
@@ -302,7 +304,13 @@ const cycleTab = (delta: number): void => {
 };
 const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     { command: `workspace.search`, title: `Search Workspace…`, icon: `search`, handler: () => focusSearch() },
-    { command: `workspace.searchContent`, title: `Search in Files…`, icon: `search`, keybinding: `Mod+Shift+F`, handler: () => focusSearch(`content`) },
+    {
+        command: `workspace.searchContent`,
+        title: `Search in Files…`,
+        icon: `search`,
+        keybinding: `Mod+Shift+F`,
+        handler: () => focusSearch(`content`),
+    },
     { command: `workspace.showChanges`, title: `Show Changes`, icon: `check-square`, keybinding: `Ctrl+Shift+D`, handler: openReview },
     { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
     { command: `workspace.showHistory`, title: `Show Checkpoints`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
@@ -635,7 +643,14 @@ const endResize = (event: PointerEvent): void => {
                     </div>
                 </template>
                 <div v-else-if="activeTab?.kind === 'diff'" class="min-h-0 flex-1">
-                    <p v-if="activeTab.binary" class="p-4 text-xs text-subtle">Binary file — no text diff to show.</p>
+                    <!-- No text to diff is not the same as nothing to see: an image renders as its two sides. -->
+                    <BinaryDiffView
+                        v-if="rendersAsBytes(activeTab.path, activeTab.binary)"
+                        :key="activeTab.id"
+                        :path="activeTab.path"
+                        :before="activeTab.beforeRaw"
+                        :after="activeTab.afterRaw"
+                    />
                     <p v-else-if="activeTab.truncated" class="p-4 text-xs text-subtle">File too large to diff in the browser.</p>
                     <DiffView v-else :key="activeTab.id" :before="activeTab.before" :after="activeTab.after" :path="activeTab.path" />
                 </div>
