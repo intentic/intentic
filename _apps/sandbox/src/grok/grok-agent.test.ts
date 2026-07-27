@@ -181,8 +181,13 @@ test("a plan turn proposes read-only on the plan agent, then executes on build a
     expect(events).toEqual([
         { kind: "session", sessionId: "s2" },
         { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route, then test." },
-        // The card's release, carrying the id it went up with — what tells the fleet the turn stopped waiting.
-        { kind: "resolved", requestId: expect.any(String) as string },
+        // The card's release — the id tells the fleet the turn stopped waiting, and the approval riding with it
+        // is what lets a replayed run freeze the card instead of re-offering it.
+        {
+            kind: "resolved",
+            requestId: expect.any(String) as string,
+            reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
+        },
         { kind: "delta", text: "Done." },
         { kind: "done" },
     ]);

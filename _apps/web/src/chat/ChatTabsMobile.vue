@@ -14,7 +14,7 @@ import PresenceAvatars from "../presence/PresenceAvatars.vue";
 
 const emit = defineEmits<{
     select: [id: string];
-    close: [id: string];
+    close: [ids: ReadonlySet<string>];
     open: [id: string];
 }>();
 
@@ -89,7 +89,7 @@ const openFromHistory = (id: string): void => {
                         v-if="conversations.length > 1"
                         role="button"
                         class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-subtle active:bg-content/10"
-                        @click.stop="emit('close', c.id)"
+                        @click.stop="emit('close', new Set([c.id]))"
                         aria-label="Close chat"
                     >
                         <Icon name="times" class="text-xs" />

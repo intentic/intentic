@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { AgentProviderSchema, AgentSummarySchema, PermissionModeSchema, RateLimitInfoSchema, UsageWindowSchema } from "./schemas.js";
+import {
+    AgentProviderSchema,
+    AgentReplySchema,
+    AgentSummarySchema,
+    PermissionModeSchema,
+    RateLimitInfoSchema,
+    UsageWindowSchema,
+} from "./schemas.js";
 
 // The wire shapes streamed from the daemon's event-iterator procedures. This is their canonical home: the
 // daemon yields them and the browser client consumes them from the same schema, so the two can't drift (they
@@ -236,7 +243,13 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // stream messages while dispatching an in-process MCP tool straight off the transport), and a card raised
     // beside a parallel tool call sits through that tool's whole life. See agents-registry.ts, which reads
     // this pair as the fleet's "needs you" state.
-    z.object({ kind: z.literal("resolved"), requestId: z.string() }),
+    //
+    // `reply` says HOW it settled, and is what a transcript rebuilt from this log freezes the card with: a
+    // reload replays the run from seq 0 and a second window renders it live, so both would otherwise restore
+    // the card pending — offering buttons on a requestId nothing holds any more, under a transcript that has
+    // already moved on. It rides verbatim, exactly as the client POSTed it; absent, nobody answered (the turn
+    // was stopped, or died under the card), which is not a decision and must not replay as one.
+    z.object({ kind: z.literal("resolved"), requestId: z.string(), reply: AgentReplySchema.optional() }),
     // The turn's permission mode, whenever it changes — the user's pick at turn start, then every move the
     // AGENT makes on its own (EnterPlanMode on a request that needs thinking through, ExitPlanMode once the
     // user approves). The composer's mode selector follows this, so the UI never lies about the live posture.
