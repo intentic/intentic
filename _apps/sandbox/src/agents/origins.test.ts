@@ -107,6 +107,24 @@ test("a path two agents landed lists both, newest land first", async () => {
     expect((await createAgentOrigins({ agents, logger }).forRepo("root", work))[`app.ts`]).toEqual(["c2", "c1"]);
 });
 
+test("committing one agent's work leaves another agent's landed files attributed", async () => {
+    const { work, worktrees, conversation } = await setup();
+    // c1 lands app.ts, c2 lands other.ts — two agents waiting in the same tree, which is the normal board.
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const first = await landAgent(worktrees, entryFor(conversation.repos));
+    const second = await worktrees.ensure("c2", []);
+    await writeFile(join(second.cwd, "other.ts"), "c2 was here\n");
+    const later = await landAgent(worktrees, entryFor(second.repos, "c2"));
+
+    // The user reviews c2 and commits ONLY other.ts. HEAD moves, but nothing has happened to app.ts…
+    await sh(work, "add", "other.ts");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed c2");
+
+    // …so c1 keeps its file and c2's — now in history — drops out. A repo-wide expiry would blank both.
+    const origins = createAgentOrigins({ agents: registryOf(entryFor(first.repos), entryFor(later.repos, "c2")), logger });
+    expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
+});
+
 test("the claim expires when the user commits — a file that goes dirty again is theirs, not the agent's", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
