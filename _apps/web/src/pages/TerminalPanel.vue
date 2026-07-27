@@ -64,11 +64,12 @@ watch(
 );
 
 // Sessions FINISH through paths no client action fires: an agent's last Bash command exits, a dev server dies.
-// The strip's own list is imperative (it relists around spawns, kills, restarts and surfaces), so a tab would
-// keep reading as running — undimmed, and invisible to the sweep below — until the panel was reopened or
-// refreshed by hand. The shared polled read (one cache entry, the same one the rail's activity badge observes)
-// supplies the missing edge; relisting only when the daemon's session set actually changes keeps it to one
-// extra request per real change, not per poll.
+// The strip lists imperatively (around spawns, kills, restarts and surfaces), so a tab would keep reading as
+// running — undimmed, and invisible to the sweep below — until the panel was reopened or refreshed by hand.
+// Observing the shared entry (the same one the rail's badge reads, and the one the strip's own relists write)
+// supplies the missing edge. Relisting only when the daemon's session set actually changes keeps it to one
+// reconcile per real change, and that relist is served from the cache it just reacted to rather than costing a
+// second request.
 const polled = useTerminalsQuery(10_000);
 watch(
     () => polled.sessions.value.map((session) => `${session.name}:${session.running}`).join(`\n`),
@@ -575,12 +576,16 @@ const container = ref<HTMLElement>();
 // The spawn-hook disposer (registered after attach, so a mid-attach "New Terminal" lands in the pending flag
 // instead of racing the initial relist).
 let disposeSpawn: (() => void) | undefined;
+// The panel is torn down and reopened by a plain v-if (Ctrl+`, the ×), so the initial relist can easily outlive
+// its own instance. Everything after that await has to check: publishing a dead instance's newTab as the global
+// spawn hook — or running it — opens a real tmux session that no live panel will ever show.
+let live = true;
 
 onMounted(async () => {
     registerPanelCommands();
     if (container.value !== undefined) {
         const autoCreated = await tabs.attach(container.value);
-        if (newTab !== undefined) {
+        if (live && newTab !== undefined) {
             disposeSpawn = registerTerminalSpawn(newTab);
             // A "New Terminal" issued while no panel was mounted; an empty panel's auto-created shell IS it.
             if (consumeSpawnRequest() && !autoCreated) {
@@ -588,11 +593,12 @@ onMounted(async () => {
             }
         }
     }
-    if (initial !== undefined) {
+    if (live && initial !== undefined) {
         await tabs.focus(initial.name);
     }
 });
 onBeforeUnmount(() => {
+    live = false;
     tabs.detach();
     window.removeEventListener(`keydown`, onArmedKeydown, true);
     for (const disposable of commandDisposables) {

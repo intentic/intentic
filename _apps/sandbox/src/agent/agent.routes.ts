@@ -135,8 +135,10 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
 
 // The fleet-registry lifecycle around a turn. An ISOLATED turn (isolated + conversationId) is wrapped here —
 // mutex acquire + worktree ensure before the turn, finish (usage flush + mutex release) in a finally — so
-// EVERY exit of the turn body (provider gates, stream errors, aborts) releases the conversation. The wake
-// paths never set `isolated`, so automations/webchat/listeners run the main-tree body unchanged.
+// EVERY exit of the turn body (provider gates, stream errors, aborts) releases the conversation. A wake
+// carrying an OUTSIDE message comes through here too — automations/scheduler.ts mints its conversation, which
+// is what puts a Discord mention on the fleet board as an ordinary agent. Schedule and chore wakes have no
+// conversation and run the main-tree body unchanged.
 async function* runConversationTurn(
     services: Services,
     input: AgentTurn,
@@ -157,6 +159,7 @@ async function* runConversationTurn(
             ...(input.title !== undefined ? { title: input.title } : {}),
             ...(input.model !== undefined ? { model: input.model } : {}),
             ...(input.account !== undefined ? { account: input.account } : {}),
+            ...(input.origin !== undefined ? { origin: input.origin } : {}),
         },
         Date.now(),
     );
@@ -211,14 +214,18 @@ async function* runConversationTurn(
                     services.history
                         .snapshot("turn", input.prompt)
                         .catch((error: unknown) => services.logger.warn({ err: error }, "history: landed snapshot failed"));
-                    emitWorkspaceEvent(services, {
-                        event: "agent.landed",
-                        agentId: conversationId,
-                        ...(finished.title !== undefined ? { title: finished.title } : {}),
-                        branch,
-                        outcome: "landed",
-                        repos: span,
-                    }, streamAgent);
+                    emitWorkspaceEvent(
+                        services,
+                        {
+                            event: "agent.landed",
+                            agentId: conversationId,
+                            ...(finished.title !== undefined ? { title: finished.title } : {}),
+                            branch,
+                            outcome: "landed",
+                            repos: span,
+                        },
+                        streamAgent,
+                    );
                 }
             }
         }
@@ -228,14 +235,18 @@ async function* runConversationTurn(
         // second pair of eyes. An empty span means the worktree never came up, so there is nothing to review.
         if (span.length > 0) {
             const settled = services.agents.entry(conversationId);
-            emitWorkspaceEvent(services, {
-                event: "turn.settled",
-                agentId: conversationId,
-                ...(settled?.title !== undefined ? { title: settled.title } : {}),
-                branch,
-                outcome: failed ? "error" : (outcome ?? "idle"),
-                repos: span,
-            }, streamAgent);
+            emitWorkspaceEvent(
+                services,
+                {
+                    event: "turn.settled",
+                    agentId: conversationId,
+                    ...(settled?.title !== undefined ? { title: settled.title } : {}),
+                    branch,
+                    outcome: failed ? "error" : (outcome ?? "idle"),
+                    repos: span,
+                },
+                streamAgent,
+            );
         }
     }
 }

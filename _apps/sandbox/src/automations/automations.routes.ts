@@ -92,9 +92,14 @@ export const createAutomationsRoutes = (services: Services) => {
             if (automation === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "the automation for that approval no longer exists" });
             }
-            void fireAutomation(services, automation, pending.payload, streamAgent, true).catch((error: unknown) =>
-                services.logger.error({ err: error, automation: automation.id }, "approved automation run failed"),
-            );
+            void fireAutomation(services, automation, streamAgent, {
+                preApproved: true,
+                ...(pending.payload !== undefined ? { payload: pending.payload } : {}),
+                // The provenance the held fire snapshotted: an approved external wake opens the same surfaced
+                // conversation the auto path would have.
+                ...(pending.origin !== undefined ? { origin: pending.origin } : {}),
+                ...(pending.title !== undefined ? { title: pending.title } : {}),
+            }).catch((error: unknown) => services.logger.error({ err: error, automation: automation.id }, "approved automation run failed"));
             return { ok: true } as const;
         }),
         reject: i.reject.handler(async ({ input }) => {

@@ -1,12 +1,12 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Automation } from "@intentic/sandbox-contract";
+import type { AgentTurn, Automation } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Services } from "../composition.js";
 import { fileAutomationsStore } from "./automations-store.js";
-import { createMessageBatcher, dispatchListenerMessage, type ListenerMessage, reportListenerFailure } from "./listeners.js";
+import { createMessageBatcher, dispatchListenerMessage, type ListenerMessage, type MessageContext, reportListenerFailure } from "./listeners.js";
 import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
 
 // The listener paths touch automations/capabilities/activity/workspace/logger; a cast keeps the fake that small.
@@ -46,6 +46,14 @@ const message = (over: Partial<ListenerMessage> = {}): ListenerMessage => ({
 
 const longLine = (tag: string): string => tag + "x".repeat(30_000);
 
+// The provenance every push carries — the batching rules under test are about payloads and reply sinks, so the
+// origin/title are held constant and only the sink varies.
+const context = (stream?: TurnStream): MessageContext => ({
+    origin: { automationId: "a", provider: "discord", channelId: "c1", author: "alice" },
+    title: "alice: hi",
+    ...(stream !== undefined ? { stream } : {}),
+});
+
 test("a burst debounces into exactly one fire carrying every line", async () => {
     const fired: string[] = [];
     const batcher = createMessageBatcher(
@@ -53,9 +61,9 @@ test("a burst debounces into exactly one fire carrying every line", async () => 
         () => {},
         5,
     );
-    batcher.push("a");
-    batcher.push("b");
-    batcher.push("c");
+    batcher.push("a", context());
+    batcher.push("b", context());
+    batcher.push("c", context());
     await vi.waitFor(() => expect(fired).toHaveLength(1));
     expect(fired[0]).toBe("a\nb\nc");
 });
@@ -73,10 +81,10 @@ test("lines arriving during an in-flight run queue into one follow-up fire — n
         () => {},
         5,
     );
-    batcher.push("a");
+    batcher.push("a", context());
     await vi.waitFor(() => expect(fired).toHaveLength(1));
-    batcher.push("b");
-    batcher.push("c");
+    batcher.push("b", context());
+    batcher.push("c", context());
     // Past the debounce, but the first fire is still running — nothing new fires yet.
     await new Promise((resolve) => setTimeout(resolve, 25));
     expect(fired).toHaveLength(1);
@@ -91,12 +99,12 @@ test("a superseded reply stream is ended so a streamed dispatch never hangs on i
     const s2: TurnStream = { delta: () => {}, end: () => void ended.push("s2") };
     const fired: Array<TurnStream | undefined> = [];
     const batcher = createMessageBatcher(
-        async (_payload, stream) => void fired.push(stream),
+        async (_payload, fireContext) => void fired.push(fireContext.stream),
         () => {},
         5,
     );
-    batcher.push("a", s1);
-    batcher.push("b", s2);
+    batcher.push("a", context(s1));
+    batcher.push("b", context(s2));
     // s1 is replaced before any flush — it's ended immediately so its consumer isn't stranded; s2 survives.
     expect(ended).toEqual(["s1"]);
     await vi.waitFor(() => expect(fired).toHaveLength(1));
@@ -110,9 +118,9 @@ test("an over-cap batch keeps the newest whole lines within the payload cap", as
         () => {},
         5,
     );
-    batcher.push(longLine("old"));
-    batcher.push(longLine("mid"));
-    batcher.push(longLine("new"));
+    batcher.push(longLine("old"), context());
+    batcher.push(longLine("mid"), context());
+    batcher.push(longLine("new"), context());
     await vi.waitFor(() => expect(fired).toHaveLength(1));
     // 3 × ~30k > PAYLOAD_MAX: the oldest line drops whole, never a mid-JSON slice.
     expect(fired[0]).toBe(`${longLine("mid")}\n${longLine("new")}`);
@@ -131,6 +139,25 @@ test("dispatch routes by provider and channelId and wakes with the JSON line as 
     // The c2-scoped automation and the disabled one never fired.
     expect((await services.automations.get("one-channel"))?.runs).toEqual([]);
     expect((await services.automations.get("off"))?.runs).toEqual([]);
+});
+
+test("a dispatched message opens an isolated conversation stamped with where it came from", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(listenerAutomation("support"));
+    const turns: AgentTurn[] = [];
+    const capture: WakeFn = async function* (_services, input) {
+        turns.push(input);
+        yield { kind: "done" };
+    };
+    await dispatchListenerMessage(services, message({ content: "can you look at the build?\nthanks" }), capture, 5);
+    await vi.waitFor(() => expect(turns).toHaveLength(1));
+    const turn = turns[0] as AgentTurn;
+    expect(turn.isolated).toBe(true);
+    expect(turn.conversationId).toMatch(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
+    expect(turn.origin).toEqual({ automationId: "support", provider: "discord", channelId: "c1", author: "alice" });
+    // Titled by the message's first line, not by the automation's prompt — every fire shares that prompt, so a
+    // prompt-derived title would give a board full of identical cards.
+    expect(turn.title).toBe("alice: can you look at the build?");
 });
 
 test("dispatch honors eventType — a message-only listener ignores voice transcripts but fires on messages", async () => {

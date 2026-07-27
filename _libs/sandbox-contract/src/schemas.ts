@@ -54,6 +54,24 @@ export type EditorContext = z.infer<typeof EditorContextSchema>;
 // and filesystem paths — the regex is the injection guard. Shared by the turn input and the attach input.
 const ConversationIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 
+// Where a conversation came from when nobody typed it into the browser: an automation wake carrying a message
+// from OUTSIDE the sandbox (a Discord mention, a web-chat visitor, a webhook). Such a wake runs as an ordinary
+// isolated conversation — registry entry, worktree, chat tab, land flow — and this is the only thing that
+// distinguishes it on the surface: the card's provenance line and the reason its first prompt is not the
+// user's. Set daemon-side by the dispatcher that received the message; the browser never sends one.
+export const AgentOriginSchema = z.object({
+    // The automation whose configured prompt opened the conversation.
+    automationId: z.string(),
+    // The listener provider that received the message ("discord", "webchat", …) or "webhook" for an event
+    // trigger. An open string for the same reason Trigger.provider is: sources are extension-declared.
+    provider: z.string(),
+    // The external thread it arrived on — a Discord channel id, a widget conversation id. Absent for webhooks.
+    channelId: z.string().optional(),
+    // Who sent it, as the source names them.
+    author: z.string().optional(),
+});
+export type AgentOrigin = z.infer<typeof AgentOriginSchema>;
+
 // How tool calls are gated — the Claude Agent SDK's PermissionMode, narrowed to the four the composer offers
 // (the SDK also has 'dontAsk'/'auto', which have no UI here). The user picks one per turn AND the agent can
 // move itself between them mid-turn, so this is both a turn input and the payload of the `mode` frame.
@@ -89,6 +107,10 @@ export const AgentTurnSchema = z
         // When true, the turn runs in the conversation's isolated git worktree (created lazily on first use)
         // instead of the shared /work tree — the parallel-agents mode. Requires conversationId.
         isolated: z.boolean().optional(),
+        // Set ONLY by the daemon's own automation dispatchers: this turn opens a conversation on behalf of an
+        // outside message rather than a user. Recorded on the registry entry so the fleet can say where the
+        // agent came from. Requires conversationId — there is nothing to record it on otherwise.
+        origin: AgentOriginSchema.optional(),
         // The client-held transcript of a conversation that just switched provider/account: seeds the FIRST
         // turn of the replacement session. The daemon folds it into the prompt as one role-attributed context
         // preamble for every runtime. Mutually exclusive with sessionId — a resumed session has its context.
@@ -114,6 +136,9 @@ export const AgentTurnSchema = z
     })
     .refine((turn) => turn.isolated !== true || turn.conversationId !== undefined, {
         message: "isolated requires conversationId",
+    })
+    .refine((turn) => turn.origin === undefined || turn.conversationId !== undefined, {
+        message: "origin requires conversationId",
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
 
@@ -169,6 +194,9 @@ export const AgentSummarySchema = z.object({
     account: z.string().optional(),
     // The worktree branch (agent/<id>); absent for a non-isolated (main-tree) conversation.
     branch: z.string().optional(),
+    // Present when the conversation was opened by an outside message rather than by the user (see
+    // AgentOriginSchema) — the card's provenance line. Absent ⇒ the user started it.
+    origin: AgentOriginSchema.optional(),
     // The ROOT repo's short base sha — the checkout moment's display identity. Per-repo bases stay
     // daemon-internal (agents.diff already reports against them).
     base: z.string().optional(),
@@ -1559,6 +1587,10 @@ export const AutomationApprovalSchema = z.object({
     automationId: z.string(),
     // The event/listener payload the wake would have carried; absent for schedule triggers.
     payload: z.string().optional(),
+    // The provenance + title the held wake would have opened its conversation with — snapshotted alongside the
+    // payload so an approved external wake surfaces on the fleet exactly as an auto one would have.
+    origin: AgentOriginSchema.optional(),
+    title: z.string().optional(),
     createdAt: z.number(),
 });
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;

@@ -36,8 +36,18 @@ const CONTROL_PLANE_ENTRIES = new Set(["owner.json", "members.json", "capabiliti
 // ordinary workspace content — and only these entries within it, because the root's other subtrees are real
 // features the browser drives through this same API (chat attachments under attachments/, a directory's own UI
 // under ui/). A new credential store added under .intentic/ belongs in the set above.
+//
+// The ROOT's own .git joins them, subtree included. It is the --separate-git-dir pointer to /history/gits/root —
+// the handle to the shadow history repo, which lives off /work precisely so the agent can't tamper with it (see
+// git/root-repo.ts). It is also a FILE where a client that drops a repo's CONTENTS at the root tries to write a
+// directory: without this floor, writeWorkspaceFileStream's mkdir throws ENOTDIR/EEXIST per entry and the upload
+// route 500s the whole drop instead of skipping the handful of paths that were never writable to begin with.
+// A NESTED repo's .git is ordinary content — a dropped repo keeps its own and stays connected to its remote.
 export const isControlPlanePath = (root: string, absPath: string): boolean => {
     const segments = relative(resolve(root), absPath).split(sep);
+    if (segments[0] === ".git") {
+        return true;
+    }
     return segments.length >= 2 && segments[0] === ".intentic" && CONTROL_PLANE_ENTRIES.has(segments[1] ?? "");
 };
 

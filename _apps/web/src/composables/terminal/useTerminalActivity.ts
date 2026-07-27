@@ -2,10 +2,11 @@ import { computed, type ComputedRef } from "vue";
 import { useTerminalsQuery } from "./terminalsQuery";
 
 /* The terminal's presence on the rail: how many live sessions there are RIGHT NOW, from any view, whether or
- * not the panel is mounted. The panel keeps its own imperative list (globalTerminalSource) because it relists
- * on demand around spawns, kills and restarts; this is the always-on read that lets the shell say "3 shells
- * running" while the panel is closed — the same idiom as the rail's uncommitted-changes and agent-attention
- * badges, and the reason the terminal no longer needs an icon inside the Workspace view.
+ * not the panel is mounted. This is the always-on read that lets the shell say "3 shells running" while the
+ * panel is closed — the same idiom as the rail's uncommitted-changes and agent-attention badges, and the reason
+ * the terminal no longer needs an icon inside the Workspace view. It observes the SAME cache entry the panel's
+ * tab strip lists from (terminalsQuery), including its pending claims, so the badge can't disagree with the
+ * strip or trail a spawn/kill the user just made by a poll interval.
  *
  * `process` sessions are excluded: dockerd and the extensions' declared background processes are always up, so
  * counting them would pin a meaningless number to the rail forever. They are not tabs in the panel either —

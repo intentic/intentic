@@ -384,9 +384,13 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.json({ error: "payload too large" }, 413);
         }
         const payload = await c.req.text();
-        void fireAutomation(services, automation, payload === "" ? undefined : payload, streamAgent).catch((error: unknown) =>
-            services.logger.error({ err: error, automation: automation.id }, "automation run failed"),
-        );
+        // A webhook is an outside message too, so its wake opens a surfaced conversation like a Discord mention's
+        // does — the sender is a system, not a person, so the origin carries no author or channel.
+        void fireAutomation(services, automation, streamAgent, {
+            ...(payload === "" ? {} : { payload }),
+            origin: { automationId: automation.id, provider: "webhook" },
+            title: `Webhook: ${automation.id}`,
+        }).catch((error: unknown) => services.logger.error({ err: error, automation: automation.id }, "automation run failed"));
         return c.json({ ok: true });
     });
 

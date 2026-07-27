@@ -1,7 +1,7 @@
 // Runnable, framework-free check for the drop-traversal recursion (the web app has no test runner).
 // Run: node _apps/web/scripts/dropEntries.check.mjs  (Node 24 strips the imported .ts types natively.)
 import assert from "node:assert/strict";
-import { collectDroppedFiles, filesToEntries } from "../src/pages/workspace/dropEntries.ts";
+import { collectDroppedFiles, filesToEntries, isRootGitPath } from "../src/pages/workspace/dropEntries.ts";
 
 // Fake FileSystemEntry builders (only the fields the walk touches). fullPath is required — the walk dedupes on it
 // to break symlink cycles; the real API always supplies a unique string, so the fakes do too (defaults to name).
@@ -126,5 +126,18 @@ assert.deepEqual(
     picked.map((e) => e.path),
     ["p.png", "folder/q.ts"],
 );
+
+// isRootGitPath: only the workspace ROOT's own .git (the /work pointer file the daemon also refuses) — the drop
+// that produces it is a repo's CONTENTS landing at the root.
+assert.equal(isRootGitPath(".git"), true);
+assert.equal(isRootGitPath(".git/config"), true);
+assert.equal(isRootGitPath(".git/objects/ab/cdef"), true);
+// A NESTED repo's .git travels: dropping the repo's FOLDER, or its contents onto a folder, both land here.
+assert.equal(isRootGitPath("repo/.git"), false);
+assert.equal(isRootGitPath("repo/.git/config"), false);
+// Name-alike siblings at the root are ordinary content — segment-exact, not a prefix match.
+assert.equal(isRootGitPath(".gitignore"), false);
+assert.equal(isRootGitPath(".github/workflows/ci.yml"), false);
+assert.equal(isRootGitPath(".gitmodules"), false);
 
 console.log("dropEntries.check: OK");

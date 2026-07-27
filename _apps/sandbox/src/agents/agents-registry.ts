@@ -61,7 +61,7 @@ const freshRuntime = (): RuntimeState => ({
 });
 
 // The registry input of an isolated turn — the fields begin() records onto the entry.
-export type AgentTurnIdentity = Pick<AgentTurn, "prompt" | "title" | "model" | "account"> & {
+export type AgentTurnIdentity = Pick<AgentTurn, "prompt" | "title" | "model" | "account" | "origin"> & {
     readonly conversationId: string;
     readonly provider: NonNullable<AgentTurn["agent"]>;
     readonly harness: NonNullable<AgentTurn["harness"]>;
@@ -167,6 +167,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 conflict: entry.status === "conflict",
             },
             ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}),
+            ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
             ...(entry.title !== undefined ? { title: entry.title } : {}),
             ...(entry.model !== undefined ? { model: entry.model } : {}),
             ...(entry.account !== undefined ? { account: entry.account } : {}),
@@ -254,6 +255,10 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             const title = existing?.title ?? (turn.title !== undefined ? sanitizeTitle(turn.title) : undefined) ?? sanitizeTitle(turn.prompt);
             const model = turn.model ?? existing?.model;
             const account = turn.account ?? existing?.account;
+            // Provenance belongs to the turn that CREATED the conversation and is never re-derived: the user's
+            // own follow-up turns in a surfaced agent's tab carry no origin, and must not strip the Discord
+            // mention that opened it off the card.
+            const origin = existing?.origin ?? turn.origin;
             replace({
                 id: turn.conversationId,
                 branch: `agent/${turn.conversationId}`,
@@ -269,6 +274,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 ...(title !== undefined ? { title } : {}),
                 ...(model !== undefined ? { model } : {}),
                 ...(account !== undefined ? { account } : {}),
+                ...(origin !== undefined ? { origin } : {}),
                 ...(existing?.sessionId !== undefined ? { sessionId: existing.sessionId } : {}),
                 // The read marker survives the rebuild too — a new turn makes the agent unread again (updatedAt
                 // now outruns it), but WHEN it was last opened is what tells "New" from "Updated".

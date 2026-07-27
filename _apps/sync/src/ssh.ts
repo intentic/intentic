@@ -6,9 +6,20 @@ import { baseDir, sshConfigPath, sshKeyPath } from "./config.js";
 
 // Paths Mutagen must NOT two-way-sync. Its OWN purpose-built list (not the daemon's search-ignore set): it must
 // also exclude secret files + the daemon's .intentic state, which the search-ignore set deliberately keeps visible.
-// Passed to `mutagen sync create --ignore`; .git is covered by --ignore-vcs. `.intentic` is the daemon's own
-// state (owner/members/automations/credentials) — it must never leave the sandbox, and two-way sync would let
-// a local deletion clobber it.
+// Passed to `mutagen sync create --ignore`. `.intentic` is the daemon's own state (owner/members/automations/
+// credentials) — it must never leave the sandbox, and two-way sync would let a local deletion clobber it.
+//
+// `/.git` is LEADING-SLASH ANCHORED: it excludes the workspace root's own .git and nothing else. /work is itself a
+// repo (git init --separate-git-dir, see the daemon's root-repo.ts), so /work/.git is a POINTER FILE reading
+// `gitdir: /history/gits/root` — a path that exists only inside the sandbox. Synced down it turns the user's local
+// folder into a repo every git command refuses ("fatal: not a git repository"), and against a local folder that is
+// already a repo it is an unresolvable file-vs-directory conflict that pins the session at Conflicts: 1 forever.
+// Mutagen's own --ignore-vcs does NOT cover it: that pattern set is `.git/` — directories — and this is a file.
+//
+// A NESTED repo's .git syncs normally, on purpose. Without it a synced project arrives with no .git at all: repo
+// discovery doesn't see a repo, the files dissolve into the root scope, and the agent's `git status` inside the
+// project walks up to /work/.git and answers for the shadow history repo instead. Syncing it costs conflicts on
+// .git internals when git runs on both ends at once — two-way-safe flags those rather than clobbering.
 export const IGNORES = [
     "node_modules",
     "dist",
@@ -21,6 +32,7 @@ export const IGNORES = [
     "claude.json",
     "capabilities.json",
     ".intentic",
+    "/.git",
 ];
 
 // A sandbox id safe for an ssh-config alias / Mutagen session name (letters, digits, dashes).

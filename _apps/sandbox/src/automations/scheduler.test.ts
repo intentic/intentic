@@ -14,6 +14,7 @@ const fakeServices = (root: string): Services =>
         automations: fileAutomationsStore(join(root, "automations.json")),
         approvals: fileApprovalsStore(join(root, "approvals")),
         activity: { append: async () => {}, list: async () => [] },
+        pushSender: { notifyIfAway: async () => {} },
         workspace: { root },
         logger: { error: () => {}, warn: () => {} },
     }) as unknown as Services;
@@ -81,12 +82,12 @@ test("event automations never tick; fireAutomation hands the payload to the guar
 
     // A webhook fire: the guard passes only because the payload reached it, and the prompt carries it too.
     const hook = (await services.automations.get("hook")) as AutomationRecord;
-    await fireAutomation(services, hook, "ping", fakeWake(prompts));
+    await fireAutomation(services, hook, fakeWake(prompts), { payload: "ping" });
     expect((await services.automations.get("hook"))?.runs[0]?.outcome).toBe("completed");
     expect(prompts[1]).toBe("wake:hook\n\n--- Event payload ---\nping");
 
     // A payload the guard rejects skips the wake.
-    await fireAutomation(services, hook, "pong", fakeWake(prompts));
+    await fireAutomation(services, hook, fakeWake(prompts), { payload: "pong" });
     expect((await services.automations.get("hook"))?.runs[0]?.outcome).toBe("skipped");
     expect(prompts).toHaveLength(2);
 });
@@ -100,10 +101,48 @@ test("an automation's agent/harness/model ride the wake; unset fields leave the 
         inputs.push(input);
         yield { kind: "done" };
     };
-    await fireAutomation(services, (await services.automations.get("pinned")) as AutomationRecord, undefined, capture);
-    await fireAutomation(services, (await services.automations.get("plain")) as AutomationRecord, undefined, capture);
+    await fireAutomation(services, (await services.automations.get("pinned")) as AutomationRecord, capture);
+    await fireAutomation(services, (await services.automations.get("plain")) as AutomationRecord, capture);
     expect(inputs[0]).toEqual({ prompt: "wake:pinned", agent: "codex", harness: "claude-code", model: "gpt-5-codex" });
     expect(inputs[1]).toEqual({ prompt: "wake:plain" });
+});
+
+test("an outside message opens a surfaced conversation; a schedule wake stays headless", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("support"));
+    const inputs: AgentTurn[] = [];
+    const capture: WakeFn = async function* (_services, input) {
+        inputs.push(input);
+        yield { kind: "done" };
+    };
+    const record = (await services.automations.get("support")) as AutomationRecord;
+    const origin = { automationId: "support", provider: "discord", channelId: "c1", author: "ada" };
+    await fireAutomation(services, record, capture, { payload: "hi", origin, title: "ada: hi" });
+    // A schedule fire of the SAME automation carries no origin, so it stays an anonymous main-tree turn.
+    await fireAutomation(services, record, capture);
+
+    const surfaced = inputs[0] as AgentTurn;
+    expect(surfaced.origin).toEqual(origin);
+    expect(surfaced.isolated).toBe(true);
+    expect(surfaced.title).toBe("ada: hi");
+    // The id is a legal conversation id (it becomes a branch name and a worktree dir) and names its automation.
+    expect(surfaced.conversationId).toMatch(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
+    expect(surfaced.conversationId).toContain("support");
+    expect(inputs[1]).toEqual({ prompt: "wake:support" });
+
+    // One conversation per FIRE — a second message is a second agent, never a resumed one.
+    await fireAutomation(services, record, capture, { payload: "again", origin, title: "ada: again" });
+    expect((inputs[2] as AgentTurn).conversationId).not.toBe(surfaced.conversationId);
+});
+
+test("a held external wake snapshots its provenance, so approving it opens the same conversation", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("gated-chat", { requireApproval: true }));
+    const record = (await services.automations.get("gated-chat")) as AutomationRecord;
+    const origin = { automationId: "gated-chat", provider: "webchat", channelId: "v-7", author: "visitor" };
+    await fireAutomation(services, record, fakeWake([]), { payload: "help", origin, title: "visitor: help" });
+    const held = (await services.approvals.list())[0];
+    expect(held).toMatchObject({ payload: "help", origin, title: "visitor: help" });
 });
 
 test("a requireApproval automation holds the wake instead of running it; preApproved runs it", async () => {
@@ -120,7 +159,7 @@ test("a requireApproval automation holds the wake instead of running it; preAppr
 
     // Approving replays it with preApproved=true: the gate is bypassed, the agent wakes, a run is recorded.
     const record = (await services.automations.get("gated")) as AutomationRecord;
-    await fireAutomation(services, record, undefined, fakeWake(prompts), true);
+    await fireAutomation(services, record, fakeWake(prompts), { preApproved: true });
     expect(prompts).toEqual(["wake:gated"]);
     expect((await services.automations.get("gated"))?.runs[0]?.outcome).toBe("completed");
 });
@@ -139,7 +178,7 @@ test("a streamed wake pipes text deltas to the sink, ends it, and tells the agen
         },
     };
     const record = (await services.automations.get("chat")) as AutomationRecord;
-    await fireAutomation(services, record, undefined, wake, false, stream);
+    await fireAutomation(services, record, wake, { stream });
     expect(chunks).toEqual(["Hel", "lo"]);
     expect(ended).toBe(true);
     // The streamed prompt carries the "don't send it yourself" note ahead of the automation's own prompt.

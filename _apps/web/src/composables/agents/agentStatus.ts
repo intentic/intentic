@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic-app/ui";
-import type { AgentStatus } from "@intentic/sandbox-contract";
+import type { AgentOrigin, AgentStatus } from "@intentic/sandbox-contract";
 
 /* Presentational metadata for fleet-agent statuses + the card's number formatters. Extends the conversation
  * status idiom (catalog.ts statusIcon) with the registry-only outcomes (landed / conflict) and the
@@ -27,6 +27,31 @@ export const agentStatusMeta = (status: AgentStatus | "draft"): { icon: IconName
         return { icon: `exclamation-triangle`, label: `Error`, class: `text-danger` };
     }
     return { icon: `circle-fill`, label: `Idle`, class: `text-subtle` };
+};
+
+// The sources an agent can be OPENED BY, when it wasn't opened by the user: the label and glyph the card's
+// provenance line wears. Keyed by AgentOrigin.provider, which is an open string (listener sources are
+// extension-declared), so an unknown one degrades to its own name rather than disappearing.
+const ORIGIN_SOURCES: Record<string, { icon: IconName; label: string }> = {
+    discord: { icon: `comments`, label: `Discord` },
+    imap: { icon: `envelope`, label: `Email` },
+    webchat: { icon: `globe`, label: `Web chat` },
+    webhook: { icon: `bolt`, label: `Webhook` },
+};
+
+// The card's "this conversation came in from outside" line: what opened it, who sent it, and — in the tooltip
+// — which automation was configured to answer. The user never typed this agent's first message, and a card
+// that doesn't say so reads as an agent they forgot starting.
+export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string; detail: string | undefined; hint: string } => {
+    const source = ORIGIN_SOURCES[origin.provider] ?? { icon: `wave-pulse` as IconName, label: origin.provider };
+    const where = origin.channelId !== undefined ? ` in ${origin.channelId}` : ``;
+    const who = origin.author !== undefined ? ` from ${origin.author}` : ``;
+    return {
+        icon: source.icon,
+        label: source.label,
+        detail: origin.author,
+        hint: `Started by the "${origin.automationId}" automation for a ${source.label} message${who}${where} — its first prompt is the automation's, not yours.`,
+    };
 };
 
 // Dollars with sensible precision: sub-cent turns still show something, big totals stay short.

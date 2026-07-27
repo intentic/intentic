@@ -57,6 +57,23 @@ test("extractTarToWorkspace writes every contained entry — former secrets, .gi
     await rm(root, { recursive: true, force: true });
 });
 
+test("extractTarToWorkspace skips the workspace ROOT's own .git and keeps extracting", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tar-"));
+    // What dropping a repo's CONTENTS (rather than its folder) at the root produces. /work's .git is the pointer
+    // to the shadow history repo, so these entries are refused — but only these: the rest of the drop still lands.
+    await extractTarToWorkspace(
+        root,
+        await tarOf([
+            { name: ".git/config", content: "stolen" },
+            { name: ".git/objects/ab/cdef", content: "obj" },
+            { name: "src/main.ts", content: "ok" },
+        ]),
+    );
+    await expect(access(join(root, ".git"))).rejects.toThrow();
+    expect(await readFile(join(root, "src/main.ts"), "utf8")).toBe("ok");
+    await rm(root, { recursive: true, force: true });
+});
+
 test("extractTarToWorkspace preserves each entry's mtime (drives the re-upload size+mtime skip)", async () => {
     const root = await mkdtemp(join(tmpdir(), "tar-"));
     const mtime = new Date(1_700_000_000 * 1000);

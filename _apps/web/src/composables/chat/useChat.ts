@@ -932,10 +932,32 @@ const fetchTranscript = async (conversation: Conversation, id: string): Promise<
     }
 };
 
+// Bring a tab with no visible transcript up to date with the daemon: attach to the turn running for its
+// conversation right now, or — when nothing is running — replay its stored session. Shared by the restore
+// watch above and by opening a fleet agent, which is what lets an agent an AUTOMATION opened for an outside
+// message read as an ordinary chat: its whole transcript (the configured prompt, the message that woke it,
+// the reply) exists only daemon-side until this runs.
+const hydrate = async (conversation: Conversation): Promise<void> => {
+    if (await conversation.reattach()) {
+        return;
+    }
+    const session = conversation.session.value;
+    if (session === undefined || session.provider !== `claude`) {
+        return;
+    }
+    const restored = await fetchTranscript(conversation, session.id);
+    // An empty replay is not a transcript, it is the absence of one — the same distinction the mirror
+    // makes when it refuses to save a blank. Painting it would blank a good cached transcript on any
+    // daemon that answers but has nothing to say, which is exactly how a reopened tab goes empty.
+    if (restored !== undefined && restored.length > 0) {
+        conversation.restoreMessages(restored);
+    }
+};
+
 // Open (or focus) the tab bound to a fleet agent's conversationId, seeding identity from its registry
-// summary. An isolated conversation's transcript lives in its WORKTREE session namespace, which /sessions
-// (main-tree-keyed) can't read — so a freshly-opened tab arms the session for server-side resume and starts
-// visually empty, the same accepted restore shape codex/grok tabs have. Exported for useAgents.open.
+// summary. An isolated conversation's transcript is readable through /sessions after all — the SDK's store
+// spans a repo's worktrees rather than one checkout — so the tab hydrates like any other instead of starting
+// visually empty. Exported for useAgents.open.
 export const openAgentConversation = (agent: {
     id: string;
     sessionId?: string;
@@ -967,9 +989,9 @@ export const openAgentConversation = (agent: {
     activeId.value = conversation.id;
     // The agent may be mid-turn right now — attach and render it live (the head synthesizes the prompt
     // bubble). Marked as hydrating so the restore watch above doesn't race a second attach; an idle agent's
-    // probe just 404s and the tab stays the accepted visually-empty restore shape.
+    // probe just 404s and its stored transcript is replayed instead.
     hydrating.add(conversation);
-    void conversation.reattach();
+    void hydrate(conversation);
     return conversation;
 };
 
@@ -1026,22 +1048,7 @@ watch([reachable, conversations], ([isReachable]) => {
             continue;
         }
         hydrating.add(conversation);
-        void (async () => {
-            if (await conversation.reattach()) {
-                return;
-            }
-            const session = conversation.session.value;
-            if (session === undefined || session.provider !== `claude`) {
-                return;
-            }
-            const restored = await fetchTranscript(conversation, session.id);
-            // An empty replay is not a transcript, it is the absence of one — the same distinction the mirror
-            // makes when it refuses to save a blank. Painting it would blank a good cached transcript on any
-            // daemon that answers but has nothing to say, which is exactly how a reopened tab goes empty.
-            if (restored !== undefined && restored.length > 0) {
-                conversation.restoreMessages(restored);
-            }
-        })();
+        void hydrate(conversation);
     }
 });
 

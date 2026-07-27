@@ -61,7 +61,7 @@ const pump = async (services: Services, id: string, wake: WakeFn): Promise<void>
             if (fresh === undefined || !fresh.enabled || fresh.trigger.kind !== "workspace") {
                 return;
             }
-            await serially(() => fireAutomation(services, fresh, JSON.stringify(next), wake)).catch((error: unknown) =>
+            await serially(() => fireAutomation(services, fresh, wake, { payload: JSON.stringify(next) })).catch((error: unknown) =>
                 services.logger.error({ err: error, automation: id, agent: next.agentId }, "chore run failed"),
             );
         }

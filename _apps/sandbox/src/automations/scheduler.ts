@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Cron } from "croner";
-import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentOrigin, AgentTurn } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { automationPending } from "../push/notifications.js";
 import type { AutomationRecord } from "./automations-store.js";
@@ -14,6 +14,8 @@ const GUARD_TIMEOUT_MS = 60_000;
 const GUARD_DETAIL_TAIL = 500;
 // How much of an event's webhook body reaches the guard's env and the wake prompt.
 export const PAYLOAD_MAX = 64_000;
+// The contract's cap on AgentTurn.title — a surfaced wake's title is built from a message, so it's clamped here.
+export const TITLE_MAX = 80;
 
 // "Wake the agent" — streamAgent's shape, INJECTED by every caller rather than imported here. Importing it
 // would put this module downstream of agent.routes, which is itself an emitter of the workspace events
@@ -56,17 +58,44 @@ const runGuard = async (command: string, cwd: string, payload: string | undefine
 // tick and the /automations/{id}/fire route share it.
 const inFlight = new Set<string>();
 
+// A conversation id is a branch name (agent/<id>) and a worktree dir, so it is bounded and charset-checked by
+// the contract's ConversationIdSchema — this builds one that satisfies it from the automation's id. Room for
+// the "a-" prefix and the suffix is bought out of the automation id, which is the part that repeats.
+const AUTOMATION_ID_IN_CONVERSATION = 40;
+// Two fires of one automation can't share a millisecond (fires are serialized per automation), but the counter
+// costs nothing and makes the id unique per PROCESS regardless of who calls this.
+let fireSeq = 0;
+const mintConversationId = (automationId: string, now: number): string =>
+    `a-${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-${now.toString(36)}${(fireSeq++).toString(36)}`;
+
+// Everything a fire needs beyond the automation itself. An options object rather than five positional flags:
+// the external dispatchers set a different subset than the tick does, and `payload, wake, false, undefined,
+// origin` reads as nothing at all at the call site.
+export interface FireOptions {
+    // The trigger's payload — appended to the prompt and handed to the guard as AUTOMATION_PAYLOAD.
+    readonly payload?: string;
+    // Set by the approve route: the owner already approved a held wake, so skip the guard + approval gate and run.
+    readonly preApproved?: boolean;
+    // When set, the agent's text deltas stream here live and it's told (via STREAM_NOTE) not to send the reply itself.
+    readonly stream?: TurnStream;
+    // Set by the dispatchers that receive an OUTSIDE message (listener sources, the web-chat widget, the event
+    // webhook). Its presence is what makes the wake a first-class conversation instead of an anonymous headless
+    // turn: it gets its own conversation id, its own worktree, a fleet card, and a chat tab the user can take
+    // over in — the wake is the conversation's first turn, with the automation's configured prompt and the
+    // message as its context. Absent (schedules, chores) ⇒ the main-tree headless turn, as before.
+    readonly origin?: AgentOrigin;
+    // The card/tab title for a surfaced wake — the inbound message's first line, which is the only thing that
+    // tells two fires of one automation apart (the prompt is identical every time). Absent ⇒ derived below.
+    readonly title?: string;
+}
+
 // Fire one automation now: guard (payload visible) → wake the agent (payload appended to the prompt) → record
 // the run. Callers run it detached from their tick/request lifecycles; tests await it directly.
 export const fireAutomation = async (
     services: Services,
     automation: AutomationRecord,
-    payload: string | undefined,
     wake: WakeFn,
-    // Set by the approve route: the owner already approved a held wake, so skip the guard + approval gate and run.
-    preApproved = false,
-    // When set, the agent's text deltas stream here live and it's told (via STREAM_NOTE) not to send the reply itself.
-    stream?: TurnStream,
+    { payload, preApproved = false, stream, origin, title }: FireOptions = {},
 ): Promise<void> => {
     if (inFlight.has(automation.id)) {
         return;
@@ -92,6 +121,11 @@ export const fireAutomation = async (
                 await services.approvals.add({
                     automationId: automation.id,
                     ...(capped !== undefined ? { payload: capped } : {}),
+                    // Snapshotted with the payload so the approved run opens the same conversation this fire
+                    // would have — an approved Discord mention lands on the board as a Discord agent, not as
+                    // an anonymous turn.
+                    ...(origin !== undefined ? { origin } : {}),
+                    ...(title !== undefined ? { title } : {}),
                     createdAt: Date.now(),
                 });
                 void services.activity
@@ -108,13 +142,29 @@ export const fireAutomation = async (
                 return;
             }
         }
-        // Each wake is a fresh headless turn; its transcript lands in the workspace sessions like a chat turn.
+        // The wake's prompt is the automation's configured one plus the outside context that woke it — which is
+        // exactly a chat's opening message, written by the configuration instead of by a person.
         const body = capped !== undefined && capped !== "" ? `${automation.prompt}\n\n--- Event payload ---\n${capped}` : automation.prompt;
         const prompt = stream !== undefined ? `${STREAM_NOTE}\n\n${body}` : body;
         let failure: string | undefined;
         let sessionId: string | undefined;
-        const turn = {
+        // An outside message opens a CONVERSATION: its own id, its own worktree, a card on the fleet and a tab
+        // the user can open, follow live, and keep talking in after the wake ends. One per FIRE, not per channel
+        // — each mention is its own agent with its own branch, which is what makes two of them reviewable
+        // separately. (Fires of one automation are still serialized by inFlight and the listener batcher; the
+        // worktree keeps them from colliding in the tree, the queue keeps a flood from becoming N turns of
+        // spend.) A schedule or chore wake stays a headless main-tree turn — its transcript still lands in the
+        // workspace sessions like a chat turn.
+        const turn: AgentTurn = {
             prompt,
+            ...(origin !== undefined
+                ? {
+                      conversationId: mintConversationId(automation.id, Date.now()),
+                      isolated: true,
+                      origin,
+                      title: (title ?? `${origin.provider}: ${automation.id}`).slice(0, TITLE_MAX),
+                  }
+                : {}),
             ...(automation.agent !== undefined ? { agent: automation.agent } : {}),
             ...(automation.harness !== undefined ? { harness: automation.harness } : {}),
             ...(automation.model !== undefined ? { model: automation.model } : {}),
@@ -185,7 +235,7 @@ export const createAutomationsScheduler = (services: Services, wake: WakeFn, int
             if (due === null || due.getTime() > now) {
                 continue;
             }
-            void fireAutomation(services, automation, undefined, wake).catch((error: unknown) =>
+            void fireAutomation(services, automation, wake).catch((error: unknown) =>
                 services.logger.error({ err: error, automation: automation.id }, "automation run failed"),
             );
         }

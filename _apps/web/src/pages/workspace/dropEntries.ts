@@ -48,6 +48,14 @@ const IGNORED_DIRS = new Set([...WORKSPACE_IGNORED_DIRS].filter((dir) => dir !==
 const isSecretFile = (name: string): boolean =>
     name === ".secrets.json" || name === "claude.json" || name === "capabilities.json" || (name.startsWith(".env") && name !== ".env.example");
 
+// The one `.git` a drop must leave behind, keyed on the DESTINATION (workspace-root-relative, targetDir already
+// joined) rather than the drop's own shape. /work is itself a repo whose git dir lives on /history, so /work/.git
+// is that repo's pointer FILE — dropping a repo's CONTENTS at the root, rather than its folder, aims a directory
+// at it. Unlike the rest of this module's policy the daemon agrees here (isControlPlanePath covers the root .git),
+// so sending them anyway buys nothing but a panel full of 404s. The very same `.git/config` entry is legitimate the
+// moment the drop lands ON a folder — there it becomes <folder>/.git/config, a nested repo keeping its metadata.
+export const isRootGitPath = (destination: string): boolean => destination === ".git" || destination.startsWith(".git/");
+
 // Promisify FileSystemFileEntry.file(cb, errCb).
 const fileOf = (entry: FileSystemFileEntry): Promise<File> =>
     withTimeout(new Promise<File>((resolve, reject) => entry.file(resolve, reject)), entry.name);

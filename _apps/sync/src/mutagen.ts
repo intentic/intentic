@@ -38,6 +38,11 @@ export const mutagenForwardArgs = (args: {
 // cross-fs 2× copy). local first, then user@alias:/work. The sync mode is pinned explicitly — Mutagen's default
 // is two-way-safe, but relying on the default lets a version bump or a user's global mutagen config silently
 // switch it to a clobbering mode; pinning keeps conflicts flagged, never overwritten.
+//
+// No --ignore-vcs: a nested repo's .git is meant to travel (it is what makes a synced project a REPO inside the
+// sandbox rather than loose files under the root scope), and the one .git that must NOT is the workspace root's
+// pointer file — which --ignore-vcs misses anyway, since its patterns match directories. IGNORES carries the
+// anchored `/.git` that actually covers it; see the comment there.
 export const mutagenCreateArgs = (args: {
     readonly name: string;
     readonly localDir: string;
@@ -50,7 +55,6 @@ export const mutagenCreateArgs = (args: {
     args.name,
     "--sync-mode",
     "two-way-safe",
-    "--ignore-vcs",
     ...IGNORES.flatMap((pattern) => ["--ignore", pattern]),
     "--stage-mode-beta",
     "neighboring",

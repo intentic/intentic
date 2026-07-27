@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { streamAgent } from "../agent/agent.routes.js";
-import { fireAutomation, PAYLOAD_MAX, type WakeFn } from "../automations/scheduler.js";
+import { fireAutomation, PAYLOAD_MAX, TITLE_MAX, type WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../context.js";
 import { createSseStream } from "./sse-stream.js";
@@ -25,11 +25,13 @@ const WebchatMessageSchema = z.object({
 });
 
 // A web-chat automation runs ONE turn at a time: concurrent visitor messages QUEUE instead of overlapping, so
-// the shared working tree is never edited by two turns at once and no request is dropped — fireAutomation's own
-// inFlight guard DROPS overlaps, which is wrong for support where every message must be answered. Keyed by
-// automation id; a job that throws still lets the next one run (.then(job, job)).
-// ponytail: serial per automation — fine for one sandbox's support load. Parallelize per conversation only if
-// it matters, by isolating each turn in its own git worktree/session (v2).
+// no request is dropped — fireAutomation's own inFlight guard DROPS overlaps, which is wrong for support where
+// every message must be answered. Keyed by automation id; a job that throws still lets the next one run
+// (.then(job, job)). Each fire now runs in its OWN worktree (it opens a surfaced conversation), so the tree can
+// no longer be the reason to serialize; the queue is what keeps a burst of visitors from becoming a burst of
+// concurrent agent turns.
+// ponytail: serial per automation — fine for one sandbox's support load. Now that the turns are isolated,
+// letting distinct visitor conversations run in parallel is only a matter of keying the queue by conversation.
 const queues = new Map<string, Promise<unknown>>();
 const enqueue = (id: string, job: () => Promise<void>): Promise<void> => {
     const tail = (queues.get(id) ?? Promise.resolve()).then(job, job);
@@ -114,9 +116,16 @@ export const createWebchatRoute =
             if (automation.requireApproval === true) {
                 await sse.writeSSE({ event: "pending", data: "Thanks — your request was received and a human will review it shortly." });
             }
-            await enqueue(automation.id, () => fireAutomation(services, automation, payload, wake, false, stream.turn)).catch((error: unknown) =>
-                services.logger.error({ err: error, automation: automation.id }, "web-chat wake failed"),
-            );
+            await enqueue(automation.id, () =>
+                fireAutomation(services, automation, wake, {
+                    payload,
+                    stream: stream.turn,
+                    // A visitor's message opens a conversation on the fleet exactly like a Discord mention does —
+                    // the owner watches the support turn live and can take the thread over from the same tab.
+                    origin: { automationId: automation.id, provider: "webchat", channelId: body.conversationId, author },
+                    title: `${author}: ${body.content}`.slice(0, TITLE_MAX),
+                }),
+            ).catch((error: unknown) => services.logger.error({ err: error, automation: automation.id }, "web-chat wake failed"));
             await stream.flushed();
         });
     };

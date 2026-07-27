@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract";
+import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
 // The persisted half of the fleet registry (<historyRoot>/agents.json — on the /history volume so a
@@ -23,6 +23,9 @@ export const PersistedAgentSchema = z.object({
     model: z.string().optional(),
     account: z.string().optional(),
     sessionId: z.string().optional(),
+    // Set when an automation opened this conversation for an outside message (a Discord mention, a web-chat
+    // visitor, a webhook) instead of the user starting it. Absent ⇒ a user-started agent.
+    origin: AgentOriginSchema.optional(),
     // The worktree composition: each workspace repo ("root" or a repo id — its root-relative dir) with the full
     // base sha its worktree branched from, and the branch tip whose delta has already LANDED into the main
     // tree (absent ⇒ nothing landed yet — the base is the reference). Land applies `landedTip → tip`, so each

@@ -1,21 +1,26 @@
-import { TerminalsListSchema } from "@intentic-app/api-contract";
 import { ref, watch } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { useLayout } from "../useLayout";
 import { useSandbox } from "../sandbox/useSandbox";
+import { clearPendingTerminals, listTerminals, refreshTerminals, removeTerminal } from "./terminalsQuery";
 import { disposeAllSessions, type TerminalTabsSource } from "./useTerminal";
 
 /* The ONE global terminal panel's controls + session source. Terminals are sandbox-global facts (tmux sessions
  * on one machine), so the panel lives in the shell — below every view — and any surface opens/focuses it with
  * one call: extensions start sessions and `openFocused` them, the rail's terminal button and Ctrl+` toggle it. The
  * daemon's GET /system/terminals is the single tab list: web-* shells (numbered) beside panel-* dev servers
- * (labeled, started via Start) — every tab ×-closable, untracked sessions dimmed. */
+ * (labeled, started via Start) — every tab ×-closable, untracked sessions dimmed. It is read through
+ * terminalsQuery's shared cache entry, so the strip and the rail's badge are literally the same list. */
 
 export const globalTerminalSource: TerminalTabsSource = {
-    list: async () => TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)).sessions,
+    list: listTerminals,
     create: () => `web-${crypto.randomUUID().slice(0, 8)}`,
-    kill: (name) => {
-        void sandboxJson(`/system/terminals/${encodeURIComponent(name)}`, { method: `DELETE` });
+    // Drop it from the shared list up front so the rail's badge falls with the tab, then let the daemon's own
+    // account of the kill land — which also puts the session back if the DELETE turns out to have failed.
+    kill: async (name) => {
+        removeTerminal(name);
+        await sandboxJson(`/system/terminals/${encodeURIComponent(name)}`, { method: `DELETE` });
+        await refreshTerminals();
     },
 };
 
@@ -48,9 +53,10 @@ export const consumeSpawnRequest = (): boolean => {
     return pending;
 };
 
-// Cached sockets die with the sandbox they were opened against.
+// Cached sockets — and the claims on names not yet listed — die with the sandbox they were opened against.
 watch(useSandbox().activeSandboxId, () => {
     disposeAllSessions();
+    clearPendingTerminals();
     requested.value = undefined;
     surfaced.value = undefined;
 });

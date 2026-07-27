@@ -3,6 +3,7 @@ import { ProgressRing, useDevice } from "@intentic-app/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import ProviderLogo from "../chat/ProviderLogo.vue";
+import OriginMark from "../components/OriginMark.vue";
 import {
     activityIcon,
     agentStatusMeta,
@@ -185,6 +186,10 @@ const grab = (event: PointerEvent): void => {
              that fits a kanban lane. Row (`dense`): the same blocks along one wrapping line — each block already
              shrinks or wraps internally, so the line degrades on its own as the board narrows. -->
         <div :class="dense ? 'flex flex-wrap items-center gap-x-3 gap-y-1' : 'flex flex-col gap-1.5'">
+            <!-- Provenance, ahead of the model/branch line: for an agent the user never started, "who asked for
+                 this" outranks what it runs on. Renders nothing for a user-started agent. -->
+            <OriginMark :origin="agent.origin" />
+
             <div v-if="model !== undefined || agent.branch !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs text-subtle">
                 <span v-if="model !== undefined" class="truncate">{{ model }}</span>
                 <template v-if="agent.branch !== undefined">

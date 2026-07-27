@@ -45,11 +45,10 @@ describe("sshConfigBlock", () => {
 
 describe("mutagenCreateArgs", () => {
     const args = mutagenCreateArgs({ name: "intentic-x", localDir: "/home/u/proj", alias: "intentic-sync-x", remoteDir: "/work" });
-    it("names the session, pins the safe conflict mode, ignores VCS + our set, stages neighboring, and orders local→remote", () => {
+    it("names the session, pins the safe conflict mode, ignores our set, stages neighboring, and orders local→remote", () => {
         expect(args.slice(0, 4)).toEqual(["sync", "create", "--name", "intentic-x"]);
         // Pinned explicitly so a Mutagen default change or a user's global config can't flip it to a clobbering mode.
         expect(args[args.indexOf("--sync-mode") + 1]).toBe("two-way-safe");
-        expect(args).toContain("--ignore-vcs");
         for (const pattern of IGNORES) {
             const at = args.indexOf(pattern);
             expect(args[at - 1]).toBe("--ignore");
@@ -57,5 +56,13 @@ describe("mutagenCreateArgs", () => {
         expect(args).toContain("--stage-mode-beta");
         // local dir precedes the remote alias:path
         expect(args.indexOf("/home/u/proj")).toBeLessThan(args.indexOf("intentic-sync-x:/work"));
+    });
+
+    // --ignore-vcs would re-block a nested repo's .git — the thing that makes a synced project a REPO in the
+    // sandbox — while still missing the root pointer FILE its directory-only patterns can't match.
+    it("does not pass --ignore-vcs, and anchors the root .git ignore so only /work's own pointer file is excluded", () => {
+        expect(args).not.toContain("--ignore-vcs");
+        expect(IGNORES).toContain("/.git");
+        expect(IGNORES).not.toContain(".git");
     });
 });

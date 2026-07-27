@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, markRaw, reactive, ref } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
-import { collectDroppedFiles, type DroppedFile } from "../../pages/workspace/dropEntries";
+import { collectDroppedFiles, type DroppedFile, isRootGitPath } from "../../pages/workspace/dropEntries";
 import { packTar } from "../../pages/workspace/tarStream";
 import { sandboxJson, sandboxUpload } from "../sandbox/sandboxClient";
 import { errorMessage } from "../useAsyncAction";
@@ -449,8 +449,16 @@ export function useUploadQueue() {
 
     // Add a drop/pick to the queue and (re)start the worker. targetDir is the root-relative folder the drop landed
     // on (root = ``); it's baked into each file's path here so the transports don't need to thread it through.
-    const enqueue = async (targetDir: string, entries: readonly DroppedFile[]): Promise<void> => {
+    const enqueue = async (targetDir: string, dropped: readonly DroppedFile[]): Promise<void> => {
+        // Dropped before anything else, so the root's own .git never reaches project detection or the diff manifest.
+        const entries = dropped.filter((entry) => !isRootGitPath(joinPath(targetDir, entry.path)));
         if (entries.length === 0) {
+            // Dropping a bare `.git` on the root leaves nothing to send. Say so — the scan already narrated a file
+            // count, and going quiet after it reads as a hang. A drop that kept something ignores what it left.
+            if (dropped.length > 0 && !running && pending.length === 0) {
+                skippedNotice.value = dropped.length;
+                finished.value = true;
+            }
             return;
         }
         // A brand-new run after the last one was left finished-and-untouched starts from a clean slate.

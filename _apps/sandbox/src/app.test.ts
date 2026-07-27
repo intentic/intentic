@@ -2198,6 +2198,8 @@ test("the daemon's control plane is unreachable through the generic file API; it
     // owner.json/members.json ARE the answer to "who may drive this sandbox" (re-read from disk per request), and
     // the rest hold the agent providers' tokens — so a member could otherwise upload a new owner and take the
     // sandbox, or read the owner's token back out. Answered as if nothing were there, and nothing is written.
+    // The root's own .git joins them: it is the --separate-git-dir pointer to the shadow history repo on /history,
+    // and a FILE, so a drop of a repo's CONTENTS at the root would aim a directory at it and 500 the whole upload.
     const controlPlane = [
         ".intentic/owner.json",
         ".intentic/members.json",
@@ -2207,6 +2209,9 @@ test("the daemon's control plane is unreachable through the generic file API; it
         ".intentic/codex/acc/auth.json",
         ".intentic/kimi/acc.json",
         ".intentic/opencode/auth.json",
+        ".git",
+        ".git/config",
+        ".git/objects/ab/cdef",
     ];
     for (const path of controlPlane) {
         expect([path, (await app.request(`/workspace/upload?path=${path}`, { method: "POST", body })).status]).toEqual([path, 404]);
@@ -2215,8 +2220,9 @@ test("the daemon's control plane is unreachable through the generic file API; it
     expect(writes).toHaveLength(0);
 
     // The root .intentic's other subtrees are ordinary workspace content driven through this very API — chat
-    // attachments and a directory's own UI — and a repo's nested .intentic is not the control plane at all.
-    const open = [".intentic/attachments/u1/pic.png", ".intentic/ui/index.html", "app/.intentic/owner.json"];
+    // attachments and a directory's own UI — and a repo's nested .intentic is not the control plane at all. Nor is
+    // a NESTED .git: a dropped repo keeps its own and stays connected to its remote.
+    const open = [".intentic/attachments/u1/pic.png", ".intentic/ui/index.html", "app/.intentic/owner.json", "app/.git/config"];
     for (const path of open) {
         expect([path, (await app.request(`/workspace/upload?path=${path}`, { method: "POST", body })).status]).toEqual([path, 200]);
         expect([path, (await app.request(`/workspace/raw?path=${path}`)).status]).toEqual([path, 200]);

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import type { Disposable } from "@intentic/extension-api";
+import type { AgentOrigin } from "@intentic/sandbox-contract";
 import Popover from "primevue/popover";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { createTitleEdit } from "../composables/agents/titleEdit";
+import { useAgents } from "../composables/agents/useAgents";
+import OriginMark from "../components/OriginMark.vue";
 import { relativeTime, statusTabClass } from "../composables/chat/catalog";
 import type { Conversation } from "../composables/chat/conversation";
 import { useChat } from "../composables/chat/useChat";
@@ -24,7 +27,13 @@ const emit = defineEmits<{
 }>();
 
 const { conversations, activeId, sessions, loadSessions } = useChat();
+const { agentById } = useAgents();
 const { supported: popoutSupported, toggle: togglePopout, overlayTarget } = useChatPopout();
+
+// Which tabs were opened by an outside message rather than by the user (the registry entry is where that
+// fact lives, so it's read from the fleet). The strip wears the source glyph alone — the title of such a tab
+// already leads with who sent the message.
+const originOf = (conversation: Conversation): AgentOrigin | undefined => agentById(conversation.conversationId)?.origin;
 
 const history = ref<InstanceType<typeof Popover> | null>(null);
 const searchInput = ref<HTMLInputElement | null>(null);
@@ -186,6 +195,8 @@ const hidePreview = (): void => {
                     @mouseenter="showPreview($event, c)"
                     @mouseleave="hidePreview"
                 >
+                    <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
+                    <OriginMark :origin="originOf(c)" compact />
                     <!-- One noun with the fleet: an untitled isolated conversation IS a draft agent card there. -->
                     <span class="min-w-0 flex-1 truncate text-left" :class="statusTabClass(c.status.value)">{{
                         c.title.value ?? (c.isolated.value ? "New agent" : "New chat")

@@ -1,4 +1,5 @@
 import { ref, type Ref, watch } from "vue";
+import { addPendingTerminal, dropPendingTerminal } from "./terminalsQuery";
 import { pruneTerminalMeta } from "./terminalMeta";
 import {
     createTerminalSession,
@@ -27,8 +28,9 @@ export interface TerminalTab {
     readonly name: string;
     // Shown on the pill; absent ⇒ the pill shows its position index (numbered shells).
     readonly label?: string;
-    // false dims the pill (an untracked session, e.g. a finished one-shot job); absent ⇒ always bright.
-    readonly running?: boolean;
+    // false dims the pill (an untracked session, e.g. a finished one-shot job) and offers it to the sweep.
+    // Required, like the daemon's own field: a tab whose liveness is merely unknown has never existed.
+    readonly running: boolean;
     // A user shell (numbered, restartable) vs a dev-server panel session (labeled, restarted via Start) vs an
     // AI-managed agent session (labeled, sparkles icon) the Claude agent's Bash commands run in vs a job
     // session (labeled) the daemon runs user-triggered flows in (capability adds, infra check) vs a managed
@@ -43,7 +45,10 @@ export interface TerminalTab {
 export interface TerminalTabsSource {
     readonly list: () => Promise<TerminalTab[]>;
     readonly create?: () => string;
-    readonly kill?: (name: string) => void;
+    // Resolves once the daemon has actually dropped the session — the tab is gone from the strip long before
+    // that (endSession is synchronous), so nothing awaits it for the view; it exists so the source can settle
+    // the shared session list on the way out.
+    readonly kill?: (name: string) => Promise<void>;
 }
 
 // Sandbox switch: every cached socket points at the OLD daemon — drop them all and bump the epoch so a
@@ -207,8 +212,19 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // Re-list the surface's sessions. Every tabbed session connects immediately — a hidden tab still streams,
     // so switching to it is instant (tmux redraws at the fitted size). Background processes stay out of the
     // tab set (and hold no idle sockets) until a log view is opened for them.
+    //
+    // `container` is the liveness gate, checked on BOTH sides of the await: detach() clears it, so a list still
+    // in flight when the panel tears down (a fast Ctrl+` off/on) can't write this dead instance's grouping back
+    // to localStorage, and — via mount() — can't append a session's host into a detached container, which would
+    // STEAL it from the instance that replaced us and leave the live panel a blank pane.
     const refresh = async (): Promise<void> => {
+        if (container === undefined) {
+            return;
+        }
         const listed = await source.list();
+        if (container === undefined) {
+            return;
+        }
         pruneTerminalMeta(new Set(listed.map((tab) => tab.name)));
         processes.value = listed.filter((tab) => tab.kind === `process`);
         const tabs = listed.filter((tab) => tab.kind !== `process` || viewedProcesses.has(tab.name));
@@ -243,6 +259,12 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const attach = async (el: HTMLElement): Promise<boolean> => {
         container = el;
         await refresh();
+        // Torn down (or re-attached) while the list was in flight — spawning the empty panel's opening shell
+        // here would leave a real tmux session nobody asked for and nothing shows, which is how a rapid Ctrl+`
+        // used to silt the sandbox up with orphan `web-*` shells.
+        if (container !== el) {
+            return false;
+        }
         if (order.value.length === 0 && source.create !== undefined) {
             newTab();
             return true;
@@ -251,7 +273,8 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     };
 
     // Remove the mounted hosts from the DOM without touching any session — sockets, xterms, scrollback stay
-    // alive. (The cell wrappers die with the panel's own DOM.)
+    // alive. (The cell wrappers die with the panel's own DOM.) Dropping `container` is what retires this
+    // instance: detach is only ever the unmount, and every async path re-checks it before touching the DOM.
     const detach = (): void => {
         for (const mounted of mountedNames) {
             const session = cache.get(mounted);
@@ -260,12 +283,16 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             }
         }
         mountedNames = [];
+        container = undefined;
     };
 
     // A session ended (tab ×, or the daemon's exit frame): dispose its client state, drop the tab, focus a
     // neighbour — its own group's survivor first — or hand off to onEmpty when it was the last.
     const endSession = (name: string): void => {
         viewedProcesses.delete(name);
+        // Whether or not the daemon ever listed it, this name is spent — a claim left standing would keep the
+        // session in the shared list (and in the rail's count) until the page reloaded.
+        dropPendingTerminal(name);
         const session = cache.get(name);
         if (session !== undefined) {
             disposeTerminalSession(session);
@@ -276,15 +303,19 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         persistGroups();
         const remaining = order.value.filter((tab) => tab.name !== name);
         order.value = remaining;
-        if (!mountedNames.includes(name)) {
-            return;
-        }
-        mountedNames = mountedNames.filter((member) => member !== name);
+        // An empty strip retires the panel however the last tab went — ahead of the mounted check, which only
+        // decides whether anything needs REmounting. (A last tab that was never mounted — the panel closed
+        // before its list landed — used to leave the panel open around nothing.)
         if (remaining.length === 0) {
+            mountedNames = [];
             activeName.value = undefined;
             onEmpty();
             return;
         }
+        if (!mountedNames.includes(name)) {
+            return;
+        }
+        mountedNames = mountedNames.filter((member) => member !== name);
         if (activeName.value === name || activeName.value === undefined) {
             activeName.value = undefined;
             const survivor = group?.find((member) => remaining.some((tab) => tab.name === member));
@@ -401,35 +432,45 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     }
     const create = source.create;
     const kill = source.kill;
-    // Open a fresh tab and switch to it. Creation is implicit: opening the socket runs `tmux new-session -A`.
-    const newTab = (): void => {
-        const name = create();
+    // Creation is implicit — opening the socket runs `tmux new-session -A` — so for the length of that
+    // handshake the daemon does not list the session. The claim (addPendingTerminal) is what carries it across:
+    // it counts on the rail the moment the tab appears, and it survives the relists that would otherwise drop
+    // the tab out from under a live socket. Retired by endSession, or by the first list that names it.
+    const claim = (name: string): TerminalTab => {
+        const tab: TerminalTab = { name, kind: `shell`, running: true };
+        addPendingTerminal(tab);
         sessionOf(name);
-        order.value = [...order.value, { name, kind: `shell` }];
-        groups.value = [...groups.value, [name]];
+        return tab;
+    };
+    // Open a fresh tab and switch to it.
+    const newTab = (): void => {
+        const tab = claim(create());
+        order.value = [...order.value, tab];
+        groups.value = [...groups.value, [tab.name]];
         persistGroups();
-        mount(name);
+        mount(tab.name);
     };
     // Split the pane: open a fresh shell INSIDE `name`'s group, right after it, and focus it.
     const splitTab = (name: string): void => {
-        const created = create();
-        sessionOf(created);
-        order.value = [...order.value, { name: created, kind: `shell` }];
+        const tab = claim(create());
+        order.value = [...order.value, tab];
         const grouped = groups.value.some((group) => group.includes(name));
         groups.value = grouped
             ? groups.value.map((group) => {
                   const at = group.indexOf(name);
-                  return at === -1 ? group : group.toSpliced(at + 1, 0, created);
+                  return at === -1 ? group : group.toSpliced(at + 1, 0, tab.name);
               })
-            : [...groups.value, [name, created]];
+            : [...groups.value, [name, tab.name]];
         persistGroups();
-        mount(created);
+        mount(tab.name);
     };
     // Close a tab (its × button): kill the tmux session for good, then drop its client state. A process log
-    // view only hides — stopping a background process is the popover's explicit Stop, never a tab close.
+    // view only hides — stopping a background process is the popover's explicit Stop, never a tab close. The
+    // kill runs unawaited: the strip is right immediately (endSession), and the source settles the shared
+    // session list once the daemon confirms.
     const closeTab = (name: string): void => {
         if (!viewedProcesses.has(name)) {
-            kill(name);
+            void kill(name);
         }
         endSession(name);
     };
@@ -446,19 +487,18 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         if (name === undefined) {
             return;
         }
-        kill(name);
+        void kill(name);
         const session = cache.get(name);
         if (session !== undefined) {
             disposeTerminalSession(session);
             cache.delete(name);
         }
-        const created = create();
-        sessionOf(created);
-        order.value = [...order.value.filter((tab) => tab.name !== name), { name: created, kind: `shell` }];
-        groups.value = groups.value.map((group) => group.map((member) => (member === name ? created : member)));
+        const tab = claim(create());
+        order.value = [...order.value.filter((entry) => entry.name !== name), tab];
+        groups.value = groups.value.map((group) => group.map((member) => (member === name ? tab.name : member)));
         persistGroups();
         activeName.value = undefined;
-        mount(created);
+        mount(tab.name);
     };
     return {
         order,
