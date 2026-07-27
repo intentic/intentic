@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { registerAutostart, unregisterAutostart } from "./autostart.js";
 import { knownHostsPath, readConfig, type SyncConfig, type SyncMode, sshKeyPath, writeConfig } from "./config.js";
-import { type Log, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
+import { type CliLauncher, type Log, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
 import { ensureCloudflared, ensureMutagen, mutagenCreateArgs, runMutagen, sessionName } from "./mutagen.js";
 import { ensureSshKey, INCLUDE_MARKER, sanitizeId, sshAlias, sshConfigBlock, writeManagedSshConfig } from "./ssh.js";
 
@@ -179,22 +179,35 @@ const setup = buildCommand<SetupFlags>({
     },
 });
 
-// The path this CLI was invoked as — re-exec'd (with `--watch`) to spawn the detached mirror watcher and named
-// by the OS autostart entries. Always set for a bin/`node dist/cli.js` invocation; the guard keeps the type honest.
-const cliEntry = (): string => {
+// Bun's compiled-binary virtual filesystem. `bun build --compile` reports process.argv[1] as a path INSIDE the
+// executable ("/$bunfs/root/<name>" on posix, a "~BUN" path on Windows) — matched on the distinctive marker
+// rather than an exact prefix, since only the marker is stable across bun versions and platforms.
+const isBunVirtualEntry = (entry: string): boolean => entry.includes("$bunfs") || entry.includes("~BUN");
+
+// How to re-launch this CLI: the executable, plus any leading argument that must precede the command. Re-exec'd
+// (with `mirror --watch`) to spawn the detached watcher, and written verbatim into the OS autostart entries.
+//
+// `node dist/cli.js` needs the script path, so its launcher is [node, cli.js]. A compiled binary — what the
+// install script actually ships — IS the CLI, and its runtime re-injects that virtual argv[1] on every launch.
+// Passing the entry explicitly therefore pushed it to argv[2], which is where stricli starts reading the command
+// name: every detached watcher died on the spot with "No command registered for `/$bunfs/root/intentic-sync-
+// linux-amd64`", and the autostart entry was persisted with the same broken argv, so port mirroring never ran on
+// a released build at all (`status` reported "No forwarding sessions found" with nothing else to go on).
+export const cliLauncher = (): CliLauncher => {
     const entry = process.argv[1];
     if (entry === undefined) {
         throw new Error("cannot locate the intentic-sync entry to start the mirror watcher");
     }
-    return entry;
+    return isBunVirtualEntry(entry) ? [process.execPath] : [process.execPath, entry];
 };
 
 // Turn mirroring on: register it to resume at every login AND run it now. registerAutostart returns true when
 // the OS mechanism (macOS launchd) already launched this session's watcher, so we don't spawn a second one.
 const enableMirroring = async (log: Log): Promise<void> => {
-    const startedNow = await registerAutostart(cliEntry(), log);
+    const launcher = cliLauncher();
+    const startedNow = await registerAutostart(launcher, log);
     if (!startedNow) {
-        await startMirrorWatcher(cliEntry(), log);
+        await startMirrorWatcher(launcher, log);
     }
 };
 

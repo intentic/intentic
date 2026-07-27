@@ -178,7 +178,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 if (c.req.method !== "GET" || c.req.path !== "/ports") {
                     return c.json({ error: "sync token not valid for this route" }, 403);
                 }
-                if (!(await verifySyncToken(sync))) {
+                if (!(await verifySyncToken(services.config.historyRoot, sync))) {
                     return c.json({ error: "unauthorized" }, 401);
                 }
                 return next();
@@ -586,7 +586,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         // A "sync" enroll is single-holder: if a different machine holds it and this isn't a takeover, 423 Locked
         // (before consuming the token, so a retry with --takeover reuses the same pairing). Mirror enrolls never lock.
         const takeover = c.req.header("x-intentic-sync-takeover") === "1";
-        const result = await enrollSyncKey({ key, mode, takeover });
+        const result = await enrollSyncKey({ historyRoot: services.config.historyRoot, key, mode, takeover });
         if ("locked" in result) {
             return c.json({ error: "sync already active", machine: result.locked }, 423);
         }
@@ -600,14 +600,14 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         // Any collaborator (owner or member) may read enrollment state — the bearer middleware already blocked a
         // non-member — so a member's Desktop-sync card can render and mint its mirror-only pairing.
         const sshHostname = syncSshHostname(services.config.connectToken, services.config.zone, services.config.sandbox.publicUrl);
-        const holder = await syncHolder();
-        const mirrors = await mirrorMachines();
+        const holder = await syncHolder(services.config.historyRoot);
+        const mirrors = await mirrorMachines(services.config.historyRoot);
         // Always 200 so the UI can render its "enable" vs "enabled" state; sshHostname is omitted when this
         // sandbox has no SSH tunnel (loopback/preview), which the card treats as "sync unavailable". syncingFrom
         // names the single machine holding file sync (takeover target); mirroredBy lists every machine mirroring
         // ports (unlimited — each collaborator on their own localhost).
         return c.json({
-            enrolled: await isKeyEnrolled(),
+            enrolled: await isKeyEnrolled(services.config.historyRoot),
             ...(holder !== undefined ? { syncingFrom: holder } : {}),
             ...(mirrors.length > 0 ? { mirroredBy: mirrors } : {}),
             ...(sshHostname !== undefined ? { sshHostname } : {}),
@@ -618,13 +618,15 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         // enrollment); the owner (Google) clears EVERY enrollment — the "Disable desktop sync" kill switch.
         const sync = c.req.header("x-intentic-sync") ?? undefined;
         if (sync !== undefined && sync !== "") {
-            return (await revokeEnrollmentByToken(sync)) ? c.json({ ok: true }) : c.json({ error: "unknown enrollment" }, 404);
+            return (await revokeEnrollmentByToken(services.config.historyRoot, sync))
+                ? c.json({ ok: true })
+                : c.json({ error: "unknown enrollment" }, 404);
         }
         const denied = await ownerDenied(c);
         if (denied !== undefined) {
             return denied;
         }
-        await clearAllEnrollments();
+        await clearAllEnrollments(services.config.historyRoot);
         return c.json({ ok: true });
     });
 

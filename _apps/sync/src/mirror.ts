@@ -17,6 +17,10 @@ import { sshAlias } from "./ssh.js";
 
 export type Log = (message: string) => void;
 
+// How to re-invoke this CLI: the executable followed by any leading args the command must come after. Non-empty
+// by construction — see cliLauncher in commands.ts, which is the only thing that builds one.
+export type CliLauncher = readonly [string, ...string[]];
+
 // How often the watcher re-reads the sandbox's ports. Fast enough that a just-started dev server is reachable
 // before the user finishes alt-tabbing to the browser; slow enough to be free.
 const POLL_MS = 5000;
@@ -201,15 +205,16 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
 
 // Start the watcher detached so it outlives the terminal that launched it, its stdout appended to mirror.log.
 // Idempotent: a live watcher already covers this machine, so a second start is a no-op (the single-holder
-// invariant means one watcher is always enough). `cliPath` is this CLI's own entry — re-exec'd with `--watch`.
-export const startMirrorWatcher = async (cliPath: string, log: Log): Promise<void> => {
+// invariant means one watcher is always enough). `launcher` is how to re-invoke this CLI (see cliLauncher).
+export const startMirrorWatcher = async (launcher: CliLauncher, log: Log): Promise<void> => {
     const existing = await readLiveWatcherPid();
     if (existing !== undefined) {
         log(`port mirroring is already running (pid ${existing}).`);
         return;
     }
     const logFd = openSync(mirrorLogPath, "a");
-    const child = spawn(process.execPath, [cliPath, "mirror", "--watch"], { detached: true, stdio: ["ignore", logFd, logFd] });
+    const [command, ...leading] = launcher;
+    const child = spawn(command, [...leading, "mirror", "--watch"], { detached: true, stdio: ["ignore", logFd, logFd] });
     child.unref();
     log(`mirroring the sandbox's workspace ports onto localhost (pid ${child.pid}). Details: ${mirrorLogPath}`);
 };

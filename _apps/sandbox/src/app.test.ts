@@ -941,12 +941,18 @@ test("POST /system/authorized-key authorizes via the pairing token alone (no bea
 });
 
 test("POST /system/authorized-key is single-holder: a rival machine needs takeover (423), which replaces the key", async () => {
-    // Enrollment writes ~/.ssh/authorized_keys — point HOME at a temp dir so it lands there, not the real home.
+    // Enrollment writes the store under historyRoot and derives ~/.ssh/authorized_keys from it — point both at
+    // temp dirs so neither lands on the real /history nor in the real home.
     process.env.HOME = mkdtempSync(join(tmpdir(), "sync-enroll-home-"));
     // connectToken + publicUrl make syncSshHostname resolve, so enrollment gets past the tunnel-configured check.
     const app = createApp(
         services({
-            config: { ...baseConfig, connectToken: "token", sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
+            config: {
+                ...baseConfig,
+                connectToken: "token",
+                historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+                sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+            },
         }),
     );
     // A fresh single-use SYNC pairing per call (the owner's file-sync path); the key's comment is the machine label.
@@ -975,7 +981,12 @@ test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll �
     process.env.HOME = mkdtempSync(join(tmpdir(), "sync-mirror-multi-"));
     const app = createApp(
         services({
-            config: { ...baseConfig, connectToken: "token", sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
+            config: {
+                ...baseConfig,
+                connectToken: "token",
+                historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+                sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+            },
         }),
     );
     const enrollMirror = (key: string) =>
@@ -1012,7 +1023,12 @@ test("DELETE /system/authorized-key: a sync token self-revokes just its own enro
     process.env.HOME = mkdtempSync(join(tmpdir(), "sync-revoke-"));
     const app = createApp(
         services({
-            config: { ...baseConfig, connectToken: "token", sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
+            config: {
+                ...baseConfig,
+                connectToken: "token",
+                historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+                sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+            },
         }),
     );
     const enroll = (key: string) =>
@@ -1036,7 +1052,12 @@ test("the enrollment-minted sync token reads /ports and nothing else", async () 
     const app = createApp(
         services({
             auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
-            config: { ...baseConfig, connectToken: "token", sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
+            config: {
+                ...baseConfig,
+                connectToken: "token",
+                historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+                sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+            },
             scanPorts: async () => [{ port: 3000, host: "127.0.0.1", forwardable: true }],
         }),
     );

@@ -20,7 +20,8 @@ LABEL org.opencontainers.image.source=https://gitlab.com/radarsu/intentic
 # curl + jq back the CLI-tool integrations (e.g. the Discord `cli` capability's skill has the agent call
 # Discord's REST API with `curl … | jq`); neither is in the slim base and the build stage's curl doesn't carry over.
 # openssh-server is the transport for the local-sync feature: Mutagen on the laptop connects over SSH (through the
-# sandbox's Cloudflare tunnel) to block-delta sync /work. Key-only (config drop-in below); host keys baked here.
+# sandbox's Cloudflare tunnel) to block-delta sync /work. Key-only (config drop-in below); the host key is NOT
+# baked — docker-entrypoint.sh generates it onto the /history volume at boot (see there for why).
 # openssh-client + sshpass + rsync back the `ssh` capability: the agent runs `ssh <alias>` / `rsync` against
 # connected machines, with sshpass -f for the password-auth ones. iproute2 gives `ip`/`ss` diagnostics.
 # Heavy or privilege-coupled capability tools (WireGuard, whisper.cpp) are NOT baked here — each capability
@@ -54,8 +55,10 @@ RUN install -m 0755 -d /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/*
 # Repos the agent creates by hand default to main, matching gitInit's --initial-branch and Forgejo.
 RUN git config --global init.defaultBranch main
+# Auth POLICY is baked (it is a constant of the image); the host key — the sandbox's SSH identity — is not, so
+# that a rebuild cannot change who the sandbox claims to be. docker-entrypoint.sh writes the matching HostKey
+# drop-in at boot.
 RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
-    && ssh-keygen -A \
     && printf '%s\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' 'PubkeyAuthentication yes' > /etc/ssh/sshd_config.d/intentic.conf
 # The terminal (system/terminal.ts) launches zsh with the oh-my-zsh "bira" theme + zsh-autosuggestions, so the
 # owner gets a real prompt and history autocomplete. Installed into root's home (the daemon/terminal run as

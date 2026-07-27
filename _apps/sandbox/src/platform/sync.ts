@@ -61,9 +61,16 @@ export const consumePairing = (token: string): void => {
     pairings.delete(token);
 };
 
-// The enrollment store — source of truth for every desktop machine's key + sync token + mode, kept OUTSIDE
-// /work (homedir, /root in the container) so the agent can't read the tokens. authorized_keys is DERIVED from
-// it: every mutation rewrites the file, so sshd's view and this store never drift.
+// The enrollment store — source of truth for every desktop machine's key + sync token + mode. It lives on the
+// /history volume: outside /work (so the agent can never read the tokens) AND outside the container's own
+// filesystem, so it survives the `docker rm -f` + `docker run` that every rebuild path performs. It used to sit
+// in homedir (/root), which a recreate wipes — taking every enrollment with it, so the laptop's key was no
+// longer authorized and its sync token no longer verified, while its Mutagen session retried forever against a
+// door that would never open again.
+//
+// authorized_keys is DERIVED from the store rather than stored alongside it: sshd reads a fixed path under
+// ~/.ssh, which is container-local and ephemeral. Every mutation rewrites it, and restoreAuthorizedKeys()
+// re-derives it at boot, so sshd's view and this store never drift.
 interface SyncEnrollment {
     // The authorized_keys line — the machine's identity (dedup key for re-enroll).
     readonly key: string;
@@ -75,25 +82,39 @@ interface SyncEnrollment {
     readonly enrolledAt: number;
 }
 
-const enrollmentsPath = (): string => join(homedir(), ".intentic-sync-enrollments.json");
+const enrollmentsPath = (historyRoot: string): string => join(historyRoot, "sync-enrollments.json");
 const authorizedKeysPath = (): string => join(homedir(), ".ssh", "authorized_keys");
 const digestOf = (token: string): string => createHash("sha256").update(token).digest("hex");
 const machineOf = (key: string): string => key.trim().split(" ")[2] ?? "unknown";
 
-const readEnrollments = async (): Promise<SyncEnrollment[]> => {
+const readEnrollments = async (historyRoot: string): Promise<SyncEnrollment[]> => {
     try {
-        return JSON.parse(await readFile(enrollmentsPath(), "utf8")) as SyncEnrollment[];
+        return JSON.parse(await readFile(enrollmentsPath(historyRoot), "utf8")) as SyncEnrollment[];
     } catch {
         return [];
     }
 };
 
-// Persist the store AND rewrite authorized_keys from it (one key line per enrollment) — the two always move
-// together, so sshd authorizes exactly the enrolled machines.
-const persist = async (enrollments: SyncEnrollment[]): Promise<void> => {
-    await writeFile(enrollmentsPath(), JSON.stringify(enrollments), { mode: 0o600 });
+// Write authorized_keys from the store (one key line per enrollment), so sshd authorizes exactly the enrolled
+// machines. An empty store writes an empty file rather than removing it — "nobody is enrolled" must be a state
+// sshd can read, not an absence that a leftover file could contradict.
+const writeAuthorizedKeys = async (enrollments: readonly SyncEnrollment[]): Promise<void> => {
     await mkdir(dirname(authorizedKeysPath()), { recursive: true, mode: 0o700 });
     await writeFile(authorizedKeysPath(), enrollments.map((entry) => entry.key).join("\n") + (enrollments.length > 0 ? "\n" : ""), { mode: 0o600 });
+};
+
+// Persist the store AND rewrite authorized_keys from it — the two always move together.
+const persist = async (historyRoot: string, enrollments: SyncEnrollment[]): Promise<void> => {
+    await mkdir(historyRoot, { recursive: true });
+    await writeFile(enrollmentsPath(historyRoot), JSON.stringify(enrollments), { mode: 0o600 });
+    await writeAuthorizedKeys(enrollments);
+};
+
+// Boot: re-derive the ephemeral authorized_keys from the store that outlived the container. Without this a
+// recreate leaves every enrollment intact but nothing for sshd to authorize them against, so the laptop's key
+// is refused until the next enroll happens to rewrite the file.
+export const restoreAuthorizedKeys = async (historyRoot: string): Promise<void> => {
+    await writeAuthorizedKeys(await readEnrollments(historyRoot));
 };
 
 // One well-formed public key line: a known type, a base64 blob, an optional comment, and no embedded newline
@@ -107,12 +128,13 @@ export const isValidAuthorizedKey = (key: string): boolean => !key.includes("\n"
 // replaces that holder (dropping its key + token) while leaving every "mirror" enrollment untouched. A "mirror"
 // enroll is always accepted and never disturbs anyone else. Re-enrolling the same machine rotates its token.
 export const enrollSyncKey = async (args: {
+    historyRoot: string;
     key: string;
     mode: SyncMode;
     takeover: boolean;
 }): Promise<{ syncToken: string } | { locked: string }> => {
     const key = args.key.trim();
-    const enrollments = await readEnrollments();
+    const enrollments = await readEnrollments(args.historyRoot);
     if (args.mode === "sync") {
         const holder = enrollments.find((entry) => entry.mode === "sync" && entry.key !== key);
         if (holder !== undefined && !args.takeover) {
@@ -124,14 +146,14 @@ export const enrollSyncKey = async (args: {
     const kept = enrollments.filter((entry) => entry.key !== key && !(args.mode === "sync" && entry.mode === "sync"));
     const token = `ist_${randomBytes(32).toString("base64url")}`;
     kept.push({ key, tokenDigest: digestOf(token), mode: args.mode, machine: machineOf(key), enrolledAt: Date.now() });
-    await persist(kept);
+    await persist(args.historyRoot, kept);
     return { syncToken: token };
 };
 
 // Whether a presented sync token matches ANY enrollment — the /ports read credential + the self-revoke identity.
-export const verifySyncToken = async (presented: string): Promise<boolean> => {
+export const verifySyncToken = async (historyRoot: string, presented: string): Promise<boolean> => {
     const digest = Buffer.from(digestOf(presented));
-    const enrollments = await readEnrollments();
+    const enrollments = await readEnrollments(historyRoot);
     return enrollments.some((entry) => {
         const stored = Buffer.from(entry.tokenDigest);
         return stored.length === digest.length && timingSafeEqual(stored, digest);
@@ -139,32 +161,33 @@ export const verifySyncToken = async (presented: string): Promise<boolean> => {
 };
 
 // Whether ANY machine is enrolled — the UI's "desktop sync/mirror active" signal.
-export const isKeyEnrolled = async (): Promise<boolean> => (await readEnrollments()).length > 0;
+export const isKeyEnrolled = async (historyRoot: string): Promise<boolean> => (await readEnrollments(historyRoot)).length > 0;
 
 // The machine holding file sync (there is at most one), for the "Syncing from X" card. Mirror-only machines
 // aren't file-syncing, so they don't appear here.
-export const syncHolder = async (): Promise<string | undefined> => (await readEnrollments()).find((entry) => entry.mode === "sync")?.machine;
+export const syncHolder = async (historyRoot: string): Promise<string | undefined> =>
+    (await readEnrollments(historyRoot)).find((entry) => entry.mode === "sync")?.machine;
 
 // The machines currently mirroring ports (any number) — for the UI to show who has live previews.
-export const mirrorMachines = async (): Promise<string[]> =>
-    (await readEnrollments()).filter((entry) => entry.mode === "mirror").map((entry) => entry.machine);
+export const mirrorMachines = async (historyRoot: string): Promise<string[]> =>
+    (await readEnrollments(historyRoot)).filter((entry) => entry.mode === "mirror").map((entry) => entry.machine);
 
 // Self-revoke: drop the enrollment owning this sync token (the agent's uninstall). Returns false when no
 // enrollment matches (already gone). Rewrites authorized_keys, so the machine's SSH access dies with it.
-export const revokeEnrollmentByToken = async (token: string): Promise<boolean> => {
+export const revokeEnrollmentByToken = async (historyRoot: string, token: string): Promise<boolean> => {
     const digest = digestOf(token);
-    const enrollments = await readEnrollments();
+    const enrollments = await readEnrollments(historyRoot);
     const kept = enrollments.filter((entry) => entry.tokenDigest !== digest);
     if (kept.length === enrollments.length) {
         return false;
     }
-    await persist(kept);
+    await persist(historyRoot, kept);
     return true;
 };
 
 // Owner "Disable desktop sync": drop EVERY enrollment (all keys + tokens) — the admin kill switch.
-export const clearAllEnrollments = async (): Promise<void> => {
-    await persist([]);
+export const clearAllEnrollments = async (historyRoot: string): Promise<void> => {
+    await persist(historyRoot, []);
 };
 
 // The SSH hostname the sandbox tunnel exposes for Mutagen — derived via sandboxIdFromToken (the same digest

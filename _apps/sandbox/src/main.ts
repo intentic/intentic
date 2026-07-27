@@ -32,7 +32,7 @@ import { createPreviewProxy } from "./panels/preview-proxy.js";
 import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
 import { linkClaudeProjects } from "./sessions/session-store.js";
 import { createAnnouncer } from "./platform/announce.js";
-import { seedPairing } from "./platform/sync.js";
+import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { reapIdleWebSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
 import { startRepoWatch } from "./workspace/repo-watch.js";
@@ -69,6 +69,13 @@ const main = async (): Promise<void> => {
     if (config.syncPairToken !== "") {
         seedPairing(config.syncPairToken);
     }
+
+    // Desktop enrollments live on /history and outlive the container; the authorized_keys sshd reads does NOT
+    // (it is ~/.ssh, container-local), so re-derive it from the store before sshd serves a laptop's first
+    // reconnect. Awaited for that ordering — a rebuild otherwise leaves every enrollment valid but unauthorized.
+    await restoreAuthorizedKeys(config.historyRoot).catch((error: unknown) =>
+        logger.warn({ err: error }, "authorized_keys not restored — enrolled machines will be refused until they re-enroll"),
+    );
 
     // Claude chat transcripts live in the SDK's ~/.claude/projects — ephemeral container fs. Converge the
     // store onto /work BEFORE serving (turns can't arrive until serve(), so the CLI can never race this).

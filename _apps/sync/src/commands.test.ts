@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { enrollKey } from "./commands.js";
+import { cliLauncher, enrollKey } from "./commands.js";
 
 const jsonResponse = (status: number, body: unknown): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -53,5 +53,38 @@ describe("enrollKey", () => {
             /enrolling the sync key failed \(502\)/,
         );
         expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+});
+
+// How the CLI re-invokes itself decides whether the mirror watcher ever runs, and the two install shapes need
+// opposite argv. The released install is a `bun build --compile` binary whose process.argv[1] is a path inside
+// its own virtual filesystem; the runtime re-injects that entry on every launch, so passing it again shifted the
+// real command to argv[2] and every watcher died with "No command registered for `/$bunfs/root/…`" — mirroring
+// silently never started on any released build. A plain `node dist/cli.js` run still needs the script path.
+describe("cliLauncher", () => {
+    const withEntry = <T>(entry: string | undefined, run: () => T): T => {
+        const argv = process.argv;
+        process.argv = entry === undefined ? [process.execPath] : [process.execPath, entry];
+        try {
+            return run();
+        } finally {
+            process.argv = argv;
+        }
+    };
+
+    it("passes the script path for a plain node invocation", () => {
+        expect(withEntry("/opt/intentic/sync/dist/cli.js", cliLauncher)).toEqual([process.execPath, "/opt/intentic/sync/dist/cli.js"]);
+    });
+
+    it("omits the virtual entry for a bun-compiled binary", () => {
+        expect(withEntry("/$bunfs/root/intentic-sync-linux-amd64", cliLauncher)).toEqual([process.execPath]);
+    });
+
+    it("omits the virtual entry on Windows, where bun roots it elsewhere", () => {
+        expect(withEntry("B:\\~BUN\\root\\intentic-sync-windows-amd64.exe", cliLauncher)).toEqual([process.execPath]);
+    });
+
+    it("refuses to guess when there is no entry at all", () => {
+        expect(() => withEntry(undefined, cliLauncher)).toThrow(/cannot locate/);
     });
 });
