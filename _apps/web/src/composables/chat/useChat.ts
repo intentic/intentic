@@ -8,6 +8,7 @@ import {
     NATIVE_PROVIDERS,
     type OauthAccount,
     type PermissionMode,
+    providerLabel,
     type RestoredMessage,
     type TranslatorAccounts,
     type UsageAccount,
@@ -30,8 +31,10 @@ import {
     rememberedModelFor,
     selectedAccountId,
     startingMode,
+    translatorAccounts,
     turnDefaults,
 } from "./conversation";
+import { providerReady } from "./access";
 import { type ChatAttachment, type ChatMessage, planParts, type PlanRequest } from "./transcript";
 import { approvalsFor } from "./catalog";
 import { dropTranscript } from "./transcriptCache";
@@ -404,9 +407,7 @@ const attachments = computed<PendingAttachment[]>({
     },
 });
 
-// Per-provider labels + the route prefix each provider's daemon routes live under.
-const providerLabel = (p: AgentProvider): string =>
-    p === `codex` ? `ChatGPT` : p === `grok` ? `Grok` : p === `kimi` ? `Kimi Code` : p === `gemini` ? `Gemini` : `Claude`;
+// The route prefix each provider's daemon routes live under.
 const providerBase = (p: AgentProvider): string =>
     p === `codex` ? `/codex` : p === `grok` ? `/grok` : p === `kimi` ? `/kimi` : p === `gemini` ? `/gemini` : `/claude`;
 // Providers whose ONLY credential is the translator subscription: they have no native account handshake, so the
@@ -460,9 +461,9 @@ const setManagedProvider = (target: AgentProvider): void => {
 // The sandbox's translator (CLIProxyAPI) serves codex/grok models to the Claude Code harness on the user's
 // ChatGPT / SuperGrok subscription OAuth — a credential of its own, separate from the provider's native-harness
 // account (each program owns and refreshes its own grant; a shared refresh token would rotate out from under
-// one of them). Held here rather than in SandboxAgent so the composer gate reads the same connection state the
-// Agent tab manages, and so a device-login poll survives that tab unmounting.
-const translatorAccounts = ref<TranslatorAccounts>({ codex: false, grok: false, gemini: false });
+// one of them). The connection state itself lives in conversation.ts beside providerAccounts (so access.ts can
+// derive from both without a cycle); what stays here is the login flow it is driven by — held outside
+// SandboxAgent so a device-login poll survives that tab unmounting.
 // The in-flight subscription login the Agent tab's routed row shows. `code` is the one-time device code for the
 // providers that mint one; an EMPTY code means the provider redirects instead, so the row asks the user to paste
 // the URL they landed on and `completeTranslator` finishes it against `state`.
@@ -584,9 +585,6 @@ const chatReady = (target: AgentProvider, loop: AgentHarness): boolean => {
     }
     return hasAccount(target) || acpProviders.value.some((agent) => agent.id === target);
 };
-// Whether a provider can serve a fresh conversation at all (for auto-repointing an account-less tab): Codex and
-// Gemini via the subscription, the rest via a connected account.
-const providerConnectable = (target: AgentProvider): boolean => (subscriptionOnly(target) ? translatorAccounts.value[target] : hasAccount(target));
 const connected = computed(() => chatReady(provider.value, harness.value));
 const claudeConnected = computed(() => hasAccount(`claude`));
 
@@ -603,7 +601,7 @@ watch([providerAccounts, translatorAccounts], () => {
         ) {
             continue;
         }
-        const fallback = NATIVE_PROVIDERS.find((p) => providerConnectable(p));
+        const fallback = NATIVE_PROVIDERS.find((p) => providerReady(p));
         if (fallback) {
             conversation.selectProvider(fallback);
         }

@@ -1,6 +1,6 @@
 import type { AgentProvider } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
-import { customEntryFor, familyGroups, type PickerEntry, pickerBlocks } from "./modelPicker";
+import { customEntryFor, familyGroups, filterEntries, type PickerEntry, pickerBlocks, pickerSections } from "./modelPicker";
 
 /* The custom-model escape hatch. Everything else in modelPicker.ts is pure derivation over the live catalogs;
  * this is the one path that lets a user name a model NO catalog published, which is the only way to reach a
@@ -188,4 +188,44 @@ test("gives a single-version provider no older blocks, so a short group never gr
     const codex = [entry(`codex`, `gpt-5.1`, `GPT 5.1`), entry(`codex`, `gpt-5`, `GPT 5`)];
 
     expect(pickerBlocks(familyGroups(codex), undefined, false)).toEqual([{ key: `latest`, entries: [codex[0]] }]);
+});
+
+/* ACCESS ORDER. Every provider's catalog is non-empty whether or not its credential is connected — the daemon
+ * serves a seed floor so a turn always resolves a model — so nothing in the list itself distinguishes a model
+ * that can run from one that cannot. Readiness is that distinction, and it outranks every other ordering rule
+ * here: a user scanning the top of the picker must be looking at models they can actually send to. */
+
+const MIXED: readonly PickerEntry[] = [
+    entry(`claude`, `claude-opus-5`, `Claude Opus 5`),
+    entry(`codex`, `gpt-5.6`, `GPT 5.6`),
+    entry(`kimi`, `kimi-k2-turbo-preview`, `Kimi K2 Turbo Preview`),
+    entry(`gemini`, `gemini-pro-agent`, `Gemini 3.1 Pro (High)`),
+];
+const readyOnly =
+    (...connected: AgentProvider[]) =>
+    (provider: AgentProvider) =>
+        connected.includes(provider);
+
+test("seats connected providers above the ones that still need a credential", () => {
+    // PROVIDERS order alone put Kimi — with no Moonshot key — above a connected Gemini purely by position.
+    const sections = pickerSections(MIXED, `claude`, undefined, readyOnly(`claude`, `gemini`));
+
+    expect(sections.slice(0, 3).map((section) => section.provider)).toEqual([`claude`, `gemini`, `codex`]);
+});
+
+test("keeps the ACTIVE provider first even when it is the locked one", () => {
+    // It is the provider the composer will send on, so burying it hides the selection the user is sitting on —
+    // and picking a locked model is how they reach the connect gate in the first place.
+    expect(pickerSections(MIXED, `kimi`, undefined, readyOnly(`claude`))[0]?.provider).toBe(`kimi`);
+});
+
+test("ranks a runnable match above a locked one, however well the locked id matched", () => {
+    // "k2" hits the Kimi id head-on and nothing else; "5" hits both. Match quality still decides WITHIN a band.
+    const matched = filterEntries(MIXED, `5`, undefined, readyOnly(`codex`));
+
+    expect(matched.map((row) => row.provider)).toEqual([`codex`, `claude`]);
+});
+
+test("leaves an unqueried list in access order too, so simply opening the picker leads with what can run", () => {
+    expect(filterEntries(MIXED, ``, undefined, readyOnly(`gemini`)).map((row) => row.provider)).toEqual([`gemini`, `claude`, `codex`, `kimi`]);
 });

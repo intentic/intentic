@@ -19,6 +19,7 @@ import {
     type RestoredMessage,
     sseData,
     sseFrames,
+    type TranslatorAccounts,
 } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
@@ -136,7 +137,7 @@ export const providerTabs: readonly { value: AgentProvider; label: string }[] = 
     { value: `codex`, label: `ChatGPT` },
     { value: `grok`, label: `Grok` },
     { value: `kimi`, label: `Kimi Code` },
-    { value: `gemini`, label: `Gemini` },
+    { value: `gemini`, label: `Google` },
 ];
 
 // A file staged in a conversation's composer, uploaded to the workspace the moment it's attached (send is
@@ -276,6 +277,12 @@ export const rememberedModelFor = (provider: AgentProvider): string => turnDefau
 // (not in useChat) so a Conversation can seed/reset its account without importing useChat (a cycle).
 export const providerAccounts = ref<Record<AgentProvider, readonly OauthAccount[]>>(perProvider<readonly OauthAccount[]>(() => []));
 export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>(perProvider<string | undefined>(() => undefined));
+
+// Which SUBSCRIPTIONS the bundled translator holds (codex/grok/gemini) — the other half of "can this provider
+// run", since those three authenticate through the translator rather than through a daemon-stored account.
+// Written by useChat (refreshTranslatorAccounts / resetChat); kept here beside providerAccounts so the access
+// rules can be derived from one place without importing useChat (a cycle).
+export const translatorAccounts = ref<TranslatorAccounts>({ codex: false, grok: false, gemini: false });
 
 // The account a fresh turn on a provider uses: the user's explicit pick when it's still connected, else the
 // provider's first connected account. The single source every account-reset site routes through.

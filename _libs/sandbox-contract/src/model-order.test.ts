@@ -57,6 +57,16 @@ test("leads with a family carrying no tier word at all, so a brand-new flagship 
     expect(["claude-sonnet-5", "claude-mythos-1", "claude-opus-5"].toSorted(compareModelIds)[0]).toBe("claude-mythos-1");
 });
 
+test("files a re-served open-weights model on the cheap rung, not at the head of the catalog it visits", () => {
+    // Google's channel vends gpt-oss beside Gemini and Claude. It carries no tier word of its own, so the
+    // lead-the-unknown rule would open that whole section on it — above Opus.
+    expect(["gpt-oss-120b-medium", "claude-opus-4-6-thinking", "gemini-pro-agent"].toSorted(compareModelIds)).toEqual([
+        "claude-opus-4-6-thinking",
+        "gemini-pro-agent",
+        "gpt-oss-120b-medium",
+    ]);
+});
+
 test("keeps the arrival order between ids the rule cannot separate — Anthropic's catalog IS ranked", () => {
     // Same tier, same version: nothing here outranks the order the provider itself reported.
     expect(["claude-opus-5", "claude-fable-5"].toSorted(compareModelIds)).toEqual(["claude-opus-5", "claude-fable-5"]);

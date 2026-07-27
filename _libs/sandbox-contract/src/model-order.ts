@@ -97,6 +97,10 @@ const TIER_RANK: Readonly<Record<string, number>> = {
     mini: 1,
     // Efficient: the cheap/fast end, the rung whose whole purpose is to cost less than the one above it.
     haiku: 2,
+    // An open-weights model a vendor re-serves beside its own (gpt-oss-120b on Google's channel) is that rung by
+    // construction: it is there to be the free/cheap option next to the frontier line, never the flagship. Without
+    // it the id carries no tier word at all and would LEAD the section it sits in.
+    oss: 2,
     lite: 2,
     nano: 2,
     fast: 2,

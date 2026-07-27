@@ -97,7 +97,10 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; loginHint
     },
     gemini: {
         title: `Google account`,
-        hint: `Runs Gemini models under the Claude Code harness on your Google account — the one connection Gemini needs.`,
+        // Worth stating in full, because it is the only free row on this page and the models it names are not
+        // the ones a "Gemini" heading implies: Google's Antigravity channel vends Claude and GPT-OSS on the same
+        // ordinary sign-in (see gemini-models.ts).
+        hint: `Runs Gemini, Claude and GPT-OSS models under the Claude Code harness on your Google account — free, and the one connection this provider needs.`,
         loginHint: `Open Google and sign in. The page it sends you to won't load — that's expected, it points back inside the sandbox. Copy the whole address from your browser's address bar and paste it below.`,
     },
 };

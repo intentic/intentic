@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { useDevice, useListNavigation } from "@intentic-app/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { type AgentHarness, type AgentProvider, PROVIDERS } from "@intentic/sandbox-contract";
+import { accessBadge, accessStateFor, providerReady } from "../composables/chat/access";
 import { BADGE_META } from "../composables/chat/catalog";
-import { acpProviders, providerAccounts, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
+import { acpProviders, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
 import { customEntryFor, filterEntries, type PickerEntry, pickerBlocks, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
 import { formatUtilization, isStale, usageDetail, usagePercent, usageStatusFor } from "../composables/chat/usageStatus";
 import { loadAllProviderModels, loadProviderModels, useChat } from "../composables/chat/useChat";
@@ -12,7 +14,17 @@ import ProviderLogo from "./ProviderLogo.vue";
 /* The unified model picker (search + provider rail + one grouped list + session-control footer) — width-
  * agnostic so the desktop panel hosts it in a Popover and the mobile panel in a BottomSheet. Rows span every
  * provider and are MODELS ONLY: picking one applies provider+model (useChat.selectModel), keeping the current
- * harness. The harness (the provider's own / Claude Code) is a separate axis, chosen via the footer chips — codex/grok run
+ * harness.
+ *
+ * ACCESS IS THE FIRST THING A ROW STATES. Every provider's catalog is non-empty whether or not its credential is
+ * connected (the daemon serves a seed floor so a turn always resolves a model), so the list used to offer models
+ * that could not run, indistinguishable from ones that could. Connected providers now lead, the rest follow
+ * dimmed under a chip naming what they'd cost — "Free · Google sign-in" against "Needs ChatGPT subscription",
+ * because which of those it is decides whether the row is worth a click. A locked row stays PICKABLE on purpose:
+ * selecting it points the conversation there and the composer's connect gate (ChatAccountPanel) takes over with
+ * the handshake, so choosing a model and connecting for it stay one continuous move.
+ *
+ * The harness (the provider's own / Claude Code) is a separate axis, chosen via the footer chips — codex/grok run
  * the same subscription model ids under either harness. A mid-chat cross-provider pick just re-points the
  * selection — the fresh session starts lazily at the next send. The rail is a FILTER, never a switcher. Both
  * hosts remount the body per open, so the query/rail reset and the catalogs refresh on every open. */
@@ -21,6 +33,7 @@ const emit = defineEmits<{ selected: [] }>();
 
 const { provider, harness, selectHarness, model, thinking, streaming, messages, account, selectAccount, accounts, selectModel } = useChat();
 const { mobile } = useDevice();
+const router = useRouter();
 
 // The harness axis, shown as footer chips for codex/grok (claude is always its own loop). Both chips NAME the
 // runtime they select — the native one is labelled for the provider whose loop it actually is ("ChatGPT", "Grok"),
@@ -67,20 +80,32 @@ const sections = computed<
         hidden: number;
         expanded: boolean;
         collapsible: boolean;
+        // What this provider costs, when it isn't connected yet. Undefined while searching (one flat section
+        // spanning every provider) — there, each row carries its own lock instead.
+        badge: string | undefined;
     }[]
 >(() => {
     let index = 0;
     const withRows = (entries: readonly PickerEntry[]): { entry: PickerEntry; index: number }[] =>
         entries.map((entry) => ({ entry, index: index++ }));
     if (searching.value) {
-        const matched = filterEntries(pickerEntries.value, query.value, rail.value);
+        const matched = filterEntries(pickerEntries.value, query.value, rail.value, providerReady);
         // Ranked catalog hits first; the escape hatch sits under them so Enter still takes the real match. A
         // search deliberately spans the WHOLE catalog flat: an older version behind a family's disclosure is
         // exactly what someone reaches for the search box to find, so re-grouping it here would defeat both.
         const rows = withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]);
-        return [{ blocks: [{ key: `search`, label: undefined, rows }], rowCount: rows.length, hidden: 0, expanded: false, collapsible: false }];
+        return [
+            {
+                blocks: [{ key: `search`, label: undefined, rows }],
+                rowCount: rows.length,
+                hidden: 0,
+                expanded: false,
+                collapsible: false,
+                badge: undefined,
+            },
+        ];
     }
-    return pickerSections(pickerEntries.value, provider.value, rail.value).map((section) => {
+    return pickerSections(pickerEntries.value, provider.value, rail.value, providerReady).map((section) => {
         const isExpanded = expanded.value.has(section.provider);
         // The selected model survives collapse only for the ACTIVE provider — it's the only group whose current
         // model is the one a checkmark would be claiming.
@@ -94,6 +119,7 @@ const sections = computed<
             expanded: isExpanded,
             // Offered only when it would actually change the list, so a short group never grows a dead control.
             collapsible: isExpanded || section.total > rowCount,
+            badge: accessBadge(section.provider),
         };
     });
 });
@@ -107,6 +133,16 @@ const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (entr
 const isSelected = (entry: PickerEntry): boolean => entry.provider === provider.value && entry.value === model.value;
 // Mid-stream, only a same-provider model swap is allowed (a provider switch retires the session).
 const isDisabled = (entry: PickerEntry): boolean => streaming.value && entry.provider !== provider.value;
+// A row whose provider has no credential yet. Dimmed and lock-marked, never disabled — see the header comment.
+const isLocked = (entry: PickerEntry): boolean => !providerReady(entry.provider);
+
+// Straight to the handshake, for the user who opened the picker already knowing they need to connect something.
+// The provider rides along as `?connect=<provider>` so the Agent tab opens on that card — the same deep link the
+// composer's connect gate uses.
+const connect = (target: AgentProvider): void => {
+    emit(`selected`);
+    void router.push({ path: `/sandbox/agent`, query: { connect: target } });
+};
 
 const pick = (entry: PickerEntry): void => {
     if (isDisabled(entry)) {
@@ -142,7 +178,8 @@ const railTo = (target: AgentProvider | undefined): void => {
     }
 };
 
-const rowAriaLabel = (entry: PickerEntry): string => `${entry.label}${isSelected(entry) ? ` — current model` : ``}`;
+const rowAriaLabel = (entry: PickerEntry): string =>
+    `${entry.label}${isSelected(entry) ? ` — current model` : ``}${isLocked(entry) ? ` — ${accessBadge(entry.provider)}` : ``}`;
 
 // The provider rail: the native three plus every installed ACP agent.
 const railProviders = computed<readonly { label: string; value: AgentProvider }[]>(() => [
@@ -152,10 +189,17 @@ const railProviders = computed<readonly { label: string; value: AgentProvider }[
 
 // A provider whose (any) connected account can no longer be refreshed — badge it so a broken credential
 // doesn't look identical to a healthy one until the user tries to chat.
-const providerNeedsReauth = (target: AgentProvider): boolean => (providerAccounts.value[target] ?? []).some((entry) => entry.needsReauth === true);
+const providerNeedsReauth = (target: AgentProvider): boolean => accessStateFor(target).needsReauth;
 
+// The rail tooltip carries what the icon cannot: whether this provider can run at all, and at what price. It is
+// the only place the requirement shows while the rail is filtered to a single provider.
 const railTooltip = (target: AgentProvider): string =>
-    `${providerDisplayLabel(target)}${target === provider.value ? ` · active` : ``}${providerNeedsReauth(target) ? ` · needs reconnect` : ``}`;
+    [
+        providerDisplayLabel(target),
+        ...(target === provider.value ? [`active`] : []),
+        ...(accessBadge(target) !== undefined ? [accessBadge(target)!] : []),
+        ...(providerNeedsReauth(target) ? [`needs reconnect`] : []),
+    ].join(` · `);
 
 // A group with no rows yet gets a state row (loading / error+retry — keyed off section.rowCount in the
 // template): the codex/grok catalogs have no static floor, so a pre-load/error would otherwise read as "this
@@ -250,14 +294,25 @@ onMounted(() => {
                     :aria-label="railTooltip(p.value)"
                     @click="railTo(p.value)"
                 >
-                    <ProviderLogo :provider="p.value" :class="rail === p.value ? 'text-primary-500' : 'text-subtle'" />
+                    <ProviderLogo
+                        :provider="p.value"
+                        :class="[rail === p.value ? 'text-primary-500' : 'text-subtle', { 'opacity-50': !providerReady(p.value) }]"
+                    />
                     <!-- The session-active provider's dot — independent of the filter selection; both must be
                          legible at once. -->
                     <span v-if="p.value === provider" class="absolute right-1 top-1 h-1 w-1 rounded-full bg-primary-500" aria-hidden="true"></span>
+                    <!-- One corner, two mutually exclusive faults: a provider with a broken account has an
+                         account, so it is never the locked one. -->
                     <Icon
                         v-if="providerNeedsReauth(p.value)"
                         name="exclamation-triangle"
                         class="absolute bottom-0.5 right-0.5 text-[0.5rem] text-warning"
+                        aria-hidden="true"
+                    />
+                    <Icon
+                        v-else-if="!providerReady(p.value)"
+                        name="lock"
+                        class="absolute bottom-0.5 right-0.5 text-[0.5rem] text-subtle"
                         aria-hidden="true"
                     />
                 </button>
@@ -273,19 +328,36 @@ onMounted(() => {
                 aria-label="Models"
             >
                 <template v-for="section in sections" :key="section.provider ?? `search`">
-                    <p
+                    <!-- The provider header doubles as the access line: what this group costs, and the way out of
+                         it. The chip is absent once connected — a usable provider should read as the plain
+                         default, not as a state worth annotating. -->
+                    <div
                         v-if="section.provider !== undefined"
                         class="flex items-center gap-1.5 px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-subtle"
                         role="presentation"
                     >
-                        {{ providerDisplayLabel(section.provider) }}
+                        <span>{{ providerDisplayLabel(section.provider) }}</span>
                         <Icon
                             v-if="providerNeedsReauth(section.provider)"
                             name="exclamation-triangle"
                             class="text-2xs text-warning"
                             v-tooltip.top="'This account needs to be reconnected'"
                         />
-                    </p>
+                        <template v-if="section.badge !== undefined">
+                            <span
+                                class="rounded px-1 py-px text-[0.6rem] font-medium normal-case tracking-normal"
+                                :class="
+                                    accessStateFor(section.provider).access?.kind === `free`
+                                        ? `bg-primary-500/15 text-primary-500`
+                                        : `bg-content/5 text-subtle`
+                                "
+                                >{{ section.badge }}</span
+                            >
+                            <button type="button" class="ml-auto text-2xs normal-case tracking-normal text-link" @click="connect(section.provider)">
+                                Connect
+                            </button>
+                        </template>
+                    </div>
                     <template v-for="block in section.blocks" :key="block.key">
                         <!-- A family header, shown only for the older-versions blocks a disclosure reveals: the
                          latest band needs none (the provider header above it already names the group). -->
@@ -302,7 +374,7 @@ onMounted(() => {
                             :aria-selected="row.index === activeIndex"
                             :aria-label="rowAriaLabel(row.entry)"
                             class="mp-row flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11"
-                            :class="{ 'mp-row-on': row.index === activeIndex }"
+                            :class="{ 'mp-row-on': row.index === activeIndex, 'opacity-60': isLocked(row.entry) }"
                             :disabled="isDisabled(row.entry)"
                             @click="pick(row.entry)"
                             @mouseenter="activeIndex = row.index"
@@ -325,6 +397,14 @@ onMounted(() => {
                                 :name="BADGE_META[badge].icon"
                                 class="shrink-0 text-2xs text-subtle"
                                 v-tooltip.top="BADGE_META[badge].label"
+                            />
+                            <!-- The per-row lock. Redundant with the section chip while browsing, but search is
+                                 one flat list across every provider, where the row is all there is to go on. -->
+                            <Icon
+                                v-if="isLocked(row.entry)"
+                                name="lock"
+                                class="shrink-0 text-2xs text-subtle"
+                                v-tooltip.top="accessBadge(row.entry.provider)"
                             />
                             <Icon v-if="isSelected(row.entry)" name="check" class="shrink-0 text-2xs text-primary-500" aria-hidden="true" />
                         </button>

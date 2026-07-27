@@ -18,8 +18,37 @@ export const PROVIDERS: readonly { label: string; value: NativeProvider }[] = [
     { label: "Codex", value: "codex" },
     { label: "Grok", value: "grok" },
     { label: "Kimi Code", value: "kimi" },
-    { label: "Gemini", value: "gemini" },
+    // Labelled for the ACCOUNT, not the model family: the `gemini` id names one channel — Google's Antigravity —
+    // and that channel vends Claude and GPT-OSS models alongside Gemini's own (see gemini-models.ts). A section
+    // headed "Gemini" holding Claude Opus would be a lie; "Google" is what the whole list has in common.
+    { label: "Google", value: "gemini" },
 ];
+
+// What it COSTS to unlock a provider, and what the user connects to do it — the axis the picker groups on, since
+// "can this row actually run" is the first thing a model list has to answer. `free` is not a courtesy tier: the
+// Google channel serves its models on an ordinary Google sign-in, at no subscription, which is the single most
+// useful thing this catalog can tell a user who has connected nothing yet.
+export type AccessKind = "free" | "subscription" | "key";
+
+export interface ProviderAccess {
+    readonly kind: AccessKind;
+    // What the user connects, named the way its vendor names it — this is the noun every connect prompt uses.
+    readonly requirement: string;
+    // What connecting it lets them run, for the connect gate's one-line pitch.
+    readonly runs: string;
+}
+
+export const PROVIDER_ACCESS: Record<NativeProvider, ProviderAccess> = {
+    claude: { kind: "subscription", requirement: "Claude subscription", runs: "Claude Code" },
+    codex: { kind: "subscription", requirement: "ChatGPT subscription", runs: "Codex" },
+    grok: { kind: "subscription", requirement: "SuperGrok subscription", runs: "Grok" },
+    kimi: { kind: "key", requirement: "Moonshot API key", runs: "Kimi Code" },
+    gemini: { kind: "free", requirement: "Google sign-in", runs: "Gemini, Claude and GPT-OSS under Claude Code" },
+};
+
+// An ACP provider carries its own credentials — installed means runnable — so it has no access requirement at
+// all; `undefined` is that state, and every surface reads it as "nothing to connect".
+export const accessFor = (provider: AgentProvider): ProviderAccess | undefined => PROVIDER_ACCESS[provider as NativeProvider];
 
 // An ACP provider's label is its capability's display name, which the web layers on top — the raw id is the
 // static fallback.
