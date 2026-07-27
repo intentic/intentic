@@ -5,6 +5,7 @@ import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
 import { sweepAgedAgents } from "./agents/archive.js";
+import { streamAgent } from "./agent/agent.routes.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { startTranslator } from "./agent/translator.js";
@@ -207,7 +208,7 @@ const main = async (): Promise<void> => {
     previewProxy.listen(config.preview.port, config.sandbox.host);
 
     // Scheduled agent wake-ups: poll the automations manifest and fire whatever comes due.
-    const scheduler = createAutomationsScheduler(services);
+    const scheduler = createAutomationsScheduler(services, streamAgent);
     scheduler.start();
 
     // Warm the "latest released sandbox version" cache in the background so /info can offer a non-blocking

@@ -1,5 +1,7 @@
 import { agentsContract, type AgentChange, type AgentRepoChanges, type GitChange } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
+import { streamAgent } from "../agent/agent.routes.js";
+import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
@@ -122,12 +124,31 @@ export const createAgentsRoutes = (services: Services) => {
         land: i.land.handler(async ({ input }) => {
             const entry = entryOf(input.id);
             notRunning(input.id);
+            // Snapshotted before the land advances every landedTip — the span a chore diffs from, exactly as
+            // the auto-land path captures it before its own land (see streamIsolatedTurn).
+            const span = entry.repos.map(({ repo, base, landedTip }) => ({
+                repo,
+                from: landedTip ?? base,
+                dir: services.agentWorktrees.worktreeDir(entry.id, repo),
+            }));
             const result = await landAgent(services.agentWorktrees, entry);
             await services.agents.recordLanded(input.id, result.repos, result.diff);
             await services.agents.finish(input.id, Date.now(), result.landed ? "landed" : "conflict");
             if (result.landed && result.changed) {
                 // The main tree changed under the user — same attribution convention as git.discard.
                 services.history.notifyUserWrite();
+                emitWorkspaceEvent(
+                    services,
+                    {
+                        event: "agent.landed",
+                        agentId: entry.id,
+                        ...(entry.title !== undefined ? { title: entry.title } : {}),
+                        branch: entry.branch,
+                        outcome: "landed",
+                        repos: span,
+                    },
+                    streamAgent,
+                );
             }
             return { landed: result.landed, ...(result.conflicts !== undefined ? { conflicts: result.conflicts } : {}) };
         }),

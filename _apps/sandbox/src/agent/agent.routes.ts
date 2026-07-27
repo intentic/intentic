@@ -1,6 +1,15 @@
-import { type ActivityEvent, type AgentEvent, type AgentTurn, agentContract, type EditorContext, NATIVE_PROVIDERS } from "@intentic/sandbox-contract";
+import {
+    type ActivityEvent,
+    type AgentEvent,
+    type AgentTurn,
+    agentContract,
+    type EditorContext,
+    NATIVE_PROVIDERS,
+    type WorkspaceEvent,
+} from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { createOutboundSniffer } from "../activity/outbound.js";
+import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import { browserServersOf } from "../browser/browser-tools.js";
 import { cliEnvOf } from "../capabilities/cli-env.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
@@ -154,6 +163,11 @@ async function* runConversationTurn(
         return;
     }
     let outcome: "landed" | "conflict" | undefined;
+    // Hoisted out of the try because the chore emit in the finally reads them: the span this turn's workspace
+    // event names, the branch it ran on, and whether it ended on an error frame.
+    let span: WorkspaceEvent["repos"] = [];
+    let branch = "";
+    let failed = false;
     try {
         // Lazily create (first turn) or repair the conversation's worktree composition, then announce it.
         const entry = services.agents.entry(conversationId);
@@ -161,10 +175,17 @@ async function* runConversationTurn(
         if ((entry?.repos.length ?? 0) === 0) {
             await services.agents.recordWorktree(conversationId, worktree.repos);
         }
+        branch = worktree.branch;
+        // Where each repo stood BEFORE this turn — the open span a chore diffs from. Captured up front because
+        // the auto-land below advances landedTip; read afterwards, every repo would report as unchanged.
+        span = worktree.repos.map(({ repo, base }) => ({
+            repo,
+            from: entry?.repos.find((recorded) => recorded.repo === repo)?.landedTip ?? base,
+            dir: services.agentWorktrees.worktreeDir(conversationId, repo),
+        }));
         const base = (worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0])?.base.slice(0, 7) ?? "";
         yield { kind: "worktree", branch: worktree.branch, base };
         // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
-        let failed = false;
         for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd }, steering)) {
             if (event.kind === "error") {
                 failed = true;
@@ -187,11 +208,32 @@ async function* runConversationTurn(
                     services.history
                         .snapshot("turn", input.prompt)
                         .catch((error: unknown) => services.logger.warn({ err: error }, "history: landed snapshot failed"));
+                    emitWorkspaceEvent(services, {
+                        event: "agent.landed",
+                        agentId: conversationId,
+                        ...(finished.title !== undefined ? { title: finished.title } : {}),
+                        branch,
+                        outcome: "landed",
+                        repos: span,
+                    }, streamAgent);
                 }
             }
         }
     } finally {
         await services.agents.finish(conversationId, Date.now(), outcome);
+        // Once per turn, whatever the outcome — the errored and conflicted ones are the ones most worth a
+        // second pair of eyes. An empty span means the worktree never came up, so there is nothing to review.
+        if (span.length > 0) {
+            const settled = services.agents.entry(conversationId);
+            emitWorkspaceEvent(services, {
+                event: "turn.settled",
+                agentId: conversationId,
+                ...(settled?.title !== undefined ? { title: settled.title } : {}),
+                branch,
+                outcome: failed ? "error" : (outcome ?? "idle"),
+                repos: span,
+            }, streamAgent);
+        }
     }
 }
 

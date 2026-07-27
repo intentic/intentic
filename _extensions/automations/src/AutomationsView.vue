@@ -1,16 +1,27 @@
 <script setup lang="ts">
-import type { AutomationRun, AutomationSummary } from "@intentic/sandbox-contract";
-import { Button, Card, cmp, CopyButton, Icon, Page, PageHeader, StatusBadge, type StatusVariant, ToggleSwitch } from "@intentic/extension-ui";
+import type { AutomationSummary } from "@intentic/sandbox-contract";
+import { Button, Card, cmp, Icon, Page, PageHeader } from "@intentic/extension-ui";
 import { computed, reactive, ref } from "vue";
+import AutomationRow from "./AutomationRow.vue";
 import CreateAutomationDialog from "./CreateAutomationDialog.vue";
-import { formatAt, scheduleLabel } from "./cronSchedule";
-import { useAutomations, webhookUrl } from "./useAutomations";
+import { formatAt } from "./cronSchedule";
+import { AUTOMATION_RECIPES, type AutomationRecipe } from "./recipes";
+import { useAutomations } from "./useAutomations";
 
 /* Automations: agent wake-ups, native to every sandbox (no capability to enable). One automation = trigger
- * (cron, webhook, or a live listener on the daemon's provider connection) → optional guard (a shell command
- * the daemon runs in the workspace first; non-zero exit skips the wake) → the prompt the agent wakes with.
- * The daemon fires them and records the run history. This view is the list + approval queue; creating one
- * lives in CreateAutomationDialog. */
+ * (cron, webhook, a live listener on the daemon's provider connection, or a moment in this workspace's own
+ * work) → optional guard (a shell command the daemon runs in the workspace first; non-zero exit skips the
+ * wake) → the prompt the agent wakes with. The daemon fires them and records the run history.
+ *
+ * Two shelves, because the two kinds answer different questions. CODE CHORES watch this workspace — they fire
+ * when your fleet settles a turn or lands work — and they are the ones a user wants without knowing they
+ * exist, so the shelf lists the ones they DON'T have yet as off cards and one click creates the row.
+ * Everything else is triggered from outside (a clock, a webhook, a live provider connection) and is listed
+ * only once it exists, because you cannot want a Sentry automation before you have Sentry.
+ *
+ * Enabling a chore from its card writes a REAL automation, visible in the same list, with its prompt, model
+ * and guard editable like any other. There is deliberately no chore toggle that isn't an automation: a second
+ * place to turn something on is a second place for it to disagree with itself. */
 
 const { automations, pending, error: listError, save, remove, approve, reject } = useAutomations();
 
@@ -19,8 +30,19 @@ const createOpen = ref(false);
 const actionError = ref<string | null>(null);
 // Rows with their run history unfolded.
 const expanded = reactive(new Set<string>());
+// The chore card mid-create, so its button alone shows the wait.
+const enabling = ref<string | undefined>(undefined);
 
 const topError = computed(() => actionError.value ?? listError.value);
+
+const CHORE_RECIPES = AUTOMATION_RECIPES.filter((recipe) => recipe.chore === true);
+// Shelved on the stored `chore` flag, not on the trigger: a nightly dependency sweep and a nightly Stripe poll
+// are both `schedule`, and only one of them is about this codebase.
+const chores = computed(() => automations.value.filter((automation) => automation.chore === true));
+const integrations = computed(() => automations.value.filter((automation) => automation.chore !== true));
+// A chore recipe with no automation of that id yet — what the shelf offers. Matching on id (not on trigger)
+// keeps a user's own second review chore from hiding the stock one.
+const availableChores = computed(() => CHORE_RECIPES.filter((recipe) => !automations.value.some((automation) => automation.id === recipe.id)));
 
 // The enabled toggle is a plain re-post of the automation with the flag flipped (upsert keeps the run history).
 const toggle = async (automation: AutomationSummary, enabled: boolean): Promise<void> => {
@@ -35,10 +57,40 @@ const toggle = async (automation: AutomationSummary, enabled: boolean): Promise<
             ...(automation.harness !== undefined ? { harness: automation.harness } : {}),
             ...(automation.model !== undefined ? { model: automation.model } : {}),
             ...(automation.requireApproval !== undefined ? { requireApproval: automation.requireApproval } : {}),
+            // Round-tripped like every other stored field — dropping it here would move a chore to the other
+            // shelf the first time someone toggled it off and on.
+            ...(automation.chore !== undefined ? { chore: automation.chore } : {}),
             enabled,
         });
     } catch (err) {
         actionError.value = err instanceof Error ? err.message : `Could not update the automation.`;
+    }
+};
+
+// Turning a chore on for the first time: create it from its recipe, enabled. From here it is an ordinary row —
+// the card is gone because the thing it offered now exists.
+const enableChore = async (recipe: AutomationRecipe): Promise<void> => {
+    const trigger = recipe.trigger;
+    // The two shapes a chore has: it reacts to a change in this workspace, or it sweeps it on a clock. A webhook
+    // or a live provider connection is by definition the outside world, so it is not a chore.
+    if (trigger.kind !== `workspace` && trigger.kind !== `schedule`) {
+        return;
+    }
+    actionError.value = null;
+    enabling.value = recipe.id;
+    try {
+        await save.mutateAsync({
+            id: recipe.id,
+            trigger: trigger.kind === `workspace` ? { kind: `workspace`, event: trigger.event } : { kind: `schedule`, cron: trigger.cron },
+            ...(recipe.guard !== undefined ? { guard: recipe.guard } : {}),
+            prompt: recipe.prompt,
+            chore: true,
+            enabled: true,
+        });
+    } catch (err) {
+        actionError.value = err instanceof Error ? err.message : `Could not turn that chore on.`;
+    } finally {
+        enabling.value = undefined;
     }
 };
 
@@ -77,15 +129,13 @@ const toggleHistory = (id: string): void => {
 
 // The prompt of the automation a pending approval belongs to, for a preview line (undefined if it was deleted).
 const pendingPrompt = (automationId: string): string | undefined => automations.value.find((automation) => automation.id === automationId)?.prompt;
-const outcomeLabel = (run: AutomationRun): string => (run.outcome === `skipped` ? `Skipped by guard` : run.outcome);
-const outcomeVariant = (outcome: string): StatusVariant => (outcome === `completed` ? `success` : outcome === `error` ? `danger` : `warning`);
 </script>
 
 <template>
     <Page width="wide">
         <PageHeader
             title="Automations"
-            description="Wake your agent on a schedule, on a webhook, or instantly from live provider events. An optional guard command runs in your workspace first and decides whether each wake actually happens."
+            description="Wake your agent on a schedule, on a webhook, instantly from live provider events, or on what your own fleet just did. An optional guard command runs in your workspace first and decides whether each wake actually happens."
         />
 
         <div v-if="topError" :class="cmp.alertDanger('mb-3')">{{ topError }}</div>
@@ -132,6 +182,68 @@ const outcomeVariant = (outcome: string): StatusVariant => (outcome === `complet
             </div>
         </Card>
 
+        <!-- Code chores. First on the page because it is the shelf with something to offer a user who has never
+             opened this page before — everything below it only ever lists what already exists. -->
+        <Card class="mb-3 flex flex-col gap-3">
+            <div class="flex items-center gap-2.5">
+                <Icon name="eye" class="text-lg text-muted" />
+                <div>
+                    <h2 class="font-semibold leading-tight">Code chores</h2>
+                    <p class="text-xs text-muted">
+                        Background maintenance of your own codebase — some react to what your fleet just did, some sweep on a schedule. The
+                        tool-driven ones run their check for free first and only spend a turn when it actually finds something. Every run is still an
+                        agent turn on your hardware, so they all start off.
+                    </p>
+                </div>
+            </div>
+
+            <div v-if="chores.length > 0" class="flex flex-col gap-2">
+                <AutomationRow
+                    v-for="chore in chores"
+                    :key="chore.id"
+                    :automation="chore"
+                    :expanded="expanded.has(chore.id)"
+                    @toggle="toggle(chore, $event)"
+                    @history="toggleHistory(chore.id)"
+                    @remove="removeAutomation(chore.id)"
+                />
+            </div>
+
+            <!-- The off state. A card is an OFFER, not a setting: turning one on writes the automation above,
+                 where its prompt, model and guard are yours to edit. -->
+            <div v-if="availableChores.length > 0" class="grid gap-2 sm:grid-cols-2">
+                <div
+                    v-for="recipe in availableChores"
+                    :key="recipe.id"
+                    class="flex flex-col gap-2 rounded-lg border border-dashed border-line bg-overlay/40 px-3 py-2.5"
+                >
+                    <div class="flex items-center gap-2">
+                        <Icon v-if="recipe.icon" :name="recipe.icon" class="shrink-0 text-muted" />
+                        <span class="min-w-0 truncate font-medium text-content">{{ recipe.title }}</span>
+                    </div>
+                    <p class="text-2xs leading-relaxed text-muted">{{ recipe.description }}</p>
+                    <div class="mt-auto flex items-center justify-between gap-2 pt-0.5">
+                        <span v-if="recipe.note" class="truncate text-2xs text-subtle">{{ recipe.note }}</span>
+                        <span v-else></span>
+                        <Button
+                            label="Turn on"
+                            size="small"
+                            severity="secondary"
+                            :disabled="enabling !== undefined"
+                            :loading="enabling === recipe.id"
+                            @click="enableChore(recipe)"
+                        >
+                            <template #icon><Icon name="plus" /></template>
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="chores.length === 0 && availableChores.length === 0" :class="cmp.emptyState('py-6')">
+                No chores available — build one from New automation with a workspace trigger.
+            </div>
+        </Card>
+
         <Card class="flex flex-col gap-3">
             <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2.5">
@@ -146,88 +258,20 @@ const outcomeVariant = (outcome: string): StatusVariant => (outcome === `complet
                 </Button>
             </div>
 
-            <div v-if="automations.length === 0" :class="cmp.emptyState('py-6')">No automations yet — schedule your agent's first wake-up.</div>
+            <div v-if="integrations.length === 0" :class="cmp.emptyState('py-6')">
+                No automations yet — schedule your agent's first wake-up.
+            </div>
 
             <div v-else class="flex flex-col gap-2">
-                <div v-for="automation in automations" :key="automation.id" class="rounded-lg border border-line bg-canvas">
-                    <div class="flex items-center justify-between gap-3 px-3 py-2">
-                        <div class="min-w-0">
-                            <div class="flex items-center gap-2">
-                                <span class="truncate font-medium text-content">{{ automation.id }}</span>
-                                <span class="rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{
-                                    automation.trigger.kind === "schedule"
-                                        ? scheduleLabel(automation.trigger.cron)
-                                        : automation.trigger.kind === "event"
-                                          ? "event"
-                                          : `live · ${automation.trigger.provider}${automation.trigger.eventType ? ` · ${automation.trigger.eventType}` : ``}${automation.trigger.mentioned ? ` · mentions` : ``}`
-                                }}</span>
-                                <CopyButton
-                                    v-if="automation.trigger.kind === 'event'"
-                                    :text="webhookUrl(automation) ?? ''"
-                                    :aria-label="`Copy webhook URL for ${automation.id}`"
-                                    v-tooltip.top="'Copy webhook URL'"
-                                />
-                                <Icon
-                                    name="shield"
-                                    v-if="automation.guard"
-                                    v-tooltip.top="`Guarded: ${automation.guard}`"
-                                    class="text-2xs text-subtle"
-                                />
-                                <Icon
-                                    name="lock"
-                                    v-if="automation.requireApproval"
-                                    v-tooltip.top="'Requires your approval before running'"
-                                    class="text-2xs text-subtle"
-                                />
-                            </div>
-                            <p class="mt-0.5 truncate text-2xs text-subtle">{{ automation.prompt }}</p>
-                        </div>
-                        <div class="flex shrink-0 items-center gap-3">
-                            <StatusBadge
-                                v-if="automation.runs[0]"
-                                :variant="outcomeVariant(automation.runs[0].outcome)"
-                                :label="outcomeLabel(automation.runs[0])"
-                                size="xs"
-                                v-tooltip.top="automation.runs[0].detail"
-                            />
-                            <span v-if="automation.nextRun" class="text-2xs text-subtle">next {{ formatAt(automation.nextRun) }}</span>
-                            <ToggleSwitch
-                                :model-value="automation.enabled"
-                                :aria-label="`Enable ${automation.id}`"
-                                @update:model-value="toggle(automation, $event)"
-                            />
-                            <button
-                                type="button"
-                                class="text-muted hover:text-content"
-                                :aria-label="`Run history for ${automation.id}`"
-                                v-tooltip.top="'Run history'"
-                                @click="toggleHistory(automation.id)"
-                            >
-                                <Icon name="history" class="text-sm" />
-                            </button>
-                            <button
-                                type="button"
-                                class="text-muted hover:text-danger"
-                                :aria-label="`Delete ${automation.id}`"
-                                v-tooltip.top="'Delete'"
-                                @click="removeAutomation(automation.id)"
-                            >
-                                <Icon name="trash" class="text-sm" />
-                            </button>
-                        </div>
-                    </div>
-
-                    <div v-if="expanded.has(automation.id)" class="border-t border-line px-3 py-2">
-                        <p v-if="automation.runs.length === 0" class="text-xs text-muted">No runs yet.</p>
-                        <div v-else class="flex flex-col gap-1">
-                            <div v-for="run in automation.runs" :key="run.at" class="flex items-baseline gap-2 text-2xs">
-                                <span class="shrink-0 font-mono text-subtle">{{ formatAt(run.at) }}</span>
-                                <StatusBadge :variant="outcomeVariant(run.outcome)" :label="outcomeLabel(run)" size="xs" />
-                                <span v-if="run.detail" class="truncate text-subtle" v-tooltip.top="run.detail">{{ run.detail }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <AutomationRow
+                    v-for="automation in integrations"
+                    :key="automation.id"
+                    :automation="automation"
+                    :expanded="expanded.has(automation.id)"
+                    @toggle="toggle(automation, $event)"
+                    @history="toggleHistory(automation.id)"
+                    @remove="removeAutomation(automation.id)"
+                />
             </div>
         </Card>
 

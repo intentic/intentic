@@ -1450,6 +1450,42 @@ export type ExtensionProcessStatus = z.infer<typeof ExtensionProcessStatusSchema
 // /webchat/<id>/message and the agent's reply streams back over SSE. Its address is the public automation id, so
 // allowedOrigins (the widget's embed sites) + a per-conversation rate limit are its abuse boundary — no secret
 // token can live in a browser.
+// `workspace` fires from the sandbox's OWN codebase instead of the outside world — see WorkspaceEventKindSchema.
+
+// What the daemon emits as the fleet works, and what a `workspace` trigger names. These are the events a code
+// CHORE runs on (continuous review, post-land checks): the daemon is both producer and consumer, so unlike
+// `event` there is no token and no route — nothing outside the sandbox can reach them.
+//
+// The two OVERLAP on the common path: a clean turn auto-lands, firing both. A chore should name exactly one.
+// `turn.settled` fires once per isolated turn whatever its outcome, so it also covers the errored and
+// conflicted turns most worth a second pair of eyes, and it fires while the user is still looking at the diff —
+// before they decide to land. `agent.landed` fires only when work actually reached the main tree, including an
+// explicit Land from the review panel long after the turn ended.
+export const WorkspaceEventKindSchema = z.enum(["turn.settled", "agent.landed"]);
+export type WorkspaceEventKind = z.infer<typeof WorkspaceEventKindSchema>;
+
+// The payload a workspace-triggered wake carries: one JSON object, in $AUTOMATION_PAYLOAD for the guard and
+// appended to the prompt for the turn.
+//
+// `repos` names the change to look at as an OPEN span — `git -C <dir> diff <from>`, with no upper bound. Each
+// `from` is where that repo stood before the turn (its last landed tip, or the base it branched from); the
+// other end is deliberately the working tree rather than a sha, because a turn that ERRORED left its work
+// uncommitted in the worktree and a commit-to-commit span would report it as nothing at all. `dir` is that
+// repo's dir inside the agent's own checkout, so a chore reads the agent's work without touching /work.
+//
+// No diffstat rides along on purpose: the registry's counts are refreshed at land, so an errored or conflicted
+// turn would carry stale numbers, and a guard that wants a size threshold gets the true one from
+// `git -C <dir> diff --numstat <from>` for the price of one spawn.
+export const WorkspaceEventSchema = z.object({
+    event: WorkspaceEventKindSchema,
+    agentId: z.string(),
+    title: z.string().optional(),
+    branch: z.string(),
+    outcome: z.enum(["landed", "conflict", "idle", "error"]),
+    repos: z.array(z.object({ repo: z.string(), from: z.string(), dir: z.string() })),
+});
+export type WorkspaceEvent = z.infer<typeof WorkspaceEventSchema>;
+
 export const TriggerSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("schedule"), cron: z.string().min(1) }),
     z.object({ kind: z.literal("event"), token: z.string().min(1).optional() }),
@@ -1462,6 +1498,8 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
         // webchat only: the website origins allowed to POST to the widget endpoint. Absent/empty ⇒ none admitted.
         allowedOrigins: z.array(z.string()).optional(),
     }),
+    // `repo` narrows to events whose span touches one workspace repo ("root" or a repo id); absent ⇒ any.
+    z.object({ kind: z.literal("workspace"), event: WorkspaceEventKindSchema, repo: z.string().min(1).optional() }),
 ]);
 export type Trigger = z.infer<typeof TriggerSchema>;
 
@@ -1479,6 +1517,11 @@ export const AutomationSchema = z.object({
     model: z.string().optional(),
     // When true, a fire doesn't wake the agent — it's held in the approvals queue until the owner approves.
     requireApproval: z.boolean().optional(),
+    // A code CHORE: maintenance of THIS codebase rather than a reaction to the outside world. Purely a
+    // classification — the daemon fires a chore exactly like any other automation — but it cannot be derived
+    // from the trigger, which is why it is stored: a nightly `pnpm audit` sweep and a nightly Stripe poll are
+    // both `schedule`, and belong on different shelves. Absent ⇒ an ordinary automation.
+    chore: z.boolean().optional(),
     enabled: z.boolean(),
 });
 export type Automation = z.infer<typeof AutomationSchema>;

@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { type AgentHarness, type AgentProvider, type CatalogOption, HARNESSES, ModelsSchema, modelsFor, PROVIDERS } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    type CatalogOption,
+    HARNESSES,
+    ModelsSchema,
+    modelsFor,
+    PROVIDERS,
+    type WorkspaceEventKind,
+} from "@intentic/sandbox-contract";
 import { Button, cmp, CopyButton, Dialog, Icon, ToggleSwitch } from "@intentic/extension-ui";
 import { useQuery } from "@tanstack/vue-query";
 import { Cron } from "croner";
@@ -50,7 +59,7 @@ const capabilities = computed(() => host().workspace.capabilities());
 const visible = defineModel<boolean>(`visible`, { default: false });
 
 const form = reactive({
-    kind: `schedule` as `schedule` | `event` | `listener`,
+    kind: `schedule` as `schedule` | `event` | `listener` | `workspace`,
     id: ``,
     guard: ``,
     prompt: ``,
@@ -62,7 +71,18 @@ const form = reactive({
     channelId: ``,
     eventType: undefined as ListenerEventType | undefined,
     mentioned: false,
+    // workspace triggers: which moment in this workspace's own work fires the chore, and an optional narrowing
+    // to one repo of the change span.
+    workspaceEvent: `turn.settled` as WorkspaceEventKind,
+    repo: ``,
 });
+
+// The moments a chore can wake on. Worded as the moment rather than the event id — the id is wire vocabulary,
+// and the two overlap enough (a clean turn auto-lands, firing both) that the difference has to read plainly.
+const WORKSPACE_EVENTS: readonly { value: WorkspaceEventKind; label: string; hint: string }[] = [
+    { value: `turn.settled`, label: `A turn settles`, hint: `After every isolated agent turn — including the ones that errored or conflicted.` },
+    { value: `agent.landed`, label: `Work lands`, hint: `Only when an agent's work actually reaches your workspace.` },
+];
 const schedule = reactive(defaultSchedule());
 
 // The picked provider's live model list — fetched lazily per provider, only while the form reads it. The
@@ -99,6 +119,12 @@ const harnessChoosable = computed(() => form.agent === `codex` || form.agent ===
 // Guard/agent/approval fold away by default — revealed on demand or when a recipe prefills a guard.
 const advancedOpen = ref(false);
 const pickedRecipe = ref<AutomationRecipe | undefined>(undefined);
+// Templates are a shortcut INTO the form, not a field of it, so they fold away too. A gallery of cards grew
+// one card per connected capability and pushed Name below the fold; a disclosure costs one row whatever the
+// recipe count is, and what it opens is filterable and scroll-capped rather than unboundedly tall.
+const recipesOpen = ref(false);
+const recipeFilter = ref(``);
+const recipeFilterInput = ref<HTMLInputElement>();
 // After creating an event automation the dialog stays open on this id to show the webhook URL + setup steps.
 const savedId = ref<string | undefined>(undefined);
 const submitError = ref<string | undefined>(undefined);
@@ -108,6 +134,20 @@ const submitError = ref<string | undefined>(undefined);
 const recipes = computed(() => {
     const enabled = new Set(capabilities.value.map((capability) => capability.config[`provider`]).filter((provider) => typeof provider === `string`));
     return AUTOMATION_RECIPES.filter((recipe) => recipe.provider === undefined || enabled.has(recipe.provider));
+});
+
+// The open picker's list, filtered and split in two: chores watch this workspace, everything else is fired
+// from outside it. Two short labelled runs stay scannable where one flat pile of near-identical rows would
+// not — "Push to repo" is two different templates once GitHub and GitLab are both connected.
+const recipeGroups = computed(() => {
+    const needle = recipeFilter.value.trim().toLowerCase();
+    const matches = recipes.value.filter((recipe) =>
+        [recipe.title, recipe.note, recipe.description, recipe.id, recipe.provider].some((field) => field?.toLowerCase().includes(needle)),
+    );
+    return [
+        { label: `Code chores`, items: matches.filter((recipe) => recipe.chore === true) },
+        { label: `Integrations`, items: matches.filter((recipe) => recipe.chore !== true) },
+    ].filter((group) => group.items.length > 0);
 });
 
 // The live sources the user can actually listen to: those whose provider is connected as a capability. Drives
@@ -175,13 +215,22 @@ const toggleDay = (day: number): void => {
     schedule.days.splice(at, 1);
 };
 
-const pickRecipe = (recipe: AutomationRecipe): void => {
-    // Clicking the active card detaches the recipe but keeps whatever the user already edited.
-    if (pickedRecipe.value === recipe) {
-        pickedRecipe.value = undefined;
+// Opening the picker always starts from an empty filter and the caret in it — the list is long enough that
+// typing two letters beats scrolling it.
+const toggleRecipes = (): void => {
+    recipesOpen.value = !recipesOpen.value;
+    if (!recipesOpen.value) {
         return;
     }
+    recipeFilter.value = ``;
+    void nextTick(() => {
+        recipeFilterInput.value?.focus();
+    });
+};
+
+const pickRecipe = (recipe: AutomationRecipe): void => {
     pickedRecipe.value = recipe;
+    recipesOpen.value = false;
     form.kind = recipe.trigger.kind;
     form.id = recipe.id;
     form.guard = recipe.guard ?? ``;
@@ -194,6 +243,17 @@ const pickRecipe = (recipe: AutomationRecipe): void => {
     if (recipe.trigger.kind === `listener`) {
         form.provider = recipe.trigger.provider;
         form.eventType = recipe.trigger.eventType;
+    }
+    if (recipe.trigger.kind === `workspace`) {
+        form.workspaceEvent = recipe.trigger.event;
+    }
+};
+
+// Enter in the filter takes the top match — and, because the picker sits inside the form, never submits it.
+const pickFirstMatch = (): void => {
+    const first = recipeGroups.value[0]?.items[0];
+    if (first !== undefined) {
+        pickRecipe(first);
     }
 };
 
@@ -228,9 +288,13 @@ const resetForm = (): void => {
     form.channelId = ``;
     form.eventType = undefined;
     form.mentioned = false;
+    form.workspaceEvent = `turn.settled`;
+    form.repo = ``;
     Object.assign(schedule, defaultSchedule());
     submitError.value = undefined;
     pickedRecipe.value = undefined;
+    recipesOpen.value = false;
+    recipeFilter.value = ``;
     savedId.value = undefined;
     touched.clear();
     shaking.value = false;
@@ -266,13 +330,19 @@ const submit = async (): Promise<void> => {
                     ? { kind: `schedule`, cron: cron as string }
                     : form.kind === `event`
                       ? { kind: `event` }
-                      : {
-                            kind: `listener`,
-                            provider: form.provider,
-                            ...(form.eventType !== undefined ? { eventType: form.eventType } : {}),
-                            ...(form.eventType === `message` && form.mentioned ? { mentioned: true } : {}),
-                            ...(form.channelId.trim() !== `` ? { channelId: form.channelId.trim() } : {}),
-                        },
+                      : form.kind === `workspace`
+                        ? {
+                              kind: `workspace`,
+                              event: form.workspaceEvent,
+                              ...(form.repo.trim() !== `` ? { repo: form.repo.trim() } : {}),
+                          }
+                        : {
+                              kind: `listener`,
+                              provider: form.provider,
+                              ...(form.eventType !== undefined ? { eventType: form.eventType } : {}),
+                              ...(form.eventType === `message` && form.mentioned ? { mentioned: true } : {}),
+                              ...(form.channelId.trim() !== `` ? { channelId: form.channelId.trim() } : {}),
+                          },
             ...(form.guard.trim() !== `` ? { guard: form.guard.trim() } : {}),
             prompt: form.prompt,
             // Defaults stay absent (schema: absent agent = claude, absent harness = native); claude never
@@ -281,6 +351,10 @@ const submit = async (): Promise<void> => {
             ...(form.agent !== `claude` && form.harness !== `native` ? { harness: form.harness } : {}),
             ...(form.model !== `` ? { model: form.model } : {}),
             ...(form.requireApproval ? { requireApproval: true } : {}),
+            // A workspace trigger is a chore by definition (nothing but this codebase can fire it). A chore on a
+            // clock can't be told from an external poll by its trigger, so that one is carried from the recipe
+            // it was started from.
+            ...(form.kind === `workspace` || pickedRecipe.value?.chore === true ? { chore: true } : {}),
             enabled: true,
         });
         // Event automations keep the dialog open: the refreshed list now carries the daemon-minted token, so the
@@ -309,29 +383,70 @@ const submit = async (): Promise<void> => {
     >
         <form id="automation-form" v-if="savedId === undefined" class="flex flex-col gap-3" @submit.prevent="submit">
             <div v-if="submitError" :class="cmp.alertDanger()">{{ submitError }}</div>
+            <!-- One row until asked for: collapsed it is the invitation, open it is a filterable list, and once
+                 something is picked it is that pick's summary. Same row throughout, so the height the templates
+                 cost the form never depends on how many capabilities are connected. -->
             <div v-if="recipes.length > 0" class="ui-field">
-                <span :class="cmp.sectionLabel()">Start from a template</span>
-                <p v-if="pickedRecipe" class="text-xs text-muted">
-                    Prefilled from "{{ pickedRecipe.title }}" — edit anything below, or click the card again to clear.
-                </p>
-                <div class="flex flex-wrap gap-2">
+                <div class="flex items-center rounded-md transition-colors" :class="pickedRecipe ? CARD_SELECTED : CARD_IDLE">
                     <button
-                        v-for="recipe in recipes"
-                        :key="recipe.id"
                         type="button"
-                        class="flex items-center gap-2 rounded-md px-3 py-2 text-left text-xs transition-colors"
-                        :class="pickedRecipe === recipe ? CARD_SELECTED : CARD_IDLE"
-                        :aria-pressed="pickedRecipe === recipe"
-                        @click="pickRecipe(recipe)"
+                        class="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-xs"
+                        :aria-expanded="recipesOpen"
+                        @click="toggleRecipes"
                     >
-                        <img v-if="recipe.logo" :src="`https://cdn.simpleicons.org/${recipe.logo}`" class="h-4 w-4" alt="" />
-                        <Icon name="bolt" v-else class="text-2xs" />
-                        <span>
-                            {{ recipe.title }}
-                            <span v-if="recipe.note" class="text-2xs text-subtle">· {{ recipe.note }}</span>
+                        <img v-if="pickedRecipe?.logo" :src="`https://cdn.simpleicons.org/${pickedRecipe.logo}`" class="h-4 w-4 shrink-0" alt="" />
+                        <Icon v-else :name="pickedRecipe?.icon ?? 'bolt'" class="shrink-0 text-2xs" />
+                        <span class="min-w-0 flex-1 truncate">
+                            <template v-if="pickedRecipe">
+                                {{ pickedRecipe.title }}
+                                <span v-if="pickedRecipe.note" class="text-2xs text-subtle">· {{ pickedRecipe.note }}</span>
+                            </template>
+                            <template v-else>Start from a template</template>
                         </span>
-                        <Icon name="check-circle" v-if="pickedRecipe === recipe" class="ml-auto" />
+                        <span v-if="!pickedRecipe" class="shrink-0 text-2xs text-subtle">{{ recipes.length }} available</span>
+                        <Icon :name="recipesOpen ? 'chevron-down' : 'chevron-right'" class="shrink-0 text-2xs" />
                     </button>
+                    <button
+                        v-if="pickedRecipe"
+                        type="button"
+                        class="shrink-0 px-2.5 py-2 text-2xs text-muted transition-colors hover:text-content"
+                        aria-label="Clear template"
+                        @click="pickedRecipe = undefined"
+                    >
+                        <Icon name="times" />
+                    </button>
+                </div>
+                <p v-if="pickedRecipe" class="text-2xs text-subtle">Prefilled below — edit anything, or clear it to start from scratch.</p>
+                <div v-if="recipesOpen" class="flex flex-col gap-1.5 rounded-md border border-line bg-canvas p-1.5">
+                    <input
+                        ref="recipeFilterInput"
+                        v-model="recipeFilter"
+                        placeholder="Filter templates…"
+                        :class="cmp.input('px-2 py-1 text-xs')"
+                        @keydown.enter.prevent="pickFirstMatch"
+                        @keydown.escape.stop.prevent="recipesOpen = false"
+                    />
+                    <div class="scrollbar-thin flex max-h-56 flex-col overflow-auto">
+                        <template v-for="group in recipeGroups" :key="group.label">
+                            <span :class="cmp.sectionLabel('px-1.5 pb-1 pt-2 text-2xs first:pt-0.5')">{{ group.label }}</span>
+                            <button
+                                v-for="recipe in group.items"
+                                :key="recipe.id"
+                                type="button"
+                                class="flex items-center gap-2 rounded px-1.5 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
+                                :class="pickedRecipe === recipe ? 'text-link' : 'text-muted hover:text-content'"
+                                :aria-pressed="pickedRecipe === recipe"
+                                @click="pickRecipe(recipe)"
+                            >
+                                <img v-if="recipe.logo" :src="`https://cdn.simpleicons.org/${recipe.logo}`" class="h-4 w-4 shrink-0" alt="" />
+                                <Icon v-else :name="recipe.icon ?? 'bolt'" class="shrink-0 text-2xs" />
+                                <span class="min-w-0 flex-1 truncate">{{ recipe.title }}</span>
+                                <span v-if="recipe.note" class="shrink-0 text-2xs text-subtle">{{ recipe.note }}</span>
+                                <Icon name="check-circle" v-if="pickedRecipe === recipe" class="shrink-0 text-2xs" />
+                            </button>
+                        </template>
+                        <p v-if="recipeGroups.length === 0" class="px-1.5 py-2 text-2xs text-subtle">No template matches.</p>
+                    </div>
                 </div>
             </div>
             <label class="ui-field">
@@ -379,8 +494,43 @@ const submit = async (): Promise<void> => {
                     >
                         <Icon name="wifi" class="mr-1.5 text-2xs" />Listen (live)
                     </button>
+                    <button
+                        type="button"
+                        class="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
+                        :class="form.kind === 'workspace' ? CARD_SELECTED : CARD_IDLE"
+                        :aria-pressed="form.kind === 'workspace'"
+                        @click="setKind('workspace')"
+                    >
+                        <Icon name="eye" class="mr-1.5 text-2xs" />This workspace
+                    </button>
                 </div>
             </div>
+            <!-- A chore's trigger: which moment in the fleet's own work wakes it, and optionally one repo of the
+                 change to care about. No token and no URL — nothing outside the sandbox can fire this. -->
+            <template v-if="form.kind === 'workspace'">
+                <div class="ui-field">
+                    <span class="ui-field-label">Wake when</span>
+                    <div class="flex flex-wrap gap-1.5">
+                        <button
+                            v-for="option in WORKSPACE_EVENTS"
+                            :key="option.value"
+                            type="button"
+                            :class="[CHIP_BASE, form.workspaceEvent === option.value ? CHIP_SELECTED : CHIP_IDLE]"
+                            :aria-pressed="form.workspaceEvent === option.value"
+                            @click="form.workspaceEvent = option.value"
+                        >
+                            {{ option.label }}
+                        </button>
+                    </div>
+                    <span class="text-2xs text-subtle">
+                        {{ WORKSPACE_EVENTS.find((option) => option.value === form.workspaceEvent)?.hint }}
+                    </span>
+                </div>
+                <label class="ui-field">
+                    <span class="ui-field-label">Only this repo (optional)</span>
+                    <input v-model="form.repo" placeholder="every repo the change touched" class="font-mono" :class="cmp.input()" />
+                </label>
+            </template>
             <template v-if="form.kind === 'listener'">
                 <div class="ui-field">
                     <span class="ui-field-label">Source</span>

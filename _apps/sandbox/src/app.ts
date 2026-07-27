@@ -6,6 +6,7 @@ import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { bearerFrom, ForbiddenError, tokenEquals } from "./auth/auth.js";
 import { bridgeScoped } from "./auth/bridge-tokens.js";
+import { streamAgent } from "./agent/agent.routes.js";
 import { fireAutomation, PAYLOAD_MAX } from "./automations/scheduler.js";
 import { extensionDir, extensionRootOf, readExtensionManifest } from "./capabilities/extension-dirs.js";
 import type { Services } from "./composition.js";
@@ -383,7 +384,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return c.json({ error: "payload too large" }, 413);
         }
         const payload = await c.req.text();
-        void fireAutomation(services, automation, payload === "" ? undefined : payload).catch((error: unknown) =>
+        void fireAutomation(services, automation, payload === "" ? undefined : payload, streamAgent).catch((error: unknown) =>
             services.logger.error({ err: error, automation: automation.id }, "automation run failed"),
         );
         return c.json({ ok: true });

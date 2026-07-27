@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Cron } from "croner";
-import { streamAgent } from "../agent/agent.routes.js";
+import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { automationPending } from "../push/notifications.js";
 import type { AutomationRecord } from "./automations-store.js";
@@ -15,7 +15,10 @@ const GUARD_DETAIL_TAIL = 500;
 // How much of an event's webhook body reaches the guard's env and the wake prompt.
 export const PAYLOAD_MAX = 64_000;
 
-export type WakeFn = typeof streamAgent;
+// "Wake the agent" — streamAgent's shape, INJECTED by every caller rather than imported here. Importing it
+// would put this module downstream of agent.routes, which is itself an emitter of the workspace events
+// workspace-events.ts turns back into fireAutomation calls: a cycle. Same reason turn-runs takes its TurnFn.
+export type WakeFn = (services: Services, input: AgentTurn, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
 
 // A live sink for a turn's assistant text. The Discord source backs it with a channel message it edits as token
 // deltas arrive, so a mention reply appears as it's written instead of only when the turn ends. undefined ⇒ no
@@ -58,8 +61,8 @@ const inFlight = new Set<string>();
 export const fireAutomation = async (
     services: Services,
     automation: AutomationRecord,
-    payload?: string,
-    wake: WakeFn = streamAgent,
+    payload: string | undefined,
+    wake: WakeFn,
     // Set by the approve route: the owner already approved a held wake, so skip the guard + approval gate and run.
     preApproved = false,
     // When set, the agent's text deltas stream here live and it's told (via STREAM_NOTE) not to send the reply itself.
@@ -161,7 +164,7 @@ export interface AutomationsScheduler {
 // Polls the automations manifest and fires whatever came due since the last pass — so edits are picked up with
 // no resync bookkeeping. Fires run detached from the tick (an agent turn can outlast many polls). Event-kind
 // automations don't tick; they fire from the /automations/{id}/fire route.
-export const createAutomationsScheduler = (services: Services, wake: WakeFn = streamAgent, intervalMs = 30_000): AutomationsScheduler => {
+export const createAutomationsScheduler = (services: Services, wake: WakeFn, intervalMs = 30_000): AutomationsScheduler => {
     let since = Date.now();
     let timer: NodeJS.Timeout | undefined;
 
