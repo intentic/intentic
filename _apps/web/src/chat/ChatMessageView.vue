@@ -213,6 +213,45 @@ const restoreToCheckpoint = async (): Promise<void> => {
     }
 };
 
+// --- Long prompt clamp (see .chat-prompt-text) ------------------------------------------------
+// The bubble is clamped in CSS; whether the clamp actually bites is a question of wrapping, and wrapping
+// depends on a panel width the user can drag. So the element is measured rather than its text guessed at,
+// and re-measured whenever it resizes — a prompt that fits at a wide panel clips at a narrow one, and a
+// faded-out prompt with no way to open it is just lost text.
+const bubble = ref<HTMLElement>();
+const overflowing = ref(false);
+const expanded = ref(false);
+
+watch(
+    bubble,
+    (element, _previous, onCleanup) => {
+        if (element === undefined) {
+            overflowing.value = false;
+            return;
+        }
+        const observer = new ResizeObserver(() => {
+            // Open, the clamp is off and the box always fits — there is nothing to measure, and measuring
+            // would clear the flag that keeps the collapse control on screen. The next collapse re-measures.
+            if (!expanded.value) {
+                overflowing.value = element.scrollHeight > element.clientHeight + 1;
+            }
+        });
+        observer.observe(element);
+        onCleanup(() => observer.disconnect());
+    },
+    { immediate: true },
+);
+
+// A clamped box has no scrollbar and cannot be scrolled by hand, so any scroll it reports came from the
+// browser revealing something inside it — find-in-page landing on a match below the fold, or a screen reader
+// moving to it. Both mean the same thing: open the message, and put the box back where it belongs.
+const onBubbleScroll = (): void => {
+    if (bubble.value !== undefined && bubble.value.scrollTop > 0) {
+        expanded.value = true;
+        bubble.value.scrollTop = 0;
+    }
+};
+
 // --- Inline edit of a past user message (hover pencil → textarea → branch from here) ---------
 const editing = ref(false);
 const editText = ref(``);
@@ -283,7 +322,11 @@ const onEditKeydown = (event: KeyboardEvent): void => {
 <template>
     <!-- The click handler is delegated for the markdown's own controls — copy buttons and file links — which
          live inside v-html and so can hold no component of their own (see onMarkdownClick). -->
-    <div class="chat-message flex flex-col gap-1" :class="{ 'chat-prompt items-end': message.role === 'user' }" @click="onMarkdownClick">
+    <div
+        class="chat-message flex flex-col gap-1"
+        :class="{ 'chat-prompt items-end': message.role === 'user', 'chat-prompt-open': expanded }"
+        @click="onMarkdownClick"
+    >
         <div v-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
             <!-- The chip/thumbnail row stays visible in edit mode (read-only — the attachments ride the re-run). -->
             <div v-if="message.attachments?.length" class="flex flex-wrap justify-end gap-1.5">
@@ -350,10 +393,21 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 >
                     <Icon name="pencil" class="text-2xs" />
                 </button>
-                <div v-if="message.text" class="chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content/90">
+                <div
+                    v-if="message.text"
+                    ref="bubble"
+                    class="chat-prompt-text chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content/90"
+                    @scroll="onBubbleScroll"
+                >
                     {{ message.text }}
                 </div>
             </div>
+            <!-- Only for a prompt the clamp actually cut. Opening it also unpins it, so a long message can be
+                 read in full without taking the screen over for the rest of the turn. -->
+            <button v-if="overflowing" type="button" class="composer-ghost h-5 gap-1 px-1.5 text-2xs" @click="expanded = !expanded">
+                {{ expanded ? `Show less` : `Show more` }}
+                <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+            </button>
         </div>
         <div v-else-if="message.role === 'notice'" class="flex items-center gap-2 self-center py-0.5 text-2xs text-subtle">
             <Icon name="info-circle" class="text-2xs" />

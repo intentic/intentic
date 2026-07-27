@@ -1137,8 +1137,47 @@ watch(keyboardInset, () => {
     top: 0;
     z-index: 5;
     padding-top: 0.75rem;
+    padding-bottom: 0.5rem;
     background: var(--color-card);
     content-visibility: visible;
+}
+/* The seam. That opaque background is a rectangle ending at the row's own last pixel, so the turn sliding
+   beneath a pinned prompt was cut off mid-glyph against a hard horizontal edge — which reads as a rendering
+   fault rather than as one layer passing under another. A card-to-transparent ramp below the row gives the
+   text somewhere to go. It costs nothing where nothing passes under it: card over card is invisible, the same
+   reason the opaque background above can be there at all. */
+.chat-prompt::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 0.75rem;
+    background: linear-gradient(to bottom, var(--color-card), transparent);
+    pointer-events: none;
+}
+/* A prompt is pinned for as long as its answer runs, so its height is charged against the room that answer has
+   to be read in — and an unbounded one (a pasted spec, a continued transcript) took half the panel for the
+   whole turn. Six lines is the recall budget: enough to know which question you are reading the answer to,
+   which is all a pinned prompt is for, and above what nearly every hand-typed prompt ever reaches.
+   The clamp is unconditional rather than applied when the row pins, though only the pinned state needs it: a
+   sticky element's flow box IS the element, so shrinking it at the moment it pins pulls everything below up by
+   the difference — measured at 355px on the transcript that prompted this — yanking the answer out from under
+   the reader mid-sentence. Clamped in both states, the pin costs nothing at the threshold. */
+.chat-prompt-text {
+    max-height: 8.5rem;
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1.75rem), transparent);
+}
+/* Opening a prompt is a deliberate "I want to read this again", and one that stayed pinned while open would
+   hand back the problem the clamp exists to solve — so an open prompt stops pinning and scrolls away like any
+   other message. Still positioned, because ::after above anchors to it. */
+.chat-prompt-open {
+    position: relative;
+}
+.chat-prompt-open .chat-prompt-text {
+    max-height: none;
+    mask-image: none;
 }
 .chat-surface {
     background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
