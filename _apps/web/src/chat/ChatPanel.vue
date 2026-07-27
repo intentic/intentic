@@ -2,7 +2,7 @@
 import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { NATIVE_PROVIDERS, type NativeProvider, providerLabel } from "@intentic/sandbox-contract";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
@@ -339,9 +339,21 @@ const onDrop = (event: DragEvent): void => {
 // --- Editor context chip ---------------------------------------------------------------------
 // What the chip would attach: the live Monaco selection, else the active file tab. OFF by default — the user
 // clicks the chip to attach it to the next message (the inverse of VSCode Claude Code's always-on injection).
+//
+// Gated on the Workspace being the area on screen. The chip's whole claim is "the file you are LOOKING AT",
+// and it reads two singletons (useWorkspaceTabs, useEditorSelection) that outlive the Workspace view — while
+// this panel is docked in the persistent shell (ShellDesktop) beside whatever area is open. Off /workspace
+// there is nothing the user is looking at, so "this file" has no referent and the chip is a stale nag for a
+// file they left behind (worse in /agents, where the turn runs in the agent's worktree, not the /work tree
+// the tab came from). Route-gated rather than dismissible: it is self-correcting — walk back into the
+// Workspace and the chip returns, with nothing to undo.
+const route = useRoute();
 const workspaceTabs = useWorkspaceTabs();
 const editorSelection = useEditorSelection();
 const editorTarget = computed<{ file: string; startLine?: number; endLine?: number; selection?: string } | undefined>(() => {
+    if (route.name !== `workspace`) {
+        return undefined;
+    }
     const selection = editorSelection.selection.value;
     if (selection !== undefined) {
         return { file: selection.path, startLine: selection.startLine, endLine: selection.endLine, selection: selection.text };
@@ -350,7 +362,9 @@ const editorTarget = computed<{ file: string; startLine?: number; endLine?: numb
     return tab?.kind === `file` ? { file: tab.path } : undefined;
 });
 const includeEditorContext = ref(false);
-// Attaching is an explicit per-file choice — a different file in the editor resets the opt-in.
+// Attaching is an explicit per-file choice — a different file in the editor resets the opt-in, as does
+// leaving the Workspace (the target goes undefined with the chip, so an opt-in can't outlive the chip that
+// explained it and ride along invisibly into a later message).
 watch(
     () => editorTarget.value?.file,
     () => {
@@ -1123,8 +1137,47 @@ watch(keyboardInset, () => {
     top: 0;
     z-index: 5;
     padding-top: 0.75rem;
+    padding-bottom: 0.5rem;
     background: var(--color-card);
     content-visibility: visible;
+}
+/* The seam. That opaque background is a rectangle ending at the row's own last pixel, so the turn sliding
+   beneath a pinned prompt was cut off mid-glyph against a hard horizontal edge — which reads as a rendering
+   fault rather than as one layer passing under another. A card-to-transparent ramp below the row gives the
+   text somewhere to go. It costs nothing where nothing passes under it: card over card is invisible, the same
+   reason the opaque background above can be there at all. */
+.chat-prompt::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 0.75rem;
+    background: linear-gradient(to bottom, var(--color-card), transparent);
+    pointer-events: none;
+}
+/* A prompt is pinned for as long as its answer runs, so its height is charged against the room that answer has
+   to be read in — and an unbounded one (a pasted spec, a continued transcript) took half the panel for the
+   whole turn. Six lines is the recall budget: enough to know which question you are reading the answer to,
+   which is all a pinned prompt is for, and above what nearly every hand-typed prompt ever reaches.
+   The clamp is unconditional rather than applied when the row pins, though only the pinned state needs it: a
+   sticky element's flow box IS the element, so shrinking it at the moment it pins pulls everything below up by
+   the difference — measured at 355px on the transcript that prompted this — yanking the answer out from under
+   the reader mid-sentence. Clamped in both states, the pin costs nothing at the threshold. */
+.chat-prompt-text {
+    max-height: 8.5rem;
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1.75rem), transparent);
+}
+/* Opening a prompt is a deliberate "I want to read this again", and one that stayed pinned while open would
+   hand back the problem the clamp exists to solve — so an open prompt stops pinning and scrolls away like any
+   other message. Still positioned, because ::after above anchors to it. */
+.chat-prompt-open {
+    position: relative;
+}
+.chat-prompt-open .chat-prompt-text {
+    max-height: none;
+    mask-image: none;
 }
 .chat-surface {
     background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
@@ -1326,14 +1379,6 @@ watch(keyboardInset, () => {
     height: 1.75rem;
     padding: 0 0.7rem;
     font-size: 0.6875rem;
-}
-/* The tab strip scrolls sideways once the tabs hit their shrink floor; the native bar is hidden, because 6px of
-   a 35px row is the difference between tabs sitting centred and tabs sitting high (ChatTabs.onWheel scrolls it). */
-.chat-strip {
-    scrollbar-width: none; /* Firefox */
-}
-.chat-strip::-webkit-scrollbar {
-    display: none;
 }
 .chat-tab {
     color: var(--color-muted);

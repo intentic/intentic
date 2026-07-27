@@ -5,6 +5,7 @@ import {
     agentContract,
     type EditorContext,
     NATIVE_PROVIDERS,
+    runsClaudeCode,
     type WorkspaceEvent,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -108,19 +109,10 @@ export async function* streamAgent(services: Services, input: AgentTurn, signal:
     } else {
         signal?.addEventListener("abort", () => controller.abort(), { once: true });
     }
-    // Steering needs the SDK's streaming-input mode, so it exists only where the Claude Code harness runs the
-    // turn: claude/kimi/gemini (always), or codex/grok routed under harness "claude-code". A native codex/grok
-    // or an ACP turn registers abort alone — steering it reports NOT_FOUND and the client falls back.
-    const provider = input.agent ?? "claude";
-    // Kimi and Gemini always run on this harness — neither has a native runtime here (Moonshot speaks the
-    // Anthropic protocol directly; Gemini is re-served through the translator) — so both are steerable like a
-    // native Claude turn, whatever harness the client happened to send.
-    const steerable =
-        provider === "claude" ||
-        provider === "kimi" ||
-        provider === "gemini" ||
-        ((provider === "codex" || provider === "grok") && (input.harness ?? "native") === "claude-code");
-    const steering = steerable ? new SteeringQueue() : undefined;
+    // Steering needs the SDK's streaming-input mode, so it exists only where the Claude Code loop runs the turn
+    // (see runsClaudeCode — which is NOT the same as the harness the client sent). A native codex/grok or an ACP
+    // turn registers abort alone — steering it reports NOT_FOUND and the client falls back.
+    const steering = runsClaudeCode(input.agent ?? "claude", input.harness ?? "native") ? new SteeringQueue() : undefined;
     const unregister =
         input.conversationId !== undefined
             ? registerTurn(input.conversationId, { abort: () => controller.abort(), ...(steering !== undefined ? { steering } : {}) })

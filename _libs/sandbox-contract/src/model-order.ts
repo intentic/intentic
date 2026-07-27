@@ -126,3 +126,15 @@ export const tierRankOf = (family: string): number => {
 // is stable, so two ids this rule cannot separate keep the order they arrived in (for Claude, the provider's own).
 export const compareModelIds = (left: string, right: string): number =>
     tierRankOf(familyOf(left)) - tierRankOf(familyOf(right)) || compareRelease(releaseOf(left), releaseOf(right));
+
+/* The order for a catalog its endpoint published as a SET — Codex, Gemini, Kimi and Grok, i.e. everything but
+ * Anthropic's ranked list. Falling back on arrival order is what the rule above does with a tie, and for a RANKED
+ * catalog that is exactly right: the tie is the provider's own opinion, so claude-opus-5 stays ahead of
+ * claude-fable-5. For a set there is no opinion to keep, and the header of this file assumed the leftover order
+ * was at least alphabetical — it is not. A subscription vending sol/terra/luna (same tier, same 5.6 release, three
+ * ids this rule cannot separate) hands its rows back in whatever order its registry iterated THIS request, so the
+ * tie decided which model a fresh conversation opened on AND flipped between catalog refreshes.
+ *
+ * So a set breaks its own ties on the id. Which sibling that seats first is arbitrary — but it is the same
+ * arbitrary answer every refresh, which is the property `default` actually needs. */
+export const compareUnrankedModelIds = (left: string, right: string): number => compareModelIds(left, right) || left.localeCompare(right);

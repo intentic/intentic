@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { compareModelIds } from "@intentic/sandbox-contract";
+import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import { discoverGeminiModels, SEED_GEMINI_MODELS } from "./gemini-models.js";
 
@@ -29,7 +29,7 @@ const MODELS_TTL_MS = 60_000;
 // order — which is what keeps Pro above Flash in the picker and makes `default` the frontier newest rather than
 // whichever id the endpoint happened to list first.
 const toCatalog = (models: readonly { id: string; label: string }[]): { models: { id: string; label: string }[]; default: string } => {
-    const ordered = models.toSorted((left, right) => compareModelIds(left.id, right.id));
+    const ordered = models.toSorted((left, right) => compareUnrankedModelIds(left.id, right.id));
     return { models: [...ordered], default: ordered[0]!.id };
 };
 

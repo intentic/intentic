@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import type { Disposable } from "@intentic/extension-api";
 import { cmp, useDevice } from "@intentic-app/ui";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
 import { dropActionLabel, dropRejection } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { FINISHED_WINDOW, type FleetAgent, type FleetLane, useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
+import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
 import AgentCard from "./AgentCard.vue";
 
 /* The fleet as a kanban: Attention | Active | Finished — attention leftmost because the board's whole job is
@@ -32,11 +34,19 @@ import AgentCard from "./AgentCard.vue";
  * three affordances the other two get for free from the status machine:
  *   · a WINDOW (FINISHED_WINDOW), because the lane's job is confirming what just completed, not holding the
  *     sandbox's whole history; everything older collapses behind one row rather than being hidden
- *   · "Clear", which archives the lane in one press, undoable from the notice strip
+ *   · "Clear", which archives the lane in one press
  *   · the ARCHIVE itself, which the lane header flips to in place — a separate route would be a bigger
  *     promise than a pile of retired agents deserves
  * Archiving is lossless (branch, transcript and counters all stay — see the daemon's agents/archive.ts), so
- * none of it asks for confirmation. Discard, which is not, keeps its drag gesture and its dialog. */
+ * none of it asks for confirmation. Discard, which is not, keeps its drag gesture and its dialog.
+ *
+ * WHAT AN ARCHIVE SAYS is graded to what it did (useAgents' receipt/notice split). Archiving one card says
+ * nothing: the card is animated out of its lane and the header's archive counter lights up, and a strip
+ * narrating that — while shoving the whole board down a line, and waiting to be dismissed — is a toll charged
+ * on the most repeated action here. A SWEEP does report, because clearing twelve at once is the case with no
+ * per-card animation to vouch for it, in a pill that floats over the board and retires itself. A FAILURE keeps
+ * the strip, since an error is the one thing here that must be read. The way back is on the keyboard (Mod+Z)
+ * and, permanently, on every card in the archive — so it never depended on the message being still on screen. */
 
 const router = useRouter();
 const { mobile } = useDevice();
@@ -52,8 +62,13 @@ const {
     loadArchived,
     archive,
     restore,
+    undoArchive,
+    undoable,
+    archivedFlash,
     notice,
     dismissNotice,
+    receipt,
+    dismissReceipt,
     busyIds,
 } = useAgents();
 const { active } = useChat();
@@ -84,6 +99,53 @@ const toggleArchive = (): void => {
         void loadArchived();
     }
 };
+
+/* --- Saying that an archive happened -------------------------------------------------------------------- */
+
+// The receipt retires itself: an archive is not something the user has to acknowledge, and one more thing to
+// dismiss is precisely what made the strip it replaces feel like a toll. The window restarts on each new
+// receipt and PAUSES while the pointer is on the pill — vanishing under the cursor that came for its Undo
+// would fail the affordance at the only moment it is ever wanted. Timing lives here rather than in the store
+// so the fleet module stays a plain state container (and its unit tests stay timer-free).
+const RECEIPT_MS = 7_000;
+const receiptHovered = ref(false);
+let receiptTimer: ReturnType<typeof setTimeout> | undefined;
+watch([receipt, receiptHovered], () => {
+    clearTimeout(receiptTimer);
+    if (receipt.value !== undefined && !receiptHovered.value) {
+        receiptTimer = setTimeout(dismissReceipt, RECEIPT_MS);
+    }
+});
+
+// The ambient half of the report, and the whole of it for a single card: the archive counter is where the
+// cards went, so it is what acknowledges them. Long enough to catch the eye that was following the card out
+// of the lane, short enough that it reads as "that just moved" rather than as a new state.
+const PULSE_MS = 1_100;
+const pulsing = ref(false);
+let pulseTimer: ReturnType<typeof setTimeout> | undefined;
+watch(archivedFlash, () => {
+    pulsing.value = true;
+    clearTimeout(pulseTimer);
+    pulseTimer = setTimeout(() => (pulsing.value = false), PULSE_MS);
+});
+
+// A lit-up counter is nothing a screen reader can convey, so the quiet archive would be silent FULL STOP for
+// one. Every archive is announced here instead — including the sweeps, so the pill can stay a purely visual
+// affordance and there is exactly one thing doing the announcing.
+const announcement = ref(``);
+watch(archivedFlash, () => {
+    announcement.value = `${undoable.value.length} agent${undoable.value.length === 1 ? `` : `s`} archived`;
+});
+
+// Undo also lives on the keyboard, because an archive that says nothing has to be reversible by the reflex
+// people already have. Registered with the board and disposed with it, so the chord is only claimed while the
+// fleet is on screen; the `when` gate hands it straight back whenever it would be the wrong Mod+Z — nothing
+// archived to put back, or a caret sitting in a field that owns its own undo (the docked chat's composer is
+// one column away from this board).
+const editable = (target: EventTarget | null): boolean =>
+    target instanceof HTMLElement && (target.isContentEditable || target.tagName === `INPUT` || target.tagName === `TEXTAREA`);
+const undoShortcut = computed(() => commandShortcut(`agents.undoArchive`));
+let undoCommand: Disposable | undefined;
 
 // A lane's drop affordance, as ONE class string per state — two ring widths or two min-heights in the same
 // list would resolve by Tailwind's emit order rather than by intent. The min-height only exists mid-drag, to
@@ -137,10 +199,25 @@ onMounted(() => {
     // anything, and an empty board would hide every agent they ever ran behind an unlabelled button.
     void loadArchived();
     ticker = setInterval(() => (now.value = Date.now()), 1000);
+    undoCommand = registerCommand({
+        owner: `builtin`,
+        command: `agents.undoArchive`,
+        title: `Undo Archive`,
+        icon: `history`,
+        keybinding: `Mod+Z`,
+        when: (event) => undoable.value.length > 0 && !editable(event.target),
+        handler: undoArchive,
+    });
 });
 onUnmounted(() => {
     clearInterval(ticker);
+    clearTimeout(receiptTimer);
+    clearTimeout(pulseTimer);
     boardObserver?.disconnect();
+    undoCommand?.dispose();
+    // The receipt is the board's, not the app's: leaving it set would float it over whatever surface the user
+    // came back to the board from.
+    dismissReceipt();
 });
 
 const LANES: readonly { key: FleetLane; label: string; dot: string; empty: string }[] = [
@@ -180,7 +257,10 @@ const reviewAgent = (agent: FleetAgent): void => {
 </script>
 
 <template>
-    <div ref="boardEl" class="flex h-full min-h-0 flex-col">
+    <!-- `relative` positions the receipt inside the BOARD rather than the viewport, so the pill clears the
+         mobile tab bar and the docked terminal without either of them having to be measured. It is not a
+         containing block for the fixed drag ghost — only transforms and containment would be. -->
+    <div ref="boardEl" class="relative flex h-full min-h-0 flex-col">
         <div class="view-header flex items-center gap-2 border-b border-line px-3">
             <span class="text-sm font-semibold text-content">Agents</span>
             <!-- Two different facts, two different pills: "needs you" is BLOCKED work (an approval, a question,
@@ -206,28 +286,20 @@ const reviewAgent = (agent: FleetAgent): void => {
             </button>
         </div>
 
-        <!-- The board has no toast, so both things it ever has to say land here: an action that failed (a drop,
-             an archive) and an action that succeeded but should be reversible. The Undo is the whole reason a
-             bulk archive needs no confirmation up front — the cheaper apology, rather than the dialog. -->
-        <p
-            v-if="notice !== undefined"
-            class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs"
-            :class="notice.tone === 'error' ? 'bg-danger/10 text-danger' : 'bg-overlay text-muted'"
-        >
-            <Icon :name="notice.tone === 'error' ? 'exclamation-triangle' : 'box'" class="shrink-0 text-2xs" />
-            <span class="min-w-0 flex-1">{{ notice.message }}</span>
-            <button
-                v-if="notice.undo !== undefined"
-                type="button"
-                class="shrink-0 rounded px-1.5 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
-                @click="notice.undo"
-            >
-                Undo
-            </button>
+        <!-- Failures only. This strip costs a layout shift and a dismissal, which is the right price for
+             something the user must read and the wrong one for a routine action's receipt — that floats
+             instead, at the bottom of the board. -->
+        <p v-if="notice !== undefined" class="flex shrink-0 items-center gap-2 border-b border-line bg-danger/10 px-3 py-1.5 text-2xs text-danger">
+            <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
+            <span class="min-w-0 flex-1">{{ notice }}</span>
             <button type="button" aria-label="Dismiss" class="shrink-0 rounded p-0.5 hover:bg-overlay" @click="dismissNotice">
                 <Icon name="times" class="text-2xs" />
             </button>
         </p>
+
+        <!-- What the counter's pulse cannot tell a screen reader. Covers every archive, quiet or not, so the
+             pill below stays purely visual and nothing is announced twice. -->
+        <span class="sr-only" aria-live="polite">{{ announcement }}</span>
 
         <!-- Nothing on the board AND nothing archived is the only true empty state. With an archive behind it,
              the same screen would otherwise be a dead end: every agent the user ever ran, and no door to it. -->
@@ -238,10 +310,13 @@ const reviewAgent = (agent: FleetAgent): void => {
                 automatically.
             </p>
             <button type="button" :class="cmp.buttonPrimary()" @click="startAgent">Start an agent</button>
+            <!-- Clearing the last lane lands the user here, so the empty state carries the pulse too — it is
+                 the only archive affordance left on screen once the board is bare. -->
             <button
                 v-if="archived.length > 0"
                 type="button"
-                class="inline-flex items-center gap-1 text-2xs text-link transition-colors hover:underline"
+                class="inline-flex items-center gap-1 rounded px-1 py-px text-2xs text-link transition-colors hover:underline"
+                :class="pulsing ? 'bg-primary-600/25 ring-1 ring-primary-500/50' : ''"
                 @click="toggleArchive"
             >
                 <Icon name="history" class="text-2xs" />{{ archived.length }} archived agent{{ archived.length === 1 ? "" : "s" }}
@@ -290,12 +365,21 @@ const reviewAgent = (agent: FleetAgent): void => {
                         </template>
                         <span class="flex-1"></span>
                         <template v-if="lane.key === 'finished' && !archiveOpen">
+                            <!-- The receipt for a quiet archive: the counter is where the card went, so it is
+                                 what acknowledges it — a highlight that fades, in the place the user would
+                                 already look to get it back. Its tooltip is where the reassurance the old
+                                 strip repeated on every press now lives, read once and on demand. -->
                             <button
                                 v-if="archived.length > 0"
                                 type="button"
                                 :aria-label="`Open the archive (${archived.length})`"
                                 v-tooltip.bottom="'Agents taken off the board. Their branches and conversations are kept.'"
-                                class="inline-flex shrink-0 items-center gap-1 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                                class="inline-flex shrink-0 items-center gap-1 rounded px-1 py-px text-2xs transition-colors"
+                                :class="
+                                    pulsing
+                                        ? 'bg-primary-600/25 text-link ring-1 ring-primary-500/50'
+                                        : 'text-muted hover:bg-overlay hover:text-content'
+                                "
                                 @click="toggleArchive"
                             >
                                 <Icon name="history" class="text-2xs" />{{ archived.length }}
@@ -347,6 +431,32 @@ const reviewAgent = (agent: FleetAgent): void => {
                 </section>
             </div>
         </div>
+
+        <!-- The sweep's receipt. It OVERLAYS the board rather than sitting in the column, so the cards it is
+             reporting on don't move to make room for the report — and it expires, so acknowledging it is not
+             work. Hidden mid-drag: the discard target lands in the same place, and one of them is destructive.
+             The wrapper is inert; only the pill takes the pointer, or it would eat clicks on the lane under it. -->
+        <Transition name="receipt">
+            <div v-if="receipt !== undefined && !dragging" class="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-3">
+                <div
+                    class="pointer-events-auto flex max-w-full items-center gap-2 rounded-full border border-line-strong bg-card py-1.5 pl-3 pr-2 text-2xs text-muted shadow-lg"
+                    @mouseenter="receiptHovered = true"
+                    @mouseleave="receiptHovered = false"
+                >
+                    <Icon name="box" class="shrink-0 text-2xs" />
+                    <span class="min-w-0 truncate">{{ receipt.message }}</span>
+                    <button
+                        v-if="receipt.undo !== undefined"
+                        type="button"
+                        class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
+                        v-tooltip.top="undoShortcut === undefined ? 'Put them back on the board' : `Put them back on the board (${undoShortcut})`"
+                        @click="receipt.undo"
+                    >
+                        Undo
+                    </button>
+                </div>
+            </div>
+        </Transition>
 
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is in flight. -->
         <div
@@ -400,5 +510,19 @@ const reviewAgent = (agent: FleetAgent): void => {
     position: absolute;
     left: 0.5rem;
     right: 0.5rem;
+}
+
+/* The receipt rises into place and sinks out of it — the same direction both ways, so a pill that expires on
+ * its own and one dismissed by an Undo read as the same object leaving. */
+.receipt-enter-active,
+.receipt-leave-active {
+    transition:
+        transform 200ms ease,
+        opacity 200ms ease;
+}
+.receipt-enter-from,
+.receipt-leave-to {
+    opacity: 0;
+    transform: translateY(0.5rem);
 }
 </style>

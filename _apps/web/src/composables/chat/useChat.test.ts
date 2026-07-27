@@ -29,7 +29,7 @@ Object.defineProperty(globalThis, `localStorage`, {
 const { sandboxJson, sandboxRequest } = await import("../sandbox/sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 const sandboxJsonMock = vi.mocked(sandboxJson);
-const { loadAccountStatus, resetChat, useChat } = await import("./useChat");
+const { loadAccountStatus, openAgentConversation, resetChat, useChat } = await import("./useChat");
 const { usageStatusByAccount } = await import("./usageStatus");
 
 afterEach(() => {
@@ -201,6 +201,61 @@ describe(`per-tab drafts`, () => {
         resetChat();
         expect(useChat().conversations.value).toHaveLength(1);
         expect(useChat().draft.value).toBe(``);
+    });
+});
+
+/* Opening a card on the fleet board replays the agent's transcript from /sessions/:id — the Claude Code Agent
+ * SDK's own session store, which holds every session that loop minted. Gating the replay on `provider ===
+ * 'claude'` opened a finished Gemini (or Kimi) agent as an empty "start a conversation with Google" panel while
+ * its whole transcript sat readable on the daemon: neither provider has a native runtime, so both ALWAYS run the
+ * Claude Code loop whatever harness the registry recorded. */
+describe(`opening a fleet agent`, () => {
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+        // Nothing is running for the agent, so the attach probe stands down and the stored transcript is what
+        // paints — the finished-lane case the board's cards are mostly made of.
+        sandboxRequestMock.mockImplementation((path: string) => {
+            if (path.startsWith(`/sessions/`)) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () =>
+                        Promise.resolve({
+                            messages: [
+                                { role: `user`, text: `What model are you?` },
+                                { role: `assistant`, text: `Gemini.` },
+                            ],
+                        }),
+                } as Response);
+            }
+            return Promise.resolve({ ok: false, status: 404 } as Response);
+        });
+    });
+
+    it(`replays a finished Gemini agent's transcript — no native runtime means its session is the SDK store's`, async () => {
+        // `native` is what the registry recorded: it persists the harness the CLIENT sent, and that is the
+        // default for a provider with no harness to choose. Gemini runs the Claude Code loop either way, which
+        // is exactly the drift a provider check tripped over.
+        const conversation = openAgentConversation({ id: `a1`, sessionId: `sess-g`, provider: `gemini`, harness: `native` });
+
+        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        expect(sandboxRequestMock).toHaveBeenCalledWith(`/sessions/sess-g`);
+        expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `Gemini.` });
+    });
+
+    it(`replays a Codex agent routed under the Claude Code harness`, async () => {
+        const conversation = openAgentConversation({ id: `a2`, sessionId: `sess-c`, provider: `codex`, harness: `claude-code` });
+
+        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        expect(sandboxRequestMock).toHaveBeenCalledWith(`/sessions/sess-c`);
+    });
+
+    it(`leaves a NATIVE Codex agent alone — its thread lives in Codex's own rollout store, not the SDK's`, async () => {
+        const conversation = openAgentConversation({ id: `a3`, sessionId: `sess-n`, provider: `codex`, harness: `native` });
+
+        await vi.waitFor(() => expect(sandboxRequestMock).toHaveBeenCalledWith(`/agent/attach`, expect.anything()));
+        expect(sandboxRequestMock).not.toHaveBeenCalledWith(`/sessions/sess-n`);
+        expect(conversation.messages.value).toHaveLength(0);
     });
 });
 

@@ -778,6 +778,31 @@ describe(`Conversation`, () => {
         expect(loadProviderModelsMock).toHaveBeenCalledWith(`codex`);
     });
 
+    it(`renders a codex-advisory as a muted notice under the answer the turn actually produced`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.provider.value = `codex`;
+        // Codex warns when its pinned CLI has no metadata for a model the subscription already serves, then runs
+        // the turn anyway. The red line said the turn had failed, directly beneath its own answer.
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                {
+                    kind: `error`,
+                    code: `codex-advisory`,
+                    message: "Model metadata for `gpt-5.6-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.",
+                },
+                { kind: `delta`, text: `ok` },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`hi`, { ...settings, agent: `codex`, model: `gpt-5.6-sol` });
+
+        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`fallback metadata`))).toBe(true);
+        // The turn's own answer still arrives — the advisory annotates it rather than replacing it.
+        expect(conversation.messages.value.some((message) => message.role === `assistant` && message.text === `ok`)).toBe(true);
+        expect(conversation.error.value).toBeNull();
+        expect(conversation.status.value).not.toBe(`error`);
+    });
+
     it(`renders a rate_limit error as a muted notice, not the red error ref`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

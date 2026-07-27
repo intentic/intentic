@@ -358,6 +358,12 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             return step({ ...attached, bubbleId: null });
         }
         case `resolved`:
+            // The card above was released, and the frame says how. The surface that ANSWERED already froze its
+            // own card (decidePlan / answerQuestion / decidePermission), so this is a no-op there; it earns its
+            // keep on every other surface — a transcript replayed after a reload, or a second window watching
+            // the same run — which would otherwise leave the card pending and offer buttons on a requestId
+            // nothing holds any more. (The daemon's fleet registry reads the same frame for how long the turn
+            // was parked; see agents-registry.ts.)
             return step(resolveCard(state, event));
         case `compact`:
             return step(appendNotice(state, `Context compacted to free up space.`));

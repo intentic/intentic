@@ -63,6 +63,21 @@ export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
     { label: "Claude Code", value: "claude-code" },
 ];
 
+// Whether a turn on this provider/harness pair ACTUALLY runs the Claude Code Agent SDK loop — which is not the
+// same question as `harness === "claude-code"`. Claude is always its own Claude Code loop, and kimi/gemini have
+// no native runtime at all (Moonshot speaks the Anthropic protocol directly; Google is re-served through the
+// translator), so all three run it whatever harness the client happened to send; only codex/grok have a native
+// runtime to switch away from. An ACP agent runs its own loop and is never one of these.
+//
+// Everything the SDK loop owns keys off this: the SteeringQueue that makes mid-turn injection possible, and the
+// session store `/sessions/:id` reads a finished conversation's transcript back out of. Both sides of the wire
+// answer it here so a provider that gains (or loses) a native runtime is one edit, not a hunt for the literals.
+export const runsClaudeCode = (provider: AgentProvider, harness: AgentHarness): boolean =>
+    provider === "claude" ||
+    provider === "kimi" ||
+    provider === "gemini" ||
+    ((provider === "codex" || provider === "grok") && harness === "claude-code");
+
 // Claude's compile-time model floor, shared by the daemon's catalog (claude-models.ts — its last rung, reached
 // only before either live source has ever answered) and by the web's pre-load list, so the two can't name
 // different models. VERSIONED ids only, never the tier aliases (`opus`, `sonnet`) that used to sit here: an
