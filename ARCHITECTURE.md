@@ -477,6 +477,18 @@ extension entry its `contributes.environment`) into the overlay Dockerfile (`FRO
 owner-run rebuild applies it — until then the capability reads `pending` and the UI routes to the
 Environment card.
 
+The AGENT's half of that surface is the custom section, and it proposes into `.intentic/environment.d/` —
+one `<tool>.Dockerfile` per thing it needs — rather than writing the proposal directly. Worktree-isolated
+agents run in parallel, so a single shared proposal file would lose one of two concurrent drafts; naming each
+draft for its tool also makes two agents needing ffmpeg converge on one entry. `readEnvironment` folds the
+drafts plus the already-approved custom section into the one proposal the owner reviews (approval *replaces*
+the custom section, so carrying it forward is what stops an approve from silently uninstalling everything
+before it), and approve/reject clear the drafts. A `PreToolUse` hook
+([agent-installs.ts](_apps/sandbox/src/agent/agent-installs.ts)) is what starts the flow: an image-scoped
+`apt-get install`/`pip install`/`npm -g` is met with a one-per-turn note that the install dies with the
+container and a draft is how it survives. It steers rather than blocks — project-scoped installs and venvs
+are ordinary and are left alone.
+
 Per-kind mechanics ([handlers/](_apps/sandbox/src/capabilities/handlers/)):
 
 | Kind | On add |
@@ -492,7 +504,7 @@ Per-kind mechanics ([handlers/](_apps/sandbox/src/capabilities/handlers/)):
 | `ssh` | Writes a per-machine Host block + `0600` key/password under `~/.ssh/intentic-hosts` (the /history-backed dir above) + the shared ssh skill; the instance id is the alias the agent uses (`ssh <id>`). |
 | `vpn` | Stores ONE connection, discriminated by `provider` — `wireguard` (pasted `.conf`, `wg-quick`), `fortinet` (FortiGate SSL-VPN via `openconnect --protocol=fortinet`), `ipsec` (IKEv1/IKEv2 PSK + XAuth via strongSwan) — plus the shared vpn skill. Connecting is NOT part of the config: see [VPN](#vpn) below. |
 | `docker` | The engine is baked into the base image, dormant; the fragment is a lone `--privileged` runtime directive (a cache-hit rebuild, not an install). Once privileged, runs `dockerd` in a persistent tmux session, restored on boot — so `pnpm db:up` works like a local dev machine. Not removable. |
-| `browser` | Per-instance platform skill + the Chromium fragment; connecting is a guided live login (screencast over WebSocket) that persists the profile the agent's `@playwright/mcp` drives. |
+| `browser` | Per-instance platform skill; connecting is a guided live login (screencast over WebSocket) that persists the profile the agent's `@playwright/mcp` drives, headed on Xvfb with the stealth patch. This capability buys *identity*, not the browser itself: Chromium is baked into the base image and every turn already gets a credential-free `mcp__web__browser_*` server (`--isolated`, headless, no profile on disk), because reading a page is ordinary coding work. |
 
 ### VPN
 

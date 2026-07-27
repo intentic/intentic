@@ -4,7 +4,6 @@ import {
     type AgentHarness,
     type AgentProvider,
     type AgentReply,
-    type AskQuestion,
     type AttachFrame,
     type CatalogOption,
     clampEffort,
@@ -15,28 +14,29 @@ import {
     NATIVE_PROVIDERS,
     type NativeProvider,
     type OauthAccount,
-    type PermissionAsk,
     type PermissionMode,
     providerLabel,
     type RestoredMessage,
     sseData,
     sseFrames,
-    type TodoItem,
-    type ToolCallContent,
-    type ToolCallLocation,
-    type ToolCallStatus,
-    type ToolKind,
 } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
 import { errorMessage } from "../useAsyncAction";
 import { mentionPaths } from "./useMentions";
+import { type ChatAttachment, type ChatMessage, transcriptOf } from "./transcript";
 import { readTranscript, saveTranscript } from "./transcriptCache";
+import {
+    appendMessage,
+    appendNotice,
+    applyTurnFrame,
+    emptyTurnState,
+    flushPending,
+    revealPending,
+    type TurnEffect,
+    type TurnState,
+} from "./turnReducer";
 import { bindingWindow, formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus";
-
-// 'notice' is a small muted system line in the transcript (dismissed / kept planning / approved /
-// stopped) — it keeps the user informed about control actions, Claude Code style.
-export type ChatRole = "user" | "assistant" | "notice";
 
 // The permission mode is the contract's PermissionMode — imported, not redeclared. The composer picks the
 // turn's STARTING mode; the agent can then move itself (EnterPlanMode when a request turns out to need
@@ -139,100 +139,6 @@ export const providerTabs: readonly { value: AgentProvider; label: string }[] = 
     { value: `gemini`, label: `Gemini` },
 ];
 
-// A proposed plan awaiting the user's decision (the agent called ExitPlanMode). 'pending' shows the
-// approve/keep-planning buttons; once decided the choice is frozen into the transcript. 'cancelled' is the
-// user stopping the turn out from under the card instead of answering it.
-export type PlanStatus = "pending" | "approved" | "rejected" | "cancelled";
-
-export interface PlanRequest {
-    readonly requestId: string;
-    readonly text: string;
-    readonly status: PlanStatus;
-}
-
-// Split a plan's markdown into its leading heading (the plan card's header line) and the remaining body;
-// without a heading the whole text is the body and the card falls back to a generic title.
-export const planParts = (text: string): { title?: string; body: string } => {
-    const match = /^\s*#{1,6}\s+(.+)/.exec(text);
-    if (match === null) {
-        return { body: text };
-    }
-    return { title: match[1]!.trim(), body: text.slice(match.index + match[0].length).trimStart() };
-};
-
-// A set of questions awaiting the user's picks. 'pending' shows the selectable card; once the user
-// submits or dismisses, the choice is frozen into the transcript.
-export type QuestionStatus = "pending" | "answered" | "cancelled";
-
-export interface QuestionRequest {
-    readonly requestId: string;
-    readonly questions: AskQuestion[];
-    readonly status: QuestionStatus;
-    // Selected option label(s) per question text, captured on submit for the static summary.
-    readonly answers?: Record<string, string[]>;
-}
-
-// A tool call awaiting the user's approval (the daemon's canUseTool gate). 'pending' shows the buttons; the
-// answer then freezes into the transcript so the turn reads back as a record of what was allowed. 'cancelled'
-// is the user stopping the turn instead of answering — the tool never ran, and nobody denied it either.
-export type PermissionStatus = "pending" | "allowed" | "always" | "denied" | "cancelled";
-
-export interface PermissionRequest extends PermissionAsk {
-    readonly requestId: string;
-    readonly status: PermissionStatus;
-}
-
-// One tool call the sandbox agent made during a turn, built from its tool_call frame and merged-by-id with
-// every later tool_call_update (status transitions, fresh content/locations — snapshots, not appends).
-export interface ChatTool {
-    readonly id: string;
-    readonly name: string;
-    readonly category: ToolKind;
-    readonly status: ToolCallStatus;
-    readonly target?: string;
-    readonly locations?: readonly ToolCallLocation[];
-    readonly content?: readonly ToolCallContent[];
-    // A sub-agent (Agent/Task tool) delegation's own transcript: the tool calls it made, nested under its card
-    // so the delegation reads as one unit instead of a flat run of siblings. Its frames carry this tool's id as
-    // their parentToolUseId (see appendTool). Absent for an ordinary tool call.
-    readonly children?: readonly ChatTool[];
-    // A sub-agent's streamed thinking, grouped onto its own card rather than merged into the parent turn's
-    // thinking block. Absent for an ordinary tool call.
-    readonly thinking?: string;
-}
-
-// Apply `fn` to the tool with `id` anywhere in a bubble's tool tree — a sub-agent's calls live nested under its
-// Agent card (see appendTool), so a tool_call_update or a sub-agent thinking delta has to reach into the
-// children too. Returns the SAME array when the id isn't present, so an unrelated bubble keeps its identity (and
-// re-renders nothing).
-const mapTool = (tools: readonly ChatTool[], id: string, fn: (tool: ChatTool) => ChatTool): readonly ChatTool[] => {
-    let changed = false;
-    const next = tools.map((tool) => {
-        if (tool.id === id) {
-            changed = true;
-            return fn(tool);
-        }
-        if (tool.children !== undefined) {
-            const children = mapTool(tool.children, id, fn);
-            if (children !== tool.children) {
-                changed = true;
-                return { ...tool, children };
-            }
-        }
-        return tool;
-    });
-    return changed ? next : tools;
-};
-
-// A file the user attached to a turn, already uploaded to the workspace before send. `previewUrl` is an
-// object URL for image thumbnails — client-session only, gone on reload (restored history shows text).
-export interface ChatAttachment {
-    readonly name: string;
-    // Workspace-relative upload destination (.intentic/attachments/<uuid>/<name>), sent on the turn.
-    readonly path: string;
-    readonly previewUrl?: string;
-}
-
 // A file staged in a conversation's composer, uploaded to the workspace the moment it's attached (send is
 // then instant). Each lands in its own uuid dir so duplicate names never collide and the agent sees the real
 // filename. `previewUrl` (object URL) and `controller` are client-session only — a restored entry has neither.
@@ -259,42 +165,6 @@ export interface QueuedMessage {
     readonly text: string;
     readonly attachments: readonly ChatAttachment[];
     readonly editorContext?: EditorContext;
-}
-
-// End-of-turn accounting from the SDK's result message.
-export interface ChatUsage {
-    readonly costUsd?: number;
-    readonly inputTokens?: number;
-    readonly outputTokens?: number;
-    readonly durationMs?: number;
-    readonly numTurns?: number;
-}
-
-export interface ChatMessage {
-    readonly id: number;
-    readonly role: ChatRole;
-    readonly text: string;
-    // Files the user attached to this turn (user bubbles only), for the chip/thumbnail row.
-    readonly attachments?: readonly ChatAttachment[];
-    // The workspace checkpoint capturing the state BEFORE this turn ran (user bubbles only, main-tree turns
-    // only) — powers the hover "restore to before this message" affordance.
-    readonly checkpointId?: string;
-    // Accumulated extended-thinking text for assistant turns (empty when none / thinking off).
-    readonly thinking?: string;
-    // Set when this assistant turn proposed a plan; carries the approval state for the card UI.
-    readonly plan?: PlanRequest;
-    // Set when this assistant turn asked interactive questions; carries the answer state.
-    readonly question?: QuestionRequest;
-    // Set when a tool call on this turn needed the user's approval; carries the decision.
-    readonly permission?: PermissionRequest;
-    // Tool actions (Bash/Edit/…) the sandbox agent ran during this turn, newest last. A sub-agent's own calls
-    // nest under its Agent card (ChatTool.children), so this is a tree, not a flat list. Built immutably (mapTool
-    // rewrites by id), so it's readonly to the element level like `attachments`.
-    readonly tools?: readonly ChatTool[];
-    // The agent's live task checklist (TodoWrite), replaced whole each time it updates.
-    readonly todos?: TodoItem[];
-    // Cost/token accounting, attached once the turn's result lands.
-    readonly usage?: ChatUsage;
 }
 
 // What a conversation is doing right now, surfaced as the tab's status icon.
@@ -416,17 +286,6 @@ export const rememberedAccountFor = (provider: AgentProvider): string | undefine
     return accounts.some((account) => account.id === picked) ? picked : accounts[0]?.id;
 };
 
-// The client transcript as a daemon-seed history: user/assistant text turns only. Notices, tool runs, todos,
-// and thinking are UI artifacts; a plan card's markdown IS the assistant's output in plan mode, so it rides.
-export const transcriptOf = (messages: readonly ChatMessage[]): { role: "user" | "assistant"; text: string }[] =>
-    messages.flatMap((message) => {
-        if (message.role === `notice`) {
-            return [];
-        }
-        const text = message.plan !== undefined ? [message.text, message.plan.text].filter((part) => part.length > 0).join(`\n\n`) : message.text;
-        return text.trim().length > 0 ? [{ role: message.role, text }] : [];
-    });
-
 // A provider-minted resumable session and the runtime/account it belongs to — the trio is coherent by
 // construction (captured together from the stream's session frame). A session only resumes on its own
 // runtime/account; a mismatched selection at send time retires it.
@@ -443,8 +302,9 @@ export interface SessionRef {
 // next steered turn on the same stream opens a fresh bubble), plus the provider/account serving the turn —
 // the attribution captured onto the session the stream mints.
 interface TurnContext {
-    id: number | null;
-    // The turn's user bubble — the checkpoint frame anchors its restore affordance here.
+    // The turn's user bubble — the checkpoint frame anchors its restore affordance here. The turn's CURRENT
+    // bubble is not here: which bubble the agent is writing into moves with every block boundary and card, so
+    // it belongs to the reducer's state (TurnState.bubbleId) rather than to a context the caller holds.
     readonly userMessageId: number;
     readonly provider: AgentProvider;
     readonly account: string | undefined;
@@ -464,7 +324,13 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
  * — the same stream a reload, a second window, or another device attaches, resumable by seq cursor when the
  * connection drops. */
 export class Conversation {
-    readonly messages = ref<ChatMessage[]>([]);
+    // The transcript, the turn's current bubble, the id allocator, and the typewriter's undrained buffer — one
+    // value, moved through the pure reducer in turnReducer.ts. Holding them together is what makes the frame
+    // rules testable without a conversation: every question the reducer asks (does this bubble hold prose yet,
+    // which bubble does a card attach to) is answerable from this object alone.
+    private readonly state = ref<TurnState>(emptyTurnState);
+
+    readonly messages = computed<readonly ChatMessage[]>(() => this.state.value.messages);
     readonly streaming = ref(false);
     readonly error = ref<string | null>(null);
     // This conversation's slash commands — replaced whole per `commands` frame, listed by the composer's `/`
@@ -571,8 +437,6 @@ export class Conversation {
             ((this.provider.value === `codex` || this.provider.value === `grok`) && this.harness.value === `claude-code`),
     );
 
-    private nextId = 1;
-
     // The one unsent "switched" divider notice, upserted/removed as the user toggles provider/account and made
     // permanent by the next send (the segment cut).
     private pendingSwitchNoticeId: number | undefined;
@@ -593,11 +457,9 @@ export class Conversation {
     // drain — the settle hook, a fresh submit — can't send the same messages twice.
     private flushing = false;
 
-    // Typewriter buffer: deltas land here and a rAF loop drains them into the visible message a few characters
-    // per frame, so the answer reveals smoothly regardless of how chunky the upstream deltas arrive. `typeId`
-    // is the bubble being drained into; `rafId` is the active frame handle.
-    private typeBuffer = ``;
-    private typeId: number | null = null;
+    // The typewriter's CLOCK. What a tick means (how much to reveal, into which bubble) is the reducer's
+    // revealPending; all this owns is when one happens, so the animation can be driven off a test's own calls
+    // instead of a browser frame.
     private rafId: number | null = null;
 
     // `id` is the ephemeral tab id (c1, c2, … — never persisted); `conversationId` is the STABLE identity the
@@ -676,7 +538,10 @@ export class Conversation {
         const started = this.messages.value.length > 0 || session !== undefined;
         if (resumes || !started) {
             if (this.pendingSwitchNoticeId !== undefined) {
-                this.messages.value = this.messages.value.filter((message) => message.id !== this.pendingSwitchNoticeId);
+                this.state.value = {
+                    ...this.state.value,
+                    messages: this.state.value.messages.filter((message) => message.id !== this.pendingSwitchNoticeId),
+                };
                 this.pendingSwitchNoticeId = undefined;
             }
             return;
@@ -690,11 +555,13 @@ export class Conversation {
             ? `Switched to ${label} — your next message starts a fresh session with the conversation so far carried over.`
             : `Switched to ${label} — your next message starts a fresh session (the earlier transcript isn't available to carry over).`;
         if (this.pendingSwitchNoticeId !== undefined) {
-            this.messages.value = this.messages.value.map((message) => (message.id === this.pendingSwitchNoticeId ? { ...message, text } : message));
+            this.state.value = {
+                ...this.state.value,
+                messages: this.state.value.messages.map((message) => (message.id === this.pendingSwitchNoticeId ? { ...message, text } : message)),
+            };
             return;
         }
-        this.pendingSwitchNoticeId = this.nextId++;
-        this.append({ id: this.pendingSwitchNoticeId, role: `notice`, text });
+        this.pendingSwitchNoticeId = this.append({ role: `notice`, text });
     }
 
     // Mirror the settled transcript to the local cache (see transcriptCache), so reopening this conversation
@@ -717,8 +584,9 @@ export class Conversation {
         if (cached === undefined || this.messages.value.length > 0 || this.streaming.value) {
             return false;
         }
-        this.messages.value = cached;
-        this.nextId = Math.max(0, ...cached.map((message) => message.id)) + 1;
+        // The cache carries its own ids, so the allocator has to resume ABOVE them or the next notice would
+        // collide with a restored bubble.
+        this.state.value = { ...emptyTurnState, messages: cached, nextId: Math.max(0, ...cached.map((message) => message.id)) + 1 };
         return true;
     }
 
@@ -728,7 +596,7 @@ export class Conversation {
     // new conversation daemon-side, and its first send seeds a fresh one from the transcript above via the
     // same `history` mechanism a provider switch already uses.
     branchFrom(source: Conversation, index: number): void {
-        this.messages.value = source.messages.value.slice(0, index).map((message) => ({ ...message, id: this.nextId++ }));
+        this.state.value = source.messages.value.slice(0, index).reduce((state, message) => appendMessage(state, message), emptyTurnState);
         this.provider.value = source.provider.value;
         this.harness.value = source.harness.value;
         this.account.value = source.account.value;
@@ -747,13 +615,16 @@ export class Conversation {
     // provider and isolation from the tab snapshot, and overwriting those with the history-menu defaults below
     // would quietly move an isolated agent's next turn onto the main tree.
     restoreMessages(messages: readonly RestoredMessage[]): void {
-        this.messages.value = messages.map((message) => ({
-            id: this.nextId++,
-            role: message.role,
-            text: message.text,
-            ...(message.thinking !== undefined ? { thinking: message.thinking } : {}),
-            ...(message.tools !== undefined ? { tools: message.tools } : {}),
-        }));
+        this.state.value = messages.reduce(
+            (state, message) =>
+                appendMessage(state, {
+                    role: message.role,
+                    text: message.text,
+                    ...(message.thinking !== undefined ? { thinking: message.thinking } : {}),
+                    ...(message.tools !== undefined ? { tools: message.tools } : {}),
+                }),
+            emptyTurnState,
+        );
         this.error.value = null;
         this.persist();
     }
@@ -810,14 +681,12 @@ export class Conversation {
         if (this.title.value === null) {
             this.title.value = this.deriveTitle(text.length > 0 ? text : attachments.map((file) => file.name).join(`, `));
         }
-        const userMessageId = this.nextId++;
-        this.append({ id: userMessageId, role: `user`, text, ...(attachments.length > 0 ? { attachments } : {}) });
+        const userMessageId = this.append({ role: `user`, text, ...(attachments.length > 0 ? { attachments } : {}) });
         // Streaming context for the turn: the current text bubble — a fresh empty assistant message (so the
         // typing indicator shows immediately; a plan card clears it so the post-decision continuation streams
         // into a new bubble below the card) — plus the provider/account attribution for the session frame.
-        const assistantId = this.nextId++;
-        this.append({ id: assistantId, role: `assistant`, text: ``, thinking: `` });
-        const turn: TurnContext = { id: assistantId, userMessageId, provider: agent, account, harness };
+        this.openBubble();
+        const turn: TurnContext = { userMessageId, provider: agent, account, harness };
         // This turn starts from the user's pick; the previous turn's live posture (a plan it entered, a mode an
         // approval landed in) is history, and the daemon will echo this one back at init.
         this.liveMode.value = undefined;
@@ -1001,7 +870,6 @@ export class Conversation {
         }
         this.removeQueued(message.id);
         this.append({
-            id: this.nextId++,
             role: `user`,
             text: message.text,
             ...(message.attachments.length > 0 ? { attachments: message.attachments } : {}),
@@ -1032,14 +900,15 @@ export class Conversation {
         if (!this.awaitingDecision.value) {
             return;
         }
-        this.messages.value = this.messages.value.map((message) => {
+        const cancel = (message: ChatMessage): ChatMessage => {
             const cancelled: Pick<ChatMessage, "plan" | "question" | "permission"> = {
                 ...(message.plan?.status === `pending` ? { plan: { ...message.plan, status: `cancelled` } } : {}),
                 ...(message.question?.status === `pending` ? { question: { ...message.question, status: `cancelled` } } : {}),
                 ...(message.permission?.status === `pending` ? { permission: { ...message.permission, status: `cancelled` } } : {}),
             };
             return Object.keys(cancelled).length > 0 ? { ...message, ...cancelled } : message;
-        });
+        };
+        this.state.value = { ...this.state.value, messages: this.state.value.messages.map(cancel) };
     }
 
     // Aborts this tab's attach stream; whatever streamed so far stays in the transcript. The run itself is
@@ -1078,11 +947,9 @@ export class Conversation {
             this.interrupted = false;
             this.error.value = null;
             this.turnStartedAt.value = head.startedAt;
-            const userMessageId = this.nextId++;
-            this.append({ id: userMessageId, role: `user`, text: head.prompt });
-            const assistantId = this.nextId++;
-            this.append({ id: assistantId, role: `assistant`, text: ``, thinking: `` });
-            return { id: assistantId, userMessageId, provider: this.provider.value, account: this.account.value, harness: this.harness.value };
+            const userMessageId = this.append({ role: `user`, text: head.prompt });
+            this.openBubble();
+            return { userMessageId, provider: this.provider.value, account: this.account.value, harness: this.harness.value };
         };
         try {
             return await this.follow({ run: undefined, after: 0 }, ensureTurn, controller);
@@ -1118,7 +985,7 @@ export class Conversation {
         // transcript even though it was sent to the agent.
         const trimmed = feedback?.trim();
         if (!approve && trimmed) {
-            this.append({ id: this.nextId++, role: `user`, text: trimmed });
+            this.append({ role: `user`, text: trimmed });
         }
         // The turn is generating again, so anything queued behind the card can go in now.
         void this.drainQueue();
@@ -1304,398 +1171,199 @@ export class Conversation {
         }
     }
 
+    // One frame in: the transcript transition is the reducer's, and whatever the frame ALSO does — set a
+    // conversation ref, touch a cross-conversation store, open a file — comes back as effects this applies.
     private handleEvent(event: AgentEvent, turn: TurnContext): void {
-        switch (event.kind) {
-            case `delta`:
-                if (!event.text) {
-                    return;
-                }
-                // A sub-agent's prose streams tagged with its Agent tool id. Its final form lands as that
-                // tool's result content (tool_call_update), so the live delta is dropped rather than duplicated
-                // there — and, crucially, never typed into the PARENT bubble as if the main agent had said it.
-                if (event.parentToolUseId !== undefined) {
-                    return;
-                }
-                this.appendDelta(this.currentTextId(turn), event.text);
-                return;
-            case `text_end`:
-                // The agent finished a block of prose. Retire the bubble it was writing into so whatever comes
-                // next — the tool calls that block introduced, or the next block after they return — opens a
-                // fresh one below it. That is what restores Claude Code's interleaving (says what it's about to
-                // do → the tool cards → what it found → more cards → the summary); with one bubble per turn the
-                // whole narration glued into a single paragraph run with every tool card hoisted above it.
-                // A subagent's blocks are its own: its prose never enters the parent bubble (see `delta`), so
-                // its boundaries must not retire the parent's either.
-                //
-                // Deliberately NOT flushed: the typewriter keeps draining into the retired bubble by id, and the
-                // next delta flushes the remainder there before typing into the new one (see appendDelta). A
-                // flush here would snap the whole tail of every block — including the closing summary, whose
-                // block ends the moment the model stops writing — into place with no typing at all.
-                if (event.parentToolUseId === undefined && this.hasProse(turn.id)) {
-                    turn.id = null;
-                }
-                return;
-            case `thinking`: {
-                const thinking = event.text;
-                if (!thinking) {
-                    return;
-                }
-                // A sub-agent's thinking is grouped onto its own Agent card (its live transcript), not merged
-                // into the parent turn's thinking block.
-                if (event.parentToolUseId !== undefined) {
-                    this.updateTool(event.parentToolUseId, (tool) => ({ ...tool, thinking: `${tool.thinking ?? ``}${thinking}` }));
-                    return;
-                }
-                this.appendThinkingDelta(this.currentTextId(turn), thinking);
-                return;
+        const { state, effects } = applyTurnFrame(this.state.value, event, { userMessageId: turn.userMessageId });
+        this.state.value = state;
+        this.syncTypewriter();
+        for (const effect of effects) {
+            this.applyEffect(effect, turn);
+        }
+    }
+
+    // Keep the animation clock in step with the buffer the reducer produced: start a loop when a frame left
+    // text unrevealed, stop one whose buffer a flush (a card, an end-of-turn) already emptied.
+    private syncTypewriter(): void {
+        if (this.state.value.pending !== undefined) {
+            if (this.rafId === null) {
+                this.rafId = requestAnimationFrame(() => this.drainType());
             }
-            case `tool_call`: {
-                this.appendTool(this.currentTextId(turn), event);
-                // Follow-along: auto-open the file an edit touches (lazy import mirrors the terminal frame —
-                // the chat model doesn't statically pull in the workspace-tabs chain).
-                const toolCall = event;
-                void import(`../workspace/useFollowAlong`).then((m) => m.useFollowAlong().followToolCall(toolCall));
-                return;
-            }
-            case `tool_call_update`:
-                // Merge the update into the call that produced it (matched by id); an update with no
-                // matching tool is dropped rather than shown loose.
-                this.mergeToolUpdate(event);
-                return;
-            case `todos`:
-                this.setTodos(this.currentTextId(turn), event.items);
-                return;
-            case `checkpoint`:
-                // The pre-turn workspace state's id — anchor the restore affordance on the turn's user bubble.
-                this.messages.value = this.messages.value.map((message) =>
-                    message.id === turn.userMessageId ? { ...message, checkpointId: event.id } : message,
-                );
-                return;
-            case `commands`:
-                // The provider's slash commands (ACP agents), replaced whole — the composer's `/` popover.
-                this.availableCommands.value = event.items;
-                return;
-            case `usage`:
-                // End-of-turn accounting — and the turn boundary: a steered conversation's stream can carry
-                // several turns (a queued message the running turn couldn't absorb runs as its own turn after
-                // this one settles), so retire the current bubble and let the next turn's frames open a fresh
-                // one below the steered user message.
-                this.flushType();
-                this.setUsage(event);
-                turn.id = null;
-                return;
-            case `rate_limit_info`:
-                // The live gate, not a headroom reading: it names whichever single window the provider
-                // considered binding for that request. The rate-limited notice below is its only reader —
-                // headroom comes from `account_usage`, which carries every pool.
-                return;
-            case `account_usage`:
-                // Account-wide subscription headroom: every plan-limit pool, keyed by the account that served
-                // the turn so switching accounts shows the right one. Not tied to any bubble. Stamped with the
-                // read time so it can be compared against the daemon's persisted snapshot on the next
-                // `/accounts` load — whichever is newer wins, and the picker can say how stale a reading is.
-                if (event.account !== undefined) {
-                    usageStatusByAccount.value = {
-                        ...usageStatusByAccount.value,
-                        [event.account]: { windows: event.windows, measuredAt: Date.now() },
-                    };
-                }
-                return;
-            case `context_usage`:
-                // Per-conversation context-window fill — held on this instance (not the singleton) so the
-                // composer shows the active chat's meter for auto-compaction awareness.
-                this.contextUsage.value = event;
-                return;
-            case `compact`:
-                this.appendNotice(`Context compacted to free up space.`);
-                return;
-            case `plan`:
-                // Attach the plan to the current bubble (its intro text, if any) and clear the turn's bubble so
-                // the post-decision continuation streams into a fresh one below the plan card. Flush first so
-                // any in-flight intro text finishes typing into this bubble, not the next.
-                this.flushType();
-                this.attachCard(this.currentTextId(turn), { plan: { requestId: event.requestId, text: event.text, status: `pending` } });
-                turn.id = null;
-                return;
-            case `question`:
-                // Same flow as plan: attach the card to the current bubble and start a fresh bubble for
-                // whatever the agent streams after the answer comes back.
-                this.flushType();
-                this.attachCard(this.currentTextId(turn), {
-                    question: { requestId: event.requestId, questions: event.questions, status: `pending` },
-                });
-                turn.id = null;
-                return;
-            case `permission`: {
-                const { kind: _kind, ...ask } = event;
-                this.flushType();
-                this.attachCard(this.currentTextId(turn), { permission: { ...ask, status: `pending` } });
-                turn.id = null;
-                return;
-            }
-            case `mode`:
-                // The turn's live posture — the user's pick echoed back at init, or a move the AGENT made
-                // (EnterPlanMode / a plan approval). Drives the composer's selector so it never lies, without
-                // overwriting the pick the NEXT turn starts from.
-                this.liveMode.value = event.mode;
-                return;
+            return;
+        }
+        if (this.rafId !== null) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+        }
+    }
+
+    private applyEffect(effect: TurnEffect, turn: TurnContext): void {
+        switch (effect.kind) {
             case `session`:
                 // Captured with the turn's provider/account so a later mismatch (a mid-chat switch) is
                 // detectable at send time.
-                this.session.value = { id: event.sessionId, provider: turn.provider, account: turn.account, harness: turn.harness };
+                this.session.value = { id: effect.sessionId, provider: turn.provider, account: turn.account, harness: turn.harness };
                 return;
             case `worktree`:
                 // First frame of an isolated turn: which branch/base this conversation works on.
-                this.worktree.value = { branch: event.branch, base: event.base };
+                this.worktree.value = { branch: effect.branch, base: effect.base };
                 return;
-            case `landed`:
-                // End of a clean isolated turn: the delta auto-landed into the main tree as uncommitted
-                // changes (review = the Changes panel), or conflicted and stayed safely in the worktree.
-                this.appendNotice(
-                    event.landed
-                        ? `Changes landed in your workspace — review them in the Changes panel.`
-                        : `Some changes couldn't land automatically — your own edits overlap in ${(event.conflicts ?? [])
-                              .map((conflict) => conflict.repo)
-                              .join(`, `)}. Resolve them, then use Land now in the agent's review.`,
-                );
+            case `liveMode`:
+                // The turn's live posture — the user's pick echoed back at init, or a move the AGENT made
+                // (EnterPlanMode / a plan approval). Drives the composer's selector so it never lies, without
+                // overwriting the pick the NEXT turn starts from.
+                this.liveMode.value = effect.mode;
                 return;
-            case `terminal`: {
+            case `commands`:
+                // The provider's slash commands (ACP agents), replaced whole — the composer's `/` popover.
+                this.availableCommands.value = effect.items;
+                return;
+            case `activeModel`:
+                this.activeModel.value = effect.model;
+                return;
+            case `contextUsage`:
+                // Per-conversation context-window fill — held on this instance (not the singleton) so the
+                // composer shows the active chat's meter for auto-compaction awareness.
+                this.contextUsage.value = effect.usage;
+                return;
+            case `totals`:
+                // The conversation's lifetime accounting (the fleet card's cost/token readout). The usage's
+                // TRANSCRIPT attachment already happened — it is a change to a bubble, so the reducer made it.
+                this.costUsd.value += effect.usage.costUsd ?? 0;
+                this.inputTokens.value += effect.usage.inputTokens ?? 0;
+                this.outputTokens.value += effect.usage.outputTokens ?? 0;
+                return;
+            case `accountUsage`:
+                // Account-wide subscription headroom, keyed by the account that served the turn so switching
+                // accounts shows the right one. Stamped with the read time so it can be compared against the
+                // daemon's persisted snapshot on the next `/accounts` load — whichever is newer wins, and the
+                // picker can say how stale a reading is.
+                usageStatusByAccount.value = {
+                    ...usageStatusByAccount.value,
+                    [effect.account]: { windows: [...effect.windows], measuredAt: Date.now() },
+                };
+                return;
+            case `followToolCall`: {
+                // Auto-open the file an edit touches. Lazily imported so the chat model doesn't statically pull
+                // in the workspace-tabs chain.
+                const { call } = effect;
+                void import(`../workspace/useFollowAlong`).then((m) => m.useFollowAlong().followToolCall(call));
+                return;
+            }
+            case `surfaceTerminal`: {
                 // The agent started running Bash in its live `agent-<id>` tmux terminal — surface it as a tab in
                 // the global panel (relist so it appears; no auto-open, no focus steal). Lazily imported so the
                 // chat model doesn't statically pull in the xterm/terminal-panel chain.
-                const { session } = event;
+                const { session } = effect;
                 void import("../terminal/useTerminalPanel").then((m) => m.useTerminalPanel().surface(session));
                 return;
             }
-            case `init`:
-                this.activeModel.value = event.model;
-                return;
             case `error`:
-                if (event.code === `session-not-found`) {
-                    // The sandbox no longer has this chat's transcript — drop the dead session so the next send
-                    // starts a fresh one instead of replaying the failure forever. A muted notice, not the
-                    // error ref: the condition is self-healed, so the red line + error tab status would overstate it.
-                    this.session.value = undefined;
-                    this.appendNotice(
-                        `This chat's server-side history is gone (the sandbox was rebuilt or the session was deleted). Your last message wasn't processed — send it again; a fresh session starts, seeded with this window's transcript.`,
-                    );
-                    return;
-                }
-                if (event.code === `rate_limit`) {
-                    // Claude's subscription usage cap, not a crash — render the daemon's message as a muted
-                    // notice (like session-not-found) rather than the red error ref, so it reads as "wait and
-                    // retry" instead of "the workspace broke". Append the concrete reset time when the usage
-                    // store knows it — from the account's FULLEST pool, which is the one that just refused the
-                    // turn; a pool with room left resets at an instant that has nothing to do with this wait.
-                    const resetsAt = bindingWindow(usageStatusFor(this.account.value))?.resetsAt;
-                    this.appendNotice(resetsAt !== undefined ? `${event.message} Resets ${formatReset(resetsAt)}.` : event.message);
-                    return;
-                }
-                if (event.code === `codex-reauth`) {
-                    // The daemon rejected this account's credential before the turn. Surface the red line AND
-                    // light the account's reauth badge immediately (the proactive probe confirms it on the next
-                    // status load) by marking the matching account in the shared list — no daemon round-trip.
-                    const provider = this.provider.value;
-                    const accounts = providerAccounts.value[provider] ?? [];
-                    const accountId = this.account.value ?? accounts[0]?.id;
-                    const message = event.message;
-                    const markReauth = (account: OauthAccount): OauthAccount =>
-                        account.id === accountId ? { ...account, needsReauth: true, detail: message } : account;
-                    providerAccounts.value = { ...providerAccounts.value, [provider]: accounts.map(markReauth) };
-                    this.error.value = message;
-                    return;
-                }
-                if (event.code === `grok-model-invalid` || event.code === `codex-model-invalid`) {
-                    // The daemon rejected the pinned model. Grok self-heals mid-turn (re-prompting with a model
-                    // xAI named), so its code reaches us only when that failed; Codex can't (OpenAI names no
-                    // alternative), so its code always lands here. Either way: surface it (red) and reload the
-                    // provider's live catalog so the picker — and any conversation still pinning the dead id —
-                    // repoints to what the daemon actually serves. Dynamic import breaks the static cycle
-                    // (useChat imports this module), mirroring the terminal-panel import above.
-                    const provider = this.provider.value;
-                    void import(`./useChat`).then((chat) => chat.loadProviderModels(provider));
-                    this.error.value = event.message;
-                    return;
-                }
-                this.error.value = event.message;
-                return;
-            // `done` (and any unfamiliar future kind) has no transcript effect — a no-op instead of a crash.
-            default:
+                this.applyTurnError(effect.message, effect.code);
                 return;
         }
     }
 
-    // Whether the turn's current bubble holds any of the agent's prose — counting text still queued in the
-    // typewriter, which hasn't reached the message yet. Guards the text_end split: a block that wrote nothing
-    // (the empty text block a model can open before going straight to a tool) has no bubble to close, and
-    // retiring one there would strand it empty in the transcript for the rest of the turn.
-    private hasProse(id: number | null): boolean {
-        if (id === null) {
-            return false;
+    // How a turn-level failure READS. Split out of the reducer because most of these codes need state it has no
+    // business reaching for — the account's usage windows, the provider's account list — to phrase themselves,
+    // and because the choice between a muted notice and the red error line is a product decision rather than a
+    // transcript rule.
+    private applyTurnError(message: string, code: Extract<AgentEvent, { kind: "error" }>["code"]): void {
+        if (code === `session-not-found`) {
+            // The sandbox no longer has this chat's transcript — drop the dead session so the next send starts
+            // a fresh one instead of replaying the failure forever. A muted notice, not the error ref: the
+            // condition is self-healed, so the red line + error tab status would overstate it.
+            this.session.value = undefined;
+            this.appendNotice(
+                `This chat's server-side history is gone (the sandbox was rebuilt or the session was deleted). Your last message wasn't processed — send it again; a fresh session starts, seeded with this window's transcript.`,
+            );
+            return;
         }
-        if (this.typeId === id && this.typeBuffer !== ``) {
-            return true;
+        if (code === `rate_limit`) {
+            // Claude's subscription usage cap, not a crash — render the daemon's message as a muted notice
+            // (like session-not-found) rather than the red error ref, so it reads as "wait and retry" instead
+            // of "the workspace broke". Append the concrete reset time when the usage store knows it — from the
+            // account's FULLEST pool, which is the one that just refused the turn; a pool with room left resets
+            // at an instant that has nothing to do with this wait.
+            const resetsAt = bindingWindow(usageStatusFor(this.account.value))?.resetsAt;
+            this.appendNotice(resetsAt !== undefined ? `${message} Resets ${formatReset(resetsAt)}.` : message);
+            return;
         }
-        return (this.messages.value.find((message) => message.id === id)?.text ?? ``) !== ``;
-    }
-
-    // The id of the bubble the current frame writes to, allocating a fresh assistant message when the turn's
-    // bubble was cleared (start of turn already has one; a plan card clears it for the next).
-    private currentTextId(turn: TurnContext): number {
-        if (turn.id === null) {
-            turn.id = this.nextId++;
-            this.append({ id: turn.id, role: `assistant`, text: ``, thinking: `` });
+        if (code === `codex-reauth`) {
+            // The daemon rejected this account's credential before the turn. Surface the red line AND light the
+            // account's reauth badge immediately (the proactive probe confirms it on the next status load) by
+            // marking the matching account in the shared list — no daemon round-trip.
+            const provider = this.provider.value;
+            const accounts = providerAccounts.value[provider] ?? [];
+            const accountId = this.account.value ?? accounts[0]?.id;
+            const markReauth = (account: OauthAccount): OauthAccount =>
+                account.id === accountId ? { ...account, needsReauth: true, detail: message } : account;
+            providerAccounts.value = { ...providerAccounts.value, [provider]: accounts.map(markReauth) };
+            this.error.value = message;
+            return;
         }
-        return turn.id;
-    }
-
-    // Append a tool call to a bubble. A sub-agent's own calls carry the id of the Agent tool that spawned them
-    // (event.parentToolUseId) — nest those under that card, wherever it lives, so the delegation reads as one
-    // unit rather than a flat run of siblings with a lone spinner stranded above them. A top-level call lands
-    // at the end of the target bubble's list. Its id lets every later tool_call_update merge into the same card.
-    private appendTool(id: number, event: Extract<AgentEvent, { kind: "tool_call" }>): void {
-        const tool: ChatTool = {
-            id: event.id,
-            name: event.name,
-            category: event.category,
-            status: event.status,
-            ...(event.target !== undefined ? { target: event.target } : {}),
-            ...(event.locations !== undefined ? { locations: event.locations } : {}),
-            ...(event.content !== undefined ? { content: event.content } : {}),
-        };
-        const parentId = event.parentToolUseId;
-        if (parentId !== undefined) {
-            let nested = false;
-            this.messages.value = this.messages.value.map((message) => {
-                if (message.tools === undefined) {
-                    return message;
-                }
-                const tools = mapTool(message.tools, parentId, (parent) => {
-                    nested = true;
-                    return { ...parent, children: [...(parent.children ?? []), tool] };
-                });
-                return tools === message.tools ? message : { ...message, tools };
-            });
-            if (nested) {
-                return;
-            }
-            // Its Agent card wasn't found (a malformed stream) — fall through to a top-level append rather than
-            // dropping the call.
+        if (code === `grok-model-invalid` || code === `codex-model-invalid`) {
+            // The daemon rejected the pinned model. Grok self-heals mid-turn (re-prompting with a model xAI
+            // named), so its code reaches us only when that failed; Codex can't (OpenAI names no alternative),
+            // so its code always lands here. Either way: surface it (red) and reload the provider's live catalog
+            // so the picker — and any conversation still pinning the dead id — repoints to what the daemon
+            // actually serves. Dynamic import breaks the static cycle (useChat imports this module).
+            const provider = this.provider.value;
+            void import(`./useChat`).then((chat) => chat.loadProviderModels(provider));
+            this.error.value = message;
+            return;
         }
-        this.messages.value = this.messages.value.map((message) =>
-            message.id === id ? { ...message, tools: [...(message.tools ?? []), tool] } : message,
-        );
+        this.error.value = message;
     }
 
-    // Merge an update into the matching tool by id, wherever it lives in the tree (a sub-agent's calls nest
-    // under its Agent card). Present fields REPLACE the prior value (snapshot semantics — Codex streams a
-    // command's growing output as whole snapshots); absent fields leave it unchanged. An update with no
-    // matching tool is dropped rather than shown loose.
-    private mergeToolUpdate(event: Extract<AgentEvent, { kind: "tool_call_update" }>): void {
-        this.updateTool(event.id, (tool) => ({
-            ...tool,
-            ...(event.status !== undefined ? { status: event.status } : {}),
-            ...(event.content !== undefined ? { content: event.content } : {}),
-            ...(event.locations !== undefined ? { locations: event.locations } : {}),
-        }));
+    // --- transcript writes the conversation itself makes (control actions, restores) --------------------------
+    // Each is one pure transition applied to the same state the reducer moves, so a notice a Stop appends and a
+    // notice a frame appends allocate ids from one counter and land in one list.
+
+    // Open the turn's first bubble: a fresh empty assistant message the frames stream into, so the typing
+    // indicator shows the moment the turn starts rather than on the first delta.
+    private openBubble(): void {
+        const id = this.append({ role: `assistant`, text: ``, thinking: `` });
+        this.state.value = { ...this.state.value, bubbleId: id };
     }
 
-    // Rewrite the tool with `id` wherever it lives across the transcript's bubbles, leaving every other bubble's
-    // object identity intact (mapTool returns the same array when the id is absent). The one seam both
-    // tool_call_update and a sub-agent's thinking delta write through.
-    private updateTool(id: string, fn: (tool: ChatTool) => ChatTool): void {
-        this.messages.value = this.messages.value.map((message) => {
-            if (message.tools === undefined) {
-                return message;
-            }
-            const tools = mapTool(message.tools, id, fn);
-            return tools === message.tools ? message : { ...message, tools };
-        });
-    }
-
-    private setTodos(id: number, items: TodoItem[]): void {
-        this.messages.value = this.messages.value.map((message) => (message.id === id ? { ...message, todos: items } : message));
-    }
-
-    // Usage lands at end-of-turn; attach it to the last assistant bubble rather than spawning an empty one,
-    // and fold it into the conversation's lifetime totals (the fleet card's cost/token readout).
-    private setUsage(usage: ChatUsage): void {
-        this.costUsd.value += usage.costUsd ?? 0;
-        this.inputTokens.value += usage.inputTokens ?? 0;
-        this.outputTokens.value += usage.outputTokens ?? 0;
-        const target = this.messages.value.findLast((message) => message.role === `assistant`);
-        if (target) {
-            this.messages.value = this.messages.value.map((message) => (message.id === target.id ? { ...message, usage } : message));
-        }
-    }
-
-    // Hang an interactive card (plan / question / permission) on a bubble — and, with the answered card,
-    // freeze that answer into the transcript. One writer for all three: they differ in what they ask, not in
-    // how they attach.
-    private attachCard(id: number, card: Pick<ChatMessage, "plan" | "question" | "permission">): void {
-        this.messages.value = this.messages.value.map((message) => (message.id === id ? { ...message, ...card } : message));
-    }
-
-    private append(message: ChatMessage): void {
-        this.messages.value = [...this.messages.value, message];
+    private append(message: Omit<ChatMessage, "id">): number {
+        const id = this.state.value.nextId;
+        this.state.value = appendMessage(this.state.value, message);
+        return id;
     }
 
     // A small muted system line marking a control action (dismissed / kept planning / approved / stopped).
     private appendNotice(text: string): void {
-        this.append({ id: this.nextId++, role: `notice`, text });
+        this.state.value = appendNotice(this.state.value, text);
     }
 
-    // Enqueue a delta for the typewriter loop rather than writing it straight to the bubble. If the target
-    // bubble changed (a new turn / a fresh post-plan bubble), flush the prior buffer first so nothing leaks
-    // across bubbles.
-    private appendDelta(id: number, delta: string): void {
-        if (this.typeId !== null && this.typeId !== id) {
-            this.flushType();
-        }
-        this.typeId = id;
-        this.typeBuffer += delta;
-        if (this.rafId === null) {
-            this.rafId = requestAnimationFrame(() => this.drainType());
-        }
+    // Hang an interactive card (plan / question / permission) on a bubble — and, with the answered card, freeze
+    // that answer into the transcript. One writer for all three: they differ in what they ask, not in how they
+    // attach.
+    private attachCard(id: number, card: Pick<ChatMessage, "plan" | "question" | "permission">): void {
+        this.state.value = {
+            ...this.state.value,
+            messages: this.state.value.messages.map((message) => (message.id === id ? { ...message, ...card } : message)),
+        };
     }
 
-    // Reveal a slice of the buffer each frame, sized to catch up when far behind so bursts type out quickly but
-    // a large backlog never lags. Stops the loop once the buffer is empty.
+    // One typewriter tick: reveal a slice and schedule the next frame while text remains.
     private drainType(): void {
         this.rafId = null;
-        const id = this.typeId;
-        if (id === null || this.typeBuffer.length === 0) {
-            return;
-        }
-        const take = Math.max(2, Math.ceil(this.typeBuffer.length / 8));
-        const slice = this.typeBuffer.slice(0, take);
-        this.typeBuffer = this.typeBuffer.slice(take);
-        this.messages.value = this.messages.value.map((message) => (message.id === id ? { ...message, text: `${message.text}${slice}` } : message));
-        if (this.typeBuffer.length > 0) {
+        this.state.value = revealPending(this.state.value);
+        if (this.state.value.pending !== undefined) {
             this.rafId = requestAnimationFrame(() => this.drainType());
         }
     }
 
-    // Drain the whole buffer synchronously and stop the loop — called when a turn ends, stops, or a
-    // plan/question card takes over, so no text is left mid-type.
+    // Drain the whole buffer at once and stop the loop — called when a turn ends or is stopped, so no text is
+    // left mid-type. (A card taking the bubble over flushes inside the reducer, where the rule belongs.)
     private flushType(): void {
         if (this.rafId !== null) {
             cancelAnimationFrame(this.rafId);
             this.rafId = null;
         }
-        const id = this.typeId;
-        const rest = this.typeBuffer;
-        this.typeBuffer = ``;
-        this.typeId = null;
-        if (id === null || rest.length === 0) {
-            return;
-        }
-        this.messages.value = this.messages.value.map((message) => (message.id === id ? { ...message, text: `${message.text}${rest}` } : message));
-    }
-
-    private appendThinkingDelta(id: number, delta: string): void {
-        this.messages.value = this.messages.value.map((message) =>
-            message.id === id ? { ...message, thinking: `${message.thinking ?? ``}${delta}` } : message,
-        );
+        this.state.value = flushPending(this.state.value);
     }
 }

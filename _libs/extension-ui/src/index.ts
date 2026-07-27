@@ -22,6 +22,7 @@ export {
     Page,
     PageHeader,
     ProgressRing,
+    RowGroup,
     Segmented,
     StatusBadge,
     type StatusVariant,

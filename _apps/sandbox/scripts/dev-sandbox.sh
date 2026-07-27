@@ -123,6 +123,22 @@ fi
 # Always named, even with no overlay: it is what stops a later recompose from flipping the base to :stable.
 set -- "$@" -e SANDBOX_BASE_IMAGE="$TAG"
 
+# Bind the compiled JS from the working tree over the copies baked into the image, so a later daemon edit needs
+# only `tsgo` + `docker restart` (dev-reload.sh, seconds) instead of a full image rebuild (minutes). Skipped
+# silently when node isn't on PATH or nothing is compiled yet — the container then runs the baked copies, which
+# is exactly the old behaviour. See dev-mounts.mjs for what is mounted and why node_modules never is.
+if command -v node >/dev/null 2>&1; then
+    mount_count=0
+    while IFS= read -r mount; do
+        [ -n "$mount" ] || continue
+        set -- "$@" -v "$mount"
+        mount_count=$((mount_count + 1))
+    done <<EOF
+$(node "$(dirname "$0")/dev-mounts.mjs" 2>/dev/null || true)
+EOF
+    [ "$mount_count" -gt 0 ] && echo "intentic: mounting ${mount_count} compiled tree(s) from the working tree — daemon edits reload with dev-reload.sh."
+fi
+
 echo "intentic: recreating ${CONTAINER} from ${RUN_IMAGE}…"
 docker rm -f "$CONTAINER" >/dev/null
 # Same shape as connect.sh's run: unprivileged unless the overlay's directives grant privileges, per-sandbox

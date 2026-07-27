@@ -1,7 +1,7 @@
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { type AgentQuery, type QueryFn, runAgent } from "./agent.js";
+import { type AgentQuery, mergeHooks, type QueryFn, runAgent } from "./agent.js";
 import { resolveRequest } from "./agent-requests.js";
 import { SteeringQueue } from "./agent-steering.js";
 
@@ -202,6 +202,7 @@ test("the interactive guidance always rides the preset system prompt, with syste
     expect(base.append).toContain("AskUserQuestion");
     expect(base.append).toContain("EnterPlanMode");
     expect(base.append).toContain("TaskCreate");
+    expect(base.append).toContain("mcp__web__browser_take_screenshot");
 
     // An unattended turn loses the widgets it has no operator for, but KEEPS the checklist: it is the longest
     // kind of turn and the only window the operator has into where it has got to.
@@ -215,6 +216,29 @@ test("the interactive guidance always rides the preset system prompt, with syste
     await collect({ ...request, systemAppend: "## Delegating\nUse codex exec." }, capture);
     const withAppend = captured?.systemPrompt as { append: string };
     expect(withAppend.append).toBe(`${base.append}\n\n## Delegating\nUse codex exec.`);
+});
+
+// Two producers register PreToolUse:Bash — the tmux wrapper and the install steer. Merged with a plain object
+// spread the second silently wins the key and the first never fires, taking the live terminal panel with it.
+// (Driven directly: tmuxRunEnabled() needs /usr/local/bin/tmux-run, which exists in the image, not on a host.)
+test("hook sets are concatenated per event, not overwritten", () => {
+    const a = { PreToolUse: [{ matcher: "Bash", hooks: [] }], PostToolUse: [{ matcher: "Edit", hooks: [] }] };
+    const b = { PreToolUse: [{ matcher: "Bash", hooks: [] }] };
+    const merged = mergeHooks(a, b);
+    expect(merged.PreToolUse).toHaveLength(2);
+    expect(merged.PostToolUse).toHaveLength(1);
+});
+
+test("every turn registers the install steer and the post-edit diagnostics hook", async () => {
+    let captured: Options | undefined;
+    const capture: QueryFn = async function* (args) {
+        captured = args.options;
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+
+    await collect(request, capture);
+    expect(captured?.hooks?.PreToolUse?.some((matcher) => matcher.matcher === "Bash")).toBe(true);
+    expect(captured?.hooks?.PostToolUse?.some((matcher) => matcher.matcher === "Edit|Write")).toBe(true);
 });
 
 test("every turn wires the ui ask server, the AskUserQuestion alias, and the permission gate", async () => {

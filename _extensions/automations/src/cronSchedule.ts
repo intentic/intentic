@@ -144,8 +144,46 @@ const ordinal = (day: number): string => {
     return `${day}th`;
 };
 
-// Locale timestamp for run/next-run readouts (the list rows and the dialog's cron preview).
+// Locale timestamp for run/next-run readouts (the dialog's cron preview, and the exact time behind a list
+// row's tooltip).
 export const formatAt = (at: number): string => new Date(at).toLocaleString();
+
+// The list's two time COLUMNS. Both stay narrow enough to align down the page — the exact timestamp rides the
+// tooltip — which is why neither is the kit's `timeAgo`: that one falls back to a full locale string past a
+// day, and three of those in a column is the end of scanning it.
+const MINUTES_PER_DAY = 60 * 24;
+
+/** How long ago a run happened: "just now", "5m ago", "3h ago", "2d ago". */
+export const since = (at: number): string => {
+    const minutes = Math.round((Date.now() - at) / 60_000);
+    if (minutes < 1) {
+        return `just now`;
+    }
+    if (minutes < 60) {
+        return `${minutes}m ago`;
+    }
+    if (minutes < MINUTES_PER_DAY) {
+        return `${Math.round(minutes / 60)}h ago`;
+    }
+    return `${Math.round(minutes / MINUTES_PER_DAY)}d ago`;
+};
+
+/** How long until the next fire: "due", "in 5m", "in 3h", "in 2d". A nextRun that has just slipped into the
+ *  past reads as "due" rather than as a miss — the daemon's scheduler picks changes up on a poll, so being a
+ *  few seconds behind the clock is its normal state. */
+export const nextIn = (at: number): string => {
+    const minutes = Math.round((at - Date.now()) / 60_000);
+    if (minutes < 1) {
+        return `due`;
+    }
+    if (minutes < 60) {
+        return `in ${minutes}m`;
+    }
+    if (minutes < MINUTES_PER_DAY) {
+        return `in ${Math.round(minutes / 60)}h`;
+    }
+    return `in ${Math.round(minutes / MINUTES_PER_DAY)}d`;
+};
 
 // Human badge for a stored cron; unrecognized shapes pass the raw string through.
 export const scheduleLabel = (cron: string): string => {

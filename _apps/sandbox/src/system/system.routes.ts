@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { type SystemEvent, type TerminalsList, type UsageAccount, HostTunnelSchema, systemContract } from "@intentic/sandbox-contract";
+import { type SystemEvent, type TerminalsList, type UsageAccount, HostTunnelSchema, SANDBOX_ROUTE_NAMES, systemContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
+import { agentSessionName } from "../agent/agent-terminals.js";
 import type { VerifiedIdentity } from "../auth/auth.js";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.js";
 import type { Services } from "../composition.js";
@@ -16,6 +17,24 @@ import { isNewer, latestVersion } from "../platform/version-check.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 
 const execFileAsync = promisify(execFile);
+
+// Fold `tmux list-panes -a` output into one row per SESSION: the last pane's foreground command, plus whether
+// any pane in it is still alive. Liveness has to be per-session because agent-*/job-* sessions carry a window
+// per command and bin/tmux-run keeps finished ones (remain-on-exit) so their output stays readable — the last
+// command of a turn always leaves a dead window behind, and a session with only dead windows is a session
+// nothing is running in. Unparseable `pane_dead` reads as alive: the flag gates a destructive sweep, so the
+// safe direction is "keep".
+export const paneStates = (stdout: string): Map<string, { command: string; live: boolean }> => {
+    const states = new Map<string, { command: string; live: boolean }>();
+    for (const line of stdout.split("\n")) {
+        const [name, dead, command] = line.split("\t");
+        if (name === undefined || name === "" || command === undefined) {
+            continue;
+        }
+        states.set(name, { command, live: dead !== "1" || states.get(name)?.live === true });
+    }
+    return states;
+};
 
 // Long-lived events stream the browser holds open: heartbeat frames every ~2s (detect the sandbox dying — the
 // tunnel drops the proxied response when the origin goes away — and trip a client watchdog) INTERLEAVED with
@@ -33,8 +52,10 @@ async function* systemEvents(
         return;
     }
     // First frame: the workspace's identity, so the browser can drop its persisted cache for a workspace that
-    // was wiped and recreated under the same sandbox id (see workspace-identity.ts).
-    yield { kind: "hello", workspaceId: await workspaceIdentity(services) };
+    // was wiped and recreated under the same sandbox id (see workspace-identity.ts), plus the route surface
+    // THIS daemon build implements. A browser newer than the daemon reads the difference and explains the gap
+    // instead of 404-ing blind; see the contract's routes.ts.
+    yield { kind: "hello", workspaceId: await workspaceIdentity(services), routes: [...SANDBOX_ROUTE_NAMES] };
     const queue: SystemEvent[] = [];
     // Resolver of the current idle wait, so a change (or an abort) ends it immediately instead of stalling until
     // the next heartbeat tick.
@@ -53,8 +74,8 @@ async function* systemEvents(
     });
     // The fleet roster rides the same stream, same snapshot-not-diff contract: an immediate frame on
     // subscribe paints the fleet, then every registry change (turn lifecycle, usage, land, discard) re-frames.
-    const unsubscribeAgents = services.agents.subscribe((agents) => {
-        queue.push({ kind: "agents", agents });
+    const unsubscribeAgents = services.agents.subscribe((agents, rev) => {
+        queue.push({ kind: "agents", agents, rev });
         onWake();
     });
     const unsubscribe = subscribeWorkspaceChanges((paths) => {
@@ -187,22 +208,27 @@ export const createSystemRoutes = (services: Services) => {
         // — EXCEPT managed background processes (an extension's ext-* keys, dockerd's), which read as kind
         // "process": the panel surfaces those in its processes popover, not as killable tabs, and their
         // `running` is the actual process — pane_current_command back at the shell means it crashed, however
-        // the manager still tracks the session. agent-* sessions are the Claude agent's live Bash terminals
-        // (tmux-run); job-* sessions are the terminal runner's user-triggered flows (capability adds, infra
-        // check — `running` from its in-flight count). Sessions matching no prefix stay hidden. No tmux server
-        // yet makes `list-panes` exit non-zero — that's an empty list, not an error.
+        // the manager still tracks the session. agent-* sessions are the Claude agent's Bash terminals
+        // (tmux-run): they are `running` while their agent has a turn in flight (the fleet registry's
+        // liveSessionIds — an agent between two commands is still working) or any pane in them is alive (see
+        // paneStates — a turn nothing tracks, e.g. the CLI's own, still reads honestly). Once neither holds,
+        // every window is a finished command's dead pane and nothing will ever write to that session again,
+        // which is what lets the panel's "clear finished terminals" sweep take it. job-* sessions are the terminal
+        // runner's user-triggered flows (capability adds, infra check — `running` from its in-flight count).
+        // Sessions matching no prefix stay hidden. No tmux server yet makes `list-panes` exit non-zero —
+        // that's an empty list, not an error.
         terminals: i.terminals.handler(async () => {
             try {
-                const { stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", "#{session_name}\t#{pane_current_command}"]);
-                const commands = new Map<string, string>();
-                for (const line of stdout.split("\n")) {
-                    const [name, command] = line.split("\t");
-                    if (name !== undefined && name !== "" && command !== undefined) {
-                        commands.set(name, command);
-                    }
-                }
+                const { stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", "#{session_name}\t#{pane_dead}\t#{pane_current_command}"]);
+                const states = paneStates(stdout);
                 const extensionProcesses = await extensionProcessIndex(services);
-                const sessions = [...commands].flatMap(([name, command]): TerminalsList["sessions"] => {
+                const liveAgentSessions = new Set(
+                    services.agents.liveSessionIds().flatMap((sessionId) => {
+                        const session = agentSessionName(sessionId);
+                        return session === undefined ? [] : [session];
+                    }),
+                );
+                const sessions = [...states].flatMap(([name, { command, live }]): TerminalsList["sessions"] => {
                     if (name.startsWith(WEB_SESSION_PREFIX)) {
                         return [{ name, kind: "shell" as const, running: true }];
                     }
@@ -225,7 +251,14 @@ export const createSystemRoutes = (services: Services) => {
                         return [{ name, label: key, kind: "panel" as const, running: services.processes.running(key) }];
                     }
                     if (name.startsWith(AGENT_SESSION_PREFIX)) {
-                        return [{ name, label: name.slice(AGENT_SESSION_PREFIX.length), kind: "agent" as const, running: true }];
+                        return [
+                            {
+                                name,
+                                label: name.slice(AGENT_SESSION_PREFIX.length),
+                                kind: "agent" as const,
+                                running: live || liveAgentSessions.has(name),
+                            },
+                        ];
                     }
                     if (name.startsWith(JOB_SESSION_PREFIX)) {
                         return [

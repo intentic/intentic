@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type ChatMessage, Conversation, transcriptOf, turnDefaults } from "./conversation";
+import { Conversation, turnDefaults } from "./conversation";
+import { type ChatMessage, transcriptOf, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
 
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
@@ -214,6 +215,23 @@ describe(`Conversation`, () => {
             { role: `user`, text: `hi` },
             { role: `assistant`, text: `intro\n\n# Plan` },
         ]);
+    });
+
+    it(`turnsOf opens a group at each prompt and keeps pre-prompt frames in one ahead of it`, () => {
+        const messages: ChatMessage[] = [
+            { id: 1, role: `notice`, text: `Resumed.` },
+            { id: 2, role: `assistant`, text: `restored` },
+            { id: 3, role: `user`, text: `hi` },
+            { id: 4, role: `assistant`, text: `hello` },
+            { id: 5, role: `notice`, text: `Stopped.` },
+            { id: 6, role: `user`, text: `again` },
+        ];
+        expect(turnsOf(messages).map((turn) => ({ id: turn.id, ids: turn.messages.map((message) => message.id) }))).toEqual([
+            { id: 1, ids: [1, 2] },
+            { id: 3, ids: [3, 4, 5] },
+            { id: 6, ids: [6] },
+        ]);
+        expect(turnsOf([])).toEqual([]);
     });
 
     it(`selectProvider re-scopes model + effort and prevents a Claude alias reaching Codex`, async () => {

@@ -30,8 +30,12 @@ LABEL org.opencontainers.image.source=https://gitlab.com/radarsu/intentic
 # inject-template.ts, or a dev in /work) compiles native deps from source — node-pty ships no linux
 # prebuild, so it ALWAYS builds here. Uncommon toolchains (cmake, -dev headers) stay an overlay concern.
 # ripgrep backs the iq search CLI's lexical engine (iq-engine shells into `rg --json`).
+# python3-pip + python3-venv: python3 was already here for node-gyp, but with no way to INSTALL anything an
+# agent reaching for ordinary Python tooling (Pillow to inspect a screenshot, a one-off script's dependency)
+# hit `pip: command not found` and improvised. Debian marks the system interpreter externally-managed, so
+# `pip install` outside a venv refuses by design — venv is what makes pip usable rather than merely present.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 make g++ ripgrep \
+    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv make g++ ripgrep \
     && rm -rf /var/lib/apt/lists/*
 # Docker Engine + Compose + buildx are baked into the base sandbox but stay DORMANT: every runner
 # (connect.sh/.ps1, dev-sandbox.sh, rebuild.sh, update.sh, the workspace provider) starts this container
@@ -164,6 +168,13 @@ RUN chmod +x /opt/iq/dist/cli.js \
 COPY --from=trees lsp /opt/lsp
 RUN chmod +x /opt/lsp/dist/cli.js \
     && ln -s /opt/lsp/dist/cli.js /usr/local/bin/lsp
+# `tsx` as a shim over node's own type stripping. Agents reach for tsx to run a one-off .ts script because that
+# is what the ecosystem taught them, and a project that lists it in devDependencies resolves its own — but a
+# scratch script outside any package hit `tsx: not found` and the agent went looking for workarounds. Node 24
+# executes TypeScript directly, so the shim is the whole implementation. NOT tsgo: that is a compiler (a tsc
+# replacement) and cannot run a file. A project-local tsx still wins — node_modules/.bin precedes /usr/local/bin.
+RUN printf '%s\n' '#!/bin/sh' 'exec node "$@"' > /usr/local/bin/tsx \
+    && chmod +x /usr/local/bin/tsx
 # The baked embedding model behind `iq ask` (IQ_MODEL_DIR below); absent → iq degrades to lexical, never fetches.
 COPY --from=trees iq-models /opt/iq-models
 # The iq Claude Code plugin (skill + SessionStart nudge) — the single source that teaches every agent to prefer
@@ -187,6 +198,19 @@ RUN npm install -g node-gyp \
     && cd /opt/sandbox/node_modules/.pnpm/@discordjs+opus@*/node_modules/@discordjs/opus \
     && rm -rf prebuild build-tmp-napi-v3 \
     && npm run install
+# Chromium for the agent's browser tools. Driven by the DAEMON'S OWN playwright — the same module
+# browser-tools.ts calls `chromium.executablePath()` on — so the revision it downloads is by construction the
+# revision the daemon later points @playwright/mcp at with --executable-path. `install-deps` pulls the shared
+# libraries Chromium links against (fonts, nss, libdrm…), which a plain `install chromium` does not.
+#
+# Baked, not left to a rebuild: a browser is ordinary for coding work (open the docs, screenshot the dev server
+# you just changed), and the alternative is what actually happened — an agent asked to look at a URL found no
+# browser, ran `npx playwright install` mid-turn, and burned a quarter of its session pulling 114 MiB into a
+# container layer that a recreate then threw away. ~180 MiB of image is the cheaper side of that trade. The
+# download lands in /root/.cache/ms-playwright, which is exactly where executablePath() looks.
+RUN cd /opt/sandbox \
+    && node node_modules/playwright/cli.js install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
 # Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors is data-only (manifest + connector skills + client image fragments) so it copies straight

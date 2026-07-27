@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The container-root lookup reads the workspace-tree query; `queryData` is that seam.
-let queryData: { root?: string }[] = [];
+let queryData: { root?: string; tree?: unknown[] }[] = [];
 vi.mock("./queryPersistence", () => ({
     queryClient: { getQueriesData: () => queryData.map((data) => [[], data] as const) },
 }));
@@ -29,7 +29,9 @@ const linkTo = (html: string, path: string): HTMLAnchorElement | undefined => {
 describe(`file mentions in agent prose`, () => {
     it(`linkifies a bare path, carrying the workspace route and the line`, () => {
         const link = linkTo(renderMarkdown(`Fixed it in src/foo.ts:42 today.`), `src/foo.ts`);
-        expect(link?.textContent).toBe(`src/foo.ts:42`);
+        // Shown by filename — the path is addressing, and it stays in the href and the tooltip.
+        expect(link?.textContent).toBe(`foo.ts:42`);
+        expect(link?.getAttribute(`title`)).toBe(`src/foo.ts:42`);
         expect(link?.getAttribute(`href`)).toBe(`/workspace/src/foo.ts`);
         expect(link?.dataset[`line`]).toBe(`42`);
         expect(link?.classList.contains(`md-file-link`)).toBe(true);
@@ -41,6 +43,23 @@ describe(`file mentions in agent prose`, () => {
         expect(link).toBeDefined();
         // The inline-code styling survives: the anchor goes INSIDE the <code>, not around it.
         expect(link?.closest(`code`)).not.toBeNull();
+    });
+
+    // Nothing asks the model for a notation, so every one it might reach for has to land on the same link.
+    it(`reads the line off whichever notation the reference arrived in`, () => {
+        const forms = [`src/foo.ts:42`, `src/foo.ts(42,7)`, `[the config](src/foo.ts#L42)`, `[the config](src/foo.ts#L42-L58)`];
+        for (const form of forms) {
+            expect(linkTo(renderMarkdown(form), `src/foo.ts`)?.dataset[`line`]).toBe(`42`);
+        }
+    });
+
+    it(`shows a deep path by its filename — the sentence stays readable, the link still lands`, () => {
+        const link = linkTo(
+            renderMarkdown(`gone from _apps/web/src/pages/workspace/WorkspaceDesktop.vue:640`),
+            `_apps/web/src/pages/workspace/WorkspaceDesktop.vue`,
+        );
+        expect(link?.textContent).toBe(`WorkspaceDesktop.vue:640`);
+        expect(link?.getAttribute(`title`)).toBe(`_apps/web/src/pages/workspace/WorkspaceDesktop.vue:640`);
     });
 
     it(`retargets a relative markdown link at the workspace route, line tail and all`, () => {
@@ -58,15 +77,45 @@ describe(`file mentions in agent prose`, () => {
     });
 
     it(`maps an absolute container path back to the workspace-relative one`, () => {
-        queryData = [{ root: `/work` }];
+        queryData = [{ root: `/work`, tree: [] }];
         expect(linkTo(renderMarkdown(`crashed at /work/src/foo.ts:7`), `src/foo.ts`)?.dataset[`line`]).toBe(`7`);
     });
 
     it(`leaves a path outside the workspace as plain text`, () => {
-        queryData = [{ root: `/work` }];
+        queryData = [{ root: `/work`, tree: [] }];
         const html = renderMarkdown(`thrown from /usr/lib/node.js:120`);
         expect(html).toContain(`/usr/lib/node.js:120`);
         expect(html).not.toContain(`md-file-link`);
+    });
+
+    // Resolved at RENDER time so the href is the real file too: ⌘-click and "copy link address" have to land
+    // where a plain click does. A reference the cached tree can't place keeps its literal href and is resolved
+    // daemon-side on click instead (see openFileRef.test.ts).
+    it(`points an abbreviated mention at the file it names`, () => {
+        queryData = [
+            {
+                root: `/work`,
+                tree: [
+                    {
+                        name: `_apps`,
+                        path: `_apps`,
+                        type: `dir`,
+                        children: [
+                            {
+                                name: `pages`,
+                                path: `_apps/pages`,
+                                type: `dir`,
+                                children: [{ name: `Foo.vue`, path: `_apps/pages/Foo.vue`, type: `file` }],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ];
+        const link = linkTo(renderMarkdown(`gone from pages/Foo.vue:3`), `_apps/pages/Foo.vue`);
+        expect(link?.getAttribute(`href`)).toBe(`/workspace/_apps/pages/Foo.vue`);
+        expect(link?.dataset[`line`]).toBe(`3`);
+        expect(link?.textContent).toBe(`Foo.vue:3`);
     });
 
     it(`never linkifies inside a fenced code block`, () => {
@@ -109,7 +158,7 @@ describe(`references inside a previewed document`, () => {
     });
 
     it(`does not re-root an absolute container path against the document`, () => {
-        queryData = [{ root: `/work` }];
+        queryData = [{ root: `/work`, tree: [] }];
         expect(linkTo(renderMarkdown(`/work/src/foo.ts`, `docs/`), `src/foo.ts`)).toBeDefined();
     });
 });

@@ -88,7 +88,7 @@ const status = computed(() => (fleetAgent.value === undefined ? undefined : agen
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5">
+        <div class="view-header flex items-center gap-2 border-b border-line px-3">
             <button
                 type="button"
                 class="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"

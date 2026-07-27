@@ -12,14 +12,81 @@ import { errorMessage } from "../useAsyncAction";
 
 const registry = ref<AgentSummary[]>([]);
 
-// Roster snapshot from the events stream (or refresh) — full-replace, last frame wins.
-export const setAgents = (agents: AgentSummary[]): void => {
-    registry.value = agents;
+/* --- Roster ordering ----------------------------------------------------------------------------------------
+ * The fleet is published as full snapshots, and THREE sources produce them: the /events stream, an explicit
+ * refresh() (GET /agents), and this browser's own optimistic archive/restore. A plain full-replace lets whichever
+ * lands last win regardless of when it was TRUE, which is what put an archived card back on the board and
+ * bounced the user off its detail page.
+ *
+ * So every snapshot carries the registry revision it was read at (see AgentsListSchema), and:
+ *   - a snapshot older than the one already applied is dropped outright; and
+ *   - a local add/remove is held as a pending intent until a snapshot at or past the revision that APPLIED it
+ *     arrives — at which point the server's own account is authoritative and the intent retires itself.
+ *
+ * The second rule is what a revision alone can't do: between sending an archive and the daemon applying it, an
+ * unrelated change (a running turn ticks updatedAt about once a second) legitimately produces a NEWER snapshot
+ * that still contains the agent. Dropping by revision would accept it; the pending intent is what keeps the card
+ * off the board across that window. */
+
+// The highest revision applied so far. -1 until the first snapshot: a fresh connection adopts whatever it is
+// handed, including revision 0 from a daemon that just restarted.
+let appliedRev = -1;
+
+// Ids this browser has locally added to or removed from the board, each held until `untilRev` is applied.
+// `present` is the summary to show for a restore; a removal carries none.
+interface PendingMove {
+    readonly untilRev: number;
+    readonly present?: AgentSummary;
+}
+const pending = new Map<string, PendingMove>();
+
+// Project a server snapshot through the still-unconfirmed local moves.
+const withPending = (agents: AgentSummary[]): AgentSummary[] => {
+    if (pending.size === 0) {
+        return agents;
+    }
+    const kept = agents.filter((agent) => !pending.has(agent.id));
+    const restored = [...pending.values()].flatMap((move) => (move.present === undefined ? [] : [move.present]));
+    return [...kept, ...restored];
 };
 
-// A disconnected roster is meaningless; the reconnect's immediate snapshot repaints it.
+// Retire every intent the server has now demonstrably absorbed, then re-project what remains.
+const applySnapshot = (agents: AgentSummary[], rev: number): void => {
+    for (const [id, move] of pending) {
+        if (rev >= move.untilRev) {
+            pending.delete(id);
+        }
+    }
+    registry.value = withPending(agents);
+};
+
+// Record a local move and paint it immediately. `rev` is the revision the daemon reported for the mutation, so
+// the intent survives exactly until a roster that includes it arrives — no timers, no fixed windows.
+const holdPending = (moves: readonly { id: string; present?: AgentSummary }[], rev: number): void => {
+    for (const move of moves) {
+        pending.set(move.id, move.present === undefined ? { untilRev: rev } : { untilRev: rev, present: move.present });
+    }
+    registry.value = withPending(registry.value.filter((agent) => !pending.has(agent.id)));
+};
+
+// Roster snapshot from the events stream or an explicit read. Dropped when it predates what we already hold —
+// an out-of-order answer is not news, it is a regression.
+export const setAgents = (agents: AgentSummary[], rev: number): void => {
+    if (rev < appliedRev) {
+        return;
+    }
+    appliedRev = rev;
+    applySnapshot(agents, rev);
+};
+
+// A disconnected roster is meaningless; the reconnect's immediate snapshot repaints it. The revision goes with
+// it: the next daemon we speak to may be a restarted one whose counter began again at 0, and holding onto a
+// higher number would make us reject its every frame. Pending moves are dropped for the same reason — they were
+// promises about a revision line that no longer exists.
 export const resetAgents = (): void => {
     registry.value = [];
+    pending.clear();
+    appliedRev = -1;
 };
 
 // Unread tracking: an agent whose updatedAt outruns the last time it was OPENED, while it isn't running, "has
@@ -179,8 +246,10 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
 // Explicit registry pull — the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
 const refresh = async (): Promise<void> => {
     try {
-        const body = await sandboxJson<{ agents: AgentSummary[] }>(`/agents`);
-        registry.value = body.agents;
+        const body = await sandboxJson<{ agents: AgentSummary[]; rev: number }>(`/agents`);
+        // Through setAgents, not a raw assignment: this read races the stream, and a slow one that started
+        // before the newest frame must not be allowed to undo it.
+        setAgents(body.agents, body.rev);
     } catch {
         // Leave the last roster; the events stream repaints on reconnect.
     }
@@ -261,7 +330,7 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
     // through the round-trip while the cards it is about to take carried on looking untouched.
     const release = claimBusy(ids ?? lanes.value.finished.map((agent) => agent.id));
     try {
-        const { moved } = await sandboxJson<{ moved: AgentSummary[] }>(`/agents/archive`, {
+        const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(`/agents/archive`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
             body: JSON.stringify(ids === undefined ? {} : { ids }),
@@ -274,8 +343,15 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
         // and the slower response would put the faster one's cards back on the board. Applying only what moved
         // also means the archive list is correct without a second round-trip to re-read it — which matters most
         // for the agent detail page, whose id lookup spans both halves (agentById).
+        //
+        // Held as a pending move until the daemon publishes a roster at `rev`: the delta alone still lost to any
+        // snapshot already in flight, which is how a just-archived card reappeared for a beat (or for good, if
+        // nothing changed after it).
         const gone = new Set(moved.map((agent) => agent.id));
-        registry.value = registry.value.filter((agent) => !gone.has(agent.id));
+        holdPending(
+            moved.map((agent) => ({ id: agent.id })),
+            rev,
+        );
         archived.value = [
             // Object.assign, not a spread — `moved` is this call's own freshly-parsed JSON.
             ...moved.map((agent) => Object.assign(agent, { open: false, unread: false })),
@@ -304,15 +380,19 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
 const restore = async (ids: readonly string[]): Promise<void> => {
     const release = claimBusy(ids);
     try {
-        const { moved } = await sandboxJson<{ moved: AgentSummary[] }>(`/agents/unarchive`, {
+        const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(`/agents/unarchive`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
             body: JSON.stringify({ ids }),
         });
-        // The same delta, in the other direction.
+        // The same delta, in the other direction — and held the same way, so a snapshot in flight can't take the
+        // restored card straight back off the board.
         const back = new Set(moved.map((agent) => agent.id));
         archived.value = archived.value.filter((agent) => !back.has(agent.id));
-        registry.value = [...registry.value.filter((agent) => !back.has(agent.id)), ...moved];
+        holdPending(
+            moved.map((agent) => ({ id: agent.id, present: agent })),
+            rev,
+        );
         notice.value = undefined;
     } catch (error) {
         notice.value = { message: errorMessage(error, `Couldn't restore that.`), tone: `error` };

@@ -3,25 +3,28 @@ import Button from "primevue/button";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { useGoogleIdentity } from "../composables/useGoogleIdentity";
+import { connectionNotice } from "./connectionNotice";
 
-/* Shown in the workspace outlet whenever the active sandbox's daemon isn't reachable (see SandboxGate). Three
- * shapes, so a first-time connect never wears the language of a failure:
- *   • never connected (no daemonUrl) — created but its daemon never announced; the move is to finish setup.
- *   • connecting (daemonUrl present, no probe failure) — the ordinary wait: the daemon reported in and the
- *     browser is opening its stream. Nothing is wrong, so no "reconnect" and nothing to click — it clears itself.
- *   • unreachable (a probe actually failed → probeError) — we reached for a daemon we expected and it didn't
- *     answer (cleanup.sh, stopped container, dead tunnel). Waiting alone won't fix it, so offer to reconnect.
- * The liveness probe flips `reachable` true the moment the daemon answers, and the real views render. */
+/* Shown in the workspace outlet whenever the active sandbox's daemon isn't reachable (see SandboxGate). What
+ * it says is a pure function of the CLASSIFIED connection failure (connectionNotice) rather than of a boolean
+ * "did a probe fail" — so a sandbox that never announced itself, one that stopped answering mid-session, and
+ * an expired Google session each get their own words and their own offered action instead of sharing one
+ * "unreachable" screen. The connection machine flips to `online` the moment the daemon answers, and the real
+ * views render. */
 
-const { active, daemonUrl, probeError } = useSandbox();
+const { active, daemonUrl, connection } = useSandbox();
+const { clearCredential, getIdToken } = useGoogleIdentity();
 const router = useRouter();
 
-// No bound URL at all ⇒ created but never connected. With a URL but no probe failure we're simply still
-// connecting; a probeError means a reach we expected actually failed (the only state that warrants "reconnect").
-const neverConnected = computed(() => daemonUrl.value === undefined);
-const failed = computed(() => probeError.value !== undefined);
+const notice = computed(() => connectionNotice(connection.value.failure, active.value?.name));
+
 // Carry the sandbox id so /setup resumes THIS sandbox instead of offering a blank create form.
 const openSetup = (): void => void router.push({ path: `/setup`, query: { sandbox: active.value?.id } });
+const signIn = (): void => {
+    clearCredential();
+    void getIdToken();
+};
 </script>
 
 <template>
@@ -33,22 +36,10 @@ const openSetup = (): void => void router.push({ path: `/setup`, query: { sandbo
             <div class="flex flex-col gap-1.5">
                 <h2 class="flex items-center justify-center gap-2 text-lg font-semibold text-content">
                     <Icon name="spinner" class="text-info" spin />
-                    <template v-if="neverConnected">Connect "{{ active?.name }}"</template>
-                    <template v-else>Connecting to "{{ active?.name }}"…</template>
+                    {{ notice.title }}
                 </h2>
-                <p class="text-sm text-muted">
-                    <template v-if="neverConnected">
-                        This sandbox isn't connected yet — finish setup to start its daemon, and your workspace opens automatically.
-                    </template>
-                    <template v-else-if="failed">
-                        Waiting for your sandbox's daemon to answer — your workspace opens automatically the moment it does. If you ran the CLI
-                        cleanup or stopped the container, reconnect it from setup.
-                    </template>
-                    <template v-else>
-                        Your sandbox reported in — opening a live connection to it. Your workspace appears automatically in a moment.
-                    </template>
-                </p>
-                <template v-if="!neverConnected && failed">
+                <p class="text-sm text-muted">{{ notice.body }}</p>
+                <template v-if="notice.showDetail">
                     <a
                         :href="daemonUrl"
                         target="_blank"
@@ -57,16 +48,22 @@ const openSetup = (): void => void router.push({ path: `/setup`, query: { sandbo
                     >
                         {{ daemonUrl }}
                     </a>
-                    <p class="text-xs text-warning">{{ probeError }}</p>
+                    <p class="text-xs text-warning">{{ connection.failure?.message }}</p>
                 </template>
             </div>
             <Button
-                v-if="neverConnected || failed"
-                :label="neverConnected ? `Finish setup` : `Reconnect`"
+                v-if="notice.action === `setup`"
+                label="Finish setup"
                 icon-pos="right"
                 severity="secondary"
                 @click="openSetup"
             >
+                <template #icon><Icon name="arrow-right" /></template>
+            </Button>
+            <Button v-else-if="notice.action === `reconnect`" label="Reconnect" icon-pos="right" severity="secondary" @click="openSetup">
+                <template #icon><Icon name="arrow-right" /></template>
+            </Button>
+            <Button v-else-if="notice.action === `signin`" label="Sign in again" icon-pos="right" severity="secondary" @click="signIn">
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
         </div>

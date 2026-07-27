@@ -40,9 +40,10 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings): Promise<E
     try {
         // Settings load BEFORE activation so api.settings.get is synchronous from the first activate() line.
         await extensionSettingsStore(summary.id).load();
-        const response = await sandboxRequest(`/extensions/${encodeURIComponent(summary.id)}/bundle`);
+        const path = `/extensions/${encodeURIComponent(summary.id)}/bundle`;
+        const response = await sandboxRequest(path);
         if (!response.ok) {
-            throw await sandboxError(response);
+            throw await sandboxError(response, { method: `GET`, path });
         }
         const url = URL.createObjectURL(new Blob([await response.text()], { type: `text/javascript` }));
         try {

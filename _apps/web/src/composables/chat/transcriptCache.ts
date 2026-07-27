@@ -1,4 +1,4 @@
-import type { ChatMessage } from "./conversation";
+import type { ChatMessage } from "./transcript";
 
 /* A local mirror of each conversation's transcript, so reopening a chat paints from disk instead of waiting on
  * a round-trip to the sandbox — which is a Cloudflare tunnel to a machine that may be asleep, on the far side

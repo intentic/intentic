@@ -2,6 +2,8 @@ import {
     type CanUseTool,
     createSdkMcpServer,
     type EffortLevel,
+    type HookCallbackMatcher,
+    type HookEvent,
     type McpSdkServerConfigWithInstance,
     type McpServerConfig,
     type Options,
@@ -18,6 +20,7 @@ import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, UsageWindow }
 import { relative, sep } from "node:path";
 import { z } from "zod";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
+import { installSteeringHooks } from "./agent-installs.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
 import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
@@ -637,11 +640,33 @@ const INTERACTIVE_GUIDANCE = [
 // TaskCreate was called zero times while the harness fired its "task list is empty" reminder on a loop. That
 // silence costs the most exactly where it is worst — an unattended turn runs ~150 steps with no plan the
 // operator can watch and nothing holding the agent to it — so this is told on EVERY turn, attended or not.
+// The browser tools are deferred (see isolatedBrowserSpec — ~20 tools is too much to pin into every prompt),
+// and a model that does not know a browser exists never ToolSearches for one: it reaches for curl, gives up on
+// anything client-rendered, or installs its own. Naming the server is what makes the capability discoverable.
+const BROWSER_GUIDANCE =
+    "You have a real browser. Load it with ToolSearch (`+browser`) to get `mcp__web__browser_navigate`, " +
+    "`mcp__web__browser_take_screenshot` and the rest — use it to read pages that need JavaScript, to check a " +
+    "docs site, and to LOOK at web UI you have changed rather than reasoning about it from the source alone. " +
+    "Screenshots land in .intentic/browser/output; read them back with the Read tool.";
+
 const CHECKLIST_GUIDANCE =
     "For any task worth more than a few steps, keep a checklist with the Task tools (load them with ToolSearch first: " +
     "`select:TaskCreate,TaskUpdate,TaskList`). Call TaskCreate once per step up front, TaskUpdate to move exactly one " +
     "task to in_progress before you start it and to completed the moment it is done. The user watches this list to see " +
     "where you are, so keep it current as you go rather than updating it in a batch at the end.";
+
+// Combine hook sets, CONCATENATING the matchers registered for the same event. A plain object spread would
+// have the last contributor silently win the key — two producers of PreToolUse:Bash (the tmux wrapper and the
+// install steer) and only one of them would ever fire.
+export const mergeHooks = (...sets: Partial<Record<HookEvent, HookCallbackMatcher[]>>[]): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
+    const merged: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
+    for (const set of sets) {
+        for (const [event, matchers] of Object.entries(set) as [HookEvent, HookCallbackMatcher[]][]) {
+            merged[event] = [...(merged[event] ?? []), ...matchers];
+        }
+    }
+    return merged;
+};
 
 // The two built-ins that are a conversation with the USER rather than an action on the workspace — which is
 // why an unattended turn cannot have them.
@@ -670,6 +695,7 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
         append: [
             ...(request.unattended === true ? [] : [INTERACTIVE_GUIDANCE]),
             CHECKLIST_GUIDANCE,
+            BROWSER_GUIDANCE,
             ...(request.systemAppend !== undefined ? [request.systemAppend] : []),
         ].join("\n\n"),
     },
@@ -702,12 +728,14 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
     },
     // Hooks fire even under bypassPermissions, and for subagents too. tmux: every Bash command runs inside an
     // `agent-*` tmux session (bin/tmux-run) so the terminal panel can watch the agent work live (the rtk
-    // backend rewrites the command to `rtk <cmd>` inside the same wrapper). Diagnostics: every native
-    // Edit/Write is type-checked via the baked lsp CLI and compile errors ride back as additionalContext.
-    hooks: {
-        ...(tmuxEnabled ? bashTmuxHooks(request.filterBackend, Object.keys(request.cliEnv ?? {})) : {}),
-        ...editDiagnosticsHooks(request.cwd),
-    },
+    // backend rewrites the command to `rtk <cmd>` inside the same wrapper). Installs: an image-scoped install
+    // is pointed at the owner-approved overlay. Diagnostics: every native Edit/Write is type-checked by the
+    // resident lsp service and compile errors ride back as additionalContext.
+    hooks: mergeHooks(
+        tmuxEnabled ? bashTmuxHooks(request.filterBackend, Object.keys(request.cliEnv ?? {})) : {},
+        installSteeringHooks(),
+        editDiagnosticsHooks(request.cwd),
+    ),
     ...(request.model !== undefined ? { model: request.model } : {}),
     ...(request.sessionId !== undefined ? { resume: request.sessionId } : {}),
     ...(request.plugins !== undefined ? { plugins: request.plugins.map((path) => ({ type: "local" as const, path })) } : {}),

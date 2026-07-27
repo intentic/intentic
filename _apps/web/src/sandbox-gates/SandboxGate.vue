@@ -18,7 +18,14 @@ import SandboxUnauthorized from "./SandboxUnauthorized.vue";
 
 const { user } = useAuth();
 const { signedInEmail, clearCredential, getIdToken } = useGoogleIdentity();
-const { reachable, denied, probeError } = useSandbox();
+const { reachable, connection } = useSandbox();
+// The daemon answered and refused this Google account (403) — its own screen, distinct from every reason the
+// daemon simply didn't answer. Read off the failure's tag rather than a separate sticky boolean.
+const denied = computed(() => connection.value.failure?.kind === `forbidden`);
+// An attempt actually resolved and failed, as opposed to one still in flight. This is what decides whether a
+// hydrated cache may keep painting: a sandbox that is merely slow deserves the stale view, one that is
+// positively down must not look operable.
+const attemptFailed = computed(() => connection.value.failure !== undefined);
 // A hydrated (IndexedDB-restored) tree marks the sandbox as previously visited: paint it stale-while-
 // revalidate instead of the connecting gate; the SSE connect refetches everything the moment it lands.
 const { tree } = useWorkspaceTree();
@@ -59,10 +66,9 @@ const switchAccount = (): void => {
         </button>
     </div>
     <SandboxUnauthorized v-if="denied" />
-    <!-- Cached paint only while connecting is unresolved: the moment an attempt fails (probeError), fall back
-         to the full gate so a dead sandbox (cleanup.sh, stopped container) never renders an operable-looking
-         workspace. -->
-    <SandboxConnecting v-else-if="!reachable && (tree.length === 0 || probeError !== undefined)" />
+    <!-- Cached paint only while connecting is unresolved: the moment an attempt fails, fall back to the full
+         gate so a dead sandbox (cleanup.sh, stopped container) never renders an operable-looking workspace. -->
+    <SandboxConnecting v-else-if="!reachable && (tree.length === 0 || attemptFailed)" />
     <template v-else>
         <!-- The sandbox environment needs owner action that lives on the Sandbox ▸ Environment tab — surface it
              everywhere, since that hub has no rail tile. Rebuild takes priority over an unreviewed proposal. -->

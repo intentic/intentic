@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
@@ -6,10 +7,21 @@ import { ensureXvfb } from "./display.js";
 import { hasSession, isLoginActive, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
 
-// The agent's browser tools come from Microsoft's official @playwright/mcp, spawned per turn as a stdio MCP
-// server bound to the platform's persisted (logged-in) Chromium profile — the parallel to mcpToolsOf for the
-// browser path. One server per active, logged-in browser capability; the server name is the capability id, so
-// its tools surface as `mcp__<id>__browser_*`. We don't reimplement browser tools — this is pure wiring.
+// The agent's browser tools come from Microsoft's official @playwright/mcp, spawned per turn as stdio MCP
+// servers. We don't reimplement browser tools — this is pure wiring. There are two kinds, and they exist for
+// different reasons:
+//
+//   - `web` — ALWAYS available, credential-free, profile in memory (`--isolated`). Reading a page is an
+//     ordinary part of coding work: check a docs page, screenshot your own dev server, look at the site you
+//     just changed. This used to require a logged-in browser capability, which meant an agent asked to
+//     "look at this URL" had no browser at all — and one duly spent a quarter of its turn downloading
+//     114 MiB of Chromium through `npx playwright install` to rebuild what was already sitting in the image.
+//   - one per logged-in browser CAPABILITY — bound to that platform's PERSISTED profile, headed on Xvfb with
+//     the stealth patch. Everything here (the login, the persistence, the anti-fingerprinting) is in service
+//     of acting as the owner on a site they authenticated to, which is why it stays gated on that login.
+//
+// The server name becomes the tool prefix, so these surface as `mcp__web__browser_*` and
+// `mcp__<capability-id>__browser_*`.
 
 const nodeRequire = createRequire(import.meta.url);
 let mcpCli: string | undefined;
@@ -61,40 +73,88 @@ export const browserServerSpec = (
     alwaysLoad: true,
 });
 
-// A browser capability contributes tools only once it's logged in, and never while a guided login holds the
-// profile (Chromium locks the --user-data-dir). Async because it resolves the installed Chromium's path, ensures
-// the virtual display is up, and writes the stealth script the MCP loads.
-export const browserServersOf = async (capabilities: readonly Capability[], root: string): Promise<Record<string, McpServerConfig>> => {
-    const ready = (capability: Capability): boolean =>
-        capability.kind === "browser" && hasSession(root, capability.config.platform) && !isLoginActive(capability.config.platform);
-    if (!capabilities.some(ready)) {
-        return {};
-    }
-    let cli: string;
-    let executablePath: string;
-    let stealthPath: string;
-    let display: string;
+// The credential-free browser. HEADLESS and `--isolated` (profile in memory): it needs no persisted identity,
+// so it needs neither Xvfb nor a --user-data-dir — which also means two concurrent turns can each have one,
+// where a shared profile directory would deadlock on Chromium's lock. Screenshots and traces land in the
+// workspace under .intentic so the agent can Read them straight back.
+export const isolatedBrowserSpec = (cli: string, executablePath: string, outputDir: string): McpServerConfig => ({
+    type: "stdio",
+    command: process.execPath,
+    args: [
+        cli,
+        "--browser",
+        "chromium",
+        "--executable-path",
+        executablePath,
+        "--no-sandbox",
+        "--isolated",
+        "--headless",
+        "--output-dir",
+        outputDir,
+        "--viewport-size",
+        "1280,800",
+    ],
+    // DISPLAY is stripped, not merely unset: a headless Chromium that inherits one from the daemon's own
+    // environment will try to talk to that X server and fail on a display it was never meant to touch.
+    env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "DISPLAY")) as Record<string, string>,
+    // NOT alwaysLoad: @playwright/mcp carries ~20 tools, and pinning them into every turn's prompt taxes the
+    // turns that never browse. Deferred, they cost nothing until ToolSearch pulls them in — the system append
+    // names the server so the model knows it is there to look for.
+});
+
+// What both server kinds need before either can run.
+interface BrowserRuntime {
+    readonly cli: string;
+    readonly executablePath: string;
+}
+
+const browserRuntime = async (): Promise<BrowserRuntime | undefined> => {
     try {
-        cli = resolveMcpCli();
+        const cli = resolveMcpCli();
         const { chromium } = await import("playwright");
-        executablePath = chromium.executablePath();
-        display = await ensureXvfb();
-        stealthPath = await ensureStealthScript(root);
+        const executablePath = chromium.executablePath();
+        // executablePath() DERIVES a path from the bundled Chromium revision and returns it whether or not the
+        // download ever ran, so it throws for a missing browser exactly never. Its existence is the only honest
+        // probe, and without it the MCP would spawn and fail on the first navigate instead of standing down here.
+        return existsSync(executablePath) ? { cli, executablePath } : undefined;
     } catch {
-        // @playwright/mcp / Chromium / Xvfb not installed yet (the sandbox hasn't been rebuilt for a browser
-        // capability) — contribute no browser tools rather than break the turn; status() tells the owner to rebuild.
+        // @playwright/mcp or playwright absent — contribute no browser tools rather than break the turn.
+        return undefined;
+    }
+};
+
+// Every browser server for this turn. The isolated one is unconditional; a capability's own server is added
+// only once it's logged in, and never while a guided login holds the profile (Chromium locks the
+// --user-data-dir). A capability may take the `web` id, in which case its persisted profile deliberately wins.
+export const browserServersOf = async (capabilities: readonly Capability[], root: string): Promise<Record<string, McpServerConfig>> => {
+    const runtime = await browserRuntime();
+    if (runtime === undefined) {
         return {};
     }
-    return Object.fromEntries(
-        capabilities.flatMap((capability) =>
-            capability.kind === "browser" && hasSession(root, capability.config.platform) && !isLoginActive(capability.config.platform)
-                ? [
-                      [
-                          capability.id,
-                          browserServerSpec(cli, executablePath, sessionDir(root, capability.config.platform), stealthPath, display),
-                      ] as const,
-                  ]
-                : [],
-        ),
+    const servers: Record<string, McpServerConfig> = {
+        web: isolatedBrowserSpec(runtime.cli, runtime.executablePath, join(root, ".intentic", "browser", "output")),
+    };
+    const loggedIn = capabilities.filter(
+        (capability) => capability.kind === "browser" && hasSession(root, capability.config.platform) && !isLoginActive(capability.config.platform),
     );
+    if (loggedIn.length === 0) {
+        return servers;
+    }
+    // Only the persisted-profile path pays for Xvfb and the stealth script — a turn that never logs in anywhere
+    // must not start a virtual display just to have a browser available.
+    const display = await ensureXvfb();
+    const stealthPath = await ensureStealthScript(root);
+    for (const capability of loggedIn) {
+        if (capability.kind !== "browser") {
+            continue;
+        }
+        servers[capability.id] = browserServerSpec(
+            runtime.cli,
+            runtime.executablePath,
+            sessionDir(root, capability.config.platform),
+            stealthPath,
+            display,
+        );
+    }
+    return servers;
 };

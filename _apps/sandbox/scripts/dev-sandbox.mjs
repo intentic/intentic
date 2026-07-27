@@ -45,35 +45,73 @@ const run = (command, args) =>
         child.on("exit", (code) => resolvePromise(code ?? 1));
     });
 
+// Which path a change needs. The container bind-mounts every compiled tree from the working tree
+// (dev-mounts.mjs), so anything that ends up as JavaScript in one of those dists reloads with a build + restart;
+// everything else is baked into an image layer and needs the full rebuild.
+//
+// The list is deliberately a denylist of what the mounts CANNOT carry, not an allowlist of TypeScript: a new
+// kind of source file should reload fast by default, whereas forgetting to list a new baked artifact here would
+// leave the container running stale code — the failure this whole loop exists to prevent.
+const IMAGE_ONLY_PATHS = [
+    join(REPO_ROOT, "_apps/sandbox/Dockerfile"),
+    join(REPO_ROOT, "_apps/sandbox/docker-entrypoint.sh"),
+    // Copied to /usr/local/bin and /root/.claude/skills, outside any mounted dist.
+    join(REPO_ROOT, "_apps/sandbox/bin"),
+    join(REPO_ROOT, "_apps/sandbox/skills"),
+];
+
+// A dependency change alters node_modules, which is never mounted (the image keeps its own installed tree,
+// including native builds); only a real image rebuild can install it.
+const isManifest = (path) => path.endsWith("package.json") || path.endsWith("pnpm-lock.yaml");
+
+const needsImageRebuild = (path) => isManifest(path) || IMAGE_ONLY_PATHS.some((prefix) => path === prefix || path.startsWith(prefix + sep));
+
 let building = false;
-let pending = false;
+// The pending run's kind: `undefined` when nothing is queued, otherwise whether a full rebuild is required.
+// Changes coalesce upward — if anything in the batch needs an image rebuild, the whole batch gets one.
+let pending;
+let queued;
 let timer;
 
-const cycle = async () => {
+const cycle = async (fullRebuild) => {
     building = true;
-    console.log("\nintentic: change detected — pnpm build:sandbox…");
-    const buildCode = await run("pnpm", ["build:sandbox"]);
-    if (buildCode === 0) {
-        await run("bash", [join(SCRIPT_DIR, "dev-sandbox.sh")]);
+    if (fullRebuild) {
+        console.log("\nintentic: change detected — pnpm build:sandbox…");
+        const buildCode = await run("pnpm", ["build:sandbox"]);
+        if (buildCode === 0) {
+            await run("bash", [join(SCRIPT_DIR, "dev-sandbox.sh")]);
+        } else {
+            console.error("intentic: build failed — the running sandbox is untouched. Fix the error and save again.");
+        }
     } else {
-        console.error("intentic: build failed — the running sandbox is untouched. Fix the error and save again.");
+        // The fast path: compile into the mounted dists and restart the daemon in place. It refuses (with an
+        // explanation) if this container predates the mounts, so a stale run can't masquerade as a reload.
+        console.log("\nintentic: change detected — reloading the daemon…");
+        await run("sh", [join(SCRIPT_DIR, "dev-reload.sh")]);
     }
     building = false;
-    if (pending) {
-        pending = false;
-        void cycle();
+    if (pending !== undefined) {
+        const next = pending;
+        pending = undefined;
+        void cycle(next);
     }
 };
 
-const schedule = () => {
+const schedule = (path) => {
+    const full = needsImageRebuild(path);
     if (building) {
-        pending = true;
+        pending = (pending ?? false) || full;
         return;
     }
+    queued = (queued ?? false) || full;
     clearTimeout(timer);
-    timer = setTimeout(() => void cycle(), DEBOUNCE_MS);
+    timer = setTimeout(() => {
+        const full = queued ?? false;
+        queued = undefined;
+        void cycle(full);
+    }, DEBOUNCE_MS);
 };
 
-watch(WATCH_PATHS, { ignored, ignoreInitial: true }).on("all", schedule);
+watch(WATCH_PATHS, { ignored, ignoreInitial: true }).on("all", (_event, path) => schedule(path));
 
-console.log("intentic: watching sandbox sources — edit and save to rebuild. Ctrl-C to stop.");
+console.log("intentic: watching sandbox sources — source edits reload in seconds; Dockerfile/bin/skills/deps rebuild the image. Ctrl-C to stop.");

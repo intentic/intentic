@@ -1,4 +1,5 @@
 import { useGoogleIdentity } from "../useGoogleIdentity";
+import { staleDaemonReason } from "./useDaemonRoutes";
 import { useSandbox } from "./useSandbox";
 import { CHUNK_BYTES } from "../workspace/uploadChunking";
 
@@ -44,7 +45,19 @@ export class SandboxHttpError extends Error {
 
 // The daemon's user-facing failure, from a non-2xx response body: oRPC handlers put the text on `message`, the
 // hand-written daemon routes on `error`; fall back to the status when the body carries neither (or isn't JSON).
-export async function sandboxError(response: Response): Promise<SandboxHttpError> {
+//
+// A 404 gets one extra check first. The browser is often newer than the daemon (see useDaemonRoutes), so a
+// route this app knows and the daemon never advertised answers 404 — identical on the wire to "that file isn't
+// there", and the single most expensive ambiguity in the product: it reads as a broken feature, and the only
+// way to tell used to be rebuilding the image to see if it changed. When the daemon has positively told us it
+// lacks the route, say so instead of passing the daemon's generic text through.
+export async function sandboxError(response: Response, request?: { method: string; path: string }): Promise<SandboxHttpError> {
+    if (response.status === 404 && request !== undefined) {
+        const reason = staleDaemonReason(request.method, request.path);
+        if (reason !== undefined) {
+            return new SandboxHttpError(404, reason);
+        }
+    }
     const detail = (await response.json().catch(() => null)) as { message?: string; error?: string } | null;
     return new SandboxHttpError(response.status, detail?.message ?? detail?.error ?? `Request failed (${response.status}).`);
 }
@@ -54,7 +67,7 @@ export async function sandboxError(response: Response): Promise<SandboxHttpError
 export async function sandboxJson<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await sandboxRequest(path, init);
     if (!response.ok) {
-        throw await sandboxError(response);
+        throw await sandboxError(response, { method: init?.method ?? `GET`, path });
     }
     return (await response.json()) as T;
 }
@@ -63,7 +76,7 @@ export async function sandboxJson<T>(path: string, init?: RequestInit): Promise<
 export async function sandboxBlob(path: string, init?: RequestInit): Promise<Blob> {
     const response = await sandboxRequest(path, init);
     if (!response.ok) {
-        throw await sandboxError(response);
+        throw await sandboxError(response, { method: init?.method ?? `GET`, path });
     }
     return response.blob();
 }

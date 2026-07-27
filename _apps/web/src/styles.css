@@ -17,6 +17,13 @@
  * so Tailwind won't auto-detect it). The app's own files are auto-detected. */
 @source "../../../_libs/ui/src/**/*.{ts,html,vue}";
 
+/* Same reason for the compiled-in builtin extensions (extension-host/builtins.ts statically imports them, so
+ * their views ARE this bundle's views) — without this, every class a builtin authors that no app file happens
+ * to use is silently dropped, and the view renders as a near-miss of what its author wrote. A git-installed
+ * extension is genuinely different: nothing scans a bundle we don't build, which is why the kit's primitives
+ * carry their own styling (see Page.vue's width tiers). */
+@source "../../../_extensions/*/src/**/*.{ts,vue}";
+
 /* Mobile base: kill the gray tap flash (active: classes provide press feedback instead) and the
  * browser's own pull-to-refresh / scroll chaining on the app shell — inner scrollers opt back in
  * with their own overscroll-behavior. */
@@ -50,6 +57,21 @@
     }
     .p-dialog-content {
         overflow-y: auto;
+    }
+}
+
+/* The bar at the top of a shell column: the workspace's explorer switch and its file-tab row, the fleet board's
+ * title row, an agent's detail row, the chat's tab strip. The desktop shell stands those columns side by side,
+ * so their bottom borders read as ONE line across the window — which only holds while every bar is exactly as
+ * tall as its neighbours, border included. That invariant lived nowhere before (each view picked its own h-8 /
+ * h-9 / py-1.5 and they drifted a few pixels apart), so it lives here now: one height, one class, every bar.
+ * The class owns nothing else — padding, background and the border itself stay with each view. */
+@layer components {
+    .view-header {
+        /* Room for an h-7 (1.75rem) icon button with air above and below, once the 1px border is taken out. */
+        height: 2.25rem;
+        /* Never stretched or squeezed by the column it sits in — a shrunk bar is a broken line. */
+        flex: none;
     }
 }
 

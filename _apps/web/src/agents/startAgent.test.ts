@@ -10,8 +10,15 @@ import { createApp, h, nextTick } from "vue";
 
 // Same import-time globals the other mounted-component tests stand up (see ChatToolCard.test.ts): ui's
 // useDevice reads window.matchMedia at module scope, environment.ts reads window.env. matches:false keeps the
-// device DESKTOP — the form factor where the docked chat is the whole point of the action.
+// device DESKTOP — the form factor where the docked chat is the whole point of the action. jsdom ships no
+// ResizeObserver at all, and the board measures itself with one to choose its layout — a stub that never
+// reports leaves it on its unmeasured default (three columns), which is the desktop case anyway.
 vi.hoisted(() => {
+    globalThis.ResizeObserver ??= class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+    };
     globalThis.matchMedia ??= ((query: string) => ({
         matches: false,
         media: query,

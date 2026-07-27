@@ -15,7 +15,7 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 const fetchEntries = async (path: string, init?: RequestInit): Promise<InventoryEntry[]> => {
     const response = await sandboxRequest(path, init);
     if (!response.ok) {
-        throw await sandboxError(response);
+        throw await sandboxError(response, { method: init?.method ?? `GET`, path });
     }
     const body = (await response.json()) as { entries?: unknown };
     return InventoryEntrySchema.array().parse(body.entries ?? []);

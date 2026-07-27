@@ -1,6 +1,6 @@
 import type { IconName } from "@intentic-app/ui";
 import type { ToolCallContent } from "@intentic/sandbox-contract";
-import type { ChatTool } from "../composables/chat/conversation";
+import type { ChatTool } from "../composables/chat/transcript";
 import { codeLangForPath } from "../pages/workspace/fileType";
 import { diffStat } from "./chatToolDiff";
 

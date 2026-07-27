@@ -3,6 +3,8 @@ import { hashKey } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { queryClient } from "../queryPersistence";
 import { apiClient } from "../useApi";
+import { withConcurrency } from "../concurrency";
+import { applyConnectionSignal, type ConnectionSignal, type ConnectionState, initialConnection } from "./connection";
 
 /* The browser's view of the user's sandboxes, as a module-level singleton. A user can own several sandboxes and
  * be a member of others; the platform is the registry — each daemon announces its own URL + lastSeenAt, and the
@@ -51,17 +53,24 @@ queryClient.getQueryCache().subscribe((event) => {
 });
 // Which sandbox the workspace is pointed at right now.
 const activeSandboxId = ref<string | undefined>(localStorage.getItem(ACTIVE_KEY) ?? undefined);
-// Whether the active daemon is reachable — set by the shell's live SSE probe loop, never by the platform.
-// Starts pessimistic: the shell shows the "connecting" gate until the ACTIVE daemon actually answers, so a
-// not-yet-ready sandbox never renders a dead UI, and a switch never shows the old sandbox as online.
-const reachable = ref(false);
-// True when the daemon answered the liveness probe with 403: the signed-in Google account is neither the
-// owner nor a member. Sticky across network errors (a denied sandbox going offline stays "denied", which
-// self-corrects on the next resolved probe). Owned by useSandboxLiveness, like `reachable`.
-const denied = ref(false);
-// Why the last liveness attempt failed (undefined while healthy) — the connecting gate shows it so a stuck
-// connection names its cause (401, network, …) instead of spinning silently. Owned by useSandboxLiveness.
-const probeError = ref<string | undefined>();
+
+// The ACTIVE daemon's connection, as one state machine value (see connection.ts) rather than a set of
+// booleans. Browser-owned: the platform's registry knows a sandbox exists and when it last announced itself,
+// but only this browser can answer "can *I* reach it right now", and only the stream can say why not.
+// Starts idle: the shell shows the connecting gate until the daemon actually answers, so a not-yet-ready
+// sandbox never renders a dead UI and a switch never shows the old sandbox as online.
+const connection = ref<ConnectionState>(initialConnection);
+
+// The single writer. Every transition goes through the pure reducer, so the sequencing rules (a heartbeat is
+// idempotent, a switch clears the outgoing cause, backoff resets on a healthy stream) live in one tested place
+// instead of being re-implemented at each assignment site.
+export const signalConnection = (signal: ConnectionSignal): void => {
+    connection.value = applyConnectionSignal(connection.value, signal);
+};
+
+// Can this browser talk to the active daemon right now — the gate on every daemon-backed query and on the
+// rail's inert-while-offline affordances. The one projection of the machine that most callers want.
+const reachable = computed(() => connection.value.phase === `online`);
 
 const active = computed(() => sandboxes.value.find((sandbox) => sandbox.id === activeSandboxId.value));
 // The active sandbox's public URL — what the sandbox client + liveness talk to. Undefined until one is bound.
@@ -96,8 +105,13 @@ const list = async (): Promise<SandboxSummary[]> => reconcileActive(await queryC
 
 // Force a fresh list regardless of staleTime — for callers that must observe just-changed server state:
 // onboarding polling (Setup), a just-accepted invite (AcceptInvite), and liveness recovery picking up a
-// restarted daemon's new daemonUrl.
-const refresh = async (): Promise<SandboxSummary[]> => reconcileActive(await queryClient.fetchQuery({ ...sandboxListQuery, staleTime: 0 }));
+// restarted daemon's new daemonUrl. Single-flighted because those callers overlap by design (a reconnect
+// storm during onboarding is three of them at once) and `staleTime: 0` is precisely the instruction NOT to
+// let the cache dedupe them — so without a policy each one is its own platform round-trip.
+const refresh = withConcurrency<void, SandboxSummary[]>(
+    async (): Promise<SandboxSummary[]> => reconcileActive(await queryClient.fetchQuery({ ...sandboxListQuery, staleTime: 0 })),
+    { mode: `singleFlight`, key: () => `sandbox.list` },
+);
 
 // Point the workspace at a different sandbox (persisted). Liveness re-probes the new daemon on the next tick.
 const select = (id: string): void => {
@@ -165,5 +179,5 @@ const remove = async (id: string): Promise<void> => {
 };
 
 export function useSandbox() {
-    return { sandboxes, activeSandboxId, active, daemonUrl, reachable, denied, probeError, list, refresh, select, create, update, attach, remove };
+    return { sandboxes, activeSandboxId, active, daemonUrl, connection, reachable, list, refresh, select, create, update, attach, remove };
 }

@@ -10,19 +10,29 @@ runtime outside `/work` is lost when the container is recreated. To extend the e
 propose custom Dockerfile steps — the owner reviews and approves them, then a rebuild recreates the sandbox
 (`/work` persists).
 
+## Check what's already here first
+
+The image is not bare, and reaching for an install before looking wastes a lot of a turn. Already baked:
+git, tmux, zsh, ripgrep, jq, curl, rsync, openssh, make/g++, docker (dormant until the capability is granted),
+python3 with **pip and venv**, node 24 (which runs `.ts` files directly — `tsx` is a shim over it), pnpm/npm,
+the `intentic`, `iq` and `lsp` CLIs, and **Chromium with browser tools** (`mcp__web__browser_navigate`,
+`mcp__web__browser_take_screenshot`, … — load them with ToolSearch; never install a browser). Check with
+`command -v <tool>` before assuming something is missing.
+
 The final overlay (`.intentic/environment.approved.Dockerfile`) is COMPOSED BY THE DAEMON from three parts:
 the pinned `FROM`, the enabled capabilities' fragments (daemon-owned — never copy or touch these), and the
 owner-approved custom section. You propose ONLY custom-section content.
 
 ## How to propose
 
-1. If `.intentic/environment.custom.Dockerfile` exists, start from its content — your proposal REPLACES the
-   custom section (and only it), so carry the already-approved custom steps forward and add yours. An empty
-   proposal clears the custom section.
-2. Write your steps to `.intentic/environment.Dockerfile` (workspace-root-relative). `RUN` and `ENV` lines
-   only — NO `FROM` (the daemon owns the base image; a proposal containing one is rejected), no
-   `# intentic:runtime` lines (reserved for capability fragments), and no `USER`, `ENTRYPOINT`, `CMD`,
-   `EXPOSE`, `WORKDIR`, or `COPY` (there is no build context). Never put secrets in it.
+1. Write your steps to `.intentic/environment.d/<tool>.Dockerfile` — one file per thing you need, named after
+   it (`ffmpeg.Dockerfile`, `rust.Dockerfile`). Do NOT write `.intentic/environment.Dockerfile`: the daemon
+   composes that from your drafts plus the already-approved custom section, and writing it directly would
+   clobber a parallel agent's request and drop steps the owner already approved. Naming the file after the
+   tool also means another agent needing the same one converges on your entry instead of duplicating it.
+2. `RUN` and `ENV` lines only — NO `FROM` (the daemon owns the base image; a proposal containing one is
+   rejected), no `# intentic:runtime` lines (reserved for capability fragments), and no `USER`, `ENTRYPOINT`,
+   `CMD`, `EXPOSE`, `WORKDIR`, or `COPY` (there is no build context). Never put secrets in it.
 3. Install into system paths, not `/work` — the workspace volume mounts over `/work` and hides anything
    the image put there.
 4. Steps must be self-contained: install (and clean up) your own build deps — capability fragments purge
@@ -38,6 +48,9 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ```
 
 ## After writing the file
+
+Keep going with the task — drafting is not a blocking handover. Use a workaround if one exists, and say
+plainly which parts stay unavailable until the rebuild rather than pretending they work.
 
 Tell the owner to review and approve the change on the platform's **Sandbox page → Environment card**.
 You cannot approve or apply it yourself; the rebuild runs outside this container (the owner pastes a

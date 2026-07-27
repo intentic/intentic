@@ -1,66 +1,49 @@
-import { AgentsSchema, HelloSchema, PresenceSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
-import { resetAgents, setAgents } from "../agents/useAgents";
-import { useChat } from "../chat/useChat";
-import { readIntenticLines } from "../intenticStream";
+import { resetAgents } from "../agents/useAgents";
 import { queryClient } from "../queryPersistence";
-import { sandboxRequest } from "./sandboxClient";
-import { throttleTrailing } from "../throttleTrailing";
-import { errorMessage } from "../useAsyncAction";
-import { presenceStreamOpened, resetPresence, setPresenceUsers } from "../usePresence";
-import { useSandbox } from "./useSandbox";
+import { presenceStreamOpened, resetPresence } from "../usePresence";
 import { markWorkspaceChanged } from "../workspace/useWorkspaceLive";
+import { classifyFailure, type ConnectionFailure } from "./connection";
+import { daemonErrorMessage, daemonErrorStatus, sandboxRpc, SandboxUnaddressedError } from "./sandboxRpc";
+import { applySystemEvent } from "./systemEvents";
+import { sandboxQueryPredicate } from "./systemEventRouting";
+import { resetDaemonRoutes } from "./useDaemonRoutes";
+import { signalConnection, useSandbox } from "./useSandbox";
 
-// No heartbeat for this long means the connection silently half-opened (origin gone without a TCP FIN) — trip
+/* The DRIVER: hold one long-lived `/events` stream open to the active sandbox daemon, and reconnect when it
+ * breaks. Everything it used to ALSO do now lives next door — the transition rules in connection.ts (pure,
+ * tested), the frame routing in systemEvents.ts (typed, tested) — so what is left here is exactly the part
+ * that genuinely needs the network: opening the stream, watching for silence, and sleeping between attempts.
+ *
+ * The stream is the typed oRPC event iterator, not a hand-parsed SSE body: the daemon has always declared
+ * /events as `eventIterator(SystemEventSchema)`, and sandboxRpc decodes it back into that union. A frame is a
+ * `SystemEvent` on arrival, so there is no framing to reassemble and no safeParse re-deriving types the
+ * contract already had.
+ *
+ * Started by the workspace shell for the lifetime of the post-login session. Module-level singleton. */
+
+// No frame for this long means the connection silently half-opened (origin gone without a TCP FIN) — trip
 // offline. The daemon emits a heartbeat every ~2s, so this tolerates ~2 missed beats before reconnecting.
 const WATCHDOG_MS = 6000;
-// Reconnect backoff while the sandbox is down — fast first retry (a restart should reconnect quickly), capped.
-const BACKOFF_MIN_MS = 1000;
-const BACKOFF_MAX_MS = 5000;
-// One review refetch per second while writes keep landing. Each one is the daemon's most expensive read — a full
-// discoverRepos walk plus a `git status` per repo — and the watcher batches every 250ms, so a drag-dropped repo
-// used to fire ~15 of them in 9 seconds. A second of staleness is imperceptible next to that cost.
-const CHANGES_REFRESH_MS = 1000;
 
-const refreshChanges = throttleTrailing(() => void queryClient.invalidateQueries({ queryKey: [`git`, `changes`] }), CHANGES_REFRESH_MS);
-
-// Which .intentic/ manifest backs which queries. The daemon-internal churn under .intentic/ (its iq index, the
-// agent transcripts) is unwatched at the source now, but this stays a per-file map rather than a prefix test:
-// one stray write under .intentic/ must never cost every one of these queries a refetch — that amplification is
-// what turned an index rebuild into an endless request storm. Prefixes, so environment.{,custom.,approved.}
-// Dockerfile and the one-file-per-approval dir each match with a single entry.
-const MANIFEST_QUERIES: readonly { readonly prefix: string; readonly keys: readonly string[] }[] = [
-    // A capability add/remove recomposes the environment overlay and can add or drop a repo's panel.
-    { prefix: `.intentic/capabilities.json`, keys: [`capabilities`, `environment`, `panels`] },
-    { prefix: `.intentic/environment.`, keys: [`environment`] },
-    { prefix: `.intentic/automations.json`, keys: [`automations`] },
-    { prefix: `.intentic/approvals/`, keys: [`automation-approvals`] },
-    { prefix: `.intentic/settings.json`, keys: [`settings`] },
-];
-
-/* Keeps useSandbox().reachable live by holding a single long-lived SSE stream open to the sandbox daemon
- * (`/events`), instead of polling. A killed sandbox breaks the stream — detected instantly (or within the
- * watchdog window for a silent half-open) — and the reconnect loop recovers once the sandbox is back. Started
- * by the workspace shell for the lifetime of the post-login session. Module-level singleton. */
-
-const { daemonUrl, reachable, denied, probeError, refresh, activeSandboxId } = useSandbox();
+const { daemonUrl, connection, activeSandboxId, refresh } = useSandbox();
 
 let running = false;
 let controller: AbortController | undefined;
 let watchdog: ReturnType<typeof setTimeout> | undefined;
-let backoff = BACKOFF_MIN_MS;
-// Set by the active-sandbox watch so the loop can tell a deliberate switch-abort apart from a stream failure —
-// a switch reconnects immediately instead of paying list() + backoff.
-let switched = false;
-// Resolver of the in-flight wait(), so a sandbox switch cuts a backoff sleep short instead of stalling the
-// reconnect against the new daemon for up to BACKOFF_MAX_MS.
+// Set when the abort came from the watchdog rather than the network, so the failure is CLASSIFIED as a timeout
+// instead of being sniffed out of `error.name === "AbortError"` after the fact — the two are identical at the
+// error object, because the watchdog aborts the very same request.
+let watchdogTripped = false;
+// Resolver of the in-flight sleep, so a sandbox switch cuts a backoff short instead of stalling the reconnect
+// against the new daemon for up to the ceiling.
 let wake: (() => void) | undefined;
 // Last observed reachability per sandbox id: switching back to a recently-healthy sandbox renders the
 // workspace immediately (stale-while-revalidate) while the stream re-establishes; a wrong guess self-corrects
 // on the first failed connect or watchdog trip.
 const lastKnown = new Map<string, boolean>();
 
-const wait = (ms: number): Promise<void> =>
+const sleep = (ms: number): Promise<void> =>
     new Promise((resolve) => {
         wake = resolve;
         setTimeout(resolve, ms);
@@ -76,168 +59,104 @@ const clearWatchdog = (): void => {
 const armWatchdog = (): void => {
     clearWatchdog();
     watchdog = setTimeout(() => {
-        reachable.value = false;
+        watchdogTripped = true;
         controller?.abort();
     }, WATCHDOG_MS);
 };
 
-// Open the stream and consume heartbeat frames until it ends or breaks. Each frame (and the initial open)
-// marks the sandbox reachable and re-arms the watchdog. Returning normally means the stream ended cleanly.
-const stream = async (): Promise<void> => {
+const failureOf = (error: unknown): ConnectionFailure => {
+    if (error instanceof SandboxUnaddressedError) {
+        return classifyFailure({ unaddressed: true, message: error.message });
+    }
+    if (watchdogTripped) {
+        return classifyFailure({ watchdog: true, message: `The sandbox stopped responding.` });
+    }
+    return classifyFailure({ status: daemonErrorStatus(error), message: daemonErrorMessage(error) });
+};
+
+// Did the active sandbox move out from under an in-flight attempt? A deliberate switch aborts the stream, and
+// that abort must not be written onto the sandbox the user just moved TO.
+const switchedDuring = (sandboxId: string): boolean => activeSandboxId.value !== sandboxId;
+
+// Consume the stream until it ends or breaks. Returns normally only when the daemon closed it cleanly — a
+// healthy stream never does, so the caller treats that as its own throttled failure rather than a success.
+const stream = async (sandboxId: string): Promise<void> => {
     controller = new AbortController();
-    // Armed before the connect, not just after: with optimistic reachability a hung connect (dead tunnel that
-    // neither answers nor refuses) must not leave a stale UI up — the watchdog trips it offline and aborts.
+    watchdogTripped = false;
+    // Armed before the connect, not just after: a hung connect (a dead tunnel that neither answers nor
+    // refuses) must not leave the optimistic paint up — the watchdog trips it and aborts.
     armWatchdog();
     // Per-CONNECTION presence id, never reused across attempts: the daemon keys this tab's roster entry by it,
     // so a lingering old connection's teardown can only ever remove its own entry, never this one's.
     const clientId = crypto.randomUUID();
-    const response = await sandboxRequest(`/events?clientId=${clientId}`, { signal: controller.signal });
-    // 403 = the daemon is up but rejects this Google account (not the owner/a member) — surfaced as its own
-    // gate instead of "connecting". One assignment both sets and clears; a network throw above skips it, so a
-    // denied sandbox going offline stays denied until the next resolved probe.
-    denied.value = response.status === 403;
-    if (denied.value) {
-        // A revoked member must not keep a cached (IndexedDB-persisted) copy of the sandbox. The sandbox id is
-        // the LAST key element (sandboxKey appends it), so prefix matching can't scope this — use a predicate.
-        queryClient.removeQueries({ predicate: (query) => query.queryKey.at(-1) === activeSandboxId.value });
-    }
-    if (!response.ok || response.body === null) {
-        throw new Error(`liveness stream failed (${response.status})`);
-    }
-    reachable.value = true;
-    probeError.value = undefined;
-    // A confirmed-healthy connection earns back the fast first retry; the reset lives here because a healthy
-    // stream never returns cleanly — it blocks on heartbeats until aborted, which throws.
-    backoff = BACKOFF_MIN_MS;
+    const frames = await sandboxRpc.system.events({ clientId }, { signal: controller.signal });
+    signalConnection({ kind: `opened` });
     armWatchdog();
     // The daemon just registered this connection's blank roster entry — announce the tab's current activity.
     presenceStreamOpened(clientId);
     // Reconnect recovery: refetch the tree on every (re)connect, since file changes during a disconnect carried
     // no frame. Empty paths = "just refetch" (no per-file re-read/highlight — we don't know what was missed).
     markWorkspaceChanged([]);
-    for await (const frame of readIntenticLines(response.body)) {
-        reachable.value = true;
+    for await (const frame of frames) {
+        signalConnection({ kind: `frame` });
         armWatchdog();
-        // The stream's first frame carries the workspace's stable identity. A different id under the SAME
-        // sandbox id means the workspace was wiped and recreated (cleanup.sh + reconnect reuses the slug) —
-        // the persisted cache is the previous workspace's data, not a stale copy of this one. Reset (not
-        // remove: active observers must refetch) every query of this sandbox; same last-key predicate as the
-        // denied purge above.
-        if (frame[`kind`] === `hello`) {
-            const parsed = HelloSchema.safeParse(frame);
-            const sandboxId = activeSandboxId.value;
-            if (parsed.success && sandboxId !== undefined) {
-                const storageKey = `intentic.workspaceId.${sandboxId}`;
-                const known = localStorage.getItem(storageKey);
-                if (known !== null && known !== parsed.data.workspaceId) {
-                    void queryClient.resetQueries({ predicate: (query) => query.queryKey.at(-1) === sandboxId });
-                }
-                localStorage.setItem(storageKey, parsed.data.workspaceId);
-            }
-            continue;
-        }
-        // Live file-change push: the daemon interleaves workspaceChanged batches with the heartbeats. Heartbeats
-        // just re-arm the watchdog (above); a change batch refreshes the tree + any open file.
-        // Presence roster snapshot: validate against the contract schema (no hand-narrowing drift) and hand
-        // it to the singleton store every presence surface reads.
-        if (frame[`kind`] === `presence`) {
-            const parsed = PresenceSchema.safeParse(frame);
-            if (parsed.success) {
-                setPresenceUsers(parsed.data.users);
-            }
-            continue;
-        }
-        // Fleet roster snapshot — same last-frame-wins contract as presence, handed to the useAgents store.
-        if (frame[`kind`] === `agents`) {
-            const parsed = AgentsSchema.safeParse(frame);
-            if (parsed.success) {
-                setAgents(parsed.data.agents);
-            }
-            continue;
-        }
-        // The discovered repo set changed (a clone, a scaffold, a deleted repo — anywhere under /work). The
-        // daemon detects this itself: the watcher never sees .git paths, so no workspaceChanged path pattern
-        // could. The rail's panel list is derived from the repo set — refetch it.
-        if (frame[`kind`] === `reposChanged`) {
-            void queryClient.invalidateQueries({ queryKey: [`panels`] });
-            continue;
-        }
-        const paths = frame[`paths`];
-        if (frame[`kind`] === `workspaceChanged` && Array.isArray(paths)) {
-            const changed = paths.filter((path): path is string => typeof path === `string`);
-            markWorkspaceChanged(changed);
-            // Cross-user freshness for the .intentic/-backed views: another member's capability/automation/
-            // setting write lands as a file change here, but those queries only refetch on their OWN mutations —
-            // invalidate the ones whose manifest actually changed, so every connected browser converges without
-            // a remount.
-            for (const { prefix, keys } of MANIFEST_QUERIES) {
-                if (!changed.some((path) => path.startsWith(prefix))) {
-                    continue;
-                }
-                for (const key of keys) {
-                    void queryClient.invalidateQueries({ queryKey: [key] });
-                }
-            }
-            // Any worktree write surfaces in the Changes review — but not during a streaming turn, whose constant
-            // writes would hammer `git status`; the stream-end invalidation (useChanges) covers that batch.
-            if (!useChat().streaming.value) {
-                refreshChanges();
-            }
-        }
+        applySystemEvent(frame, sandboxId);
     }
-    clearWatchdog();
+};
+
+// One attempt, from "we have an address" to a settled outcome. Nothing here decides how long to wait next —
+// that is the machine's `retryDelayMs`.
+const attempt = async (): Promise<void> => {
+    // Need the daemon's address to open the stream — reload the sandbox list if we don't have one yet. A
+    // rejected platform call must not escape (it would kill liveness for good, with `running` still true so
+    // start() never restarts it); the failure signals below cover it.
+    if (daemonUrl.value === undefined) {
+        await refresh().catch(() => undefined);
+    }
+    const sandboxId = activeSandboxId.value;
+    if (sandboxId === undefined) {
+        signalConnection({ kind: `failed`, failure: classifyFailure({ unaddressed: true, message: `No sandbox is selected.` }) });
+        return;
+    }
+    signalConnection({ kind: `connect` });
+    try {
+        await stream(sandboxId);
+        if (!running || switchedDuring(sandboxId)) {
+            return;
+        }
+        // The daemon answered and then closed the body without erroring. Reported as a failure so the machine
+        // throttles the next attempt — otherwise a 200-then-immediately-close daemon is a zero-delay hot loop.
+        signalConnection({ kind: `failed`, failure: classifyFailure({ closed: true, message: `The sandbox closed the connection.` }) });
+    } catch (error) {
+        if (!running || switchedDuring(sandboxId)) {
+            return;
+        }
+        const failure = failureOf(error);
+        signalConnection({ kind: `failed`, failure });
+        if (failure.kind === `forbidden`) {
+            // A revoked member must not keep a cached (IndexedDB-persisted) copy of the sandbox on disk.
+            queryClient.removeQueries({ predicate: sandboxQueryPredicate(sandboxId) });
+        }
+        // Disconnected rosters are meaningless — clear both; the reconnect's immediate snapshots repaint them.
+        resetPresence();
+        resetAgents();
+        // A restarted sandbox may have re-registered a fresh daemonUrl — pick it up before retrying. Swallowed
+        // on failure for the same reason as the refresh above: the next attempt handles it.
+        await refresh().catch(() => undefined);
+    } finally {
+        clearWatchdog();
+    }
 };
 
 const loop = async (): Promise<void> => {
-    // `running` is flipped by stop() outside this function, so the exit check lives in the body.
-    for (;;) {
+    while (running) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- a reconnect loop is sequential by definition
+        await attempt();
         if (!running) {
             return;
         }
-        // Need the daemon's address to open the stream — reload the sandbox list if we don't have it yet.
-        // A rejected platform call must not escape the loop (it would kill liveness for good, with `running`
-        // still true so start() never restarts it) — swallow and let the backoff below retry.
-        if (daemonUrl.value === undefined) {
-            await refresh().catch(() => undefined);
-        }
-        if (daemonUrl.value === undefined) {
-            await wait(backoff);
-            backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
-            continue;
-        }
-        try {
-            switched = false;
-            await stream();
-            // A healthy stream never returns cleanly — it blocks on heartbeats until aborted (→ throw), and a
-            // deliberate switch aborts too (→ catch). So a clean return means the daemon answered then closed
-            // the body without erroring; throttle before reconnecting so a 200-then-immediately-close daemon
-            // can't drive a zero-delay hot-reconnect loop.
-            await wait(backoff);
-            backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
-        } catch (error) {
-            if (!running) {
-                return;
-            }
-            // A deliberate switch is not a failure: the new daemonUrl is already in the loaded list and the
-            // watch already primed `reachable` — reconnect immediately, no list() round-trip, no backoff.
-            if (switched) {
-                continue;
-            }
-            reachable.value = false;
-            // Disconnected rosters are meaningless — clear both; the reconnect's immediate snapshots repaint them.
-            resetPresence();
-            resetAgents();
-            // Switch-aborts were handled above, so an AbortError here is the watchdog's: no response within the
-            // watchdog window — a cause worth naming, and the signal that flips the shell from cached paint to
-            // the connecting gate (probeError !== undefined ⇔ a connect attempt actually failed).
-            probeError.value =
-                error instanceof DOMException && error.name === `AbortError` ? `The sandbox stopped responding.` : errorMessage(error, String(error));
-            // A restarted sandbox may have re-registered a fresh daemonUrl — pick it up before retrying.
-            // Swallowed on failure for the same reason as the loop-top refresh: the retry handles it.
-            await refresh().catch(() => undefined);
-            await wait(backoff);
-            backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
-        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto: the backoff IS the loop
+        await sleep(connection.value.retryDelayMs);
     }
 };
 
@@ -251,21 +170,22 @@ const start = (): void => {
 
 const stop = (): void => {
     running = false;
+    signalConnection({ kind: `disconnect` });
     controller?.abort();
     clearWatchdog();
 };
 
-// Re-probe the moment the active sandbox changes: remember the outgoing sandbox's state, prime `reachable`
-// with the incoming one's last known state (never-seen stays pessimistic, so the connecting gate shows), and
-// abort the stream / wake the backoff sleep so the loop reconnects against the new daemonUrl right away.
+// Re-probe the moment the active sandbox changes: remember the outgoing sandbox's state, prime the machine
+// with the incoming one's last known state, and abort the stream / wake the backoff so the loop reconnects
+// against the new daemonUrl right away.
 watch(activeSandboxId, (id, previous) => {
     if (previous !== undefined) {
-        lastKnown.set(previous, reachable.value);
+        lastKnown.set(previous, connection.value.phase === `online`);
     }
-    reachable.value = id !== undefined && (lastKnown.get(id) ?? false);
-    denied.value = false;
-    probeError.value = undefined;
-    switched = true;
+    signalConnection({ kind: `switched`, lastKnownOnline: id !== undefined && (lastKnown.get(id) ?? false) });
+    // Another sandbox runs another image — attributing the outgoing daemon's route surface to it would hide or
+    // invent features on the incoming one.
+    resetDaemonRoutes();
     controller?.abort();
     wake?.();
 });

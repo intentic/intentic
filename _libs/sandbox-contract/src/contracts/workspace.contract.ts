@@ -22,6 +22,8 @@ import {
     WorkspaceInstallResultSchema,
     WorkspaceInstallSchema,
     WorkspaceMoveSchema,
+    WorkspaceResolveQuerySchema,
+    WorkspaceResolveSchema,
     WorkspaceSetupSchema,
     WorkspaceSyncSchema,
     WorkspaceTreeSchema,
@@ -36,6 +38,10 @@ export const workspaceContract = {
     // and the client fetches them here on expand so a giant node_modules can't blow the tree walk's entry budget.
     children: oc.route({ method: "GET", path: "/workspace/children" }).input(WorkspaceChildrenQuerySchema).output(WorkspaceChildrenSchema),
     file: oc.route({ method: "GET", path: "/workspace/file" }).input(WorkspaceFileQuerySchema).output(WorkspaceFileSchema),
+    // Which file a NAMED reference means — the lookup behind every clickable path in the UI. A path an agent
+    // wrote in prose is often only a suffix of the real one, so it is matched against the workspace tree rather
+    // than trusted as root-relative.
+    resolve: oc.route({ method: "GET", path: "/workspace/resolve" }).input(WorkspaceResolveQuerySchema).output(WorkspaceResolveSchema),
     // Ranked groups, match-reason tags, freshness, resumable cursor. `mode` narrows to one verb; default is
     // auto-mode fusion. (Implementation detail: the daemon backs this with a resident in-process iq engine.)
     search: oc.route({ method: "GET", path: "/workspace/search" }).input(WorkspaceSearchQuerySchema).output(WorkspaceSearchResultSchema),

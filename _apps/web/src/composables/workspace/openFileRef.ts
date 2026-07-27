@@ -1,4 +1,5 @@
 import { router } from "../../router";
+import { resolveWorkspaceRef } from "./resolveFileRef";
 import { useWorkspaceTabs } from "./useWorkspaceTabs";
 
 /* Going to a file reference — the one navigation every clickable path in the app funnels through: a terminal
@@ -7,17 +8,22 @@ import { useWorkspaceTabs } from "./useWorkspaceTabs";
  * Split from fileRefs (which only knows what a reference LOOKS like) because this half reaches the router and
  * the tab singleton, and the markdown renderer must be able to mark links up without pulling either in. */
 
-// Open a workspace-relative path in the editor and bring the Workspace into view. A path that doesn't resolve
-// on disk lands on the file viewer's not-found state rather than failing here.
-export const openWorkspaceRef = (path: string, line?: number): void => {
+/* Open the file a reference names in the editor and bring the Workspace into view.
+ *
+ * The reference is resolved first (resolveWorkspaceRef) rather than opened literally, because a path written
+ * in prose is routinely a suffix of the real one — `pages/workspace/Foo.vue` for a file that lives under
+ * `_apps/web/src`. A reference nothing matches is opened as written, which lands on the file viewer's
+ * not-found state naming exactly what was clicked. */
+export const openWorkspaceRef = async (path: string, line?: number): Promise<void> => {
+    const target = (await resolveWorkspaceRef(path)) ?? path;
     const { openFile, openAtLine } = useWorkspaceTabs();
     if (line !== undefined) {
-        openAtLine(path, line);
+        openAtLine(target, line);
     } else {
-        openFile(path);
+        openFile(target);
     }
     // Surface the editor (no-op when already on the workspace route — its watchers' equality guards hold).
-    void router.push({ name: `workspace`, params: { path: path.split(`/`) } });
+    void router.push({ name: `workspace`, params: { path: target.split(`/`) } });
 };
 
 /* Click handler for the file links inside rendered markdown. Delegated, like the code blocks' copy buttons:
@@ -38,5 +44,5 @@ export const openFileRefFromEvent = (event: MouseEvent): void => {
     }
     event.preventDefault();
     const line = Number(link.dataset[`line`]);
-    openWorkspaceRef(path, Number.isInteger(line) && line > 0 ? line : undefined);
+    void openWorkspaceRef(path, Number.isInteger(line) && line > 0 ? line : undefined);
 };

@@ -1,3 +1,5 @@
+import type { ContractRoute } from "./routes.js";
+import { contractRoutes, routeNameForRequest } from "./routes.js";
 import { activityContract } from "./contracts/activity.contract.js";
 import { agentContract } from "./contracts/agent.contract.js";
 import { agentsContract } from "./contracts/agents.contract.js";
@@ -58,9 +60,11 @@ export { workspaceContract } from "./contracts/workspace.contract.js";
 export * from "./effects.js";
 export * from "./events.js";
 export * from "./sse.js";
+export * from "./routes.js";
 export * from "./agent-catalog.js";
 export * from "./hostnames.js";
 export * from "./model-order.js";
+export * from "./path-refs.js";
 export * from "./schemas.js";
 export * from "./terminal-protocol.js";
 
@@ -97,3 +101,13 @@ export const sandboxContract = {
     usage: usageContract,
     vpn: vpnContract,
 };
+
+// Every route in THIS build of the contract, and the names the daemon advertises on its hello frame. Bound here
+// rather than in routes.ts so that module stays a pure function of whatever contract it is handed — importing
+// `sandboxContract` from there would close a load-time cycle back through this file. See routes.ts for why a
+// daemon advertises its route surface at all.
+export const SANDBOX_ROUTES: readonly ContractRoute[] = contractRoutes(sandboxContract);
+export const SANDBOX_ROUTE_NAMES: readonly string[] = SANDBOX_ROUTES.map((route) => route.name);
+
+// The contract route a concrete browser request belongs to, bound to this build's route table.
+export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined => routeNameForRequest(SANDBOX_ROUTES, method, pathWithQuery);

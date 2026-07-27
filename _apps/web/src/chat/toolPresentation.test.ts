@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChatTool } from "../composables/chat/conversation";
+import type { ChatTool } from "../composables/chat/transcript";
 import { numberedFileBody, present, TEXT_CAP } from "./toolPresentation";
 
 // A completed call with no output, spread over per-case.

@@ -189,6 +189,11 @@ export interface WorkspaceFileResponse {
     readonly path: string;
     readonly content: string;
 }
+// What a NAMED file reference (agent prose, terminal output) resolves to: the workspace path it means, absent
+// when nothing in the workspace ends in that reference.
+export interface WorkspaceResolveResponse {
+    readonly path?: string;
+}
 
 // Workspace search results (the daemon's fused-search wire shape). WorkspaceSearchMode is the verb enum in the query.
 export type WorkspaceSearchTag = z.infer<typeof WorkspaceSearchTagSchema>;

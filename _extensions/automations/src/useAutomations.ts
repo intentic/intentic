@@ -75,7 +75,7 @@ export function useAutomations() {
     return {
         automations: computed<AutomationSummary[]>(() => query.data.value ?? []),
         pending: computed<AutomationApproval[]>(() => pendingQuery.data.value ?? []),
-        error: computed(() => (query.error.value ? query.error.value.message : null)),
+        error: computed(() => query.error.value?.message),
         isLoading: query.isLoading,
         save,
         remove,

@@ -8,6 +8,7 @@ import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vu
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
 import { commandShortcut, registerCommand, type RegisteredCommand } from "../composables/commands/useCommands";
 import { setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
+import { useTerminalsQuery } from "../composables/terminal/terminalsQuery";
 import { createTerminalTabs, type TerminalTab, type TerminalTabsSource } from "../composables/terminal/useTerminal";
 import { consumeSpawnRequest, registerTerminalSpawn } from "../composables/terminal/useTerminalPanel";
 import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
@@ -62,6 +63,18 @@ watch(
     { flush: `post` },
 );
 
+// Sessions FINISH through paths no client action fires: an agent's last Bash command exits, a dev server dies.
+// The strip's own list is imperative (it relists around spawns, kills, restarts and surfaces), so a tab would
+// keep reading as running — undimmed, and invisible to the sweep below — until the panel was reopened or
+// refreshed by hand. The shared polled read (one cache entry, the same one the rail's activity badge observes)
+// supplies the missing edge; relisting only when the daemon's session set actually changes keeps it to one
+// extra request per real change, not per poll.
+const polled = useTerminalsQuery(10_000);
+watch(
+    () => polled.sessions.value.map((session) => `${session.name}:${session.running}`).join(`\n`),
+    () => void tabs.refresh(),
+);
+
 // --- Tab strip: segments, numbering, cosmetics ------------------------------------------------
 const tabByName = computed(() => new Map(order.value.map((tab) => [tab.name, tab])));
 // Unlabeled shells show their 1-based position in the strip's reading order (across groups).
@@ -96,7 +109,7 @@ const segmentTooltip = (name: string): string | undefined => {
         return undefined;
     }
     if (tab.kind === `agent`) {
-        return `AI terminal`;
+        return tab.running === false ? `AI terminal — finished` : `AI terminal`;
     }
     if (tab.kind === `job`) {
         return `Job terminal`;

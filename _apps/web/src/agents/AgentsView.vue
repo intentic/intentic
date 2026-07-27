@@ -13,13 +13,20 @@ import AgentCard from "./AgentCard.vue";
  * routing the user to agents that need them. Lanes are pure projections of the registry status machine
  * (laneOf), so "finished" is automatic: the auto-land flow flips a cleanly-completed turn to landed/idle
  * within ms and the card glides over — a follow-up message glides it back. Cards animate with per-lane
- * TransitionGroups: FLIP reorder within a lane, scale-fade across lanes. Desktop = three columns; mobile =
- * the same lanes stacked (columns don't fit a phone).
+ * TransitionGroups: FLIP reorder within a lane, scale-fade across lanes. A wide board is three columns; a
+ * narrow one stacks the same lanes down the page (see below).
  *
  * Cards drag between lanes, but because the lanes are projections a drop can't assign a status — it runs the
  * action that causes one (laneDrop): onto Finished stops a running turn or lands a conflicted one, and the
  * drop zone that appears mid-drag discards outright. Targets with no action behind them dim and explain why
  * on the drag hint instead of silently bouncing the card.
+ *
+ * The board is sized by its OWN width, not the viewport's: /agents lives in the shell's middle column, which
+ * the chat panel's drag handle squeezes to a few hundred pixels while the window stays wide — a case `mobile`
+ * never sees. Below NARROW_BOARD_PX three columns can only be bought by shredding every card (a 190px card
+ * truncates its title to "Ne…" and its branch to "agent/7…"), so the lanes stack instead and the cards take
+ * the full width in their row form. The lanes, their order, their counts and their drop targets are identical
+ * either way — the board is the same board, laid out down the page rather than across it.
  *
  * FINISHED is the one lane with no way out of its own — nothing transitions off landed/idle — so it needs the
  * three affordances the other two get for free from the status machine:
@@ -104,18 +111,37 @@ const hint = computed(() => {
     return dropRejection(dragged.value, over.value);
 });
 
+// Three columns need ~270px each before a card starts truncating its title — below that the board stacks.
+// Measured off the board element rather than declared as a CSS container query, because `container-type`
+// makes an element a containing block for its fixed-position descendants, and the drag ghost is fixed at
+// viewport coordinates.
+const NARROW_BOARD_PX = 840;
+const boardEl = ref<HTMLElement | undefined>(undefined);
+// Unmeasured reads as wide: the ResizeObserver's first callback lands before the first paint, so the fallback
+// is never seen, and defaulting the other way would flash three columns on a phone.
+const boardWidth = ref(Number.POSITIVE_INFINITY);
+const narrow = computed(() => boardWidth.value < NARROW_BOARD_PX);
+
 // One shared ticker for every card's elapsed/time-ago readout.
 const now = ref(Date.now());
 let ticker: ReturnType<typeof setInterval> | undefined;
+let boardObserver: ResizeObserver | undefined;
 onMounted(() => {
     void refresh();
+    if (boardEl.value !== undefined) {
+        boardObserver = new ResizeObserver(([entry]) => (boardWidth.value = entry?.contentRect.width ?? boardWidth.value));
+        boardObserver.observe(boardEl.value);
+    }
     // The archive is off the live roster, so its size has to be asked for. Worth the one request at mount:
     // without a count the Finished header can only offer an archive the user has no reason to believe holds
     // anything, and an empty board would hide every agent they ever ran behind an unlabelled button.
     void loadArchived();
     ticker = setInterval(() => (now.value = Date.now()), 1000);
 });
-onUnmounted(() => clearInterval(ticker));
+onUnmounted(() => {
+    clearInterval(ticker);
+    boardObserver?.disconnect();
+});
 
 const LANES: readonly { key: FleetLane; label: string; dot: string; empty: string }[] = [
     { key: `attention`, label: `Attention`, dot: `bg-warning`, empty: `Nothing needs you right now.` },
@@ -154,8 +180,8 @@ const reviewAgent = (agent: FleetAgent): void => {
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 flex-col">
-        <div class="flex h-9 shrink-0 items-center gap-2 border-b border-line px-3">
+    <div ref="boardEl" class="flex h-full min-h-0 flex-col">
+        <div class="view-header flex items-center gap-2 border-b border-line px-3">
             <span class="text-sm font-semibold text-content">Agents</span>
             <!-- Two different facts, two different pills: "needs you" is BLOCKED work (an approval, a question,
                  a conflict, an error) and earns the warning colour; "unread" is only "you haven't looked yet"
@@ -222,18 +248,27 @@ const reviewAgent = (agent: FleetAgent): void => {
             </button>
         </div>
 
-        <div v-else class="scrollbar-thin min-h-0 flex-1 overflow-auto p-3">
-            <div class="grid h-full gap-3" :class="mobile ? '' : 'grid-cols-3 items-start'">
+        <!-- The scroller carries no padding of its own: the stacked board's lane headers pin to `top-0`, and a
+             padded scrollport would leave a strip above them for the cards to scroll through. -->
+        <div v-else class="scrollbar-thin min-h-0 flex-1 overflow-auto">
+            <!-- Stacked, the lanes are rows of one grid that is still `h-full` (so a lane keeps a drop target
+                 when the board is empty) — `content-start` is what stops those rows from stretching to fill it
+                 and leaving a lane's cards floating a hundred pixels above the next header. -->
+            <div class="grid h-full gap-3 p-3" :class="narrow ? 'content-start' : 'grid-cols-3 items-start'">
                 <section
                     v-for="lane in LANES"
                     :key="lane.key"
                     :data-drop="lane.key === 'finished' && archiveOpen ? undefined : lane.key"
                     class="flex min-w-0 flex-col rounded-xl bg-canvas/60 transition-colors"
-                    :class="[!dragging && !mobile ? 'min-h-0' : '', laneDropClass(lane.key)]"
+                    :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
                 >
                     <!-- The Finished lane doubles as the archive's window, so its header is the one that
-                         changes: in archive mode it swaps its dot and label and grows a way back. -->
-                    <header class="flex items-center gap-2 px-3 py-2">
+                         changes: in archive mode it swaps its dot and label and grows a way back.
+                         Stacked, the header also becomes the lane's marker while you scroll: three lanes down
+                         one page is a page and a half of cards, and a card is only readable as "finished" if
+                         the lane it belongs to is still on screen. It pins inside its own section, so it
+                         leaves with it rather than sitting over the next lane's cards. -->
+                    <header class="flex items-center gap-2 px-3 py-2" :class="narrow ? 'sticky top-0 z-10 rounded-t-xl bg-canvas' : ''">
                         <template v-if="lane.key === 'finished' && archiveOpen">
                             <button
                                 type="button"
@@ -287,6 +322,7 @@ const reviewAgent = (agent: FleetAgent): void => {
                             :key="agent.id"
                             :agent="agent"
                             :now="now"
+                            :dense="narrow"
                             :dragging="draggedId === agent.id && dragging"
                             :busy="busyId === agent.id || busyIds.includes(agent.id)"
                             :selected="!mobile && active.conversationId === agent.id"
@@ -332,7 +368,7 @@ const reviewAgent = (agent: FleetAgent): void => {
              test underneath it. -->
         <div v-if="dragging && dragged !== undefined" class="pointer-events-none fixed left-0 top-0 z-50 rotate-2" :style="ghostStyle">
             <div class="opacity-90 shadow-lg">
-                <AgentCard :agent="dragged" :now="now" />
+                <AgentCard :agent="dragged" :now="now" :dense="narrow" />
             </div>
             <p
                 class="mt-1 inline-block rounded px-2 py-1 text-2xs font-medium"

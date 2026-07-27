@@ -200,7 +200,12 @@ export const AgentSummarySchema = z.object({
     archivedAt: z.number().optional(),
 });
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
-export const AgentsListSchema = z.object({ agents: z.array(AgentSummarySchema) });
+// `rev` is the registry revision this roster was read at — a counter the daemon bumps on every registry change.
+// It is what makes the browser's optimistic writes safe: the fleet is published as full snapshots (last frame
+// wins), so without an ordering stamp a roster READ before a mutation but delivered after it silently puts the
+// mutated agents back. The browser drops any roster older than the newest it has applied, and holds its own
+// pending change until a roster at or past the revision that applied it arrives. See useAgents.ts.
+export const AgentsListSchema = z.object({ agents: z.array(AgentSummarySchema), rev: z.number() });
 export const AgentIdSchema = z.object({ id: z.string().min(1) });
 // archive's input: the agents to take off the board. Absent `ids` ⇒ every finished agent that is archivable
 // right now (the lane header's "Clear"); unarchive always names its ids (a restore, or a bulk archive's undo).
@@ -211,7 +216,9 @@ export const AgentIdsSchema = z.object({ ids: z.array(z.string().min(1)).min(1).
 // the slower response resurrect what the faster one just filed away — a delta composes where a snapshot races.
 // Whole summaries rather than ids because the receiving side has to SHOW them (the archive list, and the agent
 // detail page addressed by id); the ids "Undo" needs come off them for free.
-export const AgentsMovedSchema = z.object({ moved: z.array(AgentSummarySchema) });
+// The agents an archive/unarchive actually moved, plus the registry revision that applied the move — the
+// browser holds its optimistic add/remove of exactly these ids until it sees a roster at or past `rev`.
+export const AgentsMovedSchema = z.object({ moved: z.array(AgentSummarySchema), rev: z.number() });
 export type AgentsMoved = z.infer<typeof AgentsMovedSchema>;
 // rename's input: the user-chosen display title (bounded like sanitizeTitle's cap).
 export const AgentRenameSchema = z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(80) });
@@ -795,6 +802,12 @@ export const WorkspaceChildrenSchema = z.object({
 export type WorkspaceChildren = z.infer<typeof WorkspaceChildrenSchema>;
 export const WorkspaceFileQuerySchema = z.object({ path: z.string().min(1) });
 export const WorkspaceFileSchema = z.object({ path: z.string(), content: z.string() });
+// Resolve a file reference an agent (or a compiler, or a terminal) NAMED to the workspace path it means. Prose
+// paths are routinely partial — a model that has been discussing `_apps/web/src` writes
+// `pages/workspace/Foo.vue` — so a clickable mention has to be matched as a path SUFFIX against the real tree,
+// not read as root-relative. `path` is absent when nothing in the workspace ends in that reference.
+export const WorkspaceResolveQuerySchema = z.object({ path: z.string().min(1).max(512) });
+export const WorkspaceResolveSchema = z.object({ path: z.string().optional() });
 // Direct file management over the /work tree (delete / new folder / rename+move / copy). Byte writes + the
 // editor's text save go through the plain POST /workspace/upload route (a body doesn't fit oRPC), not here.
 export const WorkspaceDirSchema = z.object({ path: z.string().min(1) });
@@ -1696,7 +1709,8 @@ export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
 // is the /system/terminal WebSocket, not oRPC): `shell` = a web-* session the user opened (numbered pill),
 // `panel` = a panel-* dev-server session (labeled by its panel key, started via Start; running:false =
 // untracked, e.g. a finished one-shot job's lingering shell), `agent` = an agent-* session the Claude agent's
-// Bash commands run in (live-watchable, AI-marked in the UI), `job` = a job-* session the daemon's terminal
+// Bash commands run in (live-watchable, AI-marked in the UI; running:false once every window is a finished
+// command's dead pane, which is what lets the panel sweep it), `job` = a job-* session the daemon's terminal
 // runner executes user-triggered flows in (capability adds, infra check), `process` = a managed background
 // process riding a panel session (an extension's declared processes, dockerd) — surfaced in the panel's
 // background-processes popover with read-only log views, never as a killable tab; running is the actual

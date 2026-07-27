@@ -283,7 +283,15 @@ export type Heartbeat = z.infer<typeof HeartbeatSchema>;
 // browser remembers it per sandbox id and drops that sandbox's persisted query cache when it changes — a wiped
 // and recreated workspace (cleanup.sh + reconnect keeps the same sandbox id) must not be painted from the
 // previous workspace's cache.
-export const HelloSchema = z.object({ kind: z.literal("hello"), workspaceId: z.string() });
+//
+// It also advertises `routes` — the contract route names (`vpn.list`, `kimi.models`) this daemon actually
+// implements, from ITS build of the contract. A browser is routinely newer than the daemon it talks to (a
+// released app plane serves whatever image each user last pulled; in local dev the web app is always ahead of
+// the last `pnpm build:sandbox`), and that stays fully supported — the browser just compares the two sets so a
+// route the daemon predates surfaces as a named, explained gap instead of a bare 404 nobody can attribute.
+// Optional: a daemon built before this field simply advertises nothing, and every route is assumed present,
+// which is exactly the pre-existing behaviour.
+export const HelloSchema = z.object({ kind: z.literal("hello"), workspaceId: z.string(), routes: z.array(z.string()).optional() });
 export type Hello = z.infer<typeof HelloSchema>;
 
 // The FULL discovered repo set (sorted root-relative ids), pushed whenever it changes — a clone, a scaffold,
@@ -325,8 +333,12 @@ export const PresenceSchema = z.object({ kind: z.literal("presence"), users: z.a
 export type Presence = z.infer<typeof PresenceSchema>;
 
 // The FULL fleet roster, broadcast on every registry change — same snapshot-not-diff contract as presence:
-// a reconnecting browser is consistent from its first frame and last frame wins.
-export const AgentsSchema = z.object({ kind: z.literal("agents"), agents: z.array(AgentSummarySchema) });
+// a reconnecting browser is consistent from its first frame. NOT simply "last frame wins", though: `rev` is the
+// registry revision the snapshot was taken at, and the browser applies a frame only if it is newer than the one
+// it already holds. Snapshots race two other sources of the same fact — an explicit GET /agents and the
+// browser's own optimistic writes — and an unordered full replace lets the slowest of them win, which is how an
+// archived card came back. See AgentsListSchema and useAgents.ts.
+export const AgentsSchema = z.object({ kind: z.literal("agents"), agents: z.array(AgentSummarySchema), rev: z.number() });
 export type Agents = z.infer<typeof AgentsSchema>;
 
 // The /events stream union: the hello identity frame, then liveness heartbeats interleaved with

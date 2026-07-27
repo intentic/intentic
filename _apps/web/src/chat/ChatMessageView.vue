@@ -3,7 +3,7 @@ import { type IconName, useDevice } from "@intentic-app/ui";
 import type { AskQuestion, TodoItem } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
-import { type ChatMessage, planParts, type PlanRequest } from "../composables/chat/conversation";
+import { type ChatMessage, planParts, type PlanRequest } from "../composables/chat/transcript";
 import { copyCodeFromEvent } from "../composables/markdownCode";
 import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
@@ -293,7 +293,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
 <template>
     <!-- The click handler is delegated for the markdown's own controls — copy buttons and file links — which
          live inside v-html and so can hold no component of their own (see onMarkdownClick). -->
-    <div class="chat-message flex flex-col gap-1" :class="{ 'items-end': message.role === 'user' }" @click="onMarkdownClick">
+    <div class="chat-message flex flex-col gap-1" :class="{ 'chat-prompt items-end': message.role === 'user' }" @click="onMarkdownClick">
         <div v-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
             <!-- The chip/thumbnail row stays visible in edit mode (read-only — the attachments ride the re-run). -->
             <div v-if="message.attachments?.length" class="flex flex-wrap justify-end gap-1.5">

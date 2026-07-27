@@ -5,7 +5,8 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { useRouter } from "vue-router";
 import { NATIVE_PROVIDERS, type NativeProvider, providerLabel } from "@intentic/sandbox-contract";
 import { effortsFor, MODES } from "../composables/chat/catalog";
-import { type ChatAttachment, type ChatMessage, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
+import { modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
+import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
 import { bindingWindow, formatUtilization, isStale, usageDetail, usageStatusFor } from "../composables/chat/usageStatus";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useChat } from "../composables/chat/useChat";
@@ -77,7 +78,10 @@ const router = useRouter();
 const layout = useLayout();
 const followAlong = useFollowAlong();
 const { overlayTarget, poppedOut } = useChatPopout();
-const { activeSandboxId, reachable, denied } = useSandbox();
+const { activeSandboxId, reachable, connection } = useSandbox();
+// The daemon refused this Google account outright — a different sentence than "not connected yet", because
+// waiting will not fix it.
+const denied = computed(() => connection.value.failure?.kind === `forbidden`);
 const { mobile, keyboardInset } = useDevice();
 
 // True while the user is dragging the left-edge handle to resize the panel.
@@ -165,6 +169,12 @@ watch(connected, (isConnected) => {
 // is still writing into.
 const isStreaming = (message: ChatMessage): boolean =>
     streaming.value && message.role === `assistant` && messages.value.findLast((entry) => entry.role === `assistant`)?.id === message.id;
+
+// The transcript as prompt-headed groups. Each group is the box its own prompt is sticky WITHIN (see
+// .chat-prompt), which is what ends the pin where the answer ends — rendered flat, every prompt would pin to
+// the same top edge and pile up on the one before it. Recomputed per streamed frame like the list it replaces,
+// and just as shallow: one pass, no message read beyond its role.
+const turns = computed(() => turnsOf(messages.value));
 
 // Track whether the transcript is parked near its bottom (within ~80px), so the auto-follow watcher only snaps
 // down when the user hasn't scrolled up to read.
@@ -786,11 +796,17 @@ watch(keyboardInset, () => {
         <ChatTabs v-else @select="selectTab" @close="closeTab" @open="openFromHistory" />
 
         <!-- The inner wrapper is what the autoscroll ResizeObserver measures; the scroller itself never
-             changes height, so it can't report the transcript growing. -->
-        <div ref="scroller" class="scrollbar-thin flex flex-1 flex-col overflow-auto p-4" @scroll="onScroll">
-            <div ref="content" class="flex flex-1 flex-col gap-1">
+             changes height, so it can't report the transcript growing.
+             The top inset lives on the wrapper, not the scroller: a sticky prompt pins to the scroller's
+             PADDING edge, so a pt-4 out here would leave a 1rem band above the pinned row for the previous
+             turn to slide through. Inside the wrapper the same inset is content, and the prompt pins flush. -->
+        <div ref="scroller" class="scrollbar-thin flex flex-1 flex-col overflow-auto px-4 pb-4" @scroll="onScroll">
+            <div ref="content" class="flex flex-1 flex-col gap-1 pt-4">
                 <template v-if="messages.length > 0">
-                    <ChatMessageView v-for="message in messages" :key="message.id" :message="message" :streaming="isStreaming(message)" />
+                    <!-- One section per turn, purely so each prompt's sticky range ends where its answer does. -->
+                    <section v-for="turn in turns" :key="turn.id" class="flex flex-col gap-1">
+                        <ChatMessageView v-for="message in turn.messages" :key="message.id" :message="message" :streaming="isStreaming(message)" />
+                    </section>
                 </template>
                 <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">Start a conversation with {{ providerName }}.</p>
                 <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
@@ -1093,6 +1109,23 @@ watch(keyboardInset, () => {
     content-visibility: auto;
     contain-intrinsic-size: auto 3rem;
 }
+/* The prompt stays on screen for as long as its answer does: it pins to the top of the transcript while the
+   turn scrolls beneath it, and the next turn's prompt pushes it out. Claude Code's transcript, and for the same
+   reason — a long turn otherwise buries the question it is answering, and re-finding it means scrolling away
+   from the output you were reading.
+   The pin is bounded by the per-turn <section> the panel groups messages into; without that grouping every
+   prompt would stick to the same top edge and stack.
+   Opaque --color-card (the scroller's own background) because a pinned row floats over the messages it holds
+   above: invisible in place, solid once it lifts. content-visibility is dropped for the same reason — a pinned
+   row is on screen for the whole turn, so it must never be skipped. */
+.chat-prompt {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding-top: 0.75rem;
+    background: var(--color-card);
+    content-visibility: visible;
+}
 .chat-surface {
     background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
     border: 1px solid color-mix(in srgb, var(--color-primary-500) 22%, var(--color-line));
@@ -1293,6 +1326,14 @@ watch(keyboardInset, () => {
     height: 1.75rem;
     padding: 0 0.7rem;
     font-size: 0.6875rem;
+}
+/* The tab strip scrolls sideways once the tabs hit their shrink floor; the native bar is hidden, because 6px of
+   a 35px row is the difference between tabs sitting centred and tabs sitting high (ChatTabs.onWheel scrolls it). */
+.chat-strip {
+    scrollbar-width: none; /* Firefox */
+}
+.chat-strip::-webkit-scrollbar {
+    display: none;
 }
 .chat-tab {
     color: var(--color-muted);

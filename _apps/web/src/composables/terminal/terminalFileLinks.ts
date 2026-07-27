@@ -21,7 +21,7 @@ const openFileRef = (event: MouseEvent, ref: string): void => {
     if (target === undefined) {
         return;
     }
-    openWorkspaceRef(target, line);
+    void openWorkspaceRef(target, line);
 };
 
 export const registerFilePathLinks = (term: Terminal): void => {

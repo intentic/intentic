@@ -18,6 +18,7 @@ export const extensionUiNames = [
     "PageHeader",
     "Popover",
     "ProgressRing",
+    "RowGroup",
     "Segmented",
     "Select",
     "StatusBadge",

@@ -6,7 +6,7 @@
 // draws nothing and throws nothing — only a mounted render catches it.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, h } from "vue";
-import type { ChatTool } from "../composables/chat/conversation";
+import type { ChatTool } from "../composables/chat/transcript";
 
 // ChatToolCard's import chain pulls in app-wide singletons that read browser/runtime globals at import time:
 // @intentic-app/ui's useDevice reads window.matchMedia (its device refs are module-level), and environment.ts

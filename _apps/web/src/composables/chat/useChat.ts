@@ -16,15 +16,11 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
 import {
     acpProviders,
-    type ChatAttachment,
-    type ChatMessage,
     type CatalogLoadState,
     Conversation,
     type ModelOption,
     type PendingAttachment,
     perProvider,
-    planParts,
-    type PlanRequest,
     providerAccounts,
     providerCommands,
     providerDefaultModel,
@@ -36,10 +32,12 @@ import {
     startingMode,
     turnDefaults,
 } from "./conversation";
+import { type ChatAttachment, type ChatMessage, planParts, type PlanRequest } from "./transcript";
 import { approvalsFor } from "./catalog";
 import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
+import { withConcurrency } from "../concurrency";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { useSandbox } from "../sandbox/useSandbox";
 import { errorMessage } from "../useAsyncAction";
@@ -667,7 +665,7 @@ const refreshAccounts = async (target: AgentProvider): Promise<OauthAccount[]> =
 // model is no longer offered — and the persisted per-provider default — back to the live default (the same
 // selection-fix refreshAccounts does for accounts). Claude-Code-harness selections are translator-mapped ids,
 // not catalog ids, so they're left alone (claude itself is its own loop on either harness).
-export const loadProviderModels = async (target: AgentProvider): Promise<void> => {
+const loadProviderModelsOnce = async (target: AgentProvider): Promise<void> => {
     providerModelsState.value = { ...providerModelsState.value, [target]: `loading` };
     let body: { models: { id: string; label: string; efforts?: string[] }[]; default: string };
     try {
@@ -715,13 +713,18 @@ export const loadProviderModels = async (target: AgentProvider): Promise<void> =
     }
 };
 
-// Refresh every NATIVE provider's catalog (skipping ones already in flight) — the reachable seam and the
-// picker's on-open refresh both use this, so searching across providers always has all lists warm. ACP
-// providers have no daemon catalog (the agent owns its own model).
+// One catalog load per provider at a time — the picker's on-open refresh, the reachable seam, and a manual
+// retry all reach for the same list, and a second fetch would answer identically. Deduped by POLICY rather
+// than by reading `providerModelsState` back as a mutex: that ref is what the picker RENDERS (spinner, error
+// row), and using presentation state to decide whether a request may start meant a direct call while one was
+// in flight duplicated the fetch, while `loaded` vs `loading` drifting for any other reason broke the dedup.
+export const loadProviderModels = withConcurrency(loadProviderModelsOnce, { mode: `singleFlight`, key: (target) => target });
+
+// Refresh every NATIVE provider's catalog — the reachable seam and the picker's on-open refresh both use this,
+// so searching across providers always has all lists warm. ACP providers have no daemon catalog (the agent
+// owns its own model). In-flight providers collapse into their running load, so this is safe to spam.
 export const loadAllProviderModels = async (): Promise<void> => {
-    await Promise.all(
-        NATIVE_PROVIDERS.filter((target) => providerModelsState.value[target] !== `loading`).map((target) => loadProviderModels(target)),
-    );
+    await Promise.all(NATIVE_PROVIDERS.map((target) => loadProviderModels(target)));
 };
 
 // Device-code sign-in expires after 15 minutes; stop polling past it.

@@ -1,3 +1,4 @@
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Environment } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -98,12 +99,46 @@ export const composeEnvironment = async (services: Services): Promise<string | u
     return sha256Hex(content);
 };
 
+// Where an AGENT writes what it needs installed — one file per thing, named for it (`ffmpeg.Dockerfile`).
+// Not the proposal itself, for two reasons. Worktree-isolated agents run in PARALLEL, and a single shared
+// proposal file makes concurrent drafts a last-writer-wins race in which one agent's request silently vanishes.
+// And naming the file after the tool means two agents that both need ffmpeg converge on one entry instead of
+// appending a near-duplicate each. The owner still reviews exactly one composed proposal.
+export const draftsDir = (services: Services): string => join(services.workspace.root, ".intentic", "environment.d");
+
+const readDrafts = async (services: Services): Promise<string> => {
+    const dir = draftsDir(services);
+    const names = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith(".Dockerfile")).toSorted();
+    const drafts = await Promise.all(
+        names.map(async (name) => {
+            const content = ((await services.files.read(join(dir, name))) ?? "").trim();
+            return content === "" ? undefined : `# ---- ${name.slice(0, -".Dockerfile".length)} ----\n${content}`;
+        }),
+    );
+    return drafts.filter((draft) => draft !== undefined).join("\n\n");
+};
+
+// Compose the proposal the owner reviews: the already-approved custom section plus every pending draft. The
+// custom section is carried forward because approval REPLACES it wholesale — composing drafts alone would
+// quietly uninstall everything approved before them. No drafts ⇒ leave the proposal untouched.
+const mergeProposalDrafts = async (services: Services): Promise<void> => {
+    const drafts = await readDrafts(services);
+    if (drafts === "") {
+        return;
+    }
+    const custom = ((await services.files.read(customPath(services))) ?? "").trim();
+    await services.files.write(proposalPath(services), `${[...(custom === "" ? [] : [custom]), drafts].join("\n\n")}\n`);
+};
+
 const fileState = async (services: Services, path: string): Promise<{ content: string; hash: string } | undefined> => {
     const content = await services.files.read(path);
     return content === undefined ? undefined : { content, hash: sha256Hex(content) };
 };
 
 export const readEnvironment = async (services: Services): Promise<Environment> => {
+    // Fold in anything agents have drafted since the last read, so the card shows what they actually asked for
+    // and its hash is the one approve will check against.
+    await mergeProposalDrafts(services);
     const proposal = await fileState(services, proposalPath(services));
     const custom = await fileState(services, customPath(services));
     const approved = await fileState(services, approvedPath(services));
@@ -121,6 +156,10 @@ export const readEnvironment = async (services: Services): Promise<Environment> 
 // owner reviewed (`mismatch` kills the TOCTOU where the agent swaps content after review) and it carries no
 // FROM/runtime-directive lines. An empty proposal clears the custom section.
 export const approveEnvironment = async (services: Services, hash: string): Promise<"missing" | "mismatch" | "invalid" | undefined> => {
+    // Same fold as the read, so approve checks the hash against the same content the card rendered. A draft
+    // that landed in between changes the content and so fails the hash check — which is the point: it sends
+    // the owner back to re-read rather than approving a step they never saw.
+    await mergeProposalDrafts(services);
     const proposal = await fileState(services, proposalPath(services));
     if (proposal === undefined) {
         return "missing";
@@ -132,10 +171,15 @@ export const approveEnvironment = async (services: Services, hash: string): Prom
         return "invalid";
     }
     await services.files.write(customPath(services), proposal.content);
+    // The drafts are now IN the custom section; leaving them would recompose the same proposal on the next
+    // read and ask the owner to approve what they just approved, forever.
+    await services.files.remove(draftsDir(services));
     await composeEnvironment(services);
     return undefined;
 };
 
+// Rejecting drops the drafts too — otherwise the next read composes the rejected proposal straight back.
 export const rejectEnvironment = async (services: Services): Promise<void> => {
+    await services.files.remove(draftsDir(services));
     await services.files.remove(proposalPath(services));
 };

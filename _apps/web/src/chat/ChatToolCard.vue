@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { ChatTool } from "../composables/chat/conversation";
+import type { ChatTool } from "../composables/chat/transcript";
 import { openWorkspaceRef } from "../composables/workspace/openFileRef";
 import ChatCodeBody from "./ChatCodeBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";

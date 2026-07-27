@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { cronOf, defaultSchedule, parseCron, type ScheduleState, scheduleLabel } from "./cronSchedule";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cronOf, defaultSchedule, nextIn, parseCron, type ScheduleState, scheduleLabel, since } from "./cronSchedule";
 
 const schedule = (overrides: Partial<ScheduleState>): ScheduleState => ({ ...defaultSchedule(), ...overrides });
 
@@ -70,5 +70,35 @@ describe(`scheduleLabel`, () => {
 
     it(`passes unrecognized crons through raw`, () => {
         expect(scheduleLabel(`7 3 * 2 *`)).toBe(`7 3 * 2 *`);
+    });
+});
+
+describe(`since / nextIn`, () => {
+    const NOW = Date.UTC(2026, 0, 15, 12, 0, 0);
+    const MINUTE = 60_000;
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(NOW);
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it(`steps a past run through the minute/hour/day tiers`, () => {
+        expect(since(NOW)).toBe(`just now`);
+        expect(since(NOW - 5 * MINUTE)).toBe(`5m ago`);
+        expect(since(NOW - 59 * MINUTE)).toBe(`59m ago`);
+        expect(since(NOW - 3 * 60 * MINUTE)).toBe(`3h ago`);
+        expect(since(NOW - 50 * 60 * MINUTE)).toBe(`2d ago`);
+    });
+
+    it(`counts down to the next fire, and reads a slipped one as due`, () => {
+        expect(nextIn(NOW + 5 * MINUTE)).toBe(`in 5m`);
+        expect(nextIn(NOW + 3 * 60 * MINUTE)).toBe(`in 3h`);
+        expect(nextIn(NOW + 50 * 60 * MINUTE)).toBe(`in 2d`);
+        // The scheduler polls, so a nextRun a moment behind the clock is normal — not a missed run.
+        expect(nextIn(NOW)).toBe(`due`);
+        expect(nextIn(NOW - 5 * MINUTE)).toBe(`due`);
     });
 });

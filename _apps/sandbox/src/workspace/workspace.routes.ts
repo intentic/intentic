@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { previewLabel, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
+import { MAX_REF_CANDIDATES, previewLabel, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -12,6 +12,7 @@ import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 import { classifyWorkspace } from "./classify.js";
 import { readPackageGraph } from "./package-graph.js";
 import { discoverRepos, isValidRepoName } from "./repo-discovery.js";
+import { resolveReference } from "./resolve-reference.js";
 import { startInstall, workspaceSetup } from "./workspace-setup.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
@@ -62,6 +63,35 @@ export const createWorkspaceRoutes = (services: Services) => {
             }
             return { path: input.path, content };
         }),
+        /* Which workspace file a NAMED reference means — the lookup behind every clickable path in the UI (chat
+         * prose, terminal output, a tool card's chip). The search itself is resolveReference; this wires it to
+         * the workspace (through the same escape + control-plane guards as every other read) and to the iq
+         * engine's path glob, an in-memory regex pass over the sweep it already holds, which is why trying a
+         * handful of tails costs nothing worth optimizing. */
+        resolve: i.resolve.handler(({ input, signal }) =>
+            resolveReference(
+                input.path,
+                services.workspace.root,
+                (relPath) => {
+                    const abs = resolveWithin(services.workspace.root, relPath);
+                    return abs !== undefined && !isControlPlanePath(services.workspace.root, abs) && existsSync(abs);
+                },
+                async (glob) => {
+                    const outcome = await services.iq.run(
+                        {
+                            verb: "files",
+                            query: glob,
+                            scope: {},
+                            render: { budget: 400, limit: MAX_REF_CANDIDATES },
+                            options: { globExact: true },
+                            echo: `files "${glob}" --exact`,
+                        },
+                        signal,
+                    );
+                    return outcome.result.groups.map((group) => group.path);
+                },
+            ),
+        ),
         // Runs the resident iq engine in-process (services.iq) — same engine the agent's Bash `iq` calls use,
         // minus the per-query process spawn, workspace sweep, and inline revalidation those pay. The request's
         // abort signal kills the engine's rg child when the browser supersedes a search mid-flight.

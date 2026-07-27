@@ -12,6 +12,7 @@ import {
     approveEnvironment,
     composeEnvironment,
     customPath,
+    draftsDir,
     baseImageOf,
     hasValidBase,
     proposalPath,
@@ -213,4 +214,56 @@ test("an empty approved proposal clears the custom section", async () => {
     expect(await services.files.read(customPath(services))).toBe("");
     // Nothing left to compose on a stock container ⇒ the overlay is gone.
     expect(await services.files.read(approvedPath(services))).toBeUndefined();
+});
+
+// Agents draft into environment.d/<tool>.Dockerfile rather than into the proposal, because worktree-isolated
+// agents run in parallel and a shared proposal file loses one of two concurrent drafts outright.
+test("drafts from parallel agents compose into one proposal, in a stable order", async () => {
+    const services = stubServices();
+    const dir = draftsDir(services);
+    await services.files.write(join(dir, "ffmpeg.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
+    await services.files.write(join(dir, "cowsay.Dockerfile"), "RUN apt-get install -y cowsay\n");
+
+    const { proposal } = await readEnvironment(services);
+    expect(proposal?.content).toContain("ffmpeg");
+    expect(proposal?.content).toContain("cowsay");
+    // Sorted by filename, so the same set of drafts always hashes the same — an unstable order would ask the
+    // owner to re-approve identical content on every read.
+    expect(proposal!.content.indexOf("cowsay")).toBeLessThan(proposal!.content.indexOf("ffmpeg"));
+});
+
+test("a draft carries the already-approved custom section forward", async () => {
+    const services = stubServices();
+    await services.files.write(proposalPath(services), CUSTOM);
+    expect(await approveEnvironment(services, sha256Hex(CUSTOM))).toBeUndefined();
+
+    await services.files.write(join(draftsDir(services), "ffmpeg.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
+    const { proposal } = await readEnvironment(services);
+    // Approval REPLACES the custom section, so dropping cowsay here would uninstall it on the next rebuild.
+    expect(proposal?.content).toContain("cowsay");
+    expect(proposal?.content).toContain("ffmpeg");
+});
+
+test("approving clears the drafts, so the same request is not proposed forever", async () => {
+    const services = stubServices();
+    await services.files.write(join(draftsDir(services), "ffmpeg.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
+    const { proposal } = await readEnvironment(services);
+    expect(await approveEnvironment(services, proposal!.hash)).toBeUndefined();
+
+    const after = await readEnvironment(services);
+    expect(after.custom?.content).toContain("ffmpeg");
+    expect(after.proposal?.content).toBe(proposal!.content);
+    // The drafts are gone: a second approve finds nothing new to fold in.
+    await services.files.write(customPath(services), "RUN true\n");
+    const reread = await readEnvironment(services);
+    expect(reread.proposal?.content).toBe(proposal!.content);
+});
+
+test("rejecting drops the drafts, not just the composed proposal", async () => {
+    const services = stubServices();
+    await services.files.write(join(draftsDir(services), "ffmpeg.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
+    await readEnvironment(services);
+
+    await rejectEnvironment(services);
+    expect((await readEnvironment(services)).proposal).toBeUndefined();
 });

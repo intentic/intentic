@@ -17,6 +17,7 @@ export const Page = m["Page"];
 export const PageHeader = m["PageHeader"];
 export const Popover = m["Popover"];
 export const ProgressRing = m["ProgressRing"];
+export const RowGroup = m["RowGroup"];
 export const Segmented = m["Segmented"];
 export const Select = m["Select"];
 export const StatusBadge = m["StatusBadge"];

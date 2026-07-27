@@ -15,7 +15,7 @@ vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxReques
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { sandboxJson } from "../sandbox/sandboxClient";
-import { laneOf, setAgents, useAgents } from "./useAgents";
+import { laneOf, resetAgents, setAgents, useAgents } from "./useAgents";
 
 // The kanban lane projection — pure over status + attention, so "finished" needs no explicit action:
 // a cleanly-completed, auto-landed turn reads landed/idle and the card moves lanes on the next roster frame.
@@ -58,7 +58,7 @@ describe("archive", () => {
     // The store is a module singleton (one board per app), so each case resets what it looks at.
     beforeEach(() => {
         post.mockReset();
-        setAgents([]);
+        resetAgents();
         const { dismissNotice, archived } = useAgents();
         archived.value = [];
         dismissNotice();
@@ -66,8 +66,8 @@ describe("archive", () => {
 
     it("moves what the daemon says moved, and offers an undo built from it", async () => {
         const { archive, notice, lanes, archived } = useAgents();
-        setAgents([agent(`a`), agent(`b`)]);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)] } as never);
+        setAgents([agent(`a`), agent(`b`)], 1);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 2 } as never);
 
         await archive([`a`]);
 
@@ -83,8 +83,8 @@ describe("archive", () => {
 
     it("with no ids asks the daemon to clear the lane, and pluralizes what it took", async () => {
         const { archive, notice } = useAgents();
-        setAgents([agent(`a`), agent(`b`)]);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)] } as never);
+        setAgents([agent(`a`), agent(`b`)], 1);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], rev: 3 } as never);
 
         await archive();
 
@@ -94,11 +94,11 @@ describe("archive", () => {
 
     it("undo restores exactly what was archived, and clears the notice", async () => {
         const { archive, notice, lanes, archived } = useAgents();
-        setAgents([agent(`a`), agent(`b`)]);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)] } as never);
+        setAgents([agent(`a`), agent(`b`)], 1);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], rev: 4 } as never);
         await archive();
 
-        post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)] } as never);
+        post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], rev: 5 } as never);
         await notice.value?.undo?.();
 
         expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`a`, `b`] }) }));
@@ -109,7 +109,7 @@ describe("archive", () => {
 
     it("says so plainly when there was nothing to archive, with nothing to undo", async () => {
         const { archive, notice } = useAgents();
-        post.mockResolvedValueOnce({ moved: [] } as never);
+        post.mockResolvedValueOnce({ moved: [], rev: 6 } as never);
 
         await archive();
 
@@ -119,7 +119,7 @@ describe("archive", () => {
 
     it("reports a failure without dropping any cards off the board", async () => {
         const { archive, notice, lanes } = useAgents();
-        setAgents([agent(`a`)]);
+        setAgents([agent(`a`)], 1);
         post.mockRejectedValueOnce(new Error(`the agent's turn is running`));
 
         await archive([`a`]);
@@ -140,7 +140,7 @@ describe("archive", () => {
 
         it("keeps each card busy until ITS OWN request lands", async () => {
             const { archive, busyIds } = useAgents();
-            setAgents([agent(`a`), agent(`b`)]);
+            setAgents([agent(`a`), agent(`b`)], 1);
             const first = deferred<unknown>();
             const second = deferred<unknown>();
             post.mockReturnValueOnce(first.promise as never).mockReturnValueOnce(second.promise as never);
@@ -149,20 +149,20 @@ describe("archive", () => {
             const archiveB = archive([`b`]);
             expect(busyIds.value.toSorted()).toEqual([`a`, `b`]);
 
-            first.resolve({ moved: [archivedAgent(`a`)] });
+            first.resolve({ moved: [archivedAgent(`a`)], rev: 7 });
             await archiveA;
             // The bug: the first call's cleanup used to clear the shared in-flight list, so b's card went quiet
             // while its request was still open.
             expect(busyIds.value).toEqual([`b`]);
 
-            second.resolve({ moved: [archivedAgent(`b`)] });
+            second.resolve({ moved: [archivedAgent(`b`)], rev: 8 });
             await archiveB;
             expect(busyIds.value).toEqual([]);
         });
 
         it("never lets the slower response put the faster one's card back", async () => {
             const { archive, lanes, archived } = useAgents();
-            setAgents([agent(`a`), agent(`b`)]);
+            setAgents([agent(`a`), agent(`b`)], 1);
             const first = deferred<unknown>();
             const second = deferred<unknown>();
             post.mockReturnValueOnce(first.promise as never).mockReturnValueOnce(second.promise as never);
@@ -170,9 +170,9 @@ describe("archive", () => {
             const archiveA = archive([`a`]);
             const archiveB = archive([`b`]);
             // b finishes first; a's response was composed when b was still on the board.
-            second.resolve({ moved: [archivedAgent(`b`)] });
+            second.resolve({ moved: [archivedAgent(`b`)], rev: 9 });
             await archiveB;
-            first.resolve({ moved: [archivedAgent(`a`)] });
+            first.resolve({ moved: [archivedAgent(`a`)], rev: 10 });
             await archiveA;
 
             expect(lanes.value.finished).toEqual([]);
@@ -181,27 +181,72 @@ describe("archive", () => {
 
         it("merges consecutive archives into one undo that puts all of them back", async () => {
             const { archive, notice } = useAgents();
-            setAgents([agent(`a`), agent(`b`)]);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)] } as never);
+            setAgents([agent(`a`), agent(`b`)], 1);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 11 } as never);
             await archive([`a`]);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`b`)] } as never);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`b`)], rev: 12 } as never);
             await archive([`b`]);
 
             // Not "1 agent archived" with the way back to `a` silently dropped.
             expect(notice.value?.message).toContain(`2 agents archived`);
-            post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)] } as never);
+            post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], rev: 13 } as never);
             await notice.value?.undo?.();
             expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`b`, `a`] }) }));
         });
 
+        // The roster arrives as full snapshots from three racing sources (the /events stream, refresh(), and
+        // this browser's own writes), so "which one is newest" cannot be "which one landed last". These pin the
+        // ordering rules that replaced last-frame-wins — each was a way an archived card came back.
+        it("ignores a roster snapshot older than the one already applied", () => {
+            const { lanes } = useAgents();
+            setAgents([agent(`a`), agent(`b`)], 5);
+            // A slow GET /agents that was read at revision 3 and delivered after the revision-5 frame.
+            setAgents([agent(`a`), agent(`b`), agent(`c`)], 3);
+            expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
+        });
+
+        it("keeps an archived card off the board across a NEWER snapshot that predates the archive", async () => {
+            const { archive, lanes } = useAgents();
+            setAgents([agent(`a`), agent(`b`)], 1);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 9 } as never);
+            await archive([`a`]);
+
+            // A running turn ticks updatedAt about once a second, so a legitimately newer roster arrives that
+            // was still composed before the archive applied. Revision ordering alone would accept it and put
+            // the card back; the pending move is what holds the board steady until revision 9.
+            setAgents([agent(`a`), agent(`b`)], 8);
+            expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
+        });
+
+        it("hands the board back to the daemon once it publishes the archive", async () => {
+            const { archive, lanes } = useAgents();
+            setAgents([agent(`a`), agent(`b`)], 1);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 9 } as never);
+            await archive([`a`]);
+
+            // The roster that reflects the archive retires the local intent — and the daemon is authoritative
+            // again, so an agent it has since restored elsewhere reappears instead of being held off forever.
+            setAgents([agent(`a`), agent(`b`)], 9);
+            expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
+        });
+
+        it("forgets the revision line when the stream drops, so a restarted daemon is not rejected", () => {
+            const { lanes } = useAgents();
+            setAgents([agent(`a`)], 42);
+            resetAgents();
+            // A daemon that restarted counts from 0 again; holding onto 42 would reject every frame it sends.
+            setAgents([agent(`a`), agent(`b`)], 0);
+            expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
+        });
+
         it("drops the merged undo once its notice is gone", async () => {
             const { archive, notice, dismissNotice } = useAgents();
-            setAgents([agent(`a`), agent(`b`)]);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)] } as never);
+            setAgents([agent(`a`), agent(`b`)], 1);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 14 } as never);
             await archive([`a`]);
             dismissNotice();
 
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`b`)] } as never);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`b`)], rev: 15 } as never);
             await archive([`b`]);
             // `a` was acknowledged and is off the strip — the new receipt speaks only for `b`.
             expect(notice.value?.message).toContain(`1 agent archived`);

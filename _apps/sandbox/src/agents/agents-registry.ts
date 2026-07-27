@@ -79,6 +79,12 @@ export interface AgentsRegistry {
     // The persisted entry — the worktree composition (per-repo bases) diff/land need.
     readonly entry: (id: string) => PersistedAgent | undefined;
     readonly running: (id: string) => boolean;
+    // The SDK session ids of the turns in flight RIGHT NOW. The terminals list maps them to the `agent-*` tmux
+    // sessions those turns run their Bash in (agent/agent-terminals.ts), so a working agent's terminal doesn't
+    // read as finished while it thinks — between two commands its only window is the last one's dead pane, and
+    // pane liveness alone would call that done. Known from the turn's first SDK frame (`session`), well before
+    // its first command; an id the entry has not been flushed with yet falls back to the last turn's.
+    readonly liveSessionIds: () => string[];
     // Acquire the conversation's turn mutex and mark it running, creating/updating the entry. False ⇒ a turn
     // is already running for that conversation (the caller surfaces the coded busy error).
     readonly begin: (turn: AgentTurnIdentity, now: number) => Promise<boolean>;
@@ -111,14 +117,23 @@ export interface AgentsRegistry {
     readonly setArchived: (ids: readonly string[], now: number) => Promise<void>;
     readonly clearArchived: (ids: readonly string[]) => Promise<void>;
     readonly remove: (id: string) => Promise<void>;
-    // Immediate snapshot on subscribe, so a fresh /events connection paints the fleet without waiting.
-    readonly subscribe: (listener: (agents: AgentSummary[]) => void) => () => void;
+    // Immediate snapshot on subscribe, so a fresh /events connection paints the fleet without waiting. The
+    // listener also receives the revision the snapshot was taken at (see `revision`).
+    readonly subscribe: (listener: (agents: AgentSummary[], rev: number) => void) => () => void;
+    // A counter bumped on every broadcast, i.e. on every registry change. The roster is published as full
+    // snapshots, and the browser reconciles three sources of it — this stream, its own GET /agents, and its
+    // optimistic writes — so each snapshot has to say WHEN it was true. Monotonic within a daemon process;
+    // it restarts at 0 on reboot, which is safe because the stream reconnects and the browser adopts the first
+    // roster it sees on a fresh connection.
+    readonly revision: () => number;
 }
 
 export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
     let entries: PersistedAgent[] = [];
     const runtime = new Map<string, RuntimeState>();
-    const listeners = new Set<(agents: AgentSummary[]) => void>();
+    const listeners = new Set<(agents: AgentSummary[], rev: number) => void>();
+    // Bumped by broadcast(), so it advances exactly once per published change — see `revision` on the interface.
+    let revision = 0;
 
     const runtimeOf = (id: string): RuntimeState => {
         const existing = runtime.get(id);
@@ -176,10 +191,13 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
 
     const list = (): AgentSummary[] => entries.filter((entry) => entry.archivedAt === undefined).map(summaryOf);
 
+    // One bump per published change, BEFORE the fan-out, so every listener on this broadcast sees the same
+    // revision and a mutation route reading revision() afterwards reports the one its own change produced.
     const broadcast = (): void => {
         const agents = list();
+        revision += 1;
         for (const listener of listeners) {
-            listener(agents);
+            listener(agents, revision);
         }
     };
 
@@ -221,6 +239,13 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
         },
         entry: entryOf,
         running: (id) => runtime.get(id)?.running === true,
+        liveSessionIds: () =>
+            [...runtime]
+                .filter(([, state]) => state.running)
+                .flatMap(([id, state]) => {
+                    const sessionId = state.pendingSessionId ?? entryOf(id)?.sessionId;
+                    return sessionId === undefined ? [] : [sessionId];
+                }),
         begin: async (turn, now) => {
             if (runtime.get(turn.conversationId)?.running === true) {
                 return false;
@@ -447,8 +472,12 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
         },
         subscribe: (listener) => {
             listeners.add(listener);
-            listener(list());
+            // The immediate paint carries the CURRENT revision without bumping it: subscribing is not a change,
+            // and inventing a revision here would make a new connection look newer than the rosters already
+            // applied by tabs that have been connected all along.
+            listener(list(), revision);
             return () => listeners.delete(listener);
         },
+        revision: () => revision,
     };
 };

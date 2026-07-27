@@ -28,8 +28,10 @@ export const createAgentsRoutes = (services: Services) => {
         }
     };
     return {
-        list: i.list.handler(() => ({ agents: services.agents.list() })),
-        archived: i.archived.handler(() => ({ agents: services.agents.listArchived() })),
+        // Every roster read carries the revision it was taken at, so the browser can tell this answer apart from
+        // the /events snapshots racing it — see AgentsListSchema.
+        list: i.list.handler(() => ({ agents: services.agents.list(), rev: services.agents.revision() })),
+        archived: i.archived.handler(() => ({ agents: services.agents.listArchived(), rev: services.agents.revision() })),
         get: i.get.handler(({ input }) => {
             const summary = services.agents.get(input.id);
             if (summary === undefined) {
@@ -58,7 +60,7 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         seenAll: i.seenAll.handler(async () => {
             await services.agents.markAllSeen(Date.now());
-            return { agents: services.agents.list() };
+            return { agents: services.agents.list(), rev: services.agents.revision() };
         }),
         // The review shows the agent's CUMULATIVE output (`base` → worktree), so work stays inspectable after
         // it lands — which is the normal case, clean turn completions auto-landing within ms of finishing.
@@ -179,8 +181,10 @@ export const createAgentsRoutes = (services: Services) => {
                     .filter((entry) => archivable(entry, services.agents.running(entry.id)))
                     .map((entry) => entry.id);
             const archived = await archiveAgents(services, targets, Date.now());
-            // Read AFTER the archive, so each summary carries the archivedAt the card dates itself by.
-            return { moved: archived.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined) };
+            // Read AFTER the archive, so each summary carries the archivedAt the card dates itself by, and with
+            // the revision that applied it — the browser holds these ids off the board until a roster at least
+            // that new arrives, so an in-flight older snapshot can't put them back.
+            return { moved: archived.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined), rev: services.agents.revision() };
         }),
         unarchive: i.unarchive.handler(async ({ input }) => {
             for (const id of input.ids) {
@@ -189,7 +193,7 @@ export const createAgentsRoutes = (services: Services) => {
             // No worktree restore: the next turn's ensure() rebuilds the checkout from the branch, so putting a
             // card back is a registry write and nothing else.
             await services.agents.clearArchived(input.ids);
-            return { moved: input.ids.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined) };
+            return { moved: input.ids.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined), rev: services.agents.revision() };
         }),
     };
 };

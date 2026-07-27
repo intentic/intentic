@@ -469,7 +469,7 @@ const endResize = (event: PointerEvent): void => {
                 <!-- The sidebar's three modes (VSCode SCM pattern): the file explorer, the agent-changes review, or
                      the snapshot timeline. One column, one resize handle — review/history never steal width from
                      the diff view in the main area. The mode switch sits ON the sidebar it switches. -->
-                <div class="flex h-8 shrink-0 items-center border-b border-line px-1.5">
+                <div class="view-header flex items-center border-b border-line px-1.5">
                     <Segmented v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
                 </div>
                 <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" :show-history="true" @open-diff="openDiff" @open-graph="openGraph" />
@@ -600,7 +600,7 @@ const endResize = (event: PointerEvent): void => {
             <section class="relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
                 <!-- Tab row: explorer toggle + open tabs + the workspace status/actions the old top bar held.
                      Always rendered so the controls survive zero open tabs. -->
-                <div class="flex h-8 shrink-0 items-stretch border-b border-line bg-card">
+                <div class="view-header flex items-stretch border-b border-line bg-card">
                     <button
                         type="button"
                         class="mx-1 flex h-7 w-7 shrink-0 items-center justify-center self-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"

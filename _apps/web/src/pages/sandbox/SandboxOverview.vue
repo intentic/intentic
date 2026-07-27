@@ -10,6 +10,7 @@ import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { presenceOthers } from "../../composables/usePresence";
+import SandboxBehindCard from "./SandboxBehindCard.vue";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
 
 /* The Sandbox hub's "Overview" tab — the calm landing. Sandbox identity (name + logo, inline-editable by the
@@ -236,6 +237,10 @@ const save = async (): Promise<void> => {
 
         <!-- A newer sandbox image has shipped: the non-blocking, host-run update prompt (self-hides otherwise). -->
         <SandboxUpdateCard />
+
+        <!-- This daemon predates routes the app knows: names the gap instead of letting them 404 unexplained.
+             Version-independent, so it also fires in local dev where every package is 0.0.0. Self-hides. -->
+        <SandboxBehindCard />
 
         <!-- At a glance: compact deep-links into the detail tabs, so the landing stays calm. -->
         <RowGroup label="At a glance">
