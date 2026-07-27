@@ -2,7 +2,7 @@
 import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { NATIVE_PROVIDERS, type NativeProvider, providerLabel } from "@intentic/sandbox-contract";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
@@ -339,9 +339,21 @@ const onDrop = (event: DragEvent): void => {
 // --- Editor context chip ---------------------------------------------------------------------
 // What the chip would attach: the live Monaco selection, else the active file tab. OFF by default — the user
 // clicks the chip to attach it to the next message (the inverse of VSCode Claude Code's always-on injection).
+//
+// Gated on the Workspace being the area on screen. The chip's whole claim is "the file you are LOOKING AT",
+// and it reads two singletons (useWorkspaceTabs, useEditorSelection) that outlive the Workspace view — while
+// this panel is docked in the persistent shell (ShellDesktop) beside whatever area is open. Off /workspace
+// there is nothing the user is looking at, so "this file" has no referent and the chip is a stale nag for a
+// file they left behind (worse in /agents, where the turn runs in the agent's worktree, not the /work tree
+// the tab came from). Route-gated rather than dismissible: it is self-correcting — walk back into the
+// Workspace and the chip returns, with nothing to undo.
+const route = useRoute();
 const workspaceTabs = useWorkspaceTabs();
 const editorSelection = useEditorSelection();
 const editorTarget = computed<{ file: string; startLine?: number; endLine?: number; selection?: string } | undefined>(() => {
+    if (route.name !== `workspace`) {
+        return undefined;
+    }
     const selection = editorSelection.selection.value;
     if (selection !== undefined) {
         return { file: selection.path, startLine: selection.startLine, endLine: selection.endLine, selection: selection.text };
@@ -350,7 +362,9 @@ const editorTarget = computed<{ file: string; startLine?: number; endLine?: numb
     return tab?.kind === `file` ? { file: tab.path } : undefined;
 });
 const includeEditorContext = ref(false);
-// Attaching is an explicit per-file choice — a different file in the editor resets the opt-in.
+// Attaching is an explicit per-file choice — a different file in the editor resets the opt-in, as does
+// leaving the Workspace (the target goes undefined with the chip, so an opt-in can't outlive the chip that
+// explained it and ride along invisibly into a later message).
 watch(
     () => editorTarget.value?.file,
     () => {
@@ -1326,14 +1340,6 @@ watch(keyboardInset, () => {
     height: 1.75rem;
     padding: 0 0.7rem;
     font-size: 0.6875rem;
-}
-/* The tab strip scrolls sideways once the tabs hit their shrink floor; the native bar is hidden, because 6px of
-   a 35px row is the difference between tabs sitting centred and tabs sitting high (ChatTabs.onWheel scrolls it). */
-.chat-strip {
-    scrollbar-width: none; /* Firefox */
-}
-.chat-strip::-webkit-scrollbar {
-    display: none;
 }
 .chat-tab {
     color: var(--color-muted);

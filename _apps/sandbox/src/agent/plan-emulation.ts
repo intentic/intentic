@@ -43,6 +43,7 @@ export async function* runPlanEmulation(
         const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
         yield { kind: "plan", requestId: id, text: capture.planText };
         const decision = await wait(signal);
+        yield { kind: "resolved", requestId: id };
         if (signal.aborted) {
             return;
         }

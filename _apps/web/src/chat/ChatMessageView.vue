@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { type IconName, useDevice } from "@intentic-app/ui";
-import type { AskQuestion, TodoItem } from "@intentic/sandbox-contract";
+import { useDevice } from "@intentic-app/ui";
+import type { AskQuestion } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { type ChatMessage, planParts, type PlanRequest } from "../composables/chat/transcript";
@@ -10,6 +10,7 @@ import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { restoreSnapshot } from "../composables/workspace/useHistory";
 import { useChat } from "../composables/chat/useChat";
 import ChatImageThumb from "./ChatImageThumb.vue";
+import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolCard from "./ChatToolCard.vue";
 
 /* One transcript entry: user bubble, notice line, or the assistant turn's stack (thinking, tools, todos,
@@ -63,17 +64,6 @@ const body = useMarkdown(
 );
 // A plan card's body arrives whole with the card, so it never streams.
 const plan = useMarkdown(() => (props.message.plan ? planParts(props.message.plan.text).body : ``), false);
-
-const todoIcon = (todo: TodoItem): { name: IconName; spin?: boolean; class: string } => {
-    if (todo.status === `completed`) {
-        return { name: `check-circle`, class: `text-success` };
-    }
-    if (todo.status === `in_progress`) {
-        return { name: `spinner`, spin: true, class: `text-link` };
-    }
-    return { name: `circle`, class: `text-subtle` };
-};
-const todoText = (todo: TodoItem): string => (todo.status === `in_progress` && todo.activeForm ? todo.activeForm : todo.content);
 
 const planTitle = (request: PlanRequest): string => planParts(request.text).title ?? `Proposed plan`;
 
@@ -388,18 +378,15 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
             </div>
 
+            <!-- `live` is this bubble's own stream flag, which is what "still happening" means for both of
+                 these: a call in flight and the checklist the agent is moving both belong to the bubble the
+                 turn is currently writing into. Anywhere else they are a record — frozen mid-flight by a Stop,
+                 by the turn moving on, or by the session ending — and must not animate. -->
             <div v-if="message.tools?.length" class="flex w-full flex-col gap-1">
-                <ChatToolCard v-for="tool in message.tools" :key="tool.id" :tool="tool" />
+                <ChatToolCard v-for="tool in message.tools" :key="tool.id" :tool="tool" :live="streaming" />
             </div>
 
-            <div v-if="message.todos?.length" class="flex w-full flex-col gap-1 rounded-lg border border-line bg-overlay/40 px-3 py-2">
-                <div v-for="(todo, index) in message.todos" :key="index" class="flex items-start gap-2 text-xs">
-                    <Icon v-bind="todoIcon(todo)" class="mt-0.5 text-2xs" />
-                    <span :class="{ 'text-subtle': todo.status === 'completed', 'line-through': todo.status === 'completed' }">{{
-                        todoText(todo)
-                    }}</span>
-                </div>
-            </div>
+            <ChatTodoList v-if="message.todos?.length" :todos="message.todos" :live="streaming" />
 
             <!-- Two v-html slots, not one: the settled half is unchanged between frames so Vue leaves its DOM
                  (and the user's selection) alone, while only the short tail is re-rendered. `.md-part` is

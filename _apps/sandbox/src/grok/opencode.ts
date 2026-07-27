@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { compareModelIds } from "@intentic/sandbox-contract";
+import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import { createOpencodeClient, createOpencodeServer, type OpencodeClient } from "@opencode-ai/sdk";
 import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
 
@@ -40,7 +40,7 @@ export interface OpenCodeService {
 // REST catalog nor its "Did you mean" rejection publishes a ranking (see model-order.ts), so the app imposes the
 // order — which is what makes `default` the frontier newest rather than whichever id xAI happened to name first.
 const toCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
-    const ordered = ids.toSorted(compareModelIds);
+    const ordered = ids.toSorted(compareUnrankedModelIds);
     return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
 };
 

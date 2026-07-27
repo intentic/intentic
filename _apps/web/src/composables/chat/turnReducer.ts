@@ -254,7 +254,9 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             // A sub-agent's thinking is grouped onto its own Agent card (its live transcript), not merged into
             // the parent turn's thinking block.
             if (event.parentToolUseId !== undefined) {
-                return step(mapToolAnywhere(state, event.parentToolUseId, (tool) => ({ ...tool, thinking: `${tool.thinking ?? ``}${event.text}` })).state);
+                return step(
+                    mapToolAnywhere(state, event.parentToolUseId, (tool) => ({ ...tool, thinking: `${tool.thinking ?? ``}${event.text}` })).state,
+                );
             }
             const opened = withBubble(state);
             return step(mapMessage(opened.state, opened.id, (message) => ({ ...message, thinking: `${message.thinking ?? ``}${event.text}` })));
@@ -317,6 +319,14 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             const attached = mapMessage(opened.state, opened.id, (message) => ({ ...message, permission: { ...ask, status: `pending` } }));
             return step({ ...attached, bubbleId: null });
         }
+        case `resolved`:
+            // The card above was released. Nothing to do HERE: the surface that answered froze its own card
+            // into the transcript with the choice the user made (decidePlan / answerQuestion / decidePermission),
+            // and this frame carries no choice to freeze — it exists so the daemon's fleet registry knows
+            // exactly how long the turn was parked (agents-registry.ts). A transcript replayed on a surface
+            // that did NOT answer still shows the card pending; retiring THAT honestly needs the outcome, not
+            // just the release.
+            return step(state);
         case `compact`:
             return step(appendNotice(state, `Context compacted to free up space.`));
         case `landed`:

@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { compareModelIds } from "@intentic/sandbox-contract";
+import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import { type KimiStore, resolveKimiKey } from "./kimi-credentials.js";
 import { discoverKimiModels, humanizeModelId, SEED_KIMI_MODELS } from "./kimi-models.js";
@@ -23,7 +23,7 @@ const MODELS_TTL_MS = 60_000;
 // imposes the order — which is what makes `default` the frontier newest rather than whichever id the endpoint
 // happened to list first.
 const toCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
-    const ordered = ids.toSorted(compareModelIds);
+    const ordered = ids.toSorted(compareUnrankedModelIds);
     return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
 };
 

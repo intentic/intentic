@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { compareModelIds, familyOf, releaseOf, tierRankOf } from "./model-order.js";
+import { compareModelIds, compareUnrankedModelIds, familyOf, releaseOf, tierRankOf } from "./model-order.js";
 
 /* The order every provider's catalog is served and browsed in. The rule exists because only Anthropic publishes
  * a ranking: the OpenAI-compatible endpoints behind Codex, Gemini, Kimi and Grok hand back a SET, and taking
@@ -24,6 +24,29 @@ test("lands the same models at the head and the tail whichever order the endpoin
         expect(ordered.slice(0, 2).toSorted()).toEqual(["gpt-5.6-sol", "gpt-5.6-terra"]);
         expect(ordered.at(-1)).toBe("gpt-5.4-mini");
     }
+});
+
+test("an unranked catalog settles its own ties, so the SAME sibling opens the group on every refresh", () => {
+    // The measured failure: the translator's /v1/models hands sol/terra/luna back in a different order per
+    // request, and the rule above ranks all three equally — same tier, same 5.6 release. Under plain stability
+    // the catalog's head (i.e. the model a fresh conversation starts on) followed that reshuffling.
+    const arrivals = [
+        ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
+        ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6-sol"],
+        ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"],
+    ];
+    const heads = arrivals.map((arrival) => arrival.toSorted(compareUnrankedModelIds)[0]);
+
+    expect(new Set(heads).size).toBe(1);
+    // Same rule, so ranking still outranks the tiebreak: the mini rung stays at the tail, under every sibling.
+    expect(["gpt-5.4-mini", ...arrivals[0]!].toSorted(compareUnrankedModelIds).at(-1)).toBe("gpt-5.4-mini");
+});
+
+test("leaves a RANKED catalog's ties alone — the id tiebreak is for sets, and Anthropic publishes an opinion", () => {
+    // compareUnrankedModelIds would seat claude-fable-5 ahead of claude-opus-5 on the id alone. Anthropic's
+    // catalog arrives newest-first, so that order is a fact about the provider, not a leftover to be broken.
+    expect(["claude-opus-5", "claude-fable-5"].toSorted(compareModelIds)).toEqual(["claude-opus-5", "claude-fable-5"]);
+    expect(["claude-opus-5", "claude-fable-5"].toSorted(compareUnrankedModelIds)).toEqual(["claude-fable-5", "claude-opus-5"]);
 });
 
 test("reads each vendor's tier vocabulary, not just Claude's", () => {

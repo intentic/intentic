@@ -13,7 +13,7 @@ import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { toolCategoryOf, workspacePath } from "../agent/tool-calls.js";
-import { CODEX_MODEL_INVALID } from "./codex-models.js";
+import { CODEX_ADVISORY, CODEX_MODEL_INVALID } from "./codex-models.js";
 
 /* The Codex provider adapter: same seam as agent.ts's runAgent — AgentRequest in, AgentEvent frames out — but
  * backed by the Codex CLI (`codex exec` via @openai/codex-sdk) instead of the Claude Agent SDK. Provider
@@ -221,6 +221,13 @@ async function* streamTurn(events: AsyncIterable<ThreadEvent>, cwd: string, capt
                 };
             } else if (item.type === "error") {
                 if (event.type === "item.completed") {
+                    // An advisory shares this channel with real failures but is not one — the turn answers
+                    // normally after it. So it must not mark the phase errored: a plan turn that hit one still
+                    // has a plan to propose (see CODEX_ADVISORY).
+                    if (CODEX_ADVISORY.test(item.message)) {
+                        yield { kind: "error", code: "codex-advisory", message: item.message };
+                        continue;
+                    }
                     yield { kind: "error", message: item.message };
                     if (capture !== undefined) {
                         capture.errored = true;
@@ -337,6 +344,13 @@ export const createCodexAgent = (codexHome: string, runner: CodexRunner = defaul
         try {
             for await (const event of turn) {
                 if (event.kind === "error") {
+                    // An advisory is already tagged and is not a failure, so it must not count as the turn's
+                    // surfaced error — letting it stand in for one would swallow the SDK's exit-code wrapper on a
+                    // turn that then died for a real reason.
+                    if (event.code === "codex-advisory") {
+                        yield event;
+                        continue;
+                    }
                     surfacedError = true;
                     // Tag a rejected/unusable model so the client reloads the live catalog and drops the bad pinned
                     // model, mirroring Grok's grok-model-invalid (OpenAI names no alternatives, so there's nothing
