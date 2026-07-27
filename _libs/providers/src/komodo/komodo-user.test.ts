@@ -139,5 +139,7 @@ test("apply does not recreate an existing user, but still enables and grants", a
 });
 
 test("malformed inputs are rejected", async () => {
-    await expect(createKomodoUserProvider(api({}), sshForward).read({ ...inputs, username: 5 }, ctx())).rejects.toThrow(/komodo-user inputs malformed/);
+    await expect(createKomodoUserProvider(api({}), sshForward).read({ ...inputs, username: 5 }, ctx())).rejects.toThrow(
+        /komodo-user inputs malformed/,
+    );
 });

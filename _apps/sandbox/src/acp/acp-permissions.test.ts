@@ -2,7 +2,10 @@ import { expect, test } from "vitest";
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { decidePermission } from "./acp-permissions.js";
 
-const request = (kind: string | undefined, options: { optionId: string; kind: "allow_once" | "allow_always" | "reject_once" | "reject_always" }[]): RequestPermissionRequest => ({
+const request = (
+    kind: string | undefined,
+    options: { optionId: string; kind: "allow_once" | "allow_always" | "reject_once" | "reject_always" }[],
+): RequestPermissionRequest => ({
     sessionId: "s1",
     toolCall: { toolCallId: "t1", ...(kind !== undefined ? { kind: kind as "edit" } : {}) },
     options: options.map((option) => ({ ...option, name: option.optionId })),

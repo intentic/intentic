@@ -109,7 +109,16 @@ export const createExtensionApi = (
                 }
                 // Title/icon/keybinding all come from the approved manifest, never the runtime call — the install
                 // dialog is what the user consented to, so the global shortcut is bound only as declared.
-                return track(registerCommand({ owner: extensionId, command, title: declared.title, icon: declared.icon, keybinding: declared.keybinding, handler }));
+                return track(
+                    registerCommand({
+                        owner: extensionId,
+                        command,
+                        title: declared.title,
+                        icon: declared.icon,
+                        keybinding: declared.keybinding,
+                        handler,
+                    }),
+                );
             },
             execute: (command, ...args) => executeCommand(command, ...args),
         },

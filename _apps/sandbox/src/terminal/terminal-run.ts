@@ -95,12 +95,7 @@ export const createTerminalRunner = (): TerminalRunner => {
             const { stdout } = visible
                 ? await execFileAsync(
                       TMUX_RUN_BIN,
-                      [
-                          ...Object.keys(options.env ?? {}).flatMap((key) => ["-e", key]),
-                          session,
-                          command,
-                          options.window ?? "run",
-                      ],
+                      [...Object.keys(options.env ?? {}).flatMap((key) => ["-e", key]), session, command, options.window ?? "run"],
                       {
                           ...execOptions,
                           env: {

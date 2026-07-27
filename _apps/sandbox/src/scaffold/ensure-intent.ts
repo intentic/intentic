@@ -21,7 +21,7 @@ const packageRoot = (pkg: string): string => {
     // invariant holds for a normally-installed package, but a broken/partial dev symlink could otherwise send
     // this synchronous loop past the root forever (dirname("/") === "/") and peg the daemon event loop — so
     // fail loudly at the root instead of spinning.
-    for (let dir = dirname(entry); ; ) {
+    for (let dir = dirname(entry); ;) {
         if (existsSync(join(dir, "package.json"))) {
             return dir;
         }

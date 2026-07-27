@@ -132,8 +132,7 @@ export const chordFromEvent = (event: KeyboardEvent, isMac: boolean): string | u
 // Multi-word named keys whose readable label isn't just first-letter capitalization ("Pagedown" reads wrong).
 const DISPLAY_NAMES: Readonly<Record<string, string>> = { pageup: `PageUp`, pagedown: `PageDown` };
 
-const displayKey = (key: string): string =>
-    DISPLAY_NAMES[key] ?? (key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1));
+const displayKey = (key: string): string => DISPLAY_NAMES[key] ?? (key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1));
 
 // The human label shown in the palette: the native glyph stack on Apple (⌃⌥⇧⌘, VSCode's order, no separators),
 // the spelled-and-joined form elsewhere (Ctrl+Shift+Alt+Key).

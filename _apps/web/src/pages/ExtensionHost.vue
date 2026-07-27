@@ -20,9 +20,7 @@ const found = computed(() => {
     // A singleton view links to /ext/<id> with no key segment (extensionPath drops the redundant key === id);
     // resolve the absent segment back to the view id, the same value the builder collapsed.
     const key = route.params[`key`] ? String(route.params[`key`]) : ext;
-    return detectActivations(panels.value, capabilities.value).find(
-        ({ extension, activation }) => extension.id === ext && activation.key === key,
-    );
+    return detectActivations(panels.value, capabilities.value).find(({ extension, activation }) => extension.id === ext && activation.key === key);
 });
 </script>
 

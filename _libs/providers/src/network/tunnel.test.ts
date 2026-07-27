@@ -197,7 +197,10 @@ test("apply restarts the connector when its image drifted and waits until the ed
         ssh.executor,
     );
 
-    const observed = { outputs: {}, detail: { ingress: [appRule, catchAll], connectorRunning: true, image: "cloudflare/cloudflared:old@sha256:bbbb" } };
+    const observed = {
+        outputs: {},
+        detail: { ingress: [appRule, catchAll], connectorRunning: true, image: "cloudflare/cloudflared:old@sha256:bbbb" },
+    };
     await provider.apply(inputs, observed, ctx());
     expect(ssh.commands.some((command) => command.includes("docker run") && command.includes("--token tok-123"))).toBe(true);
     expect(polls).toBe(2);

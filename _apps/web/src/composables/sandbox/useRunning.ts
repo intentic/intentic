@@ -20,9 +20,7 @@ export const useRunning = (): {
     const { capabilities } = useCapabilities();
     const runningPanels = computed(() => panels.value.filter((panel) => panel.running));
     const activeServices = computed(() =>
-        capabilities.value.filter(
-            (capability) => [`service`, `docker`, `ssh`].includes(capability.kind) && capability.status.state === `active`,
-        ),
+        capabilities.value.filter((capability) => [`service`, `docker`, `ssh`].includes(capability.kind) && capability.status.state === `active`),
     );
     const runningCount = computed(() => runningPanels.value.length + activeServices.value.length);
     return { runningPanels, activeServices, runningCount };

@@ -44,7 +44,9 @@ test("injects the env var for a set secret setting, skips unset and non-env sett
     });
     await writeExtensionSettings(root, "acme.tap", { token: "s3cr3t", region: "eu", verbose: true });
 
-    const env = await extensionEnvOf(stubServices(root, [{ id: "acme.tap", kind: "extension", config: { url: "https://x/y.git", ref: "a".repeat(40) } }]));
+    const env = await extensionEnvOf(
+        stubServices(root, [{ id: "acme.tap", kind: "extension", config: { url: "https://x/y.git", ref: "a".repeat(40) } }]),
+    );
     expect(env).toEqual({ ACME_TOKEN: "s3cr3t", ACME_REGION: "eu" });
 });
 
@@ -59,6 +61,8 @@ test("an empty secret contributes no env var (cleared)", async () => {
     });
     await writeExtensionSettings(root, "acme.tap", { token: "" });
 
-    const env = await extensionEnvOf(stubServices(root, [{ id: "acme.tap", kind: "extension", config: { url: "https://x/y.git", ref: "a".repeat(40) } }]));
+    const env = await extensionEnvOf(
+        stubServices(root, [{ id: "acme.tap", kind: "extension", config: { url: "https://x/y.git", ref: "a".repeat(40) } }]),
+    );
     expect(env).toEqual({});
 });

@@ -60,7 +60,16 @@ test("the production registry image is pull_policy: always so it tracks the movi
 
 test("daemon-defaulted vars are omitted — the environment block stays minimal", () => {
     const yaml = composeFile(base);
-    for (const noise of [`WORKSPACE_ROOT`, `HISTORY_ROOT`, `SANDBOX_HOST`, `SANDBOX_PORT`, `PREVIEW_PORT`, `SANDBOX_NAME:`, `SANDBOX_IMAGE`, `SYNC_PAIR_TOKEN`]) {
+    for (const noise of [
+        `WORKSPACE_ROOT`,
+        `HISTORY_ROOT`,
+        `SANDBOX_HOST`,
+        `SANDBOX_PORT`,
+        `PREVIEW_PORT`,
+        `SANDBOX_NAME:`,
+        `SANDBOX_IMAGE`,
+        `SYNC_PAIR_TOKEN`,
+    ]) {
         expect(yaml, `${noise} should ride the daemon default`).not.toContain(noise);
     }
 });

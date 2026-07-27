@@ -60,7 +60,9 @@ export const logsCommand = buildCommand({
             for (const node of loggable) {
                 out.text(`${node.id} (type "${node.type}")`);
             }
-            out.text(`\nintentic deploy logs <id> fetches that resource's container logs; app deployments live in Komodo (intentic deploy deployments).`);
+            out.text(
+                `\nintentic deploy logs <id> fetches that resource's container logs; app deployments live in Komodo (intentic deploy deployments).`,
+            );
             out.result({ resources: loggable.map((node) => ({ id: node.id, type: node.type })) });
             return;
         }

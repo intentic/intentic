@@ -310,7 +310,9 @@ const vpnFacts = (id: string): string | undefined => {
     if (link === undefined || link.state !== `connected`) {
         return undefined;
     }
-    return [link.address, link.routes.includes(`0.0.0.0/0`) ? `all traffic` : link.routes.join(`, `)].filter((fact) => fact !== undefined && fact !== ``).join(` · `);
+    return [link.address, link.routes.includes(`0.0.0.0/0`) ? `all traffic` : link.routes.join(`, `)]
+        .filter((fact) => fact !== undefined && fact !== ``)
+        .join(` · `);
 };
 
 // --- FortiClient import (vpn card only) ---
@@ -670,14 +672,14 @@ const submitLabel = computed(() =>
                 <RowGroup v-if="selected.kind === 'vpn'" label="Import from FortiClient (optional)">
                     <div class="flex flex-col gap-2 px-4 py-3">
                         <p class="text-2xs text-muted">
-                            Paste an exported FortiClient configuration (File ▸ Settings ▸ Backup) to fill the form from one of its
-                            connections. Passwords in that file are encrypted by FortiClient and can't be read — you'll still type those.
+                            Paste an exported FortiClient configuration (File ▸ Settings ▸ Backup) to fill the form from one of its connections.
+                            Passwords in that file are encrypted by FortiClient and can't be read — you'll still type those.
                         </p>
                         <textarea
                             v-model="forticlientXml"
                             rows="4"
                             spellcheck="false"
-                            placeholder="<?xml version=&quot;1.0&quot;?><forticlient_configuration> …"
+                            placeholder='<?xml version="1.0"?><forticlient_configuration> …'
                             :class="cmp.input('font-mono resize-y')"
                         />
                         <div class="flex justify-end">

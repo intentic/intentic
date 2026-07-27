@@ -37,9 +37,7 @@ test("tool_call passes the vocabulary through verbatim with editor-joined paths"
 });
 
 test("tool_call_update maps statuses and content; text content wraps as a content block", () => {
-    expect(
-        sessionUpdateOf({ kind: "tool_call_update", id: "t1", status: "completed", content: [{ type: "text", text: "ok" }] }, CWD),
-    ).toEqual({
+    expect(sessionUpdateOf({ kind: "tool_call_update", id: "t1", status: "completed", content: [{ type: "text", text: "ok" }] }, CWD)).toEqual({
         sessionUpdate: "tool_call_update",
         toolCallId: "t1",
         status: "completed",

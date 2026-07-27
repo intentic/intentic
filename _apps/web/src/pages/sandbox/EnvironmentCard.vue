@@ -93,7 +93,9 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
         <template v-if="pending">
             <Code :code="pending.content" lang="dockerfile" label="Approved overlay (pending rebuild)" />
             <template v-if="serverManaged">
-                <p class="text-2xs text-subtle">Applies on the next <span class="font-mono">intentic deploy apply</span> against this sandbox's host.</p>
+                <p class="text-2xs text-subtle">
+                    Applies on the next <span class="font-mono">intentic deploy apply</span> against this sandbox's host.
+                </p>
             </template>
             <template v-else>
                 <p class="text-xs font-medium text-content">To finish, rebuild your sandbox:</p>

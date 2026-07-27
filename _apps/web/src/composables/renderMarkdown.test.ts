@@ -111,7 +111,11 @@ describe(`streaming split`, () => {
         const text = `# Title\n\nSome prose with \`code\`.\n\n- a\n- b\n\nTail sentence.`;
         const stream = createStreamingMarkdown();
         const { settled, tail } = stream.render(text);
-        const strip = (html: string): string => html.replace(/<[^>]*>/g, ``).replace(/\s+/g, ` `).trim();
+        const strip = (html: string): string =>
+            html
+                .replace(/<[^>]*>/g, ``)
+                .replace(/\s+/g, ` `)
+                .trim();
         expect(strip(settled + tail)).toBe(strip(renderMarkdown(text)));
     });
 

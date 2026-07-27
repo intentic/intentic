@@ -13,7 +13,8 @@ export const parseLine = (json: string): Line | undefined => {
     }
 };
 
-const asRecord = (value: unknown): Line | undefined => (typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Line) : undefined);
+const asRecord = (value: unknown): Line | undefined =>
+    typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Line) : undefined;
 
 const asString = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 

@@ -201,9 +201,7 @@ const queryClient = useQueryClient();
 const restoring = ref(false);
 const confirmRestore = ref(false);
 let confirmTimer: ReturnType<typeof setTimeout> | undefined;
-const canRestore = computed(
-    () => props.message.role === `user` && props.message.checkpointId !== undefined && !conversationStreaming.value,
-);
+const canRestore = computed(() => props.message.role === `user` && props.message.checkpointId !== undefined && !conversationStreaming.value);
 const restoreToCheckpoint = async (): Promise<void> => {
     const checkpointId = props.message.checkpointId;
     if (checkpointId === undefined || restoring.value) {
@@ -342,7 +340,9 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
                         { 'text-danger opacity-100': confirmRestore },
                     ]"
-                    v-tooltip.left="confirmRestore ? 'Click again to restore the workspace to before this message' : 'Restore workspace to before this message'"
+                    v-tooltip.left="
+                        confirmRestore ? 'Click again to restore the workspace to before this message' : 'Restore workspace to before this message'
+                    "
                     aria-label="Restore workspace to before this message"
                     @click="restoreToCheckpoint"
                 >
@@ -360,10 +360,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 >
                     <Icon name="pencil" class="text-2xs" />
                 </button>
-                <div
-                    v-if="message.text"
-                    class="chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content/90"
-                >
+                <div v-if="message.text" class="chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content/90">
                     {{ message.text }}
                 </div>
             </div>
@@ -461,7 +458,9 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         message.question.questions.length > 1 ? "A few questions" : message.question.questions[0]?.question
                     }}</span>
                     <span v-if="message.question.status === 'answered'" class="mt-0.5 shrink-0 text-2xs font-medium text-success">✓ Answered</span>
-                    <span v-else-if="message.question.status === 'cancelled'" class="mt-0.5 shrink-0 text-2xs font-medium text-muted">✕ Dismissed</span>
+                    <span v-else-if="message.question.status === 'cancelled'" class="mt-0.5 shrink-0 text-2xs font-medium text-muted"
+                        >✕ Dismissed</span
+                    >
                 </div>
 
                 <div class="flex flex-col gap-4 px-3.5 py-3">
@@ -533,20 +532,12 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     <span v-if="message.permission.reason" class="text-2xs text-subtle">Requested because: {{ message.permission.reason }}</span>
                 </div>
 
-                <div
-                    v-if="message.permission.status === 'pending'"
-                    class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5"
-                >
+                <div v-if="message.permission.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
                     <button type="button" class="plan-approve" @click="decidePermission(message, 'once')">
                         <Icon name="check" class="text-xs" />
                         Allow once
                     </button>
-                    <button
-                        v-if="message.permission.alwaysLabel"
-                        type="button"
-                        class="plan-reject"
-                        @click="decidePermission(message, 'always')"
-                    >
+                    <button v-if="message.permission.alwaysLabel" type="button" class="plan-reject" @click="decidePermission(message, 'always')">
                         <Icon name="lock" class="text-xs" />
                         {{ message.permission.alwaysLabel }}
                     </button>

@@ -14,7 +14,10 @@ import { sessionUpdateOf } from "./translate.js";
  * [code, plan] map to the daemon's per-turn permissionMode, which is exactly what the web sends too. */
 
 // The daemon constrains conversation ids (branch/filesystem safety); this always satisfies its regex.
-const mintSessionId = (): string => `acp-${randomBytes(9).toString("base64url").replaceAll(/[^a-zA-Z0-9_-]/g, "")}`;
+const mintSessionId = (): string =>
+    `acp-${randomBytes(9)
+        .toString("base64url")
+        .replaceAll(/[^a-zA-Z0-9_-]/g, "")}`;
 
 interface SessionState {
     readonly conversationId: string;
@@ -42,7 +45,12 @@ export interface BridgeOptions {
 }
 
 // A plan frame → a "Review plan" tool call + permission prompt; the outcome rides the decision channel.
-const reviewPlan = async (ctx: AgentContext, sessionId: string, daemon: DaemonClient, event: Extract<AgentEvent, { kind: "plan" }>): Promise<void> => {
+const reviewPlan = async (
+    ctx: AgentContext,
+    sessionId: string,
+    daemon: DaemonClient,
+    event: Extract<AgentEvent, { kind: "plan" }>,
+): Promise<void> => {
     const toolCallId = `plan-${event.requestId}`;
     await ctx.notify(methods.client.session.update, {
         sessionId,
@@ -145,7 +153,8 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
         const config = configured();
         if (config === undefined) {
             throw RequestError.authRequired({
-                details: "Set INTENTIC_SANDBOX_URL and INTENTIC_BRIDGE_TOKEN (mint a token in the sandbox's Sync settings), or run `intentic-acp login`.",
+                details:
+                    "Set INTENTIC_SANDBOX_URL and INTENTIC_BRIDGE_TOKEN (mint a token in the sandbox's Sync settings), or run `intentic-acp login`.",
             });
         }
         return config;
@@ -174,7 +183,13 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                     ],
                     link: "https://intentic.dev/docs/editor-bridge",
                 },
-                { type: "terminal", id: "login", name: "Interactive login", description: "Paste the sandbox URL and a bridge token.", args: ["login"] },
+                {
+                    type: "terminal",
+                    id: "login",
+                    name: "Interactive login",
+                    description: "Paste the sandbox URL and a bridge token.",
+                    args: ["login"],
+                },
             ],
         }))
         .onRequest(methods.agent.authenticate, async () => {
@@ -305,7 +320,9 @@ export const bridgeAgentApp = (options: BridgeOptions = {}): AgentApp => {
                 if (state.cancelled) {
                     return { stopReason: "cancelled" };
                 }
-                throw error instanceof RequestError ? error : RequestError.internalError({ details: error instanceof Error ? error.message : "turn failed" });
+                throw error instanceof RequestError
+                    ? error
+                    : RequestError.internalError({ details: error instanceof Error ? error.message : "turn failed" });
             } finally {
                 state.abort = undefined;
             }

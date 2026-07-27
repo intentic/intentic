@@ -51,7 +51,9 @@ export const createAutomationsRoutes = (services: Services) => {
                 const declared = await listenerProvidersOf(services);
                 const eventTypes = declared.get(provider);
                 if (provider !== "webchat" && eventTypes === undefined) {
-                    throw new ORPCError("BAD_REQUEST", { message: `unknown listener provider "${provider}" — install the extension that declares it` });
+                    throw new ORPCError("BAD_REQUEST", {
+                        message: `unknown listener provider "${provider}" — install the extension that declares it`,
+                    });
                 }
                 if (eventType !== undefined && eventTypes !== undefined && !eventTypes.has(eventType)) {
                     throw new ORPCError("BAD_REQUEST", { message: `provider "${provider}" has no event type "${eventType}"` });

@@ -102,7 +102,7 @@ const CONTINUATION = /^(?: {4}|\t)/;
 
 // The last non-blank line ending at `end`, so a boundary check knows what the settled text left off with.
 const lineBefore = (text: string, end: number): string => {
-    for (let stop = end; stop > 0; ) {
+    for (let stop = end; stop > 0;) {
         const start = text.lastIndexOf(`\n`, stop - 1) + 1;
         const line = text.slice(start, stop);
         if (line.trim() !== ``) {

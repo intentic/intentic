@@ -104,7 +104,10 @@ export const ipsecConnConfig = (id: string, raw: IpsecVpnConfig): string => {
 // only 0600 file and the config half stays readable for diagnosis.
 export const ipsecSecretsConfig = (raw: IpsecVpnConfig): string => {
     const psk = `${raw.localId ?? "%any"} ${raw.server} : PSK ${JSON.stringify(raw.presharedKey)}`;
-    const xauth = raw.username !== undefined && raw.password !== undefined ? `${JSON.stringify(raw.username)} : XAUTH ${JSON.stringify(raw.password)}` : undefined;
+    const xauth =
+        raw.username !== undefined && raw.password !== undefined
+            ? `${JSON.stringify(raw.username)} : XAUTH ${JSON.stringify(raw.password)}`
+            : undefined;
     return `${[psk, xauth].filter((line) => line !== undefined).join("\n")}\n`;
 };
 
@@ -271,7 +274,9 @@ export const ipsecDriver: VpnDriver = {
         const after = await exec("ipsec", ["statusall", conn]).catch(() => ({ stdout: "" }));
         if (!parseIpsecStatus(conn, after.stdout).established) {
             const hint = ipsecFailureHint(dialOutput);
-            throw new Error([`strongSwan could not establish ${id}.`, hint, dialOutput].filter((part) => part !== undefined && part !== "").join("\n\n"));
+            throw new Error(
+                [`strongSwan could not establish ${id}.`, hint, dialOutput].filter((part) => part !== undefined && part !== "").join("\n\n"),
+            );
         }
         yield { kind: "log", message: `Connected ${id}. The gateway's routed networks now ride the IPsec tunnel.` };
     },

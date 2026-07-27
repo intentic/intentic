@@ -676,7 +676,9 @@ describe(`Conversation`, () => {
     it(`ignores an account_usage frame the daemon could not attribute to an account`, async () => {
         usageStatusByAccount.value = {};
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `account_usage`, windows: [{ kind: `seven_day`, utilization: 5 }] }, { kind: `done` }]));
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `account_usage`, windows: [{ kind: `seven_day`, utilization: 5 }] }, { kind: `done` }]),
+        );
         await conversation.send(`hello`, settings);
 
         // An env-token turn has no account to key the snapshot by — better unknown than misattributed.
@@ -689,7 +691,10 @@ describe(`Conversation`, () => {
         // The gate signal names ONE window — whichever the provider treated as binding for that request. Writing
         // it into the headroom map is how a weekly pool at 1% came to speak for an account at 98% on another.
         sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `rate_limit_info`, account: `acct-1`, status: `allowed`, utilization: 1, rateLimitType: `seven_day` }, { kind: `done` }]),
+            sseResponse([
+                { kind: `rate_limit_info`, account: `acct-1`, status: `allowed`, utilization: 1, rateLimitType: `seven_day` },
+                { kind: `done` },
+            ]),
         );
         await conversation.send(`hello`, settings);
 

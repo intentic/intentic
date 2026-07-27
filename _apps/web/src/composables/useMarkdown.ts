@@ -10,14 +10,9 @@ import { createStreamingMarkdown, renderMarkdown, type RenderedMarkdown } from "
  * in it — survives. Anything finished takes the whole-message path instead, which is both cheaper (no
  * per-frame tail re-parse) and more correct: a message's LAST block never settles, since nothing follows it
  * to confirm the boundary, so under the split a turn ending in a code fence would never be highlighted. */
-export const useMarkdown = (
-    source: MaybeRefOrGetter<string>,
-    streaming: MaybeRefOrGetter<boolean>,
-): ComputedRef<RenderedMarkdown> => {
+export const useMarkdown = (source: MaybeRefOrGetter<string>, streaming: MaybeRefOrGetter<boolean>): ComputedRef<RenderedMarkdown> => {
     // Held for the caller's lifetime, so a message keeps its boundary across frames. Unused, and costing
     // nothing, when the text never streams.
     const stream = createStreamingMarkdown();
-    return computed(() =>
-        toValue(streaming) ? stream.render(toValue(source)) : { settled: renderMarkdown(toValue(source)), tail: `` },
-    );
+    return computed(() => (toValue(streaming) ? stream.render(toValue(source)) : { settled: renderMarkdown(toValue(source)), tail: `` }));
 };

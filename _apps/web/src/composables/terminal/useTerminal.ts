@@ -1,6 +1,13 @@
 import { ref, type Ref, watch } from "vue";
 import { pruneTerminalMeta } from "./terminalMeta";
-import { createTerminalSession, disposeTerminalSession, mountTerminalSession, parkTerminalSession, persistScrollback, type TerminalSession } from "./terminalSession";
+import {
+    createTerminalSession,
+    disposeTerminalSession,
+    mountTerminalSession,
+    parkTerminalSession,
+    persistScrollback,
+    type TerminalSession,
+} from "./terminalSession";
 
 /* Multi-tab terminal state for the terminal panel (pages/TerminalPanel.vue): an instance (createTerminalTabs)
  * over ONE module-level session cache, so a session's xterm/socket/scrollback survives unmount, collapse, and

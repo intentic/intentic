@@ -12,12 +12,10 @@ test("agent message and thought chunks map to delta/thinking; non-text summarize
         kind: "thinking",
         text: "hmm",
     });
-    expect(
-        sessionUpdateEvent(
-            { sessionUpdate: "agent_message_chunk", content: { type: "image", data: "aa", mimeType: "image/png" } },
-            CWD,
-        ),
-    ).toEqual({ kind: "delta", text: "[image]" });
+    expect(sessionUpdateEvent({ sessionUpdate: "agent_message_chunk", content: { type: "image", data: "aa", mimeType: "image/png" } }, CWD)).toEqual({
+        kind: "delta",
+        text: "[image]",
+    });
 });
 
 test("tool_call passes ACP's vocabulary through: kind, status, relativized locations, capped diff", () => {

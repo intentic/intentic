@@ -79,23 +79,15 @@ const removeDraft = (id: string): Promise<void> =>
             <Row v-for="draft in drafts" :key="draft.id" icon="send">
                 <template #title>
                     <div class="flex items-center gap-2">
-                        <span class="rounded bg-overlay px-1.5 py-0.5 text-2xs font-medium capitalize text-content">{{
-                            draft.platform
-                        }}</span>
-                        <span v-if="draft.target" class="truncate rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{
-                            draft.target
-                        }}</span>
+                        <span class="rounded bg-overlay px-1.5 py-0.5 text-2xs font-medium capitalize text-content">{{ draft.platform }}</span>
+                        <span v-if="draft.target" class="truncate rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{ draft.target }}</span>
                         <StatusBadge
                             :variant="STATUS_VARIANT[draft.status]"
                             :label="draft.status"
                             size="xs"
                             v-tooltip.top="draft.status === 'failed' ? draft.error : undefined"
                         />
-                        <span
-                            v-if="draft.media && draft.media.length > 0"
-                            class="text-2xs text-subtle"
-                            v-tooltip.top="draft.media.join(', ')"
-                        >
+                        <span v-if="draft.media && draft.media.length > 0" class="text-2xs text-subtle" v-tooltip.top="draft.media.join(', ')">
                             <Icon name="paperclip" class="text-2xs" />{{ draft.media.length }}
                         </span>
                     </div>

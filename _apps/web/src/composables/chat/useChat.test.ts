@@ -100,7 +100,12 @@ describe(`account usage hydration`, () => {
                     Promise.resolve({
                         accounts: path.startsWith(`/claude`)
                             ? [
-                                  { id: `a1`, label: `Personal`, connectedAt: 0, usage: { windows: [{ kind: `seven_day`, utilization: 12 }], measuredAt: 500 } },
+                                  {
+                                      id: `a1`,
+                                      label: `Personal`,
+                                      connectedAt: 0,
+                                      usage: { windows: [{ kind: `seven_day`, utilization: 12 }], measuredAt: 500 },
+                                  },
                                   { id: `a2`, label: `Work`, connectedAt: 1 },
                               ]
                             : [],
@@ -122,7 +127,14 @@ describe(`account usage hydration`, () => {
                 json: () =>
                     Promise.resolve({
                         accounts: path.startsWith(`/claude`)
-                            ? [{ id: `a1`, label: `Personal`, connectedAt: 0, usage: { windows: [{ kind: `seven_day`, utilization: 30 }], measuredAt: 500 } }]
+                            ? [
+                                  {
+                                      id: `a1`,
+                                      label: `Personal`,
+                                      connectedAt: 0,
+                                      usage: { windows: [{ kind: `seven_day`, utilization: 30 }], measuredAt: 500 },
+                                  },
+                              ]
                             : [],
                     }),
             } as Response),

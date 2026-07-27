@@ -39,7 +39,7 @@ describe(`vscodeThemeToTokens`, () => {
             colors: {
                 "editor.background": `#1e1e1e`,
                 "editor.foreground": `#d4d4d4`,
-                "focusBorder": `#007acc`,
+                focusBorder: `#007acc`,
                 "textLink.foreground": `#3794ff`,
             },
         });

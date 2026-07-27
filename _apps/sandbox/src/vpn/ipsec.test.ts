@@ -183,7 +183,11 @@ test("PFS decides whether quick mode offers a DH group at all", () => {
 });
 
 test("the DH group is pinned identically in both phases, and never emits an unmapped literal", () => {
-    for (const [group, name] of [["5", "modp1536"], ["2", "modp1024"], ["19", "ecp256"]] as const) {
+    for (const [group, name] of [
+        ["5", "modp1536"],
+        ["2", "modp1024"],
+        ["19", "ecp256"],
+    ] as const) {
         const conf = ipsecConnConfig("x", { ...systemEg, dhGroup: group });
         expect(conf).toContain(`ike=aes128-sha256-${name}`);
         expect(conf).toContain(`esp=aes128-sha256-${name}`);

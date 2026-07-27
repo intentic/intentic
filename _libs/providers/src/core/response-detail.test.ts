@@ -10,7 +10,9 @@ const cfPage = (code: number): string =>
 
 test("classifies the tunnel-down page (1033) with the actionable hint", async () => {
     const detail = await responseDetail(new Response(cfPage(1033), { status: 530 }));
-    expect(detail).toBe("Cloudflare edge error 1033: the tunnel has no connected connector — cloudflared on the host is down or still re-registering");
+    expect(detail).toBe(
+        "Cloudflare edge error 1033: the tunnel has no connected connector — cloudflared on the host is down or still re-registering",
+    );
 });
 
 test("classifies other Cloudflare edge errors by code alone", async () => {

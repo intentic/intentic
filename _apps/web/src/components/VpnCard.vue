@@ -144,8 +144,7 @@ const anyConnected = computed(() => links.value.some((link) => link.state === `c
                         <pre
                             v-if="failures[link.id]"
                             class="scrollbar-thin max-h-32 overflow-auto whitespace-pre-wrap rounded-md border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-2xs text-danger"
-                            >{{ failures[link.id] }}</pre
-                        >
+                            >{{ failures[link.id] }}</pre>
                         <div v-if="otpFor === link.id" class="flex items-center gap-2">
                             <input
                                 v-model="otp"

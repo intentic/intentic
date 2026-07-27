@@ -108,14 +108,12 @@ export const createRecall = (options: RecallOptions): Recall => {
                     sinceTs,
                 )
                 .filter((row) => filter === undefined || filter.has(Number(row["id"])))
-                .map(
-                    (row): SessionSummary => ({
-                        sessionId: row["sid"] as string,
-                        title: typeof row["title"] === "string" ? row["title"] : undefined,
-                        lastTs: Number(row["last_ts"]),
-                        promptCount: Number(row["prompts"]),
-                    }),
-                );
+                .map((row): SessionSummary => ({
+                    sessionId: row["sid"] as string,
+                    title: typeof row["title"] === "string" ? row["title"] : undefined,
+                    lastTs: Number(row["last_ts"]),
+                    promptCount: Number(row["prompts"]),
+                }));
         },
         transcriptPathOf: (sessionId) => join(projectsDir, `${sessionId}.jsonl`),
         close: () => opened?.close(),

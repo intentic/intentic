@@ -233,7 +233,9 @@ export const ingest = async (db: RecallDb, options: { root: string; projectsDir:
             fromByte === 0
                 ? -1
                 : Number(
-                      db.get("SELECT max(t.ordinal) AS n FROM turns t JOIN sessions s ON s.id = t.session_id WHERE s.session_id = ?", sessionId)?.["n"] ?? -1,
+                      db.get("SELECT max(t.ordinal) AS n FROM turns t JOIN sessions s ON s.id = t.session_id WHERE s.session_id = ?", sessionId)?.[
+                          "n"
+                      ] ?? -1,
                   );
         const delta = await parseDelta(path, fromByte, lastOrdinal, options.root);
         db.transaction(() => {

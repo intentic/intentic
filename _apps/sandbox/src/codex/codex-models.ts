@@ -31,7 +31,8 @@ export const humanizeModelId = (id: string): string =>
 // alongside chat models. Keep only the chat/reasoning/codex families a Codex turn can drive (gpt-*, o-series,
 // codex-*), excluding the non-chat suffixes — so a future "gpt-5.6-sol" is kept while "gpt-image-1" drops.
 export const isCodexModel = (id: string): boolean =>
-    /^(gpt-|o\d|codex)/i.test(id) && !/(embedding|whisper|tts|audio|realtime|image|dall-e|moderation|search|transcribe|-instruct|-preview$)/i.test(id);
+    /^(gpt-|o\d|codex)/i.test(id) &&
+    !/(embedding|whisper|tts|audio|realtime|image|dall-e|moderation|search|transcribe|-instruct|-preview$)/i.test(id);
 
 // GET an OpenAI-compatible model-list endpoint ({ data: [{id}] }); [] on non-ok / parse error, so a caller can
 // fall through to the next source. Filtered to chat/codex ids.

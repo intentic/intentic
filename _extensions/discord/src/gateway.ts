@@ -65,7 +65,9 @@ const main = async (): Promise<void> => {
         connectors = state.connectors;
         // Hold a connection only while an enabled discord listener automation exists (the state route already
         // filtered to those); no automations ⇒ release everything.
-        const desired = new Set(state.automations.length === 0 ? [] : connectors.map((connector) => connector.config.botToken).filter((token) => token !== ""));
+        const desired = new Set(
+            state.automations.length === 0 ? [] : connectors.map((connector) => connector.config.botToken).filter((token) => token !== ""),
+        );
         // Deleting the current key during a Map key iteration is safe (the iterator skips removed entries).
         for (const token of subscribed.keys()) {
             if (!desired.has(token)) {
@@ -135,7 +137,11 @@ const main = async (): Promise<void> => {
                         return send("channelId required", 400);
                     }
                     const config = voiceConfig();
-                    return send(config === undefined ? "No Discord bot is connected — add the Discord capability first." : await joinVoice(ctx, channelId, config));
+                    return send(
+                        config === undefined
+                            ? "No Discord bot is connected — add the Discord capability first."
+                            : await joinVoice(ctx, channelId, config),
+                    );
                 }
                 return send("not found", 404);
             } catch (error) {

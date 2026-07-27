@@ -48,6 +48,9 @@ export const spawnAcpProcess = (command: string, env: Record<string, string>, cw
     child.stderr.on("data", (data: Buffer) => {
         stderr = (stderr + data.toString()).slice(-STDERR_TAIL);
     });
-    const stream = ndJsonStream(Writable.toWeb(child.stdin) as WritableStream<Uint8Array>, Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>);
+    const stream = ndJsonStream(
+        Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
+        Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>,
+    );
     return { child, stream, stderrTail: () => stderr };
 };

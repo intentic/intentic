@@ -35,8 +35,12 @@ test("fileTouchesOf covers tool_use inputs, toolUseResult payloads, and snapshot
         { path: "/w/edit.ts", modified: true },
         { path: "/w/nb.ipynb", modified: true },
     ]);
-    expect(fileTouchesOf({ type: "user", toolUseResult: { type: "text", file: { filePath: "/w/read.ts" } } })).toEqual([{ path: "/w/read.ts", modified: false }]);
-    expect(fileTouchesOf({ type: "user", toolUseResult: { filePath: "/w/edit.ts", structuredPatch: [] } })).toEqual([{ path: "/w/edit.ts", modified: true }]);
+    expect(fileTouchesOf({ type: "user", toolUseResult: { type: "text", file: { filePath: "/w/read.ts" } } })).toEqual([
+        { path: "/w/read.ts", modified: false },
+    ]);
+    expect(fileTouchesOf({ type: "user", toolUseResult: { filePath: "/w/edit.ts", structuredPatch: [] } })).toEqual([
+        { path: "/w/edit.ts", modified: true },
+    ]);
     expect(fileTouchesOf({ type: "file-history-snapshot", snapshot: { trackedFileBackups: { "/w/snap.ts": { backupId: "b" } } } })).toEqual([
         { path: "/w/snap.ts", modified: true },
     ]);

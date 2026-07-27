@@ -159,8 +159,20 @@ const MODELS: Record<string, unknown> = {
         ],
         default: "claude-opus-4-8",
     },
-    codex: { models: [{ id: "gpt-5.1", label: "GPT-5.1" }, { id: "gpt-5.1-codex", label: "GPT-5.1 Codex" }], default: "gpt-5.1" },
-    grok: { models: [{ id: "grok-4", label: "Grok 4" }, { id: "grok-4-fast", label: "Grok 4 Fast" }], default: "grok-4" },
+    codex: {
+        models: [
+            { id: "gpt-5.1", label: "GPT-5.1" },
+            { id: "gpt-5.1-codex", label: "GPT-5.1 Codex" },
+        ],
+        default: "gpt-5.1",
+    },
+    grok: {
+        models: [
+            { id: "grok-4", label: "Grok 4" },
+            { id: "grok-4-fast", label: "Grok 4 Fast" },
+        ],
+        default: "grok-4",
+    },
 };
 
 const DIFF = {
@@ -240,13 +252,23 @@ const TREE = {
                     path: "web/src",
                     type: "dir",
                     children: [
-                        { name: "pages", path: "web/src/pages", type: "dir", children: [{ name: "Upgrade.vue", path: "web/src/pages/Upgrade.vue", type: "file", size: 1980 }] },
+                        {
+                            name: "pages",
+                            path: "web/src/pages",
+                            type: "dir",
+                            children: [{ name: "Upgrade.vue", path: "web/src/pages/Upgrade.vue", type: "file", size: 1980 }],
+                        },
                         { name: "App.vue", path: "web/src/App.vue", type: "file", size: 1980 },
                     ],
                 },
             ],
         },
-        { name: "prisma", path: "prisma", type: "dir", children: [{ name: "schema.prisma", path: "prisma/schema.prisma", type: "file", size: 3200 }] },
+        {
+            name: "prisma",
+            path: "prisma",
+            type: "dir",
+            children: [{ name: "schema.prisma", path: "prisma/schema.prisma", type: "file", size: 3200 }],
+        },
         { name: "README.md", path: "README.md", type: "file", size: 640 },
         { name: "package.json", path: "package.json", type: "file", size: 980 },
         { name: "node_modules", path: "node_modules", type: "dir", ignored: true },
@@ -309,16 +331,16 @@ const attachFrames = (): unknown[] => {
                 {
                     type: "diff",
                     path: "api/src/billing/checkout.ts",
-                    oldText: "const session = await stripe.checkout.sessions.create({\n    mode: \"subscription\",\n    customer: account.stripeCustomerId,\n});",
+                    oldText:
+                        'const session = await stripe.checkout.sessions.create({\n    mode: "subscription",\n    customer: account.stripeCustomerId,\n});',
                     newText:
-                        "const session = await stripe.checkout.sessions.create({\n    mode: \"subscription\",\n    customer: account.stripeCustomerId,\n    line_items: [{ price: process.env.STRIPE_METERED_PRICE }],\n    success_url: `${process.env.APP_URL}/upgrade/done`,\n});",
+                        'const session = await stripe.checkout.sessions.create({\n    mode: "subscription",\n    customer: account.stripeCustomerId,\n    line_items: [{ price: process.env.STRIPE_METERED_PRICE }],\n    success_url: `${process.env.APP_URL}/upgrade/done`,\n});',
                 },
             ],
         }),
         f({
             kind: "delta",
-            text:
-                "Checkout now opens a metered subscription. Next I'll add `api/src/billing/webhook.ts` to record usage each period, add a `MeteredUsage` model, and update the Upgrade page — then wire up tests.",
+            text: "Checkout now opens a metered subscription. Next I'll add `api/src/billing/webhook.ts` to record usage each period, add a `MeteredUsage` model, and update the Upgrade page — then wire up tests.",
         }),
         f({ kind: "done" }),
         { kind: "end" },
@@ -348,7 +370,8 @@ const fulfillDaemon = async (route: Route): Promise<void> => {
     const path = url.pathname;
     const provider = (): string => (path.includes("claude") ? "claude" : path.includes("codex") ? "codex" : "grok");
 
-    if (path.startsWith("/events")) return route.fulfill(sse([{ kind: "hello", workspaceId: "ws-release-captain" }, { kind: "agents", agents: AGENTS }, { kind: "heartbeat" }]));
+    if (path.startsWith("/events"))
+        return route.fulfill(sse([{ kind: "hello", workspaceId: "ws-release-captain" }, { kind: "agents", agents: AGENTS }, { kind: "heartbeat" }]));
     if (path === "/agent/attach") return route.fulfill(sse(attachFrames()));
     if (path === "/agent" && req.method() === "POST") return route.fulfill(json({ run: "run-1" }));
     if (path === "/agents") return route.fulfill(json({ agents: AGENTS }));
@@ -361,7 +384,16 @@ const fulfillDaemon = async (route: Route): Promise<void> => {
     if (path === "/workspace/file") return route.fulfill(json({ content: CHECKOUT_TS }));
     if (path === "/panels") return route.fulfill(json({ panels: [] }));
     if (path === "/capabilities") return route.fulfill(json(CAPABILITIES));
-    if (path === "/info") return route.fulfill(json({ name: SANDBOX_NAME, image: "registry.gitlab.com/acme/sandbox:stable", version: "2026.7.1", latest: "2026.7.1", updateAvailable: false }));
+    if (path === "/info")
+        return route.fulfill(
+            json({
+                name: SANDBOX_NAME,
+                image: "registry.gitlab.com/acme/sandbox:stable",
+                version: "2026.7.1",
+                latest: "2026.7.1",
+                updateAvailable: false,
+            }),
+        );
     if (path === "/environment") return route.fulfill(json({ container: `intentic-sandbox-${SANDBOX_NAME}` }));
     return route.fulfill(json(emptyFor(path)));
 };
@@ -401,7 +433,10 @@ const SHOTS: Shot[] = [
 ];
 
 const boardClip = async (page: Page, clipH?: number): Promise<{ x: number; y: number; width: number; height: number }> => {
-    const box = await page.locator('textarea[name="draft"]').boundingBox().catch(() => null);
+    const box = await page
+        .locator('textarea[name="draft"]')
+        .boundingBox()
+        .catch(() => null);
     const height = clipH ?? page.viewportSize()?.height ?? DESKTOP.height;
     return { x: 0, y: 0, width: box ? Math.round(box.x - 26) : 1080, height };
 };
@@ -418,7 +453,10 @@ const run = async (): Promise<void> => {
         await context.addCookies([
             { name: SESSION_COOKIE_NAME, value: cookieValue, domain: "localhost", path: "/", httpOnly: true, secure: true, sameSite: "Lax" },
         ]);
-        await context.addInitScript(([key, token]) => window.localStorage.setItem(key, token), [GOOGLE_TOKEN_STORAGE_KEY, fakeGoogleIdToken()] as const);
+        await context.addInitScript(([key, token]) => window.localStorage.setItem(key, token), [
+            GOOGLE_TOKEN_STORAGE_KEY,
+            fakeGoogleIdToken(),
+        ] as const);
         await context.route(`${DAEMON_URL}/**`, fulfillDaemon);
         const page = await context.newPage();
         page.on("pageerror", (e) => console.warn(`  [pageerror ${shot.name}] ${e.message.split("\n")[0]}`));

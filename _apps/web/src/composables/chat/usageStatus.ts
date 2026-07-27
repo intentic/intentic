@@ -46,7 +46,10 @@ export const orderedWindows = (usage: AccountUsage): UsageWindow[] =>
 // The pool that will gate the next turn: the fullest one. A single headroom number can only ever be this one —
 // the account is as constrained as its tightest allowance, whichever that happens to be today.
 export const bindingWindow = (usage: AccountUsage | undefined): UsageWindow | undefined =>
-    usage?.windows.reduce<UsageWindow | undefined>((worst, window) => (worst === undefined || window.utilization > worst.utilization ? window : worst), undefined);
+    usage?.windows.reduce<UsageWindow | undefined>(
+        (worst, window) => (worst === undefined || window.utilization > worst.utilization ? window : worst),
+        undefined,
+    );
 
 // The one-number summary a chip or a picker row shows. Undefined when the account has no usable reading — never
 // measured, or every window it had has since reset — so the row shows nothing rather than a confident 0%.

@@ -38,7 +38,10 @@ const list = buildCommand({
     docs: { brief: "Recent sessions of this workspace, newest first" },
     parameters: {
         flags: { days: { kind: "parsed", parse: numberParser, default: "45", brief: "Only sessions active in the last N days" } },
-        positional: { kind: "tuple", parameters: [{ parse: String, brief: "Filter by prompt/response/title words", placeholder: "query", optional: true }] },
+        positional: {
+            kind: "tuple",
+            parameters: [{ parse: String, brief: "Filter by prompt/response/title words", placeholder: "query", optional: true }],
+        },
     },
     async func(this: CommandContext, flags: { days: number }, query?: string) {
         const recall = recallFor(rootFromEnv());
@@ -155,7 +158,11 @@ export const runHookMatch = async (input: string, write: (chunk: string) => void
         }
         const lead = `A related past session exists: "${top.title ?? top.sessionId}" (${dateOf(top.lastTs)}, ${top.promptCount} prompts). If the user seems to be continuing that work, suggest they fork it instead of rebuilding context: ${forkCommandOf(recall, top, prompt)}`;
         // Same 45-day window as the strong-match gate; the current session never quotes itself.
-        const excerpts = recall.grab(prompt, { days: 45, limit: 3, ...(payload.session_id === undefined ? {} : { excludeSessionId: payload.session_id }) });
+        const excerpts = recall.grab(prompt, {
+            days: 45,
+            limit: 3,
+            ...(payload.session_id === undefined ? {} : { excludeSessionId: payload.session_id }),
+        });
         const fragments = excerpts.map(
             (excerpt) =>
                 `- "${excerpt.title ?? excerpt.sessionId}" ${dateOf(excerpt.ts)} · asked: ${cap(collapse(excerpt.prompt), 160)}${excerpt.fragment === "" ? "" : ` · answered: ${cap(collapse(excerpt.fragment), 280)}`}`,
@@ -163,7 +170,9 @@ export const runHookMatch = async (input: string, write: (chunk: string) => void
         const context =
             fragments.length === 0
                 ? lead
-                : [lead, "Excerpts from those sessions (statistical recall — verify against the current code before trusting):", ...fragments].join("\n");
+                : [lead, "Excerpts from those sessions (statistical recall — verify against the current code before trusting):", ...fragments].join(
+                      "\n",
+                  );
         write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: context } })}\n`);
     } finally {
         recall.close();

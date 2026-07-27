@@ -116,10 +116,7 @@ describe(`turn runs`, () => {
         startTurnRun(turnFn, turn(`c-throw`));
         fail(new Error(`adapter exploded`));
         await vi.waitFor(() => expect(turnRunOf(`c-throw`)!.done).toBe(true));
-        expect((await collect(`c-throw`)).map((frame) => frame.event)).toEqual([
-            { kind: `error`, message: `adapter exploded` },
-            { kind: `done` },
-        ]);
+        expect((await collect(`c-throw`)).map((frame) => frame.event)).toEqual([{ kind: `error`, message: `adapter exploded` }, { kind: `done` }]);
 
         const { turnFn: abortFn, fail: abort } = crankedTurn();
         startTurnRun(abortFn, turn(`c-abort`));

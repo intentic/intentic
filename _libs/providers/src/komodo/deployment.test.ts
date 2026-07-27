@@ -85,7 +85,9 @@ test("read returns the deterministic url + an internalUrl on the host ip when th
 });
 
 test("diff is noop when the live env matches the authored env", () => {
-    expect(createDeploymentProvider(api({}), sshForward).diff(inputs, { outputs: {}, detail: { config: observedConfig } })).toEqual({ action: "noop" });
+    expect(createDeploymentProvider(api({}), sshForward).diff(inputs, { outputs: {}, detail: { config: observedConfig } })).toEqual({
+        action: "noop",
+    });
 });
 
 test("diff ignores server + image drift (Komodo owns the rollout) — only env drives it", () => {
@@ -148,5 +150,7 @@ test("apply updates the existing deployment (still no build, no deploy)", async 
 });
 
 test("malformed inputs are rejected", async () => {
-    await expect(createDeploymentProvider(api({}), sshForward).read({ ...inputs, internalIp: 5 }, ctx())).rejects.toThrow(/deployment inputs malformed/);
+    await expect(createDeploymentProvider(api({}), sshForward).read({ ...inputs, internalIp: 5 }, ctx())).rejects.toThrow(
+        /deployment inputs malformed/,
+    );
 });

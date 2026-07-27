@@ -789,7 +789,9 @@ test("sessions.get restores a transcript, and a session the store cannot read is
         if (id !== "s1") {
             throw new Error("no such session");
         }
-        return [{ role: "assistant" as const, text: dir, tools: [{ id: "t1", name: "Read", category: "read" as const, status: "completed" as const }] }];
+        return [
+            { role: "assistant" as const, text: dir, tools: [{ id: "t1", name: "Read", category: "read" as const, status: "completed" as const }] },
+        ];
     });
     const client = clientFor(createApp(services({ sessions: { list: async () => [], read, search: async () => [], exists: async () => true } })));
 

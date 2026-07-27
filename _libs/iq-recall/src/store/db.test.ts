@@ -39,7 +39,10 @@ test("a response overwrite keeps the turns FTS in sync", () => {
     const db = openRecallDb(join(dir, "response.db"));
     db.run("INSERT INTO sessions (session_id, first_ts, last_ts) VALUES ('s1', 1, 2)");
     const sessionId = db.get("SELECT id FROM sessions WHERE session_id = 's1'")!["id"] as number;
-    db.run("INSERT INTO turns (session_id, uuid, ordinal, ts, prompt, response, start_byte) VALUES (?, 'u1', 0, 1, 'fix the login flow', 'draft answer', 0)", sessionId);
+    db.run(
+        "INSERT INTO turns (session_id, uuid, ordinal, ts, prompt, response, start_byte) VALUES (?, 'u1', 0, 1, 'fix the login flow', 'draft answer', 0)",
+        sessionId,
+    );
     expect(db.all("SELECT rowid FROM turns_fts WHERE turns_fts MATCH 'draft'")).toHaveLength(1);
     db.run("UPDATE turns SET response = 'rotated the refresh secret' WHERE session_id = ?", sessionId);
     expect(db.all("SELECT rowid FROM turns_fts WHERE turns_fts MATCH 'draft'")).toHaveLength(0);

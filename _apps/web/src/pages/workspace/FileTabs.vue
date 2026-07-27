@@ -22,13 +22,7 @@ const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1)
 const fileIcon = (path: string): IconName => iconForEntry(basename(path), `file`);
 
 const tabLabel = (tab: WorkspaceTab): string =>
-    tab.kind === `plan`
-        ? tab.title
-        : tab.kind === `directory`
-          ? basename(tab.dir)
-          : tab.kind === `graph`
-            ? basename(tab.repo)
-            : basename(tab.path);
+    tab.kind === `plan` ? tab.title : tab.kind === `directory` ? basename(tab.dir) : tab.kind === `graph` ? basename(tab.repo) : basename(tab.path);
 const tabHint = (tab: WorkspaceTab): string => {
     if (tab.kind === `plan`) {
         return tab.title;

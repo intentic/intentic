@@ -29,12 +29,12 @@ const copy = async (key: string, text: string): Promise<void> => {
             <h2 class="text-sm font-semibold text-content">Editor bridge (ACP)</h2>
         </div>
         <p class="text-xs text-muted">
-            Drive this sandbox's agents from Zed, JetBrains, or any ACP editor: mint a token, paste the snippet into your editor's
-            agent settings, and open your synced folder as the project so edits and diffs line up.
+            Drive this sandbox's agents from Zed, JetBrains, or any ACP editor: mint a token, paste the snippet into your editor's agent settings, and
+            open your synced folder as the project so edits and diffs line up.
         </p>
         <p class="text-2xs text-warning">
-            A bridge token lets its holder run the agent — which edits files and runs commands in this sandbox. Treat it like a
-            password; revoke it here if it leaks.
+            A bridge token lets its holder run the agent — which edits files and runs commands in this sandbox. Treat it like a password; revoke it
+            here if it leaks.
         </p>
 
         <div class="flex items-center gap-2">
@@ -52,15 +52,12 @@ const copy = async (key: string, text: string): Promise<void> => {
             <p class="text-2xs text-subtle">Shown once — copy it now. The sandbox stores only a hash.</p>
             <div class="flex items-center gap-2">
                 <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
-                <Button
-                    :label="copied === 'token' ? 'Copied' : 'Copy'"
-                    size="small"
-                    :text="true"
-                    @click="copy('token', minted.token)"
-                />
+                <Button :label="copied === 'token' ? 'Copied' : 'Copy'" size="small" :text="true" @click="copy('token', minted.token)" />
             </div>
             <p class="text-2xs text-subtle">Zed → settings.json (JetBrains takes the same command + env):</p>
-            <pre class="scrollbar-thin max-h-48 overflow-auto rounded bg-overlay px-2 py-1.5 text-2xs leading-relaxed text-muted">{{ zedSnippet }}</pre>
+            <pre class="scrollbar-thin max-h-48 overflow-auto rounded bg-overlay px-2 py-1.5 text-2xs leading-relaxed text-muted">{{
+                zedSnippet
+            }}</pre>
             <Button
                 :label="copied === 'snippet' ? 'Copied' : 'Copy snippet'"
                 size="small"
@@ -75,14 +72,7 @@ const copy = async (key: string, text: string): Promise<void> => {
                 <Icon name="key" class="text-2xs text-subtle" />
                 <span class="text-content">{{ token.label }}</span>
                 <span class="text-2xs text-subtle">{{ new Date(token.createdAt).toLocaleDateString() }}</span>
-                <Button
-                    label="Revoke"
-                    size="small"
-                    severity="danger"
-                    :text="true"
-                    class="ml-auto"
-                    @click="revoke(token.id)"
-                />
+                <Button label="Revoke" size="small" severity="danger" :text="true" class="ml-auto" @click="revoke(token.id)" />
             </li>
         </ul>
     </Card>

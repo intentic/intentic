@@ -23,11 +23,7 @@ const failed = computed(() => props.tool.status === `failed`);
 // shows just its header, no chevron. A sub-agent card folds over its nested transcript (children + thinking)
 // too, so the whole delegation collapses to one line once it settles.
 const hasContent = computed(
-    () =>
-        view.value.diffs.length > 0 ||
-        view.value.body !== undefined ||
-        props.tool.thinking !== undefined ||
-        (props.tool.children?.length ?? 0) > 0,
+    () => view.value.diffs.length > 0 || view.value.body !== undefined || props.tool.thinking !== undefined || (props.tool.children?.length ?? 0) > 0,
 );
 
 // Output fold, mirroring the turn's Thinking block. The registry decides the default (open while running or
@@ -84,8 +80,7 @@ const location = computed(() => props.tool.locations?.[0]);
             <pre
                 v-if="tool.thinking"
                 class="scrollbar-thin ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs italic leading-relaxed text-subtle"
-                >{{ tool.thinking }}</pre
-            >
+                >{{ tool.thinking }}</pre>
             <!-- A sub-agent's nested transcript: the tool calls it made, indented under the delegation card so
                  the whole Agent run reads as one unit. Recursive — a sub-agent that itself delegates nests one
                  level deeper (ChatToolCard renders itself). -->

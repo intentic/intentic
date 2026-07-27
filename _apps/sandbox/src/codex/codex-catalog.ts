@@ -55,7 +55,9 @@ export const createCodexCatalog = (config: Config, persistPath: string, fetchImp
                     : [];
             // Dev fallback (no translator): the container OPENAI_API_KEY can enumerate OpenAI's REST /v1/models.
             const fromOpenAI =
-                fromTranslator.length === 0 && config.openaiApiKey !== "" ? await discoverCodexModels(config.openaiApiKey, fetchImpl).catch(() => []) : [];
+                fromTranslator.length === 0 && config.openaiApiKey !== ""
+                    ? await discoverCodexModels(config.openaiApiKey, fetchImpl).catch(() => [])
+                    : [];
             const discovered = (fromTranslator.length > 0 ? fromTranslator : fromOpenAI).map((model) => model.id);
             if (discovered.length > 0) {
                 await writePersisted(discovered);

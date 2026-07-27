@@ -32,7 +32,10 @@ const dedupeTags = (tags: WorkspaceSearchTag[]): WorkspaceSearchTag[] => {
 // Reciprocal-rank fusion across engines, keyed by path:line, then relevance boosts and grouping by file.
 // Deterministic: ties break by path then line, bytewise.
 export const fuse = (results: readonly EngineResult[], context: FuseContext): RankedGroup[] => {
-    const byKey = new Map<string, { path: string; line: number; text: string; start?: number; end?: number; tags: WorkspaceSearchTag[]; score: number }>();
+    const byKey = new Map<
+        string,
+        { path: string; line: number; text: string; start?: number; end?: number; tags: WorkspaceSearchTag[]; score: number }
+    >();
     for (const result of results) {
         result.hits.forEach((hit, rank) => {
             const key = `${hit.path}:${hit.line}`;

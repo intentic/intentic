@@ -59,7 +59,9 @@ describe(`ChatToolCard`, () => {
             category: `other`,
             status: `in_progress`,
             thinking: `weighing the options`,
-            children: [{ id: `b1`, name: `Bash`, category: `execute`, status: `completed`, target: `ls -la`, content: [{ type: `text`, text: `file.txt` }] }],
+            children: [
+                { id: `b1`, name: `Bash`, category: `execute`, status: `completed`, target: `ls -la`, content: [{ type: `text`, text: `file.txt` }] },
+            ],
         });
 
         // The child's own card rendered — proof the recursive <ChatToolCard> reference resolved.

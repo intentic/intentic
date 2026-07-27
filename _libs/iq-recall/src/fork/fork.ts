@@ -2,7 +2,18 @@ import { statSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { readLines } from "../transcript/line-reader.js";
-import { aiTitleOf, fileTouchesOf, leafUuidOf, type Line, parseLine, parentUuidOf, timestampOf, typedPromptOf, typeOf, uuidOf } from "../transcript/lines.js";
+import {
+    aiTitleOf,
+    fileTouchesOf,
+    leafUuidOf,
+    type Line,
+    parseLine,
+    parentUuidOf,
+    timestampOf,
+    typedPromptOf,
+    typeOf,
+    uuidOf,
+} from "../transcript/lines.js";
 
 export interface ForkOptions {
     readonly transcriptPath: string;
@@ -85,7 +96,7 @@ export const materializeFork = async (options: ForkOptions): Promise<ForkResult>
         lastPrompt = turns[index]!.prompt;
     }
     const chain = new Set<string>();
-    for (let current: string | undefined = leaf; current !== undefined; ) {
+    for (let current: string | undefined = leaf; current !== undefined;) {
         const entry = byUuid.get(current);
         if (entry === undefined) {
             throw new Error(`fork chain broken at ${current} — transcript line missing or oversized`);

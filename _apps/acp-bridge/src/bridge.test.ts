@@ -87,11 +87,7 @@ test("a turn streams translated updates, records the provider session, and stops
 test("a plan frame round-trips through request_permission: approve posts the decision", async () => {
     const { updates, daemon, connect, permissionQueue } = await harness((prompt) =>
         prompt.includes("plan me")
-            ? [
-                  { kind: "plan", requestId: "d1", text: "1. do it" },
-                  { kind: "delta", text: "executing" },
-                  { kind: "done" },
-              ]
+            ? [{ kind: "plan", requestId: "d1", text: "1. do it" }, { kind: "delta", text: "executing" }, { kind: "done" }]
             : [{ kind: "done" }],
     );
     permissionQueue.push((options) => options.find((option) => option.optionId === "approve")?.optionId ?? "");
@@ -108,10 +104,7 @@ test("a plan frame round-trips through request_permission: approve posts the dec
 });
 
 test("a plan rejection posts approve:false with the canned feedback", async () => {
-    const { daemon, connect, permissionQueue } = await harness(() => [
-        { kind: "plan", requestId: "d2", text: "plan" },
-        { kind: "done" },
-    ]);
+    const { daemon, connect, permissionQueue } = await harness(() => [{ kind: "plan", requestId: "d2", text: "plan" }, { kind: "done" }]);
     permissionQueue.push((options) => options.find((option) => option.optionId === "reject")?.optionId ?? "");
     const conn = connect();
     const sessionId = await newSession(conn);
@@ -137,11 +130,7 @@ test("questions become one permission prompt each; a pick answers, a dismiss can
 });
 
 test("an error frame fails the prompt as a JSON-RPC error AFTER the stream drains", async () => {
-    const { connect } = await harness(() => [
-        { kind: "delta", text: "partial" },
-        { kind: "error", message: "model exploded" },
-        { kind: "done" },
-    ]);
+    const { connect } = await harness(() => [{ kind: "delta", text: "partial" }, { kind: "error", message: "model exploded" }, { kind: "done" }]);
     const conn = connect();
     const sessionId = await newSession(conn);
     await expect(conn.agent.request(methods.agent.session.prompt, { sessionId, prompt: [{ type: "text", text: "x" }] })).rejects.toMatchObject({

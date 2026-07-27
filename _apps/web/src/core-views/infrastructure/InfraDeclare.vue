@@ -555,7 +555,14 @@ onUnmounted(progress.stopWatching);
                         </div>
                         <p v-if="summary(entry)" class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ summary(entry) }}</p>
                     </div>
-                    <Button size="small" severity="danger" :text="true" :rounded="true" aria-label="Remove server" @click="removingServer = entry.name">
+                    <Button
+                        size="small"
+                        severity="danger"
+                        :text="true"
+                        :rounded="true"
+                        aria-label="Remove server"
+                        @click="removingServer = entry.name"
+                    >
                         <template #icon><Icon name="trash" /></template>
                     </Button>
                 </Card>
@@ -621,15 +628,15 @@ onUnmounted(progress.stopWatching);
     >
         <div class="flex flex-col gap-3">
             <p class="text-sm text-muted">
-                This forgets <b class="text-content">{{ removingServer }}</b> from your inventory — its entry and stored SSH key. The machine
-                itself is not touched: <b>everything already deployed keeps running on it</b> until you clean it up.
+                This forgets <b class="text-content">{{ removingServer }}</b> from your inventory — its entry and stored SSH key. The machine itself
+                is not touched: <b>everything already deployed keeps running on it</b> until you clean it up.
             </p>
             <Code :code="cleanupHostCommand" lang="bash" label="Run on the server (as root) to wipe everything intentic put there" :wrap="true" />
             <p class="text-xs text-subtle">
                 The script lists exactly what it found and asks before removing anything: the deployed containers and their volumes (databases
-                included), the deployment state under /opt/intentic — <b>including the on-host backup repo</b> — the tunnel connector service, and
-                the intentic service user. Docker itself stays. This host's Cloudflare tunnel + DNS records are cleaned up from here on the next
-                apply, not by the script.
+                included), the deployment state under /opt/intentic — <b>including the on-host backup repo</b> — the tunnel connector service, and the
+                intentic service user. Docker itself stays. This host's Cloudflare tunnel + DNS records are cleaned up from here on the next apply,
+                not by the script.
             </p>
         </div>
         <template #footer>

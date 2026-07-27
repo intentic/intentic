@@ -29,7 +29,10 @@ const writeAuth = async (xdg: string, auth: unknown): Promise<void> => {
     await writeFile(join(dir, "auth.json"), JSON.stringify(auth));
 };
 const modelsPath = (xdg: string): string => join(xdg, "opencode", "xai-models.json");
-const fileExists = async (path: string): Promise<boolean> => access(path).then(() => true).catch(() => false);
+const fileExists = async (path: string): Promise<boolean> =>
+    access(path)
+        .then(() => true)
+        .catch(() => false);
 // A fetch that fails the test if the discovery path ever touches the network (used to prove it was skipped).
 const forbiddenFetch = (() => {
     throw new Error("discovery must not hit the network in this case");
@@ -87,7 +90,10 @@ test("xaiModels() skips REST discovery when the token is expired, serving the pe
     await writeAuth(xdg, { xai: { type: "oauth", access: "tok", expires: 1 } });
     const service = createOpenCodeService(xdg, forbiddenFetch);
     await service.recordModels(["grok-4.20-0309-reasoning"]);
-    expect(await service.xaiModels()).toEqual({ models: [{ id: "grok-4.20-0309-reasoning", label: humanizeModelId("grok-4.20-0309-reasoning") }], default: "grok-4.20-0309-reasoning" });
+    expect(await service.xaiModels()).toEqual({
+        models: [{ id: "grok-4.20-0309-reasoning", label: humanizeModelId("grok-4.20-0309-reasoning") }],
+        default: "grok-4.20-0309-reasoning",
+    });
 });
 
 test("xaiModels() discovers live with an unexpired token, then persists the result", async () => {
@@ -110,7 +116,10 @@ test("recordModels persists xAI's named models (chat-only) and xaiModels() serve
     await service.recordModels(["grok-4", "grok-2-image", "grok-3"]);
     expect(JSON.parse(await readFile(modelsPath(xdg), "utf8"))).toEqual(["grok-4", "grok-3"]);
     expect(await service.xaiModels()).toEqual({
-        models: [{ id: "grok-4", label: "Grok 4" }, { id: "grok-3", label: "Grok 3" }],
+        models: [
+            { id: "grok-4", label: "Grok 4" },
+            { id: "grok-3", label: "Grok 3" },
+        ],
         default: "grok-4",
     });
 });

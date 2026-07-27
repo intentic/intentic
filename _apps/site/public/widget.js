@@ -140,18 +140,22 @@ const readSSE = async (body, onFrame, onActivity) => {
                 addMsg("note", msg);
                 return;
             }
-            await readSSE(res.body, (event, data) => {
-                if (event === "delta") {
-                    if (!agentEl) agentEl = addMsg("agent", "");
-                    agentText += data;
-                    agentEl.textContent = agentText;
-                    log.scrollTop = log.scrollHeight;
-                } else if (event === "pending") {
-                    addMsg("note", data);
-                } else if (event === "error") {
-                    addMsg("note", data || "Sorry, something went wrong.");
-                }
-            }, bump);
+            await readSSE(
+                res.body,
+                (event, data) => {
+                    if (event === "delta") {
+                        if (!agentEl) agentEl = addMsg("agent", "");
+                        agentText += data;
+                        agentEl.textContent = agentText;
+                        log.scrollTop = log.scrollHeight;
+                    } else if (event === "pending") {
+                        addMsg("note", data);
+                    } else if (event === "error") {
+                        addMsg("note", data || "Sorry, something went wrong.");
+                    }
+                },
+                bump,
+            );
             if (agentText) history.push({ author: "agent", content: agentText });
         } catch {
             addMsg("note", "Couldn't reach support. Please try again.");

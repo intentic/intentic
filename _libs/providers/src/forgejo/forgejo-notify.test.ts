@@ -102,7 +102,5 @@ test("apply updates the existing matching hook rather than creating", async () =
 });
 
 test("read returns undefined when webhook is PENDING", async () => {
-    expect(
-        await createForgejoNotifyProvider(fakeForgejoApi({}), sshForward).read({ ...inputs, webhook: Symbol("PENDING") }, ctx()),
-    ).toBeUndefined();
+    expect(await createForgejoNotifyProvider(fakeForgejoApi({}), sshForward).read({ ...inputs, webhook: Symbol("PENDING") }, ctx())).toBeUndefined();
 });

@@ -440,7 +440,11 @@ const SYNC_VERB: Record<
     { readonly label: string; readonly icon: "arrow-up-right" | "arrow-down-left" | "sync" | "cloud-upload"; readonly hint: string }
 > = {
     push: { label: `Push`, icon: `arrow-up-right`, hint: `Push your committed work to each repo's upstream` },
-    pull: { label: `Pull`, icon: `arrow-down-left`, hint: `Fast-forward each repo from its upstream — a diverged history is reported, never auto-merged` },
+    pull: {
+        label: `Pull`,
+        icon: `arrow-down-left`,
+        hint: `Fast-forward each repo from its upstream — a diverged history is reported, never auto-merged`,
+    },
     sync: { label: `Sync`, icon: `sync`, hint: `Pull each repo up to its upstream (fast-forward only), then push your committed work` },
     publish: { label: `Publish`, icon: `cloud-upload`, hint: `Push and start tracking each branch on its remote` },
 };

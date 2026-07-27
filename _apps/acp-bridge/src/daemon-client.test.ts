@@ -40,10 +40,7 @@ test("streamTurn posts the turn with the bridge header and yields parsed frames,
     }
     expect(seenToken).toBe("ibt_x");
     expect(JSON.parse(seenBody)).toEqual({ prompt: "hi" });
-    expect(events).toEqual([
-        { kind: "delta", text: "hi" },
-        { kind: "done" },
-    ]);
+    expect(events).toEqual([{ kind: "delta", text: "hi" }, { kind: "done" }]);
 });
 
 test("a 401 surfaces as ACP auth_required; other failures name the status", async () => {

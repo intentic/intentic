@@ -13,7 +13,12 @@ export const vpnDir = (): string => join(homedir(), ".intentic-vpn");
 // ids that share a prefix can never collide on one interface.
 export const INTERFACE_MAX = 15;
 export const interfaceName = (id: string): string =>
-    id.length <= INTERFACE_MAX ? id : `vpn-${createHash("sha256").update(id).digest("hex").slice(0, INTERFACE_MAX - 4)}`;
+    id.length <= INTERFACE_MAX
+        ? id
+        : `vpn-${createHash("sha256")
+              .update(id)
+              .digest("hex")
+              .slice(0, INTERFACE_MAX - 4)}`;
 
 // wg-quick derives the interface from the config's FILE NAME, so the wireguard conf is named for the interface
 // rather than the id — they differ only for an id too long to be an interface name.

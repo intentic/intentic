@@ -16,7 +16,10 @@ const scaffold = async (files: Record<string, string>): Promise<string> => {
     await writeFile(join(dir, "package.json"), JSON.stringify({ type: "module" }));
     await writeFile(
         join(dir, "tsconfig.json"),
-        JSON.stringify({ compilerOptions: { module: "nodenext", moduleResolution: "nodenext", strict: true, noEmit: true, types: [] }, include: ["*.ts"] }),
+        JSON.stringify({
+            compilerOptions: { module: "nodenext", moduleResolution: "nodenext", strict: true, noEmit: true, types: [] },
+            include: ["*.ts"],
+        }),
     );
     for (const [name, content] of Object.entries(files)) {
         await writeFile(join(dir, name), content);

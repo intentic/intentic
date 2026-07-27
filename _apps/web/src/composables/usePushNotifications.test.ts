@@ -54,7 +54,9 @@ beforeEach(() => {
     vi.clearAllMocks();
     reachable.value = true;
     manager.getSubscription.mockResolvedValue(null);
-    sandboxJson.mockImplementation(async (path: string) => (path.startsWith(`/push/config`) ? { publicKey: KEY_A, subscribed: false } : { ok: true }));
+    sandboxJson.mockImplementation(async (path: string) =>
+        path.startsWith(`/push/config`) ? { publicKey: KEY_A, subscribed: false } : { ok: true },
+    );
 });
 
 test(`a subscription minted for a key the daemon no longer holds is replaced, not reused`, async () => {

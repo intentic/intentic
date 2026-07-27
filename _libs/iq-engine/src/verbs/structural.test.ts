@@ -59,10 +59,7 @@ test("ast: structural pattern with metavariables", async () => {
     const outcome = await engine.run(request({ verb: "ast", query: "createWidget($A)", options: { astLang: "ts" } }));
     expect(outcome.exitCode).toBe(0);
     // Calls only — the parenthesized pattern does not match the def's arrow or bare imports.
-    expect(outcome.result.groups.map((group) => group.path).toSorted()).toEqual([
-        "alpha/src/registry.ts",
-        "alpha/src/widget.spec.ts",
-    ]);
+    expect(outcome.result.groups.map((group) => group.path).toSorted()).toEqual(["alpha/src/registry.ts", "alpha/src/widget.spec.ts"]);
     await expect(engine.run(request({ verb: "ast", query: "x", options: {} }))).rejects.toThrow("--lang is required");
 });
 
@@ -79,9 +76,7 @@ test("context: returns the enclosing region of an anchor and grows with -C", asy
     expect(outcome.exitCode).toBe(0);
     expect(outcome.text).toContain("defaultWidgets");
 
-    const grown = await engine.run(
-        request({ verb: "context", query: "alpha/src/registry.ts:3", render: { budget: 1500, contextLines: 2 } }),
-    );
+    const grown = await engine.run(request({ verb: "context", query: "alpha/src/registry.ts:3", render: { budget: 1500, contextLines: 2 } }));
     expect(grown.result.groups[0]!.hits.length).toBeGreaterThan(outcome.result.groups[0]!.hits.length);
 
     await expect(engine.run(request({ verb: "context", query: "no-line-anchor" }))).rejects.toThrow("path:line");

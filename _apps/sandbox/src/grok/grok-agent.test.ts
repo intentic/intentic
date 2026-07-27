@@ -231,12 +231,22 @@ test("a plan turn captures only the assistant's text, never the echoed user prom
             { type: "message.updated", properties: { info: { id: "mu", sessionID: "s5", role: "user" } } },
             {
                 type: "message.part.updated",
-                properties: { part: { type: "text", id: "up1", sessionID: "s5", messageID: "mu", text: "Before making any changes… add a /ping route" } },
+                properties: {
+                    part: { type: "text", id: "up1", sessionID: "s5", messageID: "mu", text: "Before making any changes… add a /ping route" },
+                },
             },
             // The assistant's actual plan.
             {
                 type: "message.updated",
-                properties: { info: { id: "ma", sessionID: "s5", role: "assistant", cost: 0, tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } } } },
+                properties: {
+                    info: {
+                        id: "ma",
+                        sessionID: "s5",
+                        role: "assistant",
+                        cost: 0,
+                        tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+                    },
+                },
             },
             {
                 type: "message.part.updated",
@@ -263,11 +273,7 @@ test("a plan turn that errors after partial text emits the error and NO plan fra
         { type: "session.error", properties: { sessionID: "s6", error: { name: "PaymentRequiredError", data: { message: "Payment Required" } } } },
     ]);
     const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const });
-    expect(events).toEqual([
-        { kind: "session", sessionId: "s6" },
-        { kind: "error", message: "Payment Required" },
-        { kind: "done" },
-    ]);
+    expect(events).toEqual([{ kind: "session", sessionId: "s6" }, { kind: "error", message: "Payment Required" }, { kind: "done" }]);
     expect(events.some((event) => event.kind === "plan")).toBe(false);
 });
 
@@ -395,10 +401,16 @@ test("createGrokRunner self-heals a model-not-found rejection: records the named
         { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
         {
             type: "session.error",
-            properties: { sessionID: "s1", error: { name: "ProviderModelNotFoundError", data: { message: "Model not found: xai/grok-4-stale. Did you mean: grok-4-latest?" } } },
+            properties: {
+                sessionID: "s1",
+                error: { name: "ProviderModelNotFoundError", data: { message: "Model not found: xai/grok-4-stale. Did you mean: grok-4-latest?" } },
+            },
         } as unknown as Event,
         // The corrected turn (same session) streams normally after the silent re-prompt.
-        { type: "message.part.updated", properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Fixed." } } } as unknown as Event,
+        {
+            type: "message.part.updated",
+            properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Fixed." } },
+        } as unknown as Event,
         { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
     ]);
     const seen: string[] = [];
@@ -420,7 +432,10 @@ test("createGrokRunner's self-heal ignores a stale idle from the failed prompt, 
         } as unknown as Event,
         // A lingering idle from the rejected prompt — must NOT end the turn before the retry streams.
         { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
-        { type: "message.part.updated", properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Fixed." } } } as unknown as Event,
+        {
+            type: "message.part.updated",
+            properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Fixed." } },
+        } as unknown as Event,
         { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
     ]);
     const seen: string[] = [];
@@ -477,10 +492,7 @@ test("a thrown model-not-found with no named alternatives surfaces as a tagged g
     // catalog + drops the bad pinned model, instead of surfacing the raw stack-trace error.
     const { openCode, recorded, prompts } = fakeOpenCode([], { id: "grok-x", message: "Model not found: xai/grok-x." });
     const events = await collect(createGrokAgent(createGrokRunner(openCode)), { ...request, model: "grok-x" });
-    expect(events).toEqual([
-        { kind: "error", code: "grok-model-invalid", message: "Model not found: xai/grok-x." },
-        { kind: "done" },
-    ]);
+    expect(events).toEqual([{ kind: "error", code: "grok-model-invalid", message: "Model not found: xai/grok-x." }, { kind: "done" }]);
     expect(recorded).toEqual([]);
     expect(prompts).toEqual(["grok-x"]);
 });

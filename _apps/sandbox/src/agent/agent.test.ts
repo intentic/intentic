@@ -16,7 +16,8 @@ const fakeQuery = (...messages: unknown[]): QueryFn =>
 
 // The same fake, plus the control-request methods a real Query answers — a canned generator has none, which is
 // why they're optional on AgentQuery in the first place.
-const fakeQueryWith = (extras: Partial<AgentQuery>, ...messages: unknown[]): QueryFn =>
+const fakeQueryWith =
+    (extras: Partial<AgentQuery>, ...messages: unknown[]): QueryFn =>
     () =>
         Object.assign(
             (async function* () {

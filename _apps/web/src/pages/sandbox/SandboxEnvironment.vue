@@ -15,7 +15,6 @@ const empty = computed(() => !proposal.value && !pending.value && !applied.value
 <template>
     <EnvironmentCard />
     <div v-if="empty" :class="cmp.emptyState('py-10')">
-        No environment changes yet. When the agent proposes a change to the sandbox image's overlay, its diff appears here to review and
-        rebuild.
+        No environment changes yet. When the agent proposes a change to the sandbox image's overlay, its diff appears here to review and rebuild.
     </div>
 </template>

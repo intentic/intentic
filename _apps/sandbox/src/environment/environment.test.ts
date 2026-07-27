@@ -60,7 +60,9 @@ test("baseImageOf prefers the runner-named base, else an official running image,
     const latest = "registry.gitlab.com/radarsu/intentic/sandbox:latest";
     // Fresh connect.sh run: no base named, and the running image IS the base.
     expect(baseImageOf("", latest)).toBe(latest);
-    expect(baseImageOf("", "registry.gitlab.com/radarsu/intentic/sandbox:sha-abc1234")).toBe("registry.gitlab.com/radarsu/intentic/sandbox:sha-abc1234");
+    expect(baseImageOf("", "registry.gitlab.com/radarsu/intentic/sandbox:sha-abc1234")).toBe(
+        "registry.gitlab.com/radarsu/intentic/sandbox:sha-abc1234",
+    );
     // After a rebuild the running image is the overlay's own tag, which is not a base — the named base wins.
     // Getting this wrong is what produced the endless rebuild prompt AND rolled the sandbox back each time.
     expect(baseImageOf(latest, "intentic-sandbox-env-demo:abc123def456")).toBe(latest);

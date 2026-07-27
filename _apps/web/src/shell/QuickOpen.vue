@@ -172,11 +172,9 @@ const onShow = async (): Promise<void> => {
                     <Icon :name="(entry.icon ?? `chevron-right`) as IconName" class="shrink-0 text-2xs text-muted" />
                     <span class="min-w-0 truncate text-sm text-content">{{ entry.title }}</span>
                     <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ entry.command }}</span>
-                    <kbd
-                        v-if="chordFor(entry)"
-                        class="shrink-0 rounded border border-line bg-overlay px-1.5 py-0.5 font-mono text-2xs text-muted"
-                        >{{ formatChord(chordFor(entry)!, isMac) }}</kbd
-                    >
+                    <kbd v-if="chordFor(entry)" class="shrink-0 rounded border border-line bg-overlay px-1.5 py-0.5 font-mono text-2xs text-muted">{{
+                        formatChord(chordFor(entry)!, isMac)
+                    }}</kbd>
                 </button>
                 <p v-if="commandRows.length === 0 && commands.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
                     No commands registered — extensions contribute them.

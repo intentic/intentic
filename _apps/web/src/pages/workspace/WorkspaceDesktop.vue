@@ -315,7 +315,13 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
         when: (event) => keyOutside(event, `.monaco-editor, .xterm`),
         handler: () => focusSearch(),
     },
-    { command: `workspace.searchContent`, title: `Search in Files…`, icon: `search`, keybinding: `Mod+Shift+F`, handler: () => focusSearch(`content`) },
+    {
+        command: `workspace.searchContent`,
+        title: `Search in Files…`,
+        icon: `search`,
+        keybinding: `Mod+Shift+F`,
+        handler: () => focusSearch(`content`),
+    },
     { command: `workspace.showChanges`, title: `Show Changes`, icon: `check-square`, keybinding: `Ctrl+Shift+D`, handler: openReview },
     { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
     { command: `workspace.showHistory`, title: `Show Checkpoints`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
@@ -400,7 +406,9 @@ const tooltipWithChord = (label: string, command: string): string => {
     const chord = commandShortcut(command);
     return chord === undefined ? label : `${label} (${chord})`;
 };
-const explorerTooltip = computed(() => tooltipWithChord(layout.sidebarCollapsed.value ? `Show explorer` : `Hide explorer`, `workspace.toggleSidebar`));
+const explorerTooltip = computed(() =>
+    tooltipWithChord(layout.sidebarCollapsed.value ? `Show explorer` : `Hide explorer`, `workspace.toggleSidebar`),
+);
 const rootHistoryTooltip = computed(() => tooltipWithChord(`Git history of the workspace root`, `workspace.gitHistory`));
 const terminalTooltip = computed(() => tooltipWithChord(`Toggle terminal`, `terminal.toggle`));
 

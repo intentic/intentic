@@ -29,9 +29,9 @@ const bootstrap = computed(() => composeBootstrap(props.args));
             :wrap="true"
         />
         <p class="text-xs text-muted">
-            The first command redeems your setup code into a <code>.env</code> compose reads — run it once; after that the sandbox is yours to
-            manage with <code>docker compose</code> (<code>up -d</code>, <code>down</code>, <code>logs</code>). Your workspace lives in the named
-            volumes, so <code>down</code>/<code>up</code> keeps it.
+            The first command redeems your setup code into a <code>.env</code> compose reads — run it once; after that the sandbox is yours to manage
+            with <code>docker compose</code> (<code>up -d</code>, <code>down</code>, <code>logs</code>). Your workspace lives in the named volumes, so
+            <code>down</code>/<code>up</code> keeps it.
         </p>
         <p class="text-xs text-muted">
             Desktop sync isn't part of the compose path — once your workspace opens, enable it from its <b>Desktop sync</b> card.

@@ -41,18 +41,16 @@ export const grabExcerpts = (db: RecallDb, query: string, options: GrabOptions =
             sinceTs,
         )
         .filter((row) => row["sid"] !== options.excludeSessionId)
-        .map(
-            (row): TurnExcerpt => ({
-                sessionId: row["sid"] as string,
-                title: typeof row["title"] === "string" ? row["title"] : undefined,
-                ts: Number(row["ts"]),
-                ordinal: Number(row["ordinal"]),
-                turnUuid: row["uuid"] as string,
-                score: Number(row["bm25"]) * decayOf(Number(row["ts"]), now),
-                prompt: row["prompt"] as string,
-                fragment: row["fragment"] as string,
-            }),
-        )
+        .map((row): TurnExcerpt => ({
+            sessionId: row["sid"] as string,
+            title: typeof row["title"] === "string" ? row["title"] : undefined,
+            ts: Number(row["ts"]),
+            ordinal: Number(row["ordinal"]),
+            turnUuid: row["uuid"] as string,
+            score: Number(row["bm25"]) * decayOf(Number(row["ts"]), now),
+            prompt: row["prompt"] as string,
+            fragment: row["fragment"] as string,
+        }))
         .toSorted((a, b) => b.score - a.score || a.sessionId.localeCompare(b.sessionId) || a.ordinal - b.ordinal)
         .slice(0, options.limit ?? 10);
 };

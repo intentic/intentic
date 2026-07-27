@@ -342,7 +342,15 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
     host.addEventListener(
         `mousedown`,
         (event) => {
-            if (term.modes.mouseTrackingMode === `none` || !event.isTrusted || event.button !== 0 || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
+            if (
+                term.modes.mouseTrackingMode === `none` ||
+                !event.isTrusted ||
+                event.button !== 0 ||
+                event.shiftKey ||
+                event.ctrlKey ||
+                event.altKey ||
+                event.metaKey
+            ) {
                 return;
             }
             // Only gate presses on the character grid — a press on the viewport's native scrollbar (or any

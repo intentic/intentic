@@ -83,11 +83,7 @@ const COMMON_EXCLUDES = [
 // The root scope additionally skips every discovered repo dir (each repo is its own scope — also avoids git's
 // embedded-repo gitlink handling) and /.intentic/ (daemon-internal manifests + credentials). Repos can appear
 // anywhere under /work, so the list is DERIVED from the live repo set, not static.
-export const rootExcludes = (repoIds: readonly string[]): string[] => [
-    ...repoIds.map((id) => `/${id}/`),
-    "/.intentic/",
-    ...COMMON_EXCLUDES,
-];
+export const rootExcludes = (repoIds: readonly string[]): string[] => [...repoIds.map((id) => `/${id}/`), "/.intentic/", ...COMMON_EXCLUDES];
 
 // Converge the root exclude list onto both consumers — the real /work repo's git dir (git/root-repo.ts; its
 // info/ is shared with every agent worktree) and the history root scope's — so history and the Changes review

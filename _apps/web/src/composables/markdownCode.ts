@@ -20,8 +20,7 @@ export interface CodeBlock {
 
 // Minimal HTML escape — enough to render arbitrary text inertly inside v-html. Shared with renderMarkdown's
 // crash fallback, which has the same job.
-export const escapeHtml = (text: string): string =>
-    text.replace(/&/g, `&amp;`).replace(/</g, `&lt;`).replace(/>/g, `&gt;`).replace(/"/g, `&quot;`);
+export const escapeHtml = (text: string): string => text.replace(/&/g, `&amp;`).replace(/</g, `&lt;`).replace(/>/g, `&gt;`).replace(/"/g, `&quot;`);
 
 // Fence infos agents actually write, mapped onto the grammar ids the app ships (see shikiLangs.ts). Anything
 // not listed is tried as-is and, if we don't ship it, remembered as unsupported after one attempt.
@@ -73,7 +72,10 @@ const loadHighlighter = (): Promise<(code: string, lang: string) => Promise<stri
 
 // The fence's info string reduced to a grammar id: `ts`, but also ```` ```ts title=x ```` and ```` ```TS ````.
 const langId = (fence: string): string | undefined => {
-    const word = fence.trim().toLowerCase().split(/[\s:,{]/)[0];
+    const word = fence
+        .trim()
+        .toLowerCase()
+        .split(/[\s:,{]/)[0];
     if (word === undefined || word === ``) {
         return undefined;
     }

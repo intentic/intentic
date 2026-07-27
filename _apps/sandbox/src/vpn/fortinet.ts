@@ -122,7 +122,9 @@ export const fortinetDriver: VpnDriver = {
             const log = await logTail(logPath(id));
             const hint = dialFailureHint(log);
             throw new Error(
-                [`openconnect could not connect ${id} (exit ${code}).`, hint, log === "" ? undefined : log].filter((part) => part !== undefined).join("\n"),
+                [`openconnect could not connect ${id} (exit ${code}).`, hint, log === "" ? undefined : log]
+                    .filter((part) => part !== undefined)
+                    .join("\n"),
             );
         }
         yield { kind: "log", message: `Connected ${id} on ${interfaceName(id)}. Routes pushed by the gateway now ride the tunnel.` };

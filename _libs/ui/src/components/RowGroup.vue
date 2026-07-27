@@ -6,14 +6,18 @@
 <script setup lang="ts">
 import { cmp } from "../cmp.js";
 
-defineProps<{ label?: string; count?: string | number }>();
+// `caption` names the group's SUBJECT when the label alone leaves it ambiguous ("Plan limits — your whole
+// Claude plan, not this sandbox"). It sits inline with the label rather than under the surface because a reader
+// who misidentifies the subject has already misread every number below by the time a footnote reaches them.
+defineProps<{ label?: string; count?: string | number; caption?: string }>();
 </script>
 
 <template>
     <section>
-        <div v-if="label !== undefined || $slots[`actions`]" class="mb-2 flex items-center gap-2 px-0.5">
+        <div v-if="label !== undefined || $slots[`actions`]" class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
             <span v-if="label !== undefined" :class="cmp.sectionLabel()">{{ label }}</span>
             <span v-if="count !== undefined" class="text-2xs font-medium text-subtle">{{ count }}</span>
+            <span v-if="caption !== undefined" class="min-w-0 text-2xs text-subtle">{{ caption }}</span>
             <div v-if="$slots[`actions`]" class="ml-auto flex items-center gap-2"><slot name="actions" /></div>
         </div>
         <div class="divide-y divide-line overflow-hidden rounded-lg border border-line bg-card">

@@ -152,8 +152,14 @@ const headroom = computed(() =>
                 if (usage === undefined || percent === undefined) {
                     return [];
                 }
-                const windows = orderedWindows(usage).map((window) => ({ ...window, percent: Math.round(window.utilization) }));
-                return [{ provider, account, usage, percent, windows, stale: isStale(usage) }];
+                // A row per pool, rounded once here so the meter's width and its printed number can't disagree.
+                const pools = orderedWindows(usage).map((pool) => ({
+                    kind: pool.kind,
+                    label: usageWindowLabel(pool),
+                    percent: Math.round(pool.utilization),
+                    resetsAt: pool.resetsAt,
+                }));
+                return [{ provider, account, usage, percent, pools, stale: isStale(usage) }];
             }),
         )
         // Tightest first: the account about to gate a turn is the one worth seeing without scrolling.
@@ -299,22 +305,22 @@ const hasSpend = computed(() => current.value.length > 0);
                                 </span>
                             </div>
 
-                            <div v-for="window in entry.windows" :key="window.kind" class="flex items-center gap-3">
-                                <span class="w-40 shrink-0 truncate text-2xs text-muted">{{ usageWindowLabel(window) }}</span>
-                                <!-- The track is a faint step of the fill's own ramp, so state reads across the
-                                     whole bar rather than only where it happens to stop. -->
+                            <div v-for="pool in entry.pools" :key="pool.kind" class="flex items-center gap-3">
+                                <span class="w-40 shrink-0 truncate text-2xs text-muted">{{ pool.label }}</span>
+                                <!-- A pool at 0% still draws a sliver: an empty track is indistinguishable from a
+                                     pool this screen has no reading for, and those mean opposite things. -->
                                 <div class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-content/10">
                                     <div
                                         class="h-full rounded-full bg-current"
-                                        :class="usageTone(window.percent)"
-                                        :style="{ width: `${Math.max(window.percent, 1)}%` }"
+                                        :class="usageTone(pool.percent)"
+                                        :style="{ width: `${Math.max(pool.percent, 1)}%` }"
                                     />
                                 </div>
-                                <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(window.percent)">
-                                    {{ formatUtilization(window.percent, entry.stale) }}
+                                <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
+                                    {{ formatUtilization(pool.percent, entry.stale) }}
                                 </span>
                                 <span class="hidden w-32 shrink-0 truncate text-right text-2xs text-subtle sm:block">
-                                    {{ window.resetsAt === undefined ? `` : `resets ${formatReset(window.resetsAt)}` }}
+                                    {{ pool.resetsAt === undefined ? `` : `resets ${formatReset(pool.resetsAt)}` }}
                                 </span>
                             </div>
                         </div>

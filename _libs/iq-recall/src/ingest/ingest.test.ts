@@ -26,13 +26,18 @@ afterAll(async () => {
 
 const turnsOf = (sessionId: string): { ordinal: number; prompt: string }[] =>
     db
-        .all("SELECT t.ordinal AS ordinal, t.prompt AS prompt FROM turns t JOIN sessions s ON s.id = t.session_id WHERE s.session_id = ? ORDER BY t.ordinal", sessionId)
+        .all(
+            "SELECT t.ordinal AS ordinal, t.prompt AS prompt FROM turns t JOIN sessions s ON s.id = t.session_id WHERE s.session_id = ? ORDER BY t.ordinal",
+            sessionId,
+        )
         .map((row) => ({ ordinal: Number(row["ordinal"]), prompt: row["prompt"] as string }));
 
 const responseOf = (sessionId: string, ordinal: number): string =>
-    db.get("SELECT t.response AS response FROM turns t JOIN sessions s ON s.id = t.session_id WHERE s.session_id = ? AND t.ordinal = ?", sessionId, ordinal)?.[
-        "response"
-    ] as string;
+    db.get(
+        "SELECT t.response AS response FROM turns t JOIN sessions s ON s.id = t.session_id WHERE s.session_id = ? AND t.ordinal = ?",
+        sessionId,
+        ordinal,
+    )?.["response"] as string;
 
 const touchesOf = (sessionId: string, ordinal: number): { path: string; modified: number }[] =>
     db
@@ -83,7 +88,10 @@ test("appended lines extend the still-open turn without duplicating anything", a
         `${JSON.stringify({
             parentUuid: "a-a7",
             type: "assistant",
-            message: { role: "assistant", content: [{ type: "tool_use", id: "toolu_a8", name: "Read", input: { file_path: join(root, "src/web/file-tabs.ts") } }] },
+            message: {
+                role: "assistant",
+                content: [{ type: "tool_use", id: "toolu_a8", name: "Read", input: { file_path: join(root, "src/web/file-tabs.ts") } }],
+            },
             uuid: "a-a8",
             timestamp: ts,
             sessionId: SESSION_A,

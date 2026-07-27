@@ -77,9 +77,7 @@ describe(`initAnalytics`, () => {
         expect(rewrite(`https://app.intentic.dev/wire/static/posthog-recorder.js?v=1.398.2`)).toBe(
             `https://app.intentic.dev/wire/static/sdk.posthog-recorder.js?v=1.398.2`,
         );
-        expect(rewrite(`https://app.intentic.dev/wire/array/phc_test/config.js`)).toBe(
-            `https://app.intentic.dev/wire/array/phc_test/sdk.config.js`,
-        );
+        expect(rewrite(`https://app.intentic.dev/wire/array/phc_test/config.js`)).toBe(`https://app.intentic.dev/wire/array/phc_test/sdk.config.js`);
     });
 });
 

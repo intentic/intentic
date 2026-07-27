@@ -23,9 +23,12 @@ export const selectForkPoint = (db: RecallDb, root: string, sessionId: string, p
         return undefined;
     }
     const sessionRowId = Number(session["id"]);
-    const turns = db
-        .all("SELECT id, uuid, ordinal, ts, start_byte FROM turns WHERE session_id = ? ORDER BY ordinal", sessionRowId)
-        .map((row) => ({ id: Number(row["id"]), uuid: row["uuid"] as string, ordinal: Number(row["ordinal"]), startByte: Number(row["start_byte"]) }));
+    const turns = db.all("SELECT id, uuid, ordinal, ts, start_byte FROM turns WHERE session_id = ? ORDER BY ordinal", sessionRowId).map((row) => ({
+        id: Number(row["id"]),
+        uuid: row["uuid"] as string,
+        ordinal: Number(row["ordinal"]),
+        startByte: Number(row["start_byte"]),
+    }));
     if (turns.length === 0) {
         return undefined;
     }
@@ -45,7 +48,11 @@ export const selectForkPoint = (db: RecallDb, root: string, sessionId: string, p
     const relevant =
         prompt === undefined
             ? allPaths
-            : new Set(rankFilesForTopic(db, prompt, { limit: 50, days: 365 }).map((file) => file.path).filter((path) => allPaths.has(path)));
+            : new Set(
+                  rankFilesForTopic(db, prompt, { limit: 50, days: 365 })
+                      .map((file) => file.path)
+                      .filter((path) => allPaths.has(path)),
+              );
     if (relevant.size === 0) {
         return undefined;
     }
@@ -77,7 +84,10 @@ export const selectForkPoint = (db: RecallDb, root: string, sessionId: string, p
         const estTokens = Math.round(bytes / 4);
         const score = (sum(fresh) - 1.5 * sum(stale)) / Math.sqrt(estTokens + 1000);
         if (score > 0 && (best === undefined || score > best.score)) {
-            best = { point: { turnUuid: turn.uuid, ordinal: turn.ordinal, estTokens, coverageFiles: fresh.toSorted(), staleFiles: stale.toSorted() }, score };
+            best = {
+                point: { turnUuid: turn.uuid, ordinal: turn.ordinal, estTokens, coverageFiles: fresh.toSorted(), staleFiles: stale.toSorted() },
+                score,
+            };
         }
     }
     return best?.point;

@@ -36,8 +36,7 @@ export type SlotResolver = (slot: string) => PortTarget | undefined;
 // upstream actually answers at: panels bind the daemon-assigned PORT on 127.0.0.1, but a forwarded server that
 // bound `localhost` can sit on ::1 only (Vite) — the forward table records which.
 type Upstream =
-    | { dial: string; port: number; scheme: "http" | "https"; headers: http.IncomingHttpHeaders }
-    | { status: number; title: string; message: string };
+    { dial: string; port: number; scheme: "http" | "https"; headers: http.IncomingHttpHeaders } | { status: number; title: string; message: string };
 
 const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTargetOf: SlotResolver, sandboxId: string | undefined): Upstream => {
     const repo = panelFromHost(req.headers.host, sandboxId);
@@ -45,7 +44,11 @@ const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTa
         const port = portOf(repo);
         if (port === undefined) {
             const name = escapeHtml(repo);
-            return { status: 502, title: "Preview isn't running", message: `panel "${name}" is not running — start it from the ${name} entry in the sidebar` };
+            return {
+                status: 502,
+                title: "Preview isn't running",
+                message: `panel "${name}" is not running — start it from the ${name} entry in the sidebar`,
+            };
         }
         return { dial: "127.0.0.1", port, scheme: "http", headers: req.headers };
     }
@@ -53,7 +56,11 @@ const resolveUpstream = (req: http.IncomingMessage, portOf: PortResolver, slotTa
     if (slot !== undefined) {
         const target = slotTargetOf(slot);
         if (target === undefined) {
-            return { status: 502, title: "Nothing forwarded here", message: `nothing is forwarded here — re-open the preview from the Ports view or the terminal link` };
+            return {
+                status: 502,
+                title: "Nothing forwarded here",
+                message: `nothing is forwarded here — re-open the preview from the Ports view or the terminal link`,
+            };
         }
         const localhost = `localhost:${target.port}`;
         const headers: http.IncomingHttpHeaders = { ...req.headers, host: localhost };

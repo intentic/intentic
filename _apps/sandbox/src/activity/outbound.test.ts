@@ -14,7 +14,14 @@ const capture = (): { appended: Partial<ActivityEvent>[]; services: Services } =
     return { appended, services };
 };
 
-const tool = (command: string, id = "t1"): AgentEvent => ({ kind: "tool_call", id, name: "Bash", category: "execute", status: "in_progress", target: command });
+const tool = (command: string, id = "t1"): AgentEvent => ({
+    kind: "tool_call",
+    id,
+    name: "Bash",
+    category: "execute",
+    status: "in_progress",
+    target: command,
+});
 const result = (output: string, id = "t1", isError?: boolean): AgentEvent => ({
     kind: "tool_call_update",
     id,
@@ -69,7 +76,14 @@ test("non-discord commands and non-Bash tools record nothing", () => {
     const { appended, services } = capture();
     const sniffer = createOutboundSniffer(services);
     sniffer.observe(tool(`curl -s https://api.github.com/user | jq .login`));
-    sniffer.observe({ kind: "tool_call", id: "t9", name: "Read", category: "read", status: "in_progress", target: "https://discord.com/api/v10/users/@me" });
+    sniffer.observe({
+        kind: "tool_call",
+        id: "t9",
+        name: "Read",
+        category: "read",
+        status: "in_progress",
+        target: "https://discord.com/api/v10/users/@me",
+    });
     sniffer.observe(result("{}", "t9"));
     sniffer.flush();
     expect(appended.filter((event) => event.direction === "out")).toEqual([]);

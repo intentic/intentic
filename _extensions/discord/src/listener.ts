@@ -27,7 +27,11 @@ interface HistoryEntry {
 // own bots so the model recognizes its prior replies. Exported for tests.
 export const toHistory = (newestFirst: readonly Message[], selfIds: ReadonlySet<string>): HistoryEntry[] =>
     newestFirst.toReversed().map((m) => {
-        const entry: HistoryEntry = { author: { id: m.author.id, name: m.author.username }, content: m.content, timestamp: m.createdAt.toISOString() };
+        const entry: HistoryEntry = {
+            author: { id: m.author.id, name: m.author.username },
+            content: m.content,
+            timestamp: m.createdAt.toISOString(),
+        };
         if (selfIds.has(m.author.id)) {
             entry.self = true;
         }

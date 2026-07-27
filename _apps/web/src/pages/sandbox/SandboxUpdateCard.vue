@@ -28,7 +28,9 @@ const { installed, latest, updateAvailable, serverManaged, updateCommand } = use
         </div>
 
         <template v-if="serverManaged">
-            <p class="text-2xs text-subtle">This sandbox updates on the next <span class="font-mono">intentic deploy apply</span> against its host.</p>
+            <p class="text-2xs text-subtle">
+                This sandbox updates on the next <span class="font-mono">intentic deploy apply</span> against its host.
+            </p>
         </template>
         <template v-else>
             <p class="text-xs font-medium text-content">To update, recreate your sandbox on the new image:</p>

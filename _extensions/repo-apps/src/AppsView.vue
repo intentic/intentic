@@ -225,8 +225,12 @@ onUnmounted(() => {
                                 <Icon :name="app.kind.icon" class="shrink-0 text-lg" :class="app.kind.tint" />
                                 <div class="flex min-w-0 flex-1 items-center gap-2">
                                     <span class="truncate font-medium text-content">{{ app.app }}</span>
-                                    <span class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium" :class="app.kind.pill">{{ app.kind.label }}</span>
-                                    <span v-if="app.template !== app.app && app.kind.known" class="shrink-0 truncate text-2xs text-subtle">{{ app.template }}</span>
+                                    <span class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium" :class="app.kind.pill">{{
+                                        app.kind.label
+                                    }}</span>
+                                    <span v-if="app.template !== app.app && app.kind.known" class="shrink-0 truncate text-2xs text-subtle">{{
+                                        app.template
+                                    }}</span>
                                 </div>
                                 <StatusBadge
                                     :variant="app.healthy ? 'success' : app.running ? 'info' : 'neutral'"

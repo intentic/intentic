@@ -21,7 +21,7 @@ const collect = async (path: string, fromByte: number): Promise<{ json: string; 
 
 test("byte-exact offsets under multibyte UTF-8; partial tail never consumed", async () => {
     const path = join(dir, "multibyte.jsonl");
-    await writeFile(path, 'alpha\né中\u{1F600}\npartial-tail-no-newline');
+    await writeFile(path, "alpha\né中\u{1F600}\npartial-tail-no-newline");
     const lines = await collect(path, 0);
     expect(lines.map((line) => line.json)).toEqual(["alpha", "é中\u{1F600}"]);
     expect(lines[0]!.endByte).toBe(Buffer.byteLength("alpha\n"));

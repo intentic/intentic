@@ -160,7 +160,11 @@ const main = async () => {
             process.stdout.write(`${JSON.stringify(links, null, 2)}\n`);
             return;
         }
-        process.stdout.write(links.length === 0 ? "No VPNs configured. The sandbox owner adds them under Capabilities ▸ VPN.\n" : `${links.map(renderLink).join("\n")}\n`);
+        process.stdout.write(
+            links.length === 0
+                ? "No VPNs configured. The sandbox owner adds them under Capabilities ▸ VPN.\n"
+                : `${links.map(renderLink).join("\n")}\n`,
+        );
         return;
     }
 

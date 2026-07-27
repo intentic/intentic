@@ -364,15 +364,21 @@ export const createSshExecutor = (store: HostKeyStore = inMemoryHostKeyStore()):
                         forward: (remoteHost, remotePort) =>
                             new Promise((resolveForward, rejectForward) => {
                                 const server = createServer((socket) => {
-                                    client.forwardOut(socket.localAddress ?? "127.0.0.1", socket.localPort ?? 0, remoteHost, remotePort, (error, stream) => {
-                                        if (error) {
-                                            socket.destroy(error);
-                                            return;
-                                        }
-                                        socket.pipe(stream).pipe(socket);
-                                        stream.on("error", () => socket.destroy());
-                                        socket.on("error", () => stream.destroy());
-                                    });
+                                    client.forwardOut(
+                                        socket.localAddress ?? "127.0.0.1",
+                                        socket.localPort ?? 0,
+                                        remoteHost,
+                                        remotePort,
+                                        (error, stream) => {
+                                            if (error) {
+                                                socket.destroy(error);
+                                                return;
+                                            }
+                                            socket.pipe(stream).pipe(socket);
+                                            stream.on("error", () => socket.destroy());
+                                            socket.on("error", () => stream.destroy());
+                                        },
+                                    );
                                 });
                                 server.once("error", rejectForward);
                                 server.listen(0, "127.0.0.1", () => {

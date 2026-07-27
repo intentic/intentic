@@ -99,19 +99,34 @@ async function* runAcpTurn(
         // BEFORE responding — no turn is bound yet, so the replay is dropped (we resume, not re-render).
         if (connection.capabilities.loadSession === true) {
             try {
-                await connection.agent.request(methods.agent.session.load, { sessionId: sid, cwd: request.cwd, mcpServers: mcpServersOf(request, connection) });
+                await connection.agent.request(methods.agent.session.load, {
+                    sessionId: sid,
+                    cwd: request.cwd,
+                    mcpServers: mcpServersOf(request, connection),
+                });
                 connection.sessions.add(sid);
             } catch {
-                yield { kind: "error", code: "session-not-found", message: "The agent no longer has this chat's session. Send again to start fresh." };
+                yield {
+                    kind: "error",
+                    code: "session-not-found",
+                    message: "The agent no longer has this chat's session. Send again to start fresh.",
+                };
                 return { sessionId: undefined, text: "", errored: true };
             }
         } else {
-            yield { kind: "error", code: "session-not-found", message: "The agent restarted and cannot resume this chat's session. Send again to start fresh." };
+            yield {
+                kind: "error",
+                code: "session-not-found",
+                message: "The agent restarted and cannot resume this chat's session. Send again to start fresh.",
+            };
             return { sessionId: undefined, text: "", errored: true };
         }
     }
     if (sid === undefined) {
-        const created = await connection.agent.request(methods.agent.session.new, { cwd: request.cwd, mcpServers: mcpServersOf(request, connection) });
+        const created = await connection.agent.request(methods.agent.session.new, {
+            cwd: request.cwd,
+            mcpServers: mcpServersOf(request, connection),
+        });
         sid = created.sessionId;
         connection.sessions.add(sid);
         yield { kind: "session", sessionId: sid };

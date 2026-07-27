@@ -233,10 +233,7 @@ onUnmounted(stop);
                             What stays on your computer?
                         </button>
                     </p>
-                    <ul
-                        v-if="showFootprint"
-                        class="flex list-disc flex-col gap-1 rounded-lg bg-canvas py-2.5 pl-7 pr-3 text-2xs text-subtle"
-                    >
+                    <ul v-if="showFootprint" class="flex list-disc flex-col gap-1 rounded-lg bg-canvas py-2.5 pl-7 pr-3 text-2xs text-subtle">
                         <li>The sync agent, Mutagen, and cloudflared under <span class="font-mono">~/.intentic/sync</span>.</li>
                         <li>An SSH key for the sandbox tunnel, plus one include line in <span class="font-mono">~/.ssh/config</span>.</li>
                         <li>

@@ -15,9 +15,7 @@ export const createSettingsRoutes = (services: Services) => {
             await services.sandboxSettings.set(input);
             // Converge the baked-tool skills with the new `skills` list so the next turn sees them (a failed write
             // only warns — the setting is still saved, the skill files just lag until the next save/boot).
-            await reconcileSkills(services, input.skills).catch((error: unknown) =>
-                services.logger.warn({ err: error }, "skill reconcile failed"),
-            );
+            await reconcileSkills(services, input.skills).catch((error: unknown) => services.logger.warn({ err: error }, "skill reconcile failed"));
             return { ok: true } as const;
         }),
         savings: i.savings.handler(() => readCleanerSavings(services.config.historyRoot)),

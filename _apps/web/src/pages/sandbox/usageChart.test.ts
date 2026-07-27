@@ -8,6 +8,7 @@ import {
     formatCompact,
     formatDelta,
     formatUsd,
+    formatUsdHero,
     inWindow,
     niceMax,
     previousWindow,
@@ -271,6 +272,15 @@ describe(`axis and formatting`, () => {
         expect(formatUsd(0)).toBe(`$0.00`);
         expect(formatUsd(0.004)).toBe(`<$0.01`);
         expect(formatUsd(47.2)).toBe(`$47.20`);
+    });
+
+    it(`keeps the hero amount inside its tile by stepping precision down with magnitude`, () => {
+        // Cents where they carry meaning, then whole dollars, then compacted — nine glyphs at worst, so the
+        // number can't grow out of the card the way a fixed 48px "$1,234.56" does.
+        expect(formatUsdHero(36.62)).toBe(`$36.62`);
+        expect(formatUsdHero(9_999.99)).toBe(`$9,999.99`);
+        expect(formatUsdHero(12_480.4)).toBe(`$12,480`);
+        expect(formatUsdHero(1_240_000)).toBe(`$1.2M`);
     });
 
     it(`compacts counts past a thousand`, () => {

@@ -28,5 +28,8 @@ export const vpnContract = {
     disconnect: oc.route({ method: "POST", path: "/vpn/{id}/disconnect" }).input(VpnIdParamSchema).output(OkSchema),
     // Parse an exported FortiClient configuration into addable connections, so a user with that file fills the
     // add form by picking a connection instead of re-keying host/port/protocol per tunnel.
-    importForticlient: oc.route({ method: "POST", path: "/vpn/import-forticlient" }).input(ForticlientImportInputSchema).output(ForticlientImportSchema),
+    importForticlient: oc
+        .route({ method: "POST", path: "/vpn/import-forticlient" })
+        .input(ForticlientImportInputSchema)
+        .output(ForticlientImportSchema),
 };

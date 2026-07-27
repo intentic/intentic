@@ -45,7 +45,11 @@ export function useVpn(): {
         queryKey: QUERY_KEY,
         queryFn: async () => VpnListSchema.parse(await sandboxJson(`/vpn`)),
         refetchInterval: (state) =>
-            state.state.data?.links.some((link) => link.state === `connecting`) ? TRANSIENT_POLL_MS : (state.state.data?.links.length ?? 0) > 0 ? STEADY_POLL_MS : false,
+            state.state.data?.links.some((link) => link.state === `connecting`)
+                ? TRANSIENT_POLL_MS
+                : (state.state.data?.links.length ?? 0) > 0
+                  ? STEADY_POLL_MS
+                  : false,
     });
 
     const invalidate = async (): Promise<void> => {

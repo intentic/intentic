@@ -27,9 +27,7 @@ export const summarizeStats = (rows) => {
             counts.set(id, (counts.get(id) ?? 0) + 1);
         }
     }
-    const perCleaner = [...counts.entries()]
-        .map(([id, commands]) => ({ id, commands }))
-        .toSorted((a, b) => b.commands - a.commands);
+    const perCleaner = [...counts.entries()].map(([id, commands]) => ({ id, commands })).toSorted((a, b) => b.commands - a.commands);
 
     // Measured saving: avg emitted tokens on cleaned commands vs avg raw tokens on the held-out control. Because
     // holdout is a random sample of the same command stream, this is a real reduction, not a per-command estimate.

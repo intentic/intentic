@@ -27,10 +27,7 @@ const show = (event: MouseEvent): void => {
     const left = Math.min(Math.max(GAP, rect.left + rect.width / 2 - MAX / 2), win.innerWidth - MAX - GAP);
     // Anchor on whichever side has more room: above for the bottom-docked composer, below for a thumb near the
     // top of the transcript.
-    box.value =
-        rect.top >= win.innerHeight - rect.bottom
-            ? { left, bottom: win.innerHeight - rect.top + GAP }
-            : { left, top: rect.bottom + GAP };
+    box.value = rect.top >= win.innerHeight - rect.bottom ? { left, bottom: win.innerHeight - rect.top + GAP } : { left, top: rect.bottom + GAP };
 };
 const hide = (): void => {
     box.value = undefined;

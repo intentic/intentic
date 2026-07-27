@@ -13,7 +13,13 @@ import { expect, test } from "@playwright/test";
 const GROK_LOGO_PREFIX = "M9.27 15.29";
 const GROK_PLACEHOLDER_PREFIX = "M6 3h4l8";
 
-const CATALOG = { models: [{ id: "grok-4", label: "Grok 4" }, { id: "grok-3", label: "Grok 3" }], default: "grok-4" };
+const CATALOG = {
+    models: [
+        { id: "grok-4", label: "Grok 4" },
+        { id: "grok-3", label: "Grok 3" },
+    ],
+    default: "grok-4",
+};
 
 // Fail the test on any uncaught page error or Vue render/lifecycle error (main.ts prefixes the latter "[vue]").
 const collectErrors = (page: import("@playwright/test").Page): { pageErrors: string[]; vueErrors: string[] } => {

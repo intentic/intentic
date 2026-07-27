@@ -23,7 +23,8 @@ export const docsSections: DocsSection[] = [
                 title: "Overview",
                 meta: {
                     title: "intentic docs — Overview",
-                    description: "How intentic gives each coding agent its own sandbox — a specialized workspace on hardware you own — and where to start in the docs.",
+                    description:
+                        "How intentic gives each coding agent its own sandbox — a specialized workspace on hardware you own — and where to start in the docs.",
                 },
             },
             {
@@ -31,7 +32,8 @@ export const docsSections: DocsSection[] = [
                 title: "Quickstart",
                 meta: {
                     title: "Quickstart — intentic docs",
-                    description: "Sign in, name a sandbox, and paste one curl command to bring a live agent workspace up on your own machine. No inbound ports.",
+                    description:
+                        "Sign in, name a sandbox, and paste one curl command to bring a live agent workspace up on your own machine. No inbound ports.",
                 },
             },
             {
@@ -39,7 +41,8 @@ export const docsSections: DocsSection[] = [
                 title: "Docker setup",
                 meta: {
                     title: "Docker setup — intentic docs",
-                    description: "What the sandbox container is, how Docker is installed, the isolated in-sandbox engine, environment overlays, and the update/rebuild/cleanup helpers.",
+                    description:
+                        "What the sandbox container is, how Docker is installed, the isolated in-sandbox engine, environment overlays, and the update/rebuild/cleanup helpers.",
                 },
             },
         ],
@@ -52,7 +55,8 @@ export const docsSections: DocsSection[] = [
                 title: "Architecture",
                 meta: {
                     title: "Architecture — intentic docs",
-                    description: "How intentic fits together — the thin platform, the per-agent sandbox on your hardware, the ownership and trust model, and the Cloudflare reachability fabric.",
+                    description:
+                        "How intentic fits together — the thin platform, the per-agent sandbox on your hardware, the ownership and trust model, and the Cloudflare reachability fabric.",
                 },
             },
         ],
@@ -65,7 +69,8 @@ export const docsSections: DocsSection[] = [
                 title: "Autonomous employees",
                 meta: {
                     title: "Turn sandboxes into autonomous employees — intentic docs",
-                    description: "Specialize a sandbox into an agent — its tools, systems, and context — give it work, make it event-driven, then scale to a team of them.",
+                    description:
+                        "Specialize a sandbox into an agent — its tools, systems, and context — give it work, make it event-driven, then scale to a team of them.",
                 },
             },
             {
@@ -73,7 +78,8 @@ export const docsSections: DocsSection[] = [
                 title: "Reference architecture",
                 meta: {
                     title: "Reference architecture: a company on intentic — intentic docs",
-                    description: "An example of an entire company assembled from intentic sandboxes — one co-piloted agent per role and team, connected to the services they share. Every block maps to a shipping primitive.",
+                    description:
+                        "An example of an entire company assembled from intentic sandboxes — one co-piloted agent per role and team, connected to the services they share. Every block maps to a shipping primitive.",
                 },
             },
         ],

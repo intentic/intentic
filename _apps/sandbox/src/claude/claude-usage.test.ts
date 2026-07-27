@@ -44,7 +44,9 @@ test("concurrent records leave a parseable file holding every account", async ()
     // Turns on different accounts finish whenever they finish. Overlapping whole-file writes are what the
     // store's write queue exists to prevent, so the invariant is: the file always parses, and nothing is lost.
     const ids = Array.from({ length: 12 }, (_, index) => `acct-${index}`);
-    await Promise.all(ids.map((id, index) => store.record(id, snapshot({ windows: [window({ utilization: index * 8, kind: "five_hour".repeat(index + 1) })] }))));
+    await Promise.all(
+        ids.map((id, index) => store.record(id, snapshot({ windows: [window({ utilization: index * 8, kind: "five_hour".repeat(index + 1) })] }))),
+    );
     expect(Object.keys(JSON.parse(await readFile(path, "utf8"))).toSorted()).toEqual(ids.toSorted());
 });
 

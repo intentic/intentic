@@ -65,21 +65,19 @@ export const rgSearch = async (options: RgOptions): Promise<EngineHit[]> => {
         cwd: options.root,
         maxBuffer: 64 * 1024 * 1024,
         ...(options.signal !== undefined ? { signal: options.signal } : {}),
-    }).catch(
-        (error: Error & { code?: unknown; stdout?: string; stderr?: string }) => {
-            // Exit 1 = no matches. Other numeric exits = real error (e.g. bad pattern) — surface rg's own message.
-            if (error.code === 1) {
-                return { stdout: error.stdout ?? "" };
-            }
-            if (typeof error.code === "number") {
-                throw new Error(`ripgrep: ${(error.stderr ?? "").trim() || "search failed"}`);
-            }
-            if (error.code === "ENOENT") {
-                throw new Error("iq: ripgrep (rg) not found on PATH — install ripgrep or set IQ_RG_PATH");
-            }
-            throw error;
-        },
-    );
+    }).catch((error: Error & { code?: unknown; stdout?: string; stderr?: string }) => {
+        // Exit 1 = no matches. Other numeric exits = real error (e.g. bad pattern) — surface rg's own message.
+        if (error.code === 1) {
+            return { stdout: error.stdout ?? "" };
+        }
+        if (typeof error.code === "number") {
+            throw new Error(`ripgrep: ${(error.stderr ?? "").trim() || "search failed"}`);
+        }
+        if (error.code === "ENOENT") {
+            throw new Error("iq: ripgrep (rg) not found on PATH — install ripgrep or set IQ_RG_PATH");
+        }
+        throw error;
+    });
     const hits: EngineHit[] = [];
     for (const line of stdout.split("\n")) {
         if (line === "") {

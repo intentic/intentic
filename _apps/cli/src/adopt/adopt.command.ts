@@ -59,8 +59,7 @@ export const adopt = buildCommand<{ artifact?: string; baseUrl?: string }>({
         // and the CP host's SSH block the default transport forwards through.
         const { domain, user, adminPasswordRef: ref, ssh } = forgejoIdentity(graph);
         const generatedValues = await readGeneratedSecrets(targetDir);
-        const secretValue = (source: string, key: string): string | undefined =>
-            source === "generated" ? generatedValues[key] : process.env[key];
+        const secretValue = (source: string, key: string): string | undefined => (source === "generated" ? generatedValues[key] : process.env[key]);
         const password = secretValue(ref.source, ref.key);
         if (password === undefined || password === "") {
             throw new Error(`forgejo admin password (${ref.source} secret ${ref.key}) is not available`);
