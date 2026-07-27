@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { type IconName, useDevice } from "@intentic-app/ui";
-import type { AskQuestion, TodoItem } from "@intentic/sandbox-contract";
+import { useDevice } from "@intentic-app/ui";
+import type { AskQuestion } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { type ChatMessage, planParts, type PlanRequest } from "../composables/chat/transcript";
@@ -10,6 +10,7 @@ import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { restoreSnapshot } from "../composables/workspace/useHistory";
 import { useChat } from "../composables/chat/useChat";
 import ChatImageThumb from "./ChatImageThumb.vue";
+import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolCard from "./ChatToolCard.vue";
 
 /* One transcript entry: user bubble, notice line, or the assistant turn's stack (thinking, tools, todos,
@@ -63,17 +64,6 @@ const body = useMarkdown(
 );
 // A plan card's body arrives whole with the card, so it never streams.
 const plan = useMarkdown(() => (props.message.plan ? planParts(props.message.plan.text).body : ``), false);
-
-const todoIcon = (todo: TodoItem): { name: IconName; spin?: boolean; class: string } => {
-    if (todo.status === `completed`) {
-        return { name: `check-circle`, class: `text-success` };
-    }
-    if (todo.status === `in_progress`) {
-        return { name: `spinner`, spin: true, class: `text-link` };
-    }
-    return { name: `circle`, class: `text-subtle` };
-};
-const todoText = (todo: TodoItem): string => (todo.status === `in_progress` && todo.activeForm ? todo.activeForm : todo.content);
 
 const planTitle = (request: PlanRequest): string => planParts(request.text).title ?? `Proposed plan`;
 
@@ -223,6 +213,45 @@ const restoreToCheckpoint = async (): Promise<void> => {
     }
 };
 
+// --- Long prompt clamp (see .chat-prompt-text) ------------------------------------------------
+// The bubble is clamped in CSS; whether the clamp actually bites is a question of wrapping, and wrapping
+// depends on a panel width the user can drag. So the element is measured rather than its text guessed at,
+// and re-measured whenever it resizes — a prompt that fits at a wide panel clips at a narrow one, and a
+// faded-out prompt with no way to open it is just lost text.
+const bubble = ref<HTMLElement>();
+const overflowing = ref(false);
+const expanded = ref(false);
+
+watch(
+    bubble,
+    (element, _previous, onCleanup) => {
+        if (element === undefined) {
+            overflowing.value = false;
+            return;
+        }
+        const observer = new ResizeObserver(() => {
+            // Open, the clamp is off and the box always fits — there is nothing to measure, and measuring
+            // would clear the flag that keeps the collapse control on screen. The next collapse re-measures.
+            if (!expanded.value) {
+                overflowing.value = element.scrollHeight > element.clientHeight + 1;
+            }
+        });
+        observer.observe(element);
+        onCleanup(() => observer.disconnect());
+    },
+    { immediate: true },
+);
+
+// A clamped box has no scrollbar and cannot be scrolled by hand, so any scroll it reports came from the
+// browser revealing something inside it — find-in-page landing on a match below the fold, or a screen reader
+// moving to it. Both mean the same thing: open the message, and put the box back where it belongs.
+const onBubbleScroll = (): void => {
+    if (bubble.value !== undefined && bubble.value.scrollTop > 0) {
+        expanded.value = true;
+        bubble.value.scrollTop = 0;
+    }
+};
+
 // --- Inline edit of a past user message (hover pencil → textarea → branch from here) ---------
 const editing = ref(false);
 const editText = ref(``);
@@ -293,7 +322,11 @@ const onEditKeydown = (event: KeyboardEvent): void => {
 <template>
     <!-- The click handler is delegated for the markdown's own controls — copy buttons and file links — which
          live inside v-html and so can hold no component of their own (see onMarkdownClick). -->
-    <div class="chat-message flex flex-col gap-1" :class="{ 'chat-prompt items-end': message.role === 'user' }" @click="onMarkdownClick">
+    <div
+        class="chat-message flex flex-col gap-1"
+        :class="{ 'chat-prompt items-end': message.role === 'user', 'chat-prompt-open': expanded }"
+        @click="onMarkdownClick"
+    >
         <div v-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
             <!-- The chip/thumbnail row stays visible in edit mode (read-only — the attachments ride the re-run). -->
             <div v-if="message.attachments?.length" class="flex flex-wrap justify-end gap-1.5">
@@ -360,10 +393,21 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 >
                     <Icon name="pencil" class="text-2xs" />
                 </button>
-                <div v-if="message.text" class="chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content/90">
+                <div
+                    v-if="message.text"
+                    ref="bubble"
+                    class="chat-prompt-text chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content/90"
+                    @scroll="onBubbleScroll"
+                >
                     {{ message.text }}
                 </div>
             </div>
+            <!-- Only for a prompt the clamp actually cut. Opening it also unpins it, so a long message can be
+                 read in full without taking the screen over for the rest of the turn. -->
+            <button v-if="overflowing" type="button" class="composer-ghost h-5 gap-1 px-1.5 text-2xs" @click="expanded = !expanded">
+                {{ expanded ? `Show less` : `Show more` }}
+                <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+            </button>
         </div>
         <div v-else-if="message.role === 'notice'" class="flex items-center gap-2 self-center py-0.5 text-2xs text-subtle">
             <Icon name="info-circle" class="text-2xs" />
@@ -388,18 +432,15 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 </div>
             </div>
 
+            <!-- `live` is this bubble's own stream flag, which is what "still happening" means for both of
+                 these: a call in flight and the checklist the agent is moving both belong to the bubble the
+                 turn is currently writing into. Anywhere else they are a record — frozen mid-flight by a Stop,
+                 by the turn moving on, or by the session ending — and must not animate. -->
             <div v-if="message.tools?.length" class="flex w-full flex-col gap-1">
-                <ChatToolCard v-for="tool in message.tools" :key="tool.id" :tool="tool" />
+                <ChatToolCard v-for="tool in message.tools" :key="tool.id" :tool="tool" :live="streaming" />
             </div>
 
-            <div v-if="message.todos?.length" class="flex w-full flex-col gap-1 rounded-lg border border-line bg-overlay/40 px-3 py-2">
-                <div v-for="(todo, index) in message.todos" :key="index" class="flex items-start gap-2 text-xs">
-                    <Icon v-bind="todoIcon(todo)" class="mt-0.5 text-2xs" />
-                    <span :class="{ 'text-subtle': todo.status === 'completed', 'line-through': todo.status === 'completed' }">{{
-                        todoText(todo)
-                    }}</span>
-                </div>
-            </div>
+            <ChatTodoList v-if="message.todos?.length" :todos="message.todos" :live="streaming" />
 
             <!-- Two v-html slots, not one: the settled half is unchanged between frames so Vue leaves its DOM
                  (and the user's selection) alone, while only the short tail is re-rendered. `.md-part` is

@@ -778,6 +778,7 @@ const askServer = (request: AgentRequest, push: (event: AgentEvent) => void): Mc
                     const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true });
                     push({ kind: "question", requestId: id, questions });
                     const reply = await wait(request.signal);
+                    push({ kind: "resolved", requestId: id });
                     return { content: [{ type: "text", text: formatAnswers(questions, reply) }] };
                 },
             ),
@@ -832,6 +833,7 @@ const permissionGate =
             const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
             push({ kind: "plan", requestId: id, text: String((input as { plan?: unknown }).plan ?? "") });
             const reply = await wait(request.signal);
+            push({ kind: "resolved", requestId: id });
             if (!reply.approve) {
                 return { behavior: "deny", message: reply.feedback?.trim() || "Keep refining the plan — do not exit plan mode yet." };
             }
@@ -873,6 +875,7 @@ const permissionGate =
             alwaysLabel: `Don't ask again for ${options.displayName ?? toolName}`,
         });
         const reply = await wait(request.signal);
+        push({ kind: "resolved", requestId: id });
         if (reply.decision === "deny") {
             return {
                 behavior: "deny",

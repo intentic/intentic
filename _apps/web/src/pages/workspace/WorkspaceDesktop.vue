@@ -427,14 +427,18 @@ const endResize = (event: PointerEvent): void => {
         @dragover.prevent
         @drop.prevent
     >
-        <!-- Active nudge: uncommitted work is waiting for review. Dismiss keeps it quiet until the next turn. -->
+        <!-- Active nudge: uncommitted work is waiting for review. Dismiss keeps it quiet until the next turn.
+             It takes the shell-wide bar height (.view-header) instead of sizing to its own text: the banner
+             inserts a row above the workspace column, so an off-height one shifts the file-tab row below it a
+             few pixels out of step with the chat strip's line. One header height in, one header height down. -->
         <div
             v-if="showReviewBanner"
-            class="flex shrink-0 items-center gap-3 border-b border-primary-600/30 bg-primary-600/10 px-4 py-2 text-xs text-link"
+            class="view-header flex items-center gap-3 border-b border-primary-600/30 bg-primary-600/10 px-4 text-xs text-link"
         >
             <Icon name="check-square" />
             <button type="button" class="flex min-w-0 flex-1 items-center gap-3 text-left hover:underline" @click="openReview">
-                <span class="min-w-0 flex-1">
+                <!-- Fixed height means one line: a narrow column ellipsises the sentence rather than wrapping out of the bar. -->
+                <span class="min-w-0 flex-1 truncate">
                     <span class="font-medium">{{ changes.count.value }}</span> uncommitted {{ changes.count.value === 1 ? "change" : "changes" }} —
                     review before you continue.
                 </span>

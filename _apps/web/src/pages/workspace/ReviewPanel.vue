@@ -9,7 +9,9 @@ import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useLayout } from "../../composables/useLayout";
 import { originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
+import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
 import { COMMIT_SCOPE, type RepoPaths, useChanges } from "../../composables/workspace/useChanges";
+import { useRepos } from "../../composables/workspace/useRepos";
 import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTabs";
 
 /* The Changes review — a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
@@ -44,8 +46,6 @@ import { type DiffTabPayload, STATUS_CLASS, STATUS_LETTER } from "./workspaceTab
  *     of the panel naming neither, so a failed fetch read as a stray sentence with no visible cause. */
 
 const changes = useChanges();
-// A commit mid-turn would sweep the agent's half-finished work into the repo — hold committing until it ends.
-const { streaming } = useChat();
 
 // A repo the daemon could not scan at all (a half-written .git from a canceled upload, a corrupt HEAD) arrives
 // with empty change lists and `error` set to git's own one-line reason. It has nothing to commit or discard, so
@@ -275,23 +275,83 @@ const commitTarget = computed(() => (commitAll.value ? scannable.value.map((repo
 // others committed under a message that describes work that didn't all land. Better to not start.
 const blockedByConflicts = computed(() => scannable.value.some((repo) => repo.conflicted.length > 0));
 const commitReady = computed(
-    () =>
-        commitTarget.value.length > 0 &&
-        commitMessage.value.trim().length > 0 &&
-        !blockedByConflicts.value &&
-        !streaming.value &&
-        !changes.actionBusy.value,
+    () => commitTarget.value.length > 0 && commitMessage.value.trim().length > 0 && !blockedByConflicts.value && !changes.actionBusy.value,
 );
 const commitLabel = computed(() => (commitAll.value ? `Commit all` : `Commit`));
-const doCommit = async (): Promise<void> => {
-    if (!commitReady.value) {
-        return;
-    }
-    await changes.commitRepos(commitTarget.value, commitMessage.value, commitAll.value);
+
+/* --- committing while an agent works ------------------------------------------------------------------------
+ * THE INDEX IS ALREADY THE ISOLATION, which is why nothing here blocks. A plain Commit records what you
+ * staged — a snapshot git took at stage time, which no later worktree write can alter — so a turn running in
+ * the background cannot get into it, and refusing to commit during one bought exactly nothing. "Commit all" is
+ * the single exception: `commit -a` reads the WORKTREE, so a file an agent is halfway through writing goes in
+ * as it stands.
+ *
+ * So the panel warns, and only where that is true: a MAIN-TREE turn writing a repo this Commit all would
+ * sweep. An isolated turn is silent — it works in its own worktree and reaches this tree only through land,
+ * which the daemon serializes against every git write this panel makes (git.routes.ts), so there is no race
+ * left to warn about. The block this replaces did the opposite of all of that: it read one chat tab's stream,
+ * so it stopped you for the isolated turns that could never touch your commit while waving through the
+ * background main-tree turns that could — across every repo, including the ones nothing was writing.
+ *
+ * The residual case it cannot see is a main-tree agent running `git add` itself: that moves the index under a
+ * staged commit, and a Bash call reports no locations to detect it by. Recoverable (`reset --soft`), rare, and
+ * not worth warning about on every commit to catch. */
+const { conversations } = useChat();
+const repos = useRepos();
+const writingRepos = computed<ReadonlySet<string>>(
+    () =>
+        new Set(
+            conversations.value
+                .filter((conversation) => !conversation.isolated.value && conversation.streaming.value)
+                .flatMap((conversation) =>
+                    [...turnWrites(conversation.conversationId, conversation.turnStartedAt.value)].map((path) =>
+                        repoOfPath(path, repos.repoDirs.value),
+                    ),
+                ),
+        ),
+);
+// Named in the warning, and the difference between the two lists is the escape hatch: everything else is
+// committable right now, which is the whole point of scoping this per repo instead of per workspace.
+const atRisk = computed(() => (commitAll.value ? commitTarget.value.filter((repo) => writingRepos.value.has(repo)) : []));
+const unaffected = computed(() => commitTarget.value.filter((repo) => !writingRepos.value.has(repo)));
+
+const runCommit = async (target: readonly string[]): Promise<void> => {
+    await changes.commitRepos(target, commitMessage.value, commitAll.value);
     // Keep the message on failure — it is the one thing here the user typed by hand.
     if (!changes.failures.value.has(COMMIT_SCOPE)) {
         commitMessage.value = ``;
     }
+};
+// Ctrl+Enter reaches this too, and a keyboard path that silently does nothing is the worst way to say no —
+// the user retries the same chord harder. When the button is off, say which of its three reasons applies.
+const commitBlocker = computed<string | undefined>(() => {
+    if (blockedByConflicts.value) {
+        return `Resolve the conflicts first — git cannot commit while a path is unmerged.`;
+    }
+    if (commitTarget.value.length === 0) {
+        // The one genuinely puzzling empty target: an origin filter suppresses "Commit all" (it would stage
+        // every agent's work under a message about one), so the button goes quiet with changes on screen.
+        return originFilter.value === undefined
+            ? `Nothing to commit.`
+            : `Nothing staged — "Commit all" is off while the list is filtered. Stage what you want first.`;
+    }
+    if (commitMessage.value.trim().length === 0) {
+        return `Write a commit message first.`;
+    }
+    return changes.actionBusy.value ? `Another git action is still running.` : undefined;
+});
+// Shown where the readout sits, for the moment after a rejected Ctrl+Enter. Cleared by the next edit to the
+// message, so it never outlives the state it describes.
+const blockerNotice = ref<string | undefined>(undefined);
+watch([commitMessage, commitBlocker], () => {
+    blockerNotice.value = undefined;
+});
+const doCommit = async (): Promise<void> => {
+    if (!commitReady.value) {
+        blockerNotice.value = commitBlocker.value;
+        return;
+    }
+    await runCommit(commitTarget.value);
 };
 
 // --- stage / unstage ---------------------------------------------------------------------------------------
@@ -483,6 +543,9 @@ const failureIn = (scope: string) => changes.failures.value.get(scope);
 // a border, not loose coloured text — the old bare red sentence at the top of the panel was indistinguishable
 // from the panel's own content, which is most of why a git message read as gibberish rather than as an error.
 const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-danger/10 px-2 py-1.5`;
+// The same strip one severity down. Danger is reserved for what already went wrong; this is a heads-up about
+// something that hasn't, on an action the user is still free to take.
+const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5`;
 </script>
 
 <template>
@@ -544,6 +607,11 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                 <span v-if="blockedByConflicts" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-danger">
                     Resolve conflicts first
                 </span>
+                <!-- Why the button just refused a Ctrl+Enter. It takes the readout's place rather than adding a
+                     line, because it answers the same question the readout does — what will this commit do. -->
+                <span v-else-if="blockerNotice" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-warning" :title="blockerNotice">
+                    {{ blockerNotice }}
+                </span>
                 <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
                     <template v-if="changes.stagedCount.value > 0"
                         >{{ changes.stagedCount.value }} staged<span v-if="stagedRepos.length > 1"> · {{ stagedRepos.length }} repos</span></template
@@ -558,15 +626,37 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                     v-tooltip.top="
                         blockedByConflicts
                             ? 'git cannot commit while a path is unmerged — resolve the conflicts (stage each file to mark it resolved)'
-                            : streaming
-                              ? 'Wait for the agent turn to finish'
-                              : commitAll
-                                ? 'Nothing is staged — stage every change and commit it'
-                                : 'Commit the staged changes, one commit per repo'
+                            : commitAll
+                              ? 'Nothing is staged — stage every change and commit it'
+                              : 'Commit the staged changes, one commit per repo'
                     "
                 >
                     <Icon name="check" class="mr-1 text-2xs" />{{ commitLabel }}
                 </button>
+            </div>
+            <!-- An agent is writing, in a repo this Commit all would sweep from the worktree. A WARNING, not a
+                 gate: the commit is the user's to make and `reset --soft` walks it back, so the button above
+                 stays live. What the strip adds is the thing the old block never offered — the repos nobody is
+                 writing, committable in one click, which is the whole "let me commit something unrelated" case. -->
+            <div v-if="atRisk.length > 0" :class="WARNING">
+                <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
+                <div class="min-w-0 flex-1">
+                    <p class="break-words text-2xs text-warning">
+                        An agent is editing {{ atRisk.join(`, `) }} right now — "Commit all" records
+                        {{ atRisk.length === 1 ? `it` : `them` }} mid-write.
+                    </p>
+                    <button
+                        v-if="unaffected.length > 0"
+                        type="button"
+                        class="mt-1 inline-flex items-center whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
+                        :disabled="!commitReady"
+                        @click="runCommit(unaffected)"
+                        v-tooltip.top="`Commit only the repos no agent is writing: ${unaffected.join(`, `)}`"
+                    >
+                        <Icon name="check" class="mr-1 text-2xs" />Commit
+                        {{ unaffected.length === 1 ? unaffected[0] : `the other ${unaffected.length} repos` }}
+                    </button>
+                </div>
             </div>
             <!-- A commit spans every staged repo, so its failure belongs to the box that fired it — under the
                  button, where the user is already looking, with the message they typed still in the input. -->

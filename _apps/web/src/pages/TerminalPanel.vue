@@ -682,8 +682,18 @@ const endResize = (event: PointerEvent): void => {
                  clicked split); Shift/Ctrl+click multi-selects pills for the right-click mass actions; × kills
                  that session; + opens a new one. A dimmed segment is an untracked session (a finished one-shot
                  job's lingering shell, output in scrollback). Hidden while collapsed so the collapsed bar stays
-                 a single clean line (the chevron expands). -->
-            <div v-if="!effectiveCollapsed" class="scrollbar-thin flex min-w-0 items-center gap-0.5 overflow-x-auto">
+                 a single clean line (the chevron expands).
+
+                 Pills fill one row, then wrap to a second (the chat strip's rule): a sandbox with a dozen
+                 sessions used to push half of them off the right edge, where a tab you can't see is a tab you
+                 forget is running. Only past two rows (max-h-13, the cap) does the strip scroll — vertically,
+                 never sideways. One row leaves the bar at exactly its old height, so the terminal only gives up
+                 rows once there are genuinely more tabs than fit. Rows sit a touch further apart than pills in a
+                 row (gap-y-1 vs gap-x-0.5): stacked pill backgrounds need the separation to read as two rows. -->
+            <div
+                v-if="!effectiveCollapsed"
+                class="scrollbar-thin flex max-h-13 min-w-0 flex-1 flex-wrap items-center gap-x-0.5 gap-y-1 overflow-x-hidden overflow-y-auto"
+            >
                 <div
                     v-for="(group, gi) in groups"
                     :key="groupKey(group)"
@@ -756,7 +766,8 @@ const endResize = (event: PointerEvent): void => {
                     <Icon name="plus" class="text-2xs" />
                 </button>
             </div>
-            <span class="flex-1"></span>
+            <!-- The strip is what holds the toolbar against the right edge; collapsed, there is no strip. -->
+            <span v-else class="flex-1"></span>
             <!-- The sweep: only rendered while finished tabs exist, and hovering it previews the exact set it
                  would kill (see .tterm-doomed) instead of asking for a confirmation. -->
             <button

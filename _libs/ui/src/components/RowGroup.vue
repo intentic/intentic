@@ -14,8 +14,11 @@ defineProps<{ label?: string; count?: string | number; caption?: string }>();
 
 <template>
     <section>
-        <div v-if="label !== undefined || $slots[`actions`]" class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
+        <div v-if="label !== undefined || $slots[`info`] || $slots[`actions`]" class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
             <span v-if="label !== undefined" :class="cmp.sectionLabel()">{{ label }}</span>
+            <!-- Butted against the label (like PageHeader's own #info) so an <InfoHint>/<InfoDialog> reads as
+                 belonging to the group's NAME, not to the first row under it. -->
+            <slot name="info" />
             <span v-if="count !== undefined" class="text-2xs font-medium text-subtle">{{ count }}</span>
             <span v-if="caption !== undefined" class="min-w-0 text-2xs text-subtle">{{ caption }}</span>
             <div v-if="$slots[`actions`]" class="ml-auto flex items-center gap-2"><slot name="actions" /></div>

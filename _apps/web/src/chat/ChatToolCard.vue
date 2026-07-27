@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { IconName } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import type { ChatTool } from "../composables/chat/transcript";
 import { openWorkspaceRef } from "../composables/workspace/openFileRef";
@@ -13,11 +14,33 @@ import { present } from "./toolPresentation";
  * workspace at the reported line (QuickOpen's navigation pattern, so it works from the shell-docked chat on
  * any view). */
 
-const props = defineProps<{ tool: ChatTool }>();
+const props = defineProps<{
+    tool: ChatTool;
+    // Whether the turn this card belongs to is still streaming — the only state in which the card may animate.
+    live: boolean;
+}>();
 
 const view = computed(() => present(props.tool));
 const running = computed(() => props.tool.status === `pending` || props.tool.status === `in_progress`);
 const failed = computed(() => props.tool.status === `failed`);
+
+// A call that never reported back: a Stop cut the turn off mid-flight, the stream dropped, or the session was
+// restored from a file whose tool_use block has no matching result (see readWorkspaceSession). `in_progress` is
+// the honest record of that, but it is FROZEN — nothing is going to move it — so the card must not keep
+// spinning, which is a claim about right now rather than about what happened.
+const unfinished = computed(() => running.value && !props.live);
+
+// The header glyph: the loading spinner only while the call is genuinely in flight, a clock once it was left
+// unfinished, and otherwise the registry's icon for the tool.
+const statusIcon = computed<{ name: IconName; spin: boolean; class: string }>(() => {
+    if (running.value && props.live) {
+        return { name: `spinner`, spin: true, class: `text-link` };
+    }
+    if (unfinished.value) {
+        return { name: `clock`, spin: false, class: `text-subtle` };
+    }
+    return { name: view.value.icon, spin: false, class: failed.value ? `text-danger` : `text-link` };
+});
 
 // Whether there's anything to fold — an output-less call (a pending tool, or a command that printed nothing)
 // shows just its header, no chevron. A sub-agent card folds over its nested transcript (children + thinking)
@@ -53,13 +76,11 @@ const location = computed(() => props.tool.locations?.[0]);
                 @click="toggleOpen"
             >
                 <Icon :name="isOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
-                <Icon v-if="running" name="spinner" class="text-2xs text-link" spin />
-                <Icon v-else :name="view.icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
+                <Icon v-bind="statusIcon" class="text-2xs" />
                 <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
             </button>
             <template v-else>
-                <Icon v-if="running" name="spinner" class="text-2xs text-link" spin />
-                <Icon v-else :name="view.icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
+                <Icon v-bind="statusIcon" class="text-2xs" />
                 <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
             </template>
             <button
@@ -73,8 +94,12 @@ const location = computed(() => props.tool.locations?.[0]);
             </button>
             <span v-else-if="tool.target" class="truncate font-mono">{{ tool.target }}</span>
             <!-- The result phrase stays visible while collapsed — a folded card should still say what
-                 happened. Pushed right so it reads as a trailing annotation, not part of the target. -->
-            <span v-if="view.summary" class="ml-auto shrink-0 tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{ view.summary }}</span>
+                 happened. Pushed right so it reads as a trailing annotation, not part of the target. A call
+                 that never reported back says so, which is what the clock in its place means. -->
+            <span v-if="unfinished" class="ml-auto shrink-0 text-subtle">interrupted</span>
+            <span v-else-if="view.summary" class="ml-auto shrink-0 tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{
+                view.summary
+            }}</span>
         </div>
         <template v-if="isOpen">
             <!-- A sub-agent's own thinking, grouped onto its card as a muted inner-voice block rather than
@@ -87,7 +112,7 @@ const location = computed(() => props.tool.locations?.[0]);
                  the whole Agent run reads as one unit. Recursive — a sub-agent that itself delegates nests one
                  level deeper (ChatToolCard renders itself). -->
             <div v-if="tool.children?.length" class="ml-4 flex flex-col gap-1 border-l border-line pl-2">
-                <ChatToolCard v-for="child in tool.children" :key="child.id" :tool="child" />
+                <ChatToolCard v-for="child in tool.children" :key="child.id" :tool="child" :live="live" />
             </div>
             <ChatToolDiff
                 v-for="diff in view.diffs"

@@ -17,16 +17,15 @@ const sanitizeTitle = (prompt: string): string | undefined => {
     return clean === "" ? undefined : clean;
 };
 
-// The frames that PARK a turn on the user. A frame of any other kind arriving while parked means the user
-// answered and the turn is executing again, which clears the attention flags.
-const PAUSE_KINDS = new Set<AgentEvent["kind"]>(["plan", "question", "permission"]);
-
 interface RuntimeState {
     running: boolean;
-    awaiting: boolean;
-    plan: boolean;
-    question: boolean;
-    permission: boolean;
+    // The cards the turn is parked on RIGHT NOW, by the requestId each was raised with — the fleet's attention
+    // flags are read straight off it. Keyed rather than counted because a turn can be parked on more than one
+    // card at a time (a question raised beside a parallel tool call's permission prompt), and each is released
+    // by its own `resolved` frame. Emphatically NOT inferred from the frames that follow a park: frames keep
+    // arriving while a turn waits — the pausing tool's own `tool_call` regularly trails its card — and reading
+    // one of those as "the user answered" is what kept an agent asking a question out of the Attention lane.
+    pauses: Map<string, "plan" | "question" | "permission">;
     errored: boolean;
     activity: { tool?: string; target?: string; todo?: string } | undefined;
     contextTokens: number | undefined;
@@ -43,10 +42,7 @@ interface RuntimeState {
 
 const freshRuntime = (): RuntimeState => ({
     running: false,
-    awaiting: false,
-    plan: false,
-    question: false,
-    permission: false,
+    pauses: new Map(),
     errored: false,
     activity: undefined,
     contextTokens: undefined,
@@ -147,7 +143,9 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
 
     const summaryOf = (entry: PersistedAgent): AgentSummary => {
         const state = runtime.get(entry.id);
-        const status = state?.running === true ? (state.awaiting ? "awaiting" : "running") : entry.status;
+        // A turn holding an unanswered card is AWAITING, however much else it has in flight beside it.
+        const parked = state === undefined ? [] : [...state.pauses.values()];
+        const status = state?.running === true ? (parked.length > 0 ? "awaiting" : "running") : entry.status;
         const base = (entry.repos.find((repo) => repo.repo === "root") ?? entry.repos[0])?.base.slice(0, 7);
         // Live totals: persisted totals plus the running turn's not-yet-flushed usage.
         const costUsd = entry.costUsd + (state?.pendingCostUsd ?? 0);
@@ -161,9 +159,9 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             branch: entry.branch,
             updatedAt: Math.max(entry.updatedAt, state?.lastAt ?? 0),
             attention: {
-                plan: state?.plan ?? false,
-                question: state?.question ?? false,
-                permission: state?.permission ?? false,
+                plan: parked.includes("plan"),
+                question: parked.includes("question"),
+                permission: parked.includes("permission"),
                 conflict: entry.status === "conflict",
             },
             ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}),
@@ -339,14 +337,6 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
         observe: (id, event) => {
             const state = runtimeOf(id);
             state.lastAt = Date.now();
-            // A frame after a pause means the user answered — the turn is executing again.
-            const resumed = state.awaiting && !PAUSE_KINDS.has(event.kind);
-            if (resumed) {
-                state.awaiting = false;
-                state.plan = false;
-                state.question = false;
-                state.permission = false;
-            }
             switch (event.kind) {
                 case "session":
                     state.pendingSessionId = event.sessionId;
@@ -361,16 +351,16 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                     state.contextWindow = event.contextWindow;
                     break;
                 case "plan":
-                    state.awaiting = true;
-                    state.plan = true;
-                    break;
                 case "question":
-                    state.awaiting = true;
-                    state.question = true;
-                    break;
                 case "permission":
-                    state.awaiting = true;
-                    state.permission = true;
+                    state.pauses.set(event.requestId, event.kind);
+                    break;
+                case "resolved":
+                    // Nothing to release ⇒ nothing to publish: a daemon that restarted mid-park never saw the
+                    // card go up, and re-broadcasting for it would only churn the board.
+                    if (!state.pauses.delete(event.requestId)) {
+                        return;
+                    }
                     break;
                 case "tool_call":
                     state.pendingToolUses += 1;
@@ -389,9 +379,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                     state.errored = true;
                     break;
                 default:
-                    if (!resumed) {
-                        return; // delta/thinking/etc — not card-visible, skip the broadcast.
-                    }
+                    return; // delta/thinking/etc — not card-visible, skip the broadcast.
             }
             broadcast();
         },
@@ -403,10 +391,9 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             const ranTurn = state?.running === true;
             if (state !== undefined) {
                 state.running = false;
-                state.awaiting = false;
-                state.plan = false;
-                state.question = false;
-                state.permission = false;
+                // A turn that ended holds nobody up any more, however it ended: an aborted card's waiter is
+                // settled by the same abort, and its `resolved` frame may never make it out of the stream.
+                state.pauses.clear();
                 state.startedAt = undefined;
             }
             // Tolerates a missing runtime state: the manual land route finishes with an outcome outside any

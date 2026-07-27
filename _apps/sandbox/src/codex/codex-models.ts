@@ -30,19 +30,32 @@ export const humanizeModelId = (id: string): string =>
 // OpenAI's /v1/models lists every model family (embeddings, audio/tts/whisper, image/dall-e, moderation, …)
 // alongside chat models. Keep only the chat/reasoning/codex families a Codex turn can drive (gpt-*, o-series,
 // codex-*), excluding the non-chat suffixes — so a future "gpt-5.6-sol" is kept while "gpt-image-1" drops.
+// `codex-auto-review` is the same kind of exclusion by role rather than by shape: it is the id the CLI drives its
+// own auto-review pass with (its `auto_review_model_override`), never a model a user holds a conversation with.
 export const isCodexModel = (id: string): boolean =>
     /^(gpt-|o\d|codex)/i.test(id) &&
-    !/(embedding|whisper|tts|audio|realtime|image|dall-e|moderation|search|transcribe|-instruct|-preview$)/i.test(id);
+    !/(embedding|whisper|tts|audio|realtime|image|dall-e|moderation|search|transcribe|auto-review|-instruct|-preview$)/i.test(id);
 
-// GET an OpenAI-compatible model-list endpoint ({ data: [{id}] }); [] on non-ok / parse error, so a caller can
-// fall through to the next source. Filtered to chat/codex ids.
+/* WHOSE model this row is, which the id alone cannot tell you. The bundled translator multiplexes EVERY connected
+ * subscription onto ONE OpenAI-compatible /v1/models, so the Codex rows arrive interleaved with Antigravity's —
+ * and that channel re-serves `gpt-oss-120b-medium`, an id `isCodexModel` has no way to read as foreign. Offering
+ * it under Codex put a row in the picker that starts a turn, streams reasoning, and returns no answer at all.
+ *
+ * `owned_by` is the only field that separates them. OpenAI's own REST endpoint is single-vendor by construction
+ * and stamps its rows openai / openai-internal / system, so those read as OpenAI — as does a row naming no owner,
+ * since only the translator has a second vendor to name. */
+const isOpenAiOwned = (owner: string | undefined): boolean => owner === undefined || owner === "system" || owner.startsWith("openai");
+
+// GET an OpenAI-compatible model-list endpoint ({ data: [{id, owned_by}] }); [] on non-ok / parse error, so a
+// caller can fall through to the next source. Filtered to OpenAI-owned chat/codex ids.
 const getModelList = async (url: string, accessToken: string, fetchImpl: typeof fetch): Promise<{ id: string; label: string }[]> => {
     const response = await fetchImpl(url, { headers: authHeader(accessToken) }).catch(() => undefined);
     if (response === undefined || !response.ok) {
         return [];
     }
-    const json = (await response.json().catch(() => undefined)) as { data?: { id: string }[] } | undefined;
+    const json = (await response.json().catch(() => undefined)) as { data?: { id: string; owned_by?: string }[] } | undefined;
     return (json?.data ?? [])
+        .filter((model) => isOpenAiOwned(model.owned_by))
         .map((model) => model.id)
         .filter(isCodexModel)
         .map((id) => ({ id, label: humanizeModelId(id) }));
@@ -73,6 +86,21 @@ export const parseCodexModelSuggestions = (message: string): string[] => {
     return [...new Set(hint.match(/[a-z0-9][\w.-]+/gi) ?? [])].filter(isCodexModel);
 };
 
+/* Codex reports a non-fatal ADVISORY on the same `error` channel a real failure arrives on, and then runs the turn
+ * to completion. This app provokes one by design: the catalog above comes from the translator's live /v1/models,
+ * which tracks the subscription and therefore runs AHEAD of the model table compiled into the pinned codex-cli —
+ * the CLI resolves per-model metadata (context window, compaction limit, reasoning support) from ChatGPT's backend,
+ * which a translator-provider turn never authenticates against, so it falls back to that table and warns for every
+ * id newer than the build. Reading it as a failure painted the red error line under a turn that had just answered
+ * correctly and, in plan mode, dropped the plan frame outright (plan-emulation abandons an errored phase).
+ * It stays worth SAYING — fallback metadata really does degrade a long turn — so it rides as a muted notice. */
+export const CODEX_ADVISORY = /defaulting to fallback metadata/i;
+
 // OpenAI surfaces an unusable model as a "not supported"/"model not found" 400 — tag it so the client reloads
-// the live catalog and drops the bad pinned model (mirrors Grok's grok-model-invalid self-heal).
-export const CODEX_MODEL_INVALID = /model is not supported|model not found|does not exist|no such model|does not have access to|did you mean/i;
+// the live catalog and drops the bad pinned model (mirrors Grok's grok-model-invalid self-heal). "not found" is
+// the one phrase here that has to name the model ADJACENTLY: the advisory above ("Model metadata for
+// `gpt-5.6-sol` not found") puts the same two words in a sentence that is not a rejection, and reading it as one
+// would drop a pinned model that is serving turns perfectly well. The rest are unambiguous wherever they land —
+// OpenAI writes the subject first ("The model `x` does not exist"), so anchoring them would only miss.
+export const CODEX_MODEL_INVALID =
+    /model is not supported|\bmodel not found\b|does not exist|no such model|does not have access to|did you mean/i;

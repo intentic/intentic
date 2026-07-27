@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { KeyedProvider } from "@intentic/sandbox-contract";
-import { Card, cmp, CopyButton, Row, RowGroup, Segmented } from "@intentic-app/ui";
+import type { AgentProvider, KeyedProvider } from "@intentic/sandbox-contract";
+import { Card, cmp, CopyButton, InfoHint, Row, RowGroup, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { providerTabs } from "../../composables/chat/conversation";
+import { providerAccounts, providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { errorMessage } from "../../composables/useAsyncAction";
@@ -13,6 +13,9 @@ import { useCleanerSavings } from "../../composables/sandbox/useCleanerSavings";
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
+import AssistantInfo from "./AssistantInfo.vue";
+import CommandOutputInfo from "./CommandOutputInfo.vue";
+import NativeConnectFlow from "./NativeConnectFlow.vue";
 
 /* The Sandbox hub's "Agent" tab — the home for everything about the AI the sandbox runs. The AI provider
  * accounts (Claude / ChatGPT / Grok / Kimi / Gemini) it authenticates as — each provider's native-harness
@@ -24,26 +27,24 @@ import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 
 const sandbox = useSandbox();
 
-// --- AI provider accounts (native + routed, one card) -------------------------------------------------------
+// --- AI provider accounts (native + routed, one grouped list) ------------------------------------------------
 const {
     managedProvider,
     setManagedProvider,
     managedAccounts,
     authorizeUrl,
-    userCode,
-    connectLabel,
     accountUsage,
     error: chatError,
     openAccountManage,
     closeAccountManage,
     startConnect,
-    completeConnect,
     disconnect,
     translatorAccounts,
     translatorConnectFlow,
     translatorBusy,
     connectTranslator,
     completeTranslator,
+    cancelTranslatorConnect,
     disconnectTranslator,
 } = useChat();
 
@@ -84,25 +85,50 @@ onUnmounted(closeAccountManage);
 const routedProvider = computed<KeyedProvider | undefined>(() =>
     managedProvider.value === `codex` || managedProvider.value === `grok` || managedProvider.value === `gemini` ? managedProvider.value : undefined,
 );
-const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; loginHint: string }> = {
+// Each routed row carries two registers of explanation, because they are read at different moments. `hint` is
+// the glanceable one — what this connection costs you, in a fragment — and it is the only one on screen. `about`
+// is the full mechanic, parked behind the row's (i) for the reader who actually wants it: printing both is what
+// turned this card into a wall of prose. `open` names the destination on its own button so "Open sign-in" never
+// has to be guessed at, and `loginHint` appears only while that sign-in is live.
+const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; about: string; open: string; loginHint: string }> = {
     codex: {
         title: `ChatGPT subscription`,
-        hint: `Runs Codex on your ChatGPT subscription — everywhere: on its own and under the Claude Code harness.`,
-        loginHint: `Open ChatGPT, sign in, and enter this one-time code.`,
+        hint: `The only connection Codex needs.`,
+        about: `Runs Codex on your ChatGPT subscription — everywhere: on its own and under the Claude Code harness.`,
+        open: `Open ChatGPT`,
+        loginHint: `Sign in, then enter this code.`,
     },
     grok: {
         title: `Under Claude Code`,
-        hint: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription — a separate sign-in from the account above.`,
-        loginHint: `Open x.ai with your SuperGrok / X Premium account and enter this code.`,
+        hint: `Your SuperGrok / X Premium subscription.`,
+        about: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription — a separate sign-in from the Grok account above.`,
+        open: `Open x.ai`,
+        loginHint: `Sign in, then enter this code.`,
     },
     gemini: {
         title: `Google account`,
-        // Worth stating in full, because it is the only free row on this page and the models it names are not
-        // the ones a "Gemini" heading implies: Google's Antigravity channel vends Claude and GPT-OSS on the same
-        // ordinary sign-in (see gemini-models.ts).
-        hint: `Runs Gemini, Claude and GPT-OSS models under the Claude Code harness on your Google account — free, and the one connection this provider needs.`,
-        loginHint: `Open Google and sign in. The page it sends you to won't load — that's expected, it points back inside the sandbox. Copy the whole address from your browser's address bar and paste it below.`,
+        // The models are worth naming even in the short line, because they are not the ones a "Google" tab
+        // implies: Google's Antigravity channel vends Claude and GPT-OSS on the same ordinary sign-in (see
+        // gemini-models.ts). Free is the other half — it is the only free row on this page.
+        hint: `Free — Gemini, Claude and GPT-OSS models.`,
+        about: `Runs Gemini, Claude and GPT-OSS models under the Claude Code harness on your Google account — free, and the one connection this provider needs.`,
+        open: `Open Google`,
+        // The dead-end landing page is the one thing a user cannot work out on their own, so it stays in full.
+        loginHint: `The page Google lands on won't load — that's expected, it points back inside the sandbox. Copy its whole address and paste it below.`,
     },
+};
+
+// Whether a provider is usable at all — a native account, its translator subscription, or (Grok) either. Read
+// per tab so the switcher itself answers "which AI can my agent use?": the card can only ever show one
+// provider, and without a dot per tab that question costs five clicks.
+const KEYED_PROVIDERS: readonly KeyedProvider[] = [`codex`, `grok`, `gemini`];
+const providerConnected = (target: AgentProvider): boolean => {
+    // Providers are an open string vocabulary (mirroring useChat's accountsOf) — an unseeded key has no list.
+    const accounts = providerAccounts.value[target];
+    if (accounts !== undefined && accounts.length > 0) {
+        return true;
+    }
+    return KEYED_PROVIDERS.some((keyed) => keyed === target && translatorAccounts.value[keyed]);
 };
 
 // The pasted redirect URL for a routed login that can't self-complete (Google's — see completeTranslator).
@@ -133,36 +159,15 @@ const usageLine = (id: string): string | undefined => {
     return `${usage.turns} turns · ${shortTokens(usage.inputTokens)} in / ${shortTokens(usage.outputTokens)} out${cache}${cost}`;
 };
 
-// The native flows differ (codex has no native account — it connects via the subscription row below): Anthropic
-// shows a code on its hosted page to paste back; Grok (xAI OAuth) opens x.ai on any device and connects on
-// approval (a paste-back code only for the non-device method).
-const connectHint = computed(() =>
-    managedProvider.value === `grok`
-        ? `Open x.ai on any device with your SuperGrok / X Premium account and approve — this connects on its own.`
-        : managedProvider.value === `kimi`
-          ? `Open Moonshot to create an API key on your Kimi account, then paste it here.`
-          : `Open Anthropic to authorize, then paste the code it shows you.`,
-);
-const openLabel = computed(() =>
-    managedProvider.value === `grok` ? `Open x.ai` : managedProvider.value === `kimi` ? `Open Moonshot` : `Open Anthropic`,
-);
-const pastePlaceholder = computed(() => (managedProvider.value === `kimi` ? `Paste API key…` : `Paste code…`));
+const managedLabel = computed(() => providerTabs.find((tab) => tab.value === managedProvider.value)?.label ?? managedProvider.value);
+// Codex and Gemini own no native account — the subscription row IS their connection, so the accounts list is
+// theirs to skip entirely.
+const hasNativeAccounts = computed(() => managedProvider.value !== `codex` && managedProvider.value !== `gemini`);
 // Grok holds a single account (OpenCode owns the xAI credential), so hide "connect another" once it's linked.
 const canConnectMore = computed(() => managedProvider.value !== `grok` || managedAccounts.value.length === 0);
-// A connect handshake is live once startConnect has produced its authorize URL / device code.
+// A connect handshake is live once startConnect has produced its authorize URL / device code; the flow itself
+// (and everything provider-specific about it) lives in NativeConnectFlow.
 const connecting = computed(() => authorizeUrl.value !== null);
-
-const connectCode = ref(``);
-const finishConnect = async (): Promise<void> => {
-    const code = connectCode.value.trim();
-    if (code.length === 0) {
-        return;
-    }
-    const ok = await completeConnect(code);
-    if (ok) {
-        connectCode.value = ``;
-    }
-};
 
 // --- Agent behavior toggles (per-sandbox, daemon .intentic/settings.json) ----------------------------------
 // The daemon overwrites the whole settings object, so each toggle spreads the current settings and flips just
@@ -358,156 +363,139 @@ const importMemory = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-6">
-        <!-- AI provider accounts the agent runs as. -->
-        <Card id="ai-account" class="flex flex-col gap-3 transition-shadow" :class="ringing ? 'ring-2 ring-info' : ''">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex items-center gap-2.5">
-                    <Icon name="sparkles" class="text-lg text-link" />
-                    <div>
-                        <h2 class="font-semibold leading-tight">AI account</h2>
-                        <p class="text-xs text-muted">The accounts your agent signs in as. Stored inside your sandbox, never on the platform.</p>
-                    </div>
-                </div>
-                <div class="flex shrink-0 items-center gap-1">
+        <!-- AI provider accounts the agent runs as. A RowGroup like every other section on this page, NOT a
+             Card: the connections are a grouped list, and wrapping that list in a card put a bordered surface
+             inside a bordered surface for no gain — the group label carries the heading, so the sub-card,
+             the icon and the standalone <h2> all come off. -->
+        <!-- The deep-link flash rings the whole group (label included). `-m-1 p-1` holds the layout still while
+             it does: the ring needs room to sit outside the surface, and growing the section for 2.5s would
+             shove the page. -->
+        <RowGroup id="ai-account" label="AI account" :class="ringing ? '-m-1 rounded-xl p-1 ring-2 ring-info' : ''">
+            <template #info>
+                <InfoHint label="About AI accounts">
+                    <span class="block text-xs text-content">
+                        The accounts your agent signs in as. Every credential is stored inside your sandbox, never on the platform — connecting here
+                        signs the sandbox in, not this browser.
+                    </span>
+                </InfoHint>
+            </template>
+            <!-- The provider switcher rides the group label (where "Command output" carries its own trailing
+                 controls), and the dot per chip is the point: this group shows ONE provider at a time, so
+                 without it the question it exists to answer — which AI can my agent use? — costs a click each. -->
+            <template #actions>
+                <div class="flex flex-wrap items-center justify-end gap-1">
                     <button
                         v-for="tab in providerTabs"
                         :key="tab.value"
                         type="button"
-                        class="composer-ghost h-6 px-2 text-2xs font-medium"
+                        class="composer-ghost h-6 gap-1.5 px-2 text-2xs font-medium"
                         :class="{ 'composer-active': managedProvider === tab.value }"
                         @click="setManagedProvider(tab.value)"
                         :aria-pressed="managedProvider === tab.value"
                     >
+                        <span
+                            class="h-1.5 w-1.5 shrink-0 rounded-full"
+                            :class="providerConnected(tab.value) ? 'bg-success' : 'bg-content/25'"
+                            :aria-label="providerConnected(tab.value) ? `connected` : `not connected`"
+                        />
                         {{ tab.label }}
                     </button>
                 </div>
-            </div>
+            </template>
 
-            <p v-if="chatError" class="text-2xs text-danger">{{ chatError }}</p>
+            <!-- Every connection this provider has — native accounts and the translator subscription alike — as
+                 rows of ONE list. They are different mechanisms but the same question ("what am I signed in
+                 with, and can I drop it?"), so they share a row shape: status dot, name, live state, action.
+                 A sign-in in progress opens in the row's own #below, so it stays inside that row's hairline
+                 instead of spawning an inset panel detached from the thing it connects. -->
+            <p v-if="chatError" :class="cmp.alertDanger('m-3')">{{ chatError }}</p>
 
-            <!-- Native accounts (Claude, Grok, Kimi). ChatGPT/Codex and Gemini have no native account — both
-                 connect only through the subscription row below — so their whole native section is hidden. -->
-            <template v-if="managedProvider !== `codex` && managedProvider !== `gemini`">
-                <!-- Connected accounts for the managed provider; each can be disconnected independently. -->
-                <ul v-if="managedAccounts.length > 0" class="flex flex-col gap-1">
-                    <li
-                        v-for="account in managedAccounts"
-                        :key="account.id"
-                        class="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5"
-                        :class="account.needsReauth ? 'border-warning/40 bg-warning/10' : 'border-line bg-card'"
-                    >
-                        <span class="flex min-w-0 flex-col">
-                            <span class="flex min-w-0 items-center gap-2">
-                                <Icon name="circle-fill" class="text-[0.5rem]" :class="account.needsReauth ? 'text-warning' : 'text-success'" />
-                                <span class="truncate text-2xs text-content">{{ account.label }}</span>
+            <!-- Native accounts (Claude, Grok, Kimi), each disconnectable on its own. Codex and Gemini have
+                 none — the subscription row below IS their connection — so they skip straight to it. -->
+            <template v-if="hasNativeAccounts">
+                <Row v-for="account in managedAccounts" :key="account.id" :class="account.needsReauth ? 'bg-warning/10' : ''">
+                    <template #title>
+                        <span class="flex min-w-0 items-center gap-2.5">
+                            <span class="flex w-[1.125rem] shrink-0 justify-center">
+                                <span class="h-1.5 w-1.5 rounded-full" :class="account.needsReauth ? 'bg-warning' : 'bg-success'" />
                             </span>
-                            <!-- A revoked/expired credential explains itself and offers reconnect; else the usage line. -->
-                            <span v-if="account.needsReauth" class="pl-3.5 text-[0.65rem] text-warning">{{
-                                account.detail ?? `Reconnect to keep using this account.`
-                            }}</span>
-                            <span v-else-if="usageLine(account.id)" class="pl-3.5 text-[0.65rem] text-subtle">{{ usageLine(account.id) }}</span>
+                            <span class="truncate">{{ account.label }}</span>
                         </span>
-                        <div class="flex shrink-0 items-center gap-1">
-                            <Button v-if="account.needsReauth && canConnectMore" label="Re-log in" size="small" @click="startConnect">
-                                <template #icon><Icon name="link" /></template>
-                            </Button>
-                            <Button label="Disconnect" size="small" severity="danger" :text="true" @click="disconnect(account.id)">
-                                <template #icon><Icon name="sign-out" /></template>
-                            </Button>
-                        </div>
-                    </li>
-                </ul>
-                <p v-else class="text-2xs text-subtle">
-                    No {{ providerTabs.find((t) => t.value === managedProvider)?.label }} account connected yet.
-                </p>
-
-                <!-- Connect another account: a labelled sign-in handshake (kicked off on demand so the open-URL anchor
-                 is a real user gesture, never a blocked programmatic popup). -->
-                <div v-if="canConnectMore" class="flex flex-col gap-2 border-t border-line pt-2">
-                    <Button v-if="!connecting" label="Connect another account" size="small" @click="startConnect">
-                        <template #icon><Icon name="link" /></template>
-                    </Button>
-                    <template v-else>
-                        <p class="text-2xs text-subtle">{{ connectHint }}</p>
-                        <input
-                            v-model="connectLabel"
-                            name="accountLabel"
-                            placeholder="Account name (optional)"
-                            class="min-w-0 rounded-md border border-line bg-card px-3 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                        />
-                        <template v-if="managedProvider === `grok`">
-                            <div v-if="userCode" class="flex flex-col items-center gap-1 rounded-md border border-line bg-card py-2">
-                                <span class="text-2xs text-subtle">Code (already filled in at x.ai — just approve)</span>
-                                <span class="font-mono text-lg font-semibold tracking-[0.2em] text-content">{{ userCode }}</span>
-                                <CopyButton :text="userCode ?? ``" label="Copy" />
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <Button
-                                    v-if="authorizeUrl"
-                                    as="a"
-                                    :label="openLabel"
-                                    size="small"
-                                    severity="secondary"
-                                    :href="authorizeUrl"
-                                    target="_blank"
-                                    rel="noopener"
-                                >
-                                    <template #icon><Icon name="external-link" /></template>
-                                </Button>
-                                <span v-if="userCode" class="text-2xs text-subtle"
-                                    ><Icon name="spinner" class="mr-1" spin />Waiting for you to approve…</span
-                                >
-                            </div>
-                        </template>
-                        <div v-else class="flex flex-col gap-2">
-                            <div class="flex items-center gap-2">
-                                <Button
-                                    v-if="authorizeUrl"
-                                    as="a"
-                                    :label="openLabel"
-                                    size="small"
-                                    severity="secondary"
-                                    :href="authorizeUrl"
-                                    target="_blank"
-                                    rel="noopener"
-                                >
-                                    <template #icon><Icon name="external-link" /></template>
-                                </Button>
-                            </div>
-                            <div class="flex gap-2">
-                                <input
-                                    v-model="connectCode"
-                                    name="connectCode"
-                                    :placeholder="pastePlaceholder"
-                                    class="min-w-0 flex-1 rounded-md border border-line bg-card px-3 py-1.5 text-sm text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                                    @keydown.enter="finishConnect"
-                                />
-                                <Button label="Finish" size="small" :disabled="connectCode.trim().length === 0" @click="finishConnect" />
-                            </div>
-                        </div>
                     </template>
-                </div>
+                    <!-- A revoked/expired credential explains itself and offers reconnect; else the usage line. -->
+                    <template #description>
+                        <span v-if="account.needsReauth" class="block pl-7 text-warning">{{
+                            account.detail ?? `Signed out — reconnect to keep using it.`
+                        }}</span>
+                        <span v-else-if="usageLine(account.id)" class="block pl-7">{{ usageLine(account.id) }}</span>
+                    </template>
+                    <template #control>
+                        <Button v-if="account.needsReauth && canConnectMore" label="Reconnect" size="small" @click="startConnect" />
+                        <Button label="Disconnect" size="small" severity="danger" :text="true" @click="disconnect(account.id)" />
+                    </template>
+                </Row>
+
+                <!-- No account yet is a ROW, not a sentence floating above a button: same shape as a connected
+                     one, so the empty state reads as the connection that is missing rather than as an apology,
+                     and its action sits where every other row's action sits. -->
+                <Row v-if="managedAccounts.length === 0">
+                    <template #title>
+                        <span class="flex min-w-0 flex-wrap items-center gap-x-2.5">
+                            <span class="flex w-[1.125rem] shrink-0 justify-center">
+                                <span class="h-1.5 w-1.5 rounded-full bg-content/25" />
+                            </span>
+                            <span>{{ managedLabel }} account</span>
+                            <span class="text-2xs font-normal text-subtle">not connected</span>
+                        </span>
+                    </template>
+                    <template #control>
+                        <!-- Filled: with no account at all, this is the one thing the group is asking for. -->
+                        <Button v-if="!connecting" label="Connect" size="small" @click="startConnect">
+                            <template #icon><Icon name="link" /></template>
+                        </Button>
+                    </template>
+                    <template v-if="connecting" #below><NativeConnectFlow /></template>
+                </Row>
+
+                <!-- Adding a SECOND account is a different act from having none: its own quiet row at the end of
+                     the list, which is also where the handshake it starts unfolds. -->
+                <Row v-else-if="canConnectMore" :interactive="!connecting" @click="!connecting && startConnect()">
+                    <template #title>
+                        <span class="flex min-w-0 items-center gap-2.5 text-muted">
+                            <span class="flex w-[1.125rem] shrink-0 justify-center"><Icon name="plus" class="text-2xs" /></span>
+                            <span>Add another account</span>
+                        </span>
+                    </template>
+                    <template v-if="connecting" #below><NativeConnectFlow /></template>
+                </Row>
             </template>
 
             <!-- The subscription connection (translator). ChatGPT/Codex and Gemini: the ONE connection, so it's
-                 the card's primary control. Grok: a secondary row beneath the native account, for running Grok
-                 UNDER the Claude Code harness. Codex/Grok mint a one-time code and the translator connects on its
-                 own; Google redirects instead, so that flow asks for the landing URL back. Either way the shared
-                 poll flips the row to "connected". -->
-            <div v-if="routedProvider" class="flex flex-col gap-1.5" :class="routedProvider === `grok` ? 'border-t border-line pt-2' : ''">
-                <div class="flex items-start justify-between gap-2">
-                    <span class="flex min-w-0 flex-col gap-0.5">
-                        <span class="flex items-center gap-2 text-sm text-content">
-                            <Icon
-                                name="circle-fill"
-                                class="text-[0.5rem]"
-                                :class="translatorAccounts[routedProvider] ? 'text-success' : 'text-subtle'"
-                            />
-                            {{ ROUTED_ROW[routedProvider].title }}
-                            <span class="text-2xs text-subtle">{{ translatorAccounts[routedProvider] ? "connected" : "not connected" }}</span>
+                 the group's primary control. Grok: a second row beneath the native account, for running Grok
+                 UNDER the Claude Code harness. Codex/Grok mint a one-time code and the translator connects on
+                 its own; Google redirects instead, so that flow asks for the landing URL back. Either way the
+                 shared poll flips the row to "connected". -->
+            <Row v-if="routedProvider">
+                <template #title>
+                    <!-- Wraps rather than truncates: these titles are short and fixed, and a squeezed row that
+                         renders "Unde…" has hidden the only thing the row is for. -->
+                    <span class="flex min-w-0 flex-wrap items-center gap-x-2.5">
+                        <span class="flex w-[1.125rem] shrink-0 justify-center">
+                            <span class="h-1.5 w-1.5 rounded-full" :class="translatorAccounts[routedProvider] ? 'bg-success' : 'bg-content/25'" />
                         </span>
-                        <span class="pl-3.5 text-2xs text-muted">{{ ROUTED_ROW[routedProvider].hint }}</span>
+                        <span>{{ ROUTED_ROW[routedProvider].title }}</span>
+                        <span v-if="!translatorAccounts[routedProvider]" class="text-2xs font-normal text-subtle">not connected</span>
+                        <!-- The full mechanic lives here rather than on screen: it is a paragraph, and a
+                             paragraph per row is what made this group unreadable. -->
+                        <InfoHint :label="`About ${ROUTED_ROW[routedProvider].title}`">
+                            <span class="block text-xs text-content">{{ ROUTED_ROW[routedProvider].about }}</span>
+                        </InfoHint>
                     </span>
+                </template>
+                <template #description
+                    ><span class="block pl-7">{{ ROUTED_ROW[routedProvider].hint }}</span></template
+                >
+                <template #control>
                     <Button
                         v-if="translatorAccounts[routedProvider]"
                         label="Disconnect"
@@ -517,61 +505,75 @@ const importMemory = async (): Promise<void> => {
                         :loading="translatorBusy === routedProvider"
                         @click="disconnectTranslator(routedProvider)"
                     />
+                    <!-- Filled accent only where this row IS the group's one connection (Codex/Gemini). Under
+                         Grok it's the alternative to the native account right above it, and a filled accent
+                         there makes the lesser path the loudest thing on the page. -->
                     <Button
                         v-else-if="translatorConnectFlow?.provider !== routedProvider"
                         label="Connect"
                         size="small"
+                        :severity="routedProvider === `grok` ? `secondary` : undefined"
                         :loading="translatorBusy === routedProvider"
                         @click="connectTranslator(routedProvider)"
                     >
                         <template #icon><Icon name="link" /></template>
                     </Button>
-                </div>
-                <div
-                    v-if="translatorConnectFlow && translatorConnectFlow.provider === routedProvider"
-                    class="flex flex-col gap-2 rounded-md border border-line bg-card p-2"
-                >
-                    <p class="text-2xs text-subtle">{{ ROUTED_ROW[routedProvider].loginHint }}</p>
-                    <!-- A one-time code means the provider polls itself; no code means it redirects, and the
-                         landing URL carries the grant the sandbox never received. -->
-                    <div v-if="translatorConnectFlow.code" class="flex flex-col items-center gap-1">
-                        <span class="text-2xs text-subtle">Your one-time code</span>
-                        <span class="font-mono text-lg font-semibold tracking-[0.2em] text-content">{{ translatorConnectFlow.code }}</span>
-                        <CopyButton :text="translatorConnectFlow.code" label="Copy" />
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <Button
-                            as="a"
-                            label="Open sign-in"
-                            size="small"
-                            severity="secondary"
-                            :href="translatorConnectFlow.url"
-                            target="_blank"
-                            rel="noopener"
+                </template>
+                <template v-if="translatorConnectFlow && translatorConnectFlow.provider === routedProvider" #below>
+                    <div class="flex flex-col gap-2.5">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <Button
+                                as="a"
+                                :label="ROUTED_ROW[routedProvider].open"
+                                size="small"
+                                :href="translatorConnectFlow.url"
+                                target="_blank"
+                                rel="noopener"
+                            >
+                                <template #icon><Icon name="external-link" /></template>
+                            </Button>
+                            <span class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />Waiting for sign-in…</span>
+                            <Button
+                                class="ml-auto shrink-0"
+                                label="Cancel"
+                                size="small"
+                                severity="secondary"
+                                :text="true"
+                                @click="cancelTranslatorConnect"
+                            />
+                        </div>
+                        <p class="text-2xs text-subtle">{{ ROUTED_ROW[routedProvider].loginHint }}</p>
+                        <!-- A one-time code means the provider polls itself; no code means it redirects, and the
+                             landing URL carries the grant the sandbox never received. -->
+                        <div
+                            v-if="translatorConnectFlow.code"
+                            class="flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5"
                         >
-                            <template #icon><Icon name="external-link" /></template>
-                        </Button>
-                        <span class="text-2xs text-subtle"><Icon name="spinner" class="mr-1" spin />Waiting for you to finish signing in…</span>
+                            <span class="truncate font-mono text-base font-semibold tracking-[0.2em] text-content">{{
+                                translatorConnectFlow.code
+                            }}</span>
+                            <CopyButton :text="translatorConnectFlow.code" />
+                        </div>
+                        <div v-else class="flex gap-2">
+                            <input
+                                v-model="redirectUrl"
+                                type="text"
+                                :class="cmp.input(`min-w-0 flex-1 py-1.5`)"
+                                placeholder="Paste the address you landed on…"
+                                @keyup.enter="finishTranslator"
+                            />
+                            <Button
+                                label="Finish"
+                                size="small"
+                                :disabled="redirectUrl.trim().length === 0"
+                                :loading="translatorBusy === routedProvider"
+                                @click="finishTranslator"
+                            />
+                        </div>
                     </div>
-                    <div v-if="!translatorConnectFlow.code" class="flex items-center gap-2">
-                        <input
-                            v-model="redirectUrl"
-                            type="text"
-                            class="min-w-0 flex-1 rounded-md border border-line bg-input px-2 py-1 text-2xs text-content"
-                            placeholder="Paste the address you landed on…"
-                            @keyup.enter="finishTranslator"
-                        />
-                        <Button
-                            label="Finish"
-                            size="small"
-                            :disabled="redirectUrl.trim().length === 0"
-                            :loading="translatorBusy === routedProvider"
-                            @click="finishTranslator"
-                        />
-                    </div>
-                </div>
-            </div>
-        </Card>
+                </template>
+            </Row>
+        </RowGroup>
 
         <!-- Why every control below is inert, whenever it is: a settings read that hasn't landed (or failed)
              disables all of them, and an unexplained dead switch is indistinguishable from a broken page. -->
@@ -580,6 +582,7 @@ const importMemory = async (): Promise<void> => {
         <!-- Command output — the shell-output filter (master toggle + per-cleaner checklist + holdout), its A/B
              backend, and the realized-savings report. One grouped section instead of a card per toggle. -->
         <RowGroup label="Command output">
+            <template #info><CommandOutputInfo /></template>
             <Row
                 icon="bolt"
                 title="Clean command output"
@@ -665,6 +668,7 @@ const importMemory = async (): Promise<void> => {
 
         <!-- Assistant — behavior-steering toggles (concise output, search backend). -->
         <RowGroup label="Assistant">
+            <template #info><AssistantInfo /></template>
             <!-- Terse responses — steers the assistant to answer concisely (no restating context/tool output),
                  cutting its own output tokens. A stable system-prompt suffix, so it doesn't hurt prompt-cache hits. -->
             <Row

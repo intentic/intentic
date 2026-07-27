@@ -42,7 +42,7 @@ describe("laneOf", () => {
 });
 
 // The board's exit. Archiving is the ROUTINE way an agent leaves the fleet, so what these pin down is the
-// thing that makes it routine: it never asks first, and it always offers the way back.
+// thing that makes it routine: it never asks first, it never interrupts, and it always keeps a way back.
 describe("archive", () => {
     const agent = (id: string): AgentSummary => ({
         id,
@@ -55,18 +55,18 @@ describe("archive", () => {
     const archivedAgent = (id: string): AgentSummary => ({ ...agent(id), archivedAt: 2_000 });
     const post = vi.mocked(sandboxJson);
 
-    // The store is a module singleton (one board per app), so each case resets what it looks at.
+    // The store is a module singleton (one board per app), so each case resets what it looks at — resetAgents
+    // drops the roster, the undo set and both reports, since all of them were promises about one daemon.
     beforeEach(() => {
         post.mockReset();
         resetAgents();
-        const { dismissNotice, archived } = useAgents();
-        archived.value = [];
-        dismissNotice();
+        useAgents().archived.value = [];
     });
 
-    it("moves what the daemon says moved, and offers an undo built from it", async () => {
-        const { archive, notice, lanes, archived } = useAgents();
+    it("moves what the daemon says moved, and keeps a way back without saying a word", async () => {
+        const { archive, notice, receipt, undoable, archivedFlash, lanes, archived } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
+        const flashes = archivedFlash.value;
         post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 2 } as never);
 
         await archive([`a`]);
@@ -76,55 +76,103 @@ describe("archive", () => {
         // The archive half is filled from the same response — no second round-trip, so the detail page's
         // cross-half lookup resolves an agent archived under the user's cursor.
         expect(archived.value.map((entry) => entry.id)).toEqual([`a`]);
-        expect(notice.value?.tone).toBe(`info`);
-        expect(notice.value?.message).toContain(`1 agent archived`);
-        expect(notice.value?.undo).toBeTypeOf(`function`);
+        // The whole point of the rework: one card is the routine case, and the routine case interrupts nobody.
+        expect(receipt.value).toBeUndefined();
+        expect(notice.value).toBeUndefined();
+        // Quiet is not the same as unrecoverable — the undo is held, and the counter is told to pulse.
+        expect(undoable.value).toEqual([`a`]);
+        expect(archivedFlash.value).toBe(flashes + 1);
     });
 
-    it("with no ids asks the daemon to clear the lane, and pluralizes what it took", async () => {
-        const { archive, notice } = useAgents();
+    it("with no ids asks the daemon to clear the lane, and a sweep is the archive that reports", async () => {
+        const { archive, receipt } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
         post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], rev: 3 } as never);
 
         await archive();
 
         expect(post).toHaveBeenCalledWith(`/agents/archive`, expect.objectContaining({ body: JSON.stringify({}) }));
-        expect(notice.value?.message).toContain(`2 agents archived`);
+        expect(receipt.value?.message).toContain(`2 agents archived`);
+        expect(receipt.value?.undo).toBeTypeOf(`function`);
     });
 
-    it("undo restores exactly what was archived, and clears the notice", async () => {
-        const { archive, notice, lanes, archived } = useAgents();
+    it("undo restores exactly what was archived, and takes the receipt with it", async () => {
+        const { archive, receipt, undoable, lanes, archived } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
         post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], rev: 4 } as never);
         await archive();
 
         post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], rev: 5 } as never);
-        await notice.value?.undo?.();
+        await receipt.value?.undo?.();
 
         expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`a`, `b`] }) }));
         expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
         expect(archived.value).toEqual([]);
-        expect(notice.value).toBeUndefined();
+        expect(receipt.value).toBeUndefined();
+        expect(undoable.value).toEqual([]);
+    });
+
+    // Mod+Z reaches the last archive whether or not a receipt was ever raised — which, for the single-card
+    // case, it never is. Without this the quiet archive would be the unrecoverable one.
+    it("undoes a silent single archive from the keyboard", async () => {
+        const { archive, undoArchive, undoable, lanes } = useAgents();
+        setAgents([agent(`a`)], 1);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 6 } as never);
+        await archive([`a`]);
+
+        post.mockResolvedValueOnce({ moved: [agent(`a`)], rev: 7 } as never);
+        await undoArchive();
+
+        expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`a`] }) }));
+        expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`a`]);
+        expect(undoable.value).toEqual([]);
+    });
+
+    // The gate that lets the chord stay out of everything else Mod+Z means: with nothing to put back it is
+    // not an undo that fails, it is not an undo at all.
+    it("undoes nothing, and asks the daemon nothing, when there is nothing to put back", async () => {
+        const { undoArchive } = useAgents();
+
+        await undoArchive();
+
+        expect(post).not.toHaveBeenCalled();
+    });
+
+    // A card restored one at a time from the archive view is no longer the undo's to give back, or the undo
+    // would ask the daemon to unarchive an agent that is already on the board.
+    it("drops individually restored agents from the undo set", async () => {
+        const { archive, restore, undoable } = useAgents();
+        setAgents([agent(`a`), agent(`b`)], 1);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], rev: 8 } as never);
+        await archive();
+
+        post.mockResolvedValueOnce({ moved: [agent(`a`)], rev: 9 } as never);
+        await restore([`a`]);
+
+        expect(undoable.value).toEqual([`b`]);
     });
 
     it("says so plainly when there was nothing to archive, with nothing to undo", async () => {
-        const { archive, notice } = useAgents();
-        post.mockResolvedValueOnce({ moved: [], rev: 6 } as never);
+        const { archive, receipt } = useAgents();
+        post.mockResolvedValueOnce({ moved: [], rev: 10 } as never);
 
         await archive();
 
-        expect(notice.value?.tone).toBe(`info`);
-        expect(notice.value?.undo).toBeUndefined();
+        expect(receipt.value?.message).toContain(`Nothing to archive`);
+        expect(receipt.value?.undo).toBeUndefined();
     });
 
-    it("reports a failure without dropping any cards off the board", async () => {
-        const { archive, notice, lanes } = useAgents();
+    // A failure is the one thing here that must be read, so it lands on the strip that has no timer — never
+    // on the receipt, which retires itself whether or not anyone looked.
+    it("reports a failure on the persistent strip, without dropping any cards off the board", async () => {
+        const { archive, notice, receipt, lanes } = useAgents();
         setAgents([agent(`a`)], 1);
         post.mockRejectedValueOnce(new Error(`the agent's turn is running`));
 
         await archive([`a`]);
 
-        expect(notice.value?.tone).toBe(`error`);
+        expect(notice.value).toContain(`turn is running`);
+        expect(receipt.value).toBeUndefined();
         expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`a`]);
     });
 
@@ -180,17 +228,17 @@ describe("archive", () => {
         });
 
         it("merges consecutive archives into one undo that puts all of them back", async () => {
-            const { archive, notice } = useAgents();
+            const { archive, undoArchive, undoable } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
             post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 11 } as never);
             await archive([`a`]);
             post.mockResolvedValueOnce({ moved: [archivedAgent(`b`)], rev: 12 } as never);
             await archive([`b`]);
 
-            // Not "1 agent archived" with the way back to `a` silently dropped.
-            expect(notice.value?.message).toContain(`2 agents archived`);
+            // Clicking down the lane is ONE intent, so the way back to `a` is not dropped by archiving `b`.
+            expect(undoable.value).toEqual([`b`, `a`]);
             post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], rev: 13 } as never);
-            await notice.value?.undo?.();
+            await undoArchive();
             expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`b`, `a`] }) }));
         });
 
@@ -239,18 +287,18 @@ describe("archive", () => {
             expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
         });
 
-        it("drops the merged undo once its notice is gone", async () => {
-            const { archive, notice, dismissNotice } = useAgents();
+        // The way back no longer hangs off the message offering it — which is what lets the message expire on
+        // a timer, and lets the single-card archive have no message at all.
+        it("keeps the undo after the receipt that announced it is gone", async () => {
+            const { archive, receipt, dismissReceipt, undoable } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 14 } as never);
-            await archive([`a`]);
-            dismissNotice();
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], rev: 14 } as never);
+            await archive();
 
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`b`)], rev: 15 } as never);
-            await archive([`b`]);
-            // `a` was acknowledged and is off the strip — the new receipt speaks only for `b`.
-            expect(notice.value?.message).toContain(`1 agent archived`);
-            expect(notice.value?.restores).toEqual([`b`]);
+            dismissReceipt();
+
+            expect(receipt.value).toBeUndefined();
+            expect(undoable.value).toEqual([`a`, `b`]);
         });
     });
 });

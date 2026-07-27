@@ -21,14 +21,17 @@ import { resetEditBuffers } from "./useEditBuffers";
  * No client-side watermark: the reviewed line IS the commit boundary, so every browser and device agrees.
  * Module-level singletons so the badge (shell), the panel, and the workspace agree. */
 
-// An agent turn ends when chat streaming falls — refresh the review set and the snapshot timeline so the badge
-// and panels surface the turn's work without a manual refresh. Module scope (like sandboxScope.ts), NOT inside
+// A turn ending is when its work becomes reviewable — refresh the review set and the snapshot timeline so the
+// badge and panels surface it without a manual refresh. Counted across ALL conversations, not the active tab's
+// stream: a background tab's turn lands into the same tree, and watching only the focused one meant the panel
+// went stale for exactly the turns the user wasn't watching. Module scope (like sandboxScope.ts), NOT inside
 // useChanges(): a watch installed from a component dies with that component's effect scope, and the /setup
 // round-trip unmounts the shell that calls useChanges() first. Prefix match: the real keys are
 // ["git","changes",<sandboxId ref>] / ["history","snapshots",<id>] (sandboxKey appends the id).
-const { streaming } = useChat();
-watch(streaming, (now, was) => {
-    if (was && !now) {
+const { conversations } = useChat();
+const turnsRunning = computed(() => conversations.value.filter((conversation) => conversation.streaming.value).length);
+watch(turnsRunning, (now, was) => {
+    if (now < was) {
         void queryClient.invalidateQueries({ queryKey: [`git`, `changes`] });
         void queryClient.invalidateQueries({ queryKey: [`history`, `snapshots`] });
     }

@@ -36,9 +36,10 @@ test("orders the self-healed catalog too — a turn's rejection names ids, it do
     expect((await service.models()).default).toBe("gpt-5.6-sol");
 });
 
-test("leaves the seed floor's own order alone, so the id some accounts reject stays off the default", async () => {
-    // gpt-5.1 and gpt-5.1-codex are the same release of two lines: nothing derived separates them, so the seed's
-    // deliberate ordering (the plain chat model first) survives instead of being reshuffled under it.
+test("keeps the id some accounts reject off the seed floor's default", async () => {
+    // gpt-5.1 and gpt-5.1-codex are the same release of two lines, so tier and version separate neither: the id
+    // itself settles it, and a variant id is its base id plus a suffix — so the plain chat model, which is the
+    // one every account can drive, leads its own -codex sibling by construction rather than by luck.
     const catalog = await createCodexCatalog(offlineConfig, await persistPath()).models();
 
     expect(catalog.models.map((model) => model.id)).toEqual([...SEED_CODEX_MODELS]);
