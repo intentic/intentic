@@ -68,6 +68,24 @@ export const createGitRoutes = (services: Services) => {
         }
         return target;
     };
+    /* THE MAIN TREE HAS TWO WRITERS, and this is the seam where they meet. The user commits, stages and
+     * discards through this router; an agent's finished turn lands through agents/land.ts, which patches its
+     * delta into the same repo's worktree and index. Interleave the two and the user records half a patch —
+     * the one genuinely unsafe thing about working while an agent works.
+     *
+     * `land` already serializes on the repo's op chain (worktrees.withRepoLock). This side simply takes the
+     * same lock, and the race stops existing. That is why the panel does not gate committing on "is an agent
+     * running": a UI gate could only ever be a guess about a race, it cannot prevent one — the terminal commits
+     * straight past it, and it blocked the ninety-nine turns that touch a worktree to catch the one that
+     * touches this tree.
+     *
+     * `repoDir` runs INSIDE the lock: it self-heals the .git pointer, which is itself a write. Never call one
+     * `onRepo` from inside another — the chain is a queue, not a reentrant mutex. Read-only routes stay out of
+     * it entirely; git's own locking covers them, and queueing a diff behind a push would be a stall the user
+     * feels for nothing. */
+    const onRepo = <T>(repo: string, task: (dir: string) => Promise<T>): Promise<T> =>
+        services.agentWorktrees.withRepoLock(repo, async () => task(await repoDir(repo)));
+
     // The coalesced Changes scan's memo (built below). Every mutation this router performs is one the user just
     // asked for and expects to see at once, so it drops the memo: the panel's own post-action refetch must never
     // be answered from a scan that predates the action it is refetching for.
@@ -79,16 +97,16 @@ export const createGitRoutes = (services: Services) => {
     };
     // A sequence/HEAD-moving op: checkpoint the pre-action tree FIRST (so even a rewrite stays reversible from
     // the Checkpoints timeline), run it, and record the resulting tree on the timeline on a clean apply.
-    const guarded = async (repo: string, label: string, run: (dir: string) => Promise<ActionResult>): Promise<ActionResult> => {
-        const dir = await repoDir(repo);
-        await services.history.snapshot("user", label);
-        const result = await run(dir);
-        if (result.ok) {
-            invalidateScan();
-            services.history.notifyUserWrite();
-        }
-        return result;
-    };
+    const guarded = (repo: string, label: string, run: (dir: string) => Promise<ActionResult>): Promise<ActionResult> =>
+        onRepo(repo, async (dir) => {
+            await services.history.snapshot("user", label);
+            const result = await run(dir);
+            if (result.ok) {
+                invalidateScan();
+                services.history.notifyUserWrite();
+            }
+            return result;
+        });
     const scanAll = async (): Promise<{ repos: RepoChanges[] }> => {
         const repoIds = await discoverRepos(services.workspace.root);
         // A Changes review right after a clone must not sweep the new repo's files into the root scope —
@@ -229,22 +247,24 @@ export const createGitRoutes = (services: Services) => {
             await services.git.createTagAt(await repoDir(input.repo), input.name, input.sha);
             return { ok: true } as const;
         }),
-        checkout: i.checkout.handler(async ({ input }) => {
-            const dir = await repoDir(input.repo);
-            await services.history.snapshot("user", `before checkout ${input.ref.slice(0, 12)}`);
-            await services.git.checkoutRef(dir, input.ref);
-            invalidateScan();
-            services.history.notifyUserWrite();
-            return { ok: true } as const;
-        }),
-        reset: i.reset.handler(async ({ input }) => {
-            const dir = await repoDir(input.repo);
-            await services.history.snapshot("user", `before reset --${input.mode}`);
-            await services.git.resetTo(dir, input.sha, input.mode);
-            invalidateScan();
-            services.history.notifyUserWrite();
-            return { ok: true } as const;
-        }),
+        checkout: i.checkout.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                await services.history.snapshot("user", `before checkout ${input.ref.slice(0, 12)}`);
+                await services.git.checkoutRef(dir, input.ref);
+                invalidateScan();
+                services.history.notifyUserWrite();
+                return { ok: true } as const;
+            }),
+        ),
+        reset: i.reset.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                await services.history.snapshot("user", `before reset --${input.mode}`);
+                await services.git.resetTo(dir, input.sha, input.mode);
+                invalidateScan();
+                services.history.notifyUserWrite();
+                return { ok: true } as const;
+            }),
+        ),
         cherryPick: i.cherryPick.handler(({ input }) =>
             guarded(input.repo, `before cherry-pick ${input.sha.slice(0, 8)}`, (dir) => services.git.cherryPick(dir, input.sha, AGENT_GIT_AUTHOR)),
         ),
@@ -263,38 +283,43 @@ export const createGitRoutes = (services: Services) => {
         status: i.status.handler(async ({ input }) => services.git.status(await repoDir(input.repo))),
         // Two commit shapes, both whole-repo (see CommitSchema): `all` stages every change first, otherwise the
         // index is recorded as it stands. No path-scoped variant — staging is how the user chooses.
-        commit: i.commit.handler(async ({ input }) => {
-            const dir = await repoDir(input.repo);
-            // git's own refusals are the useful ones here — "Committing is not possible because you have unmerged
-            // files", a pre-commit hook's failure, a missing identity. Carried as a CONFLICT with git's verdict
-            // line so the panel prints the reason; a bare throw would reach the browser as an opaque 500 and the
-            // user would read "Commit failed." with nothing to act on.
-            try {
-                const committed =
-                    input.all === true
-                        ? await services.git.commitAll(dir, input.message, AGENT_GIT_AUTHOR)
-                        : await services.git.commitIndex(dir, input.message, AGENT_GIT_AUTHOR);
-                invalidateScan();
-                return { committed };
-            } catch (error) {
-                // The index may have moved even on a failure (`commit -a` stages before it commits), so the
-                // panel's view is stale either way.
-                invalidateScan();
-                throw new ORPCError("CONFLICT", { message: gitFailureReason(error, "git refused the commit") });
-            }
-        }),
+        commit: i.commit.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                // git's own refusals are the useful ones here — "Committing is not possible because you have
+                // unmerged files", a pre-commit hook's failure, a missing identity. Carried as a CONFLICT with
+                // git's verdict line so the panel prints the reason; a bare throw would reach the browser as an
+                // opaque 500 and the user would read "Commit failed." with nothing to act on.
+                try {
+                    const committed =
+                        input.all === true
+                            ? await services.git.commitAll(dir, input.message, AGENT_GIT_AUTHOR)
+                            : await services.git.commitIndex(dir, input.message, AGENT_GIT_AUTHOR);
+                    invalidateScan();
+                    return { committed };
+                } catch (error) {
+                    // The index may have moved even on a failure (`commit -a` stages before it commits), so the
+                    // panel's view is stale either way.
+                    invalidateScan();
+                    throw new ORPCError("CONFLICT", { message: gitFailureReason(error, "git refused the commit") });
+                }
+            }),
+        ),
         // Index-only moves: the worktree is untouched, so no checkpoint and no history notification — only the
         // panel's view of what's staged changes.
-        stage: i.stage.handler(async ({ input }) => {
-            await services.git.stagePaths(await repoDir(input.repo), input.paths);
-            invalidateScan();
-            return { ok: true } as const;
-        }),
-        unstage: i.unstage.handler(async ({ input }) => {
-            await services.git.unstagePaths(await repoDir(input.repo), input.paths);
-            invalidateScan();
-            return { ok: true } as const;
-        }),
+        stage: i.stage.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                await services.git.stagePaths(dir, input.paths);
+                invalidateScan();
+                return { ok: true } as const;
+            }),
+        ),
+        unstage: i.unstage.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                await services.git.unstagePaths(dir, input.paths);
+                invalidateScan();
+                return { ok: true } as const;
+            }),
+        ),
         branches: i.branches.handler(async ({ input }) => ({ branches: await services.git.listBranches(await repoDir(input.repo)) })),
         // Creating a branch is non-destructive UNLESS it also checks out — that moves HEAD and the worktree,
         // so it takes the same pre-action checkpoint every HEAD-mover does.
@@ -328,31 +353,33 @@ export const createGitRoutes = (services: Services) => {
             }
             return result;
         }),
-        pull: i.pull.handler(async ({ input }) => {
-            const dir = await repoDir(input.repo);
-            await services.history.snapshot("user", "before pull");
-            const result = await services.git.pullRemote(dir);
-            if (result.ok) {
+        pull: i.pull.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                await services.history.snapshot("user", "before pull");
+                const result = await services.git.pullRemote(dir);
+                if (result.ok) {
+                    invalidateScan();
+                    services.history.notifyUserWrite();
+                }
+                return result;
+            }),
+        ),
+        discard: i.discard.handler(({ input }) =>
+            onRepo(input.repo, async (dir) => {
+                // The checkpoint goes BEFORE the destruction. Discard is the one verb in this router git itself
+                // cannot walk back — untracked files are deleted outright, and a tracked file's worktree state
+                // was never in the object store to reflog back to — so the snapshot that makes it recoverable
+                // has to record the tree that is about to go. `notifyUserWrite` below records the RESULT, which
+                // is the timeline's other half and no safety net at all; the sequence verbs get this via
+                // `guarded`, and discard sat outside it purely because it reports no ActionResult.
+                await services.history.snapshot("user", `before discard in ${input.repo}`);
+                await services.git.discardPaths(dir, input.paths);
                 invalidateScan();
+                // The worktree changed under the user's feet — record it on the timeline like any user write.
                 services.history.notifyUserWrite();
-            }
-            return result;
-        }),
-        discard: i.discard.handler(async ({ input }) => {
-            const dir = await repoDir(input.repo);
-            // The checkpoint goes BEFORE the destruction. Discard is the one verb in this router git itself
-            // cannot walk back — untracked files are deleted outright, and a tracked file's worktree state was
-            // never in the object store to reflog back to — so the snapshot that makes it recoverable has to
-            // record the tree that is about to go. `notifyUserWrite` below records the RESULT, which is the
-            // timeline's other half and no safety net at all; the sequence verbs get this via `guarded`, and
-            // discard sat outside it purely because it reports no ActionResult.
-            await services.history.snapshot("user", `before discard in ${input.repo}`);
-            await services.git.discardPaths(dir, input.paths);
-            invalidateScan();
-            // The worktree changed under the user's feet — record it on the safety timeline like any user write.
-            services.history.notifyUserWrite();
-            return { ok: true } as const;
-        }),
+                return { ok: true } as const;
+            }),
+        ),
         push: i.push.handler(async ({ input }) => {
             const result = await services.git.pushBranch(await repoDir(input.repo), input.branch !== undefined ? { branch: input.branch } : {});
             if (result.ok) {

@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { compareModelIds } from "@intentic/sandbox-contract";
+import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import { discoverCodexModels, discoverTranslatorCodexModels, humanizeModelId, isCodexModel, SEED_CODEX_MODELS } from "./codex-models.js";
 
@@ -27,8 +27,10 @@ const MODELS_TTL_MS = 60_000;
 // model-order.ts), so the app imposes the order here — on every rung alike, since the persisted list inherits
 // whatever order a turn's rejection named its ids in. That is what makes `default` the frontier newest rather
 // than whichever id the endpoint happened to list first, and it is the order the picker's groups render in.
+// Unranked, so same-tier same-release siblings (the gpt-5.6-* line) break their tie on the id: the translator
+// reorders its rows between requests, and this catalog's head is the model a fresh conversation opens on.
 const toCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
-    const ordered = ids.toSorted(compareModelIds);
+    const ordered = ids.toSorted(compareUnrankedModelIds);
     return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
 };
 

@@ -17,6 +17,7 @@ import {
     type PermissionMode,
     providerLabel,
     type RestoredMessage,
+    runsClaudeCode,
     sseData,
     sseFrames,
     type TranslatorAccounts,
@@ -432,17 +433,11 @@ export class Conversation {
     // above the composer so nothing the user wrote is ever invisible, and persisted with the draft.
     readonly queued = ref<QueuedMessage[]>([]);
 
-    // Whether the running turn can absorb a message mid-flight: the Claude Code harness only — claude, kimi and
-    // gemini (neither has a native runtime, so both always run on it), or codex/grok routed under it. Mirrors
-    // the daemon's own gate in streamAgent, and is used for WORDING alone (the composer says "steer" vs "queue"):
-    // delivery asks the daemon and falls back to the queue on a refusal, so a drift here can't lose a message.
-    readonly steerable = computed(
-        () =>
-            this.provider.value === `claude` ||
-            this.provider.value === `kimi` ||
-            this.provider.value === `gemini` ||
-            ((this.provider.value === `codex` || this.provider.value === `grok`) && this.harness.value === `claude-code`),
-    );
+    // Whether the running turn can absorb a message mid-flight: the Claude Code loop only (see runsClaudeCode,
+    // the same predicate the daemon's streamAgent gates its SteeringQueue on). Used for WORDING alone (the
+    // composer says "steer" vs "queue"): delivery asks the daemon and falls back to the queue on a refusal, so
+    // a drift here can't lose a message.
+    readonly steerable = computed(() => runsClaudeCode(this.provider.value, this.harness.value));
 
     // The one unsent "switched" divider notice, upserted/removed as the user toggles provider/account and made
     // permanent by the next send (the segment cut).
@@ -1255,6 +1250,15 @@ export class Conversation {
                 // in the workspace-tabs chain.
                 const { call } = effect;
                 void import(`../workspace/useFollowAlong`).then((m) => m.useFollowAlong().followToolCall(call));
+                // A MAIN-TREE turn writes the files the Changes panel commits, so its paths are recorded for the
+                // panel to warn against — per repo, so an agent working in one repo says nothing about the rest.
+                // An isolated turn writes its own worktree and lands as a reviewable diff, so it records nothing:
+                // that distinction is the whole reason the panel no longer blocks committing on "an agent is
+                // running", which was true of both and meaningful for neither.
+                if (!this.isolated.value && this.turnStartedAt.value !== undefined) {
+                    const startedAt = this.turnStartedAt.value;
+                    void import(`../workspace/liveWrites`).then((m) => m.recordTurnWrite(this.conversationId, startedAt, call));
+                }
                 return;
             }
             case `surfaceTerminal`: {
@@ -1284,6 +1288,14 @@ export class Conversation {
             this.appendNotice(
                 `This chat's server-side history is gone (the sandbox was rebuilt or the session was deleted). Your last message wasn't processed — send it again; a fresh session starts, seeded with this window's transcript.`,
             );
+            return;
+        }
+        if (code === `codex-advisory`) {
+            // Codex warned about the turn it then ran to completion (its pinned CLI has no metadata for a model
+            // the subscription already serves, so the turn runs on fallback context/compaction limits). The red
+            // line said the turn had failed, directly under the answer it had just produced. Muted, like the
+            // other codes that describe a turn rather than end one.
+            this.appendNotice(message);
             return;
         }
         if (code === `rate_limit`) {

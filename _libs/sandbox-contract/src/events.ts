@@ -140,7 +140,8 @@ export const SessionTranscriptSchema = z.object({ messages: z.array(RestoredMess
 // ~40 SDKMessage types down to this union: high-value block types get a dedicated frame
 // (delta/thinking/tool_call/tool_call_update/todos/usage/rate_limit_info/account_usage/context_usage/init/compact); any SDK message
 // without a UI mapping is dropped. `plan`/`question`/`permission` pause the turn until the user answers on the
-// `POST /agent/reply` side channel; `mode` reports the live permission posture as the agent changes it.
+// `POST /agent/reply` side channel, and `resolved` releases the one it names; `mode` reports the live
+// permission posture as the agent changes it.
 // `parentToolUseId` tags frames produced inside a subagent (Task tool).
 export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("session"), sessionId: z.string() }),
@@ -227,6 +228,15 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("plan"), requestId: z.string(), text: z.string() }),
     z.object({ kind: z.literal("question"), requestId: z.string(), questions: z.array(AskQuestionSchema) }),
     PermissionAskSchema.extend({ kind: z.literal("permission"), requestId: z.string() }),
+    // The card above named by `requestId` is released — the user answered (or dismissed it, or the turn was
+    // stopped out from under it), so the turn is executing again. Emitted by whoever parked, the moment its
+    // waiter settles, because the park's END is otherwise invisible on this stream: nothing else here says
+    // "that card is done", and it cannot be inferred from the next frame that happens along. Frames DO arrive
+    // while a turn is parked — the pausing tool's own `tool_call` regularly trails its card (the SDK queues
+    // stream messages while dispatching an in-process MCP tool straight off the transport), and a card raised
+    // beside a parallel tool call sits through that tool's whole life. See agents-registry.ts, which reads
+    // this pair as the fleet's "needs you" state.
+    z.object({ kind: z.literal("resolved"), requestId: z.string() }),
     // The turn's permission mode, whenever it changes — the user's pick at turn start, then every move the
     // AGENT makes on its own (EnterPlanMode on a request that needs thinking through, ExitPlanMode once the
     // user approves). The composer's mode selector follows this, so the UI never lies about the live posture.
@@ -240,6 +250,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
             .enum([
                 "session-not-found",
                 "rate_limit",
+                // Codex ran the turn but warned about it (fallback model metadata) — a notice, not a failure.
+                "codex-advisory",
                 "codex-reauth",
                 "grok-model-invalid",
                 "codex-model-invalid",

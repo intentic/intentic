@@ -73,6 +73,14 @@
         /* Never stretched or squeezed by the column it sits in — a shrunk bar is a broken line. */
         flex: none;
     }
+    /* The one bar whose content is a LIST that may not fit: the chat tab strip, which wraps to a second row
+     * rather than shaving every tab down to an unreadable sliver. The unified height still governs the common
+     * case — one row is exactly a .view-header, so the line across the window is unbroken — and only a strip
+     * that has actually wrapped stands taller than its neighbours. */
+    .view-header-wrap {
+        height: auto;
+        min-height: 2.25rem;
+    }
 }
 
 /* Fenced code blocks inside rendered markdown. markdownCode.ts substitutes them as raw markup (they live

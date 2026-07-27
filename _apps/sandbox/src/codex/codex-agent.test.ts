@@ -185,6 +185,8 @@ test("a plan turn proposes read-only, then executes full-access on the same thre
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-2" },
         { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route, then test." },
+        // The card's release, carrying the id it went up with — what tells the fleet the turn stopped waiting.
+        { kind: "resolved", requestId: expect.any(String) as string },
         { kind: "delta", text: "Done." },
         { kind: "text_end" },
         { kind: "done" },
@@ -231,6 +233,68 @@ test("a plan turn that fails after holding a message emits the error and NO plan
     expect(events).toEqual([{ kind: "session", sessionId: "thr-7" }, { kind: "error", message: "Payment Required" }, { kind: "done" }]);
     expect(events.some((event) => event.kind === "plan")).toBe(false);
     expect(calls).toHaveLength(1);
+});
+
+// Codex's fallback-metadata warning, verbatim off `codex exec --json`: an `error` ITEM that lands before
+// turn.started, after which the turn answers normally. Every model the subscription serves but the pinned CLI
+// has no compiled-in metadata for emits one — currently the whole gpt-5.6 line.
+const ADVISORY = "Model metadata for `gpt-5.6-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.";
+
+test("a non-fatal advisory is tagged rather than surfaced as a failure, and the turn's answer still lands", async () => {
+    const { runner } = fakeRunner([
+        { type: "thread.started", thread_id: "thr-8" },
+        { type: "item.completed", item: { id: "e1", type: "error", message: ADVISORY } },
+        { type: "turn.started" },
+        { type: "item.completed", item: { id: "m1", type: "agent_message", text: "ok" } },
+    ]);
+    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+        { kind: "session", sessionId: "thr-8" },
+        // Coded, so the client renders a muted notice instead of the red error line under a turn that worked.
+        { kind: "error", code: "codex-advisory", message: ADVISORY },
+        { kind: "delta", text: "ok" },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+});
+
+test("a plan turn survives an advisory and still proposes its plan", async () => {
+    // The regression this covers: the advisory marked the planning phase errored, so plan-emulation abandoned the
+    // turn — picking any gpt-5.6 model in Plan mode produced a red line, no plan card, and no execution.
+    const { runner, calls } = fakeRunner(
+        [
+            { type: "thread.started", thread_id: "thr-10" },
+            { type: "item.completed", item: { id: "e1", type: "error", message: ADVISORY } },
+            { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route." } },
+        ],
+        [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
+    );
+    const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+
+    expect(events).toEqual([
+        { kind: "session", sessionId: "thr-10" },
+        { kind: "error", code: "codex-advisory", message: ADVISORY },
+        { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route." },
+        { kind: "delta", text: "Done." },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+    // The approved plan really executed: a second, full-access turn on the same thread.
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.options.sandboxMode).toBe("danger-full-access");
+});
+
+test("an advisory doesn't stand in for the real failure when the turn then dies", async () => {
+    // surfacedError exists to stop the SDK's generic exit-code wrapper from clobbering an actionable message.
+    // An advisory is not that message — counting it as one would leave a genuinely failed turn silent.
+    const runner: CodexRunner = async function* () {
+        yield { type: "item.completed", item: { id: "e1", type: "error", message: ADVISORY } } as ThreadEvent;
+        throw new Error("Codex Exec exited with code 1: Reading prompt from stdin...");
+    };
+    expect(await collect(createCodexAgent("/home", runner), request)).toEqual([
+        { kind: "error", code: "codex-advisory", message: ADVISORY },
+        { kind: "error", message: "Codex Exec exited with code 1: Reading prompt from stdin..." },
+        { kind: "done" },
+    ]);
 });
 
 test("turn failures and thrown runners become error events followed by done", async () => {

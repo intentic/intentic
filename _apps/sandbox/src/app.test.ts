@@ -2017,6 +2017,53 @@ test("git.commit records the index by default and stages everything first for `a
     expect(calls).toEqual([`index ${workspace.root} m1`, `all ${join(workspace.root, "intent")} m2`]);
 });
 
+// The reason the browser no longer refuses to commit while an agent runs: the ONE thing that was genuinely
+// unsafe about it — a commit interleaving with the `git apply` an agent's land performs on the same tree — is
+// prevented here instead, on the same per-repo chain `land` already takes. A UI gate could only guess at this
+// race; the terminal commits straight past one anyway.
+test("git writes serialize per repo, so a commit cannot interleave with an agent's land", async () => {
+    const workspace = tempWorkspace([{ name: "intent" }]);
+    // The real chain from worktrees.ts rather than the pass-through the other tests use, so this exercises the
+    // actual serialization.
+    const chains = new Map<string, Promise<unknown>>();
+    const withRepoLock = <T>(repo: string, task: () => Promise<T>): Promise<T> => {
+        const chain = chains.get(repo) ?? Promise.resolve();
+        const next = chain.then(task, task);
+        chains.set(
+            repo,
+            next.catch(() => undefined),
+        );
+        return next;
+    };
+    const order: string[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                agentWorktrees: { ...services().agentWorktrees, withRepoLock },
+                git: {
+                    ...services().git,
+                    commitIndex: async (_dir, message) => {
+                        order.push(`enter ${message}`);
+                        await new Promise((resolve) => setTimeout(resolve, 10));
+                        order.push(`exit ${message}`);
+                        return true;
+                    },
+                },
+            }),
+        ),
+    );
+    await Promise.all([client.git.commit({ repo: "root", message: "a" }), client.git.commit({ repo: "root", message: "b" })]);
+    // One repo, one at a time — whichever won the race ran to completion before the other started.
+    expect(order).toEqual([`enter a`, `exit a`, `enter b`, `exit b`]);
+
+    order.length = 0;
+    await Promise.all([client.git.commit({ repo: "root", message: "r" }), client.git.commit({ repo: "intent", message: "i" })]);
+    // Different repos still overlap. Per-repo is the whole point: a lock that spanned the workspace would be
+    // the daemon reinventing the workspace-wide block this design removed.
+    expect(order).toEqual([`enter r`, `enter i`, `exit r`, `exit i`]);
+});
+
 test("git.discard forwards paths and records the worktree change as a user write", async () => {
     const discards: (readonly string[] | undefined)[] = [];
     let notified = 0;

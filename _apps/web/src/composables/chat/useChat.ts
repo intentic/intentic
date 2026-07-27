@@ -10,6 +10,7 @@ import {
     type PermissionMode,
     providerLabel,
     type RestoredMessage,
+    runsClaudeCode,
     type TranslatorAccounts,
     type UsageAccount,
 } from "@intentic/sandbox-contract";
@@ -565,6 +566,14 @@ const disconnectTranslator = async (target: KeyedProvider): Promise<void> => {
     }
 };
 
+// Abandon an in-flight subscription login. Dropping the flow is enough to stop its poll (every tick returns
+// early once the flow it was started for is gone), but the pending timer is cleared too so a superseded tick
+// can't fire against a row the user has moved on from.
+const cancelTranslatorConnect = (): void => {
+    clearTimeout(translatorPollTimer);
+    translatorConnectFlow.value = undefined;
+};
+
 // Account / connection (global; the sandbox owns each provider's credentials). Several accounts per provider
 // live in `providerAccounts` (conversation.ts module state). `error` carries connection / account errors —
 // per-turn chat errors live on each Conversation. `connected` = the ACTIVE conversation's selection can send;
@@ -943,7 +952,13 @@ const hydrate = async (conversation: Conversation): Promise<void> => {
         return;
     }
     const session = conversation.session.value;
-    if (session === undefined || session.provider !== `claude`) {
+    // /sessions/:id reads the Claude Code Agent SDK's own store, so a transcript is replayable for exactly the
+    // sessions that loop minted — which is NOT "provider is claude": kimi and gemini have no native runtime and
+    // always run it, and codex/grok do whenever they were routed under it. Gating on the provider alone left a
+    // finished Gemini (or Kimi) agent opening from the fleet board as an empty "start a conversation" panel
+    // with its whole transcript sitting readable on the daemon. A native codex/grok thread lives in that
+    // provider's own rollout store, and an ACP agent's in its own — neither is readable here, so both stand down.
+    if (session === undefined || !runsClaudeCode(session.provider, session.harness)) {
         return;
     }
     const restored = await fetchTranscript(conversation, session.id);
@@ -1017,9 +1032,9 @@ const openConversation = async (id: string): Promise<void> => {
 // device), and attaching renders it live mid-stream. Only when nothing is running does the flat transcript
 // hydrate from the session store. `conversations` is in the source so tabs restored by a sandbox switch
 // (when reachability may already be true and never flip) are still picked up; the WeakSet keeps unrelated
-// tab churn from re-firing work already in flight. ponytail: /sessions/:id is Claude-only, so codex/grok
-// tabs restore their draft, title, and session but not the visible transcript — the next turn still resumes
-// the server thread.
+// tab churn from re-firing work already in flight. ponytail: /sessions/:id reads the Claude Code SDK's store,
+// so a NATIVE codex/grok tab restores its draft, title, and session but not the visible transcript — the next
+// turn still resumes the server thread.
 const hydrating = new WeakSet<Conversation>();
 // Conversations showing a locally cached transcript rather than a daemon-confirmed one. They still hydrate —
 // the cache decides what the user looks at during the round-trip, not whether the round-trip happens — so the
@@ -1298,12 +1313,14 @@ export function useChat() {
         closeAccountManage,
         startConnect,
         completeConnect,
+        cancelConnect,
         disconnect,
         translatorAccounts,
         translatorConnectFlow,
         translatorBusy,
         connectTranslator,
         completeTranslator,
+        cancelTranslatorConnect,
         disconnectTranslator,
     };
 }

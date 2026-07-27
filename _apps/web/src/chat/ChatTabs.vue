@@ -149,7 +149,7 @@ const confirmClose = (): void => {
 
 // --- Right-click tab menu -------------------------------------------------------------------------
 // The same close set the workspace's file tabs carry, plus this strip's own rename and the pop-out toggle — which
-// the empty-strip right-click below can no longer reach once the tabs fill the row. The menu acts on the
+// the empty-strip right-click below stops reaching once the tabs wrap and fill both rows. The menu acts on the
 // RIGHT-CLICKED tab (`menuTabId`); the commands further down act on the ACTIVE one — the split the workspace makes.
 const tabMenu = ref<{ show: (event: Event) => void } | undefined>();
 const menuTabId = ref<string>();
@@ -274,18 +274,6 @@ const closeTab = (event: Event, id: string): void => {
     emit(`close`, new Set([id]));
 };
 
-// The strip is one fixed-height row (.view-header), so a tab list past the shrink floor scrolls sideways. Its
-// native scrollbar is hidden — 6px out of a 35px row would shove the tabs off centre — which also costs it the
-// wheel, so map a vertical wheel onto scrollLeft by hand. Same trade the workspace's file tabs make.
-const onWheel = (event: WheelEvent): void => {
-    const element = strip.value;
-    if (element === null || element.scrollWidth <= element.clientWidth) {
-        return; // nothing hidden — let the wheel bubble
-    }
-    event.preventDefault();
-    element.scrollLeft += event.deltaY + event.deltaX;
-};
-
 // Right-click on the empty strip area pops the chat out / docks it (replaces the old pop-out button).
 const onContextMenu = (event: MouseEvent): void => {
     if (!popoutSupported || event.target !== event.currentTarget) return; // only empty strip, not a tab
@@ -301,12 +289,19 @@ const openHistory = (event: Event): void => {
 </script>
 
 <template>
-    <header class="view-header flex items-center gap-1 border-b border-line px-1.5">
-        <!-- ONE row, always: this strip is the chat column's share of the shell-wide header line (.view-header),
-             so wrapping to a second row would drop its bottom border below the workspace's and the fleet's. Tabs
-             give up width instead — they shrink to a floor, like browser tabs — and only past that floor does the
-             strip scroll sideways. The ✚ and history buttons sit outside it, so they never move. -->
-        <div ref="strip" class="chat-strip flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" @contextmenu="onContextMenu" @wheel="onWheel">
+    <header class="view-header view-header-wrap flex items-center gap-1 border-b border-line px-1.5">
+        <!-- Tabs fill one row, then wrap to a second; only past two rows does the strip scroll vertically. It
+             never scrolls sideways, so no tab hides off the right edge. One row still measures exactly a
+             .view-header (a 26px tab row plus its py-1 is under the 2.25rem floor), so the shell-wide header
+             line reads unbroken until there are genuinely more tabs than fit; from the second row on, this bar
+             alone stands taller (.view-header-wrap, styles.css). max-h-16 is those two rows WITH the padding —
+             the strip is the scroll box, so its own py counts against the cap. The ✚ and history buttons sit
+             outside the strip, so they never move; their h-7 rides inside the floor with no header padding. -->
+        <div
+            ref="strip"
+            class="scrollbar-thin flex max-h-16 min-w-0 flex-1 flex-wrap items-center gap-1 overflow-x-hidden overflow-y-auto py-1"
+            @contextmenu="onContextMenu"
+        >
             <template v-for="c in conversations" :key="c.id">
                 <!-- Renaming REPLACES the tab rather than nesting a field inside it: an input in a button is
                      neither valid markup nor a usable caret. Enter commits, Esc cancels, blur commits, an empty
@@ -328,7 +323,7 @@ const openHistory = (event: Event): void => {
                     v-else
                     type="button"
                     :data-chat-tab="c.id"
-                    class="chat-tab group flex min-w-20 max-w-40 items-center gap-1.5 rounded-md px-2 py-1 text-2xs"
+                    class="chat-tab group flex min-w-20 max-w-40 shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-2xs"
                     :class="{ 'chat-tab-on': activeId === c.id }"
                     @click="emit('select', c.id)"
                     @dblclick.prevent.stop="beginRename(c.id)"

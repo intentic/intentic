@@ -89,7 +89,7 @@ const perform = async (id: string, chosen: DropAction): Promise<void> => {
             const result = await landAgent(id);
             await invalidateAgentAction(id);
             if (!result.landed) {
-                notice.value = { message: `Landing hit a conflict — open the agent to resolve it.`, tone: `error` };
+                notice.value = `Landing hit a conflict — open the agent to resolve it.`;
             }
         } else {
             await discardAgent(id);
@@ -98,7 +98,7 @@ const perform = async (id: string, chosen: DropAction): Promise<void> => {
         // The action's own roster frame is already on its way; this just closes the gap on a quiet stream.
         await refresh();
     } catch (caught) {
-        notice.value = { message: errorMessage(caught, `That didn't work.`), tone: `error` };
+        notice.value = errorMessage(caught, `That didn't work.`);
     } finally {
         busyId.value = undefined;
     }

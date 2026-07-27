@@ -9,6 +9,10 @@ import type { AgentReply } from "@intentic/sandbox-contract";
  * A waiter always settles. If the turn aborts (Stop, or the browser dismissing a card) the abort signal
  * settles it with `onAbort`'s value instead, so the SDK's tool handler never hangs holding the turn open.
  *
+ * Every caller owes the stream a `resolved` frame carrying the same id the moment its waiter settles — that
+ * pair is the only honest account of how long the turn was parked (see the frame's note in events.ts, and
+ * agents-registry.ts, which lights the fleet's "needs you" lane from it).
+ *
  * The daemon is single-tenant (one container per project, reached only over its authenticated tunnel — the
  * owner's Google ID token), so requests are keyed by an unguessable id alone — no per-user scoping. */
 
