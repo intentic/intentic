@@ -18,10 +18,14 @@ import {
 // branches into the main tree (per-repo, conflicts reported, nothing lost on failure); `discard` removes
 // worktrees + branches + registry entry. An unknown {id} is NOT_FOUND; land/discard while the turn runs is CONFLICT.
 // `rename` sets the user-chosen display title — legal mid-turn (it touches no worktree state).
+// `seen`/`seenAll` stamp the read marker behind the cards' unread badge (AgentSummarySchema.seenAt) — also
+// legal mid-turn, and like `rename` they never bump `updatedAt` (reading is not activity).
 export const agentsContract = {
     list: oc.route({ method: "GET", path: "/agents" }).output(AgentsListSchema),
     get: oc.route({ method: "GET", path: "/agents/{id}" }).input(AgentIdSchema).output(AgentSummarySchema),
     rename: oc.route({ method: "POST", path: "/agents/{id}/rename" }).input(AgentRenameSchema).output(AgentSummarySchema),
+    seen: oc.route({ method: "POST", path: "/agents/{id}/seen" }).input(AgentIdSchema).output(AgentSummarySchema),
+    seenAll: oc.route({ method: "POST", path: "/agents/seen" }).output(AgentsListSchema),
     diff: oc.route({ method: "GET", path: "/agents/{id}/diff" }).input(AgentIdSchema).output(AgentChangesSchema),
     fileDiff: oc.route({ method: "GET", path: "/agents/{id}/{repo}/file-diff" }).input(AgentFileDiffQuerySchema).output(FileDiffSchema),
     land: oc.route({ method: "POST", path: "/agents/{id}/land" }).input(AgentIdSchema).output(LandResultSchema),

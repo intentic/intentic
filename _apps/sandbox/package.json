@@ -34,6 +34,7 @@
         "@intentic/scaffold": "workspace:*",
         "@intentic/sdk": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
+        "@intentic/workspace-setup": "workspace:*",
         "@openai/codex-sdk": "catalog:",
         "@opencode-ai/sdk": "catalog:",
         "@orpc/openapi": "catalog:",

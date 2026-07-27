@@ -8,12 +8,11 @@ import { type ModelOption, acpProviders, modelOptionsFor } from "./conversation"
  * picker's footer chips — NOT a row here — because codex/grok run the same subscription model ids under either
  * harness, so the list no longer forks by harness.
  *
- * Every rendered fact about a model — label, description, badges, and the ORDER — comes from the provider's own
- * catalog. There is deliberately no local ranking table: one used to rank by hand-written capability tiers, which
- * meant an unrecognized id fell to a floor BELOW the everyday tier, so a brand-new flagship sorted beneath the
- * model it replaced. Catalog order is the provider's own preference and is always current, so it needs no edit
- * when a model ships. Rows a provider publishes nothing about render label-only; that is the intended end state,
- * not a gap to backfill. */
+ * Every rendered fact about a model — label, description, badges — comes from the provider's own catalog, and so
+ * does recency: catalog order IS the provider's newest-first preference, always current, needing no edit when a
+ * model ships. Rows a provider publishes nothing about render label-only; that is the intended end state, not a
+ * gap to backfill. The single exception is TIER_RANK below, which orders FAMILIES (not models) and is scoped as
+ * tightly as it is precisely because a per-model ranking table failed here once already — see its comment. */
 
 export interface PickerEntry {
     // `${provider}:${value}` — the model id is unique within a provider's (harness-independent) catalog.
@@ -99,26 +98,112 @@ export const customEntryFor = (entries: readonly PickerEntry[], query: string, p
     return { key: `${provider}:${value}`, provider, value, label: value, description: `use as custom model id` };
 };
 
-/* Browse-mode truncation. Claude's group is every version /v1/models publishes for the account — a dozen-odd
- * rows, which pushes the codex/grok/gemini groups below the fold the moment the picker opens. A collapsed group
- * shows the HEAD of the provider's own order, which is already newest-first, so "newest" needs no date field and
- * no local ranking: the same no-curation rule the rest of this module follows delivers it for free. Search never
- * truncates (see the component) — a buried older version is precisely what someone types to find. */
-export const COLLAPSED_ROWS = 8;
+/* FAMILY-MAJOR BROWSING. A provider's catalog order is a RELEASE TIMELINE (newest-first), and rendering it
+ * straight made the picker a version history rather than a menu: Claude's account list opened with five Opus
+ * versions in a row, so Haiku — a whole tier — sat below the fold and the one axis a user actually decides on
+ * (how capable vs. how fast/cheap) was never presented at all. So a group opens as ONE ROW PER FAMILY, newest of
+ * each, and the older versions live behind the disclosure grouped under their own family — because the intent
+ * that reaches for Opus 4.7 is formed as "Opus, an older one", never as "row 11". Search still spans the whole
+ * flat catalog and never truncates (see the component).
+ *
+ * Catalog order still decides everything it can: which version of a family is newest, and how families that
+ * share a rank sit relative to each other. */
 
-// The rows a collapsed group shows: the head, plus the selected model when truncation would otherwise drop it.
-// That union is why this isn't a bare slice — losing the selected row takes the checkmark with it, so a user
-// pinned to an older version would open the picker to no visible current model at all.
-export const collapseEntries = (entries: readonly PickerEntry[], selected: string | undefined): readonly PickerEntry[] => {
-    if (entries.length <= COLLAPSED_ROWS) {
-        return entries;
+// A model's FAMILY — its id with every version-ish segment dropped, so claude-opus-5 and claude-opus-4-8 land
+// together (as do gpt-5.1/gpt-5, and claude-haiku-4-5-20251001 with its date suffix). Derived, never listed:
+// a family that ships tomorrow groups itself. The id is the stable key here — labels get renamed, ids don't.
+const familyOf = (entry: PickerEntry): string => {
+    const stem = entry.value
+        .split(/[-_]/)
+        .filter((segment) => !/^v?[\d.]+$/.test(segment))
+        .join(`-`);
+    // An all-numeric id (and the ACP row's empty one) has no stem to speak of; it stands as its own family.
+    return stem === `` ? entry.value : stem;
+};
+
+// The family's header, taken from its newest row's label with the trailing version words peeled off ("Claude
+// Opus 5" → "Claude Opus"). Reusing the published label keeps the header in the provider's own naming rather
+// than in a phrase this repo invented, and a label that ends in a word ("Grok 4 Fast") simply stands as it is.
+const familyLabelOf = (newest: PickerEntry): string => {
+    const words = newest.label.split(/\s+/);
+    while (words.length > 1 && /^v?[\d.]+$/.test(words.at(-1)!)) {
+        words.pop();
     }
-    const head = entries.slice(0, COLLAPSED_ROWS);
-    if (selected === undefined || head.some((entry) => entry.value === selected)) {
-        return head;
+    return words.join(` `);
+};
+
+/* The ONE curated fact in this module, and the only one the providers publish nowhere the app can read: which
+ * tier is the frontier and which is the cheap one. The SDK's alias list orders opus/sonnet/haiku but has no
+ * Fable alias at all, so pure derivation would seat Fable — a frontier model — under Sonnet. Families sharing a
+ * rank keep catalog order between them (the sort is stable).
+ *
+ * An UNKNOWN family LEADS rather than sinks. That direction is the point: the ranking this replaced sank
+ * unrecognized ids to a floor below the everyday tier, so a brand-new flagship sorted beneath the model it
+ * replaced — whereas a family nobody here has heard of, arriving at the head of a newest-first catalog, is far
+ * likelier to be the next flagship than the next budget tier. Being wrong costs one row's position; being wrong
+ * the other way hides a launch. */
+const TIER_RANK: Readonly<Record<string, number>> = { opus: 0, fable: 0, sonnet: 1, haiku: 2 };
+
+const rankOf = (family: string): number => {
+    for (const segment of family.split(`-`)) {
+        const rank = TIER_RANK[segment];
+        if (rank !== undefined) {
+            return rank;
+        }
     }
-    const current = entries.find((entry) => entry.value === selected);
-    return current === undefined ? head : [...head, current];
+    return -1;
+};
+
+export interface FamilyGroup {
+    readonly key: string;
+    readonly label: string;
+    // The family's newest, i.e. its first row in the provider's own order — the row the collapsed group shows.
+    readonly latest: PickerEntry;
+    readonly older: readonly PickerEntry[];
+}
+
+// One group per family, in tier order. Membership and recency come from the catalog; only the tier order is ours.
+export const familyGroups = (entries: readonly PickerEntry[]): readonly FamilyGroup[] => {
+    const families = new Map<string, PickerEntry[]>();
+    for (const entry of entries) {
+        const key = familyOf(entry);
+        const members = families.get(key);
+        if (members === undefined) {
+            families.set(key, [entry]);
+            continue;
+        }
+        members.push(entry);
+    }
+    return [...families]
+        .map(([key, members]) => ({ key, label: familyLabelOf(members[0]!), latest: members[0]!, older: members.slice(1) }))
+        .toSorted((a, b) => rankOf(a.key) - rankOf(b.key));
+};
+
+export interface PickerBlock {
+    readonly key: string;
+    // Absent on the latest band — the provider header already names it, and a second header above the first row
+    // of every group would out-shout the rows themselves.
+    readonly label?: string;
+    readonly entries: readonly PickerEntry[];
+}
+
+// The blocks a provider group renders: collapsed, a single band of one row per family; expanded, that band
+// followed by each family's older versions under their own header. The pinned row is why the collapsed band
+// isn't just the latest band — a user sitting on an older version would otherwise open the picker to a list
+// with no checkmark anywhere in it, and no sign of which model the next turn actually runs.
+export const pickerBlocks = (groups: readonly FamilyGroup[], selected: string | undefined, expanded: boolean): readonly PickerBlock[] => {
+    const latest = groups.map((group) => group.latest);
+    if (expanded) {
+        return [
+            { key: `latest`, entries: latest },
+            ...groups.filter((group) => group.older.length > 0).map((group) => ({ key: group.key, label: group.label, entries: group.older })),
+        ];
+    }
+    const pinned =
+        selected === undefined || latest.some((entry) => entry.value === selected)
+            ? undefined
+            : groups.flatMap((group) => group.older).find((entry) => entry.value === selected);
+    return [{ key: `latest`, entries: pinned === undefined ? latest : [...latest, pinned] }];
 };
 
 // Browse-mode grouping: one section per provider (respecting the rail filter), the active provider hoisted
@@ -128,11 +213,13 @@ export const pickerSections = (
     entries: readonly PickerEntry[],
     activeProvider: AgentProvider,
     rail: AgentProvider | undefined,
-): readonly { provider: AgentProvider; entries: readonly PickerEntry[] }[] => {
+): readonly { provider: AgentProvider; groups: readonly FamilyGroup[]; total: number }[] => {
     const providers: AgentProvider[] = [...PROVIDERS.map((option) => option.value), ...acpProviders.value.map((agent) => agent.id)].filter(
         (provider) => rail === undefined || provider === rail,
     );
     const order = providers.includes(activeProvider) ? [activeProvider, ...providers.filter((provider) => provider !== activeProvider)] : providers;
-    // Rows keep the provider's own catalog order; only the group order (active hoisted, then PROVIDERS) is ours.
-    return order.map((provider) => ({ provider, entries: entries.filter((entry) => entry.provider === provider) }));
+    return order.map((provider) => {
+        const owned = entries.filter((entry) => entry.provider === provider);
+        return { provider, groups: familyGroups(owned), total: owned.length };
+    });
 };

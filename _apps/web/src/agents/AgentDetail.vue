@@ -19,7 +19,7 @@ import AgentReviewPanel from "./AgentReviewPanel.vue";
 const route = useRoute();
 const router = useRouter();
 const { mobile } = useDevice();
-const { fleet, open, markSeen } = useAgents();
+const { fleet, open } = useAgents();
 const { conversations, setActive } = useChat();
 
 const agentId = computed(() => (typeof route.params[`id`] === `string` ? route.params[`id`] : ``));
@@ -47,9 +47,9 @@ watch(
             open(fleetAgent.value);
             return;
         }
+        // No fleet entry means no registry entry, so there is no read marker to stamp — just focus the tab.
         if (conversation.value !== undefined) {
             setActive(conversation.value.id);
-            markSeen(id);
             return;
         }
         void router.replace(`/agents`);

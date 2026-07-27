@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Checkbox from "primevue/checkbox";
 import { computed, onBeforeUnmount, watch } from "vue";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
 import { formatBytes } from "@intentic-app/ui";
@@ -22,6 +23,12 @@ const {
     failedCount,
     doneCount,
     throughput,
+    setupProjects,
+    installAfterUpload,
+    setInstallAfterUpload,
+    installStarted,
+    installError,
+    installSettled,
     dismiss,
 } = useUploadQueue();
 
@@ -48,12 +55,26 @@ const groups = computed(() => {
 });
 const failures = computed(() => files.value.filter((file) => file.status === `failed`));
 
+// A drop omits node_modules/.venv, so the project lands unusable until its dependencies are installed. The
+// offer is shown for the WHOLE upload rather than as a dialog before it or a prompt after: the user keeps the
+// "drag it in and it just works" flow, and still has the entire upload to uncheck it before anything runs.
+// One line per project, since a drop can carry several; `evidence` names the file we read so the pick is
+// never opaque ("pnpm — pnpm-lock.yaml", or "npm — package.json (no lockfile)", which invites a correction).
+const setupSummary = computed(() =>
+    setupProjects.value.map((project) => ({
+        dir: project.dir === `` ? `the workspace root` : project.dir,
+        label: `${project.recipe.manager} · ${project.recipe.evidence}`,
+    })),
+);
+
 let timer: ReturnType<typeof setTimeout> | undefined;
 watch(
-    finished,
-    (isFinished) => {
-        if (isFinished && failedCount.value === 0) {
-            timer = setTimeout(dismiss, 3000);
+    [finished, installSettled],
+    ([isFinished, isSettled]) => {
+        // Hold the panel until the install request has settled, so a clean finish can't vanish before saying
+        // what it kicked off. Longer once something started — that line is news, not just an acknowledgement.
+        if (isFinished && failedCount.value === 0 && isSettled && installError.value === undefined) {
+            timer = setTimeout(dismiss, installStarted.value.length > 0 ? 6000 : 3000);
         }
     },
     { immediate: true },
@@ -180,5 +201,56 @@ onBeforeUnmount(() => {
                 </li>
             </ul>
         </template>
+
+        <!-- Dependencies. Outside the branches above so it rides every phase of the import: the offer during
+             scan + upload, the outcome after. Hidden entirely when the drop carries no project. -->
+        <div v-if="setupSummary.length > 0" class="mt-2 border-t border-line pt-2">
+            <!-- Still uploading: the offer, pre-checked. Unchecking is remembered as the default for next time. -->
+            <template v-if="!finished">
+                <label class="flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                        :model-value="installAfterUpload"
+                        binary
+                        size="small"
+                        @update:model-value="setInstallAfterUpload($event as boolean)"
+                        input-id="install-after-upload"
+                    />
+                    <span class="flex-1 font-medium">Install dependencies after upload</span>
+                </label>
+                <ul class="mt-1 space-y-0.5">
+                    <li v-for="project in setupSummary" :key="project.dir" class="flex items-center gap-2 text-2xs text-subtle">
+                        <span class="truncate">{{ project.dir }}</span>
+                        <span class="shrink-0">{{ project.label }}</span>
+                    </li>
+                </ul>
+            </template>
+
+            <!-- Couldn't even ask the daemon. The upload still succeeded, so this is a note, not a failure. -->
+            <div v-else-if="installError !== undefined" class="flex items-start gap-2 text-2xs text-danger">
+                <Icon name="exclamation-triangle" class="mt-0.5 text-sm" />
+                <span class="flex-1">{{ installError }}</span>
+            </div>
+
+            <div v-else-if="!installSettled" class="flex items-center gap-2">
+                <Icon name="spinner" class="text-sm text-muted" spin />
+                <span class="flex-1 font-medium">Starting install…</span>
+            </div>
+
+            <!-- Running. The tmux panel owns the real output, so point there rather than mirroring it here. -->
+            <template v-else-if="installStarted.length > 0">
+                <div class="flex items-center gap-2">
+                    <Icon name="spinner" class="text-sm text-muted" spin />
+                    <span class="flex-1 font-medium">Installing dependencies…</span>
+                </div>
+                <p class="mt-0.5 text-2xs text-subtle">Running in the terminal panel — you can watch, cancel or re-run it there.</p>
+            </template>
+
+            <!-- Asked, nothing to do: the daemon found every project already installed. Said out loud because
+                 silence here reads as "it ignored me", which is what sends people to re-drop the folder. -->
+            <div v-else-if="installAfterUpload" class="flex items-center gap-2 text-2xs text-subtle">
+                <Icon name="check-circle" class="text-sm text-success" />
+                <span class="flex-1">Dependencies already installed</span>
+            </div>
+        </div>
     </div>
 </template>

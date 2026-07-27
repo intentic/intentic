@@ -10,6 +10,7 @@
         { "path": "_libs/providers" },
         { "path": "_libs/sandbox-contract" },
         { "path": "_libs/workspace-ignore" },
+        { "path": "_libs/workspace-setup" },
         { "path": "_libs/iq-engine" },
         { "path": "_apps/iq" },
         { "path": "_apps/cli" }

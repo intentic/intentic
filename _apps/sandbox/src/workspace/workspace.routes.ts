@@ -12,6 +12,7 @@ import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 import { classifyWorkspace } from "./classify.js";
 import { readPackageGraph } from "./package-graph.js";
 import { discoverRepos, isValidRepoName } from "./repo-discovery.js";
+import { startInstall, workspaceSetup } from "./workspace-setup.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files.js";
@@ -114,6 +115,30 @@ export const createWorkspaceRoutes = (services: Services) => {
             await services.files.copy(contained(input.from), contained(input.to));
             services.history.notifyUserWrite();
             return { ok: true } as const;
+        }),
+        // Dependency readiness per project. The wire shape flattens the recipe and drops its `marker` — the
+        // browser renders manager/command/evidence and never needs to know which directory proves an install.
+        setup: i.setup.handler(async () => ({
+            projects: (await workspaceSetup(services.workspace.root, services.processes)).map(({ dir, recipe, state }) => ({
+                dir,
+                ecosystem: recipe.ecosystem,
+                manager: recipe.manager,
+                command: recipe.command,
+                evidence: recipe.evidence,
+                state,
+            })),
+        })),
+        // Install the named projects. The CLIENT's list is a request, not an instruction: it comes from a
+        // pre-upload guess made in the browser (which cannot see what's already on disk), so every dir is
+        // re-resolved against the real workspace and only genuine `needs-setup` projects run. That is what
+        // makes a re-drop of an already-installed repo a silent no-op instead of a redundant reinstall.
+        install: i.install.handler(async ({ input }) => {
+            const requested = new Set(input.dirs);
+            const projects = (await workspaceSetup(services.workspace.root, services.processes)).filter(
+                (project) => requested.has(project.dir) && project.state === "needs-setup",
+            );
+            await Promise.all(projects.map((project) => startInstall(services.workspace.root, project, services.processes)));
+            return { started: projects.map((project) => project.dir) };
         }),
         repos: i.repos.handler(async () => ({ repos: await discoverRepos(services.workspace.root) })),
         addRepo: i.addRepo.handler(async ({ input }) => {

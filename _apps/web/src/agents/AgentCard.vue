@@ -38,6 +38,16 @@ const review = computed(() => (mobile.value ? undefined : reviewAction(props.age
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
 const model = computed(() => (props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.model) : undefined));
 const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
+// The unread chip, in the two flavours worth telling apart: an agent nobody has opened yet is "New"; one you
+// HAVE opened that has worked since is "Updated" — with "New" on both, every returning agent reads as a
+// stranger. The marker behind it lives on the daemon entry, so opening it anywhere clears it everywhere.
+const unread = computed(() =>
+    !props.agent.unread
+        ? undefined
+        : props.agent.seenAt === undefined
+          ? { label: `New`, hint: `You haven't opened this agent yet` }
+          : { label: `Updated`, hint: `Worked since you last opened it — ${relativeTime(props.agent.seenAt)}` },
+);
 
 const edit = createTitleEdit(
     () => props.agent.id,
@@ -126,7 +136,12 @@ const grab = (event: PointerEvent): void => {
             <span v-else-if="reason !== undefined" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">{{
                 reason
             }}</span>
-            <span v-else-if="agent.unread" class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link">New</span>
+            <span
+                v-else-if="unread !== undefined"
+                v-tooltip.top="unread.hint"
+                class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link"
+                >{{ unread.label }}</span
+            >
             <Icon v-else :name="meta.icon" :spin="meta.spin" class="shrink-0 text-xs" :class="meta.class" />
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>

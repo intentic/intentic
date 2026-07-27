@@ -43,6 +43,19 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
+        // The read marker behind the card's unread badge. Daemon-side, so the badge stays cleared after a
+        // browser cache wipe and clears on the other devices the moment one of them opens the agent.
+        seen: i.seen.handler(async ({ input }) => {
+            const summary = await services.agents.markSeen(input.id, Date.now());
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+            }
+            return summary;
+        }),
+        seenAll: i.seenAll.handler(async () => {
+            await services.agents.markAllSeen(Date.now());
+            return { agents: services.agents.list() };
+        }),
         // The review shows the agent's CUMULATIVE output (`base` → worktree), so work stays inspectable after
         // it lands — which is the normal case, clean turn completions auto-landing within ms of finishing.
         // What landing changes is per-file: a second pass from `landedTip` names the remainder still waiting

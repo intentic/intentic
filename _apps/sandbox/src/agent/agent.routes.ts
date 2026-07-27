@@ -15,6 +15,7 @@ import type { OrpcContext } from "../context.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
+import { setupNoticeFor, workspaceSetup } from "../workspace/workspace-setup.js";
 import { landAgent } from "../agents/land.js";
 import type { AgentRequest } from "./agent.js";
 import { resolveRequest } from "./agent-requests.js";
@@ -514,7 +515,14 @@ async function* runTurn(
         // note is prepended HERE (a user-message preamble) instead of appended to the preset system prompt, so the
         // cached system+tools prefix stays byte-stable and the provider prompt cache is reused across the session.
         const promptWithAttachments = attachmentPaths.length > 0 ? withAttachmentNote(base.prompt, attachmentPaths) : base.prompt;
-        const prompt = stableSystemPrompt && note !== undefined ? `${note}\n\n---\n\n${promptWithAttachments}` : promptWithAttachments;
+        // Dependency readiness for the tree this turn actually works in (an isolated turn's worktree, not /work).
+        // Told up front because the alternative is the model paying to rediscover it the expensive way — a package
+        // script exiting `vue-tsc: not found`, an `npx` reaching the registry for a binary that was never a package
+        // name, and a post-edit type-check whose every error is false. Rides the USER message, never systemAppend:
+        // it changes the moment an install finishes, and the system prefix is kept byte-stable for the prompt cache.
+        const setupNotice = setupNoticeFor(await workspaceSetup(effectiveCwd, services.processes));
+        const preamble = [...(stableSystemPrompt && note !== undefined ? [note] : []), ...(setupNotice !== undefined ? [setupNotice] : [])];
+        const prompt = preamble.length > 0 ? `${preamble.join("\n\n")}\n\n---\n\n${promptWithAttachments}` : promptWithAttachments;
         // System-prompt suffix: the delegation note (unless stableSystemPrompt moved it into the user message)
         // followed by the terse-output steer. Both are stable across a session, so appending here keeps the cached
         // system+tools prefix intact (the point of stableSystemPrompt).

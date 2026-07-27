@@ -748,6 +748,9 @@ importers:
       '@intentic/workspace-ignore':
         specifier: workspace:*
         version: link:../../_libs/workspace-ignore
+      '@intentic/workspace-setup':
+        specifier: workspace:*
+        version: link:../../_libs/workspace-setup
       '@openai/codex-sdk':
         specifier: 'catalog:'
         version: 0.142.5
@@ -973,6 +976,9 @@ importers:
       '@intentic/workspace-ignore':
         specifier: workspace:*
         version: link:../../_libs/workspace-ignore
+      '@intentic/workspace-setup':
+        specifier: workspace:*
+        version: link:../../_libs/workspace-setup
       '@orpc/client':
         specifier: 'catalog:'
         version: 1.14.3(@opentelemetry/api@1.9.1)
@@ -1832,6 +1838,25 @@ importers:
       ignore:
         specifier: 'catalog:'
         version: 7.0.5
+      tslib:
+        specifier: 'catalog:'
+        version: 2.8.1
+    devDependencies:
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(happy-dom@20.11.1)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.1.2(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+
+  _libs/workspace-setup:
+    dependencies:
       tslib:
         specifier: 'catalog:'
         version: 2.8.1

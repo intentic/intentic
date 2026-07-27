@@ -19,11 +19,11 @@ const numbered = (lines: string[], start = 1, sep = `→`): string =>
 describe(`present: icons`, () => {
     it(`falls back to the ACP category when no presenter claims the name`, () => {
         expect(present(tool({ name: `mcp__db__query`, category: `search` })).icon).toBe(`search`);
-        expect(present(tool({ name: `Whatever`, category: `other` })).icon).toBe(`angle-right`);
+        expect(present(tool({ name: `Whatever`, category: `other` })).icon).toBe(`cog`);
     });
 
     it(`lets a per-name presenter override the category icon`, () => {
-        // The subagent tool categorizes as `other` (icon angle-right) but reads as a delegation. The Claude SDK
+        // The subagent tool categorizes as `other` but reads as a delegation. The Claude SDK
         // names it `Agent`; native backends emit lowercase `task` — both resolve to the delegation icon.
         expect(present(tool({ name: `Agent`, category: `other` })).icon).toBe(`users`);
         expect(present(tool({ name: `Task`, category: `other` })).icon).toBe(`users`);

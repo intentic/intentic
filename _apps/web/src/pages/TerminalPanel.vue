@@ -301,22 +301,28 @@ const menuItems = computed<MenuItem[]>(() => {
     return items;
 });
 
+// The panel element — the resize drag measures it, and terminal.rename's `when` gate asks it whether a
+// keystroke came from inside this panel (it declares here, above that gate, rather than beside the other
+// template refs below).
+const root = ref<HTMLElement>();
+
 // --- Palette commands + shortcuts --------------------------------------------------------------
 // Every strip action is also a registered command, so it lives in `>` (Ctrl+P) and on a shortcut. Registered
 // while THIS panel is mounted (the desktop shell and the mobile route are exclusive, so the ids can't
 // double-register) and disposed on unmount. Join and kill are selection-aware; the rest act on the focused
 // session.
 //
-// The defaults are all Ctrl+Shift+<key> — the ONE modifier family that's safe here, for two independent
+// The chorded defaults are all Ctrl+Shift+<key> — the ONE modifier family that's safe here, for two independent
 // reasons: (1) the shell owns every Ctrl+<letter> (C/D/R/U/K/W/A/E… — SIGINT, EOF, reverse-search, readline
 // line-edits), and Shift makes a DISTINCT keydown, so createTerminalSession's handler swallows only the exact
 // bound chord and leaves the bare control code untouched; (2) it dodges Ctrl+Alt, which is AltGr on
 // Windows/Linux (types € @ … and international glyphs) and an ESC-prefixed control code in a terminal — the
 // trap the old Ctrl+Alt+{R,J,U} defaults fell into. Letters steer clear of the browser chords the page can't
 // intercept (Ctrl+Shift+{I,J,C}=DevTools, N=incognito, T=reopen tab, W=close window, C/V=terminal copy/paste),
-// and lean mnemonic: K=kill, U=unsplit, G=group(join), E=edit(rename). Split keeps Ctrl+Shift+5 and New keeps
+// and lean mnemonic: K=kill, U=unsplit, G=group(join). Split keeps Ctrl+Shift+5 and New keeps
 // Ctrl+Shift+` — the VSCode/tmux muscle memory — matched by physical key (matchesChord's CODE_TO_KEY path), so
-// the Shift glyph ("%","~"), a dead-key layout, or a non-US layout can't break them. Everything is rebindable
+// the Shift glyph ("%","~"), a dead-key layout, or a non-US layout can't break them. Rename is the exception:
+// a bare F2, panel-scoped by a `when` gate, because rename is F2 app-wide (see its entry below). Everything is rebindable
 // in Settings → Keybindings; the two cosmetic pickers (color, icon) ship UNBOUND — a global chord for a rare
 // "open a swatch grid" earns its keys the least, so they stay palette- and menu-only, exactly as VSCode leaves
 // them (double-click a tab renames without one).
@@ -329,7 +335,13 @@ const registerPanelCommands = (): void => {
             command: `terminal.rename`,
             title: `Rename Terminal…`,
             icon: `pencil`,
-            keybinding: `Ctrl+Shift+E`,
+            // F2 — the rename key everywhere else in the app (the workspace tree's, the chat strip's) — gated to
+            // a keystroke that came from INSIDE this panel. Outside it the chord stays free (the tree renames
+            // its file, a full-screen TUI in another surface keeps F2), and inside it the gate is what makes
+            // xterm's key hook forward the press to the dispatcher instead of the PTY: a terminal app that wants
+            // its own F2 needs the binding remapped in Settings → Keybindings.
+            keybinding: `F2`,
+            when: (event): boolean => event.target instanceof Node && root.value?.contains(event.target) === true,
             handler: (): void => {
                 if (activeName.value !== undefined) {
                     openCustomize(activeName.value, `rename`);
@@ -528,7 +540,6 @@ const setCollapsed = (value: boolean): void => {
     write(COLLAPSED_KEY, value ? `1` : `0`);
 };
 
-const root = ref<HTMLElement>();
 const container = ref<HTMLElement>();
 
 // The spawn-hook disposer (registered after attach, so a mid-attach "New Terminal" lands in the pending flag

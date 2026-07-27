@@ -22,7 +22,7 @@ import AgentCard from "./AgentCard.vue";
 
 const router = useRouter();
 const { mobile } = useDevice();
-const { lanes, attention, refresh, open } = useAgents();
+const { lanes, blocking, unread, refresh, open, markAllSeen } = useAgents();
 const { newChat, active } = useChat();
 const { dragged, dragging, draggedId, over, action, accepts, busyId, error, ghostStyle, begin, consumeSuppressedOpen, dismissError } = useAgentDrag();
 
@@ -104,9 +104,23 @@ const startAgent = (): void => {
     <div class="flex h-full min-h-0 flex-col">
         <div class="flex h-9 shrink-0 items-center gap-2 border-b border-line px-3">
             <span class="text-sm font-semibold text-content">Agents</span>
-            <span v-if="attention > 0" class="rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">
-                {{ attention }} need{{ attention === 1 ? "s" : "" }} you
+            <!-- Two different facts, two different pills: "needs you" is BLOCKED work (an approval, a question,
+                 a conflict, an error) and earns the warning colour; "unread" is only "you haven't looked yet"
+                 and stays informational — with its own way out, so silencing the board never means clicking
+                 through every card. -->
+            <span v-if="blocking > 0" class="rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">
+                {{ blocking }} need{{ blocking === 1 ? "s" : "" }} you
             </span>
+            <button
+                v-if="unread > 0"
+                type="button"
+                aria-label="Mark all agents read"
+                v-tooltip.bottom="'Mark all read'"
+                class="inline-flex items-center gap-1 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link transition-colors hover:bg-primary-600/25"
+                @click="markAllSeen"
+            >
+                <Icon name="check" class="text-2xs" />{{ unread }} unread
+            </button>
             <span class="flex-1"></span>
             <button type="button" :class="cmp.buttonPrimary('gap-1 px-2.5 py-1 text-2xs')" @click="startAgent">
                 <Icon name="plus" class="text-2xs" />New agent

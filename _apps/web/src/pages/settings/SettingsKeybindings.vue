@@ -46,10 +46,15 @@ const rows = computed<readonly Row[]>(() => {
 const hasAnyOverride = computed(() => Object.keys(keymapOverrides.value).length > 0);
 
 // chord → command ids sharing it, so a row can warn when its shortcut collides with another's (the shell resolves
-// a live conflict by first-registered-wins, but the user should see it).
+// a live conflict by first-registered-wins, but the user should see it). Commands with a `when` gate are left out
+// of the count: they only claim the chord in their own context (F2 renames the focused terminal OR the focused
+// chat, never both), so counting them would cry conflict over bindings that can't actually collide.
 const chordOwners = computed<Record<string, readonly string[]>>(() => {
     const byChord: Record<string, string[]> = {};
     for (const entry of commands.value) {
+        if (entry.when !== undefined) {
+            continue;
+        }
         const chord = effectiveKeybinding(entry.command, entry.keybinding);
         if (chord !== undefined) {
             (byChord[chord] ??= []).push(entry.command);

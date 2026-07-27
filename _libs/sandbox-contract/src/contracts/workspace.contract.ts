@@ -19,7 +19,10 @@ import {
     WorkspaceFileQuerySchema,
     WorkspaceFileSchema,
     WorkspaceGraphSchema,
+    WorkspaceInstallResultSchema,
+    WorkspaceInstallSchema,
     WorkspaceMoveSchema,
+    WorkspaceSetupSchema,
     WorkspaceSyncSchema,
     WorkspaceTreeSchema,
 } from "../schemas.js";
@@ -47,6 +50,12 @@ export const workspaceContract = {
     delete: oc.route({ method: "DELETE", path: "/workspace/entry" }).input(WorkspaceFileQuerySchema).output(OkSchema),
     move: oc.route({ method: "POST", path: "/workspace/move" }).input(WorkspaceMoveSchema).output(OkSchema),
     copy: oc.route({ method: "POST", path: "/workspace/copy" }).input(WorkspaceMoveSchema).output(OkSchema),
+    // Dependency readiness for every project under /work, and the install that fixes it. An imported project
+    // arrives without node_modules/.venv (the drop omits them), so "the files landed" is not "this works":
+    // until setup says ready, its type-checks and tests can only lie. The install runs as a one-shot tmux panel
+    // like a dev server or add-app — attachable, survives a reload, output kept in the terminal logs.
+    setup: oc.route({ method: "GET", path: "/workspace/setup" }).output(WorkspaceSetupSchema),
+    install: oc.route({ method: "POST", path: "/workspace/setup/install" }).input(WorkspaceInstallSchema).output(WorkspaceInstallResultSchema),
     repos: oc.route({ method: "GET", path: "/workspace/repos" }).output(ReposListSchema),
     addRepo: oc.route({ method: "POST", path: "/workspace/repos" }).input(CloneRepoSchema).output(CloneResultSchema),
     // Force-fetch + guarded fast-forward every repo with a remote (mutates the tree ⇒ POST). The turn hook syncs

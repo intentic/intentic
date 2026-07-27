@@ -4,7 +4,7 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import { type AgentHarness, type AgentProvider, PROVIDERS } from "@intentic/sandbox-contract";
 import { BADGE_META } from "../composables/chat/catalog";
 import { acpProviders, providerAccounts, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
-import { collapseEntries, customEntryFor, filterEntries, type PickerEntry, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
+import { customEntryFor, filterEntries, type PickerEntry, pickerBlocks, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
 import { formatUtilization, isStale, usageDetail, usagePercent, usageStatusFor } from "../composables/chat/usageStatus";
 import { loadAllProviderModels, loadProviderModels, useChat } from "../composables/chat/useChat";
 import ProviderLogo from "./ProviderLogo.vue";
@@ -56,10 +56,18 @@ const toggleExpanded = (target: AgentProvider): void => {
 };
 
 // The visible list: while searching a single flat ranked section (provider identity rides on every row's
-// logo); browsing, one section per provider with the active provider hoisted first, collapsed to its newest
-// rows. Rows carry their index in visual order — the keyboard highlight's coordinate system.
+// logo); browsing, one section per provider with the active provider hoisted first, each opening at one row per
+// model family. A section renders as BLOCKS — the latest band, then (expanded) each family's older versions
+// under its own header. Rows carry their index in visual order — the keyboard highlight's coordinate system.
 const sections = computed<
-    readonly { provider?: AgentProvider; rows: { entry: PickerEntry; index: number }[]; hidden: number; expanded: boolean; collapsible: boolean }[]
+    readonly {
+        provider?: AgentProvider;
+        blocks: { key: string; label: string | undefined; rows: { entry: PickerEntry; index: number }[] }[];
+        rowCount: number;
+        hidden: number;
+        expanded: boolean;
+        collapsible: boolean;
+    }[]
 >(() => {
     let index = 0;
     const withRows = (entries: readonly PickerEntry[]): { entry: PickerEntry; index: number }[] =>
@@ -67,36 +75,31 @@ const sections = computed<
     if (searching.value) {
         const matched = filterEntries(pickerEntries.value, query.value, rail.value);
         // Ranked catalog hits first; the escape hatch sits under them so Enter still takes the real match. A
-        // search deliberately spans the WHOLE catalog: a version outside the collapsed head is exactly what
-        // someone reaches for the search box to find, so hiding it behind a disclosure would defeat both.
-        return [
-            {
-                rows: withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]),
-                hidden: 0,
-                expanded: false,
-                collapsible: false,
-            },
-        ];
+        // search deliberately spans the WHOLE catalog flat: an older version behind a family's disclosure is
+        // exactly what someone reaches for the search box to find, so re-grouping it here would defeat both.
+        const rows = withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]);
+        return [{ blocks: [{ key: `search`, label: undefined, rows }], rowCount: rows.length, hidden: 0, expanded: false, collapsible: false }];
     }
     return pickerSections(pickerEntries.value, provider.value, rail.value).map((section) => {
         const isExpanded = expanded.value.has(section.provider);
-        // The selected model survives truncation only for the ACTIVE provider — it's the only group whose
-        // current model is the one a checkmark would be claiming.
-        const visible = isExpanded
-            ? section.entries
-            : collapseEntries(section.entries, section.provider === provider.value ? model.value : undefined);
-        const hidden = section.entries.length - visible.length;
+        // The selected model survives collapse only for the ACTIVE provider — it's the only group whose current
+        // model is the one a checkmark would be claiming.
+        const blocks = pickerBlocks(section.groups, section.provider === provider.value ? model.value : undefined, isExpanded);
+        const rowCount = blocks.reduce((count, block) => count + block.entries.length, 0);
         return {
             provider: section.provider,
-            rows: withRows(visible),
-            hidden,
+            blocks: blocks.map((block) => ({ key: block.key, label: block.label, rows: withRows(block.entries) })),
+            rowCount,
+            hidden: section.total - rowCount,
             expanded: isExpanded,
             // Offered only when it would actually change the list, so a short group never grows a dead control.
-            collapsible: isExpanded || hidden > 0,
+            collapsible: isExpanded || section.total > rowCount,
         };
     });
 });
-const flat = computed<readonly PickerEntry[]>(() => sections.value.flatMap((section) => section.rows.map((row) => row.entry)));
+const flat = computed<readonly PickerEntry[]>(() =>
+    sections.value.flatMap((section) => section.blocks.flatMap((block) => block.rows.map((row) => row.entry))),
+);
 
 const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (entry) => entry.key);
 
@@ -154,10 +157,9 @@ const providerNeedsReauth = (target: AgentProvider): boolean => (providerAccount
 const railTooltip = (target: AgentProvider): string =>
     `${providerDisplayLabel(target)}${target === provider.value ? ` · active` : ``}${providerNeedsReauth(target) ? ` · needs reconnect` : ``}`;
 
-// A group with no rows yet gets a state row (loading / error+retry): the codex/grok catalogs have no static
-// floor, so a pre-load/error would otherwise read as "this provider has nothing". Claude's alias floor always
-// renders, so it never qualifies.
-const missingModels = (rows: readonly { entry: PickerEntry }[]): boolean => rows.length === 0;
+// A group with no rows yet gets a state row (loading / error+retry — keyed off section.rowCount in the
+// template): the codex/grok catalogs have no static floor, so a pre-load/error would otherwise read as "this
+// provider has nothing". Claude's seed floor always renders, so it never qualifies.
 const stateFor = (target: AgentProvider) => providerModelsState.value[target];
 
 // The account the turn will use: the explicit pick, else the first (the daemon's default) — so the picker
@@ -284,41 +286,51 @@ onMounted(() => {
                             v-tooltip.top="'This account needs to be reconnected'"
                         />
                     </p>
-                    <button
-                        v-for="row in section.rows"
-                        :id="`model-picker-opt-${row.index}`"
-                        :key="row.entry.key"
-                        :ref="(el) => setRowEl(row.entry.key, el)"
-                        type="button"
-                        role="option"
-                        :aria-selected="row.index === activeIndex"
-                        :aria-label="rowAriaLabel(row.entry)"
-                        class="mp-row flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11"
-                        :class="{ 'mp-row-on': row.index === activeIndex }"
-                        :disabled="isDisabled(row.entry)"
-                        @click="pick(row.entry)"
-                        @mouseenter="activeIndex = row.index"
-                    >
-                        <ProviderLogo
-                            :provider="row.entry.provider"
-                            class="shrink-0 text-xs"
-                            :class="isSelected(row.entry) ? 'text-primary-500' : 'text-muted'"
-                        />
-                        <span class="max-w-[55%] shrink-0 truncate text-sm md:text-xs" :class="isSelected(row.entry) ? 'text-link' : 'text-content'">
-                            {{ row.entry.label }}
-                        </span>
-                        <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ row.entry.description }}</span>
-                        <Icon
-                            v-for="badge in (row.entry.badges ?? []).slice(0, 3)"
-                            :key="badge"
-                            :name="BADGE_META[badge].icon"
-                            class="shrink-0 text-2xs text-subtle"
-                            v-tooltip.top="BADGE_META[badge].label"
-                        />
-                        <Icon v-if="isSelected(row.entry)" name="check" class="shrink-0 text-2xs text-primary-500" aria-hidden="true" />
-                    </button>
+                    <template v-for="block in section.blocks" :key="block.key">
+                        <!-- A family header, shown only for the older-versions blocks a disclosure reveals: the
+                         latest band needs none (the provider header above it already names the group). -->
+                        <p v-if="block.label !== undefined" class="px-3 pb-0.5 pt-1.5 pl-8 text-2xs text-subtle" role="presentation">
+                            {{ block.label }}
+                        </p>
+                        <button
+                            v-for="row in block.rows"
+                            :id="`model-picker-opt-${row.index}`"
+                            :key="row.entry.key"
+                            :ref="(el) => setRowEl(row.entry.key, el)"
+                            type="button"
+                            role="option"
+                            :aria-selected="row.index === activeIndex"
+                            :aria-label="rowAriaLabel(row.entry)"
+                            class="mp-row flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11"
+                            :class="{ 'mp-row-on': row.index === activeIndex }"
+                            :disabled="isDisabled(row.entry)"
+                            @click="pick(row.entry)"
+                            @mouseenter="activeIndex = row.index"
+                        >
+                            <ProviderLogo
+                                :provider="row.entry.provider"
+                                class="shrink-0 text-xs"
+                                :class="isSelected(row.entry) ? 'text-primary-500' : 'text-muted'"
+                            />
+                            <span
+                                class="max-w-[55%] shrink-0 truncate text-sm md:text-xs"
+                                :class="isSelected(row.entry) ? 'text-link' : 'text-content'"
+                            >
+                                {{ row.entry.label }}
+                            </span>
+                            <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ row.entry.description }}</span>
+                            <Icon
+                                v-for="badge in (row.entry.badges ?? []).slice(0, 3)"
+                                :key="badge"
+                                :name="BADGE_META[badge].icon"
+                                class="shrink-0 text-2xs text-subtle"
+                                v-tooltip.top="BADGE_META[badge].label"
+                            />
+                            <Icon v-if="isSelected(row.entry)" name="check" class="shrink-0 text-2xs text-primary-500" aria-hidden="true" />
+                        </button>
+                    </template>
                     <!-- Group disclosure: the merged Claude catalog is long enough to bury every other provider's
-                         group below the fold, so a group opens at its newest rows and expands in place. It sits at
+                         group below the fold, so a group opens at one row per family and expands in place. It sits at
                          the truncation boundary — where the list visibly stops — rather than in the footer, which
                          is session controls, or the rail, which owns the provider axis. Deliberately NOT a
                          role=option: it selects nothing, so it stays out of the arrow-key model list, and the
@@ -331,15 +343,15 @@ onMounted(() => {
                         :aria-label="
                             section.expanded
                                 ? `Show fewer ${providerDisplayLabel(section.provider)} models`
-                                : `Show ${section.hidden} more ${providerDisplayLabel(section.provider)} models`
+                                : `Show ${section.hidden} older ${providerDisplayLabel(section.provider)} models`
                         "
                         @click="toggleExpanded(section.provider)"
                     >
                         <Icon :name="section.expanded ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
-                        <span>{{ section.expanded ? `Show fewer` : `Show ${section.hidden} more` }}</span>
+                        <span>{{ section.expanded ? `Show fewer` : `Show ${section.hidden} older` }}</span>
                     </button>
                     <!-- Catalog state row (loading / error+retry) — searching hides it. -->
-                    <template v-if="!searching && section.provider !== undefined && missingModels(section.rows)">
+                    <template v-if="!searching && section.provider !== undefined && section.rowCount === 0">
                         <div v-if="stateFor(section.provider) === `error`" class="flex items-center gap-2 px-3 py-1.5 text-2xs text-danger">
                             <span>Couldn't load models.</span>
                             <button type="button" class="text-link" @click="void loadProviderModels(section.provider)">Retry</button>

@@ -1,6 +1,6 @@
 import type { AgentProvider } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
-import { COLLAPSED_ROWS, collapseEntries, customEntryFor, type PickerEntry } from "./modelPicker";
+import { customEntryFor, familyGroups, type PickerEntry, pickerBlocks } from "./modelPicker";
 
 /* The custom-model escape hatch. Everything else in modelPicker.ts is pure derivation over the live catalogs;
  * this is the one path that lets a user name a model NO catalog published, which is the only way to reach a
@@ -62,36 +62,76 @@ test("offers nothing for an empty query, so simply focusing the search box adds 
     expect(customEntryFor(CATALOG, `   `, `claude`)).toBeUndefined();
 });
 
-/* Browse-mode collapse. Merging the REST catalog took Claude's group past a screenful, which is what pushed
- * every other provider below the fold — the group has to open short and expand in place. */
+/* FAMILY-MAJOR BROWSING. The catalog arrives as a release timeline, which opened the picker on five straight
+ * Opus versions and left Haiku — a whole tier — below the fold. A group must open on one row per family. */
 
-const LONG = Array.from({ length: 15 }, (_, position) => entry(`claude`, `model-${position}`, `Model ${position}`));
+// Claude's account catalog in its own (newest-first) order, the shape the screenshot showed.
+const CLAUDE: readonly PickerEntry[] = [
+    entry(`claude`, `claude-opus-5`, `Claude Opus 5`),
+    entry(`claude`, `claude-sonnet-5`, `Claude Sonnet 5`),
+    entry(`claude`, `claude-fable-5`, `Claude Fable 5`),
+    entry(`claude`, `claude-opus-4-8`, `Claude Opus 4.8`),
+    entry(`claude`, `claude-opus-4-7`, `Claude Opus 4.7`),
+    entry(`claude`, `claude-sonnet-4-6`, `Claude Sonnet 4.6`),
+    entry(`claude`, `claude-haiku-4-5-20251001`, `Claude Haiku 4.5`),
+];
 
-test("keeps a short group whole, so a two-model provider never grows a disclosure", () => {
-    const short = LONG.slice(0, COLLAPSED_ROWS);
-    expect(collapseEntries(short, undefined)).toEqual(short);
+test("groups versions into families by id, so a date suffix or a point release never splits a tier", () => {
+    expect(familyGroups(CLAUDE).map((group) => [group.key, group.latest.value, group.older.map((older) => older.value)])).toEqual([
+        [`claude-opus`, `claude-opus-5`, [`claude-opus-4-8`, `claude-opus-4-7`]],
+        [`claude-fable`, `claude-fable-5`, []],
+        [`claude-sonnet`, `claude-sonnet-5`, [`claude-sonnet-4-6`]],
+        [`claude-haiku`, `claude-haiku-4-5-20251001`, []],
+    ]);
 });
 
-test("collapses a long group to the head of the PROVIDER'S order, which is already newest-first", () => {
-    // Not a date sort of our own: the head is whatever order the catalog arrived in (aliases, then /v1/models
-    // newest-first), so "newest" costs no metadata and breaks no ranking rule.
-    expect(collapseEntries(LONG, undefined)).toEqual(LONG.slice(0, COLLAPSED_ROWS));
+test("orders families frontier-first, which the catalog's own order cannot express", () => {
+    // Catalog order alone would seat Fable — a frontier model the SDK publishes no alias for — under Sonnet.
+    expect(familyGroups(CLAUDE).map((group) => group.label)).toEqual([`Claude Opus`, `Claude Fable`, `Claude Sonnet`, `Claude Haiku`]);
 });
 
-test("keeps the selected model visible even when truncation would drop it", () => {
-    // The reason this isn't a bare slice: a user pinned to an older version would otherwise open the picker to a
-    // list with no checkmark anywhere in it, and no sign of which model the next turn actually runs.
-    const collapsed = collapseEntries(LONG, `model-14`);
+test("leads with a family no tier rank names, so a brand-new flagship is never buried by its own novelty", () => {
+    // The precise inverse of the ranking this replaced, which sank unrecognized ids BELOW the everyday tier.
+    const groups = familyGroups([entry(`claude`, `claude-mythos-1`, `Claude Mythos 1`), ...CLAUDE]);
 
-    expect(collapsed).toHaveLength(COLLAPSED_ROWS + 1);
-    expect(collapsed.at(-1)?.value).toBe(`model-14`);
+    expect(groups[0]?.key).toBe(`claude-mythos`);
 });
 
-test("does not duplicate a selected model that already survived the cut", () => {
-    expect(collapseEntries(LONG, `model-2`)).toEqual(LONG.slice(0, COLLAPSED_ROWS));
+test("keeps catalog order between families that share a rank, so recency still breaks the tie", () => {
+    const groups = familyGroups([entry(`claude`, `claude-fable-6`, `Claude Fable 6`), ...CLAUDE]);
+
+    expect(groups.map((group) => group.key)).toEqual([`claude-fable`, `claude-opus`, `claude-sonnet`, `claude-haiku`]);
 });
 
-test("ignores a selected id the group does not publish, rather than padding the list", () => {
-    // A custom model rides an id in no catalog; it must not conjure a phantom row into another provider's group.
-    expect(collapseEntries(LONG, `claude-opus-9`)).toEqual(LONG.slice(0, COLLAPSED_ROWS));
+test("opens a group at one row per family — every tier visible, no version history", () => {
+    expect(pickerBlocks(familyGroups(CLAUDE), `claude-opus-5`, false)).toEqual([
+        { key: `latest`, entries: [CLAUDE[0], CLAUDE[2], CLAUDE[1], CLAUDE[6]] },
+    ]);
+});
+
+test("keeps the selected model visible when it is an older version the latest band drops", () => {
+    // Otherwise a user pinned to Opus 4.7 opens the picker to a list with no checkmark anywhere in it, and no
+    // sign of which model the next turn actually runs.
+    const [band] = pickerBlocks(familyGroups(CLAUDE), `claude-opus-4-7`, false);
+
+    expect(band?.entries.at(-1)?.value).toBe(`claude-opus-4-7`);
+});
+
+test("ignores a selected id the group does not publish, rather than padding the band", () => {
+    // A custom model rides an id in no catalog; it must not conjure a phantom row into a provider's group.
+    expect(pickerBlocks(familyGroups(CLAUDE), `claude-opus-9`, false)[0]?.entries).toHaveLength(4);
+});
+
+test("expands into per-family blocks, because the intent is 'Opus, an older one' — never 'row 11'", () => {
+    expect(pickerBlocks(familyGroups(CLAUDE), undefined, true).map((block) => [block.label, block.entries.map((row) => row.value)])).toEqual([
+        [undefined, [`claude-opus-5`, `claude-fable-5`, `claude-sonnet-5`, `claude-haiku-4-5-20251001`]],
+        [`Claude Opus`, [`claude-opus-4-8`, `claude-opus-4-7`]],
+        [`Claude Sonnet`, [`claude-sonnet-4-6`]],
+    ]);
+});
+
+test("gives a single-version provider no older blocks, so a short group never grows a disclosure", () => {
+    const codex = [entry(`codex`, `gpt-5.1`, `GPT 5.1`), entry(`codex`, `gpt-5`, `GPT 5`)];
+
+    expect(pickerBlocks(familyGroups(codex), undefined, false)).toEqual([{ key: `latest`, entries: [codex[0]] }]);
 });

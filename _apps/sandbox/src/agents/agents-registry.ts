@@ -84,6 +84,11 @@ export interface AgentsRegistry {
     // other browsers or reorder lanes) and takes no running guard — begin()/finish() re-read the entry, so a
     // mid-turn rename survives. Undefined ⇒ unknown id or a title that sanitizes to nothing.
     readonly setTitle: (id: string, title: string) => Promise<AgentSummary | undefined>;
+    // Stamp the read marker the cards' unread badge is measured against. Like setTitle it leaves updatedAt
+    // alone (reading is not activity) and needs no running guard. Undefined ⇒ unknown id.
+    readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
+    // "Mark all read" — one stamp across the whole fleet, so a board full of badges has a single escape hatch.
+    readonly markAllSeen: (now: number) => Promise<void>;
     // Persist a land's advanced per-repo landedTips (partial lands included — conflicted repos keep theirs)
     // and the refreshed cumulative diffstat.
     readonly recordLanded: (
@@ -150,6 +155,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             ...(state?.contextWindow !== undefined ? { contextWindow: state.contextWindow } : {}),
             ...(state?.activity !== undefined ? { activity: state.activity } : {}),
             ...(state?.running === true && state.startedAt !== undefined ? { startedAt: state.startedAt } : {}),
+            ...(entry.seenAt !== undefined ? { seenAt: entry.seenAt } : {}),
             ...(entry.turns !== undefined ? { turns: entry.turns } : {}),
             // Live count: the running turn's tool calls show on the card as they happen.
             ...((entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) > 0 ? { toolUses: (entry.toolUses ?? 0) + (state?.pendingToolUses ?? 0) } : {}),
@@ -212,6 +218,9 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 ...(model !== undefined ? { model } : {}),
                 ...(account !== undefined ? { account } : {}),
                 ...(existing?.sessionId !== undefined ? { sessionId: existing.sessionId } : {}),
+                // The read marker survives the rebuild too — a new turn makes the agent unread again (updatedAt
+                // now outruns it), but WHEN it was last opened is what tells "New" from "Updated".
+                ...(existing?.seenAt !== undefined ? { seenAt: existing.seenAt } : {}),
                 // Lifetime counters + diffstat survive the per-turn entry rebuild.
                 ...(existing?.turns !== undefined ? { turns: existing.turns } : {}),
                 ...(existing?.toolUses !== undefined ? { toolUses: existing.toolUses } : {}),
@@ -247,6 +256,24 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             await persist();
             broadcast();
             return summaryOf(next);
+        },
+        markSeen: async (id, now) => {
+            const entry = entryOf(id);
+            if (entry === undefined) {
+                return undefined;
+            }
+            const next = { ...entry, seenAt: now };
+            replace(next);
+            await persist();
+            // Broadcast so the badge clears on EVERY connected surface at once — the phone that opened it and
+            // the desktop rail counting it are looking at the same fleet.
+            broadcast();
+            return summaryOf(next);
+        },
+        markAllSeen: async (now) => {
+            entries = entries.map((entry) => ({ ...entry, seenAt: now }));
+            await persist();
+            broadcast();
         },
         observe: (id, event) => {
             const state = runtimeOf(id);

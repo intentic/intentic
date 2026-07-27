@@ -53,6 +53,10 @@ export const PersistedAgentSchema = z.object({
     diffDeletions: z.number().optional(),
     createdAt: z.number(),
     updatedAt: z.number(),
+    // When the agent was last opened (ms epoch) — the unread badge's reference point, kept HERE rather than in
+    // a browser so it survives a cache wipe and holds across every device the fleet is driven from. Absent ⇒
+    // never opened.
+    seenAt: z.number().optional(),
 });
 export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
 

@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, markRaw, reactive, ref } from "vue";
+import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
 import { collectDroppedFiles, type DroppedFile } from "../../pages/workspace/dropEntries";
 import { packTar } from "../../pages/workspace/tarStream";
 import { sandboxJson, sandboxUpload } from "../sandbox/sandboxClient";
@@ -65,6 +66,91 @@ const skippedNotice = ref<number | undefined>(undefined);
 // Surfaced so a re-upload visibly re-sends only what changed instead of silently doing less than the file count.
 const skippedUnchanged = ref(0);
 
+const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
+
+// ---- dependency install (see @intentic/workspace-setup) ----
+// A drop omits node_modules/.venv on purpose, so what lands is a project that can't build, test or type-check
+// yet. Rather than leave that for the user to hit later — or spring a dialog before the upload they already
+// asked for — the manager is detected from the dropped FILE NAMES at scan time, and the offer rides the
+// progress panel for the whole upload. By the time it could run, the user has had the entire upload to
+// uncheck it. Dirs here are workspace-root-relative (targetDir already joined in), ready to POST.
+const setupProjects = ref<readonly ProjectSetup[]>([]);
+
+const INSTALL_PREF_KEY = `intentic.install-on-import`;
+// Sticky default rather than a second "always" control: a 320px panel can't afford two checkboxes, and the last
+// choice is a better predictor than any fixed default. Starts ON — dragging a project in almost always means
+// "I want to work on this", and a wrong yes costs a cancellable install in a visible terminal, where a wrong no
+// costs a workspace that silently lies to both the user and the agent.
+const readInstallPreference = (): boolean => {
+    try {
+        return localStorage.getItem(INSTALL_PREF_KEY) !== `never`;
+    } catch {
+        return true;
+    }
+};
+const installAfterUpload = ref(readInstallPreference());
+const setInstallAfterUpload = (enabled: boolean): void => {
+    installAfterUpload.value = enabled;
+    try {
+        localStorage.setItem(INSTALL_PREF_KEY, enabled ? `always` : `never`);
+    } catch {
+        // Storage unavailable (private mode) — the choice still holds for this session.
+    }
+};
+
+// What the daemon actually started. The client's list is only a pre-upload GUESS (the browser can't see what is
+// already installed on the sandbox), so the daemon re-resolves it and installs only what genuinely needs it —
+// which is what makes a re-drop of a ready project a silent no-op. `installSettled` gates the panel's dismiss
+// so a clean finish can't disappear before saying what it kicked off.
+const installStarted = ref<readonly string[]>([]);
+const installError = ref<string | undefined>(undefined);
+const installSettled = ref(false);
+
+// Read each detected project's package.json for its `packageManager` declaration — the corepack field beats any
+// lockfile, and we have the File in hand, so the guess costs one small read per project. A missing or unreadable
+// manifest just leaves the lockfile answer standing.
+const detectSetup = async (targetDir: string, entries: readonly DroppedFile[]): Promise<readonly ProjectSetup[]> => {
+    const paths = entries.map((entry) => entry.path);
+    const fields = new Map<string, string>();
+    await Promise.all(
+        detectProjects(paths).map(async ({ dir }) => {
+            const manifest = entries.find((entry) => entry.path === (dir === `` ? `package.json` : `${dir}/package.json`));
+            if (manifest === undefined) {
+                return;
+            }
+            const manager = managerFromPackageJson(await manifest.file.text().catch(() => ``));
+            if (manager !== undefined) {
+                fields.set(dir, manager);
+            }
+        }),
+    );
+    // Re-project onto the workspace root so `dir` is what the daemon will resolve, not what the drop was
+    // relative to. A drop onto a subfolder lands its project there.
+    return detectProjects(paths, fields).map((project) => ({ dir: joinPath(targetDir, project.dir), recipe: project.recipe }));
+};
+
+// Kick off the install once the bytes are down. Never blocks or fails the upload — a workspace that uploaded
+// fine but couldn't start its install is still a successful import, so the error is reported, not thrown.
+const runInstall = async (): Promise<void> => {
+    const projects = setupProjects.value;
+    if (!installAfterUpload.value || projects.length === 0) {
+        installSettled.value = true;
+        return;
+    }
+    try {
+        const { started } = await sandboxJson<{ started: string[] }>(`/workspace/setup/install`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ dirs: projects.map((project) => project.dir) }),
+        });
+        installStarted.value = started;
+    } catch (error) {
+        installError.value = errorMessage(error, `Couldn't start the install.`);
+    } finally {
+        installSettled.value = true;
+    }
+};
+
 const pending: QueueFile[][] = [];
 let running = false;
 let queryClient: ReturnType<typeof useQueryClient> | undefined;
@@ -92,10 +178,12 @@ export const resetUploadQueue = (): void => {
     scanningName.value = "";
     skippedNotice.value = undefined;
     skippedUnchanged.value = 0;
+    setupProjects.value = [];
+    installStarted.value = [];
+    installError.value = undefined;
+    installSettled.value = false;
     pending.length = 0;
 };
-
-const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
 
 // A repo's own git metadata: the `.git` directory itself, anything under it, or the `.git` FILE a worktree or
 // submodule checkout carries instead of a directory. Segment-wise, so a `src/.gitignore` or `notes/git` can't match.
@@ -349,6 +437,9 @@ const run = async (): Promise<void> => {
             // Refresh the tree once the queue drains. The RAW prefix matches every ["workspace","tree", …, id]
             // query — sandboxKey would append the id and break the prefix match (see useSandbox).
             await queryClient?.invalidateQueries({ queryKey: [`workspace`, `tree`] });
+            // Then make the tree usable: the imported project's dependencies. Last, so an install can never
+            // delay the files appearing, and after the abort checks, so a cancelled drop installs nothing.
+            await runInstall();
         }
     }
 };
@@ -366,6 +457,12 @@ export function useUploadQueue() {
         if (finished.value && !running) {
             resetUploadQueue();
         }
+        // Detect projects from the WHOLE drop, before the unchanged-file filter below prunes it: on a re-drop the
+        // manifests are usually the files that DIDN'T change, so filtering first would hide the project entirely.
+        // A second drop mid-upload contributes its own projects; dedupe by dir so one can't be installed twice.
+        const detected = await detectSetup(targetDir, entries);
+        const known = new Set(setupProjects.value.map((project) => project.dir));
+        setupProjects.value = [...setupProjects.value, ...detected.filter((project) => !known.has(project.dir))];
         // Skip files already identical on the sandbox (size + mtime) so a re-upload only sends what changed. Capture
         // the signal first — a cancel during the round-trip must abort the enqueue.
         const signal = controller.signal;
@@ -388,6 +485,10 @@ export function useUploadQueue() {
             // The whole drop is already up to date — surface it (via skippedUnchanged) instead of a silent no-op.
             if (!running && pending.length === 0) {
                 finished.value = true;
+                // Still offer the install: re-dropping a project that's already on the sandbox is exactly what
+                // someone does when it isn't working, and "already up to date" would otherwise be a dead end.
+                // The daemon no-ops if it's genuinely ready, so this can't cause a redundant reinstall.
+                await runInstall();
             }
             return;
         }
@@ -463,6 +564,12 @@ export function useUploadQueue() {
         failedCount,
         doneCount,
         throughput,
+        setupProjects,
+        installAfterUpload,
+        setInstallAfterUpload,
+        installStarted,
+        installError,
+        installSettled,
         enqueue,
         enqueueFromDataTransfer,
         dismiss: resetUploadQueue,

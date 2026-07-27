@@ -181,6 +181,11 @@ export const AgentSummarySchema = z.object({
     // Present while a turn runs: its start, ms since epoch.
     startedAt: z.number().optional(),
     updatedAt: z.number(),
+    // When the agent was last OPENED, ms since epoch — the unread badge's reference point (`updatedAt >
+    // seenAt` ⇒ the agent has done something you haven't looked at). Absent ⇒ never opened. Daemon-side on
+    // purpose: read state is a fact about the WORK, not about one browser profile, so clearing site data or
+    // picking up the phone must not resurrect every badge.
+    seenAt: z.number().optional(),
     attention: AgentAttentionSchema,
     // Completed turns and lifetime tool calls — the card's msgs/tools counters.
     turns: z.number().optional(),
@@ -826,6 +831,30 @@ export const WorkspaceSearchResultSchema = z.object({
     features: z.array(z.string()).optional(),
 });
 export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
+
+// ---- workspace setup (dependency readiness) ----
+
+// One project under /work and whether its dependencies are actually installed. A drop omits node_modules/.venv
+// on purpose, so a freshly imported project is present-but-unusable until this says "ready" — the import UI,
+// the agent's post-edit type-check, and the agent's turn context all gate on it.
+// `dir` is root-relative ("" = the workspace root itself); `manager` is the real binary (pnpm/npm/uv/…);
+// `evidence` is the file that decided it ("pnpm-lock.yaml"), so the UI can show WHY, not just what.
+// state: ready | installing | needs-setup | unsupported (manager absent from this sandbox — `manager` names it).
+export const ProjectSetupSchema = z.object({
+    dir: z.string(),
+    ecosystem: z.enum(["node", "python"]),
+    manager: z.string(),
+    command: z.string(),
+    evidence: z.string(),
+    state: z.enum(["ready", "installing", "needs-setup", "unsupported"]),
+});
+export type ProjectSetup = z.infer<typeof ProjectSetupSchema>;
+export const WorkspaceSetupSchema = z.object({ projects: z.array(ProjectSetupSchema) });
+export type WorkspaceSetup = z.infer<typeof WorkspaceSetupSchema>;
+// Install these projects' dependencies. Dirs already ready, already installing, or whose manager is missing are
+// skipped server-side, so a stale client list can't spawn redundant installs — `started` is what actually ran.
+export const WorkspaceInstallSchema = z.object({ dirs: z.array(z.string()).min(1) });
+export const WorkspaceInstallResultSchema = z.object({ started: z.array(z.string()) });
 
 // ---- workspace repos ----
 

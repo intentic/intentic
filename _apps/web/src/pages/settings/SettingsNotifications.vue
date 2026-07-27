@@ -10,7 +10,12 @@ import { usePushNotifications } from "../../composables/usePushNotifications";
  *   - it is PER BROWSER. A push subscription belongs to the browser that created it, so enabling here says
  *     nothing about your phone. The copy says so rather than letting the toggle imply an account-wide setting.
  *   - nothing is sent while you are watching. The daemon suppresses a notification whenever any tab on this
- *     sandbox is present and not idle, which is the difference between useful and irritating. */
+ *     sandbox is present and not idle, which is the difference between useful and irritating.
+ *
+ * Both live in the footnote UNDER the group, not as rows inside it. A <Row> with a title, a description and no
+ * #control is visually indistinguishable from a setting whose switch failed to render, so caveats phrased as
+ * rows get read as bugs. Everything on the bordered surface does something; everything that only explains sits
+ * outside it, in the small muted type a grouped list already uses for footnotes. */
 
 const { state, busy, error, canToggle, enable, disable, sendTest } = usePushNotifications();
 
@@ -36,38 +41,35 @@ const status = computed(() => {
 
 <template>
     <div class="flex flex-col gap-6">
-        <RowGroup label="Push notifications">
-            <Row icon="bolt" title="Notify this browser" :description="status">
-                <template #control><ToggleSwitch :model-value="enabled" :disabled="!canToggle" @update:model-value="toggle" /></template>
-            </Row>
-            <Row
-                icon="desktop"
-                title="Per browser, per device"
-                description="A subscription belongs to the browser that created it — turn this on again on each device you want notified."
-            />
-            <Row
-                icon="eye"
-                title="Quiet while you're watching"
-                description="Nothing is sent while a tab on this sandbox is open and active. You're only notified when you've actually stepped away."
-            />
-            <Row
-                v-if="enabled"
-                icon="send"
-                title="Send a test"
-                description="Checks the whole chain — the sandbox, the push service, and your operating system's notification settings."
-            >
-                <template #control>
-                    <button
-                        type="button"
-                        class="rounded-md border border-line px-2.5 py-1 text-xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
-                        :disabled="busy"
-                        @click="sendTest"
-                    >
-                        Send test
-                    </button>
-                </template>
-            </Row>
-        </RowGroup>
+        <div class="flex flex-col gap-2">
+            <RowGroup label="Push notifications">
+                <Row icon="bolt" title="Notify this browser" :description="status">
+                    <template #control><ToggleSwitch :model-value="enabled" :disabled="!canToggle" @update:model-value="toggle" /></template>
+                </Row>
+                <Row
+                    v-if="enabled"
+                    icon="send"
+                    title="Send a test"
+                    description="Checks the whole chain — the sandbox, the push service, and your operating system's notification settings."
+                >
+                    <template #control>
+                        <button
+                            type="button"
+                            class="rounded-md border border-line px-2.5 py-1 text-xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
+                            :disabled="busy"
+                            @click="sendTest"
+                        >
+                            Send test
+                        </button>
+                    </template>
+                </Row>
+            </RowGroup>
+
+            <p class="px-0.5 text-2xs leading-relaxed text-subtle">
+                A subscription belongs to the browser that created it, so turn this on again on every device you want notified. Nothing is sent while
+                a tab on this sandbox is open and active — you're only interrupted once you've actually stepped away.
+            </p>
+        </div>
 
         <p v-if="error" class="text-xs text-danger">{{ error }}</p>
     </div>

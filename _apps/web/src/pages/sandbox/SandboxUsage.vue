@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, cmp, Segmented } from "@intentic-app/ui";
+import { Card, cmp, RowGroup, Segmented } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
@@ -224,13 +224,14 @@ const hasSpend = computed(() => current.value.length > 0);
             </p>
 
             <template v-else>
-                <!-- The hero and its supporting tiles. Spend is the one number this screen is about, so it is
-                     the only figure at hero size; the rest are stat tiles. -->
-                <!-- Every figure is sized against ITS OWN tile (@container + cqi), not the viewport: the tiles
-                     go four-up at exactly the width where a four-figure amount stops fitting at 48px, so a
-                     viewport breakpoint is the wrong ruler and a fixed size is how "$36.62" ended up hanging
-                     out of its card. The floor of each clamp is a size the widest value this tile can hold
-                     still fits at. -->
+                <!-- The hero and its supporting tiles. Spend is the one number this screen is about, so it is the
+                     only figure at hero size; the rest are stat tiles.
+                     Every figure is sized against ITS OWN tile (@container + cqi), not the viewport — the grid
+                     goes four-up at exactly the width where a four-figure amount stops fitting at 48px, so a
+                     viewport breakpoint measures the wrong thing and a fixed size is how "$36.62" came to hang
+                     out of its card. Each clamp's floor is a size the widest value that tile can hold still fits
+                     at, with `truncate` as the backstop for a locale that disagrees. `mt-auto` on the last line
+                     of each tile settles the footers onto one baseline however tall the grid stretches them. -->
                 <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <Card class="@container flex min-w-0 flex-col">
                         <div class="text-xs text-muted">Spend</div>
@@ -286,54 +287,52 @@ const hasSpend = computed(() => current.value.length > 0);
                      Every pool gets its own meter — one row per window, never a single "usage" number — because
                      these are separate allowances that fill at different rates, and folding them is how a
                      screen ends up saying 1% about an account that is actually out of room. -->
-                <section v-if="headroom.length > 0" id="accounts">
-                    <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
-                        <span :class="cmp.sectionLabel()">Plan limits</span>
-                        <span class="text-2xs text-subtle">
-                            your whole Claude plan, not this sandbox — every device on the account spends the same pools
-                        </span>
-                    </div>
-                    <div class="divide-y divide-line overflow-hidden rounded-lg border border-line bg-card">
-                        <div v-for="entry in headroom" :key="entry.account.id" class="flex flex-col gap-2.5 px-4 py-3">
-                            <div class="flex items-baseline gap-2">
-                                <ProviderLogo :provider="entry.provider" class="shrink-0 self-center text-sm text-muted" />
-                                <span class="min-w-0 truncate text-sm text-content">{{ entry.account.label }}</span>
-                                <!-- Freshness belongs on the ACCOUNT, not on each meter: one read produced all
-                                     of these, and it is the single caveat that governs every number below. -->
-                                <span class="ml-auto shrink-0 text-2xs" :class="entry.stale ? `text-muted` : `text-subtle`">
-                                    read {{ formatAge(entry.usage.measuredAt) }}
-                                </span>
-                            </div>
+                <RowGroup
+                    v-if="headroom.length > 0"
+                    id="accounts"
+                    label="Plan limits"
+                    caption="your whole Claude plan, not this sandbox — every device on the account spends the same pools"
+                >
+                    <div v-for="entry in headroom" :key="entry.account.id" class="flex flex-col gap-2.5 px-4 py-3">
+                        <div class="flex items-baseline gap-2">
+                            <ProviderLogo :provider="entry.provider" class="shrink-0 self-center text-sm text-muted" />
+                            <span class="min-w-0 truncate text-sm text-content">{{ entry.account.label }}</span>
+                            <!-- Freshness belongs on the ACCOUNT, not on each meter: one read produced all of
+                                 these, and it is the single caveat that governs every number below it. -->
+                            <span class="ml-auto shrink-0 text-2xs" :class="entry.stale ? `text-muted` : `text-subtle`">
+                                read {{ formatAge(entry.usage.measuredAt) }}
+                            </span>
+                        </div>
 
-                            <div v-for="pool in entry.pools" :key="pool.kind" class="flex items-center gap-3">
-                                <span class="w-40 shrink-0 truncate text-2xs text-muted">{{ pool.label }}</span>
-                                <!-- A pool at 0% still draws a sliver: an empty track is indistinguishable from a
-                                     pool this screen has no reading for, and those mean opposite things. -->
-                                <div class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-content/10">
-                                    <div
-                                        class="h-full rounded-full bg-current"
-                                        :class="usageTone(pool.percent)"
-                                        :style="{ width: `${Math.max(pool.percent, 1)}%` }"
-                                    />
-                                </div>
-                                <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
-                                    {{ formatUtilization(pool.percent, entry.stale) }}
-                                </span>
-                                <span class="hidden w-32 shrink-0 truncate text-right text-2xs text-subtle sm:block">
-                                    {{ pool.resetsAt === undefined ? `` : `resets ${formatReset(pool.resetsAt)}` }}
-                                </span>
+                        <div v-for="pool in entry.pools" :key="pool.kind" class="flex items-center gap-3">
+                            <span class="w-40 shrink-0 truncate text-2xs text-muted">{{ pool.label }}</span>
+                            <!-- A pool at 0% still draws a sliver: an empty track is indistinguishable from a
+                                 pool this screen has no reading for, and those mean opposite things. -->
+                            <div class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-content/10">
+                                <div
+                                    class="h-full rounded-full bg-current"
+                                    :class="usageTone(pool.percent)"
+                                    :style="{ width: `${Math.max(pool.percent, 1)}%` }"
+                                />
                             </div>
+                            <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
+                                {{ formatUtilization(pool.percent, entry.stale) }}
+                            </span>
+                            <span class="hidden w-32 shrink-0 truncate text-right text-2xs text-subtle sm:block">
+                                {{ pool.resetsAt === undefined ? `` : `resets ${formatReset(pool.resetsAt)}` }}
+                            </span>
                         </div>
                     </div>
-                    <!-- The honest caveat, spelled out rather than left to a "≥". A reading is taken when a turn
-                         ENDS, so an idle sandbox's is as old as its last turn, and the pools keep draining
-                         elsewhere the whole time — which is the entire distance between "1%" here and 98% in a
-                         terminal on the same account. -->
-                    <p class="mt-2 px-0.5 text-2xs text-subtle">
-                        Read from your plan when a turn finishes, so it can only be a floor: usage never falls inside a window, and other clients on
-                        this account spend the same pools without telling this sandbox. Run a turn to refresh it.
+
+                    <!-- The caveat sits INSIDE the surface, as the last row: a footnote floating below the border
+                         is read after the numbers it qualifies, if at all. A reading is taken when a turn ENDS, so
+                         an idle sandbox's is as old as its last turn while the pools keep draining elsewhere —
+                         which is the entire distance between "1%" here and 98% in a terminal on the same account. -->
+                    <p class="px-4 py-2.5 text-2xs text-subtle">
+                        Read from your plan when a turn finishes, so it can only ever be a floor: usage never falls inside a window, and other clients
+                        on this account spend the same pools without telling this sandbox. Run a turn to refresh it.
                     </p>
-                </section>
+                </RowGroup>
 
                 <p v-else :class="cmp.emptyState()">
                     No account has reported its plan limits yet. Claude publishes them when a turn finishes; other providers don't report limits.

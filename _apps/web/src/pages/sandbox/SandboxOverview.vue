@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Card, cmp, Row, RowGroup, StatusBadge } from "@intentic-app/ui";
+import { Card, Row, RowGroup, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { useChat } from "../../composables/chat/useChat";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
@@ -29,10 +29,13 @@ const othersHere = computed(() => presenceOthers.value.length);
 
 // Inline identity editing (owner only): rename + pick a logo. The picked file never uploads — it is downscaled
 // to a small square data URL in the browser and stored as a string (sandbox.update). Only changed fields sent.
+// Editing is strictly in place: every control it needs already occupies a slot in the header (the title box, the
+// logo, the action cell), so entering edit mode reveals affordances without reflowing a single pixel below.
 const editing = ref(false);
 const name = ref(``);
 const stagedImage = ref<string | undefined>(undefined);
 const fileInput = ref<HTMLInputElement | null>(null);
+const nameInput = ref<HTMLInputElement | null>(null);
 const nameTouched = ref(false);
 const busy = ref(false);
 const error = ref<string | undefined>(undefined);
@@ -50,12 +53,24 @@ const canSave = computed(() => {
     return trimmed.length > 0 && trimmed.length <= 60 && (trimmed !== sandbox.active.value?.name || stagedImage.value !== undefined);
 });
 
-const startEdit = (): void => {
+// The single line under the title, present in every state so nothing can grow or shrink beneath it: the
+// sandbox's status when idle, the edit affordances while editing, and errors in place of both.
+const subline = computed<{ text: string; tone: string }>(() => {
+    if (error.value !== undefined) return { text: error.value, tone: `text-danger` };
+    if (editing.value && nameTouched.value && nameError.value !== undefined) return { text: nameError.value, tone: `text-danger` };
+    if (editing.value) return { text: `Click the logo to change it (cropped to a square) · Enter saves · Esc cancels.`, tone: `text-muted` };
+    if (sandbox.reachable.value) return { text: `Online — the workspace Claude Code and your tools operate from.`, tone: `text-muted` };
+    return { text: `Offline — reconnecting to the workspace.`, tone: `text-muted` };
+});
+
+const startEdit = async (): Promise<void> => {
     name.value = sandbox.active.value?.name ?? ``;
     stagedImage.value = undefined;
     error.value = undefined;
     nameTouched.value = false;
     editing.value = true;
+    await nextTick();
+    nameInput.value?.select();
 };
 const cancelEdit = (): void => {
     editing.value = false;
@@ -103,35 +118,58 @@ const save = async (): Promise<void> => {
     <div class="flex flex-col gap-6">
         <!-- Identity: name + logo (owner-editable), self-reported image / version / URL, online status. -->
         <Card class="flex flex-col gap-4">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex min-w-0 items-center gap-3">
-                    <span
-                        class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-card text-muted"
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex min-w-0 flex-1 items-center gap-3">
+                    <!-- The logo IS the picker while editing — that's what removes the old "Choose image" row,
+                         and with it the card's height change. Disabled outside edit mode, so it stays a plain
+                         decorative avatar (and out of the tab order) until it can actually do something. -->
+                    <button
+                        type="button"
+                        :disabled="!editing"
+                        :aria-label="editing ? `Change logo` : undefined"
+                        :title="editing ? `Change logo` : undefined"
+                        class="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-card text-muted"
+                        :class="editing ? 'cursor-pointer border-line-strong' : 'border-line'"
+                        @click="fileInput?.click()"
                     >
                         <img v-if="previewImage" :src="previewImage" alt="" class="h-full w-full object-cover" />
                         <span v-else-if="avatarLetter" class="text-lg font-semibold uppercase text-content">{{ avatarLetter }}</span>
                         <Icon name="server" v-else class="text-lg" />
-                    </span>
-                    <div class="min-w-0">
-                        <label v-if="editing" class="flex flex-col gap-1">
+                        <span
+                            v-if="editing"
+                            class="absolute inset-0 flex items-center justify-center bg-canvas/70 text-content opacity-90 transition-opacity group-hover:opacity-100"
+                        >
+                            <Icon name="image" class="text-base" />
+                        </span>
+                    </button>
+                    <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="pickFile" />
+
+                    <!-- Title and field share one box — same height, padding and type scale — so switching modes
+                         only paints a border; the glyphs never move. The subline below is always rendered. -->
+                    <div class="-ml-2 min-w-0 flex-1 sm:max-w-md">
+                        <div class="grid grid-cols-1 grid-rows-1">
                             <input
+                                v-if="editing"
+                                ref="nameInput"
                                 v-model="name"
                                 type="text"
+                                aria-label="Sandbox name"
                                 autocomplete="off"
                                 maxlength="60"
-                                :class="[cmp.input('w-full'), nameTouched && nameError ? 'ui-field-input-error' : '']"
+                                class="col-start-1 row-start-1 h-8 w-full min-w-0 rounded-md border border-line-strong bg-canvas px-2 text-lg font-semibold text-content outline-none"
+                                :class="nameTouched && nameError ? 'ui-field-input-error' : ''"
                                 @blur="nameTouched = true"
+                                @keydown.enter.prevent="save"
+                                @keydown.esc.prevent="cancelEdit"
                             />
-                            <span v-if="nameTouched && nameError" class="ui-field-error">
-                                <Icon name="exclamation-triangle" class="text-2xs" />
-                                {{ nameError }}
-                            </span>
-                        </label>
-                        <h2 v-else class="truncate text-lg font-semibold leading-tight">{{ sandbox.active.value?.name ?? `Sandbox` }}</h2>
-                        <p class="mt-0.5 text-xs text-muted">
-                            <template v-if="sandbox.reachable.value">Online — the workspace Claude Code and your tools operate from.</template>
-                            <template v-else>Offline — reconnecting to the workspace.</template>
-                        </p>
+                            <h2
+                                v-else
+                                class="col-start-1 row-start-1 flex h-8 items-center rounded-md border border-transparent px-2 text-lg font-semibold"
+                            >
+                                <span class="truncate">{{ sandbox.active.value?.name ?? `Sandbox` }}</span>
+                            </h2>
+                        </div>
+                        <p class="h-4 truncate px-2 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
                     </div>
                 </div>
                 <div class="flex shrink-0 items-center gap-2">
@@ -140,25 +178,23 @@ const save = async (): Promise<void> => {
                         :label="sandbox.reachable.value ? 'Online' : 'Offline'"
                         dot
                     />
-                    <Button v-if="isOwner && !editing" label="Edit" size="small" severity="secondary" :text="true" @click="startEdit">
-                        <template #icon><Icon name="pencil" /></template>
-                    </Button>
+                    <!-- Edit and Cancel/Save are stacked in one grid cell: the cell is as wide as the widest
+                         state, so revealing Save can never shove the status badge sideways. The inactive layer
+                         is `invisible`, which keeps its size while dropping out of the tab order and the a11y
+                         tree. Save sits where Edit sat — the same corner keeps meaning "commit". -->
+                    <div v-if="isOwner" class="grid grid-cols-1 grid-rows-1 items-center">
+                        <div class="col-start-1 row-start-1 flex items-center justify-end" :class="editing ? 'invisible' : ''">
+                            <Button label="Edit" size="small" severity="secondary" :text="true" @click="startEdit">
+                                <template #icon><Icon name="pencil" /></template>
+                            </Button>
+                        </div>
+                        <div class="col-start-1 row-start-1 flex items-center justify-end gap-2" :class="editing ? '' : 'invisible'">
+                            <Button label="Cancel" size="small" severity="secondary" :text="true" :disabled="busy" @click="cancelEdit" />
+                            <Button label="Save" size="small" class="min-w-[5.5rem]" :loading="busy" :disabled="busy || !canSave" @click="save" />
+                        </div>
+                    </div>
                 </div>
             </div>
-
-            <!-- Owner edit controls (logo + save/cancel); the name input lives in the header above. -->
-            <div v-if="editing" class="flex flex-wrap items-center gap-2 border-t border-line pt-3">
-                <Button label="Choose image" severity="secondary" :outlined="true" size="small" @click="fileInput?.click()">
-                    <template #icon><Icon name="image" /></template>
-                </Button>
-                <span class="text-2xs text-subtle">Cropped to a square and shown in the sandbox switcher.</span>
-                <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="pickFile" />
-                <div class="ml-auto flex items-center gap-2">
-                    <Button label="Cancel" size="small" severity="secondary" :text="true" :disabled="busy" @click="cancelEdit" />
-                    <Button label="Save" size="small" :loading="busy" :disabled="busy || !canSave" @click="save" />
-                </div>
-            </div>
-            <p v-if="error" class="text-2xs text-danger">{{ error }}</p>
 
             <!-- What the sandbox reports about itself (relayed via /info, never stored by the platform). -->
             <dl

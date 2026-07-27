@@ -1,5 +1,5 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { openAgentConversation, useChat } from "../chat/useChat";
 import { sandboxJson } from "../sandbox/sandboxClient";
 
@@ -21,25 +21,32 @@ export const resetAgents = (): void => {
     registry.value = [];
 };
 
-// Unread tracking: an agent whose updatedAt outruns the last time this browser opened it, while it isn't
-// running, "has something for you". Persisted per browser (not per sandbox — conversation ids are unique).
-const SEEN_KEY = `intentic.agentsSeen`;
-const readSeen = (): Record<string, number> => {
-    try {
-        const raw = localStorage.getItem(SEEN_KEY);
-        return raw === null ? {} : (JSON.parse(raw) as Record<string, number>);
-    } catch {
-        return {};
-    }
-};
-const seen = ref<Record<string, number>>(readSeen());
+// Unread tracking: an agent whose updatedAt outruns the last time it was OPENED, while it isn't running, "has
+// something for you". The read marker itself lives on the daemon entry (AgentSummary.seenAt), not in this
+// browser — read state is a fact about the work, so clearing site data, opening an incognito window, or
+// switching to the phone must not resurrect a board full of "New" badges.
+//
+// Writes are optimistic: stamp the roster in place (the card repaints instantly — `registry` is a deep ref),
+// then persist through the daemon, whose broadcast re-lands the same value on every other connected surface.
+// Best-effort: a failed write only means the badge returns on the next roster frame, and a card with no
+// registry entry is a draft — nothing to mark, nothing unread.
 const markSeen = (id: string): void => {
-    seen.value = { ...seen.value, [id]: Date.now() };
-    try {
-        localStorage.setItem(SEEN_KEY, JSON.stringify(seen.value));
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory map still holds.
+    const entry = registry.value.find((agent) => agent.id === id);
+    if (entry === undefined) {
+        return;
     }
+    entry.seenAt = Date.now();
+    void sandboxJson(`/agents/${encodeURIComponent(id)}/seen`, { method: `POST` }).catch(() => undefined);
+};
+
+// The escape hatch a notification surface owes the user: clear the whole board at once instead of clicking
+// through every card to silence the rail badge.
+const markAllSeen = (): void => {
+    const now = Date.now();
+    for (const agent of registry.value) {
+        agent.seenAt = now;
+    }
+    void sandboxJson(`/agents/seen`, { method: `POST` }).catch(() => undefined);
 };
 
 // One fleet entry. Two sources merged by conversationId: the registry (authoritative once a turn has run) and
@@ -52,13 +59,15 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly unread: boolean;
 }
 
+// "Blocked on you" — the agent literally cannot go on (or has failed) until you act. Deliberately NOT the same
+// thing as unread, which only says you haven't looked at it yet: a board that tells the user seven finished
+// agents "need you" teaches them to ignore the word.
+const blocked = (agent: Pick<FleetAgent, "status" | "attention">): boolean =>
+    agent.attention.plan || agent.attention.question || agent.attention.permission || agent.attention.conflict || agent.status === `error`;
+
 // Attention first, then running + fresh drafts, then most recently active.
 const weight = (entry: FleetAgent): number =>
-    entry.attention.plan || entry.attention.question || entry.attention.permission || entry.attention.conflict || entry.status === `error`
-        ? 0
-        : entry.status === `running` || entry.status === `awaiting` || entry.status === `draft`
-          ? 1
-          : 2;
+    blocked(entry) ? 0 : entry.status === `running` || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;
 
 const fleet = computed<FleetAgent[]>(() => {
     const { conversations } = useChat();
@@ -87,25 +96,46 @@ const fleet = computed<FleetAgent[]>(() => {
         ...registry.value.map((agent) => ({
             ...agent,
             open: openIds.has(agent.id),
-            unread: agent.status !== `running` && agent.updatedAt > (seen.value[agent.id] ?? 0),
+            unread: agent.status !== `running` && agent.updatedAt > (agent.seenAt ?? 0),
         })),
         ...drafts,
     ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);
 });
 
-// The single "agents need you" aggregate the rail tile and mobile tab badge render: one count per agent that
-// has a pending plan/question, a land conflict, an error, or unread activity.
-const attention = computed(
-    () =>
-        fleet.value.filter(
-            (agent) =>
-                agent.attention.plan ||
-                agent.attention.question ||
-                agent.attention.permission ||
-                agent.attention.conflict ||
-                agent.status === `error` ||
-                agent.unread,
-        ).length,
+// The board's two headline counts, kept apart on purpose (the header renders both): agents BLOCKED on the
+// user, and agents merely unread.
+const blocking = computed(() => fleet.value.filter(blocked).length);
+const unread = computed(() => fleet.value.filter((agent) => agent.unread).length);
+// The single aggregate the rail tile and mobile tab badge render — "there is something for you on the board",
+// counted per AGENT so one that is both blocked and unread badges once.
+const attention = computed(() => fleet.value.filter((agent) => blocked(agent) || agent.unread).length);
+
+// A turn that finishes while you are WATCHING its conversation is not news — the reply is already on your
+// screen, so the card must not flip to "New" under your cursor (and the rail must not badge it). Gated on the
+// tab being VISIBLE: an agent that finishes while the app sits in a background tab or a locked phone is
+// exactly what the badge exists for, even though its conversation is still technically the active one.
+// (Guarded like the store read it replaced: this module also evaluates in the node test env.)
+const visible = ref(true);
+if (typeof document !== `undefined`) {
+    const syncVisible = (): void => {
+        visible.value = document.visibilityState === `visible`;
+    };
+    syncVisible();
+    document.addEventListener(`visibilitychange`, syncVisible);
+}
+watch(
+    () => {
+        if (!visible.value) {
+            return undefined;
+        }
+        const watched = fleet.value.find((agent) => agent.id === useChat().active.value.conversationId);
+        return watched?.unread === true ? watched.id : undefined;
+    },
+    (id) => {
+        if (id !== undefined) {
+            markSeen(id);
+        }
+    },
 );
 
 // The kanban lanes — pure projections of the status machine, so "finished" needs no explicit action or
@@ -113,10 +143,7 @@ const attention = computed(
 // follow-up message animates the card straight back to active. Unread stays a card badge, not a promotion.
 export type FleetLane = "attention" | "active" | "finished";
 export const laneOf = (agent: Pick<FleetAgent, "status" | "attention">): FleetLane => {
-    if (agent.attention.plan || agent.attention.question || agent.attention.permission || agent.attention.conflict) {
-        return `attention`;
-    }
-    if (agent.status === `awaiting` || agent.status === `conflict` || agent.status === `error`) {
+    if (blocked(agent) || agent.status === `awaiting` || agent.status === `conflict`) {
         return `attention`;
     }
     if (agent.status === `running` || agent.status === `draft`) {
@@ -210,5 +237,5 @@ const open = (agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId
 };
 
 export function useAgents() {
-    return { fleet, lanes, attention, refresh, open, markSeen, rename };
+    return { fleet, lanes, attention, blocking, unread, refresh, open, markSeen, markAllSeen, rename };
 }

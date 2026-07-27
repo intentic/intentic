@@ -54,7 +54,8 @@ const CATEGORY_ICONS: Record<ChatTool["category"], IconName> = {
     execute: `code`,
     think: `sparkles`,
     fetch: `globe`,
-    other: `angle-right`,
+    // Not `angle-right`: a caret sits immediately after the card's fold chevron and reads as a second one.
+    other: `cog`,
 };
 
 // Cap on rendered text so a large file read or a chatty command can't bloat the DOM (the box scrolls anyway).
@@ -207,6 +208,9 @@ const PRESENTERS: Record<string, Presenter> = {
     task: { icon: `users` },
     websearch: { icon: `search` },
     webfetch: { icon: `globe` },
+    // Asking the user is its own act, not an "other" — and the category default (`angle-right`) read as a second
+    // fold chevron sitting right next to the real one.
+    askuserquestion: { icon: `question-circle` },
 };
 
 export const present = (tool: ChatTool): ToolPresentation => {

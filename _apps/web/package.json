@@ -30,6 +30,7 @@
         "@intentic/extension-ui": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
+        "@intentic/workspace-setup": "workspace:*",
         "@orpc/client": "catalog:",
         "@orpc/contract": "catalog:",
         "@orpc/openapi-client": "catalog:",
