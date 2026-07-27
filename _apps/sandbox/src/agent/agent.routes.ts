@@ -48,9 +48,12 @@ const routedModel = (catalog: { models: readonly { id: string }[]; default: stri
     model !== undefined && model !== "" && catalog.models.some((entry) => entry.id === model) ? model : catalog.default;
 
 // Fold attached-file paths into the prompt — Claude Code's canonical attachment mechanism (its Read tool
-// handles images and PDFs from disk natively, same as dragging a file into the CLI).
-const withAttachmentNote = (prompt: string, paths: readonly string[]): string =>
-    `${prompt}\n\nThe user attached these files — read them with the Read tool as needed:\n${paths.map((path) => `- ${path}`).join("\n")}`;
+// handles images and PDFs from disk natively, same as dragging a file into the CLI). An empty prompt is the
+// attachment-only message (a screenshot with nothing typed), where the note IS the message.
+const withAttachmentNote = (prompt: string, paths: readonly string[]): string => {
+    const note = `The user attached these files — read them with the Read tool as needed:\n${paths.map((path) => `- ${path}`).join("\n")}`;
+    return prompt === "" ? note : `${prompt}\n\n${note}`;
+};
 
 // Fold the opt-in editor context (the composer chip, off by default) into the prompt: the file the user is
 // looking at and, when they selected text, the lines themselves — so deictic prompts ("fix this") ground
@@ -789,9 +792,26 @@ export const createAgentRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         // Inject a user message into the conversation's running turn (delivered between tool calls);
-        // NOT_FOUND when no steerable turn is live — the client falls back to a fresh send.
+        // NOT_FOUND when no steerable turn is live — the client then keeps it queued for the next turn.
+        // The message is composed exactly like a turn's own prompt (editor-context note, then the attachment
+        // note over workspace-resolved paths), so adding a file mid-turn reads the same to the agent as
+        // attaching it to a fresh message.
         steer: i.steer.handler(({ input }) => {
-            if (!steerTurn(input.conversationId, input.text)) {
+            const paths: string[] = [];
+            for (const rel of input.attachments ?? []) {
+                const abs = resolveWithin(services.workspace.root, rel);
+                if (abs === undefined) {
+                    throw new ORPCError("BAD_REQUEST", { message: `invalid attachment path: ${rel}` });
+                }
+                paths.push(abs);
+            }
+            if (input.editorContext !== undefined && resolveWithin(services.workspace.root, input.editorContext.file) === undefined) {
+                throw new ORPCError("BAD_REQUEST", { message: `invalid editor context path: ${input.editorContext.file}` });
+            }
+            const withEditor = [input.text, ...(input.editorContext !== undefined ? [editorContextNote(input.editorContext)] : [])]
+                .filter((part) => part !== "")
+                .join("\n\n");
+            if (!steerTurn(input.conversationId, paths.length > 0 ? withAttachmentNote(withEditor, paths) : withEditor)) {
                 throw new ORPCError("NOT_FOUND", { message: "no steerable turn running for that conversation" });
             }
             return { ok: true } as const;

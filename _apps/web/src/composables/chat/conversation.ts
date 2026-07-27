@@ -249,6 +249,18 @@ export interface PendingAttachment {
     error?: string;
 }
 
+// A message the user wrote while a turn was already running, waiting to reach the agent. The composer never
+// refuses input: a message submitted mid-turn lands here and the conversation delivers it as soon as it can —
+// injected into the running turn where the harness accepts that (Claude Code's queue-and-steer), else sent as
+// the next turn the moment this one settles. Carries everything a fresh message can (files, the editor chip),
+// so "add more while it works" isn't a lesser kind of message.
+export interface QueuedMessage {
+    readonly id: string;
+    readonly text: string;
+    readonly attachments: readonly ChatAttachment[];
+    readonly editorContext?: EditorContext;
+}
+
 // End-of-turn accounting from the SDK's result message.
 export interface ChatUsage {
     readonly costUsd?: number;
@@ -543,6 +555,22 @@ export class Conversation {
     readonly draft = ref(``);
     readonly attachments = ref<PendingAttachment[]>([]);
 
+    // Messages submitted while a turn was running and not yet delivered — see enqueue/drainQueue. Rendered
+    // above the composer so nothing the user wrote is ever invisible, and persisted with the draft.
+    readonly queued = ref<QueuedMessage[]>([]);
+
+    // Whether the running turn can absorb a message mid-flight: the Claude Code harness only — claude, kimi and
+    // gemini (neither has a native runtime, so both always run on it), or codex/grok routed under it. Mirrors
+    // the daemon's own gate in streamAgent, and is used for WORDING alone (the composer says "steer" vs "queue"):
+    // delivery asks the daemon and falls back to the queue on a refusal, so a drift here can't lose a message.
+    readonly steerable = computed(
+        () =>
+            this.provider.value === `claude` ||
+            this.provider.value === `kimi` ||
+            this.provider.value === `gemini` ||
+            ((this.provider.value === `codex` || this.provider.value === `grok`) && this.harness.value === `claude-code`),
+    );
+
     private nextId = 1;
 
     // The one unsent "switched" divider notice, upserted/removed as the user toggles provider/account and made
@@ -555,6 +583,15 @@ export class Conversation {
 
     // The in-flight reattach probe (see reattach), aborted by a send so the two never race one run.
     private probe: AbortController | undefined;
+
+    // Set by abort() — a Stop, a closed tab, a sandbox switch — and cleared whenever a turn starts or the user
+    // submits again. An INTERRUPTED turn must not flush the queue: someone who just stopped the agent did not
+    // ask for another turn to start on its own. The queued messages stay put and ride the user's next send.
+    private interrupted = false;
+
+    // True while drainQueue owns the idle flush (it is awaiting the turn that carries the queue), so a second
+    // drain — the settle hook, a fresh submit — can't send the same messages twice.
+    private flushing = false;
 
     // Typewriter buffer: deltas land here and a rAF loop drains them into the visible message a few characters
     // per frame, so the answer reveals smoothly regardless of how chunky the upstream deltas arrive. `typeId`
@@ -750,6 +787,8 @@ export class Conversation {
         }
         // A pending reattach probe must not race this send's own stream over the same run.
         this.probe?.abort();
+        // A turn is starting: whatever interrupted the last one is history, so this one's clean end may flush.
+        this.interrupted = false;
 
         this.error.value = null;
         // The session is resumed only while the selection still matches the runtime/account that minted it — a
@@ -856,28 +895,118 @@ export class Conversation {
             this.streaming.value = false;
             this.turnStartedAt.value = undefined;
             this.persist();
+            void this.drainQueue();
         }
     }
 
-    // Mid-turn steering: deliver a user message INTO the running turn (the daemon injects it between tool
-    // calls — Claude Code's queue-and-steer). On the rare miss (the turn ended before delivery) the bubble is
-    // withdrawn and the text goes back to the draft, so nothing is silently lost. The running turn keeps
-    // streaming into its current bubble (above this message — that output answers what came before); a steer
-    // the turn can't absorb runs as its own follow-up turn on the same stream, and the `usage` frame closing
-    // the current turn retires the bubble, so that answer opens a fresh one below this message.
-    async steer(text: string): Promise<void> {
+    /* The composer's one send path — the message is accepted whatever the conversation is doing, and the
+     * conversation works out how to deliver it (Claude Code's queue-and-steer):
+     *   idle          → it starts a turn immediately, together with anything already queued behind it;
+     *   turn running  → it is handed to that turn where the harness takes mid-turn input (injected between
+     *                   tool calls), and otherwise waits for the turn to settle and goes as the next one.
+     * An empty message with a non-empty queue is the user pressing Send on the queue itself, so it just drains.
+     */
+    enqueue(text: string, attachments: readonly ChatAttachment[] = [], editorContext?: EditorContext): Promise<void> {
         const trimmed = text.trim();
-        if (trimmed.length === 0 || !this.streaming.value) {
-            return;
+        // The user is driving again — a Stop's hold on the queue is released (see `interrupted`).
+        this.interrupted = false;
+        if (trimmed.length > 0 || attachments.length > 0) {
+            this.queued.value = [
+                ...this.queued.value,
+                { id: crypto.randomUUID(), text: trimmed, attachments, ...(editorContext !== undefined ? { editorContext } : {}) },
+            ];
         }
-        const messageId = this.nextId++;
-        this.append({ id: messageId, role: `user`, text: trimmed });
-        const ok = await this.postTurnControl(`/agent/steer`, { conversationId: this.conversationId, text: trimmed });
-        if (!ok) {
-            this.messages.value = this.messages.value.filter((message) => message.id !== messageId);
-            this.draft.value = this.draft.value.trim().length > 0 ? `${trimmed} ${this.draft.value}` : trimmed;
-            this.appendNotice(`The turn ended before your message was delivered — send it again.`);
+        return this.drainQueue();
+    }
+
+    // Drop a queued message before it reaches the agent (the × on its chip).
+    removeQueued(id: string): void {
+        this.queued.value = this.queued.value.filter((message) => message.id !== id);
+    }
+
+    /* Deliver what's waiting, oldest first. A running turn takes them one at a time over /agent/steer; the
+     * daemon is the authority on whether it can (a native codex/grok/ACP turn has no steering queue and
+     * answers NOT_FOUND), so a refusal simply leaves the message queued for the settle below rather than
+     * needing this client to predict the harness. A turn parked on a card is skipped too: the card is what the
+     * agent is waiting on, so the message goes in once it's answered (the decide* methods drain again).
+     *
+     * With nothing running, the whole queue rides ONE fresh turn — "also do Y", written while the agent worked,
+     * belongs to the same request as "and Z", not to a turn each. Public so the card decisions can re-drive it:
+     * answering a card un-parks the turn, which is a moment the queue can move that no send() covers. */
+    async drainQueue(): Promise<void> {
+        for (;;) {
+            const next = this.queued.value[0];
+            if (next === undefined) {
+                return;
+            }
+            if (this.streaming.value) {
+                if (this.awaitingDecision.value || !(await this.deliverSteer(next))) {
+                    return;
+                }
+                continue;
+            }
+            // An interrupted turn doesn't flush: the queue waits for the user's next send instead of starting
+            // a turn nobody asked for. Same for a flush already in flight — it owns these messages.
+            if (this.interrupted || this.flushing) {
+                return;
+            }
+            this.flushing = true;
+            try {
+                const pending = this.queued.value;
+                this.queued.value = [];
+                await this.send(
+                    pending
+                        .map((message) => message.text)
+                        .filter((text) => text.length > 0)
+                        .join(`\n\n`),
+                    this.turnSettings(),
+                    pending.flatMap((message) => [...message.attachments]),
+                    pending.find((message) => message.editorContext !== undefined)?.editorContext,
+                );
+            } finally {
+                this.flushing = false;
+            }
         }
+    }
+
+    // The turn settings a message sends under: this conversation's own current selection, captured at delivery.
+    // The composer writes provider/model/effort/thinking straight onto these refs, so a queued message rides
+    // whatever is selected when it actually goes — the same rule a typed message follows.
+    turnSettings(): TurnSettings {
+        return {
+            agent: this.provider.value,
+            harness: this.harness.value,
+            account: this.account.value,
+            model: this.model.value,
+            effort: this.effort.value,
+            thinking: this.thinking.value,
+        };
+    }
+
+    // Hand one queued message to the running turn (the daemon injects it between tool calls), moving it into
+    // the transcript once the daemon has it. False when no steerable turn is live — the message stays queued.
+    // The running turn keeps streaming into its current bubble (above this message — that output answers what
+    // came before); the `usage` frame closing the current turn retires the bubble, so the answer to this
+    // message opens a fresh one below it.
+    private async deliverSteer(message: QueuedMessage): Promise<boolean> {
+        const paths = message.attachments.map((file) => file.path);
+        const delivered = await this.postTurnControl(`/agent/steer`, {
+            conversationId: this.conversationId,
+            text: message.text,
+            ...(paths.length > 0 ? { attachments: paths } : {}),
+            ...(message.editorContext !== undefined ? { editorContext: message.editorContext } : {}),
+        });
+        if (!delivered) {
+            return false;
+        }
+        this.removeQueued(message.id);
+        this.append({
+            id: this.nextId++,
+            role: `user`,
+            text: message.text,
+            ...(message.attachments.length > 0 ? { attachments: message.attachments } : {}),
+        });
+        return true;
     }
 
     // User-initiated Stop button: retire any card the turn was parked on, record a muted notice, hard-cancel
@@ -918,6 +1047,9 @@ export class Conversation {
     // Called bare by the manager when its tab is closed: the turn finishes and lands its work, and reopening
     // the conversation reattaches to it.
     abort(): void {
+        // The turn is ending on someone's say-so, not its own — hold the queue back from the settle flush
+        // (a closed tab must not fire a turn; a stopped agent must not be immediately restarted).
+        this.interrupted = true;
         this.flushType();
         this.probe?.abort();
         this.inflight?.abort();
@@ -942,6 +1074,8 @@ export class Conversation {
             engaged = true;
             this.inflight = controller;
             this.streaming.value = true;
+            // This window is now watching a live turn — its clean end may flush the queue (see send).
+            this.interrupted = false;
             this.error.value = null;
             this.turnStartedAt.value = head.startedAt;
             const userMessageId = this.nextId++;
@@ -960,6 +1094,7 @@ export class Conversation {
                 this.streaming.value = false;
                 this.turnStartedAt.value = undefined;
                 this.persist();
+                void this.drainQueue();
             }
         }
     }
@@ -985,6 +1120,8 @@ export class Conversation {
         if (!approve && trimmed) {
             this.append({ id: this.nextId++, role: `user`, text: trimmed });
         }
+        // The turn is generating again, so anything queued behind the card can go in now.
+        void this.drainQueue();
     }
 
     // Submits the user's picks for a pending question card. The turn is parked on the `ask` tool, which
@@ -1000,6 +1137,7 @@ export class Conversation {
             return;
         }
         this.attachCard(message.id, { question: { ...question, status: `answered`, answers } });
+        void this.drainQueue();
     }
 
     // Dismisses a pending question. This TELLS the daemon (cancelled), rather than just dropping the stream:
@@ -1018,6 +1156,7 @@ export class Conversation {
         }
         this.attachCard(message.id, { question: { ...question, status: `cancelled` } });
         this.appendNotice(`Question dismissed.`);
+        void this.drainQueue();
     }
 
     // Answers a pending permission card. 'once' allows just this call, 'always' also persists the rules the
@@ -1034,6 +1173,7 @@ export class Conversation {
         }
         const status = decision === `deny` ? `denied` : decision === `always` ? `always` : `allowed`;
         this.attachCard(message.id, { permission: { ...permission, status } });
+        void this.drainQueue();
     }
 
     // Un-parks the turn's pending card on the daemon's side channel. Returns whether it succeeded — a 404

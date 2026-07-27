@@ -276,8 +276,20 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
 export type AgentReply = z.infer<typeof AgentReplySchema>;
 // Steering: a user message delivered INTO the running turn (injected between tool calls, Claude Code style),
 // keyed by the conversation whose turn is in flight. NOT_FOUND when no steerable turn is running — the client
-// then falls back to a fresh send.
-export const SteerSchema = z.object({ conversationId: z.string().min(1), text: z.string().min(1).max(20_000) });
+// then holds the message in its queue and sends it as the next turn instead. Carries everything a turn's own
+// prompt can carry (files, the editor-context chip), because "add more while it works" is worth nothing if it
+// only takes bare text: the daemon folds the same notes into the injected message that a fresh turn gets.
+export const SteerSchema = z
+    .object({
+        conversationId: z.string().min(1),
+        text: z.string().max(20_000),
+        attachments: z.array(z.string().min(1)).max(20).optional(),
+        editorContext: EditorContextSchema.optional(),
+    })
+    // An attachment-only steer (a screenshot dropped in mid-turn) is legal; an entirely empty one is not.
+    .refine((steer) => steer.text.trim().length > 0 || (steer.attachments?.length ?? 0) > 0, {
+        message: "text or attachments required",
+    });
 // True cancel for the conversation's in-flight turn — aborts the agent daemon-side, unlike closing the
 // /agent fetch (which sends no cancel frame).
 export const StopTurnSchema = z.object({ conversationId: z.string().min(1) });

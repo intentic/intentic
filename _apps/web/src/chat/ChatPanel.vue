@@ -53,7 +53,6 @@ const {
     contextUsage,
     mode,
     provider,
-    harness,
     account,
     accounts,
     model,
@@ -62,13 +61,15 @@ const {
     draft,
     attachments,
     connected,
+    queued,
+    removeQueued,
+    steerable,
     setActive,
     send,
-    steer,
     stop,
     decidePlan,
     openConversation,
-    newChat: newChatAction,
+    composerFocus,
     closeTab: closeTabAction,
     availableCommands,
 } = useChat();
@@ -354,21 +355,11 @@ const editorChipLabel = computed(() => {
     const name = target.file.split(`/`).pop() ?? target.file;
     return target.startLine !== undefined ? `${name}:${target.startLine}-${target.endLine}` : name;
 });
-// Whether the running turn accepts mid-turn steering: the Claude Code harness only — the claude provider, kimi
-// and gemini (neither has a native runtime, so both always run on it), or codex/grok routed under harness
-// "claude-code". Mirrors the daemon's steerable gate in agent.routes.
-const steerable = computed(
-    () =>
-        provider.value === `claude` ||
-        provider.value === `kimi` ||
-        provider.value === `gemini` ||
-        ((provider.value === `codex` || provider.value === `grok`) && harness.value === `claude-code`),
-);
-
-// The composer Send is usable when there's text or a finished attachment and the turn state accepts it: idle
-// (a fresh send), a pending plan (typed text becomes feedback), or mid-generation on a steerable turn (typed
-// text is injected into it). Blocked while a question card is the input and while any attachment is still
-// uploading (or failed — remove it to proceed).
+// The composer Send is usable whenever there is something to send — text, a finished attachment, or a queued
+// message waiting to go out — regardless of what the conversation is doing: a message written mid-turn is
+// never refused, it is delivered into the running turn or queued behind it (see Conversation.enqueue). The
+// two blocks left are an attachment still uploading (or failed — remove it to proceed) and a pending plan,
+// whose card takes typed text as revision feedback rather than as a message.
 const canSend = computed(() => {
     if (attachments.value.some((entry) => entry.status !== `done`)) {
         return false;
@@ -377,26 +368,21 @@ const canSend = computed(() => {
         // Plan feedback is text-only; staged attachments wait for the next real turn.
         return draft.value.trim().length > 0;
     }
-    if (streaming.value) {
-        // Mid-turn steering: text-only (staged attachments wait for a real turn), and never past a pending
-        // question card — the card is the input surface there.
-        return steerable.value && !awaitingDecision.value && draft.value.trim().length > 0 && attachments.value.length === 0;
-    }
-    if (draft.value.trim().length === 0 && attachments.value.length === 0) {
-        return false;
-    }
-    return true;
+    return draft.value.trim().length > 0 || attachments.value.length > 0 || (queued.value.length > 0 && !streaming.value);
 });
 const sendHint = computed(() => {
     if (pendingPlanMessage.value) {
         return `Send as feedback (keep planning)`;
     }
-    // A question / permission card IS the input surface while it's open — say so, rather than leaving a
-    // disabled button that reads as "Send" and does nothing.
-    if (streaming.value && awaitingDecision.value) {
-        return `Answer the request above, or stop the turn`;
+    if (!streaming.value) {
+        return `Send`;
     }
-    return streaming.value ? `Send to the running turn` : `Send`;
+    // Mid-turn the message either reaches the running turn or waits for it — say which, so a Send that looks
+    // identical in both cases doesn't quietly mean two different things.
+    if (awaitingDecision.value) {
+        return `Queue for after the request above`;
+    }
+    return steerable.value ? `Send to the running turn` : `Queue for when this turn ends`;
 });
 // Stop is offered for every live turn, including one parked on a card — that state is the most common reason to
 // want out (a permission the user won't grant, a plan they'd rather restate from scratch), and until now the
@@ -405,19 +391,29 @@ const stopLabel = computed(() => (awaitingDecision.value ? `Stop the turn` : `St
 const stopHint = computed(() =>
     awaitingDecision.value ? `Stop the turn — discards the request above` : mobile.value ? stopLabel.value : `${stopLabel.value} (Esc)`,
 );
-// While a plan awaits a decision, typing revises it (reject-with-feedback); while a steerable turn runs,
-// typing steers it — the placeholder says which.
+// While a plan awaits a decision, typing revises it (reject-with-feedback); while a turn runs, typing either
+// steers it or queues behind it — the placeholder says which.
 const composerPlaceholder = computed(() => {
     if (pendingPlanMessage.value) {
         return `Reply to revise the plan…`;
     }
-    if (streaming.value && awaitingDecision.value) {
-        return `Answer the request above…`;
+    if (!streaming.value) {
+        return `Ask ${providerName.value}…`;
     }
-    if (streaming.value && steerable.value) {
-        return `Steer ${providerName.value} mid-turn…`;
+    if (awaitingDecision.value) {
+        return `Answer above, or add a message for after…`;
     }
-    return `Ask ${providerName.value}…`;
+    return steerable.value ? `Steer ${providerName.value} mid-turn…` : `Add a message for when this turn ends…`;
+});
+
+// The one line under the queued stack: what will actually happen to those messages. A turn that can take
+// mid-turn input has already been offered them (they are only sitting here because it is parked on a card),
+// so the wait is the card; an unsteerable turn ends first; with nothing running the queue rides the next send.
+const queuedHint = computed(() => {
+    if (!streaming.value) {
+        return `Sends with your next message`;
+    }
+    return awaitingDecision.value ? `Sends once you answer the request above` : `Sends when this turn ends`;
 });
 
 // The sandbox's message-recall ring (↑ / ↓ / Escape in the composer — see the Message recall section below).
@@ -444,7 +440,7 @@ const composerHint = computed(() => {
 });
 
 const submit = (): void => {
-    // canSend covers all the gates: empty composer, uploads still in flight, unsteerable mid-generation.
+    // canSend covers the gates that are left: empty composer, uploads still in flight, an empty plan reply.
     if (!connected.value || !canSend.value) {
         return;
     }
@@ -454,9 +450,6 @@ const submit = (): void => {
         // Typing while a plan is pending rejects it with that text as feedback (Claude Code style) — the
         // agent stays in plan mode and revises.
         void decidePlan(pendingPlan, false, `plan`, text);
-    } else if (streaming.value) {
-        // Mid-turn steering: injected into the running turn between tool calls; chip and attachments wait.
-        void steer(text);
     } else {
         const target = editorTarget.value;
         const editorContext =
@@ -468,8 +461,9 @@ const submit = (): void => {
                           : {}),
                   }
                 : undefined;
-        // Snapshot the chips onto the turn, then clear WITHOUT revoking preview URLs — the thumbnails
-        // now live on the sent user bubble.
+        // One path whether or not a turn is running — the conversation delivers it into the running turn or
+        // queues it (see Conversation.enqueue). Snapshot the chips onto the message, then clear WITHOUT
+        // revoking preview URLs — the thumbnails now live on the queued/sent message.
         void send(
             text,
             attachments.value.map(({ name, path, previewUrl }): ChatAttachment => ({
@@ -482,9 +476,11 @@ const submit = (): void => {
         attachments.value = [];
         includeEditorContext.value = false;
     }
-    // Every branch above sends `text` somewhere (a turn, a steer, a plan revision), so every branch earns a
-    // slot in the recall ring.
-    history.value?.record(text);
+    // Both branches send `text` somewhere (a turn, the queue, a plan revision), so both earn a slot in the
+    // recall ring — except the bare "flush the queue" press, which contributed no text of its own.
+    if (text.length > 0) {
+        history.value?.record(text);
+    }
     draft.value = ``;
     // Snap the box back to one line and keep the cursor ready for the next message.
     void nextTick(() => {
@@ -647,14 +643,18 @@ const onKeydown = (event: KeyboardEvent): void => {
 };
 
 // --- Tabs / history --------------------------------------------------------------------------
-const newChat = (): void => {
-    newChatAction();
+// The panel's half of "New agent" (and of anything else that hands the user the composer): the action itself
+// lives in agentActions.startAgent, which opens the tab wherever it was pressed — the board, the strip's "+",
+// the mobile header — and then asks for the caret. This is the only component that can give it, so it answers
+// the signal, and every surface gets the same result instead of the one that happens to sit next to the
+// textarea getting a better one.
+watch(composerFocus, () => {
     atBottom.value = true;
     void nextTick(() => {
         grow();
         input.value?.focus();
     });
-};
+});
 
 // Switch the active tab and re-pin to the bottom (atBottom is shared across tabs).
 const selectTab = (id: string): void => {
@@ -782,8 +782,8 @@ watch(keyboardInset, () => {
             title="Drag to resize · double-click to reset"
         ></div>
 
-        <ChatTabsMobile v-if="mobile" @select="selectTab" @close="closeTab" @new="newChat" @open="openFromHistory" />
-        <ChatTabs v-else @select="selectTab" @close="closeTab" @new="newChat" @open="openFromHistory" />
+        <ChatTabsMobile v-if="mobile" @select="selectTab" @close="closeTab" @open="openFromHistory" />
+        <ChatTabs v-else @select="selectTab" @close="closeTab" @open="openFromHistory" />
 
         <!-- The inner wrapper is what the autoscroll ResizeObserver measures; the scroller itself never
              changes height, so it can't report the transcript growing. -->
@@ -825,6 +825,36 @@ watch(keyboardInset, () => {
                     >
                 </button>
                 <template v-if="connected">
+                    <!-- Messages written while the agent was busy that haven't reached it yet. They sit here
+                         rather than in the transcript because they are not part of the conversation until the
+                         agent has them — a steered one moves into the transcript the moment the daemon takes
+                         it. Each is removable, so a queued thought can be withdrawn before it lands. -->
+                    <div v-if="queued.length > 0" class="flex flex-col gap-1">
+                        <div
+                            v-for="message in queued"
+                            :key="message.id"
+                            class="flex items-start gap-2 rounded-xl border border-dashed border-line-strong bg-overlay/60 px-3 py-2"
+                        >
+                            <Icon name="clock" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                            <div class="min-w-0 flex-1">
+                                <p v-if="message.text" class="truncate text-2xs text-muted">{{ message.text }}</p>
+                                <p v-if="message.attachments.length > 0" class="truncate text-2xs text-subtle">
+                                    <Icon name="file" class="text-2xs" />
+                                    {{ message.attachments.map((file) => file.name).join(`, `) }}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                class="composer-ghost h-5 w-5 shrink-0"
+                                @click="removeQueued(message.id)"
+                                v-tooltip.top="'Remove — this message will not be sent'"
+                                aria-label="Remove queued message"
+                            >
+                                <Icon name="times" class="text-2xs" />
+                            </button>
+                        </div>
+                        <p class="px-1 text-2xs text-subtle">{{ queuedHint }}</p>
+                    </div>
                     <form
                         class="relative flex flex-col rounded-2xl border border-line-strong bg-overlay shadow-lg transition-colors focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/25"
                         @submit.prevent="submit"
@@ -978,18 +1008,11 @@ watch(keyboardInset, () => {
                             >
                                 <Icon name="stop" class="text-sm" />
                             </button>
-                            <!-- Send stays alongside Stop while a steerable turn runs — typed text is
-                                 injected into the running turn instead of waiting for it. It drops out
-                                 entirely mid-turn on an unsteerable provider: there is nowhere for the text
-                                 to go, so Stop is the only button in the corner. -->
-                            <button
-                                v-if="!streaming || awaitingDecision || steerable"
-                                type="submit"
-                                class="composer-send shrink-0"
-                                :disabled="!canSend"
-                                v-tooltip.top="sendHint"
-                                aria-label="Send"
-                            >
+                            <!-- Send stays alongside Stop for the whole live turn: mid-turn text goes into the
+                                 running turn where the harness takes it, and queues behind the turn where it
+                                 doesn't. There is no state in which the composer has nowhere to put a message,
+                                 so there is no state in which this button is missing. -->
+                            <button type="submit" class="composer-send shrink-0" :disabled="!canSend" v-tooltip.top="sendHint" aria-label="Send">
                                 <Icon name="send" class="text-sm" />
                             </button>
                         </div>

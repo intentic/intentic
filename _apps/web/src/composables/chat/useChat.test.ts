@@ -182,6 +182,20 @@ describe(`per-tab drafts`, () => {
         expect(chat.active.value).toBe(tabs[1]); // the second tab was active when persisted
     });
 
+    // A queued message is text the user wrote and nobody has answered yet — a refresh mid-turn must not eat it.
+    it(`restores messages queued behind a running turn, with their attachments`, async () => {
+        const chat = useChat();
+        chat.active.value.queued.value = [
+            { id: `q1`, text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/attachments/u1/spec.md` }] },
+        ];
+        await nextTick();
+
+        resetChat();
+        expect(chat.queued.value).toMatchObject([
+            { text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/attachments/u1/spec.md` }] },
+        ]);
+    });
+
     it(`degrades a corrupt snapshot to a single fresh tab`, () => {
         storage.set(`intentic.chatTabs.sb1`, `not json`);
         resetChat();

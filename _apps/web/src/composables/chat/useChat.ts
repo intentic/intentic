@@ -92,7 +92,19 @@ interface StoredTab {
     readonly title?: string;
     readonly draft: string;
     readonly attachments: { name: string; path: string }[];
+    // Messages submitted while a turn ran that hadn't reached the agent yet — user-written text, so a refresh
+    // must not swallow them. They restore as queued (not as draft, which would collide with the real draft)
+    // and go out when the tab's turn settles or with the user's next send. The editor-context chip on one is
+    // deliberately dropped: it points at a selection this window no longer has.
+    readonly queued: { text: string; attachments: { name: string; path: string }[] }[];
 }
+
+// The persisted shape of one attachment (upload metadata only — previewUrl/controller are client-session
+// objects), read back defensively from the tab snapshot's draft and queued entries alike.
+const readAttachments = (raw: unknown): { name: string; path: string }[] =>
+    (Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [])
+        .filter((entry) => typeof entry[`name`] === `string` && typeof entry[`path`] === `string`)
+        .map((entry) => ({ name: entry[`name`] as string, path: entry[`path`] as string }));
 
 // Validated read of a sandbox's persisted tab snapshot; anything malformed degrades to undefined (fresh tab).
 const readTabs = (sandboxId: string | undefined): { active: number; tabs: StoredTab[] } | undefined => {
@@ -120,9 +132,10 @@ const readTabs = (sandboxId: string | undefined): { active: number; tabs: Stored
                     : undefined;
             tabs.push({
                 draft: tab[`draft`],
-                attachments: (Array.isArray(tab[`attachments`]) ? (tab[`attachments`] as Record<string, unknown>[]) : [])
-                    .filter((entry) => typeof entry[`name`] === `string` && typeof entry[`path`] === `string`)
-                    .map((entry) => ({ name: entry[`name`] as string, path: entry[`path`] as string })),
+                attachments: readAttachments(tab[`attachments`]),
+                queued: (Array.isArray(tab[`queued`]) ? (tab[`queued`] as Record<string, unknown>[]) : [])
+                    .filter((entry) => typeof entry[`text`] === `string`)
+                    .map((entry) => ({ text: entry[`text`] as string, attachments: readAttachments(entry[`attachments`]) })),
                 ...(typeof tab[`conversationId`] === `string` ? { conversationId: tab[`conversationId`] } : {}),
                 ...(typeof tab[`isolated`] === `boolean` ? { isolated: tab[`isolated`] } : {}),
                 ...(validProvider(tab[`provider`]) ? { provider: tab[`provider`] } : {}),
@@ -162,6 +175,7 @@ const restoreTabs = (): Conversation[] => {
             status: `done` as const,
             progress: 1,
         }));
+        conversation.queued.value = tab.queued.map((message) => ({ id: crypto.randomUUID(), text: message.text, attachments: message.attachments }));
         conversation.title.value = tab.title ?? null;
         // Restore the harness before the model — the native/claude-code model lists diverge for codex/grok.
         if (tab.harness !== undefined) {
@@ -213,6 +227,10 @@ watch(
                 attachments: conversation.attachments.value
                     .filter((file) => file.status === `done`)
                     .map((file) => ({ name: file.name, path: file.path })),
+                queued: conversation.queued.value.map((message) => ({
+                    text: message.text,
+                    attachments: message.attachments.map((file) => ({ name: file.name, path: file.path })),
+                })),
             })),
         }),
     (json) => {
@@ -255,6 +273,11 @@ const availableCommands = computed<readonly AgentCommand[]>(() => {
 });
 const awaitingDecision = computed(() => active.value.awaitingDecision.value);
 const pendingPlanMessage = computed(() => active.value.pendingPlanMessage.value);
+// The active conversation's undelivered messages (submitted while its turn was running) and whether its
+// running turn can take one mid-flight — the composer renders the first and words its hints from the second.
+const queued = computed(() => active.value.queued.value);
+const removeQueued = (id: string): void => active.value.removeQueued(id);
+const steerable = computed(() => active.value.steerable.value);
 
 // Open (or re-focus) the active conversation's plan preview tab in the main view — the tab id is derived from
 // the conversation, so any plan card in the transcript reopens/replaces the same preview. Also the target of
@@ -783,11 +806,23 @@ export const resetChat = (): void => {
 };
 
 // --- Tabs -------------------------------------------------------------------------------------
-// Open a fresh empty conversation and focus it (the composer's "+"). Other tabs keep streaming.
-const newChat = (): void => {
+// Open a fresh empty conversation and focus it. The store half of "New agent" — every surface that offers the
+// action goes through startAgent (agents/agentActions.ts), which is the one place that also puts the caret in
+// the composer and, on mobile, navigates to the new agent's screen. Other tabs keep streaming.
+const newChat = (): Conversation => {
     const conversation = new Conversation(`c${convSeq++}`);
     conversations.value = [...conversations.value, conversation];
     activeId.value = conversation.id;
+    return conversation;
+};
+
+// "Put the caret in the composer", as a signal rather than a call: the conversation list is store state, but
+// the caret belongs to whichever chat surface is mounted (the docked panel, the mobile detail, a popped-out
+// window), and only that component holds the textarea. A counter, not a flag — two "New agent" presses in a
+// row must each land, and a re-focus of the same conversation is still a distinct request.
+const composerFocus = ref(0);
+export const focusComposer = (): void => {
+    composerFocus.value++;
 };
 
 const setActive = (id: string): void => {
@@ -813,28 +848,12 @@ const closeTab = (id: string): void => {
 };
 
 // --- Active-conversation actions (forwarded) --------------------------------------------------
+// The composer's one send path, whatever the conversation is doing: an idle chat starts a turn, a running one
+// takes the message mid-turn (or holds it until it settles). See Conversation.enqueue.
 const send = (prompt: string, staged?: readonly ChatAttachment[], editorContext?: EditorContext): Promise<void> => {
     // Core funnel milestone (autocapture misses Enter-key sends); PostHog derives "first message" per person.
-    track(`message_sent`, { agent: active.value.provider.value });
-    return active.value.send(
-        prompt,
-        {
-            agent: active.value.provider.value,
-            harness: active.value.harness.value,
-            account: active.value.account.value,
-            model: active.value.model.value,
-            effort: active.value.effort.value,
-            thinking: active.value.thinking.value,
-        },
-        staged,
-        editorContext,
-    );
-};
-
-// Mid-turn steering: the composer stays live while a turn runs; typed text is injected into it.
-const steer = (text: string): Promise<void> => {
-    track(`message_sent`, { agent: active.value.provider.value, steered: true });
-    return active.value.steer(text);
+    track(`message_sent`, { agent: active.value.provider.value, queued: active.value.streaming.value });
+    return active.value.enqueue(prompt, staged, editorContext);
 };
 
 // Edit a past user message and re-run from that point — as a BRANCH, in a new tab. The turns before the
@@ -858,18 +877,7 @@ const editAndResend = async (message: ChatMessage, text: string): Promise<void> 
     conversations.value = [...conversations.value, branch];
     activeId.value = branch.id;
     track(`message_sent`, { agent: branch.provider.value, edited: true });
-    await branch.send(
-        text,
-        {
-            agent: branch.provider.value,
-            harness: branch.harness.value,
-            account: branch.account.value,
-            model: branch.model.value,
-            effort: branch.effort.value,
-            thinking: branch.thinking.value,
-        },
-        attachments,
-    );
+    await branch.send(text, branch.turnSettings(), attachments);
 };
 
 const stop = (): void => {
@@ -1259,10 +1267,13 @@ export function useChat() {
         connectLabel,
         accountManageOpen,
         newChat,
+        composerFocus,
         setActive,
         closeTab,
         send,
-        steer,
+        queued,
+        removeQueued,
+        steerable,
         editAndResend,
         stop,
         decidePlan,

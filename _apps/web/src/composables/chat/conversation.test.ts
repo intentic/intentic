@@ -452,7 +452,9 @@ describe(`Conversation`, () => {
         const emit = (event: AgentEvent): void => controller.enqueue(sseFrame({ kind: `frame`, seq: (seq += 1), event }));
 
         const turn = conversation.send(`2+3?`, settings);
-        await conversation.steer(`2+6?`);
+        await conversation.enqueue(`2+6?`);
+        // The daemon took it, so it left the queue and joined the transcript.
+        expect(conversation.queued.value).toHaveLength(0);
 
         // The first answer streams AFTER the steer landed — still into the bubble ABOVE the steered message.
         emit({ kind: `delta`, text: `5` });
@@ -473,6 +475,136 @@ describe(`Conversation`, () => {
             { role: `assistant`, text: `8` },
         ]);
         expect(conversation.messages.value[1]!.usage).toMatchObject({ costUsd: 0.1 });
+    });
+
+    it(`sends a steered message's attachments and editor context with it, so a mid-turn file isn't a lesser message`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
+
+        const turn = conversation.send(`start`, settings);
+        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+        await conversation.enqueue(`look at this`, [{ name: `shot.png`, path: `.intentic/attachments/u1/shot.png` }], { file: `src/app.ts` });
+
+        const steer = sandboxRequestMock.mock.calls.find(([path]) => path === `/agent/steer`);
+        expect(JSON.parse(steer![1]!.body as string)).toMatchObject({
+            text: `look at this`,
+            attachments: [`.intentic/attachments/u1/shot.png`],
+            editorContext: { file: `src/app.ts` },
+        });
+        // The bubble carries the files too — the transcript shows what was actually handed over.
+        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `user`, text: `look at this`, attachments: [{ name: `shot.png` }] });
+
+        conversation.stop();
+        await turn;
+    });
+
+    it(`keeps a message the running turn can't take, then sends it as the next turn once that one settles`, async () => {
+        const conversation = new Conversation(`c1`);
+        let controller!: ReadableStreamDefaultController<Uint8Array>;
+        const body = new ReadableStream<Uint8Array>({
+            start(c) {
+                controller = c;
+                c.enqueue(sseFrame(head()));
+            },
+        });
+        // A native codex/grok/ACP turn registers no steering queue, so the daemon answers NOT_FOUND — the
+        // message must survive that and go out on its own rather than vanishing.
+        const followUp = sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
+        let attaches = 0;
+        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
+            if (path === `/agent/attach`) {
+                attaches += 1;
+                return attaches === 1 ? Promise.resolve({ ok: true, body } as Response) : followUp(path, init);
+            }
+            if (path === `/agent/steer`) {
+                return Promise.resolve({ ok: false, status: 404 } as Response);
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        });
+
+        const turn = conversation.send(`start`, settings);
+        await conversation.enqueue(`also update the tests`);
+        expect(conversation.queued.value).toMatchObject([{ text: `also update the tests` }]);
+        expect(turnBodies()).toHaveLength(1);
+
+        // The turn ends on its own — the queue goes out as the next turn.
+        controller.enqueue(sseFrame({ kind: `end` }));
+        controller.close();
+        await turn;
+
+        await vi.waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
+        expect(turnBodies()[1]).toMatchObject({ prompt: `also update the tests` });
+        expect(conversation.queued.value).toHaveLength(0);
+    });
+
+    it(`carries several queued messages into ONE follow-up turn, in the order they were written`, async () => {
+        const conversation = new Conversation(`c1`);
+        let controller!: ReadableStreamDefaultController<Uint8Array>;
+        const body = new ReadableStream<Uint8Array>({
+            start(c) {
+                controller = c;
+                c.enqueue(sseFrame(head()));
+            },
+        });
+        const followUp = sseResponse([{ kind: `done` }]);
+        let attaches = 0;
+        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
+            if (path === `/agent/attach`) {
+                attaches += 1;
+                return attaches === 1 ? Promise.resolve({ ok: true, body } as Response) : followUp(path, init);
+            }
+            if (path === `/agent/steer`) {
+                return Promise.resolve({ ok: false, status: 404 } as Response);
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        });
+
+        const turn = conversation.send(`start`, settings);
+        await conversation.enqueue(`also the tests`, [{ name: `spec.md`, path: `.intentic/attachments/u1/spec.md` }]);
+        await conversation.enqueue(`and the docs`);
+        controller.enqueue(sseFrame({ kind: `end` }));
+        controller.close();
+        await turn;
+
+        // Two thoughts about the same work are one request, not a turn each.
+        await vi.waitFor(() => expect(turnBodies()).toHaveLength(2));
+        expect(turnBodies()[1]).toMatchObject({
+            prompt: `also the tests\n\nand the docs`,
+            attachments: [`.intentic/attachments/u1/spec.md`],
+        });
+    });
+
+    it(`holds the queue when the user stops the turn, then sends it with their next message`, async () => {
+        const conversation = new Conversation(`c1`);
+        const followUp = sseResponse([{ kind: `done` }]);
+        let attaches = 0;
+        const parked = sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true });
+        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
+            if (path === `/agent/attach`) {
+                attaches += 1;
+                return attaches === 1 ? parked(path, init) : followUp(path, init);
+            }
+            if (path === `/agent/steer`) {
+                return Promise.resolve({ ok: false, status: 404 } as Response);
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        });
+
+        const turn = conversation.send(`start`, settings);
+        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+        await conversation.enqueue(`and the docs`);
+        conversation.stop();
+        await turn;
+
+        // Stopping the agent is not a request for another turn — the message waits where the user can see it.
+        expect(turnBodies()).toHaveLength(1);
+        expect(conversation.queued.value).toMatchObject([{ text: `and the docs` }]);
+
+        // Their next message takes it along.
+        await conversation.enqueue(`actually, start with the docs`);
+        await vi.waitFor(() => expect(turnBodies()).toHaveLength(2));
+        expect(turnBodies()[1]).toMatchObject({ prompt: `and the docs\n\nactually, start with the docs` });
+        expect(conversation.queued.value).toHaveLength(0);
     });
 
     it(`parks the turn on a plan card and streams the continuation into a fresh bubble`, async () => {
