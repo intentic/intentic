@@ -1,5 +1,5 @@
-import type { AgentEvent, AgentSummary, AgentTurn } from "@intentic/sandbox-contract";
-import type { AgentsStore, PersistedAgent } from "./agents-store.js";
+import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, planParts } from "@intentic/sandbox-contract";
+import type { AgentsStore, AgentTitleSource, PersistedAgent } from "./agents-store.js";
 
 // The runtime half of the fleet registry: holds the authoritative in-memory entry list (loaded once from the
 // store, write-through on persisted mutations) plus per-conversation turn state rebuilt from AgentEvent frames
@@ -8,6 +8,9 @@ import type { AgentsStore, PersistedAgent } from "./agents-store.js";
 // same last-frame-wins contract as presence), which system.routes relays onto /events.
 
 const MAX_TITLE_LENGTH = 80;
+// The source ranking as a number, so promoteTitle's comparison is one `<=`. An entry written before it had a
+// source reads as `derived`, i.e. as replaceable by anything better.
+const TITLE_RANK: Record<AgentTitleSource, number> = { derived: 0, plan: 1, user: 2 };
 const sanitizeTitle = (prompt: string): string | undefined => {
     const clean = prompt
         .replaceAll(/[\p{Cc}\p{Cf}]+/gu, " ")
@@ -86,10 +89,12 @@ export interface AgentsRegistry {
     readonly begin: (turn: AgentTurnIdentity, now: number) => Promise<boolean>;
     // Record the worktree composition on first creation (per-repo full base shas).
     readonly recordWorktree: (id: string, repos: readonly PersistedAgent["repos"][number][]) => Promise<void>;
-    // Set the user-chosen display title. Deliberately does NOT bump updatedAt (a rename must not fake-unread
-    // other browsers or reorder lanes) and takes no running guard — begin()/finish() re-read the entry, so a
-    // mid-turn rename survives. Undefined ⇒ unknown id or a title that sanitizes to nothing.
-    readonly setTitle: (id: string, title: string) => Promise<AgentSummary | undefined>;
+    // Set the display title, subject to the source ranking (see AgentTitleSourceSchema): a rename always
+    // lands, an automatic source only ever moves the title up. Deliberately does NOT bump updatedAt (a rename
+    // must not fake-unread other browsers or reorder lanes) and takes no running guard — begin()/finish()
+    // re-read the entry, so a mid-turn rename survives. Undefined ⇒ unknown id or a title that sanitizes to
+    // nothing; a rejected promotion returns the entry's CURRENT summary rather than undefined.
+    readonly setTitle: (id: string, title: string, source: AgentTitleSource) => Promise<AgentSummary | undefined>;
     // Stamp the read marker the cards' unread badge is measured against. Like setTitle it leaves updatedAt
     // alone (reading is not activity) and needs no running guard. Undefined ⇒ unknown id.
     readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
@@ -206,6 +211,30 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
     // means the closure reads `entries` at EXECUTION time, so a queued write always persists the latest state.
     // (`.then(save, save)` so one rejected write doesn't poison the queue — the push-store idiom.)
     let writes: Promise<unknown> = Promise.resolve();
+    /* Move a title UP the source ranking, or leave it exactly as it is. The single place the ranking is
+     * applied, so the rename route and the frame path cannot disagree about who may rename what.
+     *
+     * A rename always lands — including the second one, which an ordinary rank comparison would reject as a
+     * sideways move. Everything else has to strictly outrank what is already there: a plan heading may replace
+     * the prompt the title was derived from, nothing may replace a rename, and a REPLAN may not rename the job
+     * the first plan already named. Returns whether the entry changed, so callers persist and broadcast only
+     * when something actually did. */
+    const promoteTitle = (id: string, title: string | undefined, source: AgentTitleSource): boolean => {
+        const entry = entryOf(id);
+        const clean = title === undefined ? undefined : sanitizeTitle(title);
+        if (entry === undefined || clean === undefined) {
+            return false;
+        }
+        if (source !== "user" && TITLE_RANK[source] <= TITLE_RANK[entry.titleSource ?? "derived"]) {
+            return false;
+        }
+        if (entry.title === clean && entry.titleSource === source) {
+            return false;
+        }
+        replace({ ...entry, title: clean, titleSource: source });
+        return true;
+    };
+
     const persist = (): Promise<void> => {
         const next = writes.then(
             () => store.save(entries),
@@ -250,7 +279,12 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 return false;
             }
             const existing = entryOf(turn.conversationId);
-            const title = existing?.title ?? (turn.title !== undefined ? sanitizeTitle(turn.title) : undefined) ?? sanitizeTitle(turn.prompt);
+            // An authored title — the browser's own derivation, or a rename that landed mid-turn — is taken as
+            // written. A turn that arrived WITHOUT one (an automation, a Discord mention, a webchat visitor)
+            // is named by the same rule the browser runs, so one prompt opens under one name wherever it
+            // entered; sanitizeTitle then does what it does for any title, including turning empty into none.
+            const title =
+                existing?.title ?? (turn.title !== undefined ? sanitizeTitle(turn.title) : undefined) ?? sanitizeTitle(deriveTitle(turn.prompt));
             const model = turn.model ?? existing?.model;
             const account = turn.account ?? existing?.account;
             // Provenance belongs to the turn that CREATED the conversation and is never re-derived: the user's
@@ -269,7 +303,10 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 outputTokens: existing?.outputTokens ?? 0,
                 createdAt: existing?.createdAt ?? now,
                 updatedAt: now,
-                ...(title !== undefined ? { title } : {}),
+                // The source rides with the title: an entry rebuilt for a follow-up turn keeps whatever
+                // promoted it (a rename stays a rename), and a fresh one starts at the bottom of the ranking
+                // so the turn's first plan can name it properly.
+                ...(title !== undefined ? { title, titleSource: existing?.titleSource ?? "derived" } : {}),
                 ...(model !== undefined ? { model } : {}),
                 ...(account !== undefined ? { account } : {}),
                 ...(origin !== undefined ? { origin } : {}),
@@ -304,17 +341,16 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             replace({ ...entry, repos: [...repos] });
             await persist();
         },
-        setTitle: async (id, title) => {
-            const entry = entryOf(id);
-            const clean = sanitizeTitle(title);
-            if (entry === undefined || clean === undefined) {
+        setTitle: async (id, title, source) => {
+            if (entryOf(id) === undefined || sanitizeTitle(title) === undefined) {
                 return undefined;
             }
-            const next = { ...entry, title: clean };
-            replace(next);
-            await persist();
-            broadcast();
-            return summaryOf(next);
+            if (promoteTitle(id, title, source)) {
+                await persist();
+                broadcast();
+            }
+            const entry = entryOf(id);
+            return entry === undefined ? undefined : summaryOf(entry);
         },
         markSeen: async (id, now) => {
             const entry = entryOf(id);
@@ -337,6 +373,16 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
         observe: (id, event) => {
             const state = runtimeOf(id);
             state.lastAt = Date.now();
+            // A plan's heading is the agent's own name for the whole job, which the opening prompt rarely was.
+            // Promoted out here rather than under `case "plan"` so that case keeps falling through to the
+            // shared pause registration, and applied to the entry immediately so the card and every open tab
+            // pick the name up on the broadcast this frame was already going to make — a plan parks the turn
+            // on the user, and it may sit there a while. The write out is fire-and-forget: it is ordered
+            // behind whatever else is in the store's write chain, and a daemon that dies before it lands loses
+            // a title the next plan frame re-derives anyway.
+            if (event.kind === "plan" && promoteTitle(id, planParts(event.text).title, "plan")) {
+                void persist();
+            }
             switch (event.kind) {
                 case "session":
                     state.pendingSessionId = event.sessionId;

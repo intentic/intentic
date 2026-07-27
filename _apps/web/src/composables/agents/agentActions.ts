@@ -1,4 +1,4 @@
-import type { LandResult } from "@intentic/sandbox-contract";
+import type { LandMode, LandResult } from "@intentic/sandbox-contract";
 import { useDevice } from "@intentic-app/ui";
 import { focusComposer, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
@@ -30,7 +30,11 @@ export const startAgent = (): void => {
 
 // Land: merge the agent's worktree branches into the main tree. A partial result reports per-repo conflicts —
 // the worktree keeps everything, so the user can resolve (main-side), discard, or keep working.
-export const landAgent = (id: string): Promise<LandResult> => sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, { method: `POST` });
+// `check` (the default) applies the delta only if ALL of it applies, so a refusal leaves the workspace
+// byte-identical. `merge` is what the conflict report offers once the user has read it: a three-way apply that
+// lands every clean path and leaves the rest carrying conflict markers to finish in place.
+export const landAgent = (id: string, mode: LandMode = `check`): Promise<LandResult> =>
+    sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, { method: `POST`, body: JSON.stringify({ mode }) });
 
 // Discard: drop the worktrees, the agent/<id> branches, and the registry entry. Irreversible.
 export const discardAgent = async (id: string): Promise<void> => {

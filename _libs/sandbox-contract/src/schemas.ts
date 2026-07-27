@@ -251,13 +251,48 @@ export type AgentsMoved = z.infer<typeof AgentsMovedSchema>;
 // rename's input: the user-chosen display title (bounded like sanitizeTitle's cap).
 export const AgentRenameSchema = z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(80) });
 export const AgentFileDiffQuerySchema = z.object({ id: z.string().min(1), repo: z.string().min(1), path: z.string().min(1) });
-// land's outcome: per-repo conflicts (dirty-main overlaps or merge conflicts); landed only when every repo
-// with changes merged cleanly. Conflicted repos keep their worktree state — nothing is lost.
+/* WHY a path would not land. The distinction is the whole difference between an actionable report and a dead
+ * end, because the three have nothing in common but their symptom:
+ *   `workspace` — you have uncommitted edits on that path. Yours is the copy at risk; commit or stash it.
+ *   `diverged`  — the main tree's COMMITTED content moved under the agent since it branched. Nothing of
+ *                 yours is at risk; the agent's delta is simply written against an older file.
+ *   `binary`    — git cannot three-way merge the file at all, so no automatic resolution exists.
+ * The old report named only the first, which is the rarest of the three. */
+export const LandConflictReasonSchema = z.enum(["workspace", "diverged", "binary"]);
+export type LandConflictReason = z.infer<typeof LandConflictReasonSchema>;
+export const LandConflictPathSchema = z.object({ path: z.string(), reason: LandConflictReasonSchema });
+
+/* land's outcome, per repo of the composition. `paths` is the set that genuinely failed to apply — NOT the
+ * whole delta, which is what the first version reported whenever it could not pin the cause down, turning
+ * four real conflicts into a wall of fourteen. `clean` counts what would land regardless, so the UI can say
+ * how much is being held back by how little, and offer to take it. An empty `paths` with `clean: 0` is the
+ * repo-unavailable case: the main checkout is gone, and no path-level account exists. */
+export const LandConflictSchema = z.object({
+    repo: z.string(),
+    paths: z.array(LandConflictPathSchema),
+    clean: z.number(),
+});
+export type LandConflict = z.infer<typeof LandConflictSchema>;
+
+// land's outcome; landed only when every repo with changes applied cleanly. Conflicted repos keep their
+// worktree state — nothing is lost, and "Land now" stays available. `resolving` is populated only by a
+// `merge` land: the paths written into the workspace carrying conflict markers, which the user finishes by
+// hand in their own editor exactly as they would any merge.
 export const LandResultSchema = z.object({
     landed: z.boolean(),
-    conflicts: z.array(z.object({ repo: z.string(), paths: z.array(z.string()) })).optional(),
+    conflicts: z.array(LandConflictSchema).optional(),
+    resolving: z.array(z.object({ repo: z.string(), paths: z.array(z.string()) })).optional(),
 });
 export type LandResult = z.infer<typeof LandResultSchema>;
+
+/* land's input. `check` is the safe default and the historical behaviour: the delta is applied only if ALL of
+ * it applies, so a refusal leaves the workspace byte-identical. `merge` is the escape hatch the conflict
+ * report offers — a three-way apply that lands every clean path and leaves the rest with conflict markers to
+ * resolve in place. It is opt-in because it WRITES on failure, which is the one thing `check` promises not
+ * to do. */
+export const LandModeSchema = z.enum(["check", "merge"]);
+export type LandMode = z.infer<typeof LandModeSchema>;
+export const AgentLandSchema = z.object({ id: z.string().min(1), mode: LandModeSchema.optional() });
 
 // ---- routed-provider subscriptions ----
 

@@ -280,6 +280,47 @@ const layoutOptions: { label: string; value: `split` | `unified` }[] = [
 const ICON_BUTTON = `flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40`;
 const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-danger/10 px-2 py-1.5`;
 
+/* THE CONFLICT REPORT — the panel's one job when a land is refused.
+ *
+ * What it replaced named every path in the delta and said "your workspace's copy of these paths differs",
+ * which was wrong twice over: `git apply` is atomic, so a handful of real conflicts held back everything and
+ * the report listed the lot; and the stated cause was the rarest of the three. A user reading it had no way
+ * to tell four blocked files from fourteen, no idea which of their own edits was implicated, and — since the
+ * only buttons were Archive, Discard and a Land that would fail identically forever — nothing to do about it.
+ *
+ * So: count what is actually blocked against what would land anyway, group the blockers by CAUSE, and end on
+ * the one action that fits the causes present. */
+const REASON_COPY = {
+    diverged: {
+        title: `your workspace moved on since the agent branched`,
+        fix: `A three-way merge can reconcile these.`,
+    },
+    workspace: {
+        title: `you have uncommitted edits to these`,
+        fix: `Commit or stash your copy, then land again — git cannot merge through unstaged work.`,
+    },
+    binary: {
+        title: `binary files, which have no automatic merge`,
+        fix: `Land the rest, then copy these across by hand.`,
+    },
+} as const;
+
+const conflictPaths = computed(() => (changes.conflicts.value ?? []).flatMap((conflict) => conflict.paths));
+const blockedCount = computed(() => conflictPaths.value.length);
+// What the atomic refusal is holding hostage — the number that tells the user how little is actually wrong.
+const cleanCount = computed(() => (changes.conflicts.value ?? []).reduce((total, conflict) => total + conflict.clean, 0));
+// Grouped by cause, because the three want three different things from the user.
+const conflictGroups = computed(() =>
+    (Object.keys(REASON_COPY) as (keyof typeof REASON_COPY)[]).flatMap((reason) => {
+        const paths = conflictPaths.value.filter((conflict) => conflict.reason === reason).map((conflict) => conflict.path);
+        return paths.length === 0 ? [] : [{ reason, paths, ...REASON_COPY[reason] }];
+    }),
+);
+// A three-way apply goes through the index, so git refuses it outright on an unstaged path. Offering the
+// button in that case would promise something the daemon has to decline.
+const mergeable = computed(() => blockedCount.value > 0 && conflictPaths.value.every((conflict) => conflict.reason !== `workspace`));
+const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
+
 // Destructive and unrecoverable (the branch and worktree go), so it asks in the same modal every other
 // irreversible git action in this app uses — not the inline warning strip that used to shove the list down.
 const pendingDiscard = ref(false);
@@ -394,16 +435,53 @@ const confirmDiscard = (): void => {
             <p class="min-w-0 flex-1 break-words text-2xs text-danger">{{ changes.actionError.value }}</p>
         </div>
 
-        <!-- Conflict report from the last land attempt: the merge was aborted, nothing lost — resolve the
-             named paths in your workspace (or discard the agent) and land again. -->
+        <!-- What a MERGE land left behind: the delta is in the workspace, and these files carry markers to
+             finish there. Shown above the conflict report so the newest outcome reads first. -->
+        <div v-if="resolvingPaths.length > 0" class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-info/40 bg-info/10 px-2 py-1.5">
+            <span class="text-2xs font-medium text-info">
+                Landed with {{ resolvingPaths.length }} file{{ resolvingPaths.length === 1 ? "" : "s" }} to finish
+            </span>
+            <p class="text-2xs text-muted">
+                Everything else applied. These carry conflict markers in your workspace — resolve them there, as you would any merge.
+            </p>
+            <p class="break-all font-mono text-2xs text-muted">{{ resolvingPaths.join(", ") }}</p>
+        </div>
+
+        <!-- The conflict report. Nothing was written: the worktree still holds every change, so this is a
+             decision point rather than a failure — hence the count of what is being held back by how little,
+             the cause of each blocker, and an action that fits the causes present. -->
         <div
             v-if="changes.conflicts.value !== undefined && changes.conflicts.value.length > 0"
-            class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5"
+            class="mx-2 mt-2 flex shrink-0 flex-col gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5"
         >
-            <span class="text-2xs font-medium text-warning">Land conflicts — your workspace's copy of these paths differs:</span>
-            <div v-for="conflict in changes.conflicts.value" :key="conflict.repo" class="text-2xs text-muted">
-                <span class="font-medium">{{ conflict.repo }}</span
-                >: <span class="font-mono">{{ conflict.paths.length > 0 ? conflict.paths.join(", ") : "(repo unavailable)" }}</span>
+            <span class="text-2xs font-medium text-warning">
+                <template v-if="blockedCount === 0">Couldn't reach your workspace's copy of this repo</template>
+                <template v-else>
+                    {{ blockedCount }} file{{ blockedCount === 1 ? "" : "s" }} couldn't be applied<template v-if="cleanCount > 0">
+                        — holding back {{ cleanCount }} that {{ cleanCount === 1 ? "would" : "would all" }} land cleanly</template
+                    >
+                </template>
+            </span>
+            <!-- Grouped by cause: which of the three is in play decides what the user does next. -->
+            <div v-for="group in conflictGroups" :key="group.reason" class="flex flex-col">
+                <span class="text-2xs text-content">{{ group.title }}</span>
+                <span class="break-all font-mono text-2xs text-muted">{{ group.paths.join(", ") }}</span>
+                <span class="text-2xs text-subtle">{{ group.fix }}</span>
+            </div>
+            <p v-if="blockedCount === 0" class="text-2xs text-muted">
+                Nothing was applied and nothing was lost — the agent's work is still on its branch.
+            </p>
+            <div v-if="mergeable" class="mt-0.5 flex items-center gap-2">
+                <button
+                    type="button"
+                    :class="cmp.buttonWarning('gap-0 whitespace-nowrap px-2.5 py-1 text-2xs')"
+                    :disabled="changes.actionBusy.value || streaming"
+                    @click="changes.land('merge')"
+                    v-tooltip.bottom="'Applies everything that fits and leaves the rest with conflict markers to resolve in your workspace'"
+                >
+                    <Icon name="check" class="mr-1 text-2xs" />Land with conflict markers
+                </button>
+                <span class="text-2xs text-subtle">Writes to your workspace — "Land now" does not.</span>
             </div>
         </div>
 

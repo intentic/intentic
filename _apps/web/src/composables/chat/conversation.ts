@@ -8,6 +8,7 @@ import {
     type CatalogOption,
     clampEffort,
     type ContextUsage,
+    deriveTitle,
     type EditorContext,
     type ModelBadge,
     modelsFor,
@@ -679,9 +680,10 @@ export class Conversation {
         const history = resume === undefined ? transcriptOf(this.messages.value).slice(-200) : [];
         // The switch divider (if any) is frozen into the transcript — the segment cut happened.
         this.pendingSwitchNoticeId = undefined;
-        // First message of a fresh conversation names it — free, no model call.
+        // First message of a fresh conversation names it — free, no model call. An attachment-only send has no
+        // prose to read, so it is named after what was dropped in.
         if (this.title.value === null) {
-            this.title.value = this.deriveTitle(text.length > 0 ? text : attachments.map((file) => file.name).join(`, `));
+            this.title.value = deriveTitle(text.length > 0 ? text : attachments.map((file) => file.name).join(`, `));
         }
         const userMessageId = this.append({ role: `user`, text, ...(attachments.length > 0 ? { attachments } : {}) });
         // Streaming context for the turn: the current text bubble — a fresh empty assistant message (so the
@@ -1065,13 +1067,6 @@ export class Conversation {
         } catch {
             return false;
         }
-    }
-
-    // A free conversation title from a message: collapse whitespace and truncate to a header-sized snippet. No
-    // model call — just the first user line.
-    private deriveTitle(text: string): string {
-        const clean = text.replace(/\s+/g, ` `).trim();
-        return clean.length > 40 ? `${clean.slice(0, 40).trimEnd()}…` : clean;
     }
 
     /* Render a run by attaching to it, re-attaching from the seq cursor whenever the stream drops, until the

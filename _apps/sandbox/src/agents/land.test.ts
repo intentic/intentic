@@ -118,10 +118,100 @@ test("a user edit on the same lines conflicts: nothing applies, main is untouche
     const result = await landAgent(worktrees, entryFor(conversation.repos));
     expect(result.landed).toBe(false);
     expect(result.changed).toBe(true);
-    expect(result.conflicts).toEqual([{ repo: "root", paths: ["app.ts"] }]);
+    // `workspace` is the one cause where the copy at risk is the USER'S, which is what the report has to say.
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0 }]);
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one USER\nline two\nline three\n");
     // The agent's work is intact in the worktree for Land-now recovery.
     expect(await readFile(join(conversation.cwd, "app.ts"), "utf8")).toBe("line one AGENT\nline two\nline three\n");
+});
+
+test("names only the paths that actually refuse, and counts what would land anyway", async () => {
+    const { work, worktrees, conversation } = await setup();
+    // The agent touches two files; the user has edited only one of them.
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await writeFile(join(conversation.cwd, "added.ts"), "brand new\n");
+    await writeFile(join(work, "app.ts"), "line one USER\nline two\nline three\n");
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos));
+
+    // `git apply` is atomic, so BOTH files are held back — but only one of them is the reason, and saying so
+    // is the difference between "resolve this file" and a wall of every path the agent ever touched.
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 1 }]);
+    expect(existsSync(join(work, "added.ts"))).toBe(false);
+});
+
+test("blames the moved main line, not the workspace, when the conflict is a committed divergence", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+    // The main line moves on and COMMITS — the working tree is spotless, so the old dirty-overlap heuristic
+    // found nothing to blame and fell back to naming the entire delta.
+    await writeFile(join(work, "app.ts"), "line one MAIN\nline two\nline three\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "main moved");
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos));
+
+    // Nothing of the user's is at risk here, and the report has to say which of the two situations this is.
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0 }]);
+});
+
+test("re-anchors on the merge-base, so an agent rebased onto the moved main line still lands its own work", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const recorded = entryFor(conversation.repos);
+    await writeFile(join(conversation.cwd, "agent.ts"), "agent work\n");
+    await sh(conversation.cwd, "add", "-A");
+    await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "agent");
+
+    // The main line moves on, in a file the agent never touched.
+    await writeFile(join(work, "main-only.ts"), "main work\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "main moved");
+    // The user rebases the agent onto it — the natural response to being told main moved on. The branch now
+    // CONTAINS main's commit, so a delta measured from the frozen base would carry that commit back onto main
+    // and fail wholesale, naming files the agent never opened.
+    await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "rebase", await sh(work, "rev-parse", "HEAD"));
+
+    const result = await landAgent(worktrees, recorded);
+
+    expect(result.conflicts).toBeUndefined();
+    expect(result.landed).toBe(true);
+    expect(await readFile(join(work, "agent.ts"), "utf8")).toBe("agent work\n");
+    expect(await readFile(join(work, "main-only.ts"), "utf8")).toBe("main work\n");
+});
+
+test("merge mode lands every clean path and leaves the diverged one with conflict markers to finish", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await writeFile(join(conversation.cwd, "added.ts"), "brand new\n");
+    // The main line moved on and committed, so the workspace is clean — which is what lets git merge at all.
+    await writeFile(join(work, "app.ts"), "line one MAIN\nline two\nline three\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "main moved");
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos), "merge");
+
+    // The clean file is no longer held hostage by the conflicted one.
+    expect(await readFile(join(work, "added.ts"), "utf8")).toBe("brand new\n");
+    // ...and the conflicted one arrives in the shape any merge leaves behind, to finish in place.
+    const merged = await readFile(join(work, "app.ts"), "utf8");
+    expect(merged).toContain("<<<<<<<");
+    expect(merged).toContain("line one AGENT");
+    expect(merged).toContain("line one MAIN");
+    expect(result.resolving).toEqual([{ repo: "root", paths: ["app.ts"] }]);
+});
+
+test("merge mode declines when the clash is with uncommitted work, because git cannot merge through it", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await writeFile(join(work, "app.ts"), "line one USER\nline two\nline three\n");
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos), "merge");
+
+    // `--3way` goes through the index and refuses on an unstaged path, applying NOTHING — so the honest
+    // outcome is the same report `check` gives, and the user commits or stashes their copy first.
+    expect(result.resolving).toBeUndefined();
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0 }]);
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one USER\nline two\nline three\n");
 });
 
 test("a user edit ELSEWHERE in the same file still lands (patch context, not path sets)", async () => {
@@ -194,7 +284,7 @@ test("a discard fired during an in-flight land queues behind the repo lock — l
         return defaultGit(dir, args);
     };
 
-    const landing = landAgent(worktrees, entryFor(conversation.repos), pausingGit);
+    const landing = landAgent(worktrees, entryFor(conversation.repos), "check", pausingGit);
     await pausedAt;
     let removed = false;
     const removing = worktrees.remove("c1", conversation.repos).then(() => {

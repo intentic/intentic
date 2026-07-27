@@ -217,6 +217,35 @@ watch(
     },
 );
 
+/* An open conversation adopts the roster's name for it.
+ *
+ * A tab seeds its title once, at open (openAgentConversation), and then owns it — which held while the only
+ * thing that ever renamed a conversation was the user typing on this device. It no longer does: the daemon
+ * promotes a title on its own when a plan names the job the opening prompt only hinted at, and a rename from
+ * the phone has always had to reach the desktop. The registry is the authority, so a tab follows it.
+ *
+ * Following it UNCONDITIONALLY is what makes this safe rather than a race: the daemon refuses every promotion
+ * that would overwrite a rename (see promoteTitle), so a title arriving here has already been judged better
+ * than the one it replaces, and the browser needs no second opinion. Renames stay instant because rename()
+ * writes the registry entry optimistically before it posts — this watch sees the new name on the tick the
+ * user typed it, not a round trip later.
+ *
+ * The source is a string rather than the roster itself: a deep watch would re-run on every usage frame of
+ * every running turn, and titles change a handful of times per conversation. */
+watch(
+    () => registry.value.map((agent) => `${agent.id}=${agent.title ?? ``}`).join(` `),
+    () => {
+        const { conversations } = useChat();
+        for (const agent of registry.value) {
+            const conversation = conversations.value.find((candidate) => candidate.conversationId === agent.id);
+            // An entry with no title yet (a turn that has not begun) must not blank a tab that named itself.
+            if (agent.title !== undefined && conversation !== undefined && conversation.title.value !== agent.title) {
+                conversation.title.value = agent.title;
+            }
+        }
+    },
+);
+
 // The kanban lanes — pure projections of the status machine, so "finished" needs no explicit action or
 // timer: the auto-land flow flips a cleanly-completed turn to landed/idle within ms of it ending, and any
 // follow-up message animates the card straight back to active. Unread stays a card badge, not a promotion.

@@ -326,7 +326,8 @@ describe(`effects`, () => {
     });
 
     it(`names the repos whose changes could not land`, () => {
-        const { state } = run(started(), { kind: `landed`, landed: false, conflicts: [{ repo: `app`, paths: [`src/a.ts`] }] });
+        const conflicts = [{ repo: `app`, paths: [{ path: `src/a.ts`, reason: `diverged` as const }], clean: 0 }];
+        const { state } = run(started(), { kind: `landed`, landed: false, conflicts });
         expect(state.messages.at(-1)!.text).toContain(`app`);
     });
 });

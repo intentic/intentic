@@ -67,6 +67,7 @@ export * from "./model-order.js";
 export * from "./path-refs.js";
 export * from "./schemas.js";
 export * from "./terminal-protocol.js";
+export * from "./title.js";
 
 // The aggregated contract — implemented on the server by the per-domain route factories and consumed by the
 // browser's typed oRPC client (ContractRouterClient<typeof sandboxContract>). The wire paths it declares are
@@ -110,4 +111,5 @@ export const SANDBOX_ROUTES: readonly ContractRoute[] = contractRoutes(sandboxCo
 export const SANDBOX_ROUTE_NAMES: readonly string[] = SANDBOX_ROUTES.map((route) => route.name);
 
 // The contract route a concrete browser request belongs to, bound to this build's route table.
-export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined => routeNameForRequest(SANDBOX_ROUTES, method, pathWithQuery);
+export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined =>
+    routeNameForRequest(SANDBOX_ROUTES, method, pathWithQuery);

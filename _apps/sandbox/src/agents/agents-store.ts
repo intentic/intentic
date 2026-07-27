@@ -12,12 +12,22 @@ import { z } from "zod";
 // state the user can act on (the turn itself is gone).
 const PersistedAgentStatusSchema = z.enum(["idle", "landed", "conflict", "error"]);
 
+/* Where a title came from, which is the whole of what decides whether a better one may replace it.
+ *
+ * `derived` is the opening prompt read as prose (deriveTitle). `plan` is the heading of a plan the agent
+ * wrote — its own name for the whole job, and so strictly better than the prompt it was derived from. `user`
+ * is a rename, which outranks everything: an agent that renames a tab the user just named is a bug. */
+const AgentTitleSourceSchema = z.enum(["derived", "plan", "user"]);
+export type AgentTitleSource = z.infer<typeof AgentTitleSourceSchema>;
+
 export const PersistedAgentSchema = z.object({
     // The conversationId — also the worktree dir name and the agent/<id> branch suffix.
     id: z.string(),
     branch: z.string(),
-    // First prompt, sanitized to one bounded line.
+    // The display name, sanitized to one bounded line — derived from the opening prompt, promoted to a plan's
+    // heading, or chosen outright by a rename. `titleSource` says which, and gates the next promotion.
     title: z.string().optional(),
+    titleSource: AgentTitleSourceSchema.optional(),
     provider: AgentProviderSchema,
     harness: AgentHarnessSchema,
     model: z.string().optional(),

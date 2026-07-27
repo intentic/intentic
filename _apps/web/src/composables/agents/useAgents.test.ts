@@ -15,6 +15,9 @@ vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxReques
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { nextTick } from "vue";
+import { Conversation } from "../chat/conversation";
+import { useChat } from "../chat/useChat";
 import { laneOf, resetAgents, setAgents, useAgents } from "./useAgents";
 
 // The kanban lane projection — pure over status + attention, so "finished" needs no explicit action:
@@ -38,6 +41,51 @@ describe("laneOf", () => {
     it("routes landed and idle agents to finished — the auto-finish rule", () => {
         expect(laneOf({ status: `landed`, attention: none })).toBe(`finished`);
         expect(laneOf({ status: `idle`, attention: none })).toBe(`finished`);
+    });
+});
+
+/* An open tab follows the roster's name for its conversation. A tab used to seed its title once and own it,
+ * which stopped being enough the moment the daemon could promote a title on its own (a plan heading naming
+ * the job) or another device could rename it. */
+describe("roster titles", () => {
+    const registered = (id: string, title?: string): AgentSummary => ({
+        id,
+        status: `running`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 1_000,
+        attention: { plan: false, question: false, permission: false, conflict: false },
+        ...(title !== undefined ? { title } : {}),
+    });
+
+    // Each case installs the one tab it is about. The list is never emptied: useChat guarantees an ACTIVE
+    // conversation at all times, and its computeds read straight through that guarantee.
+    beforeEach(() => {
+        resetAgents();
+    });
+
+    it("repaints an open tab when the daemon promotes its title", async () => {
+        const conversation = new Conversation(`c1`, `a1`);
+        conversation.title.value = `The login page throws on submit`;
+        useChat().conversations.value = [conversation];
+
+        setAgents([registered(`a1`, `Fix the login submit handler`)], 1);
+        await nextTick();
+
+        expect(conversation.title.value).toBe(`Fix the login submit handler`);
+    });
+
+    it("leaves a tab that named itself alone while its entry carries no title", async () => {
+        // A draft's first turn has not begun, so the roster knows the conversation without knowing its name —
+        // adopting that absence would blank a tab the browser had already titled from the prompt.
+        const conversation = new Conversation(`c1`, `a1`);
+        conversation.title.value = `The login page throws on submit`;
+        useChat().conversations.value = [conversation];
+
+        setAgents([registered(`a1`)], 1);
+        await nextTick();
+
+        expect(conversation.title.value).toBe(`The login page throws on submit`);
     });
 });
 

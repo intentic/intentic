@@ -8,6 +8,7 @@ import {
     NATIVE_PROVIDERS,
     type OauthAccount,
     type PermissionMode,
+    planParts,
     providerLabel,
     type RestoredMessage,
     runsClaudeCode,
@@ -36,7 +37,7 @@ import {
     turnDefaults,
 } from "./conversation";
 import { providerReady } from "./access";
-import { type ChatAttachment, type ChatMessage, planParts, type PlanRequest } from "./transcript";
+import { type ChatAttachment, type ChatMessage, type PlanRequest } from "./transcript";
 import { approvalsFor } from "./catalog";
 import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";

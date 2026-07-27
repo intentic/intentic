@@ -1,7 +1,7 @@
 import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LandResult } from "@intentic/sandbox-contract";
+import type { LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
 import { changedFiles, headSha } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
@@ -40,8 +40,116 @@ export interface LandOutcome extends LandResult {
 // `git diff --shortstat` line: " 3 files changed, 10 insertions(+), 2 deletions(-)" — every term optional.
 const SHORTSTAT = /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/;
 
-export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent, git: GitRunner = defaultGit): Promise<LandOutcome> => {
-    const conflicts: { repo: string; paths: string[] }[] = [];
+// `git merge-base --is-ancestor` answers by exit code, which the runner surfaces as a throw.
+const isAncestor = async (dir: string, ancestor: string, descendant: string, git: GitRunner): Promise<boolean> => {
+    try {
+        await git(dir, ["merge-base", "--is-ancestor", ancestor, descendant]);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+/* WHERE this land's delta is measured from — which decides what "this agent's work" even means.
+ *
+ * An incremental land continues from `landedTip`, so a second land carries only what the agent has done
+ * since the first. Everything else asks git: the agent's own work is what its tip has that the main line does
+ * not, i.e. the delta from their MERGE-BASE.
+ *
+ * The base recorded at worktree creation is only the last resort, because it is a sha frozen in time and the
+ * branch does not have to keep agreeing with it. Rebase an agent onto the current main line — the natural
+ * response to being told the main tree moved on — and the branch now CONTAINS main's commits. Diffing from
+ * the frozen base then yields "what this agent did PLUS everything main did since": a patch of dozens of
+ * files that can never apply, because the main tree already has its own half of it. What the user sees for
+ * that is a conflict report naming files the agent never touched, and no way forward. The merge-base is
+ * immune — it moves with the rebase, and the delta stays exactly the agent's own work. */
+const anchorOf = async (
+    worktree: string,
+    main: string,
+    tip: string,
+    landedTip: string | undefined,
+    base: string,
+    git: GitRunner,
+): Promise<string> => {
+    // Only while the branch still descends from it: a rewrite that dropped the landed work has to re-land it.
+    if (landedTip !== undefined && (await isAncestor(worktree, landedTip, tip, git))) {
+        return landedTip;
+    }
+    const head = await headSha(main, git);
+    if (head !== undefined) {
+        try {
+            const merged = (await git(worktree, ["merge-base", head, tip])).stdout.trim();
+            if (merged !== "") {
+                return merged;
+            }
+        } catch {
+            // Unrelated histories — fall through to the recorded base.
+        }
+    }
+    return base;
+};
+
+/* WHICH paths of a delta actually refuse to apply, and why.
+ *
+ * `git apply` is ATOMIC: one unapplicable file rejects the entire patch. So a failed bulk check says only
+ * "something in here does not fit" — it says nothing about WHAT, and the first version of this code guessed,
+ * intersecting the delta with the main tree's dirty paths and falling back to naming the whole delta when
+ * that intersection came up empty. That fallback fires exactly when the cause is a moved main line, which is
+ * the common case, so the common case reported every file as a conflict.
+ *
+ * Re-checking each path on its own is the only way to tell four real conflicts from the fourteen an atomic
+ * failure implicates. Rename detection stays on so each probe sees the same patch shape the real apply will;
+ * a rename probed one leg at a time degrades to a delete plus an add, which is accurate enough for a report. */
+const classifyConflicts = async (
+    main: string,
+    from: string,
+    tip: string,
+    patchDir: string,
+    repo: string,
+    git: GitRunner,
+): Promise<{ paths: { path: string; reason: LandConflictReason }[]; clean: number }> => {
+    const deltaPaths = (await git(main, ["diff", "--name-only", "-z", from, tip])).stdout.split("\0").filter((path) => path !== "");
+    // A path the user STAGED conflicts with the incoming patch exactly as much as one they left unstaged, so
+    // "yours is the copy at risk" has to consider the union — rename `from` legs included.
+    const mainState = await changedFiles(main, git);
+    const mainDirty = new Set<string>();
+    for (const change of [...mainState.staged, ...mainState.unstaged]) {
+        mainDirty.add(change.path);
+        if (change.from !== undefined) {
+            mainDirty.add(change.from);
+        }
+    }
+    const paths: { path: string; reason: LandConflictReason }[] = [];
+    let clean = 0;
+    for (const [index, path] of deltaPaths.entries()) {
+        const single = (await git(main, ["diff", "--binary", "-M", from, tip, "--", path])).stdout;
+        if (single === "") {
+            clean += 1;
+            continue;
+        }
+        const probePath = join(patchDir, `${repo.replaceAll("/", "_")}.probe.${index}.patch`);
+        await writeFile(probePath, single);
+        try {
+            await git(main, ["apply", "--check", probePath]);
+            clean += 1;
+        } catch {
+            // Binary first: it outranks the other two, because no three-way merge of it exists to offer.
+            const reason: LandConflictReason = single.includes("GIT binary patch") ? "binary" : mainDirty.has(path) ? "workspace" : "diverged";
+            paths.push({ path, reason });
+        }
+    }
+    return { paths, clean };
+};
+
+export const landAgent = async (
+    worktrees: AgentWorktrees,
+    entry: PersistedAgent,
+    mode: LandMode = "check",
+    git: GitRunner = defaultGit,
+): Promise<LandOutcome> => {
+    const conflicts: LandConflict[] = [];
+    // Only a `merge` land fills this: the paths now sitting in the workspace with conflict markers on them.
+    const resolving: { repo: string; paths: string[] }[] = [];
     const repos: PersistedAgent["repos"] = [];
     const diff = { files: 0, insertions: 0, deletions: 0 };
     let changed = false;
@@ -58,8 +166,9 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
                 }
                 const main = worktrees.mainDir(repo);
                 if (!(await exists(join(main, ".git")))) {
-                    // The main checkout vanished — nothing to apply into; surfaced, not silently skipped.
-                    conflicts.push({ repo, paths: [] });
+                    // The main checkout vanished — nothing to apply into; surfaced, not silently skipped. No
+                    // path-level account exists for it, which is what an empty `paths` with nothing clean says.
+                    conflicts.push({ repo, paths: [], clean: 0 });
                     changed = true;
                     return;
                 }
@@ -81,7 +190,7 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
                         diff.deletions += Number(stat[3] ?? 0);
                     }
                 }
-                const from = composed.landedTip ?? base;
+                const from = await anchorOf(worktree, main, tip, composed.landedTip, base, git);
                 if (tip === from) {
                     return; // Everything already landed for this repo.
                 }
@@ -106,21 +215,40 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
                 try {
                     await git(main, ["apply", "--check", patchPath]);
                 } catch {
-                    // Best-effort conflict hint: the delta paths the user's uncommitted work also touches
-                    // (rename `from` legs included); when that intersection is empty, name the whole delta.
-                    const deltaPaths = (await git(main, ["diff", "--name-only", "-z", from, tip])).stdout.split("\0").filter((path) => path !== "");
-                    // Both sides: a path the user staged conflicts with the incoming patch exactly as much as
-                    // one they left unstaged, so the overlap test must consider the union.
-                    const mainState = await changedFiles(main, git);
-                    const mainDirty = new Set<string>();
-                    for (const change of [...mainState.staged, ...mainState.unstaged]) {
-                        mainDirty.add(change.path);
-                        if (change.from !== undefined) {
-                            mainDirty.add(change.from);
-                        }
+                    const report = await classifyConflicts(main, from, tip, patchDir, repo, git);
+                    /* A three-way apply merges THROUGH THE INDEX, so git refuses it outright — applying not
+                     * one file, not even the clean ones — as soon as any path it must fall back on differs
+                     * between the working tree and the index ("does not match index"). That is precisely the
+                     * `workspace` cause. So merge mode is offered only where git can actually merge: the
+                     * user's own uncommitted copy has to be committed or stashed first, and saying so beats
+                     * attempting it and reporting a failure they cannot read. */
+                    const mergeable = report.paths.every((conflict) => conflict.reason !== "workspace");
+                    if (mode === "check" || !mergeable) {
+                        // What `check` promises is that a refusal leaves the workspace byte-identical. Report
+                        // and stop: the worktree keeps everything, and "Land now" recovers once the user acts.
+                        conflicts.push({ repo, ...report });
+                        return;
                     }
-                    const overlap = deltaPaths.filter((path) => mainDirty.has(path));
-                    conflicts.push({ repo, paths: overlap.length > 0 ? overlap : deltaPaths });
+                    /* `merge`: the user has read the report and asked for the three-way anyway. Every clean
+                     * path lands, and each conflicted one arrives carrying the standard markers to be finished
+                     * in place — the shape any merge leaves behind, in the editor they already use.
+                     *
+                     * `--3way` exits non-zero precisely BECAUSE it left conflicts, so a throw here is the
+                     * intended outcome rather than a failure; the delta is in the tree either way. It needs
+                     * both blobs to merge against, which the object store shared with the worktree has. */
+                    try {
+                        await git(main, ["apply", "--3way", patchPath]);
+                    } catch {
+                        // Nothing to add: `report` already names what was left open, and it is reported below.
+                    }
+                    if (report.paths.length > 0) {
+                        resolving.push({ repo, paths: report.paths.map((conflict) => conflict.path) });
+                    }
+                    // The tip advances even with paths still open, because the delta IS in the main tree now.
+                    // Holding it back would re-apply the whole thing over the user's half-finished resolution
+                    // the next time anything lands.
+                    const merged = await headSha(main, git);
+                    next = { repo, base, landedTip: tip, ...(merged !== undefined ? { landedHead: merged } : {}), landedAt: Date.now() };
                     return;
                 }
                 await git(main, ["apply", patchPath]);
@@ -137,5 +265,12 @@ export const landAgent = async (worktrees: AgentWorktrees, entry: PersistedAgent
     } finally {
         await rm(patchDir, { recursive: true, force: true });
     }
-    return { landed: conflicts.length === 0, changed, repos, diff, ...(conflicts.length > 0 ? { conflicts } : {}) };
+    return {
+        landed: conflicts.length === 0,
+        changed,
+        repos,
+        diff,
+        ...(conflicts.length > 0 ? { conflicts } : {}),
+        ...(resolving.length > 0 ? { resolving } : {}),
+    };
 };

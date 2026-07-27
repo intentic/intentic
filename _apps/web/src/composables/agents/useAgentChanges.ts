@@ -1,5 +1,5 @@
 import type { AgentChange, AgentChangesResponse, AgentRepoChanges, FileDiffResponse } from "@intentic-app/api-contract";
-import type { LandResult } from "@intentic/sandbox-contract";
+import type { LandMode, LandResult } from "@intentic/sandbox-contract";
 import { computed, ref, watch, type Ref } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
@@ -99,9 +99,15 @@ export function useAgentChanges(agentId: Ref<string>) {
     // The conflicts of the last land attempt, for the conflict panel; cleared by a clean land or discard.
     const conflicts = ref<LandResult[`conflicts`]>(undefined);
 
-    const land = (): Promise<void> =>
+    // Paths a `merge` land wrote into the workspace with conflict markers on them, for the panel to hand back
+    // to the user as work to finish. Like `conflicts`, it describes the LAST attempt only.
+    const resolving = ref<LandResult[`resolving`]>(undefined);
+
+    const land = (mode: LandMode = `check`): Promise<void> =>
         run(async () => {
-            conflicts.value = (await landAgent(agentId.value)).conflicts;
+            const result = await landAgent(agentId.value, mode);
+            conflicts.value = result.conflicts;
+            resolving.value = result.resolving;
             await invalidateAgentAction(agentId.value);
         }, `Land failed.`);
 
@@ -109,6 +115,7 @@ export function useAgentChanges(agentId: Ref<string>) {
         run(async () => {
             await discardAgent(agentId.value);
             conflicts.value = undefined;
+            resolving.value = undefined;
             await invalidateAgentAction(agentId.value);
         }, `Discard failed.`);
 
@@ -135,6 +142,7 @@ export function useAgentChanges(agentId: Ref<string>) {
         discard,
         archive,
         conflicts,
+        resolving,
         actionBusy,
         actionError,
     };

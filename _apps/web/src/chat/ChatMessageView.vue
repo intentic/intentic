@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useDevice } from "@intentic-app/ui";
-import type { AskQuestion } from "@intentic/sandbox-contract";
+import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
-import { type ChatMessage, planParts, type PlanRequest } from "../composables/chat/transcript";
+import { type ChatMessage, type PlanRequest } from "../composables/chat/transcript";
 import { copyCodeFromEvent } from "../composables/markdownCode";
 import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";

@@ -43,7 +43,7 @@ export const createAgentsRoutes = (services: Services) => {
         // entry at begin/finish, so the rename survives a running turn.
         rename: i.rename.handler(async ({ input }) => {
             entryOf(input.id);
-            const summary = await services.agents.setTitle(input.id, input.title);
+            const summary = await services.agents.setTitle(input.id, input.title, "user");
             if (summary === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "title is empty" });
             }
@@ -133,7 +133,7 @@ export const createAgentsRoutes = (services: Services) => {
                 from: landedTip ?? base,
                 dir: services.agentWorktrees.worktreeDir(entry.id, repo),
             }));
-            const result = await landAgent(services.agentWorktrees, entry);
+            const result = await landAgent(services.agentWorktrees, entry, input.mode);
             await services.agents.recordLanded(input.id, result.repos, result.diff);
             await services.agents.finish(input.id, Date.now(), result.landed ? "landed" : "conflict");
             if (result.landed && result.changed) {
@@ -184,7 +184,10 @@ export const createAgentsRoutes = (services: Services) => {
             // Read AFTER the archive, so each summary carries the archivedAt the card dates itself by, and with
             // the revision that applied it — the browser holds these ids off the board until a roster at least
             // that new arrives, so an in-flight older snapshot can't put them back.
-            return { moved: archived.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined), rev: services.agents.revision() };
+            return {
+                moved: archived.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined),
+                rev: services.agents.revision(),
+            };
         }),
         unarchive: i.unarchive.handler(async ({ input }) => {
             for (const id of input.ids) {
@@ -193,7 +196,10 @@ export const createAgentsRoutes = (services: Services) => {
             // No worktree restore: the next turn's ensure() rebuilds the checkout from the branch, so putting a
             // card back is a registry write and nothing else.
             await services.agents.clearArchived(input.ids);
-            return { moved: input.ids.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined), rev: services.agents.revision() };
+            return {
+                moved: input.ids.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined),
+                rev: services.agents.revision(),
+            };
         }),
     };
 };

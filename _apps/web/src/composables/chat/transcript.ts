@@ -21,16 +21,6 @@ export interface PlanRequest {
     readonly status: PlanStatus;
 }
 
-// Split a plan's markdown into its leading heading (the plan card's header line) and the remaining body;
-// without a heading the whole text is the body and the card falls back to a generic title.
-export const planParts = (text: string): { title?: string; body: string } => {
-    const match = /^\s*#{1,6}\s+(.+)/.exec(text);
-    if (match === null) {
-        return { body: text };
-    }
-    return { title: match[1]!.trim(), body: text.slice(match.index + match[0].length).trimStart() };
-};
-
 // A set of questions awaiting the user's picks. 'pending' shows the selectable card; once the user submits or
 // dismisses, the choice is frozen into the transcript.
 export type QuestionStatus = "pending" | "answered" | "cancelled";

@@ -3,6 +3,7 @@ import {
     AgentProviderSchema,
     AgentReplySchema,
     AgentSummarySchema,
+    LandConflictSchema,
     PermissionModeSchema,
     RateLimitInfoSchema,
     UsageWindowSchema,
@@ -157,11 +158,12 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("worktree"), branch: z.string(), base: z.string() }),
     // Emitted after a clean isolated turn whose delta auto-landed (or failed to): landed ⇒ the work is now
     // UNCOMMITTED changes in the main tree (the Changes panel is the review); conflicts ⇒ it stayed safely in
-    // the worktree — the named paths collide with the user's own edits, "Land now" recovers after they resolve.
+    // the worktree, and each named path carries WHY it would not apply (see LandConflictSchema) so the report
+    // can say whether the user's own copy is at risk or the main line simply moved on underneath the agent.
     z.object({
         kind: z.literal("landed"),
         landed: z.boolean(),
-        conflicts: z.array(z.object({ repo: z.string(), paths: z.array(z.string()) })).optional(),
+        conflicts: z.array(LandConflictSchema).optional(),
     }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     z.object({ kind: z.literal("init"), model: z.string() }),

@@ -968,7 +968,7 @@ describe(`Conversation`, () => {
             ]),
         );
         await source.send(`original topic`, settings);
-        expect(source.title.value).toBe(`original topic`);
+        expect(source.title.value).toBe(`Original topic`);
 
         const branch = new Conversation(`c2`);
         branch.branchFrom(source, 0);
@@ -977,8 +977,8 @@ describe(`Conversation`, () => {
         await branch.send(`new topic`, settings);
 
         // Each tab is findable by its own name rather than two tabs sharing one.
-        expect(branch.title.value).toBe(`new topic`);
-        expect(source.title.value).toBe(`original topic`);
+        expect(branch.title.value).toBe(`New topic`);
+        expect(source.title.value).toBe(`Original topic`);
         // Nothing preceded the branch point, so the fresh session gets neither a session id nor a history seed.
         const body = turnBodies()[1]!;
         expect(`sessionId` in body).toBe(false);
