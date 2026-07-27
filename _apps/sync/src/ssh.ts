@@ -16,6 +16,11 @@ import { baseDir, sshConfigPath, sshKeyPath } from "./config.js";
 // already a repo it is an unresolvable file-vs-directory conflict that pins the session at Conflicts: 1 forever.
 // Mutagen's own --ignore-vcs does NOT cover it: that pattern set is `.git/` — directories — and this is a file.
 //
+// `.pnpm-store` is the sandbox's pnpm content-addressable store — tens of thousands of hash-named blobs (GBs) that
+// are a rebuildable cache, not workspace content, and that dwarf the actual project on the wire. It also carries a
+// live SQLite WAL (v11/index.db-wal) that pnpm appends to while a scan runs, so leaving it in produces recurring
+// "hashed size mismatch" scan problems on beta. The sandbox's own history ignore set already excludes it.
+//
 // A NESTED repo's .git syncs normally, on purpose. Without it a synced project arrives with no .git at all: repo
 // discovery doesn't see a repo, the files dissolve into the root scope, and the agent's `git status` inside the
 // project walks up to /work/.git and answers for the shadow history repo instead. Syncing it costs conflicts on
@@ -33,6 +38,7 @@ export const IGNORES = [
     "capabilities.json",
     ".intentic",
     "/.git",
+    ".pnpm-store",
 ];
 
 // A sandbox id safe for an ssh-config alias / Mutagen session name (letters, digits, dashes).
