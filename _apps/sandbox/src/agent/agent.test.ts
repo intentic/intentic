@@ -201,6 +201,15 @@ test("the interactive guidance always rides the preset system prompt, with syste
     expect(base).toMatchObject({ type: "preset", preset: "claude_code" });
     expect(base.append).toContain("AskUserQuestion");
     expect(base.append).toContain("EnterPlanMode");
+    expect(base.append).toContain("TaskCreate");
+
+    // An unattended turn loses the widgets it has no operator for, but KEEPS the checklist: it is the longest
+    // kind of turn and the only window the operator has into where it has got to.
+    captured = undefined;
+    await collect({ ...request, unattended: true }, capture);
+    const unattended = captured?.systemPrompt as { append: string };
+    expect(unattended.append).not.toContain("AskUserQuestion");
+    expect(unattended.append).toContain("TaskCreate");
 
     captured = undefined;
     await collect({ ...request, systemAppend: "## Delegating\nUse codex exec." }, capture);

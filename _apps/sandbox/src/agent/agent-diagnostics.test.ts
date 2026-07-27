@@ -18,8 +18,10 @@ const fire = async (hooks: ReturnType<typeof editDiagnosticsHooks>, toolInput: u
 const runHook = async (diag: DiagRunner, toolInput: unknown, modules: ModulesProbe = RESOLVABLE) =>
     fire(editDiagnosticsHooks("/work", diag, modules), toolInput);
 
-const withErrors: DiagRunner = async () =>
-    "src/app.ts:12:5: error TS2304: Cannot find name 'foo'.\nsrc/app.ts:14:1: warning TS6133: 'bar' is declared but never used.\n";
+const withErrors: DiagRunner = async () => [
+    "src/app.ts:12:5: error TS2304: Cannot find name 'foo'.",
+    "src/app.ts:14:1: warning TS6133: 'bar' is declared but never used.",
+];
 
 test("compile errors ride back as additionalContext; warnings are dropped", async () => {
     const result = await runHook(withErrors, { file_path: "/work/src/app.ts" });
@@ -29,7 +31,7 @@ test("compile errors ride back as additionalContext; warnings are dropped", asyn
 });
 
 test("a clean file adds nothing", async () => {
-    const result = await runHook(async () => "no diagnostics\n", { file_path: "/work/src/app.ts" });
+    const result = await runHook(async () => [], { file_path: "/work/src/app.ts" });
     expect(result).toEqual({});
 });
 
@@ -38,7 +40,7 @@ test("non-TypeScript files are never checked", async () => {
     const result = await runHook(
         async () => {
             ran = true;
-            return "no diagnostics\n";
+            return [];
         },
         { file_path: "/work/README.md" },
     );
@@ -46,7 +48,9 @@ test("non-TypeScript files are never checked", async () => {
     expect(ran).toBe(false);
 });
 
-test("a failed lsp run (missing binary, crash, timeout) stays silent", async () => {
+// undefined is "there is no answer to be had" — no tsconfig above the file, or no daemon we could reach — and
+// must read the same as clean to the model rather than inventing a verdict.
+test("an unanswerable check stays silent", async () => {
     const result = await runHook(async () => undefined, { file_path: "/work/src/app.ts" });
     expect(result).toEqual({});
 });
@@ -64,7 +68,7 @@ test("with no resolvable node_modules the type-check never runs", async () => {
     const result = await runHook(
         async () => {
             ran = true;
-            return "src/app.ts:1:1: error TS2307: Cannot find module 'node:path'.\n";
+            return ["src/app.ts:1:1: error TS2307: Cannot find module 'node:path'."];
         },
         { file_path: "/work/src/app.ts" },
         MISSING,

@@ -550,9 +550,17 @@ them by spawning a process, never by import:
   `createResidentEngine` instance in-process (index DB held open, sweep cached, revalidation driven by the
   workspace watcher), sharing the on-disk index with the CLI. Search is a **core editor feature**; iq is
   merely the interchangeable engine behind that route.
-- **lsp** ([`@intentic/lsp`](_apps/lsp)) — despite the name, **not** a language-server host: a small
-  agent-facing TypeScript CLI (`lsp rename`, `lsp diag`) over the TS language service, advertised to the
-  agent through a gated skill file. TypeScript/JavaScript only.
+- **lsp** ([`@intentic/lsp`](_apps/lsp)) — an agent-facing TypeScript CLI (`lsp rename`, `lsp diag`) over the
+  TS language service, advertised to the agent through a gated skill file. TypeScript/JavaScript only. Like
+  iq, the CLI is a subprocess but the service is **resident**: `lsp daemon <root>` holds one warm
+  LanguageService per tsconfig (sharing a document registry, so lib.d.ts is parsed once for the monorepo) and
+  keeps the markers for edited files current on a debounce, exactly as VS Code's tsserver does for open
+  buffers. Both callers — the agent's `lsp diag` and the daemon's post-edit hook
+  ([agent-diagnostics.ts](_apps/sandbox/src/agent/agent-diagnostics.ts), which imports
+  `@intentic/lsp/client`) — converge on one socket per repository. It matters because the cold path was
+  ~0.8-1.3s per edit against this monorepo and the warm one is ~40-90ms, which is what makes checking after
+  *every* edit affordable. The daemon is started by the first caller with a tsconfig above its file and exits
+  after 15 min idle, so a workspace with no TypeScript in it never starts one.
 
 ## Scaling model & limits
 

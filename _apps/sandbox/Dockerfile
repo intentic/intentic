@@ -156,9 +156,11 @@ COPY --from=trees iq /opt/iq
 RUN chmod +x /opt/iq/dist/cli.js \
     && ln -s /opt/iq/dist/cli.js /usr/local/bin/iq
 # The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
-# daemon writes/removes its skill at /work/.claude/skills/lsp). Standalone: it drives the TS language service
-# (its own bundled typescript) over whatever tsconfig project the agent points it at in /work. Same chmod +
-# symlink rationale as iq/intentic — tsc keeps the file's shebang, so the linked cli.js runs directly.
+# daemon writes/removes its skill at /work/.claude/skills/lsp). It drives the TS language service (its own
+# bundled typescript) over whatever tsconfig project the agent points it at in /work. `lsp diag` and the
+# sandbox's post-edit hook both route through a resident `lsp daemon`, started on demand by whichever asks
+# first and shared via one socket per repo — so no service runs for a workspace without TypeScript in it.
+# Same chmod + symlink rationale as iq/intentic — tsc keeps the file's shebang, so the linked cli.js runs directly.
 COPY --from=trees lsp /opt/lsp
 RUN chmod +x /opt/lsp/dist/cli.js \
     && ln -s /opt/lsp/dist/cli.js /usr/local/bin/lsp

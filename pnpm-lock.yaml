@@ -736,6 +736,9 @@ importers:
       '@intentic/iq-engine':
         specifier: workspace:*
         version: link:../../_libs/iq-engine
+      '@intentic/lsp':
+        specifier: workspace:*
+        version: link:../lsp
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_libs/sandbox-contract

@@ -15,6 +15,9 @@
     "bin": {
         "lsp": "./dist/cli.js"
     },
+    "exports": {
+        "./client": "./dist/client.js"
+    },
     "scripts": {
         "build": "tsgo",
         "watch": "tsgo --build --watch",

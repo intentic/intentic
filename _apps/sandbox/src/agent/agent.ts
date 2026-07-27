@@ -14,7 +14,7 @@ import {
     type SlashCommand,
     tool,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, TodoItem, UsageWindow } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
 import { relative, sep } from "node:path";
 import { z } from "zod";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
@@ -23,6 +23,7 @@ import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { agentSessionName, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
 import { EventQueue } from "./event-queue.js";
+import { TaskChecklist } from "./task-checklist.js";
 import { editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 
 export interface AgentRequest {
@@ -186,25 +187,6 @@ async function* steeredInput(first: string, steering: SteeringQueue): AsyncGener
     }
 }
 
-// Pull the TodoWrite/Task checklist off a tool_use input, or undefined if the shape doesn't match.
-const todoItems = (input: unknown): TodoItem[] | undefined => {
-    const todos = (input as { todos?: unknown }).todos;
-    if (!Array.isArray(todos)) {
-        return undefined;
-    }
-    return todos.map((t) => {
-        const item = t as { content?: unknown; status?: unknown; activeForm?: unknown };
-        const todo: TodoItem = {
-            content: String(item.content ?? ""),
-            status: item.status === "in_progress" || item.status === "completed" ? item.status : "pending",
-        };
-        if (typeof item.activeForm === "string") {
-            todo.activeForm = item.activeForm;
-        }
-        return todo;
-    });
-};
-
 // In streaming-input mode the SDK emits one `result` per TURN and keeps the stream open for further input: a
 // steered message the running turn could not absorb runs as its own follow-up turn AFTER the result (observed
 // to announce itself within ~2ms), while a steer absorbed mid-turn (injected between tool calls) produces no
@@ -308,6 +290,10 @@ async function* streamSdk(
     // tool_use ids whose tool_call already carried the authoritative diff (derived from the Edit/Write input),
     // so the success result's redundant "file updated" text must not REPLACE it (update content is a snapshot).
     const diffToolIds = new Set<string>();
+    // The agent's working checklist, reassembled from the Task tool family across both branches below. Their
+    // tool_use ids are remembered so the result branch suppresses their cards too — the list IS their render.
+    const checklist = new TaskChecklist();
+    const checklistToolIds = new Set<string>();
     // Context-window fill for the turn: the latest message_start reports the request's input size (grows
     // monotonically within a turn); the result reports the model's contextWindow. Paired into one
     // context_usage frame at the result so the UI can warn as the chat nears auto-compaction.
@@ -393,12 +379,24 @@ async function* streamSdk(
                     if (block.type !== "tool_use" || typeof block.name !== "string" || block.id === undefined) {
                         continue;
                     }
-                    if (block.name === "TodoWrite") {
-                        const items = todoItems(block.input);
+                    // The checklist, which renders as its own live list rather than as tool cards — one card per
+                    // task creation and per status flip would bury the transcript. A create can only render from
+                    // its RESULT (that is where it learns its task id); an update names the id in its input, so
+                    // the list moves the instant the agent says so.
+                    if (block.name === "TaskCreate" || block.name === "TaskList") {
+                        if (block.name === "TaskCreate") {
+                            checklist.created(block.id, block.input);
+                        }
+                        checklistToolIds.add(block.id);
+                        continue;
+                    }
+                    if (block.name === "TaskUpdate") {
+                        const items = checklist.updated(block.input);
+                        checklistToolIds.add(block.id);
                         if (items !== undefined) {
                             yield { kind: "todos", items };
-                            continue;
                         }
+                        continue;
                     }
                     // The agent moving itself into planning. Nothing else reports it — there is no mode-change
                     // SDK message — so the tool call IS the signal. ExitPlanMode is NOT mirrored here: the user's
@@ -457,6 +455,16 @@ async function* streamSdk(
                     if (!terminalResurfaced && agentSession !== undefined && bashToolIds.has(block.tool_use_id)) {
                         terminalResurfaced = true;
                         yield { kind: "terminal", session: agentSession };
+                    }
+                    // A checklist verb: no card was emitted for the call, so none is updated here. A create
+                    // learns its task id from this result ("Task #1 created successfully"), and a TaskList
+                    // result is the authoritative set — it adopts tasks made before this turn attached.
+                    if (checklistToolIds.has(block.tool_use_id)) {
+                        const items = checklist.resolved(block.tool_use_id, block.content) ?? checklist.listed(block.content);
+                        if (items !== undefined) {
+                            yield { kind: "todos", items };
+                        }
+                        continue;
                     }
                     // A successful Edit/Write result is only the redundant "file updated" snippet — status alone,
                     // so the call-time diff stays the card's content. Errors DO replace it (the text is the reason).
@@ -624,6 +632,17 @@ const INTERACTIVE_GUIDANCE = [
     "When a request is large, risky, or underspecified, call EnterPlanMode first, investigate read-only, then ExitPlanMode to get your plan approved before changing anything.",
 ].join("\n\n");
 
+// The checklist tools are DEFERRED — the model is told their names but not their schemas, so it must call
+// ToolSearch before it can use one, and left to itself it never does: across a corpus of sandbox turns,
+// TaskCreate was called zero times while the harness fired its "task list is empty" reminder on a loop. That
+// silence costs the most exactly where it is worst — an unattended turn runs ~150 steps with no plan the
+// operator can watch and nothing holding the agent to it — so this is told on EVERY turn, attended or not.
+const CHECKLIST_GUIDANCE =
+    "For any task worth more than a few steps, keep a checklist with the Task tools (load them with ToolSearch first: " +
+    "`select:TaskCreate,TaskUpdate,TaskList`). Call TaskCreate once per step up front, TaskUpdate to move exactly one " +
+    "task to in_progress before you start it and to completed the moment it is done. The user watches this list to see " +
+    "where you are, so keep it current as you go rather than updating it in a batch at the end.";
+
 // The two built-ins that are a conversation with the USER rather than an action on the workspace — which is
 // why an unattended turn cannot have them.
 const PLAN_TOOLS = ["EnterPlanMode", "ExitPlanMode"];
@@ -650,6 +669,7 @@ const baseOptions = (request: AgentRequest, abortController: AbortController, pe
         // about asking or planning.
         append: [
             ...(request.unattended === true ? [] : [INTERACTIVE_GUIDANCE]),
+            CHECKLIST_GUIDANCE,
             ...(request.systemAppend !== undefined ? [request.systemAppend] : []),
         ].join("\n\n"),
     },
