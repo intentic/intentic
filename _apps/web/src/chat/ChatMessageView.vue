@@ -260,6 +260,31 @@ watch(
     { immediate: true },
 );
 
+// --- Pinned state (see .chat-prompt-pinned) ----------------------------------------------------
+// CSS has no way to ask whether a sticky element is currently stuck, and the seam below a prompt must only be
+// drawn while it is — unpinned it lies over the answer below and dims it. The row is offset by a pixel above
+// the scroller's top edge (`top: -1px`), so the moment it pins that pixel is clipped and the ratio drops below
+// 1. The observer is rooted at the transcript scroller, the only scrolling ancestor the pin is relative to.
+const row = ref<HTMLElement>();
+const pinned = ref(false);
+
+watch(
+    row,
+    (element, _previous, onCleanup) => {
+        pinned.value = false;
+        if (element === undefined || props.message.role !== `user`) {
+            return;
+        }
+        const observer = new IntersectionObserver(([entry]) => (pinned.value = entry !== undefined && entry.intersectionRatio < 1), {
+            root: element.closest(`.chat-scroller`),
+            threshold: [1],
+        });
+        observer.observe(element);
+        onCleanup(() => observer.disconnect());
+    },
+    { immediate: true },
+);
+
 // A clamped box has no scrollbar and cannot be scrolled by hand, so any scroll it reports came from the
 // browser revealing something inside it — find-in-page landing on a match below the fold, or a screen reader
 // moving to it. Both mean the same thing: open the message, and put the box back where it belongs.
@@ -341,8 +366,13 @@ const onEditKeydown = (event: KeyboardEvent): void => {
     <!-- The click handler is delegated for the markdown's own controls — copy buttons and file links — which
          live inside v-html and so can hold no component of their own (see onMarkdownClick). -->
     <div
+        ref="row"
         class="chat-message flex flex-col gap-1"
-        :class="{ 'chat-prompt items-end': message.role === 'user', 'chat-prompt-open': expanded }"
+        :class="{
+            'chat-prompt items-end': message.role === 'user',
+            'chat-prompt-open': expanded,
+            'chat-prompt-pinned': pinned && !expanded,
+        }"
         @click="onMarkdownClick"
     >
         <div v-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
@@ -414,7 +444,8 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 <div
                     v-if="message.text"
                     ref="bubble"
-                    class="chat-prompt-text chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content/90"
+                    class="chat-prompt-text chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content"
+                    :class="{ 'chat-prompt-clamped': overflowing && !expanded }"
                     @scroll="onBubbleScroll"
                 >
                     {{ message.text }}

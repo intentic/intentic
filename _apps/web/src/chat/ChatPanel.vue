@@ -815,7 +815,8 @@ watch(keyboardInset, () => {
              The top inset lives on the wrapper, not the scroller: a sticky prompt pins to the scroller's
              PADDING edge, so a pt-4 out here would leave a 1rem band above the pinned row for the previous
              turn to slide through. Inside the wrapper the same inset is content, and the prompt pins flush. -->
-        <div ref="scroller" class="scrollbar-thin flex flex-1 flex-col overflow-auto px-4 pb-4" @scroll="onScroll">
+        <!-- .chat-scroller is the IntersectionObserver root each prompt uses to tell whether it is pinned. -->
+        <div ref="scroller" class="chat-scroller scrollbar-thin flex flex-1 flex-col overflow-auto px-4 pb-4" @scroll="onScroll">
             <div ref="content" class="chat-turns flex flex-1 flex-col gap-1 pt-4">
                 <template v-if="messages.length > 0">
                     <!-- One section per turn, purely so each prompt's sticky range ends where its answer does. -->
@@ -1089,22 +1090,22 @@ watch(keyboardInset, () => {
         <!-- The pickers: anchored popovers on desktop, bottom sheets on mobile — same menu bodies. -->
         <template v-if="mobile">
             <BottomSheet v-model="modelSheetOpen" header="Model">
-                <div class="chat-scale"><ChatModelPicker @selected="modelSheetOpen = false" /></div>
+                <ChatModelPicker @selected="modelSheetOpen = false" />
             </BottomSheet>
             <BottomSheet v-model="modeSheetOpen" header="Agent mode">
-                <div class="chat-scale"><ChatModeMenu @selected="modeSheetOpen = false" /></div>
+                <ChatModeMenu @selected="modeSheetOpen = false" />
             </BottomSheet>
         </template>
         <template v-else>
             <!-- Flush content (no composer-pop-content padding): the picker's search bar and rail sit
                  edge-to-edge against the popover chrome. -->
             <Popover ref="providerModel" :append-to="overlayTarget" :pt="{ content: { class: '!p-0' } }">
-                <div class="chat-scale w-[26rem]">
+                <div class="w-[26rem]">
                     <ChatModelPicker @selected="providerModel?.hide()" />
                 </div>
             </Popover>
             <Popover ref="modeMenu" :append-to="overlayTarget" :pt="{ content: { class: 'composer-pop-content' } }">
-                <div class="chat-scale w-56">
+                <div class="w-56">
                     <ChatModeMenu @selected="modeMenu?.hide()" />
                 </div>
             </Popover>

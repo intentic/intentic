@@ -44,17 +44,23 @@ case "$arch" in
         ;;
 esac
 
-# Resolve the agent: an explicit AGENT_BIN (local dev), else an installed `intentic-sync`, else the published
-# binary from the package registry, else npx (when Node is present).
-BIN="${AGENT_BIN:-$(command -v intentic-sync || true)}"
+# Resolve the agent: an explicit AGENT_BIN (local dev), else the published binary — downloaded on EVERY run, so
+# re-running the card's command upgrades an existing install. Short-circuiting on an installed `intentic-sync`
+# pinned a machine to the version it first paired with — via the very symlink this script creates — and agent
+# fixes could never reach anyone already syncing (the ignore rules that decide whether a project's .git travels
+# to the sandbox among them). Only a failed download falls back to what's installed, then to npx.
+BIN="${AGENT_BIN:-}"
 if [ -z "$BIN" ]; then
     dest="${HOME}/.intentic/sync/bin/intentic-sync"
     mkdir -p "$(dirname "$dest")"
     echo "Downloading the intentic-sync agent…"
-    # The download error stays visible (a masked network/permission failure used to silently drop to npx);
-    # a partial file is removed before falling back.
-    if curl -fsSL "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-sync/latest/intentic-sync-${os}-${arch}" -o "$dest"; then
-        chmod +x "$dest"
+    # Download beside the target and rename into place: the mirror watcher runs FROM $dest, and overwriting a
+    # running executable fails outright ("Text file busy"). A rename swaps the directory entry instead, leaving
+    # the live process on the old inode until it next restarts. It also means a half-downloaded agent is never
+    # what runs. The download error stays visible (a masked network/permission failure used to silently drop to npx).
+    if curl -fsSL "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-sync/latest/intentic-sync-${os}-${arch}" -o "${dest}.tmp"; then
+        chmod +x "${dest}.tmp"
+        mv -f "${dest}.tmp" "$dest"
         BIN="$dest"
         # Put `intentic-sync` on PATH for the status/pause/resume commands the setup output suggests.
         mkdir -p "$HOME/.local/bin"
@@ -63,14 +69,18 @@ if [ -z "$BIN" ]; then
             *":$HOME/.local/bin:"*) ;;
             *) echo "note: add ~/.local/bin to your PATH to use \`intentic-sync\` directly (or run $dest)." ;;
         esac
-    elif command -v npx >/dev/null 2>&1; then
-        rm -f "$dest"
-        echo "Falling back to npx (@intentic/sync@latest)…" >&2
-        BIN="npx -y @intentic/sync@latest"
     else
-        rm -f "$dest"
-        echo "error: could not download the agent and no npx fallback (install Node.js, or see the docs)." >&2
-        exit 1
+        rm -f "${dest}.tmp"
+        BIN="$(command -v intentic-sync || true)"
+        if [ -n "$BIN" ]; then
+            echo "note: could not download the latest agent — continuing with the installed $BIN." >&2
+        elif command -v npx >/dev/null 2>&1; then
+            echo "Falling back to npx (@intentic/sync@latest)…" >&2
+            BIN="npx -y @intentic/sync@latest"
+        else
+            echo "error: could not download the agent and no npx fallback (install Node.js, or see the docs)." >&2
+            exit 1
+        fi
     fi
 fi
 

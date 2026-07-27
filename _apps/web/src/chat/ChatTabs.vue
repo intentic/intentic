@@ -296,11 +296,11 @@ const openHistory = (event: Event): void => {
              line reads unbroken until there are genuinely more tabs than fit; from the second row on, this bar
              alone stands taller (.view-header-wrap, styles.css). max-h-16 is those two rows WITH the padding —
              the strip is the scroll box, so its own py counts against the cap.
-             A tab has no fixed height, so the row tracks the meta tier (chat.css): at 0.75rem/1.1rem it
-             measures 27.6px, which is why the strip's own padding is py-0.5 and not more — one row then comes
-             to 31.6px and still clears the 2.25rem floor (measured: the header lands on exactly 36px), while
-             two rows plus the gap come to 63.2px, just inside max-h-16, and a third (94.8px) is well outside.
-             All three numbers move together with --chat-meta; retune them together, never one alone.
+             A tab has no fixed height, so the row tracks the meta tier (text-2xs): at 0.6875rem/1rem it
+             measures 26px, which is why the strip's own padding is py-0.5 and not more — one row then comes
+             to 30px and still clears the 2.25rem floor (measured: the header lands on exactly 36px), while
+             two rows plus the gap come to 60px, just inside max-h-16, and a third (90px) is well outside.
+             All three numbers move together with --text-2xs; retune them together, never one alone.
              The ✚ and history buttons sit outside the strip, so they never move; their h-7 rides inside the
              floor with no header padding. -->
         <div
@@ -363,7 +363,7 @@ const openHistory = (event: Event): void => {
             <Icon name="history" class="text-sm" />
         </button>
         <Popover ref="history" :append-to="overlayTarget" @show="searchInput?.focus()">
-            <div class="chat-scale flex w-72 flex-col">
+            <div class="flex w-72 flex-col">
                 <div class="relative p-1">
                     <Icon
                         name="search"
@@ -419,7 +419,7 @@ const openHistory = (event: Event): void => {
     <Teleport :to="overlayTarget">
         <div
             v-if="preview"
-            class="chat-scale pointer-events-none fixed z-50 line-clamp-[12] max-w-[320px] min-w-[12rem] rounded-lg border border-line-strong bg-card px-3 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap text-content shadow-2xl"
+            class="pointer-events-none fixed z-50 line-clamp-[12] max-w-[320px] min-w-[12rem] rounded-lg border border-line-strong bg-card px-3 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap text-content shadow-2xl"
             :style="{
                 left: `${preview.left}px`,
                 ...(preview.top !== undefined ? { top: `${preview.top}px` } : {}),

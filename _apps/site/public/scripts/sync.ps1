@@ -22,17 +22,31 @@ if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($pair)) {
 }
 
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
-# AGENT_BIN (local dev) short-circuits the download; else resolve an installed agent, else download/npx below.
-$bin = if (-not [string]::IsNullOrEmpty($env:AGENT_BIN)) { $env:AGENT_BIN } else { (Get-Command intentic-sync -ErrorAction SilentlyContinue).Source }
+# AGENT_BIN (local dev) short-circuits the download; otherwise the published binary is fetched on EVERY run, so
+# re-running the card's command upgrades an existing install. Resolving an already-installed agent first pinned a
+# machine to the version it first paired with, and agent fixes could never reach anyone already syncing (the
+# ignore rules that decide whether a project's .git travels to the sandbox among them).
+$bin = $env:AGENT_BIN
 if (-not $bin) {
     $dest = Join-Path $HOME '.intentic\sync\bin\intentic-sync.exe'
     New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
     Write-Host 'Downloading the intentic-sync agent…'
     try {
-        Invoke-WebRequest -UseBasicParsing -Uri "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-sync/latest/intentic-sync-windows-$arch.exe" -OutFile $dest
+        # Download beside the target, then swap: the mirror watcher runs FROM $dest, and Windows refuses to
+        # overwrite or delete a running executable — but it does allow RENAMING one out of the way, which leaves
+        # the live watcher running from the renamed file while the new binary takes its place. The leftover is
+        # cleared on the next run, once nothing is executing it. A half-download never becomes $dest either.
+        Invoke-WebRequest -UseBasicParsing -Uri "https://gitlab.com/api/v4/projects/radarsu%2Fintentic/packages/generic/intentic-sync/latest/intentic-sync-windows-$arch.exe" -OutFile "$dest.tmp"
+        Remove-Item -Force -ErrorAction SilentlyContinue "$dest.old"
+        if (Test-Path $dest) { Move-Item -Force -Path $dest -Destination "$dest.old" }
+        Move-Item -Force -Path "$dest.tmp" -Destination $dest
         $bin = $dest
     } catch {
-        if (Get-Command npx -ErrorAction SilentlyContinue) { $bin = 'npx' } else { Write-Error 'Could not download the agent and no npx fallback (install Node.js, or see the docs).'; exit 1 }
+        Remove-Item -Force -ErrorAction SilentlyContinue "$dest.tmp"
+        $installed = (Get-Command intentic-sync -ErrorAction SilentlyContinue).Source
+        if ($installed) { Write-Warning "Could not download the latest agent — continuing with the installed $installed."; $bin = $installed }
+        elseif (Get-Command npx -ErrorAction SilentlyContinue) { $bin = 'npx' }
+        else { Write-Error 'Could not download the agent and no npx fallback (install Node.js, or see the docs).'; exit 1 }
     }
 }
 

@@ -6,9 +6,9 @@ import { join, resolve } from "node:path";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { registerAutostart, unregisterAutostart } from "./autostart.js";
-import { knownHostsPath, readConfig, type SyncConfig, type SyncMode, sshKeyPath, writeConfig } from "./config.js";
-import { type CliLauncher, type Log, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
-import { ensureCloudflared, ensureMutagen, mutagenCreateArgs, runMutagen, sessionName } from "./mutagen.js";
+import { knownHostsPath, type Log, readConfig, type SyncConfig, type SyncMode, sshKeyPath, writeConfig } from "./config.js";
+import { type CliLauncher, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
+import { ensureCloudflared, ensureMutagen, ensureSyncSession, runMutagen, sessionName } from "./mutagen.js";
 import { ensureSshKey, INCLUDE_MARKER, sanitizeId, sshAlias, sshConfigBlock, writeManagedSshConfig } from "./ssh.js";
 
 // Enroll our SSH public key using the browser-minted pairing token (single-use). The daemon returns the tunnel's
@@ -97,7 +97,12 @@ const setup = buildCommand<SetupFlags>({
         flags: {
             url: { kind: "parsed", parse: String, brief: "The sandbox's public URL (e.g. https://sandbox-xxx.example.dev)" },
             pair: { kind: "parsed", parse: String, brief: "The one-time pairing token from the Desktop sync card" },
-            dir: { kind: "parsed", parse: String, optional: true, brief: "Local directory to sync (default: ~/intentic/<sandbox id>, the id in the sandbox's own URL)" },
+            dir: {
+                kind: "parsed",
+                parse: String,
+                optional: true,
+                brief: "Local directory to sync (default: ~/intentic/<sandbox id>, the id in the sandbox's own URL)",
+            },
             sandboxId: { kind: "parsed", parse: String, optional: true, brief: "Session/alias id (default: the sandbox URL host)" },
             takeover: { kind: "boolean", brief: "Take over sync from another machine already enrolled on this sandbox (revokes its key)" },
         },
@@ -154,12 +159,9 @@ const setup = buildCommand<SetupFlags>({
         };
         await writeConfig(config);
 
-        if (mode === "sync" && localDir !== undefined) {
-            // Terminate any previous session of the same name so re-running setup (a fresh pairing) replaces it
-            // instead of failing on the name collision. Silent: "no session found" is the common case.
-            spawnSync(mutagen, ["sync", "terminate", sessionName(sandboxId)], { stdio: "ignore" });
-            runMutagen(mutagen, mutagenCreateArgs({ name: sessionName(sandboxId), localDir, alias: sshAlias(sandboxId), remoteDir: "/work" }));
-        }
+        // Start the file sync — or, when re-running setup found the same session already running on this
+        // version's rules, leave it exactly as it is rather than paying a full rescan for nothing.
+        ensureSyncSession(mutagen, config, out);
         // Register the Mutagen daemon to autostart at login and resume sessions across reboots — it holds BOTH
         // sync and forward sessions, so this covers mirror-only too. Its own native mechanism (launchd/Task
         // Scheduler); no register verb on Linux. Best-effort: already-registered isn't worth failing on.

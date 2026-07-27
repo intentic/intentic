@@ -45,9 +45,11 @@ export interface TerminalTab {
 export interface TerminalTabsSource {
     readonly list: () => Promise<TerminalTab[]>;
     readonly create?: () => string;
-    // Resolves once the daemon has actually dropped the session — the tab is gone from the strip long before
-    // that (endSession is synchronous), so nothing awaits it for the view; it exists so the source can settle
-    // the shared session list on the way out.
+    // Resolves once the daemon has answered and the source has settled the shared session list against that
+    // answer — which is the only reason it is async at all. The tab is gone from the strip long before then
+    // (endSession is synchronous), so nothing awaits it for the view; callers `void` it. NEVER rejects, for
+    // that same reason: a kill that failed is the source's to reconcile and report, and a promise nobody
+    // awaits is the one place a throw goes nowhere.
     readonly kill?: (name: string) => Promise<void>;
 }
 

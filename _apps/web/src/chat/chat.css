@@ -15,29 +15,42 @@
    prompt would stick to the same top edge and stack.
    Opaque --color-card (the scroller's own background) because a pinned row floats over the messages it holds
    above: invisible in place, solid once it lifts. content-visibility is dropped for the same reason — a pinned
-   row is on screen for the whole turn, so it must never be skipped. */
+   row is on screen for the whole turn, so it must never be skipped.
+   `top: -1px` rather than 0 so the row is clipped by a pixel the moment it pins, which is what the
+   IntersectionObserver in ChatMessageView watches for (there is no :stuck selector). The pixel is spent out of
+   the padding above the bubble and never shows. */
 .chat-prompt {
     position: sticky;
-    top: 0;
+    top: -1px;
     z-index: 5;
-    padding-top: 0.75rem;
+    padding-top: calc(0.75rem + 1px);
     padding-bottom: 0.5rem;
     background: var(--color-card);
     content-visibility: visible;
 }
-/* The seam. That opaque background is a rectangle ending at the row's own last pixel, so the turn sliding
-   beneath a pinned prompt was cut off mid-glyph against a hard horizontal edge — which reads as a rendering
-   fault rather than as one layer passing under another. A card-to-transparent ramp below the row gives the
-   text somewhere to go. It costs nothing where nothing passes under it: card over card is invisible, the same
-   reason the opaque background above can be there at all. */
-.chat-prompt::after {
+/* The seam, and ONLY while the row is actually pinned. That opaque background is a rectangle ending at the
+   row's own last pixel, so the turn sliding beneath a pinned prompt was cut off mid-glyph against a hard
+   horizontal edge — which reads as a rendering fault rather than as one layer passing under another. A
+   card-to-transparent ramp below the row gives the text somewhere to go.
+   Unpinned it is not free, which is why it is gated: the ramp is painted over the NEXT message (the row is a
+   z-index 5 layer), and the assistant's surface is translucent over the card, so an always-on ramp washed the
+   top of every answer out — the whole turn read dimmer than the prompt heading it. The stops ease the fade
+   instead of running alpha linearly: a straight ramp holds ~50% card across its middle, which is exactly the
+   half-erased smear that made a passing line look broken rather than covered. */
+.chat-prompt-pinned::after {
     content: "";
     position: absolute;
     top: 100%;
     left: 0;
     right: 0;
-    height: 0.75rem;
-    background: linear-gradient(to bottom, var(--color-card), transparent);
+    height: 1.25rem;
+    background: linear-gradient(
+        to bottom,
+        var(--color-card) 0%,
+        color-mix(in srgb, var(--color-card) 78%, transparent) 30%,
+        color-mix(in srgb, var(--color-card) 30%, transparent) 62%,
+        transparent 100%
+    );
     pointer-events: none;
 }
 /* A prompt is pinned for as long as its answer runs, so its height is charged against the room that answer has
@@ -49,11 +62,18 @@
    the difference — measured at 355px on the transcript that prompted this — yanking the answer out from under
    the reader mid-sentence. Clamped in both states, the pin costs nothing at the threshold.
    Six lines is stated as arithmetic, not as the rem it happened to work out to: the bubble is `text-xs
-   leading-relaxed px-3 py-2`, so its line box is 1.625 × the body tier and its padding is 1rem — and the body
-   tier moves (it just did). A literal height silently becomes five-and-a-bit lines the next time it does. */
+   leading-relaxed px-3 py-2`, so its line box is 1.625 × --text-xs and its padding is 1rem. A literal height
+   silently becomes five-and-a-bit lines the next time that token moves. */
 .chat-prompt-text {
-    max-height: calc(6 * 1.625 * var(--chat-body) + 1rem);
+    max-height: calc(6 * 1.625 * var(--text-xs) + 1rem);
     overflow: hidden;
+}
+/* The "there is more of this" fade, applied only to a prompt the clamp actually cut (ChatMessageView measures
+   it). A mask erases the ELEMENT, not just its text — background and rounded border included — so on a message
+   that fits, this used to dissolve the bottom of the bubble itself: the border faded out mid-curve and whatever
+   sat below showed through it, which reads as a shadow bleeding over the edge rather than as text continuing
+   past a fold. A one-line prompt is barely taller than the fade, so most of it went dim. */
+.chat-prompt-clamped {
     mask-image: linear-gradient(to bottom, #000 calc(100% - 1.75rem), transparent);
 }
 /* Opening a prompt is a deliberate "I want to read this again", and one that stayed pinned while open would
@@ -64,7 +84,6 @@
 }
 .chat-prompt-open .chat-prompt-text {
     max-height: none;
-    mask-image: none;
 }
 .chat-surface {
     background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
@@ -75,63 +94,40 @@
     border: 1px solid var(--color-line);
 }
 /* ── Chat type scale ─────────────────────────────────────────────────────────────────────────────
-   Four tiers, and nothing else in the chat column:
+   The chat column runs on the APP's type scale — it does not keep one of its own. Three tiers, and
+   nothing else in here:
 
-     meta   0.75rem     tool cards, timestamps, badges, hints, option descriptions
-     body   0.8125rem   controls and short strings: bubbles, composer, menu rows, todos
-     title  0.9375rem   card header lines (plan / question / permission)
-     prose  0.875rem    rendered markdown — see prose.css
+     meta   text-2xs  0.6875rem  tool cards, timestamps, badges, hints, option descriptions
+     body   text-xs   0.75rem    everything read or typed: bubbles, prose, composer, menu rows, todos
+     title  text-sm   0.875rem   card header lines (plan / question / permission)
 
-   Prose is its own tier because it is the only thing here read in paragraphs rather than glanced
-   at, and the two wants pull opposite ways: chrome should stay compact so it frames the answer, the
-   answer should be big enough to read a screenful of at a time. Collapsing them (the column ran a
-   single 0.75rem "prose and controls" tier) is what made a long technical turn punishing — 12px
-   sans carrying 11px mono identifiers, for an answer that is half identifiers.
-
-   HOW THE TIERS REACH THE TEMPLATES: the chat's surfaces reassign Tailwind's own type-scale
-   variables to them, for those subtrees only. `text-2xs` inside the chat column therefore means meta
-   (0.75rem), not the 0.6875rem it means everywhere else, and every existing `text-2xs`/`text-xs`/
-   `text-sm` — including the responsive pairs — moves with the tier it was already standing in.
-   Retune the column by editing the five numbers below; do NOT reintroduce absolute font sizes in the
-   chat templates.
+   The column is dense on purpose: a turn is mostly chrome around an answer, and a chat panel is read
+   beside the code it is about, not instead of it. A pass that lifted every tier ~8-18% (and split
+   prose off at 0.875rem) is what made the panel feel bloated; it was reverted. If a tier ever needs
+   retuning, it is the app's token in _libs/ui/src/styles/shared/tokens.css that moves, so the chat
+   and the rest of the shell stay on one scale — do NOT reintroduce a chat-local scale that quietly
+   redefines what `text-xs` means inside this subtree, and do NOT put absolute font sizes in the chat
+   templates.
 
    Touch bumps a step, so shared surfaces are written as a pair — `text-base md:text-xs` on inputs
-   (16px is iOS's zoom threshold, so that half stays absolute), `text-sm md:text-xs` on menu rows.
-   The mobile-only components (ChatTabsMobile) sit at the touch sizes throughout.
+   (16px is iOS's zoom threshold), `text-sm md:text-xs` on menu rows. The mobile-only components
+   (ChatTabsMobile) sit at the touch sizes throughout.
    Labelled .composer-ghost buttons are chrome, not content: they take the meta tier wherever they
    appear (the composer's model/mode row, the picker's footer, the connect gate's provider tabs), so
    the controls framing the input never out-weigh the message being written in it.
    Mono runs a tier below its sans context — it reads optically larger at the same nominal size. */
 
-/* The tier VALUES sit at the root, so a chat surface still resolves them wherever it is rendered. */
-:root {
-    --chat-meta: 0.75rem;
-    --chat-body: 0.8125rem;
-    --chat-title: 0.9375rem;
-    --chat-prose: 0.875rem;
-    --chat-code: 0.8125rem;
-}
-
-/* The REASSIGNMENT is what is scoped — to the column, and to the overlays the column opens. PrimeVue
-   teleports those to the append target (the document body when docked, the pip body when popped out), so
-   they land outside .chat-panel and would otherwise be the one part of the chat left at the app's scale:
-   a model picker a tier smaller than the composer row that opened it. `chat-scale` goes on the content
-   WE author inside each overlay, never on PrimeVue's own nodes. */
-.chat-panel,
-.chat-scale {
-    --text-2xs: var(--chat-meta);
-    --text-2xs--line-height: 1.1rem;
-    --text-xs: var(--chat-body);
-    --text-xs--line-height: 1.3rem;
-    --text-sm: var(--chat-title);
-    --text-sm--line-height: 1.4rem;
-}
-
 /* The assistant's rendered answer. Everything about how markdown looks lives in prose.css, which the
-   workspace file preview shares — this is only the chat's tuning of it. */
+   workspace file preview shares — this is only the chat's tuning of it. The preview is a document surface
+   and keeps prose.css's larger default; the transcript sets prose to the column's own body tier, so a
+   rendered answer matches the bubbles and cards it is stacked between instead of standing a size above them. */
 .chat-markdown {
-    --prose-size: var(--chat-prose);
-    --prose-code: var(--chat-code);
+    --prose-size: var(--text-xs);
+    --prose-code: var(--text-2xs);
+    /* A step tighter than the preview's 1.7. Leading is a ratio, so the preview's airier default buys real
+       pixels back at this size — and the transcript is a scrolling column where every one of them is a line
+       of the answer pushed below the fold. */
+    --prose-lead: 1.625;
     /* No per-block measure: .chat-turns already caps the whole column at a readable width, and capping
        the text a second time inside it would set prose short of the code blocks and tables beside it. */
     --prose-measure: none;
@@ -190,7 +186,7 @@
     border-radius: var(--radius-md);
     background-color: var(--color-canvas);
     font-family: var(--font-mono);
-    font-size: var(--chat-meta);
+    font-size: var(--text-2xs);
     line-height: 1.5;
 }
 .chat-code-gutter {
@@ -238,7 +234,7 @@
     height: 2.125rem;
     padding: 0 0.9rem;
     border-radius: var(--radius-md);
-    font-size: var(--chat-body);
+    font-size: var(--text-xs);
     font-weight: 600;
     cursor: pointer;
     transition:
@@ -269,7 +265,7 @@
 .plan-sm {
     height: 1.875rem;
     padding: 0 0.75rem;
-    font-size: var(--chat-meta);
+    font-size: var(--text-2xs);
 }
 .chat-tab {
     color: var(--color-muted);

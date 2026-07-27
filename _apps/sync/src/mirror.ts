@@ -5,8 +5,8 @@ import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import { unregisterAutostart } from "./autostart.js";
-import { type MirroredPort, mirrorLogPath, mirrorPidPath, readConfig, type SyncConfig, writeConfig } from "./config.js";
-import { ensureMutagen, forwardSessionName, mutagenForwardArgs, runMutagen } from "./mutagen.js";
+import { type Log, type MirroredPort, mirrorLogPath, mirrorPidPath, readConfig, type SyncConfig, writeConfig } from "./config.js";
+import { ensureMutagen, ensureSyncSession, forwardSessionName, mutagenForwardArgs, runMutagen } from "./mutagen.js";
 import { sshAlias } from "./ssh.js";
 
 // Port mirroring: every WORKSPACE port listening in the sandbox is bound to the SAME port on this machine's
@@ -14,8 +14,6 @@ import { sshAlias } from "./ssh.js";
 // development feel local — a frontend baked with `https://localhost:6480` just works (cookies + CORS included)
 // because localhost IS serving it. A resident watcher polls the daemon's /ports so a dev server started later
 // (Vite grabbing a fresh random port) is mirrored within a poll, with no user action.
-
-export type Log = (message: string) => void;
 
 // How to re-invoke this CLI: the executable followed by any leading args the command must come after. Non-empty
 // by construction — see cliLauncher in commands.ts, which is the only thing that builds one.
@@ -172,6 +170,10 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         return;
     }
     const mutagen = await ensureMutagen();
+    // The watcher runs at every login, which makes it the one place an upgraded agent reliably reaches the file
+    // sync it INHERITED — Mutagen bakes a session's ignores at creation, so an install that swapped the binary
+    // without re-pairing would otherwise keep syncing on whatever rules were current the day it first paired.
+    ensureSyncSession(mutagen, first, log);
     log(`mirror watcher started (pid ${process.pid}); polling ${first.sandboxUrl}/ports every ${POLL_MS / 1000}s`);
 
     let rejectedPolls = 0;

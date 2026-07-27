@@ -16,11 +16,24 @@ export const globalTerminalSource: TerminalTabsSource = {
     list: listTerminals,
     create: () => `web-${crypto.randomUUID().slice(0, 8)}`,
     // Drop it from the shared list up front so the rail's badge falls with the tab, then let the daemon's own
-    // account of the kill land — which also puts the session back if the DELETE turns out to have failed.
+    // account of the kill land — which is what puts the session BACK if the DELETE turns out to have failed.
+    // That reconcile is the whole point, so it runs in a `finally`: a tunnel that drops mid-kill is exactly the
+    // case the optimistic removal has to be walked back for, and a refresh only reached on success would leave
+    // the rail under-counting a shell that is still up until the next poll.
+    //
+    // The failure stops here rather than riding out of a promise nobody awaits (the tab left the strip
+    // synchronously — see TerminalTabsSource.kill). One line of console is all there is to say: the list above
+    // has already told the user the truth, and the panel has no error surface that a dead tunnel wouldn't
+    // already be shouting from.
     kill: async (name) => {
         removeTerminal(name);
-        await sandboxJson(`/system/terminals/${encodeURIComponent(name)}`, { method: `DELETE` });
-        await refreshTerminals();
+        try {
+            await sandboxJson(`/system/terminals/${encodeURIComponent(name)}`, { method: `DELETE` });
+        } catch (error) {
+            console.error(`terminal ${name}: kill failed`, error);
+        } finally {
+            await refreshTerminals();
+        }
     },
 };
 

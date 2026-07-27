@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { AgentProvider, KeyedProvider } from "@intentic/sandbox-contract";
+import type { KeyedProvider } from "@intentic/sandbox-contract";
 import { Card, cmp, CopyButton, InfoHint, Row, RowGroup, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { providerAccounts, providerTabs } from "../../composables/chat/conversation";
+import { providerReady } from "../../composables/chat/access";
+import { providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { errorMessage } from "../../composables/useAsyncAction";
@@ -118,19 +119,10 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; about: st
     },
 };
 
-// Whether a provider is usable at all — a native account, its translator subscription, or (Grok) either. Read
-// per tab so the switcher itself answers "which AI can my agent use?": the card can only ever show one
-// provider, and without a dot per tab that question costs five clicks.
-const KEYED_PROVIDERS: readonly KeyedProvider[] = [`codex`, `grok`, `gemini`];
-const providerConnected = (target: AgentProvider): boolean => {
-    // Providers are an open string vocabulary (mirroring useChat's accountsOf) — an unseeded key has no list.
-    const accounts = providerAccounts.value[target];
-    if (accounts !== undefined && accounts.length > 0) {
-        return true;
-    }
-    return KEYED_PROVIDERS.some((keyed) => keyed === target && translatorAccounts.value[keyed]);
-};
-
+// The dot per tab, so the switcher itself answers "which AI can my agent use?" — the card can only ever show one
+// provider, and without it that question costs five clicks. `providerReady` (access.ts) is the shared rule every
+// surface that offers a provider reads; this card must not carry a second opinion about what "connected" means,
+// least of all one that would call a provider ready here and locked in the picker.
 // The pasted redirect URL for a routed login that can't self-complete (Google's — see completeTranslator).
 const redirectUrl = ref(``);
 const finishTranslator = async (): Promise<void> => {
@@ -395,8 +387,8 @@ const importMemory = async (): Promise<void> => {
                     >
                         <span
                             class="h-1.5 w-1.5 shrink-0 rounded-full"
-                            :class="providerConnected(tab.value) ? 'bg-success' : 'bg-content/25'"
-                            :aria-label="providerConnected(tab.value) ? `connected` : `not connected`"
+                            :class="providerReady(tab.value) ? 'bg-success' : 'bg-content/25'"
+                            :aria-label="providerReady(tab.value) ? `connected` : `not connected`"
                         />
                         {{ tab.label }}
                     </button>

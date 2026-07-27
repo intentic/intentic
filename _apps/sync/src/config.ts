@@ -16,6 +16,11 @@ export const binDir = join(baseDir, "bin");
 export const mirrorPidPath = join(baseDir, "mirror.pid");
 export const mirrorLogPath = join(baseDir, "mirror.log");
 
+// Where a command writes its user-facing progress. Every entry point owns its sink (stdout for an interactive
+// command, the timestamped mirror.log for the detached watcher), so the code underneath takes one of these
+// rather than writing anywhere itself.
+export type Log = (message: string) => void;
+
 // One mirrored port: the local bind (same number) + the loopback address the sandbox listener answers at —
 // stored so the watch reconcile can leave unchanged forwards untouched and recreate one whose family moved.
 export interface MirroredPort {

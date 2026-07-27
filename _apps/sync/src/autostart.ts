@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { mirrorLogPath } from "./config.js";
-import type { CliLauncher, Log } from "./mirror.js";
+import { type Log, mirrorLogPath } from "./config.js";
+import type { CliLauncher } from "./mirror.js";
 
 // Login autostart for the port-mirror watcher, so mirroring resumes after a reboot with no user action — the
 // same guarantee Mutagen's own daemon gets from `mutagen daemon register`. Each OS has its own mechanism
