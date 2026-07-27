@@ -11,6 +11,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { useAgents } from "../composables/agents/useAgents";
+import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
 import { relativeTime, statusTabClass } from "../composables/chat/catalog";
 import type { Conversation } from "../composables/chat/conversation";
@@ -85,33 +86,18 @@ const focusedTabId = (): string | undefined => {
 };
 
 // --- Hover preview --------------------------------------------------------------------------------
-// A compact card that reveals a tab's FIRST message IN FULL, standing in for the terse title tooltip (which only
-// ever repeats the 40-char header). It teleports to the overlay target (the pip body while popped out, else
-// <body>) so it escapes the tab strip's overflow-auto clipping, and flips above/below the tab depending on the
-// room in that window — the same floating-preview idiom as the image attachments.
-const preview = ref<{ text: string; left: number; top?: number; bottom?: number }>();
-
-const PREVIEW_WIDTH = 320; // px — matches the card's max-w below.
-const PREVIEW_GAP = 8;
+// A tab wears its title clipped to max-w-40 on top of the 40-char derivation, so hovering reveals the FULL
+// derived title and, under it, the first message that title was derived from. The card itself is the shared
+// HoverCard — the Changes panel's agent chips raise the same one for the same session.
+const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
 
 const showPreview = (event: MouseEvent, conversation: Conversation): void => {
     const firstUser = conversation.messages.value.find((message) => message.role === `user`);
-    const text = (firstUser && firstUser.text.trim() !== `` ? firstUser.text : conversation.title.value) ?? ``;
-    if (text.trim() === ``) return; // a fresh "New chat"/"New agent" tab has no first message to preview.
-    const el = event.currentTarget as HTMLElement;
-    // The tab may live in the pip window, whose viewport (and fixed-position origin) is its own — measure and
-    // clamp against that window, not the main realm's globalThis.
-    const win = el.ownerDocument.defaultView ?? globalThis;
-    const rect = el.getBoundingClientRect();
-    const left = Math.min(Math.max(PREVIEW_GAP, rect.left), win.innerWidth - PREVIEW_WIDTH - PREVIEW_GAP);
-    // Anchor below the tab (the strip sits at the top, so there's room) and only flip above when there isn't.
-    preview.value =
-        rect.top >= win.innerHeight - rect.bottom
-            ? { text, left, bottom: win.innerHeight - rect.top + PREVIEW_GAP }
-            : { text, left, top: rect.bottom + PREVIEW_GAP };
+    // A fresh "New chat"/"New agent" tab has neither, and the card declines to open on empty content.
+    hoverCard.value?.show(event, { title: conversation.title.value ?? undefined, body: firstUser?.text });
 };
 const hidePreview = (): void => {
-    preview.value = undefined;
+    hoverCard.value?.hide();
 };
 
 // --- Closing ------------------------------------------------------------------------------------
@@ -155,29 +141,34 @@ const confirmClose = (): void => {
 const tabMenu = ref<{ show: (event: Event) => void } | undefined>();
 const menuTabId = ref<string>();
 
-// The one row that isn't about a particular tab, so it is the whole of the empty-space menu and the tail of a
-// tab's. Undefined off Chromium, where there is no pip window to move the chat into.
-const popoutItem = computed<MenuItem | undefined>(() =>
-    popoutSupported
-        ? {
-              label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
-              shortcut: commandShortcut(`chat.togglePopout`),
-              command: togglePopout,
-          }
-        : undefined,
-);
+// The rows that name no particular tab: they tail a tab's menu and they ARE the empty-space one. The pop-out
+// drops off Chromium, where there is no pip window to move the chat into.
+const stripItems = computed<MenuItem[]>(() => {
+    const items: MenuItem[] = [{ label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => requestClose(allTabs()) }];
+    if (popoutSupported) {
+        items.push(
+            { separator: true },
+            {
+                label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
+                shortcut: commandShortcut(`chat.togglePopout`),
+                command: togglePopout,
+            },
+        );
+    }
+    return items;
+});
 
 const tabMenuItems = computed<MenuItem[]>(() => {
     const id = menuTabId.value;
     if (id === undefined) {
-        return popoutItem.value === undefined ? [] : [popoutItem.value];
+        return stripItems.value;
     }
     if (!conversations.value.some((c) => c.id === id)) {
         return []; // the right-clicked tab closed under the open menu
     }
     const others = othersOf(id);
     const toRight = toRightOf(id);
-    const items: MenuItem[] = [
+    return [
         { label: `Rename`, icon: `pencil`, shortcut: commandShortcut(`chat.rename`), command: () => beginRename(id) },
         { separator: true },
         { label: `Close`, icon: `times`, shortcut: commandShortcut(`chat.closeTab`), command: () => emit(`close`, new Set([id])) },
@@ -194,12 +185,8 @@ const tabMenuItems = computed<MenuItem[]>(() => {
             command: () => requestClose(toRight),
         },
         { separator: true },
-        { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => requestClose(allTabs()) },
+        ...stripItems.value, // Close All, then the pop-out toggle behind its own separator
     ];
-    if (popoutItem.value !== undefined) {
-        items.push({ separator: true }, popoutItem.value);
-    }
-    return items;
 });
 
 const openTabMenu = (id: string, event: Event): void => {
@@ -283,12 +270,10 @@ const closeTab = (event: Event, id: string): void => {
     emit(`close`, new Set([id]));
 };
 
-// Right-click on the strip's empty space OPENS THE MENU (holding the pop-out toggle) rather than popping the
-// chat out on the spot — an accidental right-click near the tabs shouldn't tear the panel into its own window.
-// With nothing strip-wide to offer (no pip support), the browser's own menu is left alone.
+// Right-click on the strip's empty space OPENS THE MENU (Close All, and the pop-out toggle) rather than popping
+// the chat out on the spot — an accidental right-click near the tabs shouldn't tear the panel into its own window.
 const onStripContextMenu = (event: MouseEvent): void => {
     if (event.target !== event.currentTarget) return; // a tab handles its own right-click
-    if (popoutItem.value === undefined) return;
     event.preventDefault();
     menuTabId.value = undefined;
     tabMenu.value?.show(event);
@@ -427,21 +412,9 @@ const openHistory = (event: Event): void => {
             </div>
         </Popover>
     </header>
-    <!-- Full first message on tab hover: a compact card, teleported out of the strip's clipping and clamped to
-         the window. pointer-events-none so it never eats the hover that summons it. -->
-    <Teleport :to="overlayTarget">
-        <div
-            v-if="preview"
-            class="pointer-events-none fixed z-50 line-clamp-[12] max-w-[320px] min-w-[12rem] rounded-lg border border-line-strong bg-card px-3 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap text-content shadow-2xl"
-            :style="{
-                left: `${preview.left}px`,
-                ...(preview.top !== undefined ? { top: `${preview.top}px` } : {}),
-                ...(preview.bottom !== undefined ? { bottom: `${preview.bottom}px` } : {}),
-            }"
-        >
-            {{ preview.text }}
-        </div>
-    </Teleport>
+    <!-- Full title (+ first message) on tab hover. Mounted at the overlay target so it clears the strip's
+         overflow-auto clipping, and into the pip window while the chat floats there. -->
+    <HoverCard ref="hoverCard" :to="overlayTarget" />
 
     <!-- Right-click menu, for a tab and for the strip's empty space alike. Rendered into the pop-out window while
          the chat floats there (`append-to`), with the same dense pt and shortcut-hint row the workspace's file-tab

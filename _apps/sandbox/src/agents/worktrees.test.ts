@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, lstatSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -47,6 +47,123 @@ const setup = async (): Promise<{ work: string; historyRoot: string; worktrees: 
     const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), logger });
     return { work, historyRoot, worktrees };
 };
+
+// One package's installed tree. Untracked by design — this is exactly what a worktree checkout cannot carry.
+const deps = async (repo: string, pkg: string): Promise<void> => {
+    await mkdir(join(repo, pkg, "node_modules", "dep"), { recursive: true });
+    await writeFile(join(repo, pkg, "node_modules", "dep", "index.js"), `dep of ${pkg === "" ? "root" : pkg}\n`);
+};
+
+// A repo with dependencies installed the way a real one has them: a committed ignore rule, tracked package
+// dirs, and node_modules trees outside version control. `rule` is what decides whether mirroring is safe —
+// only a rule matching FILES too can hide a symlink from `add -A`. pkg/b is tracked but left uninstalled, so a
+// test can install it later and watch a re-ensure pick it up.
+const install = async (repo: string, rule: string): Promise<void> => {
+    await writeFile(join(repo, ".gitignore"), `${rule}\n`);
+    for (const pkg of ["pkg/a", "pkg/b"]) {
+        await mkdir(join(repo, pkg), { recursive: true });
+        await writeFile(join(repo, pkg, "package.json"), "{}\n");
+    }
+    await sh(repo, "add", "-A");
+    await sh(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "packages");
+    await deps(repo, "");
+    await deps(repo, "pkg/a");
+};
+
+// The property isolated turns rest on: a checkout of TRACKED files alone cannot resolve a single import, so
+// nothing type-checks, lints or tests in a worktree unless the installed trees are mirrored into it.
+test("a worktree resolves dependencies through links to the main checkout", async () => {
+    const { work, worktrees } = await setup();
+    await install(join(work, "intent"), "**/node_modules");
+
+    const conversation = await worktrees.ensure("c1", []);
+    const worktree = join(conversation.cwd, "intent");
+
+    // A link, not a copy — and one per installed package, at the same relative path.
+    expect(lstatSync(join(worktree, "node_modules")).isSymbolicLink()).toBe(true);
+    expect(await readlink(join(worktree, "node_modules"))).toBe(join(work, "intent", "node_modules"));
+    expect(await readFile(join(worktree, "node_modules", "dep", "index.js"), "utf8")).toBe("dep of root\n");
+    expect(await readFile(join(worktree, "pkg", "a", "node_modules", "dep", "index.js"), "utf8")).toBe("dep of pkg/a\n");
+    // A tracked package with nothing installed has nothing to mirror.
+    expect(existsSync(join(worktree, "pkg", "b", "node_modules"))).toBe(false);
+});
+
+test("the mirror stays out of git, so retire cannot commit it onto the branch", async () => {
+    const { work, worktrees } = await setup();
+    await install(join(work, "intent"), "**/node_modules");
+    const conversation = await worktrees.ensure("c1", []);
+    expect(await sh(join(conversation.cwd, "intent"), "status", "--porcelain")).toBe("");
+
+    // Real work alongside the links, so retire takes a commit rather than no-opping past the question.
+    await writeFile(join(conversation.cwd, "intent", "deploy.config.ts"), "agent edit\n");
+    await worktrees.retire("c1", conversation.repos, "t");
+
+    expect(await sh(join(work, "intent"), "show", "agent/c1:deploy.config.ts")).toBe("agent edit");
+    expect(await sh(join(work, "intent"), "ls-tree", "-r", "--name-only", "agent/c1")).not.toContain("node_modules");
+});
+
+// `node_modules/` matches DIRECTORIES only, and a symlink is not a directory: git would stage it and retire
+// would put a machine-local absolute path on the branch, then into whatever land merges. Unmirrored (no
+// tooling) is the correct trade against that.
+test("a repo whose ignore rule is directory-only is left unmirrored", async () => {
+    const { work, worktrees } = await setup();
+    await install(join(work, "intent"), "node_modules/");
+
+    const conversation = await worktrees.ensure("c1", []);
+
+    expect(existsSync(join(conversation.cwd, "intent", "node_modules"))).toBe(false);
+    expect(existsSync(join(conversation.cwd, "intent", "pkg", "a", "node_modules"))).toBe(false);
+    expect(await sh(join(conversation.cwd, "intent"), "status", "--porcelain")).toBe("");
+});
+
+test("re-ensure keeps existing links and mirrors packages installed since the checkout", async () => {
+    const { work, worktrees } = await setup();
+    const intent = join(work, "intent");
+    await install(intent, "**/node_modules");
+    const created = await worktrees.ensure("c1", []);
+
+    // An install that lands after the agent's checkout already exists — the next turn's ensure must see it.
+    await deps(intent, "pkg/b");
+    const restored = await worktrees.ensure("c1", created.repos);
+    const worktree = join(restored.cwd, "intent");
+
+    expect(await readFile(join(worktree, "pkg", "b", "node_modules", "dep", "index.js"), "utf8")).toBe("dep of pkg/b\n");
+    // The links that were already there are untouched, not rebuilt into something else.
+    expect(await readlink(join(worktree, "node_modules"))).toBe(join(intent, "node_modules"));
+    expect(await sh(worktree, "status", "--porcelain")).toBe("");
+});
+
+// A package dir the agent's branch never had is not a package to mirror — planting a link would mean first
+// creating an untracked directory the checkout deliberately doesn't contain.
+test("a package absent from the agent's branch is not mirrored into its worktree", async () => {
+    const { work, worktrees } = await setup();
+    const intent = join(work, "intent");
+    await install(intent, "**/node_modules");
+    const created = await worktrees.ensure("c1", []);
+
+    await mkdir(join(intent, "pkg", "later"), { recursive: true });
+    await writeFile(join(intent, "pkg", "later", "package.json"), "{}\n");
+    await deps(intent, "pkg/later");
+
+    const restored = await worktrees.ensure("c1", created.repos);
+    expect(existsSync(join(restored.cwd, "intent", "pkg", "later"))).toBe(false);
+});
+
+// The links point at the OWNER's real dependency trees. A teardown that followed them would delete the
+// workspace's installed packages — the worst failure this mechanism could have.
+test("teardown drops the links without touching the main checkout's dependencies", async () => {
+    const { work, worktrees } = await setup();
+    const intent = join(work, "intent");
+    await install(intent, "**/node_modules");
+    const conversation = await worktrees.ensure("c1", []);
+    expect(existsSync(join(conversation.cwd, "intent", "node_modules"))).toBe(true);
+
+    await worktrees.remove("c1", conversation.repos);
+
+    expect(existsSync(conversation.cwd)).toBe(false);
+    expect(await readFile(join(intent, "node_modules", "dep", "index.js"), "utf8")).toBe("dep of root\n");
+    expect(await readFile(join(intent, "pkg", "a", "node_modules", "dep", "index.js"), "utf8")).toBe("dep of pkg/a\n");
+});
 
 test("ensure creates the mirrored composition with agent branches and recorded bases", async () => {
     const { work, worktrees } = await setup();

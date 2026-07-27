@@ -9,6 +9,15 @@ injectWorkspacePackages: true
 syncInjectedDepsAfterScripts:
   - build
 
+# An agent conversation runs in a git worktree, which checks out TRACKED files only — so its node_modules are
+# symlinks mirroring the main checkout's (agents/worktrees.ts). Resolution works through them, but pnpm's
+# pre-run deps check compares state that is keyed to the workspace PATH, so it declares a mirrored worktree out
+# of sync and runs a full recursive install before every `pnpm run` there — minutes, on a tree that is already
+# correct. The check cannot be scoped to worktrees (it is not readable from .npmrc or the environment), so it
+# is off everywhere: after changing a package.json, run `pnpm install` yourself rather than relying on a script
+# to do it for you.
+verifyDepsBeforeRun: false
+
 useNodeVersion: 24.18.0
 
 overrides:

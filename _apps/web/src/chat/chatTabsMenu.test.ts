@@ -144,14 +144,25 @@ it(`teaches the shortcut a close command is bound to, and disables the rows with
     expect(row(`Close to the Right`).className).toContain(`p-disabled`);
 });
 
-it(`offers the pop-out from the empty strip's menu instead of popping out on the right-click itself`, async () => {
+it(`offers the tab-less rows from the empty strip's menu instead of popping out on the right-click itself`, async () => {
+    const chat = useChat();
+    const ids = [chat.active.value.id, chat.newChat().id];
+    await nextTick();
+
     // The gesture used to toggle the pop-out on the spot, which tore the panel into its own window on a
-    // right-click that only just missed a tab. It opens the menu now; the pop-out is one row in it.
+    // right-click that only just missed a tab. It opens the menu now, carrying the rows that need no tab
+    // under the pointer; the pop-out is one of them.
     await openStripMenu();
-    expect(labels()).toEqual([`Move chat into new window`]);
+    expect(labels()).toEqual([`Close All`, `Move chat into new window`]);
     expect(requestWindow).not.toHaveBeenCalled();
 
-    // The row itself still pops out — the menu is a step in front of the gesture, not a replacement for it.
+    // Close All means here what it means on a tab: the strip comes back as one fresh conversation.
+    await clickRow(`Close All`);
+    expect(chat.conversations.value).toHaveLength(1);
+    expect(chat.conversations.value[0]!.id).not.toBeOneOf(ids);
+
+    // The pop-out row still pops out — the menu is a step in front of the gesture, not a replacement for it.
+    await openStripMenu();
     await clickRow(`Move chat into new window`);
     expect(requestWindow).toHaveBeenCalled();
 });

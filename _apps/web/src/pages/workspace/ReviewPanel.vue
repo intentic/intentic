@@ -5,6 +5,7 @@ import Dialog from "primevue/dialog";
 import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import DiffStat from "../../components/DiffStat.vue";
+import HoverCard from "../../components/HoverCard.vue";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useLayout } from "../../composables/useLayout";
@@ -87,6 +88,9 @@ const plural = (count: number, noun: string): string => `${count} ${noun}${count
  * Nothing is drawn for a file with no agent origin. A "you" badge on nine rows in ten is noise, and the daemon
  * cannot see terminal edits or main-tree turns anyway — the legend states that once, for all of them. */
 const { fleet } = useAgents();
+// The open tabs — read here for the first message behind an origin chip's title, and below for which repos a
+// main-tree turn is writing while you commit.
+const { conversations } = useChat();
 const { mobile } = useDevice();
 const layout = useLayout();
 
@@ -111,8 +115,25 @@ const toggleOrigin = (id: string): void => {
 // origin, and hiding it would silently re-attribute the file to the user.
 const agentOf = (id: string) => fleet.value.find((agent) => agent.id === id);
 const originLabel = (id: string): string => agentOf(id)?.title ?? `Agent ${id.slice(0, 6)}`;
-const originTitle = (ids: readonly string[]): string =>
-    ids.length === 1 ? `Landed by ${originLabel(ids[0]!)}` : `Landed by ${ids.map((id) => originLabel(id)).join(` · `)}`;
+
+// The chip is a 14px logo and, at best, a title truncated to max-w-24 — so hovering it raises the SAME card the
+// chat tab strip raises for that session: the full derived title, and under it the first message it came from
+// when that conversation is open in the panel (the roster carries no prompt, only the ≤40-char title).
+const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
+const firstPromptOf = (id: string): string | undefined => {
+    const conversation = conversations.value.find((c) => c.conversationId === id);
+    return conversation?.messages.value.find((message) => message.role === `user`)?.text;
+};
+const showOrigins = (event: MouseEvent, ids: readonly string[]): void => {
+    // Two agents on one file is a real (if rare) case, and it is exactly the case a single title can't state —
+    // so the card lists them and the first message stays out of it.
+    hoverCard.value?.show(
+        event,
+        ids.length === 1
+            ? { label: `Landed by`, title: originLabel(ids[0]!), body: firstPromptOf(ids[0]!) }
+            : { label: `Landed by`, title: ids.map((id) => originLabel(id)).join(`\n`) },
+    );
+};
 // The name only rides the row once the panel is wide enough to hold it without evicting the path — and on
 // mobile, where this panel is the whole screen.
 const wide = computed(() => mobile.value || layout.sidebarWidth.value >= 320);
@@ -299,7 +320,6 @@ const commitLabel = computed(() => (commitAll.value ? `Commit all` : `Commit`));
  * The residual case it cannot see is a main-tree agent running `git add` itself: that moves the index under a
  * staged commit, and a Bash call reports no locations to detect it by. Recoverable (`reset --soft`), rare, and
  * not worth warning about on every commit to catch. */
-const { conversations } = useChat();
 const repos = useRepos();
 const writingRepos = computed<ReadonlySet<string>>(
     () =>
@@ -928,7 +948,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                     <span
                                         v-if="originsOf(group, change.path).length > 0"
                                         class="flex shrink-0 items-center gap-0.5"
-                                        v-tooltip.left="originTitle(originsOf(group, change.path))"
+                                        @mouseenter="showOrigins($event, originsOf(group, change.path))"
+                                        @mouseleave="hoverCard?.hide()"
                                     >
                                         <span
                                             v-if="wide && originsOf(group, change.path).length === 1"
@@ -1021,5 +1042,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </button>
             </template>
         </Dialog>
+
+        <!-- The full session title behind a row's origin chip — the same card the chat tab strip raises, mounted
+             at <body> so it clears this sidebar's narrow, scrolling column. -->
+        <HoverCard ref="hoverCard" />
     </div>
 </template>
