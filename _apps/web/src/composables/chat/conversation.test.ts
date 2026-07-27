@@ -1076,6 +1076,39 @@ describe(`Conversation`, () => {
         expect(conversation.streaming.value).toBe(false);
     });
 
+    it(`reattach replays an already-answered question card as decided, not as a live prompt`, async () => {
+        // The bug this guards: a reload replays the run from seq 0, so the card is rebuilt from its own frame —
+        // and without the resolution frame it came back pending, offering Submit on a requestId the daemon had
+        // already resolved, underneath a transcript that had visibly moved on.
+        const conversation = new Conversation(`c1`);
+        const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
+        sandboxRequestMock.mockImplementation(() => {
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(sseFrame(head({ prompt: `which one?`, startedAt: 1234, seq: 3 })));
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `question`, requestId: `q1`, questions } }));
+                    controller.enqueue(
+                        sseFrame({
+                            kind: `frame`,
+                            seq: 2,
+                            event: { kind: `resolved`, requestId: `q1`, reply: { kind: `question`, requestId: `q1`, answers: { Which: [`A`] } } },
+                        }),
+                    );
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 3, event: { kind: `delta`, text: `Doing A.` } }));
+                    controller.enqueue(sseFrame({ kind: `end` }));
+                    controller.close();
+                },
+            });
+            return Promise.resolve({ ok: true, body } as Response);
+        });
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value[1]!.question).toMatchObject({ status: `answered`, answers: { Which: [`A`] } });
+        // Nothing is parked, so the composer is free and no card is asking for an answer that was already given.
+        expect(conversation.awaitingDecision.value).toBe(false);
+    });
+
     it(`reattach reports false when nothing is running, leaving the transcript untouched`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockResolvedValue({ ok: false, status: 404 } as Response);

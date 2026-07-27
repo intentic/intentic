@@ -301,21 +301,23 @@ const decide = async (
     turn: Parameters<typeof runAgent>[0],
     call: { tool: string; input?: Record<string, unknown>; suggestions?: PermissionUpdate[] },
     answer: (event: AgentEvent) => AgentReply,
-): Promise<{ result: PermissionResult; card: AgentEvent }> => {
+): Promise<{ result: PermissionResult; card: AgentEvent; frames: AgentEvent[] }> => {
     let result: PermissionResult | undefined;
     let card: AgentEvent | undefined;
+    const frames: AgentEvent[] = [];
     const query: QueryFn = async function* (args) {
         const gate = args.options.canUseTool!;
         result = await gate(call.tool, call.input ?? {}, { signal: turn.signal, suggestions: call.suggestions } as never);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
     for await (const event of runAgent(turn, query)) {
+        frames.push(event);
         if (event.kind === "permission" || event.kind === "plan") {
             card = event;
             resolveRequest(answer(event));
         }
     }
-    return { result: result!, card: card! };
+    return { result: result!, card: card!, frames };
 };
 
 test("'always' grants the whole tool for the session, alongside whatever the SDK suggested", async () => {
@@ -350,6 +352,22 @@ test("a card with no SDK suggestions still offers 'always', and 'once' persists 
 
     expect(card).toMatchObject({ alwaysLabel: "Don't ask again for WebFetch" });
     expect(result).toEqual({ behavior: "allow", updatedInput: {}, decisionClassification: "user_temporary" });
+});
+
+test("a decided card is recorded in the frame log, so a replay freezes it instead of re-offering it", async () => {
+    // The turn's frames are what a reload replays and what a second window renders. A card whose answer never
+    // entered the log comes back live there — buttons on a requestId this daemon no longer holds.
+    const { card, frames } = await decide({ ...request, permissionMode: "default" }, { tool: "WebFetch" }, (event) => ({
+        kind: "permission",
+        requestId: event.requestId,
+        decision: "once",
+    }));
+
+    expect(frames.filter((frame) => frame.kind === "resolved")).toEqual([
+        { kind: "resolved", requestId: card.requestId, reply: { kind: "permission", requestId: card.requestId, decision: "once" } },
+    ]);
+    // ...and it lands after the card it settles, so replaying in order never freezes a card that isn't there yet.
+    expect(frames.findIndex((frame) => frame.kind === "resolved")).toBeGreaterThan(frames.findIndex((frame) => frame.kind === "permission"));
 });
 
 test("an approved plan returns to the posture the turn started in when the reply names none", async () => {

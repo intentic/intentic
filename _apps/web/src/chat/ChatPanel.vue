@@ -1368,6 +1368,13 @@ watch(keyboardInset, () => {
 .qopt-on:hover {
     background: color-mix(in srgb, var(--color-primary-500) 18%, transparent);
 }
+/* The taken option on a DECIDED card. Quieter than .qopt-on — a live selection is a state the user is still
+   moving, this one is settled — and its border is what separates it from the options it was chosen over, which
+   carry none. No :hover pair on purpose: a decided card responds to nothing. */
+.qopt-picked {
+    background: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
+    border-color: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
+}
 .composer-ghost {
     display: inline-flex;
     align-items: center;

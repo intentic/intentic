@@ -185,6 +185,13 @@ test("a plan turn proposes read-only, then executes full-access on the same thre
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-2" },
         { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route, then test." },
+        // The approval is logged as well as acted on: a client replaying this run rebuilds the plan card from
+        // the frame above, and this is the only thing that stops it coming back asking to be approved again.
+        {
+            kind: "resolved",
+            requestId: expect.any(String) as string,
+            reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
+        },
         { kind: "delta", text: "Done." },
         { kind: "text_end" },
         { kind: "done" },

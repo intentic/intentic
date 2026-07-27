@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { AgentProviderSchema, AgentSummarySchema, PermissionModeSchema, RateLimitInfoSchema, UsageWindowSchema } from "./schemas.js";
+import {
+    AgentProviderSchema,
+    AgentReplySchema,
+    AgentSummarySchema,
+    PermissionModeSchema,
+    RateLimitInfoSchema,
+    UsageWindowSchema,
+} from "./schemas.js";
 
 // The wire shapes streamed from the daemon's event-iterator procedures. This is their canonical home: the
 // daemon yields them and the browser client consumes them from the same schema, so the two can't drift (they
@@ -227,6 +234,12 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("plan"), requestId: z.string(), text: z.string() }),
     z.object({ kind: z.literal("question"), requestId: z.string(), questions: z.array(AskQuestionSchema) }),
     PermissionAskSchema.extend({ kind: z.literal("permission"), requestId: z.string() }),
+    // The card at `requestId` stopped being live, and how it settled. A turn's frame log is what a reload
+    // replays and what a second window renders, so the ANSWER has to be in the log too: without this frame both
+    // rebuild the card from its `plan`/`question`/`permission` frame alone and show it pending — offering
+    // buttons on a requestId nothing holds any more, under a transcript that has already moved on. The reply
+    // rides verbatim, exactly as the client POSTed it; absent, the turn ended before anyone answered.
+    z.object({ kind: z.literal("resolved"), requestId: z.string(), reply: AgentReplySchema.optional() }),
     // The turn's permission mode, whenever it changes — the user's pick at turn start, then every move the
     // AGENT makes on its own (EnterPlanMode on a request that needs thinking through, ExitPlanMode once the
     // user approves). The composer's mode selector follows this, so the UI never lies about the live posture.

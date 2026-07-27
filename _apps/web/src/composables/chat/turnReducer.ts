@@ -1,5 +1,5 @@
-import type { AgentCommand, AgentEvent, ContextUsage, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
-import { type ChatMessage, type ChatTool, type ChatUsage, mapTool } from "./transcript";
+import type { AgentCommand, AgentEvent, AgentReply, ContextUsage, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
+import { type ChatMessage, type ChatTool, type ChatUsage, mapTool, type PermissionStatus, type PlanStatus, type QuestionStatus } from "./transcript";
 
 /* One agent frame applied to the transcript — as a PURE function.
  *
@@ -209,6 +209,44 @@ const appendTool = (state: TurnState, bubbleId: number, event: Extract<AgentEven
     return mapMessage(state, bubbleId, (message) => ({ ...message, tools: [...(message.tools ?? []), tool] }));
 };
 
+// The frozen status each card takes from the reply that settled it — the same mapping the answering client
+// applies locally (see Conversation.decidePlan / answerQuestion / decidePermission), applied here to the card
+// the frame names. No reply means the turn ended with the card still parked (Stop, a lost daemon), which is
+// nobody's decision — 'cancelled' for all three. A reply of the wrong kind cannot reach a card of another,
+// since the requestId is what matched it; it reads as unanswered rather than inventing a decision.
+const planStatusOf = (reply: AgentReply | undefined): PlanStatus => (reply?.kind !== `plan` ? `cancelled` : reply.approve ? `approved` : `rejected`);
+const questionStatusOf = (reply: AgentReply | undefined): QuestionStatus =>
+    reply?.kind === `question` && reply.cancelled !== true ? `answered` : `cancelled`;
+const permissionStatusOf = (reply: AgentReply | undefined): PermissionStatus => {
+    if (reply?.kind !== `permission`) {
+        return `cancelled`;
+    }
+    return reply.decision === `deny` ? `denied` : reply.decision === `always` ? `always` : `allowed`;
+};
+
+// Freeze the card the frame names, wherever it hangs. Idempotent by construction: the window that answered
+// already wrote this exact status when its reply came back, so the frame only ever changes a transcript that
+// did NOT answer — a replay after a reload, or a second window watching the same run.
+const resolveCard = (state: TurnState, event: Extract<AgentEvent, { kind: "resolved" }>): TurnState => ({
+    ...state,
+    messages: state.messages.map((message): ChatMessage => {
+        if (message.plan?.requestId === event.requestId) {
+            return { ...message, plan: { ...message.plan, status: planStatusOf(event.reply) } };
+        }
+        if (message.question?.requestId === event.requestId) {
+            const answers = event.reply?.kind === `question` ? event.reply.answers : undefined;
+            return {
+                ...message,
+                question: { ...message.question, status: questionStatusOf(event.reply), ...(answers !== undefined ? { answers } : {}) },
+            };
+        }
+        if (message.permission?.requestId === event.requestId) {
+            return { ...message, permission: { ...message.permission, status: permissionStatusOf(event.reply) } };
+        }
+        return message;
+    }),
+});
+
 // Usage lands at end-of-turn; attach it to the last assistant bubble rather than spawning an empty one.
 const attachUsage = (state: TurnState, usage: ChatUsage): TurnState => {
     const target = state.messages.findLast((message) => message.role === `assistant`);
@@ -254,7 +292,9 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             // A sub-agent's thinking is grouped onto its own Agent card (its live transcript), not merged into
             // the parent turn's thinking block.
             if (event.parentToolUseId !== undefined) {
-                return step(mapToolAnywhere(state, event.parentToolUseId, (tool) => ({ ...tool, thinking: `${tool.thinking ?? ``}${event.text}` })).state);
+                return step(
+                    mapToolAnywhere(state, event.parentToolUseId, (tool) => ({ ...tool, thinking: `${tool.thinking ?? ``}${event.text}` })).state,
+                );
             }
             const opened = withBubble(state);
             return step(mapMessage(opened.state, opened.id, (message) => ({ ...message, thinking: `${message.thinking ?? ``}${event.text}` })));
@@ -317,6 +357,8 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             const attached = mapMessage(opened.state, opened.id, (message) => ({ ...message, permission: { ...ask, status: `pending` } }));
             return step({ ...attached, bubbleId: null });
         }
+        case `resolved`:
+            return step(resolveCard(state, event));
         case `compact`:
             return step(appendNotice(state, `Context compacted to free up space.`));
         case `landed`:
