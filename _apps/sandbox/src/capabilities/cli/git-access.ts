@@ -2,7 +2,8 @@ import type { CliConfig } from "@intentic/sandbox-contract";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ExecInTerminal } from "../../terminal/terminal-run.js";
+import { directExec, type ExecInTerminal } from "../../terminal/terminal-run.js";
+import type { CapabilitiesStore } from "../capabilities-store.js";
 import { hostConfPath, hostKeyPath, hostsDir, removeSshHost, writeSshHost } from "../ssh-hosts.js";
 
 // A connected git provider (github/gitlab) with git access on gets more than the curl-API skill: real git creds so
@@ -19,6 +20,11 @@ import { hostConfPath, hostKeyPath, hostsDir, removeSshHost, writeSshHost } from
 //     remotes keep working over the https credential, and a warning names how to enable native ssh. The two paths
 //     clear each other's artifacts, so a scope-fixed re-add flips back to native ssh.
 // Keyed by host, so github.com and a self-hosted gitlab coexist. The key title is fixed so re-apply is idempotent.
+//
+// Half of this state is on a VOLUME and half is not, which is what restoreGitAccess exists for: the keypair and
+// the ssh alias live in the managed dir (symlinked onto /history, see linkSshHosts) and survive a container
+// recreate, while ~/.gitconfig (the credential helper + the insteadOf rewrite) and ~/.git-credentials are the
+// container's own filesystem and do not.
 
 const KEY_TITLE = "intentic-sandbox";
 
@@ -199,6 +205,38 @@ export const setupGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: 
     return undefined;
 };
 
+// The boot half of setupGitAccess: re-derive only what the container's ephemeral HOME lost — the credential
+// helper + the https line, and either the ssh alias (whose ~/.ssh/config Include died with HOME) or the https
+// rewrite. Deliberately WITHOUT an account call: a persisted keypair is already registered, so re-uploading it
+// on every boot would only pile up dead "intentic-sandbox" keys on the user's account, and a boot that happens
+// to have no network yet would misread the failure as "registration refused" and silently drop to https. A
+// MISSING keypair is the one case that needs the full apply, upload included — a sandbox that never wired this
+// connector up, or whose managed dir wasn't on the volume yet.
+export const restoreGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<string | undefined> => {
+    if (!(await fileExists(hostKeyPath(host.host)))) {
+        return setupGitAccess(host, exec, deps);
+    }
+    await ensureHttpsCredential(host, exec);
+    // The alias survived next to the key ⇒ the key IS on the account (setupGitAccess writes the alias only after
+    // a successful upload, and removes it when one is refused). Rewriting it restores the Include; no alias ⇒
+    // registration had been refused, so ssh-form remotes go back over the https credential.
+    if (await fileExists(hostConfPath(host.host))) {
+        await writeSshHost(host.host, { host: host.host, user: "git", port: 22, identityFile: hostKeyPath(host.host) });
+        return undefined;
+    }
+    await enableHttpsRewrite(host, exec);
+    return undefined;
+};
+
+// Whether this connection's container-local git credential is actually in place. The https line is written by
+// every path that wires git access (native ssh is best-effort on top of it), so its absence is precisely "the
+// manifest says connected, git isn't" — the state a container recreate leaves behind, and the one the capability
+// card used to report as active while `git pull` failed.
+export const gitAccessWired = async (host: GitHost): Promise<boolean> => {
+    const current = await readFile(credentialsPath(), "utf8").catch(() => "");
+    return current.split("\n").some((entry) => entry.endsWith(`@${host.host}`));
+};
+
 export const teardownGitAccess = async (host: GitHost, exec: ExecInTerminal, deps: GitAccessDeps = realDeps): Promise<void> => {
     // Nothing was ever set up (git access off / never on) ⇒ no local files and no account key ⇒ no-op, no network.
     if (!(await fileExists(hostKeyPath(host.host)))) {
@@ -219,6 +257,9 @@ export const teardownGitAccess = async (host: GitHost, exec: ExecInTerminal, dep
 export interface ConnectorHook {
     readonly apply: (config: CliConfig, exec: ExecInTerminal) => Promise<string | undefined>;
     readonly remove: (config: CliConfig, exec: ExecInTerminal) => Promise<void>;
+    // What a recreated container has to get back at boot — the connection survives on /work, its side effect on
+    // the container's own filesystem does not.
+    readonly restore: (config: CliConfig, exec: ExecInTerminal) => Promise<string | undefined>;
 }
 
 const gitAccessHook: ConnectorHook = {
@@ -233,6 +274,33 @@ const gitAccessHook: ConnectorHook = {
         return undefined;
     },
     remove: (config, exec) => teardownGitAccess(gitHostOf(config), exec),
+    // Nothing to restore with git access off — the connector is then env + skill, both already on /work.
+    restore: async (config, exec) => (config["git"] === "on" ? restoreGitAccess(gitHostOf(config), exec) : undefined),
 };
 
 export const CORE_CONNECTOR_HOOKS: Record<string, ConnectorHook> = { github: gitAccessHook, gitlab: gitAccessHook };
+
+// main.ts's boot restore over the manifest — the git counterpart to reconnectVpns: git access dies with the
+// container while the connection survives on /work, so every connected provider gets its container-local git
+// config back before the first turn (or the owner's first `git pull`) needs it. Best-effort per entry, and
+// silent when it works: a failure here degrades one connection, never the daemon, and the capability's own
+// status reports the result (gitAccessWired) rather than a boot log nobody reads.
+export const restoreConnectorGitAccess = async (capabilities: CapabilitiesStore, logger: { warn: (message: string) => void }): Promise<void> => {
+    for (const capability of await capabilities.list()) {
+        if (capability.kind !== "cli") {
+            continue;
+        }
+        const hook = CORE_CONNECTOR_HOOKS[capability.config.provider];
+        if (hook === undefined) {
+            continue;
+        }
+        try {
+            const warning = await hook.restore(capability.config, directExec);
+            if (warning !== undefined) {
+                logger.warn(`git access ${capability.id}: ${warning}`);
+            }
+        } catch (error) {
+            logger.warn(`git access ${capability.id}: could not restore: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+};

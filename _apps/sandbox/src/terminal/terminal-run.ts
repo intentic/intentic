@@ -76,6 +76,11 @@ export const terminalExec =
         return { stdout: output };
     };
 
+// The same contract for boot plumbing, which the visible-terminal principle above exempts: a restore runs with
+// nobody watching and no job session to surface it in, so it goes straight through execFile — including the
+// numeric exit `code` callers branch on (git config --unset's 5).
+export const directExec: ExecInTerminal = (file, args) => execFileAsync(file, [...args]);
+
 export const createTerminalRunner = (): TerminalRunner => {
     const visible = existsSync(TMUX_RUN_BIN);
     const inFlight = new Map<string, number>();

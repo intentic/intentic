@@ -7,7 +7,7 @@ import { capabilityJobSession } from "../../terminal/terminal-session.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 import { envSuffix } from "../cli-env.js";
 import { connectorRegistry, connectorSkillPath, validateConnectorConfig } from "../cli/connector-registry.js";
-import { CORE_CONNECTOR_HOOKS } from "../cli/git-access.js";
+import { CORE_CONNECTOR_HOOKS, gitAccessWired, gitHostOf } from "../cli/git-access.js";
 import { extensionRead } from "../extension-dirs.js";
 
 // A CLI-tool integration: give the AGENT an authenticated command-line tool. The provider's card/fields/env/
@@ -65,10 +65,18 @@ export const cliHandler: CapabilityHandler = {
         if ((await ctx.files.read(skillPath(ctx.workspace.root, id))) === undefined) {
             return { state: "inactive" };
         }
+        // The skill and the manifest are on /work; git access is in the container's HOME, which a recreate
+        // wipes — so without this the card read "active" while `git pull` answered Permission denied. The boot
+        // restore heals that; a `pending` here is what a restore that COULDN'T (revoked token, no network on
+        // the full-setup path) looks like, instead of a card that lies about it.
+        const cliConfig = config as CliConfig;
+        if (cliConfig["git"] === "on" && CORE_CONNECTOR_HOOKS[cliConfig.provider] !== undefined && !(await gitAccessWired(gitHostOf(cliConfig)))) {
+            return { state: "pending", detail: "git access needs a re-add" };
+        }
         // Discord's voice transcription rides whisper.cpp from the connector's overlay fragment — until the owner
         // rebuilds, the text tools work but voice doesn't. The gateway process reports whisper's presence via
         // /listeners/discord/status (whisper runs there now, not in the daemon), so surface pending off that.
-        if ((config as CliConfig).provider === "discord" && listenerStatus("discord", Date.now())?.whisperReady === false) {
+        if (cliConfig.provider === "discord" && listenerStatus("discord", Date.now())?.whisperReady === false) {
             return { state: "pending", detail: "voice needs a rebuild (whisper)" };
         }
         return { state: "active" };

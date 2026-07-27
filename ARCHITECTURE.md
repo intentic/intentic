@@ -142,7 +142,14 @@ survive reconnects. Its subsystems:
   is capped to `mirror` at pairing-mint. Each enrolled machine gets its own key in `authorized_keys` and its own
   `/ports`-scoped sync token, so machines revoke independently (self-revoke on uninstall; owner clears all).
 - **History** — git snapshots every 60 s + per agent turn, on a `/history` volume mounted *outside*
-  `/work` so an agent `rm -rf` can't reach it ([history/](_apps/sandbox/src/history/)).
+  `/work` so an agent `rm -rf` can't reach it ([history/](_apps/sandbox/src/history/)). The same volume holds
+  the managed ssh dir (`/history/ssh-hosts`, symlinked to `~/.ssh/intentic-hosts` at boot by
+  [`linkSshHosts`](_apps/sandbox/src/capabilities/ssh-hosts.ts)): container recreates — every rebuild, update
+  and `dev-sandbox.sh` swap — wipe `/root`, so a git-provider identity or an `ssh` capability's key kept there
+  died on each one while the manifest still read "connected". What genuinely can't be persisted (`~/.gitconfig`,
+  `~/.git-credentials`) is re-derived from the manifest at boot by
+  [`restoreConnectorGitAccess`](_apps/sandbox/src/capabilities/cli/git-access.ts), the git counterpart to
+  `reconnectVpns`.
 - **Environment overlays** — agent-proposed Dockerfile layers, applied only after owner approval
   ([environment/](_apps/sandbox/src/environment/)).
 - **Discord** — chat/stream/voice integration, now an image-baked extension: a gateway `process` +
@@ -479,10 +486,10 @@ Per-kind mechanics ([handlers/](_apps/sandbox/src/capabilities/handlers/)):
 | `mcp` | Pure registration — no side effect beyond the manifest entry; `status` probes the URL. |
 | `service` | Upserts an `i.want.service` entry into `deploy.config.ts`'s managed region and runs the infra-apply job, relaying its events. |
 | `integration` | Upserts an `i.have.<provider>` backend entry; the secret (e.g. `STRIPE_API_KEY`) is read from sandbox env at provision time. |
-| `cli` | Connector-driven (data from `contributes.connectors`): templates the connector's SKILL.md into `.claude/skills/<id>`, injects the credential into the agent's env each turn, optionally bakes a client-image fragment (psql, mysql, whisper). |
+| `cli` | Connector-driven (data from `contributes.connectors`): templates the connector's SKILL.md into `.claude/skills/<id>`, injects the credential into the agent's env each turn, optionally bakes a client-image fragment (psql, mysql, whisper). github/gitlab additionally run the core git-access hook (keypair registered to the account + an https credential, restored on every boot); `status` reports `pending` when that credential is missing, so the card can't read active while `git pull` fails. |
 | `plugin` | Clones a Claude Code plugin repo into `.intentic/plugins/<id>`; the Agent SDK's loader reads its skills/agents/hooks/`.mcp.json` each turn. A marketplace repo (`.claude-plugin/marketplace.json`) can pre-fill the form. |
 | `extension` | Owner-only, sha-pinned clone into `.intentic/extensions/<id>`, validated before swap (manifest parses, prebuilt entry exists, fragment RUN/ENV-only); starts declared `autoStart` processes. |
-| `ssh` | Writes a per-machine Host block + `0600` key/password under `~/.ssh/intentic-hosts` + the shared ssh skill; the instance id is the alias the agent uses (`ssh <id>`). |
+| `ssh` | Writes a per-machine Host block + `0600` key/password under `~/.ssh/intentic-hosts` (the /history-backed dir above) + the shared ssh skill; the instance id is the alias the agent uses (`ssh <id>`). |
 | `vpn` | Stores ONE connection, discriminated by `provider` — `wireguard` (pasted `.conf`, `wg-quick`), `fortinet` (FortiGate SSL-VPN via `openconnect --protocol=fortinet`), `ipsec` (IKEv1/IKEv2 PSK + XAuth via strongSwan) — plus the shared vpn skill. Connecting is NOT part of the config: see [VPN](#vpn) below. |
 | `docker` | The engine is baked into the base image, dormant; the fragment is a lone `--privileged` runtime directive (a cache-hit rebuild, not an install). Once privileged, runs `dockerd` in a persistent tmux session, restored on boot — so `pnpm db:up` works like a local dev machine. Not removable. |
 | `browser` | Per-instance platform skill + the Chromium fragment; connecting is a guided live login (screencast over WebSocket) that persists the profile the agent's `@playwright/mcp` drives. |

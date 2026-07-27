@@ -3,17 +3,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "@intentic/scaffold";
-import type { Capability } from "@intentic/sandbox-contract";
+import type { Capability, CliConfig } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { setListenerStatus } from "../../extensions/listener-status.js";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
-import { createTerminalRunner, terminalExec } from "../../terminal/terminal-run.js";
+import { createTerminalRunner, directExec } from "../../terminal/terminal-run.js";
 import { makeWorkspaceDir, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/workspace-files.js";
+import type { CapabilitiesStore } from "../capabilities-store.js";
 import type { CapabilityCtx } from "../capability.js";
 import { echoConfig } from "../capability.js";
 import { cliEnvOf } from "../cli-env.js";
 import { connectorRegistry } from "../cli/connector-registry.js";
-import { type GitAccessDeps, gitHostOf, setupGitAccess, teardownGitAccess } from "../cli/git-access.js";
+import {
+    type GitAccessDeps,
+    gitAccessWired,
+    gitHostOf,
+    restoreConnectorGitAccess,
+    restoreGitAccess,
+    setupGitAccess,
+    teardownGitAccess,
+} from "../cli/git-access.js";
+import { linkSshHosts } from "../ssh-hosts.js";
 import { cliHandler } from "./cli.js";
 
 // The real first-party connectors/discord extensions provide every provider's data (fields/env/skill/fragment).
@@ -156,10 +166,10 @@ test("echoConfig never leaks the secret — the token becomes hasSecret", async 
 });
 
 // ---- git access (github/gitlab clone/pull/push in the terminal) ----
-// The account-key REST calls are the injectable seam; keygen + git-config run for real against a temp HOME,
-// through the terminal-exec adapter in its no-tmux fallback (the same path cliHandler wires in production).
-
-const execInTerminal = terminalExec(createTerminalRunner(), "git-cap-test", tmpdir());
+// The account-key REST calls are the injectable seam; keygen + git-config run for real against a temp HOME.
+// Through directExec, NOT the terminal runner: where tmux-run exists (running this suite inside a sandbox) the
+// runner hands the command to the container's tmux server, whose env — and therefore whose HOME — is the real
+// /root, so every `git config --global` here would land in the sandbox's own config instead of the temp home.
 
 const gitHome = (): string => {
     const home = mkdtempSync(join(tmpdir(), "git-cap-home-"));
@@ -179,7 +189,7 @@ test("git setup: writes a 0600 key + ssh alias + https creds, registers the publ
     const deps: GitAccessDeps = { uploadKey: async (_host, publicKey, title) => void uploads.push({ publicKey, title }), deleteKey: async () => {} };
     const host = gitHostOf({ provider: "github", token: "gh-tok", git: "on" });
 
-    expect(await setupGitAccess(host, execInTerminal, deps)).toBeUndefined();
+    expect(await setupGitAccess(host, directExec, deps)).toBeUndefined();
 
     expect(statSync(hostKey(home, "github.com")).mode & 0o777).toBe(0o600);
     const conf = readFileSync(hostConf(home, "github.com"), "utf8");
@@ -200,7 +210,7 @@ test("git setup reroutes ssh over https + warns (no throw) when ssh-key registra
     };
     const host = gitHostOf({ provider: "github", token: "scopeless", git: "on" });
 
-    const warning = await setupGitAccess(host, execInTerminal, deps);
+    const warning = await setupGitAccess(host, directExec, deps);
 
     const publicKey = readFileSync(`${hostKey(home, "github.com")}.pub`, "utf8").trim();
     expect(warning).toContain("write:public_key");
@@ -214,7 +224,7 @@ test("git setup (gitlab): host + https user derive from the instance url", async
     const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => {} };
     const host = gitHostOf({ provider: "gitlab", token: "gl-tok", url: "https://gitlab.example.com", git: "on" });
 
-    await setupGitAccess(host, execInTerminal, deps);
+    await setupGitAccess(host, directExec, deps);
 
     expect(existsSync(hostConf(home, "gitlab.example.com"))).toBe(true);
     expect(readFileSync(join(home, ".git-credentials"), "utf8")).toContain("https://oauth2:gl-tok@gitlab.example.com");
@@ -225,9 +235,9 @@ test("git teardown: deletes the account key and removes the local key, ssh alias
     let deleted = 0;
     const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => void (deleted += 1) };
     const host = gitHostOf({ provider: "github", token: "gh-tok", git: "on" });
-    await setupGitAccess(host, execInTerminal, deps);
+    await setupGitAccess(host, directExec, deps);
 
-    await teardownGitAccess(host, execInTerminal, deps);
+    await teardownGitAccess(host, directExec, deps);
 
     expect(deleted).toBe(1);
     expect(existsSync(hostKey(home, "github.com"))).toBe(false);
@@ -238,6 +248,115 @@ test("git teardown is a no-op (no account call) when nothing was ever set up", a
     gitHome();
     let deleted = 0;
     const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => void (deleted += 1) };
-    await teardownGitAccess(gitHostOf({ provider: "github", token: "x", git: "off" }), execInTerminal, deps);
+    await teardownGitAccess(gitHostOf({ provider: "github", token: "x", git: "off" }), directExec, deps);
     expect(deleted).toBe(0);
+});
+
+// ---- the boot restore (a container recreate: new HOME, same /history volume) ----
+
+const gitlabOn: CliConfig = { provider: "gitlab", url: "https://gitlab.com", token: "gl-tok", git: "on" };
+
+test("status: a git-access connector pends while the container holds no git credentials", async () => {
+    const { ctx, root } = tempCtx();
+    await writeWorkspaceFile(skillPath(root, "gitlab"), "---\nname: gitlab\n---\n");
+
+    // The skill (on /work) survived the recreate; the credentials (in HOME) did not.
+    expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "pending", detail: "git access needs a re-add" });
+
+    await setupGitAccess(gitHostOf(gitlabOn), directExec, { uploadKey: async () => {}, deleteKey: async () => {} });
+
+    expect(await cliHandler.status(ctx, "gitlab", gitlabOn)).toEqual({ state: "active" });
+});
+
+test("git restore: a recreated container gets its credentials back without registering another account key", async () => {
+    const history = mkdtempSync(join(tmpdir(), "git-cap-history-"));
+    gitHome();
+    await linkSshHosts(history);
+    const uploads: string[] = [];
+    const deps: GitAccessDeps = { uploadKey: async (_host, publicKey) => void uploads.push(publicKey), deleteKey: async () => {} };
+    const host = gitHostOf(gitlabOn);
+    await setupGitAccess(host, directExec, deps);
+    expect(uploads).toHaveLength(1);
+
+    // The recreate: a brand-new container filesystem, the volume intact.
+    const home = gitHome();
+    await linkSshHosts(history);
+    expect(await gitAccessWired(host)).toBe(false);
+
+    expect(await restoreGitAccess(host, directExec, deps)).toBeUndefined();
+
+    // The persisted keypair is already on the account — re-uploading it is exactly what piled up dead keys.
+    expect(uploads).toHaveLength(1);
+    expect(readFileSync(join(home, ".git-credentials"), "utf8")).toContain("https://oauth2:gl-tok@gitlab.com");
+    expect(readFileSync(join(home, ".ssh", "config"), "utf8")).toContain("Include intentic-hosts/*.conf");
+    expect(readFileSync(hostConf(home, "gitlab.com"), "utf8")).toContain("Host gitlab.com");
+    // Native ssh is wired, so ssh-form remotes are NOT rerouted over https.
+    expect(await httpsRewrite("gitlab.com")).toEqual([]);
+    expect(await gitAccessWired(host)).toBe(true);
+});
+
+test("git restore falls back to the full setup when no keypair was persisted", async () => {
+    const home = gitHome();
+    const uploads: string[] = [];
+    const deps: GitAccessDeps = { uploadKey: async (_host, publicKey) => void uploads.push(publicKey), deleteKey: async () => {} };
+
+    await restoreGitAccess(gitHostOf(gitlabOn), directExec, deps);
+
+    expect(uploads).toEqual([readFileSync(`${hostKey(home, "gitlab.com")}.pub`, "utf8").trim()]);
+    expect(existsSync(hostConf(home, "gitlab.com"))).toBe(true);
+});
+
+test("git restore keeps ssh-form remotes on https when the key had never been registered", async () => {
+    const history = mkdtempSync(join(tmpdir(), "git-cap-history-"));
+    gitHome();
+    await linkSshHosts(history);
+    let uploads = 0;
+    const refused: GitAccessDeps = {
+        uploadKey: async () => {
+            uploads += 1;
+            throw new Error("GitLab SSH key upload failed (403): insufficient_scope");
+        },
+        deleteKey: async () => {},
+    };
+    const host = gitHostOf(gitlabOn);
+    expect(await setupGitAccess(host, directExec, refused)).toContain("api scope");
+
+    gitHome();
+    await linkSshHosts(history);
+    await restoreGitAccess(host, directExec, refused);
+
+    // No alias next to the persisted key ⇒ registration had been refused ⇒ the https rewrite comes back, and
+    // the restore doesn't retry the upload (a re-add is what retries it).
+    expect(uploads).toBe(1);
+    expect(await httpsRewrite("gitlab.com")).toEqual(["git@gitlab.com:", "ssh://git@gitlab.com/"]);
+    expect(await gitAccessWired(host)).toBe(true);
+});
+
+test("restoreConnectorGitAccess walks the manifest: git connectors only, one failure never stops the rest", async () => {
+    const history = mkdtempSync(join(tmpdir(), "git-cap-history-"));
+    gitHome();
+    await linkSshHosts(history);
+    // Wire gitlab first, then recreate — so the boot pass takes the offline branch it takes in production
+    // (this is the only call path that uses the real account deps; a persisted key must never reach for one).
+    await setupGitAccess(gitHostOf(gitlabOn), directExec, { uploadKey: async () => {}, deleteKey: async () => {} });
+    const home = gitHome();
+    await linkSshHosts(history);
+    const warnings: string[] = [];
+    const capabilities = {
+        list: async (): Promise<Capability[]> => [
+            discord,
+            { id: "github", kind: "cli", config: { provider: "github", token: "gh", git: "off" } },
+            { id: "broken", kind: "cli", config: { provider: "gitlab", url: "not-a-url", token: "x", git: "on" } },
+            { id: "gitlab", kind: "cli", config: gitlabOn },
+        ],
+    } as unknown as CapabilitiesStore;
+
+    await restoreConnectorGitAccess(capabilities, { warn: (message) => void warnings.push(message) });
+
+    const credentials = readFileSync(join(home, ".git-credentials"), "utf8");
+    expect(credentials).toContain("@gitlab.com");
+    // discord has no git hook, and github's git access is off — neither writes a credential.
+    expect(credentials).not.toContain("@github.com");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("git access broken:");
 });

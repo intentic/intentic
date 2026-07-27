@@ -8,6 +8,8 @@ import { sweepAgedAgents } from "./agents/archive.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
+import { restoreConnectorGitAccess } from "./capabilities/cli/git-access.js";
+import { linkSshHosts } from "./capabilities/ssh-hosts.js";
 import { startTranslator } from "./agent/translator.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
 import { writeAgentToken } from "./auth/agent-token.js";
@@ -73,6 +75,15 @@ const main = async (): Promise<void> => {
     // Awaited, unlike the best-effort steps below, because a turn spawning the CLI mid-link would fork stores.
     await linkClaudeProjects(services.workspace.root).catch((error: unknown) =>
         logger.warn({ err: error }, "claude session store not persisted — transcripts will not survive a rebuild"),
+    );
+
+    // The managed ssh dir (git-provider keys + every ssh capability's key) is the other store that lived in the
+    // container's ephemeral HOME — point it at the /history volume before anything reads or writes an alias, so
+    // a recreate stops silently taking git access and the ssh machines down with it. Awaited for that ordering;
+    // a failure (a dev-host run, where the guard refuses to touch a real ~/.ssh/intentic-hosts) leaves the
+    // pre-existing local dir in place rather than the daemon down.
+    await linkSshHosts(config.historyRoot).catch((error: unknown) =>
+        logger.warn({ err: error }, "ssh hosts dir not persisted — git access and ssh aliases will not survive a rebuild"),
     );
 
     // The /work workspace repo (the Changes review's "root"): init once, heal the .git pointer, converge
@@ -172,6 +183,10 @@ const main = async (): Promise<void> => {
     // the daemon log, not the boot path.
     const bootCtx = capabilityCtx(services);
     void reconnectVpns(services.capabilities, services.logger);
+    // Git access dies with the container the same way: the keypair is on /history (linked above), but the
+    // credential helper, the https line and the ssh-config Include were in HOME — re-derive them from the
+    // manifest so the owner's first `git pull` and the agent's first clone authenticate.
+    void restoreConnectorGitAccess(services.capabilities, services.logger);
     void startDockerdIfEnabled(bootCtx);
     // The translator (CLIProxyAPI) backing "Codex/Grok under the Claude Code harness": starts when TRANSLATOR_URL
     // is baked (no-op on a bare dev run) and serves those providers on their connected subscription OAuth.
