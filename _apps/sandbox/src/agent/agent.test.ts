@@ -355,9 +355,20 @@ test("a rate_limit assistant error is tagged with a code and a human message, no
     ]);
 });
 
-test("a non-rate-limit assistant error stays a plain agent error", async () => {
+test("a non-rate-limit assistant error with no explanation falls back to its bare category", async () => {
     const events = await collect(request, fakeQuery({ type: "assistant", session_id: "s", error: "overloaded", message: { content: [] } }));
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", message: "agent error: overloaded" }, { kind: "done" }]);
+});
+
+// 'unknown' is the SDK's catch-all for every 4xx, so the category names nothing the user can fix; the API's own
+// sentence rides in the synthetic message's text block and is the whole value of the frame.
+test("an API error surfaces the API's own sentence, not the SDK's error category", async () => {
+    const apiError = "API Error: 400 output_config.effort 'max' is not supported when thinking is disabled on this model.";
+    const events = await collect(
+        request,
+        fakeQuery({ type: "assistant", session_id: "s", error: "unknown", message: { content: [{ type: "text", text: apiError }] } }),
+    );
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", message: apiError }, { kind: "done" }]);
 });
 
 test("a rate_limit_event surfaces the subscription usage snapshot (window, utilization, reset)", async () => {

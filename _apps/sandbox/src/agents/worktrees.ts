@@ -2,7 +2,6 @@ import { access, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
-import { changedFiles } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
@@ -175,16 +174,27 @@ export const createAgentWorktrees = (
         retire: async (id, recorded, title) => {
             // Two passes on purpose. EVERY repo is committed before ANY checkout goes, so a failure partway
             // through leaves worktrees standing rather than a branch that is missing the work its checkout held.
-            for (const { repo } of recorded) {
-                await withRepoLock(repo, async () => {
+            //
+            // PASS 1 takes NO repo lock, and that is the difference between archiving one agent and archiving
+            // ten: `withRepoLock` is a per-repo chain shared by every agent, so holding it here would serialize
+            // the whole fleet's preserve work behind one queue. Nothing in this pass needs it — the status read,
+            // the index write and the commit all happen inside THIS agent's own worktree (its own index, its own
+            // HEAD), and the only shared things it touches are the object store (content-addressed) and its own
+            // refs/heads/agent/<id> (git's per-ref lockfile). The admin area `withRepoLock` exists to protect is
+            // touched only by pass 2.
+            await Promise.all(
+                recorded.map(async ({ repo }) => {
                     const worktree = worktreeDir(id, repo);
                     if (!(await exists(join(worktree, ".git")))) {
                         return; // Never created, or already retired — nothing to preserve.
                     }
-                    // Dirty on either side, exactly like land: the agent may have staged part of its work and
-                    // left the rest loose, and `add -A` below sweeps up both.
-                    const state = await changedFiles(worktree, git);
-                    if (state.staged.length + state.unstaged.length === 0) {
+                    // ONE spawn to answer "is there anything to keep", which is the answer in the common case:
+                    // a cleanly-landed agent's worktree is already clean, because land committed its remainder.
+                    // (The full changedFiles read this replaced cost five to seven spawns to say the same thing,
+                    // per repo, per agent — the single biggest chunk of an archive's wall clock.) Porcelain
+                    // covers staged, unstaged AND untracked, which is exactly what `add -A` below would sweep.
+                    const { stdout } = await git(worktree, ["status", "--porcelain", "-z"]);
+                    if (stdout === "") {
                         return;
                     }
                     await git(worktree, ["add", "-A"]);
@@ -198,16 +208,24 @@ export const createAgentWorktrees = (
                         "-m",
                         `Agent: ${title ?? id}`,
                     ]);
-                });
-            }
-            for (const { repo } of recorded) {
-                await withRepoLock(repo, async () => {
+                }),
+            );
+            // PASS 2 does need the lock (worktree admin area), but only per repo — so the nested repos run
+            // concurrently with each other. ROOT GOES LAST: its worktree dir is the parent the nested checkouts
+            // mount into, so removing it first deletes them out from under their own `worktree remove`, which
+            // then fails into a `prune` fallback — two wasted spawns per nested repo, every time.
+            const nested = recorded.filter(({ repo }) => repo !== "root");
+            const removeOne = (repo: string): Promise<void> =>
+                withRepoLock(repo, async () => {
                     const main = mainDir(repo);
                     // No `branch -D` — the branch IS the archive. Only the checkout is reclaimed.
                     await git(main, ["worktree", "remove", "--force", worktreeDir(id, repo)]).catch(() =>
                         git(main, ["worktree", "prune"]).catch(() => undefined),
                     );
                 });
+            await Promise.all(nested.map(({ repo }) => removeOne(repo)));
+            if (recorded.some(({ repo }) => repo === "root")) {
+                await removeOne("root");
             }
             await rm(conversationDir(id), { recursive: true, force: true });
         },

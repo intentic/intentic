@@ -82,3 +82,33 @@ describe(`apps extension — merged tests view`, () => {
         expect(acts.some(({ extension }) => extension.id === `vitest`)).toBe(false);
     });
 });
+
+// The registry outlives the host modules that write to it (it is their leaf dependency), so under a dev-server
+// hot reload an extension activates a SECOND time against the SAME registry. Appending there is what put a
+// duplicate of every icon on the rail.
+describe(`re-activation`, () => {
+    const panels = [panel({ repo: `shop`, monorepo: true })];
+
+    it(`activating an extension again replaces its views instead of stacking duplicates`, () => {
+        const before = detectActivations(panels, []);
+        apps.activate(registerApi, { extensionId: `intentic.repo-apps`, subscriptions: [] });
+        preview.activate(registerApi, { extensionId: `intentic.preview`, subscriptions: [] });
+        expect(detectActivations(panels, []).map(({ extension }) => extension.id)).toEqual(before.map(({ extension }) => extension.id));
+    });
+
+    it(`a superseded registration's disposable cannot evict the live replacement`, () => {
+        const view = (): ViewRegistration => ({
+            id: `ghost`,
+            label: `Ghost`,
+            surface: `rail`,
+            detect: () => [{ key: `ghost`, title: `Ghost` }],
+            view: async () => ({}),
+        });
+        const stale = registerView(`test`, view());
+        const live = registerView(`test`, view());
+        stale.dispose();
+        expect(detectActivations(panels, []).some(({ extension }) => extension.id === `ghost`)).toBe(true);
+        live.dispose();
+        expect(detectActivations(panels, []).some(({ extension }) => extension.id === `ghost`)).toBe(false);
+    });
+});

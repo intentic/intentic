@@ -20,8 +20,12 @@ export interface RegisteredViewer {
 
 const viewers = shallowRef<readonly RegisteredViewer[]>([]);
 
+// Keyed by owner + viewer id, exactly like the view registry: re-registering the same identity is a
+// re-activation, so it replaces its predecessor in place instead of stacking a second entry that would shadow
+// the first for the same file extensions.
 export const registerViewer = (viewer: RegisteredViewer): Disposable => {
-    viewers.value = [...viewers.value, viewer];
+    const index = viewers.value.findIndex((existing) => existing.owner === viewer.owner && existing.id === viewer.id);
+    viewers.value = index === -1 ? [...viewers.value, viewer] : viewers.value.with(index, viewer);
     return {
         dispose: (): void => {
             viewers.value = viewers.value.filter((entry) => entry !== viewer);

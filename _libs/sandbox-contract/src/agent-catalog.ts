@@ -59,3 +59,18 @@ export const modelsFor = (provider: AgentProvider): CatalogOption[] => {
     // Codex/Grok/Kimi/Gemini (live catalog only) and ACP providers (the agent owns its model): nothing static.
     return [];
 };
+
+// Whether a reasoning-effort tier is actually sendable for this provider with this thinking setting. 'max' is
+// the only constrained tier and it fails two ways: no non-Claude scale HAS it, and Claude's API rejects it
+// outright when extended thinking is disabled ("effort 'max' is not supported when thinking is disabled on this
+// model" — a 400 that kills the turn before the model sees it, surfacing only as the SDK's `unknown` error
+// category). Every point where a selection can land on an invalid pair — restore from storage, provider switch,
+// thinking toggle, the picker's own option list — runs the pair through here, so the combination is unreachable
+// rather than merely discouraged.
+export const effortAllowed = (effort: string, provider: AgentProvider, thinking: boolean): boolean =>
+    effort !== "max" || (provider === "claude" && thinking);
+
+// The tier a selection falls back to when effortAllowed rejects it — one rung down from 'max', the top of every
+// scale that excludes it.
+export const clampEffort = (effort: string, provider: AgentProvider, thinking: boolean): string =>
+    effortAllowed(effort, provider, thinking) ? effort : "xhigh";

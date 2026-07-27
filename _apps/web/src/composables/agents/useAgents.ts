@@ -218,46 +218,83 @@ export interface FleetNotice {
     readonly message: string;
     readonly tone: "error" | "info";
     readonly undo?: () => Promise<void>;
+    // The ids `undo` would put back. Carried ON the notice rather than beside it so the set can never outlive
+    // the message offering it: replacing the notice — with an error, a drag's report, or nothing at all —
+    // retires the undo with it, and there is no second place to remember to clear.
+    readonly restores?: readonly string[];
 }
 const notice = ref<FleetNotice | undefined>(undefined);
-const busyIds = ref<readonly string[]>([]);
+
+// Which cards are mid-action. A COUNTER per id, not a list: archiving is something the user does card by card
+// as fast as they can click, so two calls overlap constantly, and a shared "the ids in flight" ref meant the
+// first one to finish cleared the second one's spinner — the card went quiet while its request was still open.
+// Each call now releases only what it claimed.
+const busyCounts = ref<Record<string, number>>({});
+const busyIds = computed(() => Object.keys(busyCounts.value));
+const claimBusy = (ids: readonly string[]): (() => void) => {
+    for (const id of ids) {
+        busyCounts.value = { ...busyCounts.value, [id]: (busyCounts.value[id] ?? 0) + 1 };
+    }
+    return () => {
+        const next = { ...busyCounts.value };
+        for (const id of ids) {
+            const held = (next[id] ?? 0) - 1;
+            if (held > 0) {
+                next[id] = held;
+            } else {
+                delete next[id];
+            }
+        }
+        busyCounts.value = next;
+    };
+};
 
 const dismissNotice = (): void => {
     notice.value = undefined;
 };
 
 // Archive the named agents, or — with no ids — every finished agent that is archivable right now (the lane
-// header's "Clear"). The daemon answers with the ids that actually moved, which is what the undo is built
-// from: "everything finished" cannot be re-derived once the lane is empty.
+// header's "Clear"). The daemon answers with the agents that actually moved: "everything finished" cannot be
+// re-derived once the lane is empty, and the summaries are what the archive list renders.
 const archive = async (ids?: readonly string[]): Promise<void> => {
     // The bulk press has no ids of its own, so it borrows the lane's — otherwise "Clear" would sit silent
     // through the round-trip while the cards it is about to take carried on looking untouched.
-    busyIds.value = ids ?? lanes.value.finished.map((agent) => agent.id);
-    notice.value = undefined;
+    const release = claimBusy(ids ?? lanes.value.finished.map((agent) => agent.id));
     try {
-        const result = await sandboxJson<{ agents: AgentSummary[]; archived: string[] }>(`/agents/archive`, {
+        const { moved } = await sandboxJson<{ moved: AgentSummary[] }>(`/agents/archive`, {
             method: `POST`,
             headers: { "content-type": `application/json` },
             body: JSON.stringify(ids === undefined ? {} : { ids }),
         });
-        registry.value = result.agents;
-        if (result.archived.length === 0) {
+        if (moved.length === 0) {
             notice.value = { message: `Nothing to archive — every finished agent is already off the board.`, tone: `info` };
             return;
         }
+        // A DELTA, not the roster the daemon happens to hold now: two archives in flight would otherwise race,
+        // and the slower response would put the faster one's cards back on the board. Applying only what moved
+        // also means the archive list is correct without a second round-trip to re-read it — which matters most
+        // for the agent detail page, whose id lookup spans both halves (agentById).
+        const gone = new Set(moved.map((agent) => agent.id));
+        registry.value = registry.value.filter((agent) => !gone.has(agent.id));
+        archived.value = [
+            // Object.assign, not a spread — `moved` is this call's own freshly-parsed JSON.
+            ...moved.map((agent) => Object.assign(agent, { open: false, unread: false })),
+            ...archived.value.filter((agent) => !gone.has(agent.id)),
+        ];
+        // Archiving several cards in a row is ONE intent, so consecutive receipts merge into one undo. The
+        // alternative — newest notice wins — quietly threw away the way back to everything archived before it,
+        // which is the worst thing to lose from the affordance that makes archiving safe enough not to confirm.
+        const restorable = [...moved.map((agent) => agent.id), ...(notice.value?.restores ?? []).filter((id) => !gone.has(id))];
         notice.value = {
-            message: `${result.archived.length} agent${result.archived.length === 1 ? `` : `s`} archived. Their work and transcripts are kept.`,
+            message: `${restorable.length} agent${restorable.length === 1 ? `` : `s`} archived. Their work and transcripts are kept.`,
             tone: `info`,
-            undo: () => restore(result.archived),
+            undo: () => restore(restorable),
+            restores: restorable,
         };
-        // Unconditionally, not "only when the archive is already showing": an agent's detail page resolves it
-        // through `agentById`, so archiving one WHILE reviewing it must leave it findable rather than bounce
-        // the user back to the board mid-read.
-        await loadArchived();
     } catch (error) {
         notice.value = { message: errorMessage(error, `Couldn't archive that.`), tone: `error` };
     } finally {
-        busyIds.value = [];
+        release();
     }
 };
 
@@ -265,21 +302,22 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
 // not rebuilt here (the daemon does that lazily on the agent's next turn), so this is as cheap for a hundred
 // agents as for one.
 const restore = async (ids: readonly string[]): Promise<void> => {
-    busyIds.value = ids;
+    const release = claimBusy(ids);
     try {
-        registry.value = (
-            await sandboxJson<{ agents: AgentSummary[] }>(`/agents/unarchive`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify({ ids }),
-            })
-        ).agents;
+        const { moved } = await sandboxJson<{ moved: AgentSummary[] }>(`/agents/unarchive`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ ids }),
+        });
+        // The same delta, in the other direction.
+        const back = new Set(moved.map((agent) => agent.id));
+        archived.value = archived.value.filter((agent) => !back.has(agent.id));
+        registry.value = [...registry.value.filter((agent) => !back.has(agent.id)), ...moved];
         notice.value = undefined;
-        archived.value = archived.value.filter((agent) => !ids.includes(agent.id));
     } catch (error) {
         notice.value = { message: errorMessage(error, `Couldn't restore that.`), tone: `error` };
     } finally {
-        busyIds.value = [];
+        release();
     }
 };
 

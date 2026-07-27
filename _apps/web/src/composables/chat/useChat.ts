@@ -2,6 +2,7 @@ import {
     type AgentCommand,
     type AgentHarness,
     type AgentProvider,
+    clampEffort,
     type EditorContext,
     type KeyedProvider,
     NATIVE_PROVIDERS,
@@ -350,6 +351,11 @@ const thinking = computed<boolean>({
     set: (value) => {
         active.value.thinking.value = value;
         turnDefaults.thinking.value = value;
+        // Turning thinking OFF invalidates a 'max' effort pick (the API rejects the pair), and the picker drops
+        // the tier from its list the moment this flips — so the selection is clamped here rather than left
+        // pointing at an option that is no longer offered. Writing through `effort` persists it to turnDefaults
+        // too, so the next new chat doesn't inherit the invalid pair.
+        effort.value = clampEffort(effort.value, provider.value, value);
     },
 });
 // Account facades: the active conversation's account selection + its picker. `accounts` lists the active

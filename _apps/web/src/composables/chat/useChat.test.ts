@@ -189,3 +189,33 @@ describe(`per-tab drafts`, () => {
         expect(useChat().draft.value).toBe(``);
     });
 });
+
+/* Claude's API rejects effort 'max' with extended thinking disabled — a 400 that kills the turn before the
+ * model sees the prompt, and reaches the user only as the SDK's opaque `unknown` error category. Both halves
+ * persist into turnDefaults, so an unclamped pair would poison every NEW conversation too, not just the tab it
+ * was set on. The toggle is the only user-facing write path for thinking, so it is where the pair is repaired. */
+describe(`effort/thinking pairing`, () => {
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+    });
+
+    it(`clamps a 'max' effort down when extended thinking is switched off, and persists the clamp`, () => {
+        const chat = useChat();
+        chat.effort.value = `max`;
+
+        chat.thinking.value = false;
+        expect(chat.effort.value).toBe(`xhigh`);
+
+        // The next new conversation seeds from turnDefaults; it must not inherit the pair the API rejects.
+        chat.newChat();
+        expect(chat.effort.value).toBe(`xhigh`);
+    });
+
+    it(`leaves 'max' alone while thinking stays on`, () => {
+        const chat = useChat();
+        chat.effort.value = `max`;
+        chat.thinking.value = true;
+        expect(chat.effort.value).toBe(`max`);
+    });
+});

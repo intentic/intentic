@@ -1,6 +1,5 @@
 import { oc } from "@orpc/contract";
 import {
-    AgentArchiveResultSchema,
     AgentArchiveSchema,
     AgentChangesSchema,
     AgentFileDiffQuerySchema,
@@ -8,6 +7,7 @@ import {
     AgentIdsSchema,
     AgentRenameSchema,
     AgentsListSchema,
+    AgentsMovedSchema,
     AgentSummarySchema,
     FileDiffSchema,
     LandResultSchema,
@@ -40,6 +40,6 @@ export const agentsContract = {
     fileDiff: oc.route({ method: "GET", path: "/agents/{id}/{repo}/file-diff" }).input(AgentFileDiffQuerySchema).output(FileDiffSchema),
     land: oc.route({ method: "POST", path: "/agents/{id}/land" }).input(AgentIdSchema).output(LandResultSchema),
     discard: oc.route({ method: "POST", path: "/agents/{id}/discard" }).input(AgentIdSchema).output(OkSchema),
-    archive: oc.route({ method: "POST", path: "/agents/archive" }).input(AgentArchiveSchema).output(AgentArchiveResultSchema),
-    unarchive: oc.route({ method: "POST", path: "/agents/unarchive" }).input(AgentIdsSchema).output(AgentsListSchema),
+    archive: oc.route({ method: "POST", path: "/agents/archive" }).input(AgentArchiveSchema).output(AgentsMovedSchema),
+    unarchive: oc.route({ method: "POST", path: "/agents/unarchive" }).input(AgentIdsSchema).output(AgentsMovedSchema),
 };

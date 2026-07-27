@@ -24,12 +24,24 @@ export interface HostBindings {
     readonly capabilities: () => readonly CapabilityFacts[];
 }
 
+// The live activation of each extension id. An extension is activated ONCE per app load; a second
+// createExtensionApi for the same id therefore means the previous activation is being superseded (the dev
+// server hot-reloading the host chain, a reload after install/settings change). Retiring it here is what makes
+// `context.subscriptions` the deactivation path this file's header promises: without it the old activation's
+// views, viewers, commands and settings/workspace/theme watchers all stay live alongside the new ones — a
+// second copy of every rail icon, and a listener per re-activation firing on stale state.
+const activations = new Map<string, readonly Disposable[]>();
+
 export const createExtensionApi = (
     summary: ExtensionSummary,
     host: HostBindings,
 ): { readonly api: IntenticApi; readonly context: ExtensionContext } => {
     const extensionId = extensionIdOf(summary.manifest);
+    for (const disposable of activations.get(extensionId) ?? []) {
+        disposable.dispose();
+    }
     const subscriptions: Disposable[] = [];
+    activations.set(extensionId, subscriptions);
     const track = (disposable: Disposable): Disposable => {
         subscriptions.push(disposable);
         return disposable;

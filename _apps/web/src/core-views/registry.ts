@@ -14,11 +14,20 @@ interface RegisteredView {
 
 const views = shallowRef<readonly RegisteredView[]>(coreViews.map((registration) => ({ owner: `builtin`, registration })));
 
+// A registration is IDENTIFIED by owner + view id, not by object identity: the same extension registering the
+// same view id again can only mean it is being re-activated (the dev server hot-reloading the host module while
+// this registry — a leaf dependency — keeps its instance, a re-run after install), never a second view. So a
+// re-registration REPLACES its predecessor in place rather than appending; otherwise every re-activation grows
+// the rail another copy of the same icon. In place, so tile order stays put while it happens.
 export const registerView = (owner: string, registration: ViewRegistration): Disposable => {
-    views.value = [...views.value, { owner, registration }];
+    const entry: RegisteredView = { owner, registration };
+    const index = views.value.findIndex((existing) => existing.owner === owner && existing.registration.id === registration.id);
+    views.value = index === -1 ? [...views.value, entry] : views.value.with(index, entry);
     return {
+        // Filtered by THIS entry, so a stale disposable held by a superseded activation can't evict the live
+        // replacement — it just finds nothing to remove.
         dispose: (): void => {
-            views.value = views.value.filter((entry) => entry.registration !== registration);
+            views.value = views.value.filter((existing) => existing !== entry);
         },
     };
 };

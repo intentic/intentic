@@ -7,6 +7,7 @@ import {
     type AskQuestion,
     type AttachFrame,
     type CatalogOption,
+    clampEffort,
     type ContextUsage,
     type EditorContext,
     type ModelBadge,
@@ -570,11 +571,11 @@ export class Conversation {
         readonly id: string,
         readonly conversationId: string = crypto.randomUUID(),
     ) {
-        // Codex/Grok have no 'max' effort tier (only Claude does) — clamp a restored 'max'. The model is already
-        // provider-correct from the seed (rememberedModelFor), so no model re-scope is needed.
-        if (this.provider.value !== `claude` && this.effort.value === `max`) {
-            this.effort.value = `xhigh`;
-        }
+        // A restored 'max' can be invalid two ways — Codex/Grok have no such tier, and Claude's API rejects it
+        // with thinking off — and turnDefaults persists BOTH halves, so an unclamped pair would fail every turn
+        // of every new conversation until the user happened to change one. The model is already provider-correct
+        // from the seed (rememberedModelFor), so no model re-scope is needed.
+        this.effort.value = clampEffort(this.effort.value, this.provider.value, this.thinking.value);
     }
 
     // Switch the provider this conversation's next turn runs on and re-scope its provider-specific settings:
@@ -590,9 +591,7 @@ export class Conversation {
         // Switching back to the session's own runtime restores its account, so the next send resumes it.
         this.account.value = next === this.session.value?.provider ? this.session.value.account : rememberedAccountFor(next);
         this.model.value = rememberedModelFor(next);
-        if (next !== `claude` && this.effort.value === `max`) {
-            this.effort.value = `xhigh`;
-        }
+        this.effort.value = clampEffort(this.effort.value, next, this.thinking.value);
         turnDefaults.provider.value = next;
         // The old segment's live model and context meter don't describe the next turn.
         this.activeModel.value = null;

@@ -206,10 +206,13 @@ export const AgentIdSchema = z.object({ id: z.string().min(1) });
 // right now (the lane header's "Clear"); unarchive always names its ids (a restore, or a bulk archive's undo).
 export const AgentArchiveSchema = z.object({ ids: z.array(z.string().min(1)).max(500).optional() });
 export const AgentIdsSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(500) });
-// The roster after the change PLUS the ids that actually moved — the board needs those to offer "Undo",
-// since "archive everything finished" can't be inverted by re-reading the list afterwards.
-export const AgentArchiveResultSchema = z.object({ agents: z.array(AgentSummarySchema), archived: z.array(z.string()) });
-export type AgentArchiveResult = z.infer<typeof AgentArchiveResultSchema>;
+// What actually MOVED, and deliberately NOT the roster afterwards. Two archives in flight at once each finish
+// holding a full-roster snapshot from a different instant, so a client that swapped one in wholesale would let
+// the slower response resurrect what the faster one just filed away — a delta composes where a snapshot races.
+// Whole summaries rather than ids because the receiving side has to SHOW them (the archive list, and the agent
+// detail page addressed by id); the ids "Undo" needs come off them for free.
+export const AgentsMovedSchema = z.object({ moved: z.array(AgentSummarySchema) });
+export type AgentsMoved = z.infer<typeof AgentsMovedSchema>;
 // rename's input: the user-chosen display title (bounded like sanitizeTitle's cap).
 export const AgentRenameSchema = z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(80) });
 export const AgentFileDiffQuerySchema = z.object({ id: z.string().min(1), repo: z.string().min(1), path: z.string().min(1) });

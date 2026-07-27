@@ -43,23 +43,47 @@ export interface AgentArchiveDeps {
     readonly logger: Logger;
 }
 
+// How many agents retire at once. Each one spawns a handful of short-lived git processes per repo, so this is
+// a throttle on process pressure, not on the lock: "Clear" on a full lane must not fork a hundred `git status`
+// at once, and past a small number the per-repo worktree-admin lock (worktrees.retire pass 2) is the real
+// ceiling anyway.
+const RETIRE_CONCURRENCY = 4;
+
 // Retire the checkouts, then stamp the marker — in that order, so a failure mid-way leaves an agent that is
 // still ON the board with its worktree intact rather than one the board has forgotten but the disk has not.
-// A repo whose retire throws takes only its own agent out of the batch; the rest still archive.
+// An agent whose retire throws takes only itself out of the batch; the rest still archive.
+//
+// The retires overlap: "Clear" on a lane of ten is ten independent teardowns that share nothing but the repo
+// locks their removal pass takes, and running them one after another made the wait scale with the size of the
+// lane. The marker is still ONE write at the end — one persist, one roster broadcast, one repaint.
 export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string[], now: number): Promise<string[]> => {
-    const archived: string[] = [];
-    for (const id of ids) {
-        const entry = deps.agents.entry(id);
-        if (entry === undefined) {
-            continue;
+    const pending = ids.filter((id) => deps.agents.entry(id) !== undefined);
+    // Written by slot, not pushed: the workers finish out of order, and the caller's undo reads better when the
+    // result still lists what the user picked in the order they picked it.
+    const done: (string | undefined)[] = Array.from({ length: pending.length });
+    const retire = async (index: number): Promise<void> => {
+        const id = pending[index];
+        const entry = id === undefined ? undefined : deps.agents.entry(id);
+        if (id === undefined || entry === undefined) {
+            return;
         }
         try {
             await deps.agentWorktrees.retire(id, entry.repos, entry.title);
-            archived.push(id);
+            done[index] = id;
         } catch (error) {
             deps.logger.warn({ err: error, id }, "agents: archive skipped — worktree retire failed");
         }
-    }
+    };
+    // A shared cursor rather than fixed chunks: a slow agent (a big checkout) holds up only its own worker.
+    let cursor = 0;
+    await Promise.all(
+        Array.from({ length: Math.min(RETIRE_CONCURRENCY, pending.length) }, async () => {
+            for (let index = cursor++; index < pending.length; index = cursor++) {
+                await retire(index);
+            }
+        }),
+    );
+    const archived = done.filter((id) => id !== undefined);
     if (archived.length > 0) {
         await deps.agents.setArchived(archived, now);
     }

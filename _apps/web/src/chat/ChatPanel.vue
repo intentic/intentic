@@ -58,6 +58,7 @@ const {
     accounts,
     model,
     effort,
+    thinking,
     draft,
     attachments,
     connected,
@@ -89,7 +90,7 @@ const providerName = computed(() => providerLabel(provider.value));
 const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
 // An ACP provider owns its own model AND reasoning settings — no effort scale to offer (the segments hide).
 const nativeProvider = computed(() => NATIVE_PROVIDERS.includes(provider.value as NativeProvider));
-const efforts = computed(() => (nativeProvider.value ? effortsFor(provider.value, model.value) : []));
+const efforts = computed(() => (nativeProvider.value ? effortsFor(provider.value, model.value, thinking.value) : []));
 
 // The mobile pickers: pill taps open bottom sheets instead of anchored popovers.
 const modelSheetOpen = ref(false);

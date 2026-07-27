@@ -140,8 +140,8 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Named ids archive whatever the user pointed at (a card, or a bulk undo's inverse); no ids means
         // "clear the Finished lane" — every agent that is archivable RIGHT NOW, ignoring the retention clock.
-        // Either way the response names what actually moved, because that list is what "Undo" needs and it is
-        // not recoverable from the roster afterwards.
+        // Both routes answer with what MOVED and not with the roster afterwards: see AgentsMovedSchema — a
+        // snapshot would let two overlapping requests undo each other's work in the browser.
         archive: i.archive.handler(async ({ input }) => {
             if (input.ids !== undefined) {
                 for (const id of input.ids) {
@@ -158,7 +158,8 @@ export const createAgentsRoutes = (services: Services) => {
                     .filter((entry) => archivable(entry, services.agents.running(entry.id)))
                     .map((entry) => entry.id);
             const archived = await archiveAgents(services, targets, Date.now());
-            return { agents: services.agents.list(), archived };
+            // Read AFTER the archive, so each summary carries the archivedAt the card dates itself by.
+            return { moved: archived.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined) };
         }),
         unarchive: i.unarchive.handler(async ({ input }) => {
             for (const id of input.ids) {
@@ -167,7 +168,7 @@ export const createAgentsRoutes = (services: Services) => {
             // No worktree restore: the next turn's ensure() rebuilds the checkout from the branch, so putting a
             // card back is a registry write and nothing else.
             await services.agents.clearArchived(input.ids);
-            return { agents: services.agents.list() };
+            return { moved: input.ids.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined) };
         }),
     };
 };

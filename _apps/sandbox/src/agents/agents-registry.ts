@@ -183,7 +183,20 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
         }
     };
 
-    const persist = (): Promise<void> => store.save(entries);
+    // Chained, not fire-and-forget: `entries` is REPLACED (not mutated) by every write path, so two overlapping
+    // persists would each serialize the array they captured — and the one that finishes last would write back a
+    // snapshot missing the other's change. Archiving several agents at once is exactly that shape. Chaining also
+    // means the closure reads `entries` at EXECUTION time, so a queued write always persists the latest state.
+    // (`.then(save, save)` so one rejected write doesn't poison the queue — the push-store idiom.)
+    let writes: Promise<unknown> = Promise.resolve();
+    const persist = (): Promise<void> => {
+        const next = writes.then(
+            () => store.save(entries),
+            () => store.save(entries),
+        );
+        writes = next.catch(() => undefined);
+        return next;
+    };
 
     const entryOf = (id: string): PersistedAgent | undefined => entries.find((entry) => entry.id === id);
 

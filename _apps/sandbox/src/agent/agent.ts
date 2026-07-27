@@ -7,6 +7,7 @@ import {
     type Options,
     type PermissionUpdate,
     query,
+    type SDKAssistantMessage,
     type SDKControlGetUsageResponse,
     type SDKMessage,
     type SDKUserMessage,
@@ -273,6 +274,17 @@ async function* sdkTurns(stream: AsyncIterable<SDKMessage>, steering: SteeringQu
 // settings default, say — which have no UI here, so a mode frame is only emitted for one of these four.
 const PERMISSION_MODES = new Set<PermissionMode>(["default", "acceptEdits", "plan", "bypassPermissions"]);
 
+// What the UI shows for an API-level failure. The SDK's `error` field is only a CATEGORY, and 'unknown' is its
+// catch-all for everything it can't bucket — every 4xx lands there. The synthetic assistant message carrying it
+// holds the API's actual sentence in its text block ("API Error: 400 output_config.effort 'max' is not supported
+// when thinking is disabled on this model", say), which is the only part anyone can act on: reporting the
+// category alone turns a precise, fixable complaint into a shrug. Text wins, category is the fallback.
+const apiErrorMessage = (message: SDKAssistantMessage): string => {
+    const content = message.message.content as ReadonlyArray<{ type: string; text?: string }>;
+    const explained = content.find((block) => block.type === "text" && block.text !== undefined && block.text.trim() !== "")?.text;
+    return explained ?? `agent error: ${message.error}`;
+};
+
 // Normalize the SDK's SDKMessage stream onto AgentEvents. High-value block types get a dedicated frame;
 // any SDK message without a mapping is dropped. Does NOT emit the terminal `done` (runAgent does that once
 // the whole turn settles).
@@ -373,7 +385,7 @@ async function* streamSdk(
                           message:
                               "Claude usage limit reached — this is the Claude subscription's rate limit resetting, not a workspace problem. Your last message wasn't processed; try again shortly.",
                       }
-                    : { kind: "error", message: `agent error: ${message.error}` };
+                    : { kind: "error", message: apiErrorMessage(message) };
             } else {
                 const content = message.message.content as ReadonlyArray<{ type: string; id?: string; name?: string; input?: unknown }>;
                 for (const block of content) {
