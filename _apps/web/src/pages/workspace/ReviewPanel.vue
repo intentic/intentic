@@ -407,6 +407,60 @@ const pullHint = (repo: RepoChanges): string =>
     `Pull ${plural(behind(repo), `commit`)} from ${repo.remote?.upstream} — fast-forward only; a diverged history is reported, never auto-merged`;
 const pushHint = (repo: RepoChanges): string => `Push ${plural(ahead(repo), `commit`)} to ${repo.remote?.upstream}`;
 
+// --- the primary sync action --------------------------------------------------------------------------------
+// VSCode's post-commit move: the same prominent slot the user just used to Commit becomes the sync the repos now
+// need, so "push what I just committed" is one labelled click where they are already looking — not the muted ↑N
+// pill on a repo row that most people never register as a button at all. It takes the slot only once the commit
+// box has nothing left to show (no uncommitted work anywhere); the per-row pills stay the granular control for a
+// set whose repos each need something different.
+const syncRepos = computed(() => scannable.value.filter((repo) => syncable(repo) && (ahead(repo) > 0 || behind(repo) > 0 || unpublished(repo))));
+const aheadTotal = computed(() => syncRepos.value.reduce((total, repo) => total + ahead(repo), 0));
+const behindTotal = computed(() => syncRepos.value.reduce((total, repo) => total + behind(repo), 0));
+const toPublish = computed(() => syncRepos.value.some((repo) => unpublished(repo)));
+// The verb mirrors the row pills so the bar can never contradict them: Pull when the only work is incoming, Push
+// when it is only outgoing, Publish when the only work is a branch with no upstream yet, and Sync when a repo (or
+// the set as a whole) carries both sides at once. Mixed publish + outgoing reads Push, whose per-repo fan-out
+// publishes the un-tracked branches anyway.
+const syncVerb = computed<"push" | "pull" | "sync" | "publish" | undefined>(() => {
+    if (syncRepos.value.length === 0) {
+        return undefined;
+    }
+    if (behindTotal.value > 0) {
+        return aheadTotal.value > 0 || toPublish.value ? `sync` : `pull`;
+    }
+    if (toPublish.value && aheadTotal.value === 0) {
+        return `publish`;
+    }
+    return `push`;
+});
+// Label, glyph and the whole-sentence tooltip per verb — the same shape INDEX_VERB uses for the stage buttons.
+// The icons match the row pills (↑ push, ↓ pull) so the bar and the rows read as one language.
+const SYNC_VERB: Record<
+    "push" | "pull" | "sync" | "publish",
+    { readonly label: string; readonly icon: "arrow-up-right" | "arrow-down-left" | "sync" | "cloud-upload"; readonly hint: string }
+> = {
+    push: { label: `Push`, icon: `arrow-up-right`, hint: `Push your committed work to each repo's upstream` },
+    pull: { label: `Pull`, icon: `arrow-down-left`, hint: `Fast-forward each repo from its upstream — a diverged history is reported, never auto-merged` },
+    sync: { label: `Sync`, icon: `sync`, hint: `Pull each repo up to its upstream (fast-forward only), then push your committed work` },
+    publish: { label: `Publish`, icon: `cloud-upload`, hint: `Push and start tracking each branch on its remote` },
+};
+const syncMeta = computed(() => (syncVerb.value === undefined ? undefined : SYNC_VERB[syncVerb.value]));
+// The one-line readout beside the button — the counts its single word leaves out, plus the repo spread when more
+// than one repo is in play, so a multi-repo sync says so before it fires. A pure publish has nothing to count.
+const syncSummary = computed<string>(() => {
+    const counts = [...(behindTotal.value > 0 ? [`↓${behindTotal.value}`] : []), ...(aheadTotal.value > 0 ? [`↑${aheadTotal.value}`] : [])];
+    const spread = syncRepos.value.length > 1 ? ` · ${plural(syncRepos.value.length, `repo`)}` : ``;
+    return (counts.length > 0 ? counts.join(` `) : `no upstream yet`) + spread;
+});
+// One click, every repo that has remote work — git can't span remotes, so the composable fans it out into one
+// real sync per repo (pull what's behind, then push/publish what's ahead), each failure landing on its own row.
+const doSync = (): void => {
+    if (changes.actionBusy.value) {
+        return;
+    }
+    void changes.syncAll(syncRepos.value.map((repo) => ({ repo: repo.repo, pull: behind(repo) > 0, push: ahead(repo) > 0 || unpublished(repo) })));
+};
+
 // Ahead/behind are only ever as fresh as the last fetch, which is why fetch is offered even when both read
 // zero — the zero itself is the claim most likely to be stale.
 const SYNC_PILL = `flex h-5 shrink-0 items-center gap-0.5 rounded px-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40`;
@@ -530,6 +584,24 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
                     <Icon name="times" class="text-2xs" />
                 </button>
             </div>
+        </div>
+
+        <!-- Once there is nothing left to commit, the commit box hands the primary slot to the sync the repos
+             actually need — VSCode's post-commit button. Same place, same weight, so the commits you just made
+             are one labelled click from their remote instead of a muted pill you had to spot on a repo row. Every
+             sync failure renders on its own repo row below (each is filed per repo), so this bar carries only the
+             action and a one-line readout of what it will do. -->
+        <div v-else-if="syncMeta !== undefined" class="flex shrink-0 items-center gap-1 border-b border-line p-2">
+            <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{ syncSummary }}</span>
+            <button
+                type="button"
+                :class="cmp.buttonPrimary('shrink-0 gap-0 whitespace-nowrap px-2 py-1 text-2xs')"
+                :disabled="changes.actionBusy.value"
+                @click="doSync"
+                v-tooltip.top="syncMeta!.hint"
+            >
+                <Icon :name="syncMeta!.icon" class="mr-1 text-2xs" />{{ syncMeta!.label }}
+            </button>
         </div>
 
         <!-- WHOSE WORK IS IN MY TREE — one line, only when an agent actually landed something. Each entry is a

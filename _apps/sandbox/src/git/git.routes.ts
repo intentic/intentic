@@ -118,9 +118,14 @@ export const createGitRoutes = (services: Services) => {
                             return {};
                         }),
                     ]);
-                    // A repo with a clean tree still belongs in the response when it is ahead of or behind its
-                    // upstream — there is real work to sync, which is exactly what the panel must not hide.
-                    if (conflicted.length > 0 || staged.length > 0 || unstaged.length > 0 || remote.ahead > 0 || remote.behind > 0) {
+                    // A repo with a clean tree still belongs in the response whenever there is remote work to
+                    // do: ahead of or behind its upstream, or sitting on a branch that has a remote but no
+                    // upstream yet (which the panel offers to Publish). Whatever the sync controls can act on
+                    // they must be able to SEE — a repo that drops out the instant its tree goes clean is exactly
+                    // the push/publish dead-end this avoids, and the reason committing everything felt like it
+                    // took the sync affordance with it.
+                    const publishable = branch !== undefined && remote.remote !== undefined && remote.upstream === undefined;
+                    if (conflicted.length > 0 || staged.length > 0 || unstaged.length > 0 || remote.ahead > 0 || remote.behind > 0 || publishable) {
                         // Narrowed to the paths this scan actually reports: an agent's landed delta outlives the
                         // review (the paths stay in `base..landedTip` until the branch goes), so shipping it
                         // whole would attribute files that are no longer changed at all.

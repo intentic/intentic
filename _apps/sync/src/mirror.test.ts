@@ -27,6 +27,7 @@ const jsonResponse = (status: number, body: unknown): Response =>
 const ws = (port: number, host: "127.0.0.1" | "::1" = "127.0.0.1", command = "vite"): PortSummary => ({
     port,
     host,
+    forwardable: true,
     kind: "workspace",
     command,
     forwarded: false,
@@ -50,12 +51,14 @@ const fakeExecutor = (free: (port: number) => boolean = () => true): { executor:
 const log = (): void => {};
 
 describe("fetchWorkspacePorts", () => {
-    it("sends the sync token and returns only workspace-kind ports", async () => {
+    it("sends the sync token and returns only forwardable workspace-kind ports", async () => {
         const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
             jsonResponse(200, {
                 ports: [
-                    { port: 47145, host: "::1", kind: "workspace", command: "vite", forwarded: false },
-                    { port: 4096, host: "127.0.0.1", kind: "system", command: "opencode serve", forwarded: false },
+                    { port: 47145, host: "::1", forwardable: true, kind: "workspace", command: "vite", forwarded: false },
+                    { port: 4096, host: "127.0.0.1", forwardable: true, kind: "system", command: "opencode serve", forwarded: false },
+                    // A workspace bind on a loopback alias — Mutagen would dial 127.0.0.1 and never reach it, so it's dropped.
+                    { port: 9500, host: "127.0.0.1", forwardable: false, kind: "workspace", command: "alias-bound", forwarded: false },
                 ],
             }),
         );
@@ -63,7 +66,7 @@ describe("fetchWorkspacePorts", () => {
 
         const ports = await fetchWorkspacePorts("https://sandbox-abc.example.dev/", "ist_tok");
 
-        expect(ports).toEqual([{ port: 47145, host: "::1", kind: "workspace", command: "vite", forwarded: false }]);
+        expect(ports).toEqual([{ port: 47145, host: "::1", forwardable: true, kind: "workspace", command: "vite", forwarded: false }]);
         expect(fetchMock).toHaveBeenCalledWith("https://sandbox-abc.example.dev/ports", { headers: { "x-intentic-sync": "ist_tok" } });
     });
 

@@ -151,15 +151,24 @@ const toggleOption = (question: AskQuestion, index: number, label: string): void
     if (question.multiSelect) {
         next = current.includes(label) ? current.filter((l) => l !== label) : [...current, label];
     } else {
-        // Single-select: clicking the active option clears it, otherwise it replaces the choice.
+        // Single-select: clicking the active option clears it, otherwise it replaces the choice. And,
+        // matching Claude Code, a listed option and the free-text "Other" are mutually exclusive — so
+        // picking one clears whatever was typed.
         next = current.includes(label) ? [] : [label];
+        if (next.length > 0) {
+            otherTexts.value = { ...otherTexts.value, [index]: `` };
+        }
     }
     selections.value = { ...selections.value, [index]: next };
 };
 
 const otherValue = (index: number): string => otherTexts.value[index] ?? ``;
-const setOther = (index: number, value: string): void => {
+const setOther = (question: AskQuestion, index: number, value: string): void => {
     otherTexts.value = { ...otherTexts.value, [index]: value };
+    // The other half of the single-select exclusivity above: typing a custom answer drops the picked option.
+    if (!question.multiSelect && value.length > 0) {
+        selections.value = { ...selections.value, [index]: [] };
+    }
 };
 
 // Combined picks for one question: selected option label(s) plus any non-empty "Other" text.
@@ -444,23 +453,20 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             </div>
 
             <div v-if="message.question" class="chat-surface w-full overflow-hidden rounded-xl">
-                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
-                    <Icon name="comments" class="text-sm text-link" />
-                    <span
-                        class="min-w-0 flex-1 truncate text-sm font-semibold text-content"
-                        v-tooltip.bottom="message.question.questions[0]?.question ?? ''"
-                        >{{ message.question.questions[0]?.question }}</span
-                    >
-                    <span v-if="message.question.status === 'answered'" class="text-2xs font-medium text-success">✓ Answered</span>
-                    <span v-else-if="message.question.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Dismissed</span>
+                <!-- The question wraps in full here rather than truncating behind a tooltip; a multi-question
+                     card carries a generic title and breaks each question out inline in the body below. -->
+                <div class="flex items-start gap-2 border-b border-line px-3.5 py-2">
+                    <Icon name="comments" class="mt-0.5 text-sm text-link" />
+                    <span class="min-w-0 flex-1 text-sm font-semibold text-content">{{
+                        message.question.questions.length > 1 ? "A few questions" : message.question.questions[0]?.question
+                    }}</span>
+                    <span v-if="message.question.status === 'answered'" class="mt-0.5 shrink-0 text-2xs font-medium text-success">✓ Answered</span>
+                    <span v-else-if="message.question.status === 'cancelled'" class="mt-0.5 shrink-0 text-2xs font-medium text-muted">✕ Dismissed</span>
                 </div>
 
                 <div class="flex flex-col gap-4 px-3.5 py-3">
                     <div v-for="(question, index) in message.question.questions" :key="index" class="flex flex-col gap-2">
-                        <div class="flex flex-col gap-0.5">
-                            <span class="text-2xs uppercase tracking-wide text-subtle">{{ question.header }}</span>
-                            <span v-if="message.question.questions.length > 1" class="text-xs font-medium text-content">{{ question.question }}</span>
-                        </div>
+                        <span v-if="message.question.questions.length > 1" class="text-xs font-medium text-content">{{ question.question }}</span>
 
                         <div v-if="message.question.status === 'pending'" class="flex flex-col gap-1.5">
                             <button
@@ -486,7 +492,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                             <input
                                 type="text"
                                 :value="otherValue(index)"
-                                @input="setOther(index, ($event.target as HTMLInputElement).value)"
+                                @input="setOther(question, index, ($event.target as HTMLInputElement).value)"
                                 placeholder="Other…"
                                 class="rounded-lg border border-line bg-card px-2.5 py-1.5 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none md:text-xs"
                             />
@@ -497,14 +503,14 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     <div v-if="message.question.status === 'pending'" class="flex items-center gap-2 pt-1">
                         <button
                             type="button"
-                            class="plan-approve disabled:cursor-default disabled:opacity-50"
+                            class="plan-approve plan-sm disabled:cursor-default disabled:opacity-50"
                             :disabled="!canSubmit"
                             @click="submitAnswers"
                         >
-                            <Icon name="check" class="text-xs" />
+                            <Icon name="check" class="text-2xs" />
                             Submit
                         </button>
-                        <button type="button" class="plan-reject" @click="cancelQuestion(message)">Dismiss</button>
+                        <button type="button" class="plan-reject plan-sm" @click="cancelQuestion(message)">Dismiss</button>
                     </div>
                 </div>
             </div>

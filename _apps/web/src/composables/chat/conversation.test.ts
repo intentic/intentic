@@ -290,6 +290,40 @@ describe(`Conversation`, () => {
         ]);
     });
 
+    it(`nests a sub-agent's calls and thinking under its Agent card, keeping its prose out of the parent bubble`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `tool_call`, id: `agent1`, name: `Agent`, category: `other`, status: `in_progress`, target: `explore` },
+                // Frames produced INSIDE the sub-agent carry the Agent tool's id as their parent.
+                { kind: `thinking`, text: `sub-thinking`, parentToolUseId: `agent1` },
+                { kind: `delta`, text: `sub prose`, parentToolUseId: `agent1` },
+                { kind: `tool_call`, id: `t1`, name: `Read`, category: `read`, status: `in_progress`, parentToolUseId: `agent1` },
+                { kind: `tool_call_update`, id: `t1`, status: `completed`, content: [{ type: `text`, text: `contents` }] },
+                { kind: `tool_call_update`, id: `agent1`, status: `completed`, content: [{ type: `text`, text: `done` }] },
+                { kind: `delta`, text: `main answer` },
+            ]),
+        );
+
+        await conversation.send(`explore it`, settings);
+
+        const assistant = conversation.messages.value[1]!;
+        // The sub-agent's own prose never leaks into the parent bubble — only the main agent's own delta types in.
+        expect(assistant.text).toBe(`main answer`);
+        expect(assistant.tools).toEqual([
+            {
+                id: `agent1`,
+                name: `Agent`,
+                category: `other`,
+                status: `completed`,
+                target: `explore`,
+                thinking: `sub-thinking`,
+                children: [{ id: `t1`, name: `Read`, category: `read`, status: `completed`, content: [{ type: `text`, text: `contents` }] }],
+                content: [{ type: `text`, text: `done` }],
+            },
+        ]);
+    });
+
     it(`surfaces thinking, todos, and end-of-turn usage on the assistant bubble`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

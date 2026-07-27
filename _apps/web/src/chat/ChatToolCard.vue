@@ -20,8 +20,15 @@ const running = computed(() => props.tool.status === `pending` || props.tool.sta
 const failed = computed(() => props.tool.status === `failed`);
 
 // Whether there's anything to fold — an output-less call (a pending tool, or a command that printed nothing)
-// shows just its header, no chevron.
-const hasContent = computed(() => view.value.diffs.length > 0 || view.value.body !== undefined);
+// shows just its header, no chevron. A sub-agent card folds over its nested transcript (children + thinking)
+// too, so the whole delegation collapses to one line once it settles.
+const hasContent = computed(
+    () =>
+        view.value.diffs.length > 0 ||
+        view.value.body !== undefined ||
+        props.tool.thinking !== undefined ||
+        (props.tool.children?.length ?? 0) > 0,
+);
 
 // Output fold, mirroring the turn's Thinking block. The registry decides the default (open while running or
 // on failure); a manual toggle overrides it and sticks for the session.
@@ -72,6 +79,19 @@ const location = computed(() => props.tool.locations?.[0]);
             <span v-if="view.summary" class="ml-auto shrink-0 tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{ view.summary }}</span>
         </div>
         <template v-if="isOpen">
+            <!-- A sub-agent's own thinking, grouped onto its card as a muted inner-voice block rather than
+                 merged into the parent turn's thinking (see conversation.ts). -->
+            <pre
+                v-if="tool.thinking"
+                class="scrollbar-thin ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs italic leading-relaxed text-subtle"
+                >{{ tool.thinking }}</pre
+            >
+            <!-- A sub-agent's nested transcript: the tool calls it made, indented under the delegation card so
+                 the whole Agent run reads as one unit. Recursive — a sub-agent that itself delegates nests one
+                 level deeper (ChatToolCard renders itself). -->
+            <div v-if="tool.children?.length" class="ml-4 flex flex-col gap-1 border-l border-line pl-2">
+                <ChatToolCard v-for="child in tool.children" :key="child.id" :tool="child" />
+            </div>
             <ChatToolDiff
                 v-for="diff in view.diffs"
                 :key="diff.path"

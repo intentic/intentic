@@ -188,7 +188,37 @@ export interface ChatTool {
     readonly target?: string;
     readonly locations?: readonly ToolCallLocation[];
     readonly content?: readonly ToolCallContent[];
+    // A sub-agent (Agent/Task tool) delegation's own transcript: the tool calls it made, nested under its card
+    // so the delegation reads as one unit instead of a flat run of siblings. Its frames carry this tool's id as
+    // their parentToolUseId (see appendTool). Absent for an ordinary tool call.
+    readonly children?: readonly ChatTool[];
+    // A sub-agent's streamed thinking, grouped onto its own card rather than merged into the parent turn's
+    // thinking block. Absent for an ordinary tool call.
+    readonly thinking?: string;
 }
+
+// Apply `fn` to the tool with `id` anywhere in a bubble's tool tree — a sub-agent's calls live nested under its
+// Agent card (see appendTool), so a tool_call_update or a sub-agent thinking delta has to reach into the
+// children too. Returns the SAME array when the id isn't present, so an unrelated bubble keeps its identity (and
+// re-renders nothing).
+const mapTool = (tools: readonly ChatTool[], id: string, fn: (tool: ChatTool) => ChatTool): readonly ChatTool[] => {
+    let changed = false;
+    const next = tools.map((tool) => {
+        if (tool.id === id) {
+            changed = true;
+            return fn(tool);
+        }
+        if (tool.children !== undefined) {
+            const children = mapTool(tool.children, id, fn);
+            if (children !== tool.children) {
+                changed = true;
+                return { ...tool, children };
+            }
+        }
+        return tool;
+    });
+    return changed ? next : tools;
+};
 
 // A file the user attached to a turn, already uploaded to the workspace before send. `previewUrl` is an
 // object URL for image thumbnails — client-session only, gone on reload (restored history shows text).
@@ -241,8 +271,10 @@ export interface ChatMessage {
     readonly question?: QuestionRequest;
     // Set when a tool call on this turn needed the user's approval; carries the decision.
     readonly permission?: PermissionRequest;
-    // Tool actions (Bash/Edit/…) the sandbox agent ran during this turn, newest last.
-    readonly tools?: ChatTool[];
+    // Tool actions (Bash/Edit/…) the sandbox agent ran during this turn, newest last. A sub-agent's own calls
+    // nest under its Agent card (ChatTool.children), so this is a tree, not a flat list. Built immutably (mapTool
+    // rewrites by id), so it's readonly to the element level like `attachments`.
+    readonly tools?: readonly ChatTool[];
     // The agent's live task checklist (TodoWrite), replaced whole each time it updates.
     readonly todos?: TodoItem[];
     // Cost/token accounting, attached once the turn's result lands.
@@ -1119,15 +1151,31 @@ export class Conversation {
     private handleEvent(event: AgentEvent, turn: TurnContext): void {
         switch (event.kind) {
             case `delta`:
-                if (event.text) {
-                    this.appendDelta(this.currentTextId(turn), event.text);
+                if (!event.text) {
+                    return;
                 }
-                return;
-            case `thinking`:
-                if (event.text) {
-                    this.appendThinkingDelta(this.currentTextId(turn), event.text);
+                // A sub-agent's prose streams tagged with its Agent tool id. Its final form lands as that
+                // tool's result content (tool_call_update), so the live delta is dropped rather than duplicated
+                // there — and, crucially, never typed into the PARENT bubble as if the main agent had said it.
+                if (event.parentToolUseId !== undefined) {
+                    return;
                 }
+                this.appendDelta(this.currentTextId(turn), event.text);
                 return;
+            case `thinking`: {
+                const thinking = event.text;
+                if (!thinking) {
+                    return;
+                }
+                // A sub-agent's thinking is grouped onto its own Agent card (its live transcript), not merged
+                // into the parent turn's thinking block.
+                if (event.parentToolUseId !== undefined) {
+                    this.updateTool(event.parentToolUseId, (tool) => ({ ...tool, thinking: `${tool.thinking ?? ``}${thinking}` }));
+                    return;
+                }
+                this.appendThinkingDelta(this.currentTextId(turn), thinking);
+                return;
+            }
             case `tool_call`: {
                 this.appendTool(this.currentTextId(turn), event);
                 // Follow-along: auto-open the file an edit touches (lazy import mirrors the terminal frame —
@@ -1307,7 +1355,10 @@ export class Conversation {
         return turn.id;
     }
 
-    // Append a tool call to a bubble. Its id lets every later tool_call_update merge into the same card.
+    // Append a tool call to a bubble. A sub-agent's own calls carry the id of the Agent tool that spawned them
+    // (event.parentToolUseId) — nest those under that card, wherever it lives, so the delegation reads as one
+    // unit rather than a flat run of siblings with a lone spinner stranded above them. A top-level call lands
+    // at the end of the target bubble's list. Its id lets every later tool_call_update merge into the same card.
     private appendTool(id: number, event: Extract<AgentEvent, { kind: "tool_call" }>): void {
         const tool: ChatTool = {
             id: event.id,
@@ -1318,32 +1369,54 @@ export class Conversation {
             ...(event.locations !== undefined ? { locations: event.locations } : {}),
             ...(event.content !== undefined ? { content: event.content } : {}),
         };
+        const parentId = event.parentToolUseId;
+        if (parentId !== undefined) {
+            let nested = false;
+            this.messages.value = this.messages.value.map((message) => {
+                if (message.tools === undefined) {
+                    return message;
+                }
+                const tools = mapTool(message.tools, parentId, (parent) => {
+                    nested = true;
+                    return { ...parent, children: [...(parent.children ?? []), tool] };
+                });
+                return tools === message.tools ? message : { ...message, tools };
+            });
+            if (nested) {
+                return;
+            }
+            // Its Agent card wasn't found (a malformed stream) — fall through to a top-level append rather than
+            // dropping the call.
+        }
         this.messages.value = this.messages.value.map((message) =>
             message.id === id ? { ...message, tools: [...(message.tools ?? []), tool] } : message,
         );
     }
 
-    // Merge an update into the matching tool by id, wherever it lives. Present fields REPLACE the prior
-    // value (snapshot semantics — Codex streams a command's growing output as whole snapshots); absent
-    // fields leave it unchanged.
+    // Merge an update into the matching tool by id, wherever it lives in the tree (a sub-agent's calls nest
+    // under its Agent card). Present fields REPLACE the prior value (snapshot semantics — Codex streams a
+    // command's growing output as whole snapshots); absent fields leave it unchanged. An update with no
+    // matching tool is dropped rather than shown loose.
     private mergeToolUpdate(event: Extract<AgentEvent, { kind: "tool_call_update" }>): void {
-        this.messages.value = this.messages.value.map((message) =>
-            message.tools?.some((tool) => tool.id === event.id)
-                ? {
-                      ...message,
-                      tools: message.tools.map((tool) =>
-                          tool.id === event.id
-                              ? {
-                                    ...tool,
-                                    ...(event.status !== undefined ? { status: event.status } : {}),
-                                    ...(event.content !== undefined ? { content: event.content } : {}),
-                                    ...(event.locations !== undefined ? { locations: event.locations } : {}),
-                                }
-                              : tool,
-                      ),
-                  }
-                : message,
-        );
+        this.updateTool(event.id, (tool) => ({
+            ...tool,
+            ...(event.status !== undefined ? { status: event.status } : {}),
+            ...(event.content !== undefined ? { content: event.content } : {}),
+            ...(event.locations !== undefined ? { locations: event.locations } : {}),
+        }));
+    }
+
+    // Rewrite the tool with `id` wherever it lives across the transcript's bubbles, leaving every other bubble's
+    // object identity intact (mapTool returns the same array when the id is absent). The one seam both
+    // tool_call_update and a sub-agent's thinking delta write through.
+    private updateTool(id: string, fn: (tool: ChatTool) => ChatTool): void {
+        this.messages.value = this.messages.value.map((message) => {
+            if (message.tools === undefined) {
+                return message;
+            }
+            const tools = mapTool(message.tools, id, fn);
+            return tools === message.tools ? message : { ...message, tools };
+        });
     }
 
     private setTodos(id: number, items: TodoItem[]): void {

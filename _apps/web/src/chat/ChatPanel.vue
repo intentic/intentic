@@ -1261,6 +1261,14 @@ watch(keyboardInset, () => {
     background: color-mix(in srgb, var(--color-content) 8%, transparent);
     border-color: var(--color-content);
 }
+/* The question card's Submit / Dismiss sit inline with smaller controls (option rows, the Other field),
+   so they run a touch tighter than the plan/permission decisions. Desktop only — the mobile block below
+   still lifts .plan-approve/.plan-reject back to full 2.75rem touch targets. */
+.plan-sm {
+    height: 1.75rem;
+    padding: 0 0.7rem;
+    font-size: 0.6875rem;
+}
 .chat-tab {
     color: var(--color-muted);
     cursor: pointer;

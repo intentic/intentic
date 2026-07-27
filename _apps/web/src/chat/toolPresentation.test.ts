@@ -23,7 +23,9 @@ describe(`present: icons`, () => {
     });
 
     it(`lets a per-name presenter override the category icon`, () => {
-        // Task categorizes as `other` (icon angle-right) but reads as a delegation.
+        // The subagent tool categorizes as `other` (icon angle-right) but reads as a delegation. The Claude SDK
+        // names it `Agent`; native backends emit lowercase `task` — both resolve to the delegation icon.
+        expect(present(tool({ name: `Agent`, category: `other` })).icon).toBe(`users`);
         expect(present(tool({ name: `Task`, category: `other` })).icon).toBe(`users`);
     });
 

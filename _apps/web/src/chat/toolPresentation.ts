@@ -198,8 +198,12 @@ const PRESENTERS: Record<string, Presenter> = {
     write: { summary: diffSummary },
     multiedit: { summary: diffSummary },
     notebookedit: { summary: diffSummary },
-    // A subagent's own transcript renders in the parent turn (frames carry parentToolUseId); the card is just
-    // the delegation marker, so it gets a distinct icon and no output shaping.
+    // A subagent's own transcript nests under this card (its child tool calls + streamed thinking — the client
+    // groups them by parentToolUseId; see conversation.ts appendTool), so it gets a distinct icon and no output
+    // shaping of its own; its result rides the default text body. The Claude SDK names the tool `Agent` (its
+    // input is AgentInput/subagent_type) while native backends emit lowercase `task` — both are current, so both
+    // resolve here.
+    agent: { icon: `users` },
     task: { icon: `users` },
     websearch: { icon: `search` },
     webfetch: { icon: `globe` },

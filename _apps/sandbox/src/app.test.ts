@@ -525,16 +525,16 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
                 config,
                 portForwards,
                 scanPorts: async () => [
-                    { port: 22, host: "127.0.0.1" },
-                    { port: 3000, host: "127.0.0.1", pid: 7, command: "vite", cwd: "/work/app" },
-                    { port: 5173, host: "127.0.0.1" },
-                    { port: 8787, host: "127.0.0.1" },
+                    { port: 22, host: "127.0.0.1", forwardable: true },
+                    { port: 3000, host: "127.0.0.1", forwardable: true, pid: 7, command: "vite", cwd: "/work/app" },
+                    { port: 5173, host: "127.0.0.1", forwardable: true },
+                    { port: 8787, host: "127.0.0.1", forwardable: true },
                 ],
             }),
         ),
     );
     expect(await client.ports.list()).toEqual({
-        ports: [{ port: 3000, host: "127.0.0.1", kind: "workspace", pid: 7, command: "vite", cwd: "/work/app", forwarded: false }],
+        ports: [{ port: 3000, host: "127.0.0.1", forwardable: true, kind: "workspace", pid: 7, command: "vite", cwd: "/work/app", forwarded: false }],
     });
 
     await portForwards.forward(3000, "127.0.0.1");
@@ -543,6 +543,7 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
             {
                 port: 3000,
                 host: "127.0.0.1",
+                forwardable: true,
                 kind: "workspace",
                 pid: 7,
                 command: "vite",
@@ -563,7 +564,7 @@ test("ports.forward maps a listener onto a slot, mints its route label, and refu
             services({
                 config,
                 portForwards,
-                scanPorts: async () => [{ port: 3000, host: "127.0.0.1", pid: 7, command: "vite" }],
+                scanPorts: async () => [{ port: 3000, host: "127.0.0.1", forwardable: true, pid: 7, command: "vite" }],
                 ensurePreviewRoutes: async (labels) => {
                     ensured.push(...labels);
                 },
@@ -578,11 +579,13 @@ test("ports.forward maps a listener onto a slot, mints its route label, and refu
     // Unforward frees the slot; the port reads unforwarded again.
     expect(await client.ports.unforward({ port: 3000 })).toEqual({ ok: true });
     // No cwd and not a known sandbox binary -> unattributable, filed under system.
-    expect((await client.ports.list()).ports).toEqual([{ port: 3000, host: "127.0.0.1", kind: "system", pid: 7, command: "vite", forwarded: false }]);
+    expect((await client.ports.list()).ports).toEqual([
+        { port: 3000, host: "127.0.0.1", forwardable: true, kind: "system", pid: 7, command: "vite", forwarded: false },
+    ]);
 });
 
 test("ports.forward on a loopback sandbox (no zone/token) still maps the slot but returns no URL", async () => {
-    const client = clientFor(createApp(services({ scanPorts: async () => [{ port: 3000, host: "127.0.0.1" }] })));
+    const client = clientFor(createApp(services({ scanPorts: async () => [{ port: 3000, host: "127.0.0.1", forwardable: true }] })));
     expect(await client.ports.forward({ port: 3000 })).toEqual({});
 });
 
@@ -1014,7 +1017,7 @@ test("the enrollment-minted sync token reads /ports and nothing else", async () 
         services({
             auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
             config: { ...baseConfig, connectToken: "token", sandbox: { ...baseConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
-            scanPorts: async () => [{ port: 3000, host: "127.0.0.1" }],
+            scanPorts: async () => [{ port: 3000, host: "127.0.0.1", forwardable: true }],
         }),
     );
     const enrolled = await app.request("/system/authorized-key", {
@@ -1029,7 +1032,7 @@ test("the enrollment-minted sync token reads /ports and nothing else", async () 
     const withToken = (path: string, method = "GET") => app.request(path, { method, headers: { "x-intentic-sync": syncToken } });
     const list = await withToken("/ports");
     expect(list.status).toBe(200);
-    expect(await list.json()).toEqual({ ports: [{ port: 3000, host: "127.0.0.1", kind: "system", forwarded: false }] });
+    expect(await list.json()).toEqual({ ports: [{ port: 3000, host: "127.0.0.1", forwardable: true, kind: "system", forwarded: false }] });
     // Out of scope (403): any other route, and even the ports MUTATIONS — the token is read-only by design.
     expect((await withToken("/panels")).status).toBe(403);
     expect((await withToken("/ports/forward", "POST")).status).toBe(403);

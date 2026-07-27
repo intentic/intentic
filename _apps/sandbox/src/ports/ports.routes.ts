@@ -40,6 +40,9 @@ export const createPortsRoutes = (services: Services) => {
             if (listener === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: `nothing is listening on port ${input.port}` });
             }
+            if (!listener.forwardable) {
+                throw new ORPCError("BAD_REQUEST", { message: `port ${input.port} is bound to a loopback address the preview proxy can't reach` });
+            }
             // The listener's dial host rides into the forward: a `localhost` bind can be ::1-only (Vite).
             const slot = await services.portForwards.forward(input.port, listener.host);
             // Almost always a memoized no-op: the boot sweep pre-mints every slot label (and own-Cloudflare

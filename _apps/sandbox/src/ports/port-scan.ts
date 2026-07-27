@@ -15,29 +15,38 @@ export type LoopbackHost = "127.0.0.1" | "::1";
 export interface ListeningPort {
     readonly port: number;
     readonly host: LoopbackHost;
+    // Whether the preview proxy can actually reach the listener by dialing `host`. False for a bind to a
+    // loopback alias (Docker's embedded DNS uses 127.0.0.11) that only answers at its own address — listed for
+    // transparency, but the Ports view hides Preview and forwarding is refused.
+    readonly forwardable: boolean;
     readonly pid?: number;
     readonly command?: string;
     readonly cwd?: string;
 }
 
-// A /proc/net/tcp{,6} LISTEN row's local address, hex-encoded (IPv4 little-endian), resolved to the loopback
-// address that reaches it — or undefined for a bind the proxy can't reach (a docker bridge address). Wildcard
-// binds (0.0.0.0 and ::, which accepts v4-mapped connections on Linux) dial as 127.0.0.1; a v6-loopback-only
-// bind must be dialed at ::1.
-const dialHost = (hexAddress: string): LoopbackHost | undefined => {
+// A /proc/net/tcp{,6} LISTEN row's local address, hex-encoded (IPv4 little-endian), resolved to how the preview
+// proxy reaches it: the loopback address it must DIAL, and whether that dial actually lands. `undefined` means
+// the bind isn't a loopback listener the proxy could reach at all (a docker bridge address), so it's dropped
+// from the scan. Wildcard binds (0.0.0.0 and ::, which accept v4-mapped connections on Linux) and an exact
+// 127.0.0.1/::1 bind are forwardable; a bind to another 127/8 alias (e.g. Docker's embedded DNS on 127.0.0.11)
+// is a real listener worth showing but only answers at that address, so it's listed as not-forwardable.
+const loopbackBind = (hexAddress: string): { host: LoopbackHost; forwardable: boolean } | undefined => {
     if (hexAddress.length === 8) {
-        return hexAddress === "00000000" || hexAddress.endsWith("7F") ? "127.0.0.1" : undefined; // 0.0.0.0 or 127/8
+        if (hexAddress === "00000000" || hexAddress === "0100007F") {
+            return { host: "127.0.0.1", forwardable: true }; // 0.0.0.0 or 127.0.0.1
+        }
+        return hexAddress.endsWith("7F") ? { host: "127.0.0.1", forwardable: false } : undefined; // 127/8 alias vs non-loopback
     }
     if (hexAddress === "0".repeat(32)) {
-        return "127.0.0.1"; // ::
+        return { host: "127.0.0.1", forwardable: true }; // ::
     }
-    return hexAddress === `${"0".repeat(24)}01000000` ? "::1" : undefined; // ::1
+    return hexAddress === `${"0".repeat(24)}01000000` ? { host: "::1", forwardable: true } : undefined; // ::1
 };
 
 // LISTEN rows from one /proc/net/tcp{,6} table: whitespace-split fields are
 // [sl, local_address, rem_address, st, tx:rx, tr:tm, retrnsmt, uid, timeout, inode, …]; st 0A is LISTEN.
-const parseListeners = (table: string): { port: number; host: LoopbackHost; address: string; inode: string }[] => {
-    const listeners: { port: number; host: LoopbackHost; address: string; inode: string }[] = [];
+const parseListeners = (table: string): { port: number; host: LoopbackHost; forwardable: boolean; address: string; inode: string }[] => {
+    const listeners: { port: number; host: LoopbackHost; forwardable: boolean; address: string; inode: string }[] = [];
     for (const line of table.split("\n").slice(1)) {
         const fields = line.trim().split(/\s+/);
         const local = fields[1]?.split(":");
@@ -46,11 +55,11 @@ const parseListeners = (table: string): { port: number; host: LoopbackHost; addr
             continue;
         }
         const address = local[0].toUpperCase();
-        const host = dialHost(address);
-        if (host === undefined) {
+        const bind = loopbackBind(address);
+        if (bind === undefined) {
             continue;
         }
-        listeners.push({ port: Number.parseInt(local[1], 16), host, address, inode });
+        listeners.push({ port: Number.parseInt(local[1], 16), host: bind.host, forwardable: bind.forwardable, address, inode });
     }
     return listeners;
 };
@@ -118,7 +127,7 @@ const DOCKER_EMBEDDED_DNS_ADDRESS = "0B00007F"; // 127.0.0.11, /proc/net/tcp lit
 // fixture tree. Dual-stack listeners (the same port on tcp and tcp6) collapse to one row.
 export const scanListeningPorts = async (procRoot = "/proc"): Promise<ListeningPort[]> => {
     const tables = await Promise.all(["tcp", "tcp6"].map((table) => readFile(join(procRoot, "net", table), "utf8").catch(() => "")));
-    const byPort = new Map<number, { port: number; host: LoopbackHost; address: string; inode: string }>();
+    const byPort = new Map<number, { port: number; host: LoopbackHost; forwardable: boolean; address: string; inode: string }>();
     for (const listener of tables.flatMap(parseListeners)) {
         const existing = byPort.get(listener.port);
         // A dual-stack port collapses to one row, preferring the 127.0.0.1-dialable side.
@@ -130,12 +139,14 @@ export const scanListeningPorts = async (procRoot = "/proc"): Promise<ListeningP
     return Promise.all(
         [...byPort.values()]
             .toSorted((a, b) => a.port - b.port)
-            .map(async ({ port, host, address, inode }) => {
+            .map(async ({ port, host, forwardable, address, inode }) => {
                 const pid = owners.get(inode);
                 if (pid === undefined) {
                     // No /proc/*/fd owns the socket — usually plumbing served from outside this PID namespace.
                     // Docker's embedded DNS is the one we can still name, from its fixed 127.0.0.11 bind address.
-                    return address === DOCKER_EMBEDDED_DNS_ADDRESS ? { port, host, command: "Docker embedded DNS" } : { port, host };
+                    return address === DOCKER_EMBEDDED_DNS_ADDRESS
+                        ? { port, host, forwardable, command: "Docker embedded DNS" }
+                        : { port, host, forwardable };
                 }
                 // cmdline is the full NUL-separated argv, but it reads empty for kernel threads and any process
                 // that cleared its argv (some daemons, a defunct process still holding the socket) — fall back to
@@ -144,9 +155,15 @@ export const scanListeningPorts = async (procRoot = "/proc"): Promise<ListeningP
                 // has — any of these reads failing just drops that annotation.
                 const cmdline = await readFile(join(procRoot, String(pid), "cmdline"), "utf8").catch(() => "");
                 const command =
-                    cmdline.split("\0").filter(Boolean).join(" ") || (await readFile(join(procRoot, String(pid), "comm"), "utf8").catch(() => "")).trim();
+                    cmdline.split("\0").filter(Boolean).join(" ") ||
+                    (await readFile(join(procRoot, String(pid), "comm"), "utf8").catch(() => "")).trim();
                 const cwd = await readlink(join(procRoot, String(pid), "cwd")).catch(() => undefined);
-                const listener: { port: number; host: LoopbackHost; pid: number; command?: string; cwd?: string } = { port, host, pid };
+                const listener: { port: number; host: LoopbackHost; forwardable: boolean; pid: number; command?: string; cwd?: string } = {
+                    port,
+                    host,
+                    forwardable,
+                    pid,
+                };
                 if (command !== "") {
                     listener.command = command;
                 }

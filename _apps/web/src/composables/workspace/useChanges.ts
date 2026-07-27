@@ -177,6 +177,14 @@ const stageGroups = (groups: readonly RepoPaths[], staged: boolean): Promise<voi
         invalidateChanges,
     );
 
+// Pull is the only sync verb that rewrites the worktree, so it is the only one that must drop the edit buffers
+// and refetch the tree: a buffer left open over a pulled-away file would save it straight back over the merge on
+// the next keystroke. fetch and push move refs the worktree never sees, so they need neither.
+const afterPull = async (): Promise<void> => {
+    resetEditBuffers();
+    await queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
+};
+
 // Remote sync, per repo. Each reports a GitActionResult rather than throwing, so "won't fast-forward" or a
 // credential failure surfaces as git's own reason on the action line instead of a generic request error.
 const syncRepo = (repo: string, action: "fetch" | "pull" | "push", label: string): Promise<void> =>
@@ -192,14 +200,50 @@ const syncRepo = (repo: string, action: "fetch" | "pull" | "push", label: string
                         // through to runBatch's fallback rather than being papered over with the verb again.
                         throw new Error(result.reason);
                     }
-                    // Pull is the only one that can change files under an open editor.
                     if (action === `pull`) {
-                        resetEditBuffers();
-                        await queryClient.invalidateQueries({ queryKey: [`workspace`, `tree`] });
+                        await afterPull();
                     }
                 },
             },
         ],
+        () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: [`git`, `log`] })]),
+    );
+
+// The aggregate the panel's primary button fires once the commit box has nothing left to show: the commits you
+// just made are one labelled click from their remote — in the very place you committed them — instead of a muted
+// ↑N pill you had to know to hunt for on a repo row. git can't span remotes, so, exactly like commitRepos, this
+// is one real sync PER repo under a single busy span, each failure filed against its own repo row. Per repo the
+// order is pull-then-push: fast-forward the branch up to its upstream before sending local commits, so a push
+// can't be rejected for work we could have taken first. `pull`/`push` come straight off the row's ahead/behind,
+// so a repo that needs only one gets only one, and a set whose repos disagree still resolves each on its own.
+export interface SyncTarget {
+    readonly repo: string;
+    readonly pull: boolean; // behind its upstream — fast-forward it first
+    readonly push: boolean; // ahead, or a branch with no upstream yet — send (publishing it when unpublished) after
+}
+const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
+    runBatch(
+        targets.map((target) => ({
+            scope: target.repo,
+            // Name the verb the repo actually needed, so a push-only repo that fails reads "Push failed" — not a
+            // "Sync" it never attempted. The row's failure line stays as specific as the individual pills'.
+            action: `${target.pull && target.push ? `Sync` : target.push ? `Push` : `Pull`} failed`,
+            run: async (): Promise<void> => {
+                if (target.pull) {
+                    const pulled = await post<GitActionResult>(target.repo, `pull`, {});
+                    if (!pulled.ok) {
+                        throw new Error(pulled.reason);
+                    }
+                    await afterPull();
+                }
+                if (target.push) {
+                    const pushed = await post<GitActionResult>(target.repo, `push`, {});
+                    if (!pushed.ok) {
+                        throw new Error(pushed.reason);
+                    }
+                }
+            },
+        })),
         () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: [`git`, `log`] })]),
     );
 
@@ -218,8 +262,9 @@ export function useChanges() {
     const count = computed(() => repos.value.reduce((total, repo) => total + repo.staged.length + repo.unstaged.length, 0));
     const hasChanges = computed(() => count.value > 0);
     // How much a plain Commit would record, across every repo — what the commit box reads out, and what decides
-    // whether the button is "Commit" or "Commit all". Ahead/behind are deliberately NOT aggregated here: sync is
-    // a per-repo act (each has its own remote and branch), so the panel reads `repo.remote` on the row itself.
+    // whether the button is "Commit" or "Commit all". Ahead/behind stay off this summary: sync is a per-repo act
+    // (each has its own remote and branch), so the panel reads `repo.remote` straight off the row — for the row
+    // pills and for the primary button's aggregate alike, which hands syncAll the resolved per-repo targets.
     const stagedCount = computed(() => repos.value.reduce((total, repo) => total + repo.staged.length, 0));
 
     return {
@@ -237,6 +282,7 @@ export function useChanges() {
         fetchRepo: (repo: string) => syncRepo(repo, `fetch`, `Fetch`),
         pullRepo: (repo: string) => syncRepo(repo, `pull`, `Pull`),
         pushRepo: (repo: string) => syncRepo(repo, `push`, `Push`),
+        syncAll,
         actionBusy,
         // Keyed by repo id (the per-repo verbs) or COMMIT_SCOPE — the panel renders each one where it happened.
         failures,

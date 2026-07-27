@@ -44,10 +44,10 @@ const fixture = (): string => {
 test("reports loopback/wildcard LISTEN sockets once per port, attributed to their owning process", async () => {
     const ports = await scanListeningPorts(fixture());
     expect(ports).toEqual([
-        { port: 3000, host: "127.0.0.1" }, // no fd matched its inode — still listed, just unattributed
+        { port: 3000, host: "127.0.0.1", forwardable: true }, // no fd matched its inode — still listed, just unattributed
         // A ::1-only bind (a server that bound `localhost`, like Vite) must be dialed at ::1, not 127.0.0.1.
-        { port: 9999, host: "::1", pid: 123, command: "node /work/app/node_modules/.bin/vite", cwd: "/work/app" },
-        { port: 45678, host: "127.0.0.1", pid: 123, command: "node /work/app/node_modules/.bin/vite", cwd: "/work/app" },
+        { port: 9999, host: "::1", forwardable: true, pid: 123, command: "node /work/app/node_modules/.bin/vite", cwd: "/work/app" },
+        { port: 45678, host: "127.0.0.1", forwardable: true, pid: 123, command: "node /work/app/node_modules/.bin/vite", cwd: "/work/app" },
     ]);
 });
 
@@ -62,7 +62,17 @@ test("names the Docker embedded DNS bind (127.0.0.11) it can't attribute to any 
     // namespace, so no /proc/*/fd owns inode 1005 and the pid walk comes up empty — but the address names it.
     writeFileSync(join(root, "net", "tcp"), [HEADER, row("0B00007F:B25D", "0A", "1005")].join("\n"));
     writeFileSync(join(root, "net", "tcp6"), HEADER);
-    await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 45661, host: "127.0.0.1", command: "Docker embedded DNS" }]);
+    // Named, but flagged not-forwardable: 127.0.0.11 only answers at its own address, not the dialed 127.0.0.1.
+    await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 45661, host: "127.0.0.1", forwardable: false, command: "Docker embedded DNS" }]);
+});
+
+test("lists an un-nameable 127/8 alias but flags it not-forwardable", async () => {
+    const root = mkdtempSync(join(tmpdir(), "port-scan-"));
+    mkdirSync(join(root, "net"), { recursive: true });
+    // 127.0.0.5:9500 LISTEN, no owning fd — a loopback alias we can neither name nor reach at 127.0.0.1.
+    writeFileSync(join(root, "net", "tcp"), [HEADER, row("0500007F:251C", "0A", "1007")].join("\n"));
+    writeFileSync(join(root, "net", "tcp6"), HEADER);
+    await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 9500, host: "127.0.0.1", forwardable: false }]);
 });
 
 test("falls back to /proc/<pid>/comm when a listening process has an empty cmdline", async () => {
@@ -74,7 +84,7 @@ test("falls back to /proc/<pid>/comm when a listening process has an empty cmdli
     symlinkSync("socket:[1006]", join(root, "200", "fd", "5"));
     writeFileSync(join(root, "200", "cmdline"), ""); // argv cleared — nothing to join
     writeFileSync(join(root, "200", "comm"), "cloudflared\n"); // kernel-maintained executable name, the fallback
-    await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 8081, host: "127.0.0.1", pid: 200, command: "cloudflared" }]);
+    await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 8081, host: "127.0.0.1", forwardable: true, pid: 200, command: "cloudflared" }]);
 });
 
 test("portKind: repo cwds and terminal processes are workspace; sandbox machinery and unknowns are system", () => {

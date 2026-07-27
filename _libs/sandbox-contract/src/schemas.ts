@@ -1536,6 +1536,10 @@ export const PortSummarySchema = z.object({
     // The loopback address the listener actually answers at inside the sandbox — a `localhost` bind can land
     // on ::1 only (Vite). The preview proxy and the desktop mirror (Mutagen forward) both dial this.
     host: z.enum(["127.0.0.1", "::1"]),
+    // Whether the proxy can actually reach the listener at `host`. False for a bind to a loopback alias like
+    // Docker's embedded DNS (127.0.0.11), which answers only at its own address, not 127.0.0.1 — such rows are
+    // listed for transparency but the Ports view hides Preview and forwarding them is refused.
+    forwardable: z.boolean(),
     // Which bucket the Ports view files it under: `workspace` = user-run (dev servers in repos, terminal
     // processes, published container ports) — the previewable set; `system` = the sandbox's own machinery
     // (agent runtimes, translator, dockerd, sshd), listed for transparency but nobody previews it.

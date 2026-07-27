@@ -32,7 +32,8 @@ export class SyncAuthError extends Error {}
 
 // The sandbox's currently-listening WORKSPACE ports (dev servers, terminal processes, published containers) —
 // what the reconcile drives from. Authenticated by the enrollment-minted sync token, which the daemon scopes
-// to exactly this read. System ports (the sandbox's own machinery) are filtered out and never mirrored.
+// to exactly this read. System ports (the sandbox's own machinery) are filtered out and never mirrored, and so
+// are non-forwardable binds (a loopback alias Mutagen would dial at 127.0.0.1 and never reach).
 export const fetchWorkspacePorts = async (sandboxUrl: string, syncToken: string): Promise<PortSummary[]> => {
     const response = await fetch(`${sandboxUrl.replace(/\/$/, "")}/ports`, { headers: { "x-intentic-sync": syncToken } });
     if (response.status === 401 || response.status === 403) {
@@ -43,7 +44,7 @@ export const fetchWorkspacePorts = async (sandboxUrl: string, syncToken: string)
     if (!response.ok) {
         throw new Error(`reading the sandbox's ports failed (${response.status}): ${await response.text()}`);
     }
-    return PortsListSchema.parse(await response.json()).ports.filter((port) => port.kind === "workspace");
+    return PortsListSchema.parse(await response.json()).ports.filter((port) => port.kind === "workspace" && port.forwardable);
 };
 
 // Whether the local loopback port is free to bind — checked after terminating our OWN prior forward (which held
