@@ -144,6 +144,14 @@ export const FINISHED_WINDOW = 6;
 const blocked = (agent: Pick<FleetAgent, "status" | "attention">): boolean =>
     agent.attention.plan || agent.attention.question || agent.attention.permission || agent.attention.conflict || agent.status === `error`;
 
+// The half of "blocked" that is literally WAITING TO BE TOLD SOMETHING — a plan to approve, a question, a
+// permission, a paused turn. Deliberately narrower than `blocked`, which also covers the DEAD ENDS (a failed
+// turn, an unlandable conflict): those want looking at, but nothing about them is outstanding on the user's
+// side, so ending the agent throws away no answer it was owed. laneDrop draws the same line in the same order
+// for the same reason — a drop is refused for this set and offered for the dead ends.
+const awaitingUser = (agent: Pick<FleetAgent, "status" | "attention">): boolean =>
+    agent.attention.plan || agent.attention.question || agent.attention.permission || agent.status === `awaiting`;
+
 // Attention first, then running + fresh drafts, then most recently active.
 const weight = (entry: FleetAgent): number =>
     blocked(entry) ? 0 : entry.status === `running` || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;
@@ -259,6 +267,23 @@ export const laneOf = (agent: Pick<FleetAgent, "status" | "attention">): FleetLa
     }
     return `finished`; // landed | idle — the work is in the workspace (or there was none).
 };
+
+/* May this card be archived from the board? NOT the same question as "is it in the Finished lane", which is
+ * what the affordance used to be gated on — and the gate that left an errored agent with no exit at all: its
+ * only offered drop is a land onto Finished, so a turn that failed with nothing landable sat in Attention
+ * permanently, un-archivable because it wasn't finished and unable to finish because there was nothing to land.
+ *
+ * The daemon is the wrong thing to mirror here too. Its `archivable()` (agents/archive.ts) is the guard on the
+ * UNATTENDED retention sweep, which is properly conservative; the named-id archive this button calls takes
+ * anything that exists and isn't mid-turn. So the real question is a product one — would archiving DISCARD
+ * something the agent is still waiting on? — and that is `awaitingUser`:
+ *   · running       — no (the worktree is the live turn's working state; the daemon refuses it too)
+ *   · draft         — no registry entry to archive
+ *   · awaiting/plan/question/permission — archiving would bury the question instead of answering it
+ *   · error/conflict — YES: a dead end is exactly what wants taking off the board
+ *   · landed/idle   — yes, the routine case */
+export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt">): boolean =>
+    agent.archivedAt === undefined && agent.status !== `draft` && agent.status !== `running` && !awaitingUser(agent);
 
 const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     const grouped: Record<FleetLane, FleetAgent[]> = { attention: [], active: [], finished: [] };

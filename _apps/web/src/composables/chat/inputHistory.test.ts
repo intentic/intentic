@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { InputHistory, inputHistoryFor, onFirstLine, onLastLine } from "./inputHistory";
+import { InputHistory, inputHistoryFor, onFirstLine, onLastLine, recallStep } from "./inputHistory";
 
 const fresh = (key = `test`): InputHistory => new InputHistory(key);
 
@@ -114,6 +114,84 @@ describe(`InputHistory`, () => {
         expect(fresh(`broken`).previous(``)).toBeUndefined();
         localStorage.setItem(`wrong-shape`, `{"entries":["one"]}`);
         expect(fresh(`wrong-shape`).previous(``)).toBeUndefined();
+    });
+});
+
+describe(`recallStep`, () => {
+    // Long enough to wrap over several rows in the composer while still being ONE line of text — the draft the
+    // caret step exists for.
+    const wrapped = `please review the diff and tell me whether the caching layer still makes sense`;
+    const stocked = (): InputHistory => {
+        const history = fresh();
+        history.record(`one`);
+        history.record(`two`);
+        return history;
+    };
+
+    it(`recalls straight away from an empty composer`, () => {
+        expect(recallStep(stocked(), `ArrowUp`, ``, 0)).toEqual({ kind: `text`, text: `two` });
+    });
+
+    it(`parks the caret at the start before recalling, so ↑ inside a wrapped draft moves instead of pasting`, () => {
+        const history = stocked();
+
+        expect(recallStep(history, `ArrowUp`, wrapped, 40)).toEqual({ kind: `caret`, at: 0 });
+        // The ring stayed where it was: nothing was recalled, so nothing was stashed either.
+        expect(history.recalling).toBe(false);
+        expect(recallStep(history, `ArrowUp`, wrapped, 0)).toEqual({ kind: `text`, text: `two` });
+    });
+
+    it(`keeps ↑ cycling from the caret recall itself parked at the end of the message`, () => {
+        const history = stocked();
+
+        expect(recallStep(history, `ArrowUp`, ``, 0)).toEqual({ kind: `text`, text: `two` });
+        expect(recallStep(history, `ArrowUp`, `two`, 3)).toEqual({ kind: `text`, text: `one` });
+    });
+
+    it(`steps the caret inside a recalled message once the user has moved it, without losing the ring's place`, () => {
+        const history = stocked();
+        recallStep(history, `ArrowUp`, ``, 0);
+
+        expect(recallStep(history, `ArrowUp`, `two`, 2)).toEqual({ kind: `caret`, at: 0 });
+        expect(recallStep(history, `ArrowUp`, `two`, 0)).toEqual({ kind: `text`, text: `one` });
+    });
+
+    it(`leaves the arrows to the browser in the middle of a multi-line draft`, () => {
+        const history = stocked();
+        const draft = `first\nsecond\nthird`;
+
+        expect(recallStep(history, `ArrowUp`, draft, 8)).toBeUndefined();
+        expect(recallStep(history, `ArrowDown`, draft, 8)).toBeUndefined();
+    });
+
+    it(`mirrors the caret step on the way forward: ↓ reaches the end before it steps`, () => {
+        const history = stocked();
+        recallStep(history, `ArrowUp`, ``, 0);
+        recallStep(history, `ArrowUp`, `two`, 3);
+
+        expect(recallStep(history, `ArrowDown`, `one`, 1)).toEqual({ kind: `caret`, at: 3 });
+        expect(recallStep(history, `ArrowDown`, `one`, 3)).toEqual({ kind: `text`, text: `two` });
+    });
+
+    it(`ignores ↓ and Escape while the composer holds the user's own text`, () => {
+        const history = stocked();
+
+        expect(recallStep(history, `ArrowDown`, wrapped, 40)).toBeUndefined();
+        expect(recallStep(history, `Escape`, wrapped, 40)).toBeUndefined();
+    });
+
+    it(`hands the displaced draft back on Escape, wherever the caret sits`, () => {
+        const history = stocked();
+
+        expect(recallStep(history, `ArrowUp`, `half-typed`, 0)).toEqual({ kind: `text`, text: `two` });
+        expect(recallStep(history, `Escape`, `two`, 1)).toEqual({ kind: `text`, text: `half-typed` });
+    });
+
+    it(`parks the caret even when the ring is empty, so ↑ means one thing in the composer`, () => {
+        const history = fresh();
+
+        expect(recallStep(history, `ArrowUp`, wrapped, 40)).toEqual({ kind: `caret`, at: 0 });
+        expect(recallStep(history, `ArrowUp`, wrapped, 0)).toBeUndefined();
     });
 });
 

@@ -36,9 +36,9 @@ const write = (key: string, entries: readonly string[]): void => {
     }
 };
 
-/* Whether the caret sits on the first / last line of the draft. These gate the arrows so recall claims a key
- * only when the caret has nowhere left to go in that direction — which is what lets a recalled MULTI-LINE
- * message still be navigated and edited natively before it is sent. */
+/* Whether the caret sits on the first / last LINE of the draft — the only lines from which the arrows can reach
+ * recall at all. Anywhere else the key belongs to the browser, which is what lets a recalled MULTI-LINE message
+ * still be navigated and edited natively before it is sent. */
 export const onFirstLine = (text: string, caret: number): boolean => !text.slice(0, caret).includes(`\n`);
 export const onLastLine = (text: string, caret: number): boolean => !text.slice(caret).includes(`\n`);
 
@@ -126,6 +126,46 @@ export class InputHistory {
         this.stash = ``;
     }
 }
+
+/* What ↑ / ↓ / Escape do to the composer, or undefined to leave the key to the browser. */
+export type RecallStep =
+    // Put this text in the composer: a recalled message, or the displaced draft coming back.
+    | { readonly kind: `text`; readonly text: string }
+    // Move the caret to this offset, leaving the text alone.
+    | { readonly kind: `caret`; readonly at: number };
+
+/* The composer's whole arrow contract, decided from the key, the draft and the caret.
+ *
+ * A line here is a line of TEXT, but on screen it wraps into as many rows as it needs, and inside those rows ↑
+ * reads as "move up", not "recall" — pressing it to reach the row above must not paste yesterday's prompt over
+ * what is being typed. So on the line that gates recall the arrows first walk the caret to that line's edge —
+ * start for ↑, end for ↓ — and only the press that finds it ALREADY at the edge steps through history. Two
+ * presses reach the ring from anywhere in the draft, however tall it has grown.
+ *
+ * The one position exempt from that first step is where recall itself leaves the caret (the end of the message
+ * it just pasted): treating it as an edge is what keeps ↑ ↑ ↑ walking the ring instead of spending every second
+ * press re-parking a caret the user never moved. */
+export const recallStep = (history: InputHistory, key: string, text: string, caret: number): RecallStep | undefined => {
+    if (key === `Escape`) {
+        const restored = history.cancel();
+        return restored === undefined ? undefined : { kind: `text`, text: restored };
+    }
+    if (key === `ArrowUp` && onFirstLine(text, caret)) {
+        if (caret > 0 && !(history.recalling && caret === text.length)) {
+            return { kind: `caret`, at: 0 };
+        }
+        const previous = history.previous(text);
+        return previous === undefined ? undefined : { kind: `text`, text: previous };
+    }
+    if (key === `ArrowDown` && history.recalling && onLastLine(text, caret)) {
+        if (caret < text.length) {
+            return { kind: `caret`, at: text.length };
+        }
+        const next = history.next();
+        return next === undefined ? undefined : { kind: `text`, text: next };
+    }
+    return undefined;
+};
 
 // One instance per sandbox, so switching back to a sandbox finds the ring it left behind.
 const histories = new Map<string, InputHistory>();

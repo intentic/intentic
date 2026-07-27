@@ -15,7 +15,7 @@ import {
     reviewAction,
 } from "../composables/agents/agentStatus";
 import { createTitleEdit } from "../composables/agents/titleEdit";
-import { laneOf, type FleetAgent } from "../composables/agents/useAgents";
+import { canArchive, laneOf, type FleetAgent } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/conversation";
 
@@ -38,13 +38,13 @@ const meta = computed(() => agentStatusMeta(props.agent.status));
 const router = useRouter();
 const lane = computed(() => laneOf(props.agent));
 const reason = computed(() => attentionReason(props.agent));
-// Archiving is offered exactly where it means something: a card in the FINISHED lane. That lane is
-// landed-or-idle by definition, which is the same set the daemon will accept — so the affordance never
-// appears on an agent whose archive would be refused, and never on one still holding a question for the user.
-// It sits beside the rename pencil rather than behind the drag gesture: this is the routine way to end an
-// agent (nothing is lost — the branch, transcript and counters all stay), so it has to be reachable by touch
-// and by keyboard, which a drag to a zone that only exists mid-drag never was.
-const archivable = computed(() => props.agent.archivedAt === undefined && props.agent.status !== `draft` && lane.value === `finished`);
+// Archiving is offered wherever it means something — which is NOT the same as "the Finished lane" (see
+// canArchive): every card whose archive the daemon would take and that isn't holding a question for the user,
+// dead ends in the Attention lane included. It sits beside the rename pencil rather than behind the drag
+// gesture: this is the routine way to end an agent (nothing is lost — the branch, transcript and counters all
+// stay), so it has to be reachable by touch and by keyboard, which a drag to a zone that only exists mid-drag
+// never was.
+const archivable = computed(() => canArchive(props.agent));
 // The drill-in label, or undefined for a draft (nothing to review — a click only focuses the docked chat).
 // Desktop only: on mobile the detail IS the chat, so a tap navigates and no separate affordance is needed.
 const review = computed(() => (mobile.value ? undefined : reviewAction(props.agent)));

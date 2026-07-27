@@ -18,7 +18,7 @@ import { sandboxJson } from "../sandbox/sandboxClient";
 import { nextTick } from "vue";
 import { Conversation } from "../chat/conversation";
 import { useChat } from "../chat/useChat";
-import { laneOf, resetAgents, setAgents, useAgents } from "./useAgents";
+import { canArchive, laneOf, resetAgents, setAgents, useAgents } from "./useAgents";
 
 // The kanban lane projection — pure over status + attention, so "finished" needs no explicit action:
 // a cleanly-completed, auto-landed turn reads landed/idle and the card moves lanes on the next roster frame.
@@ -41,6 +41,41 @@ describe("laneOf", () => {
     it("routes landed and idle agents to finished — the auto-finish rule", () => {
         expect(laneOf({ status: `landed`, attention: none })).toBe(`finished`);
         expect(laneOf({ status: `idle`, attention: none })).toBe(`finished`);
+    });
+});
+
+/* The board's exit gate, which is NOT the Finished lane. Gating it on the lane is what stranded a failed turn:
+ * an errored card's only offered drop is a land onto Finished, so an agent that failed with nothing landable
+ * could neither be archived (not finished) nor finish (nothing to land). The line that matters is whether
+ * archiving would bury something the agent is still WAITING for. */
+describe("canArchive", () => {
+    const none = { plan: false, question: false, permission: false, conflict: false };
+
+    it("takes the dead ends — a failed turn and an unlandable conflict are exactly what wants taking off the board", () => {
+        expect(canArchive({ status: `error`, attention: none })).toBe(true);
+        expect(canArchive({ status: `conflict`, attention: { ...none, conflict: true } })).toBe(true);
+        expect(canArchive({ status: `idle`, attention: { ...none, conflict: true } })).toBe(true);
+    });
+
+    it("takes the routine case the Finished lane already offered", () => {
+        expect(canArchive({ status: `landed`, attention: none })).toBe(true);
+        expect(canArchive({ status: `idle`, attention: none })).toBe(true);
+    });
+
+    it("refuses an agent waiting to be told something — archiving would bury the question, not answer it", () => {
+        expect(canArchive({ status: `awaiting`, attention: none })).toBe(false);
+        expect(canArchive({ status: `running`, attention: { ...none, plan: true } })).toBe(false);
+        expect(canArchive({ status: `running`, attention: { ...none, question: true } })).toBe(false);
+        expect(canArchive({ status: `running`, attention: { ...none, permission: true } })).toBe(false);
+    });
+
+    it("refuses a live turn (the worktree is its working state) and a draft (no registry entry to archive)", () => {
+        expect(canArchive({ status: `running`, attention: none })).toBe(false);
+        expect(canArchive({ status: `draft`, attention: none })).toBe(false);
+    });
+
+    it("refuses one that is already archived, so the card offers Restore instead of a second Archive", () => {
+        expect(canArchive({ status: `landed`, attention: none, archivedAt: 1_000 })).toBe(false);
     });
 });
 

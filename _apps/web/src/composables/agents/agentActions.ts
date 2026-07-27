@@ -33,8 +33,20 @@ export const startAgent = (): void => {
 // `check` (the default) applies the delta only if ALL of it applies, so a refusal leaves the workspace
 // byte-identical. `merge` is what the conflict report offers once the user has read it: a three-way apply that
 // lands every clean path and leaves the rest carrying conflict markers to finish in place.
+//
+// The content-type is NOT optional. Without it `fetch` labels a string body `text/plain`, and the daemon's oRPC
+// handler then parses the body as a STRING rather than an object — at which point its compact-input codec
+// returns that string as the whole input and drops the `{id}` it took from the path, so every land was refused
+// as "Input validation failed" before it reached the handler. Silent for a long time because the land that
+// matters most is the automatic one at turn completion, which runs inside the daemon and never crosses this
+// seam; what broke was the two manual paths (the review panel's Land/Merge, and dropping a card on Finished) —
+// and with them the only way an errored or conflicted agent could ever reach the Finished lane.
 export const landAgent = (id: string, mode: LandMode = `check`): Promise<LandResult> =>
-    sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, { method: `POST`, body: JSON.stringify({ mode }) });
+    sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, {
+        method: `POST`,
+        headers: { "content-type": `application/json` },
+        body: JSON.stringify({ mode }),
+    });
 
 // Discard: drop the worktrees, the agent/<id> branches, and the registry entry. Irreversible.
 export const discardAgent = async (id: string): Promise<void> => {

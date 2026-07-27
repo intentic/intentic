@@ -19,7 +19,7 @@ import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { useLayout } from "../composables/useLayout";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { collectDroppedFiles } from "../pages/workspace/dropEntries";
-import { inputHistoryFor, onFirstLine, onLastLine } from "../composables/chat/inputHistory";
+import { inputHistoryFor, recallStep } from "../composables/chat/inputHistory";
 import { insertMention, mentionQueryAt } from "../composables/chat/useMentions";
 import ChatAccountPanel from "./ChatAccountPanel.vue";
 import ChatCommandPopover from "./ChatCommandPopover.vue";
@@ -586,30 +586,32 @@ const recallInto = (text: string): void => {
     });
 };
 
-// Returns true when recall consumed the key. The arrows are claimed only when the caret has nowhere left to go
-// in that direction, so a recalled MULTI-LINE message can still be walked and edited natively before sending.
-// The live element is read rather than the `caret` ref, which only tracks keyup/click and so goes stale under
-// an auto-repeating arrow — exactly the case that decides when the caret reaches the first line.
+// Returns true when recall consumed the key — see recallStep for which presses it claims and which walk the
+// caret to the edge of a wrapped line first. Nothing is claimed while text is selected: there the arrows are
+// collapsing a selection, not navigating. The live element is read rather than the `caret` ref, which only
+// tracks keyup/click and so goes stale under an auto-repeating arrow — exactly the case that decides when the
+// caret reaches the edge.
 const recallKeydown = (event: KeyboardEvent): boolean => {
     const past = history.value;
     const el = input.value;
     if (past === undefined || el === undefined || el.selectionStart !== el.selectionEnd) {
         return false;
     }
-    const at = el.selectionStart;
-    const recalled =
-        event.key === `ArrowUp` && onFirstLine(draft.value, at)
-            ? past.previous(draft.value)
-            : event.key === `ArrowDown` && past.recalling && onLastLine(draft.value, at)
-              ? past.next()
-              : event.key === `Escape` && past.recalling
-                ? past.cancel()
-                : undefined;
-    if (recalled === undefined) {
+    const step = recallStep(past, event.key, draft.value, el.selectionStart);
+    if (step === undefined) {
         return false;
     }
     event.preventDefault();
-    recallInto(recalled);
+    if (step.kind === `text`) {
+        recallInto(step.text);
+        return true;
+    }
+    el.setSelectionRange(step.at, step.at);
+    caret.value = step.at;
+    // The step always lands on an edge of the draft, which past max-h-48 is scrolled out of view — and moving a
+    // textarea's selection does not reliably bring it back. Without this the caret would leave the visible rows
+    // and the press would read as having done nothing.
+    el.scrollTop = step.at === 0 ? 0 : el.scrollHeight;
     return true;
 };
 
