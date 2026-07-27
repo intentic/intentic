@@ -64,3 +64,69 @@ test("unknown languages fall back to flagged heuristics", () => {
     expect(symbols[0]?.name).toBe("doBuild");
     expect(symbols[0]?.heuristic).toBe(true);
 });
+
+const VUE = `<script setup lang="ts">
+import { computed } from "vue";
+
+const props = defineProps<{ repo: string }>();
+
+const barOf = (group: string): string => {
+    function pick(): string {
+        return group;
+    }
+    return pick();
+};
+
+const legend = computed(() => [props.repo]);
+</script>
+
+<template>
+    <div>{{ legend }}</div>
+</template>
+`;
+
+test("Vue SFC extraction: script-block symbols land on their real file lines", () => {
+    const symbols = extractSymbols("_extensions/repo-apps/src/DependenciesView.vue", "vue", VUE);
+    const byName = new Map(symbols.map((symbol) => [symbol.name, symbol]));
+    expect(byName.get("barOf")?.kind).toBe("fn");
+    // `computed(...)` is a call, so the declarator reads as a value — same as it would in a .ts file.
+    expect(byName.get("legend")?.kind).toBe("const");
+    expect(byName.get("props")?.kind).toBe("const");
+    expect(symbols.every((symbol) => !symbol.heuristic)).toBe(true);
+    // `const barOf` is line 6 of the file, not line 5 of the script block.
+    expect(byName.get("barOf")?.line).toBe(6);
+    expect(VUE.split("\n")[byName.get("barOf")!.line - 1]).toContain("const barOf");
+});
+
+test("Vue SFC extraction: script-setup locals are indexed but not exported", () => {
+    const byName = new Map(extractSymbols("app/Widget.vue", "vue", VUE).map((symbol) => [symbol.name, symbol]));
+    // Indexed, so `iq def barOf` finds it inside the component…
+    expect(byName.get("barOf")).toBeDefined();
+    expect(byName.get("pick")).toBeDefined();
+    // …but a component's locals are not its API, and claiming otherwise turns every large component into a fake
+    // hub in the map's reference graph (`step`, `busy`, `error` match everywhere).
+    expect(byName.get("barOf")?.exported).toBe(false);
+    expect(byName.get("legend")?.exported).toBe(false);
+});
+
+test("Vue SFC extraction: a real module-scope export still reads as exported", () => {
+    const two = `<script lang="ts">
+export const WIDGET_KIND = "widget";
+</script>
+`;
+    expect(extractSymbols("app/Widget.vue", "vue", two)[0]?.exported).toBe(true);
+});
+
+test("Vue SFC extraction: both blocks of the two-block form contribute", () => {
+    const two = `<script lang="ts">
+export const NAME = "widget";
+</script>
+
+<script setup lang="ts">
+const local = 1;
+</script>
+`;
+    const byName = new Map(extractSymbols("app/Widget.vue", "vue", two).map((symbol) => [symbol.name, symbol]));
+    expect(byName.get("NAME")?.line).toBe(2);
+    expect(byName.get("local")?.line).toBe(6);
+});

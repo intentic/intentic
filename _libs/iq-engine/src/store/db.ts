@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 
 // Bumped on any table/column change OR extraction-logic change that must reindex — mismatch drops and recreates
 // everything (the index is a pure cache).
-const SCHEMA_VERSION = "4";
+const SCHEMA_VERSION = "5";
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS files (
     lang TEXT,
     mtime_ms INTEGER NOT NULL,
     size INTEGER NOT NULL,
-    hash TEXT NOT NULL
+    hash TEXT NOT NULL,
+    -- Branch-point count from indexer/complexity.ts — the structural half of the hotspots verb.
+    complexity INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS symbols (
     id INTEGER PRIMARY KEY,
@@ -30,6 +32,14 @@ CREATE TABLE IF NOT EXISTS symbols (
 );
 CREATE INDEX IF NOT EXISTS symbols_name ON symbols(name);
 CREATE INDEX IF NOT EXISTS symbols_file ON symbols(file_id);
+-- Module specifiers as written in the source, unresolved: resolution needs the whole file set, which only a
+-- query has. These are the edges of the map verb's reference graph.
+CREATE TABLE IF NOT EXISTS imports (
+    id INTEGER PRIMARY KEY,
+    file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    specifier TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS imports_file ON imports(file_id);
 CREATE TABLE IF NOT EXISTS chunks (
     id INTEGER PRIMARY KEY,
     file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,

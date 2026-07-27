@@ -40,33 +40,33 @@ const git = async (root: string, repo: string, args: string[]): Promise<string> 
 
 const toWorkspacePath = (repo: string, repoRel: string): string => (repo === "" ? repoRel : `${repo}/${repoRel}`);
 
-export interface RecentOptions {
+export interface ChurnOptions {
+    // Omitted means all of history — what `hotspots` wants, where `recent` always has a window.
     readonly since?: string;
     readonly author?: string;
-    readonly pattern?: string;
 }
 
-interface FileActivity {
+export interface FileChurn {
     latestMs: number;
     commits: number;
     adds: number;
     dels: number;
-    uncommitted: boolean;
 }
 
-// `iq recent` — per-file change summary inside the window: committed activity from git log --numstat, plus
-// uncommitted files by mtime. Paths outside the sweep (floor, scope) never surface.
-export const recentFiles = async (root: string, entries: readonly FileEntry[], options: RecentOptions): Promise<RankedGroup[]> => {
-    const windowMs = parseSince(options.since ?? DEFAULT_SINCE);
-    const now = Date.now();
+// Per-file committed activity from `git log --numstat`, the shared substrate of `recent` (activity in a window)
+// and `hotspots` (activity over all history). Paths outside the sweep — floor-denied, out of scope, deleted —
+// are dropped here, so no caller has to re-check them.
+export const churnOf = async (root: string, entries: readonly FileEntry[], options: ChurnOptions): Promise<Map<string, FileChurn>> => {
     const allowed = new Set(entries.map((entry) => entry.path));
-    const activity = new Map<string, FileActivity>();
-
+    const churn = new Map<string, FileChurn>();
     // One read-only `git log` per repo — spawn them concurrently (repos are few), fold in repo order.
     const repos = reposOf(entries);
     const logs = await Promise.all(
         repos.map((repo) => {
-            const args = ["log", `--since=${Math.floor((now - windowMs) / 1000)}`, "--numstat", "--format=commit:%ct"];
+            const args = ["log", "--numstat", "--format=commit:%ct"];
+            if (options.since !== undefined) {
+                args.push(`--since=${Math.floor((Date.now() - parseSince(options.since)) / 1000)}`);
+            }
             if (options.author !== undefined) {
                 args.push(`--author=${options.author}`);
             }
@@ -88,14 +88,39 @@ export const recentFiles = async (root: string, entries: readonly FileEntry[], o
             if (!allowed.has(path) || isIqDenied(path)) {
                 continue;
             }
-            const entry = activity.get(path) ?? { latestMs: 0, commits: 0, adds: 0, dels: 0, uncommitted: false };
+            const entry = churn.get(path) ?? { latestMs: 0, commits: 0, adds: 0, dels: 0 };
             entry.commits++;
             entry.adds += match[1] === "-" ? 0 : Number(match[1]);
             entry.dels += match[2] === "-" ? 0 : Number(match[2]);
             entry.latestMs = Math.max(entry.latestMs, commitMs);
-            activity.set(path, entry);
+            churn.set(path, entry);
         }
     }
+    return churn;
+};
+
+export interface RecentOptions {
+    readonly since?: string;
+    readonly author?: string;
+    readonly pattern?: string;
+}
+
+interface FileActivity extends FileChurn {
+    uncommitted: boolean;
+}
+
+// `iq recent` — per-file change summary inside the window: committed activity from git log --numstat, plus
+// uncommitted files by mtime. Paths outside the sweep (floor, scope) never surface.
+export const recentFiles = async (root: string, entries: readonly FileEntry[], options: RecentOptions): Promise<RankedGroup[]> => {
+    const since = options.since ?? DEFAULT_SINCE;
+    const windowMs = parseSince(since);
+    const now = Date.now();
+    const activity = new Map<string, FileActivity>(
+        [...(await churnOf(root, entries, { since, ...(options.author !== undefined ? { author: options.author } : {}) }))].map(([path, entry]) => [
+            path,
+            { ...entry, uncommitted: false },
+        ]),
+    );
     for (const entry of entries) {
         if (now - entry.mtimeMs <= windowMs && !activity.has(entry.path)) {
             activity.set(entry.path, { latestMs: entry.mtimeMs, commits: 0, adds: 0, dels: 0, uncommitted: true });

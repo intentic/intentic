@@ -31,8 +31,10 @@ test("recent: committed files with change summaries, uncommitted by mtime", asyn
     // …while beta (no git repo) files appear as uncommitted mtime hits.
     expect(outcome.text).toMatch(/beta\/app\.py\s+just now\s+uncommitted/);
 
+    // The pattern match is case-insensitive, so PascalCase paths (WidgetList.vue) count as hits too.
     const filtered = await engine.run(request({ verb: "recent", query: "widget" }));
-    expect(filtered.result.groups.every((group) => group.path.includes("widget"))).toBe(true);
+    expect(filtered.result.groups.every((group) => group.path.toLowerCase().includes("widget"))).toBe(true);
+    expect(filtered.result.groups.some((group) => group.path === "alpha/src/WidgetList.vue")).toBe(true);
 
     await expect(engine.run(request({ verb: "recent", query: "", options: { since: "yesterday" } }))).rejects.toThrow("--since expects");
 });

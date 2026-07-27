@@ -28,9 +28,12 @@ The index self-manages: it builds on first query and revalidates against disk on
 - **You know the exact identifier** → `iq def X` / `iq refs X` — one call replaces a grep-then-filter chain.
 - **You don't know where it lives**, or your words may not match the code's vocabulary → bare `iq "…"` or `iq ask "…"`. This is where `iq` decisively beats grep.
 - **You have error-message text** → `iq find 'literal text'`, then `iq context` on the hit.
+- **You know nothing yet** — a repo you've never opened → `iq map --budget 4000` for the shape, `iq hotspots` for where the risk sits. These answer "what is this and where do I start", which no amount of searching does.
 
 | I want… | Run |
 |---|---|
+| the repo's shape | `iq map --budget 4000` |
+| where risk concentrates | `iq hotspots --in _apps` |
 | text/regex match | `iq find 'createServer\(' --lang ts` |
 | a file by name | `iq files wkignore` (`--exact` for globs) |
 | where X is defined | `iq def createIgnoreScope` |
@@ -78,6 +81,16 @@ All nine stages are independently toggleable for benchmarking and deployment tun
 `bm25`, `semantic`, `rerank`, `prf`, `confidence`, `symctx`, `graph`, `boosts`, `pack`.
 
 Structural search (`ast`) uses ast-grep; history verbs (`log`, `who`, `recent`) use git.
+
+### Orientation verbs
+
+`map` ranks files by **PageRank over the import graph** — an edge A→B means A imports B — then prints each file's exported signatures until `--budget` runs out. Specifiers are extracted at index time and resolved at query time against the indexed file set: relative paths directly (including TypeScript's `./x.js` → `x.ts` rule), bare specifiers via each workspace `package.json`'s `name`, so cross-package imports don't fragment a monorepo into disconnected islands. Unresolved specifiers — node_modules, stdlib — are simply not edges. Generated files contribute no definitions; a re-export shim would otherwise look like the most depended-upon file in the repo.
+
+An earlier version built edges from exported-symbol name matches instead. It doesn't work at any weighting: text can't tell a reference from a coincidence, so modules exporting ordinary words (`App`, `Host`, `Repo`) top the list.
+
+`hotspots` multiplies **git churn** (commits touching a file) by **complexity** (branch points, counted at index time from the same ast-grep parse that extracts symbols, with a lexical fallback for languages that have no grammar). Neither half is interesting alone: a churning config file is trivial, a gnarly file nobody edits costs nobody anything. Data and markup score zero — keyword scans there read content, not code paths.
+
+Complexity is reported as a **raw branch count**, not a composite score: counts are comparable to the file in front of you, and you can recount them by hand.
 
 ## Benchmarks
 

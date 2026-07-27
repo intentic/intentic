@@ -1,6 +1,7 @@
 import type { WorkspaceSearchFreshness, WorkspaceSearchResult, WorkspaceSearchTag } from "@intentic/sandbox-contract";
 
-export type Verb = "q" | "find" | "files" | "def" | "refs" | "sym" | "ast" | "ask" | "outline" | "context" | "recent" | "log" | "who";
+export type Verb =
+    "q" | "find" | "files" | "def" | "refs" | "sym" | "ast" | "ask" | "outline" | "context" | "recent" | "log" | "who" | "hotspots" | "map";
 
 export type FileClass = "tests" | "src" | "docs" | "config";
 

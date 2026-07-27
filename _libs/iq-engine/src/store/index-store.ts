@@ -39,9 +39,10 @@ export const deleteFile = (db: IndexDb, id: number): void => {
 // unchanged chunk content are copied over by hash so renames/moves/reformats never re-embed.
 export const replaceFile = (
     db: IndexDb,
-    file: { path: string; repo: string | undefined; lang: string | undefined; mtimeMs: number; size: number; hash: string },
+    file: { path: string; repo: string | undefined; lang: string | undefined; mtimeMs: number; size: number; hash: string; complexity: number },
     symbols: readonly SymbolRow[],
     chunks: readonly ChunkRow[],
+    imports: readonly string[],
 ): void => {
     const previousEmbeddings = new Map<string, Uint8Array>();
     for (const row of db.all(
@@ -52,13 +53,14 @@ export const replaceFile = (
     }
     db.run("DELETE FROM files WHERE path = ?", file.path);
     db.run(
-        "INSERT INTO files (path, repo, lang, mtime_ms, size, hash) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO files (path, repo, lang, mtime_ms, size, hash, complexity) VALUES (?, ?, ?, ?, ?, ?, ?)",
         file.path,
         file.repo ?? null,
         file.lang ?? null,
         Math.round(file.mtimeMs),
         file.size,
         file.hash,
+        file.complexity,
     );
     const id = Number(db.get("SELECT id FROM files WHERE path = ?", file.path)!["id"]);
     for (const symbol of symbols) {
@@ -73,6 +75,9 @@ export const replaceFile = (
             symbol.exported ? 1 : 0,
             symbol.heuristic ? 1 : 0,
         );
+    }
+    for (const specifier of imports) {
+        db.run("INSERT INTO imports (file_id, specifier) VALUES (?, ?)", id, specifier);
     }
     for (const chunk of chunks) {
         db.run(

@@ -1,6 +1,7 @@
 import type { SgNode } from "@ast-grep/napi";
 import type { SymbolRow } from "../types.js";
-import { LANGUAGES, parseLang } from "./languages.js";
+import { LANGUAGES, NON_CODE, parseLang } from "./languages.js";
+import { scriptBlocksOf } from "./sfc.js";
 
 const SIGNATURE_MAX = 160;
 
@@ -92,12 +93,30 @@ const heuristicSymbols = (path: string, content: string): SymbolRow[] => {
     return rows;
 };
 
-// Docs/config/markup never hold definitions — heuristic patterns would turn prose code samples into fake symbols.
-const NON_CODE = /\.(md|mdx|rst|txt|json|jsonc|ya?ml|toml|ini|lock|csv|html|xml|svg|css|scss)$/i;
+// An SFC's symbols come from its <script> blocks, parsed as TypeScript and shifted back onto their real file
+// lines, so `def`/`sym`/`outline` can see inside a component.
+//
+// A `<script setup>` body has no `export` statements, so nearly everything here reads as internal — which is
+// accurate, and deliberately kept that way. Marking top-level declarations "exported" on the theory that a
+// component's script is its public shape was tried and reverted: a component's locals are ordinary words
+// (`step`, `busy`, `error`), so it turned every large component into a fake hub in the map's reference graph.
+// A component is a consumer, not a definition site, and the export flag should say so.
+const sfcSymbols = (path: string, content: string): SymbolRow[] => {
+    const rows: SymbolRow[] = [];
+    for (const block of scriptBlocksOf(content)) {
+        for (const symbol of extractSymbols(path, block.lang, block.content)) {
+            rows.push({ ...symbol, line: symbol.line + block.lineOffset, endLine: symbol.endLine + block.lineOffset });
+        }
+    }
+    return rows.toSorted((a, b) => a.line - b.line);
+};
 
 export const extractSymbols = (path: string, lang: string | undefined, content: string): SymbolRow[] => {
     if (NON_CODE.test(path)) {
         return [];
+    }
+    if (lang === "vue") {
+        return sfcSymbols(path, content);
     }
     const config = lang !== undefined ? LANGUAGES[lang] : undefined;
     if (lang === undefined || config === undefined) {

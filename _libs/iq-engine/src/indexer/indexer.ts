@@ -8,13 +8,18 @@ import { langOf } from "../workspace/scan.js";
 
 const MAX_FILE_BYTES = 1024 * 1024;
 
-// Bumped when symbol-extraction/chunking logic changes: every file is reparsed on the next revalidation, but
-// unlike a schema bump the DB survives, so unchanged chunks keep their embeddings (hash reuse in replaceFile).
-const PARSER_VERSION = "2";
+// Bumped when symbol-extraction/chunking/complexity logic changes: every file is reparsed on the next
+// revalidation, but unlike a schema bump the DB survives, so unchanged chunks keep their embeddings (hash reuse
+// in replaceFile).
+const PARSER_VERSION = "3";
 
-// Symbol/chunk production is injected: the structural (ast-grep) and semantic (chunker) stages plug in here,
-// and tests can run the indexer without either.
-export type ParseFile = (path: string, lang: string | undefined, content: string) => { symbols: SymbolRow[]; chunks: ChunkRow[] };
+// Symbol/chunk/complexity production is injected: the structural (ast-grep) and semantic (chunker) stages plug
+// in here, and tests can run the indexer without either.
+export type ParseFile = (
+    path: string,
+    lang: string | undefined,
+    content: string,
+) => { symbols: SymbolRow[]; chunks: ChunkRow[]; complexity: number; imports: string[] };
 
 export interface RevalidateResult {
     readonly generation: number;
@@ -47,7 +52,13 @@ export const revalidate = async (db: IndexDb, entries: readonly FileEntry[], par
     // short-circuits them on the next sweep instead of re-reading every time.
     const skipEntry = (entry: FileEntry): void => {
         db.transaction(() =>
-            replaceFile(db, { path: entry.path, repo: entry.repo, lang: undefined, mtimeMs: entry.mtimeMs, size: entry.size, hash: "-" }, [], []),
+            replaceFile(
+                db,
+                { path: entry.path, repo: entry.repo, lang: undefined, mtimeMs: entry.mtimeMs, size: entry.size, hash: "-", complexity: 0 },
+                [],
+                [],
+                [],
+            ),
         );
         changed++;
     };
@@ -66,13 +77,14 @@ export const revalidate = async (db: IndexDb, entries: readonly FileEntry[], par
             return;
         }
         const content = buf.includes(0) ? buf.toString("utf8").replaceAll("\0", "�") : buf.toString("utf8");
-        const parsed = parse?.(entry.path, lang, content) ?? { symbols: [], chunks: [] };
+        const parsed = parse?.(entry.path, lang, content) ?? { symbols: [], chunks: [], complexity: 0, imports: [] };
         db.transaction(() =>
             replaceFile(
                 db,
-                { path: entry.path, repo: entry.repo, lang, mtimeMs: entry.mtimeMs, size: entry.size, hash },
+                { path: entry.path, repo: entry.repo, lang, mtimeMs: entry.mtimeMs, size: entry.size, hash, complexity: parsed.complexity },
                 parsed.symbols,
                 parsed.chunks,
+                parsed.imports,
             ),
         );
         changed++;

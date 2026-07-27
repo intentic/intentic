@@ -5,7 +5,9 @@ import { astSearch } from "../engines/astq.js";
 import { bm25Search, prfTerms } from "../engines/bm25.js";
 import { fileSearch } from "../engines/files.js";
 import { logSearch, recentFiles, whoAnchor } from "../engines/git.js";
+import { hotspotFiles } from "../engines/hotspots.js";
 import { rgSearch } from "../engines/lexical.js";
+import { repoMap } from "../engines/map.js";
 import { embedPending, semanticSearch } from "../engines/semantic.js";
 import { defOf, refsOf, symSearch } from "../engines/symbols.js";
 import { disabledOf, type Feature } from "../features.js";
@@ -198,7 +200,7 @@ const packGroups = (db: IndexDb, groups: readonly RankedGroup[]): RankedGroup[] 
         return { path: group.path, score: group.score, hits };
     });
 
-const ANCHOR_VERBS = new Set<Verb>(["outline", "context", "recent", "log", "who"]);
+const ANCHOR_VERBS = new Set<Verb>(["outline", "context", "recent", "log", "who", "hotspots", "map"]);
 
 // grep escapes metachars that rust regex takes literally — `a\|b` matches the text "a|b", not "a or b". Agents
 // reflexively write this (benchmarked: the single most common wasted query), so it's worth catching proactively.
@@ -392,6 +394,34 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             ...(request.query !== "" ? { pattern: request.query } : {}),
         });
         return { groups, unit: "files", style: "paths", showTags: false };
+    }
+
+    if (request.verb === "hotspots") {
+        const groups = await hotspotFiles(context.db, context.root, entries, {
+            ...(request.options.since !== undefined ? { since: request.options.since } : {}),
+            ...(request.options.author !== undefined ? { author: request.options.author } : {}),
+            ...(request.query !== "" ? { pattern: request.query } : {}),
+        });
+        return {
+            groups,
+            unit: "files",
+            style: "paths",
+            showTags: false,
+            headerNote: "churn × complexity — commits over all history unless --since narrows it",
+            ...(groups.length === 0 ? { hint: "no file has both commits and branch points in scope — is this a git repo with history?" } : {}),
+        };
+    }
+
+    if (request.verb === "map") {
+        const groups = repoMap(context.db, allowed);
+        return {
+            groups,
+            unit: "symbols",
+            style: "hits",
+            showTags: false,
+            headerNote: "files by PageRank over the import graph, exported symbols each",
+            ...(groups.length === 0 ? { hint: "no exported symbols in scope — widen with --in, or check the index with iq index status" } : {}),
+        };
     }
 
     if (request.verb === "log") {

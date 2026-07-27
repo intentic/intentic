@@ -1,4 +1,6 @@
 import { chunkFile } from "./chunker.js";
+import { fileComplexity } from "./complexity.js";
+import { extractImports } from "./imports.js";
 import type { ParseFile } from "./indexer.js";
 import { extractSymbols } from "./symbols.js";
 
@@ -8,5 +10,10 @@ import { extractSymbols } from "./symbols.js";
 // it, and PARSER_VERSION (which exists to make that kind of drift reindex) could not see it.
 export const parseEntry: ParseFile = (path, lang, content) => {
     const symbols = extractSymbols(path, lang, content);
-    return { symbols, chunks: chunkFile(path, symbols, content) };
+    return {
+        symbols,
+        chunks: chunkFile(path, symbols, content),
+        complexity: fileComplexity(path, lang, content),
+        imports: extractImports(path, lang, content),
+    };
 };

@@ -79,6 +79,9 @@ const EXT_LANG: Record<string, string> = {
     go: "go",
     rs: "rust",
     java: "java",
+    // No ast-grep grammar of its own — symbol extraction lifts the <script> block and parses it as TypeScript
+    // (indexer/sfc.ts). Named here so `--lang vue` scopes and the "no X files in scope" diagnostic can say it.
+    vue: "vue",
 };
 
 export const langOf = (path: string): string | undefined => EXT_LANG[path.slice(path.lastIndexOf(".") + 1)];
