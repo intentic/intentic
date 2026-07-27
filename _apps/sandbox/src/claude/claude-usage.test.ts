@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AccountUsage } from "@intentic/sandbox-contract";
+import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { fileClaudeUsageStore } from "./claude-usage.js";
 
@@ -13,14 +13,9 @@ const tempStore = () => {
 };
 
 const SECOND = 1000;
-const snapshot = (over: Partial<AccountUsage> = {}): AccountUsage => ({
-    status: "allowed",
-    utilization: 42,
-    rateLimitType: "five_hour",
-    resetsAt: Math.floor((Date.now() + 3600 * SECOND) / SECOND),
-    measuredAt: Date.now(),
-    ...over,
-});
+const inAnHour = (): number => Math.floor((Date.now() + 3600 * SECOND) / SECOND);
+const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: "five_hour", utilization: 42, resetsAt: inAnHour(), ...over });
+const snapshot = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: Date.now(), ...over });
 
 test("read is empty when the file is absent", async () => {
     const { store } = tempStore();
@@ -37,11 +32,11 @@ test("a recorded snapshot survives a fresh store over the same path", async () =
 
 test("snapshots for several accounts are kept side by side", async () => {
     const { store } = tempStore();
-    await store.record("acct-1", snapshot({ utilization: 10 }));
-    await store.record("acct-2", snapshot({ utilization: 90 }));
+    await store.record("acct-1", snapshot({ windows: [window({ utilization: 10 })] }));
+    await store.record("acct-2", snapshot({ windows: [window({ utilization: 90 })] }));
     const read = await store.read();
-    expect(read["acct-1"]?.utilization).toBe(10);
-    expect(read["acct-2"]?.utilization).toBe(90);
+    expect(read["acct-1"]?.windows[0]?.utilization).toBe(10);
+    expect(read["acct-2"]?.windows[0]?.utilization).toBe(90);
 });
 
 test("concurrent records leave a parseable file holding every account", async () => {
@@ -49,20 +44,29 @@ test("concurrent records leave a parseable file holding every account", async ()
     // Turns on different accounts finish whenever they finish. Overlapping whole-file writes are what the
     // store's write queue exists to prevent, so the invariant is: the file always parses, and nothing is lost.
     const ids = Array.from({ length: 12 }, (_, index) => `acct-${index}`);
-    await Promise.all(ids.map((id, index) => store.record(id, snapshot({ utilization: index * 8, rateLimitType: "five_hour".repeat(index + 1) }))));
+    await Promise.all(ids.map((id, index) => store.record(id, snapshot({ windows: [window({ utilization: index * 8, kind: "five_hour".repeat(index + 1) })] }))));
     expect(Object.keys(JSON.parse(await readFile(path, "utf8"))).toSorted()).toEqual(ids.toSorted());
 });
 
-test("a snapshot whose window has already reset is dropped rather than reported stale", async () => {
+test("only the window that has reset is dropped — its account keeps the pools that are still live", async () => {
     const { store } = tempStore();
-    await store.record("fresh", snapshot({ utilization: 10 }));
-    await store.record("rolled-over", snapshot({ utilization: 99, resetsAt: Math.floor((Date.now() - 60 * SECOND) / SECOND) }));
+    const rolledOver = window({ kind: "five_hour", utilization: 99, resetsAt: Math.floor((Date.now() - 60 * SECOND) / SECOND) });
+    await store.record("acct-1", snapshot({ windows: [rolledOver, window({ kind: "seven_day", utilization: 40 })] }));
+    // Per-window expiry, not per-account: the weekly pool is still real when the 5-hour one rolls over, and
+    // dropping the whole snapshot would blank an account's headroom five times a day.
+    expect((await store.read())["acct-1"]?.windows.map((entry) => entry.kind)).toEqual(["seven_day"]);
+});
+
+test("an account left with no live window is absent, not reported as measured-and-empty", async () => {
+    const { store } = tempStore();
+    await store.record("fresh", snapshot());
+    await store.record("rolled-over", snapshot({ windows: [window({ resetsAt: Math.floor((Date.now() - 60 * SECOND) / SECOND) })] }));
     expect(Object.keys(await store.read())).toEqual(["fresh"]);
 });
 
-test("a snapshot with no reset instant is kept — measuredAt carries the staleness caveat instead", async () => {
+test("a window with no reset instant is kept — measuredAt carries the staleness caveat instead", async () => {
     const { store } = tempStore();
-    await store.record("acct-1", snapshot({ resetsAt: undefined, measuredAt: Date.now() - 5 * 24 * 3600 * SECOND }));
+    await store.record("acct-1", snapshot({ windows: [window({ resetsAt: undefined })], measuredAt: Date.now() - 5 * 24 * 3600 * SECOND }));
     expect(Object.keys(await store.read())).toEqual(["acct-1"]);
 });
 

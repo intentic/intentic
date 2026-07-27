@@ -782,6 +782,24 @@ test("sessions.list returns the full list, and routes to search when a query is 
     expect(await client.sessions.list({ query: "   " })).toEqual({ sessions: all });
 });
 
+// Every restore reads from the workspace root — which reaches an isolated conversation's transcript too, since
+// its turns ran in a linked worktree of this repo and the SDK's store spans a repo's worktrees.
+test("sessions.get restores a transcript, and a session the store cannot read is NOT_FOUND", async () => {
+    const read = vi.fn(async (dir: string, id: string) => {
+        if (id !== "s1") {
+            throw new Error("no such session");
+        }
+        return [{ role: "assistant" as const, text: dir, tools: [{ id: "t1", name: "Read", category: "read" as const, status: "completed" as const }] }];
+    });
+    const client = clientFor(createApp(services({ sessions: { list: async () => [], read, search: async () => [], exists: async () => true } })));
+
+    // The tool cards ride along, which is what lets a reopened tab show the run and not just the prose.
+    expect(await client.sessions.get({ id: "s1" })).toEqual({
+        messages: [{ role: "assistant", text: "/work", tools: [{ id: "t1", name: "Read", category: "read", status: "completed" }] }],
+    });
+    await expect(client.sessions.get({ id: "gone" })).rejects.toThrow();
+});
+
 test("system.info reports the sandbox image tag and exact bundled version", async () => {
     const client = clientFor(
         createApp(services({ info: { name: "intentic-sandbox", image: "registry.gitlab.com/radarsu/intentic/sandbox:stable", version: "1.52.0" } })),

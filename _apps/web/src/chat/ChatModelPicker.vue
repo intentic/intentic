@@ -5,7 +5,7 @@ import { type AgentHarness, type AgentProvider, PROVIDERS } from "@intentic/sand
 import { BADGE_META } from "../composables/chat/catalog";
 import { acpProviders, providerAccounts, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
 import { collapseEntries, customEntryFor, filterEntries, type PickerEntry, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
-import { usageDetail, usagePercent, usageStatusFor } from "../composables/chat/usageStatus";
+import { formatUtilization, isStale, usageDetail, usagePercent, usageStatusFor } from "../composables/chat/usageStatus";
 import { loadAllProviderModels, loadProviderModels, useChat } from "../composables/chat/useChat";
 import ProviderLogo from "./ProviderLogo.vue";
 
@@ -166,18 +166,20 @@ const activeAccountId = computed(() => account.value ?? accounts.value[0]?.id);
 
 const footerVisible = computed(() => accounts.value.length > 1 || provider.value === `claude` || harnessChoosable.value || messages.value.length > 0);
 
-// The account rows, each decorated with how much of its usage window is spent — the whole point of the account
-// list being a list: with several connected, "which one has room left" is the actual question, and answering it
-// used to cost a turn to find out. Only Claude reports a window, and only for accounts that have run a turn
-// since their last reset, so an undecorated row means "unknown", never "empty".
+// The account rows, each decorated with how much of its TIGHTEST limit pool is spent — the whole point of the
+// account list being a list: with several connected, "which one has room left" is the actual question, and
+// answering it used to cost a turn to find out. Only Claude reports limits, and only for accounts that have run
+// a turn since their last reset, so an undecorated row means "unknown", never "empty". The row shows the one
+// number a switch decision turns on; the tooltip breaks it into pools.
 const accountRows = computed(() =>
     accounts.value.map((entry) => {
         const usage = usageStatusFor(entry.id);
+        const percent = usagePercent(usage);
         return {
             ...entry,
-            percent: usagePercent(usage),
+            headroom: usage === undefined || percent === undefined ? undefined : formatUtilization(percent, isStale(usage)),
             usageDetail: usage !== undefined ? usageDetail(usage) : undefined,
-            usageWarn: usage !== undefined && usage.status !== `allowed`,
+            usageWarn: percent !== undefined && percent >= 75,
         };
     }),
 );
@@ -382,20 +384,21 @@ onMounted(() => {
                         @click="selectAccount(a.id)"
                     >
                         <span class="truncate text-content">{{ a.label }}</span>
-                        <!-- How much of this account's window is spent, so the switch decision is informed
-                             before it costs a turn. Absent ⇒ never measured (or its window has since reset). -->
+                        <!-- How much of this account's tightest limit pool is spent, so the switch decision is
+                             informed before it costs a turn. Absent ⇒ never measured (or every window it had
+                             has since reset). -->
                         <span
-                            v-if="a.percent !== undefined"
+                            v-if="a.headroom !== undefined"
                             class="ml-auto shrink-0 tabular-nums text-2xs"
                             :class="a.usageWarn ? 'text-warning' : 'text-subtle'"
                             v-tooltip.top="a.usageDetail"
-                            >{{ a.percent }}%</span
+                            >{{ a.headroom }}</span
                         >
                         <Icon
                             v-if="a.needsReauth"
                             name="exclamation-triangle"
                             class="shrink-0 text-2xs text-warning"
-                            :class="{ 'ml-auto': a.percent === undefined }"
+                            :class="{ 'ml-auto': a.headroom === undefined }"
                             v-tooltip.top="a.detail ?? 'This account needs to be reconnected'"
                         />
                     </button>

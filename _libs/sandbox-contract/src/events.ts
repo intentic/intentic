@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentProviderSchema, AgentSummarySchema, PermissionModeSchema, RateLimitInfoSchema } from "./schemas.js";
+import { AgentProviderSchema, AgentSummarySchema, PermissionModeSchema, RateLimitInfoSchema, UsageWindowSchema } from "./schemas.js";
 
 // The wire shapes streamed from the daemon's event-iterator procedures. This is their canonical home: the
 // daemon yields them and the browser client consumes them from the same schema, so the two can't drift (they
@@ -102,9 +102,43 @@ export const ToolCallContentSchema = z.discriminatedUnion("type", [
 ]);
 export type ToolCallContent = z.infer<typeof ToolCallContentSchema>;
 
+// ---- restored transcripts ----
+// What /sessions/{id} replays into a reopened tab. Deliberately NOT SessionTranscriptMessage (the {role,text}
+// seed a resumed turn carries as prompt context): this one has to REDRAW the transcript the user was looking
+// at, so it keeps the assistant's thinking and the tool cards its turn ran. Reconstructed from the stored
+// tool_use/tool_result blocks, so a restored card carries everything the live `tool_call` frame did except
+// the streaming-only correlation fields.
+//
+// One restored tool card. Subagent (Task) calls do NOT nest here: the SDK stores a delegation's own calls in a
+// separate per-subagent file, so a Task card restores as a leaf and its children stay collapsed — the live
+// stream still nests them (see ChatTool.children).
+export const RestoredToolCallSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    category: ToolKindSchema,
+    status: ToolCallStatusSchema,
+    target: z.string().optional(),
+    locations: z.array(ToolCallLocationSchema).optional(),
+    content: z.array(ToolCallContentSchema).optional(),
+});
+export type RestoredToolCall = z.infer<typeof RestoredToolCallSchema>;
+
+// One restored bubble. Each stored assistant message becomes its own, which is what reproduces the live
+// interleaving — prose, the tool cards that prose introduced, then the next block of prose — rather than
+// collapsing a turn's whole narration into a single bubble with its tools hanging off the end.
+export const RestoredMessageSchema = z.object({
+    role: z.enum(["user", "assistant"]),
+    text: z.string(),
+    thinking: z.string().optional(),
+    tools: z.array(RestoredToolCallSchema).optional(),
+});
+export type RestoredMessage = z.infer<typeof RestoredMessageSchema>;
+
+export const SessionTranscriptSchema = z.object({ messages: z.array(RestoredMessageSchema) });
+
 // One frame from an agent turn, relayed to the UI. `kind`-discriminated. The daemon normalizes the SDK's
 // ~40 SDKMessage types down to this union: high-value block types get a dedicated frame
-// (delta/thinking/tool_call/tool_call_update/todos/usage/rate_limit_info/context_usage/init/compact); any SDK message
+// (delta/thinking/tool_call/tool_call_update/todos/usage/rate_limit_info/account_usage/context_usage/init/compact); any SDK message
 // without a UI mapping is dropped. `plan`/`question`/`permission` pause the turn until the user answers on the
 // `POST /agent/reply` side channel; `mode` reports the live permission posture as the agent changes it.
 // `parentToolUseId` tags frames produced inside a subagent (Task tool).
@@ -179,8 +213,14 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         durationMs: z.number().optional(),
         numTurns: z.number().optional(),
     }),
-    // account tags which Claude account the snapshot belongs to, so the client keys usageStatus by account.
+    // The live gate: the provider's answer to "may this turn run", pushed mid-turn. Drives the rate-limited
+    // notice, not the headroom readouts — see RateLimitInfoSchema.
     RateLimitInfoSchema.extend({ kind: z.literal("rate_limit_info"), account: z.string().optional() }),
+    // Every plan-limit pool for the account that served the turn, read from the CLI's usage endpoint once the
+    // turn settles. `account` tags which Claude account it belongs to, so the client keys headroom by account;
+    // absent on an env-token turn, which has no account to attribute it to. No `measuredAt` on the wire: both
+    // readers stamp it on receipt, which is the read time to within the hop.
+    z.object({ kind: z.literal("account_usage"), account: z.string().optional(), windows: z.array(UsageWindowSchema) }),
     ContextUsageSchema.extend({ kind: z.literal("context_usage") }),
     z.object({ kind: z.literal("compact"), trigger: z.string(), preTokens: z.number().optional(), postTokens: z.number().optional() }),
     // The three interactive cards. Each parks the turn until `POST /agent/reply` resolves its `requestId`.

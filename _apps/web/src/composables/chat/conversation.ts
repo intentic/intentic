@@ -17,6 +17,7 @@ import {
     type PermissionAsk,
     type PermissionMode,
     providerLabel,
+    type RestoredMessage,
     sseData,
     sseFrames,
     type TodoItem,
@@ -30,7 +31,7 @@ import { sandboxRequest } from "../sandbox/sandboxClient";
 import { errorMessage } from "../useAsyncAction";
 import { mentionPaths } from "./useMentions";
 import { readTranscript, saveTranscript } from "./transcriptCache";
-import { formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus";
+import { bindingWindow, formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus";
 
 // 'notice' is a small muted system line in the transcript (dismissed / kept planning / approved /
 // stopped) — it keeps the user informed about control actions, Claude Code style.
@@ -78,19 +79,21 @@ export const providerModelsState = ref<Record<AgentProvider, CatalogLoadState>>(
 
 // The model a fresh conversation seeds for a provider. Harness-independent: codex/grok run the SAME subscription
 // model ids natively and under the Claude Code harness (the translator serves them), so the catalog no longer
-// forks by harness. Every provider names its live daemon default; before the first catalog load Claude falls
-// back to its stable `opus` alias (always valid) and codex/grok send empty (the daemon resolves its default).
+// forks by harness. Every provider names its live daemon default; before the first catalog load it takes the
+// head of the same static floor the picker shows (Claude's newest seeded version; codex/grok empty, so the
+// daemon resolves its own default). Reading the floor rather than naming an id here is what keeps the seeded
+// model a row the picker actually offers.
 const defaultModelFor = (provider: AgentProvider): string => {
     // An unseeded provider key (an ACP agent) has no catalog — the agent owns its own model, so empty rides.
     const live = providerDefaultModel.value[provider] ?? ``;
     if (live !== ``) {
         return live;
     }
-    return provider === `claude` ? `opus` : ``;
+    return modelsFor(provider)[0]?.value ?? ``;
 };
 
 // The model options for a provider's picker/chip: the provider's live daemon catalog, with the static catalog
-// as the pre-load floor (Claude's tier aliases; codex/grok empty). Harness-independent (the harness is a
+// as the pre-load floor (Claude's seeded versions; codex/grok empty). Harness-independent (the harness is a
 // separate axis now). Shared by the composer pill and the menu bodies so their list + label logic can't drift.
 export const modelOptionsFor = (provider: AgentProvider): ModelOption[] => {
     const live = providerModels.value[provider] ?? [];
@@ -703,10 +706,27 @@ export class Conversation {
         this.title.value = null;
     }
 
-    // Restore a past conversation pulled from history: build bubbles from the stored transcript and arm its
-    // session so the next turn resumes it in the sandbox.
-    loadTranscript(messages: { role: ChatRole; text: string }[], sessionId: string, title: string | null): void {
-        this.messages.value = messages.map((m) => ({ id: this.nextId++, role: m.role, text: m.text }));
+    // Redraw the bubbles of a transcript the daemon replayed, leaving every other property of the conversation
+    // alone. This is the whole of what a RESTORED tab needs: it already carries its own session, title,
+    // provider and isolation from the tab snapshot, and overwriting those with the history-menu defaults below
+    // would quietly move an isolated agent's next turn onto the main tree.
+    restoreMessages(messages: readonly RestoredMessage[]): void {
+        this.messages.value = messages.map((message) => ({
+            id: this.nextId++,
+            role: message.role,
+            text: message.text,
+            ...(message.thinking !== undefined ? { thinking: message.thinking } : {}),
+            ...(message.tools !== undefined ? { tools: message.tools } : {}),
+        }));
+        this.error.value = null;
+        this.persist();
+    }
+
+    // Restore a past conversation pulled from the history menu: build bubbles from the stored transcript and
+    // arm its session so the next turn resumes it in the sandbox. Unlike restoreMessages this also seeds the
+    // conversation's identity, because the tab it lands in is a fresh one that has none.
+    loadTranscript(messages: readonly RestoredMessage[], sessionId: string, title: string | null): void {
+        this.restoreMessages(messages);
         // History-menu sessions live in the MAIN tree's session namespace — resuming one in a worktree would
         // miss it. The fleet's own open path rehydrates isolated conversations separately.
         this.isolated.value = false;
@@ -722,8 +742,6 @@ export class Conversation {
         this.model.value = rememberedModelFor(`claude`);
         this.title.value = title;
         this.activeModel.value = null;
-        this.error.value = null;
-        this.persist();
     }
 
     async send(prompt: string, settings: TurnSettings, attachments: readonly ChatAttachment[] = [], editorContext?: EditorContext): Promise<void> {
@@ -1227,17 +1245,23 @@ export class Conversation {
                 this.setUsage(event);
                 turn.id = null;
                 return;
-            case `rate_limit_info`: {
-                // Account-wide subscription usage (5-hour / weekly window), keyed by the account that served
-                // the turn so switching accounts shows the right window. Not tied to any bubble. Stamped with
-                // the read time so it can be compared against the daemon's persisted snapshot on the next
+            case `rate_limit_info`:
+                // The live gate, not a headroom reading: it names whichever single window the provider
+                // considered binding for that request. The rate-limited notice below is its only reader —
+                // headroom comes from `account_usage`, which carries every pool.
+                return;
+            case `account_usage`:
+                // Account-wide subscription headroom: every plan-limit pool, keyed by the account that served
+                // the turn so switching accounts shows the right one. Not tied to any bubble. Stamped with the
+                // read time so it can be compared against the daemon's persisted snapshot on the next
                 // `/accounts` load — whichever is newer wins, and the picker can say how stale a reading is.
-                const { kind: _kind, account, ...snapshot } = event;
-                if (account !== undefined) {
-                    usageStatusByAccount.value = { ...usageStatusByAccount.value, [account]: { ...snapshot, measuredAt: Date.now() } };
+                if (event.account !== undefined) {
+                    usageStatusByAccount.value = {
+                        ...usageStatusByAccount.value,
+                        [event.account]: { windows: event.windows, measuredAt: Date.now() },
+                    };
                 }
                 return;
-            }
             case `context_usage`:
                 // Per-conversation context-window fill — held on this instance (not the singleton) so the
                 // composer shows the active chat's meter for auto-compaction awareness.
@@ -1322,8 +1346,9 @@ export class Conversation {
                     // Claude's subscription usage cap, not a crash — render the daemon's message as a muted
                     // notice (like session-not-found) rather than the red error ref, so it reads as "wait and
                     // retry" instead of "the workspace broke". Append the concrete reset time when the usage
-                    // store knows it (from this account's last rate_limit_info frame).
-                    const resetsAt = usageStatusFor(this.account.value)?.resetsAt;
+                    // store knows it — from the account's FULLEST pool, which is the one that just refused the
+                    // turn; a pool with room left resets at an instant that has nothing to do with this wait.
+                    const resetsAt = bindingWindow(usageStatusFor(this.account.value))?.resetsAt;
                     this.appendNotice(resetsAt !== undefined ? `${event.message} Resets ${formatReset(resetsAt)}.` : event.message);
                     return;
                 }

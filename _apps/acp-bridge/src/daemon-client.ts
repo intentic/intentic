@@ -1,5 +1,13 @@
 import { RequestError } from "@agentclientprotocol/sdk";
-import { type AgentEvent, AgentEventSchema, type AgentReply, type AgentTurn, type SessionTranscriptMessage, sseData, sseFrames } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    AgentEventSchema,
+    type AgentReply,
+    type AgentTurn,
+    type RestoredMessage,
+    sseData,
+    sseFrames,
+} from "@intentic/sandbox-contract";
 
 /* The bridge's view of the sandbox daemon: the /agent SSE stream plus the decision/answer side channels and
  * the session store, every call carrying the bridge token (x-intentic-bridge — see the daemon's
@@ -11,7 +19,7 @@ export interface DaemonClient {
     readonly streamTurn: (turn: AgentTurn, signal: AbortSignal) => AsyncGenerator<AgentEvent>;
     // Un-parks a turn waiting on any interactive card (plan / question / permission) — one route, one body.
     readonly postReply: (reply: AgentReply) => Promise<void>;
-    readonly getSession: (id: string) => Promise<SessionTranscriptMessage[]>;
+    readonly getSession: (id: string) => Promise<RestoredMessage[]>;
     // The auth probe (also `intentic-acp login`'s validation call).
     readonly listSessions: () => Promise<void>;
 }
@@ -60,7 +68,7 @@ export const createDaemonClient = (url: string, token: string): DaemonClient => 
         },
         getSession: async (id) => {
             const response = await request(`/sessions/${encodeURIComponent(id)}`);
-            const body = (await response.json()) as { messages?: SessionTranscriptMessage[] };
+            const body = (await response.json()) as { messages?: RestoredMessage[] };
             return body.messages ?? [];
         },
         listSessions: async () => {

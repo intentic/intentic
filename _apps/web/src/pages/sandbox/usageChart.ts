@@ -318,6 +318,20 @@ export const niceMax = (max: number): number => {
 export const formatUsd = (value: number): string =>
     value > 0 && value < 0.005 ? `<$0.01` : `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+/* Money at hero size, where WIDTH is a constraint the tile can't negotiate away: at 48px a stray thousands
+ * group is the difference between a number and a number that has left its card. So precision steps down with
+ * magnitude — cents below $10k (where they're the difference between "$36.62" and a shrug), whole dollars to
+ * $1M, then compacted. Nine glyphs, worst case, at any amount a sandbox can reach.
+ *
+ * Nothing is lost by this: the chart header, the table and the CSV all carry the exact figure, and this is the
+ * one place where a reader is looking at the ORDER of a number rather than reconciling it. */
+export const formatUsdHero = (value: number): string => {
+    if (value < 10_000) {
+        return formatUsd(value);
+    }
+    return value < 1_000_000 ? `$${Math.round(value).toLocaleString()}` : `$${formatCompact(value)}`;
+};
+
 // Counts, compacted past a thousand: 999 / 1.3K / 18.4M / 124M. Three significant digits — a tenth is what
 // separates "18.4M tokens" from a flat "18M", and past 100 that digit is noise.
 export const formatCompact = (value: number): string => {

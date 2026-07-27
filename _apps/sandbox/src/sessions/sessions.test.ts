@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { searchWorkspaceSessions } from "./sessions.js";
+import { readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
 
 // Fake the SDK store the sessions module reads through. `listSessions` is newest-first; `getSessionMessages`
 // returns Anthropic-shaped turns (content is a string here for brevity).
@@ -39,4 +39,74 @@ test("a content match beyond the content limit is not returned or even read", as
     const hits = await searchWorkspaceSessions("/work", "body s11", 10);
     expect(hits).toEqual([]);
     expect(getSessionMessages).not.toHaveBeenCalledWith("s11", expect.anything());
+});
+
+// A stored turn as the SDK files it: the assistant's prose and tool_use blocks on one message, their results
+// on the synthetic user message that follows.
+test("rebuilds the turn's tool cards, settled by their results", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "fix the config" } },
+        {
+            type: "assistant",
+            message: {
+                content: [
+                    { type: "thinking", thinking: "check it first" },
+                    { type: "text", text: "Reading the config." },
+                    { type: "tool_use", id: "t1", name: "Read", input: { file_path: "/work/app/config.ts" } },
+                    { type: "tool_use", id: "t2", name: "Bash", input: { command: "ls" } },
+                ],
+            },
+        },
+        {
+            type: "user",
+            message: {
+                content: [
+                    { type: "tool_result", tool_use_id: "t1", content: "export const port = 1;" },
+                    { type: "tool_result", tool_use_id: "t2", content: "boom", is_error: true },
+                ],
+            },
+        },
+        { type: "assistant", message: { content: [{ type: "text", text: "Done." }] } },
+    ]);
+
+    const messages = await readWorkspaceSession("/work", "s0");
+
+    // The tool_result-only user message is plumbing, not something the user said — four stored messages, three bubbles.
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "assistant"]);
+    expect(messages[0]).toEqual({ role: "user", text: "fix the config" });
+    expect(messages[1]?.thinking).toBe("check it first");
+    expect(messages[1]?.tools?.map((tool) => [tool.name, tool.category, tool.status])).toEqual([
+        ["Read", "read", "completed"],
+        ["Bash", "execute", "failed"],
+    ]);
+    expect(messages[1]?.tools?.[1]?.content).toEqual([{ type: "text", text: "boom" }]);
+    // Each stored assistant message is its own bubble, so the closing prose does not merge into the first.
+    expect(messages[2]).toEqual({ role: "assistant", text: "Done." });
+});
+
+test("a call whose result never arrived stays in progress rather than claiming it finished", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "sleep 100" } }] } },
+    ]);
+    const messages = await readWorkspaceSession("/work", "s0");
+    expect(messages[0]?.tools?.[0]?.status).toBe("in_progress");
+});
+
+// A successful Edit's result is the redundant "file updated" snippet; the card keeps the diff derived from the
+// call's own input, exactly as the live stream leaves it.
+test("a successful edit keeps its call-time diff instead of the result snippet", async () => {
+    getSessionMessages.mockResolvedValue([
+        {
+            type: "assistant",
+            message: {
+                content: [{ type: "tool_use", id: "t1", name: "Edit", input: { file_path: "/work/a.ts", old_string: "one", new_string: "two" } }],
+            },
+        },
+        { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "The file has been updated." }] } },
+    ]);
+    const messages = await readWorkspaceSession("/work", "s0");
+    expect(messages[0]?.tools?.[0]).toMatchObject({
+        status: "completed",
+        content: [{ type: "diff", path: "a.ts", oldText: "one", newText: "two" }],
+    });
 });

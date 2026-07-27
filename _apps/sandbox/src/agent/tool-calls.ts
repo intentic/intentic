@@ -6,6 +6,24 @@ import type { ToolCallContent, ToolCallLocation, ToolKind } from "@intentic/sand
  * Every adapter (Claude SDK blocks, Codex ThreadItems, OpenCode parts — and later ACP sessionUpdates) maps
  * through these instead of keeping its own copy, so the taxonomy can't drift per backend. */
 
+// Flatten a tool_result block's content (a string, or an array of text/other blocks) to plain text — the
+// edit diff / bash output the UI shows under the tool card. Non-text blocks are summarised by type. Shared by
+// the live Claude stream and the session restore, so a replayed card reads exactly like the one it replaces.
+export const resultText = (content: unknown): string => {
+    if (typeof content === "string") {
+        return content;
+    }
+    if (!Array.isArray(content)) {
+        return "";
+    }
+    return content
+        .map((block) => {
+            const b = block as { type?: string; text?: string };
+            return b.type === "text" && typeof b.text === "string" ? b.text : `[${b.type ?? "block"}]`;
+        })
+        .join("");
+};
+
 // Native tool ids → the display names the UI styles. Covers OpenCode's lowercase ids (bash/edit/patch/…);
 // Claude SDK names are already display names and pass through. `todowrite` is intentionally absent — its
 // checklist renders from the todos frame, never as a tool card.

@@ -1,60 +1,76 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { type Options, query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type Model, type ModelBadge, ModelSchema } from "@intentic/sandbox-contract";
+import { CLAUDE_SEED_MODELS, type Model, type ModelBadge, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { Config } from "../env.config.js";
 import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 
-/* Claude's model catalog for the picker, merged from the TWO catalogs Anthropic publishes, because neither is
- * complete on its own:
+/* Claude's model catalog for the picker, built from the TWO catalogs Anthropic publishes, because neither is
+ * usable on its own:
  *
  *   1. The Agent SDK's supportedModels() control request — the TIER ALIASES the Claude Code CLI offers
- *      (default / opus[1m] / sonnet / haiku). This is the only source for per-model effort levels, capability
- *      badges and the CLI's own recommended default, but it publishes no versioned id at all: every row is named
- *      for its tier ("Opus") with the version it currently resolves to buried in prose inside `description`
- *      ("Opus 4.8 with 1M context · …"). An alias also LAGS a release — `opus` kept resolving to claude-opus-4-8
- *      after claude-opus-5 had shipped and was already serving turns — so a new model is simply unreachable
- *      through it, which is exactly how a shipped model went missing from this picker.
+ *      (default / opus[1m] / sonnet / haiku). This is the only source for per-model effort levels and capability
+ *      badges, but it publishes no versioned id at all: every row is named for its tier ("Opus") with the version
+ *      it currently resolves to buried in prose inside `description` ("Opus 4.8 with 1M context · …"). An alias
+ *      also LAGS a release — `opus` kept resolving to claude-opus-4-8 after claude-opus-5 had shipped and was
+ *      already serving turns — so a new model is simply unreachable through it, which is exactly how a shipped
+ *      model went missing from this picker.
  *   2. Anthropic's REST /v1/models, read with the same account OAuth token — the account's authoritative list of
  *      VERSIONED ids, each carrying a versioned display name ("Claude Opus 5"). This is what makes a just-shipped
  *      model pickable, and the only place a version is published as a NAME rather than as prose.
  *
- * Merged, the picker offers both the stable tiers (with their efforts/badges) and every concrete version the
- * account can actually drive. Fallback order, matching codex-catalog.ts and kimi-catalog.ts: the live merge; the
- * persisted last-known-good catalog, rewritten on every successful discovery; the compile-time tier-alias floor.
- * Only real (discovered) results are cached, so an unreachable CLI is retried on the next read rather than
- * pinning a degraded list for the daemon's lifetime.
+ * ONLY VERSIONED ROWS ARE OFFERED. A tier alias cannot tell the user which model will answer them: "Opus" names
+ * a moving target that the CLI repoints on its own schedule, so the composer's chip, the transcript and any
+ * later "which model wrote this?" all lose the one fact that matters. The aliases still earn their discovery —
+ * they hand their effort levels and badges to the versioned rows of their own tier (withTierCapabilities) — but
+ * they never become rows themselves, and neither does the nameless "Default (recommended)" the CLI lists first.
  *
- * The persisted tier is what keeps a NEW TIER surviving a restart: the aliases track versions but name the tiers
- * we knew about at build time, so before persistence an offline restart silently lost a tier the CLI had already
- * reported. Persisting whole model records rather than bare ids (codex/kimi persist ids, having nothing else)
- * keeps the display name and description too — the alias floor is now genuinely last-resort, reached only before
- * the very first successful discovery.
+ * Fallback order, matching codex-catalog.ts and kimi-catalog.ts: the live merge; the persisted last-known-good
+ * catalog, rewritten on every successful discovery; the compile-time seed floor. Only real (discovered) results
+ * are cached, so an unreachable source is retried on the next read rather than pinning a degraded list for the
+ * daemon's lifetime. Persisting whole model records rather than bare ids (codex/kimi persist ids, having nothing
+ * else) keeps the display name and capabilities too, so a version that postdates this build survives a restart
+ * with its presentation intact and the seed floor is genuinely last-resort.
  *
  * Everything either catalog reports is forwarded verbatim — the repo curates nothing about any model, so a
  * release or a rename needs no edit here. The OpenAI-compatible providers report ids only and render label-only;
  * see ModelSchema in the contract. */
 
-// The stable-alias fallback catalog, reached only before the first successful discovery of EITHER source ever
-// persists. Aliases track the latest version of each tier, so this stays correct across version bumps; a
-// brand-new tier or version is missing only until one source is reachable once, after which the persisted
-// catalog carries it across restarts.
-const CLAUDE_ALIAS_MODELS: readonly Model[] = [
-    { id: "opus", label: "Opus" },
-    { id: "sonnet", label: "Sonnet" },
-    { id: "haiku", label: "Haiku" },
-];
+// The hyphen-delimited segments both id tests below read. REST ids are hyphenated (claude-opus-5,
+// claude-haiku-4-5-20251001); an alias id is one bare word, optionally with a context-window suffix (opus[1m]).
+const segmentsOf = (id: string): string[] => id.split("-");
 
-// The one row the CLI publishes that names no model at all: a "Default (recommended)" alias whose actual target
-// is buried in prose inside `description` ("Opus 4.8 with 1M context"). Every other row identifies either a tier
-// ("Opus") or a version ("Claude Opus 5"), so this is the only pick that can leave the composer's chip unable to
-// say what will run — and it is the pick a fresh session lands on, since the CLI lists it first. Dropping it moves
-// models[0] to the CLI's next preference: still the provider's own opinion, still tracking releases the way this
-// row did, and finally nameable. A stale selection repoints itself — routedModel validates catalog membership
-// daemon-side, and loadProviderModels does the same in the picker.
-const UNNAMED_ALIAS_ID = "default";
-const named = (models: readonly Model[]): Model[] => models.filter((model) => model.id !== UNNAMED_ALIAS_ID);
+// A row names a version when a numeric segment sits in its id. Every REST row carries one and no alias does —
+// including opus[1m], whose digit is a context window, not a version, and which the segment test therefore
+// rejects the way it rejects `opus` itself.
+const namesVersion = (model: Model): boolean => segmentsOf(model.id).some((segment) => /^\d+$/.test(segment));
+
+// The tier an alias speaks for: its id up to the context-window suffix ("opus[1m]" → "opus"), which is exactly
+// the segment every versioned id in that tier carries ("claude-opus-5"). "default" names no tier, so it lends
+// its capabilities to nothing — the same reason it can never be a row.
+const tierOf = (alias: Model): string => alias.id.split("[")[0]!;
+
+// Effort levels and capability badges are published by supportedModels() ALONE, and against a TIER rather than a
+// version — so dropping the alias rows would take the composer's effort control with them. Each versioned row
+// inherits them from its tier's alias instead; a row that published its own keeps it, and a family the CLI
+// offers no alias for simply carries none, which is the honest answer. `description` is deliberately NOT
+// inherited: it is prose about the one version the alias currently resolves to, so on any other row it would be
+// a false claim about that model.
+const withTierCapabilities = (model: Model, aliases: readonly Model[]): Model => {
+    if (model.efforts !== undefined || model.badges !== undefined) {
+        return model;
+    }
+    const alias = aliases.find((candidate) => segmentsOf(model.id).includes(tierOf(candidate)));
+    if (alias === undefined) {
+        return model;
+    }
+    return {
+        ...model,
+        ...(alias.efforts !== undefined ? { efforts: alias.efforts } : {}),
+        ...(alias.badges !== undefined ? { badges: alias.badges } : {}),
+    };
+};
 
 const ANTHROPIC_MODELS_URL = "https://api.anthropic.com/v1/models?limit=100";
 
@@ -138,14 +154,15 @@ const discoverApiModels = async (oauthToken: string | undefined, fetchImpl: type
     return (json?.data ?? []).map((model) => ({ id: model.id, label: model.display_name ?? model.id }));
 };
 
-// Aliases lead: theirs is the CLI's own preference order, they carry the effort tiers and capability badges only
-// supportedModels() publishes, and keeping them first means models[0] stays the CLI's top preference. The
-// versioned rows follow in the API's own order (newest first). Ids never collide in practice — an alias is a
-// bare tier ("opus"), a REST row is versioned ("claude-opus-5") — but dedup by id anyway so one source adopting
-// the other's naming can only ever drop a duplicate row, never render the picker twice over.
+// The versioned rows ARE the catalog; the aliases are mined for capabilities and then dropped. They ride in the
+// REST catalog's own order (newest first), so models[0] — the default a fresh chat lands on — is the newest
+// model the account can actually drive, and no local ranking decides it. An alias reporting a versioned id
+// leads (it brings metadata the REST row lacks) and dedups against it, so one source adopting the other's
+// naming can only ever drop a duplicate row, never render the picker twice over.
 const mergeCatalogs = (aliases: readonly Model[], versioned: readonly Model[]): Model[] => {
-    const seen = new Set(aliases.map((model) => model.id));
-    return [...aliases, ...versioned.filter((model) => !seen.has(model.id))];
+    const aliasVersions = aliases.filter(namesVersion);
+    const seen = new Set(aliasVersions.map((model) => model.id));
+    return [...aliasVersions, ...versioned.filter((model) => !seen.has(model.id))].map((model) => withTierCapabilities(model, aliases));
 };
 
 export interface ClaudeCatalog {
@@ -159,7 +176,8 @@ const MODELS_TTL_MS = 60 * 60_000;
 
 // The provider's own first-listed model is the default — matching codex/grok/kimi, which all take ids[0]. Naming
 // a tier here (the old /opus/i preference) would silently fall through to models[0] the moment Anthropic renamed
-// its flagship, so the ordering the CLI already reports is both simpler and the one thing that stays correct.
+// its flagship, so the ordering the REST catalog already reports is both simpler and the one thing that stays
+// correct.
 const withDefault = (models: Model[]): { models: Model[]; default: string } => ({ models, default: models[0]!.id });
 
 // `discover` and `fetchImpl` are injectable for the same reason codex/kimi inject `fetchImpl`: the real discovery
@@ -211,17 +229,19 @@ export const createClaudeCatalog = (
             // Both catalogs answer for the same account and neither gates the other: one is a process spawn, the
             // other a fetch, so they run concurrently and either alone still yields a usable list.
             const [aliases, versioned] = await Promise.all([discover(token, cwd).catch(() => []), discoverApiModels(token, fetchImpl)]);
-            const merged = named(mergeCatalogs(aliases, versioned));
+            const merged = mergeCatalogs(aliases, versioned);
             if (merged.length > 0) {
                 await writePersisted(merged);
                 const value = withDefault(merged);
                 cache = { value, expiresAt: Date.now() + MODELS_TTL_MS };
                 return value;
             }
-            // No live catalog: serve the last-known-good, else the alias floor. Uncached either way, so both
+            // No live catalog: serve the last-known-good, else the seed floor. Uncached either way, so both
             // sources are re-probed on the next read instead of pinning a degraded list for the daemon's lifetime.
-            const persisted = named(await readPersisted());
-            return withDefault(persisted.length > 0 ? persisted : [...CLAUDE_ALIAS_MODELS]);
+            // The versioned test runs here too — the file is untrusted disk state (that is why it is schema-parsed
+            // at all), so a record written by any other build can't put an unnameable row back in the picker.
+            const persisted = (await readPersisted()).filter(namesVersion);
+            return withDefault(persisted.length > 0 ? persisted : [...CLAUDE_SEED_MODELS]);
         },
     };
 };

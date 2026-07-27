@@ -6,7 +6,7 @@ import { useRouter } from "vue-router";
 import { NATIVE_PROVIDERS, type NativeProvider, providerLabel } from "@intentic/sandbox-contract";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { type ChatAttachment, type ChatMessage, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
-import { formatReset, usageStatusFor, usageWindowLabel } from "../composables/chat/usageStatus";
+import { bindingWindow, formatUtilization, isStale, usageDetail, usageStatusFor } from "../composables/chat/usageStatus";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -117,21 +117,22 @@ const activeAccountReauth = computed(() => {
 // Compact "142k" style token count for the context tooltip.
 const formatTokens = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
-// Claude subscription usage (5-hour / weekly window) for the active conversation's account, pushed from the
-// agent stream at no token cost — a small ring once that account's first Claude turn reports utilization,
-// tinted on the warning/rejected states. Keyed by account so switching accounts shows the right window.
+// Claude subscription headroom for the active conversation's account, pushed from the agent stream at no token
+// cost — a small ring once that account's first Claude turn reports its limits, tinted as the binding pool
+// fills. Keyed by account so switching accounts shows the right one. The ring tracks the FULLEST pool (the one
+// that will gate the next turn); the tooltip lists them all, because which one is binding shifts between turns.
 const usageRing = computed(() => {
     const info = usageStatusFor(active.value.account.value);
-    if (info === undefined || info.utilization === undefined) {
+    const window = bindingWindow(info);
+    if (info === undefined || window === undefined) {
         return undefined;
     }
-    const rounded = Math.round(info.utilization);
-    const reset = info.resetsAt !== undefined ? `resets ${formatReset(info.resetsAt)}` : undefined;
+    const rounded = Math.round(window.utilization);
     return {
-        value: info.utilization,
-        label: `${rounded}%`,
-        warn: info.status !== `allowed`,
-        tooltip: [usageWindowLabel(info.rateLimitType), `${rounded}%`, reset].filter((part) => part !== undefined).join(` · `),
+        value: window.utilization,
+        label: formatUtilization(rounded, isStale(info)),
+        warn: rounded >= 75,
+        tooltip: usageDetail(info),
     };
 });
 

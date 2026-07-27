@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { Card, cmp, ProgressRing, RowGroup, Segmented } from "@intentic-app/ui";
+import { Card, cmp, Segmented } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import { useAgents } from "../../composables/agents/useAgents";
 import { providerAccounts } from "../../composables/chat/conversation";
-import { formatAge, usageDetail, usagePercent, usageStatusByAccount, usageWindowLabel } from "../../composables/chat/usageStatus";
+import {
+    formatAge,
+    formatReset,
+    formatUtilization,
+    isStale,
+    orderedWindows,
+    usagePercent,
+    usageStatusByAccount,
+    usageTone,
+    usageWindowLabel,
+} from "../../composables/chat/usageStatus";
 import { useUsage } from "../../composables/sandbox/useUsage";
 import UsageBarChart from "./UsageBarChart.vue";
 import UsageColumnChart from "./UsageColumnChart.vue";
@@ -17,6 +27,7 @@ import {
     formatDelta,
     formatPercent,
     formatUsd,
+    formatUsdHero,
     inWindow,
     previousWindow,
     providerLabel,
@@ -34,14 +45,20 @@ import {
     windowFor,
 } from "./usageChart";
 
-/* The Sandbox hub's "Usage" tab: what the agents have cost, what is eating it, and how close each account is
- * to its limit. Every figure here is a projection of ONE durable source — the daemon's never-pruned spend
- * ledger (usage/usage-store.ts) — so a total can't shrink as the sandbox gets busier, which is exactly what
- * the old activity-log aggregation did.
+/* The Sandbox hub's "Usage" tab. It answers two questions with DIFFERENT SUBJECTS, and keeping them apart is
+ * most of the design:
  *
- * Two things are deliberately NOT on the same plot. Cost and tokens have unrelated scales, so they are two
- * tiles, never one chart with two y-axes. And headroom is a separate section from spend: a limit and a cost
- * are different mental models, and stacking them invites reading "78%" as a budget. */
+ *   - What has this sandbox cost? Every figure is a projection of one durable source — the daemon's never-pruned
+ *     spend ledger (usage/usage-store.ts) — so a total can't shrink as the sandbox gets busier, which is exactly
+ *     what the old activity-log aggregation did. Scoped by the filter row.
+ *   - How much of your PLAN is left? Account-wide, provider-reported, unaffected by every filter above it, and
+ *     not a share of the spend either: a Max plan's weekly pool has no dollar figure at all.
+ *
+ * So the plan-limit meters are their own section with their own subject stated in the label — an earlier version
+ * of this tab put a bare "1%" under the spend tiles and invited reading it as a budget, on an account that was
+ * really 98% through its week.
+ *
+ * Cost and tokens stay two tiles for the same reason: unrelated scales, never one chart with two y-axes. */
 
 const route = useRoute();
 const router = useRouter();
@@ -120,28 +137,28 @@ const byModel = computed(() =>
 const agentTitle = (id: string): string => fleet.value.find((agent) => agent.id === id)?.title ?? `${id.slice(0, 8)}…`;
 const byAgent = computed(() => rankByCost(current.value, (row) => row.conversationId, agentTitle, `Main tree`));
 
-// ---- account headroom -------------------------------------------------------------------------------------
+// ---- plan limits --------------------------------------------------------------------------------------------
 
-// Every connected account that has reported a usage window, across providers. Claude is the only provider whose
-// stream reports one today, so this is short by construction — and an account that has never run a turn is
-// absent rather than shown at a confident 0%.
+// Every connected account that has reported its plan limits, across providers, with each of its pools rounded
+// once here so the meter and its label can't disagree. Claude is the only provider that reports limits today, so
+// this is short by construction — and an account that has never run a turn is absent rather than shown at a
+// confident 0%.
 const headroom = computed(() =>
     Object.entries(providerAccounts.value)
         .flatMap(([provider, accounts]) =>
             accounts.flatMap((account) => {
                 const usage = usageStatusByAccount.value[account.id];
                 const percent = usagePercent(usage);
-                return usage === undefined || percent === undefined ? [] : [{ provider, account, usage, percent }];
+                if (usage === undefined || percent === undefined) {
+                    return [];
+                }
+                const windows = orderedWindows(usage).map((window) => ({ ...window, percent: Math.round(window.utilization) }));
+                return [{ provider, account, usage, percent, windows, stale: isStale(usage) }];
             }),
         )
-        // Fullest first: the account about to gate a turn is the one worth seeing without scrolling.
+        // Tightest first: the account about to gate a turn is the one worth seeing without scrolling.
         .toSorted((left, right) => right.percent - left.percent),
 );
-
-// The meter's fill carries severity; the provider's own status wins over the raw number, because a provider
-// that says "rejected" is out regardless of what its last utilization reading said.
-const meterTone = (percent: number, status: string): string =>
-    status === `rejected` || percent >= 90 ? `text-danger` : status === `allowed_warning` || percent >= 75 ? `text-warning` : `text-link`;
 
 // ---- the table and the export -------------------------------------------------------------------------------
 
@@ -203,81 +220,117 @@ const hasSpend = computed(() => current.value.length > 0);
             <template v-else>
                 <!-- The hero and its supporting tiles. Spend is the one number this screen is about, so it is
                      the only figure at hero size; the rest are stat tiles. -->
+                <!-- Every figure is sized against ITS OWN tile (@container + cqi), not the viewport: the tiles
+                     go four-up at exactly the width where a four-figure amount stops fitting at 48px, so a
+                     viewport breakpoint is the wrong ruler and a fixed size is how "$36.62" ended up hanging
+                     out of its card. The floor of each clamp is a size the widest value this tile can hold
+                     still fits at. -->
                 <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <Card>
+                    <Card class="@container flex min-w-0 flex-col">
                         <div class="text-xs text-muted">Spend</div>
-                        <div class="mt-1 text-5xl font-semibold leading-none text-content">{{ formatUsd(totals.costUsd) }}</div>
-                        <div class="mt-2 flex items-center gap-1.5 text-2xs" :class="deltaTone(spendDelta)">
+                        <div class="mt-1 truncate text-[clamp(1.5rem,13cqi,3rem)] font-semibold leading-none tabular-nums text-content">
+                            {{ formatUsdHero(totals.costUsd) }}
+                        </div>
+                        <div class="mt-auto flex flex-wrap items-baseline gap-x-1.5 pt-2 text-2xs" :class="deltaTone(spendDelta)">
                             <template v-if="formatDelta(spendDelta) !== undefined">
-                                <span>{{ deltaArrow(spendDelta) }}{{ formatDelta(spendDelta) }}</span>
+                                <span class="tabular-nums">{{ deltaArrow(spendDelta) }}{{ formatDelta(spendDelta) }}</span>
                                 <span class="text-subtle">{{ comparedTo }}</span>
                             </template>
                             <span v-else class="text-subtle">{{ comparedTo === undefined ? `All time` : `No spend in the previous period` }}</span>
                         </div>
                     </Card>
 
-                    <Card>
+                    <Card class="@container flex min-w-0 flex-col">
                         <div class="text-xs text-muted">Turns</div>
-                        <div class="mt-1 text-2xl font-semibold leading-none text-content">{{ formatCompact(totals.turns) }}</div>
-                        <div class="mt-1 text-2xs" :class="deltaTone(turnsDelta)">
+                        <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
+                            {{ formatCompact(totals.turns) }}
+                        </div>
+                        <div class="mt-1 text-2xs tabular-nums" :class="deltaTone(turnsDelta)">
                             {{ formatDelta(turnsDelta) === undefined ? `—` : `${deltaArrow(turnsDelta)}${formatDelta(turnsDelta)}` }}
                         </div>
-                        <UsageSparkline :points="turnPoints" class="mt-2 text-subtle" />
+                        <UsageSparkline :points="turnPoints" class="mt-auto pt-2 text-subtle" />
                     </Card>
 
-                    <Card>
+                    <Card class="@container flex min-w-0 flex-col">
                         <div class="text-xs text-muted">Tokens</div>
-                        <div class="mt-1 text-2xl font-semibold leading-none text-content">{{ formatCompact(totalTokens(totals)) }}</div>
-                        <div class="mt-1 text-2xs" :class="deltaTone(tokensDelta)">
+                        <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
+                            {{ formatCompact(totalTokens(totals)) }}
+                        </div>
+                        <div class="mt-1 text-2xs tabular-nums" :class="deltaTone(tokensDelta)">
                             {{ formatDelta(tokensDelta) === undefined ? `—` : `${deltaArrow(tokensDelta)}${formatDelta(tokensDelta)}` }}
                         </div>
-                        <UsageSparkline :points="tokenPoints" class="mt-2 text-subtle" />
+                        <UsageSparkline :points="tokenPoints" class="mt-auto pt-2 text-subtle" />
                     </Card>
 
-                    <Card>
+                    <Card class="@container flex min-w-0 flex-col">
                         <div class="text-xs text-muted">Cache hit rate</div>
-                        <div class="mt-1 text-2xl font-semibold leading-none text-content">{{ formatPercent(cacheHitRate(totals)) }}</div>
-                        <p class="mt-1 text-2xs text-subtle">
+                        <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
+                            {{ formatPercent(cacheHitRate(totals)) }}
+                        </div>
+                        <p class="mt-auto pt-2 text-2xs text-subtle">
                             {{ formatCompact(totals.cacheReadTokens) }} of prompt input served from cache — the share you were not billed full rate
                             for.
                         </p>
                     </Card>
                 </div>
 
-                <!-- Headroom: a ratio against a limit, so a meter — and its own section, because "78% of my
-                     weekly window" and "$47 spent" are different questions. -->
-                <RowGroup v-if="headroom.length > 0" id="accounts" label="Account headroom">
-                    <div v-for="entry in headroom" :key="entry.account.id" class="flex items-center gap-3 px-4 py-3">
-                        <ProviderLogo :provider="entry.provider" class="shrink-0 text-base text-muted" />
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-baseline justify-between gap-2">
-                                <span class="truncate text-sm text-content">{{ entry.account.label }}</span>
-                                <span class="shrink-0 text-2xs text-subtle">{{ usageWindowLabel(entry.usage.rateLimitType) }}</span>
+                <!-- Plan limits. Its own section, and deliberately NOT phrased like the tiles above it: "$36
+                     spent here" and "98% of my plan's week is gone" are different questions with different
+                     subjects, and the tab used to invite reading the second as a share of the first.
+                     Every pool gets its own meter — one row per window, never a single "usage" number — because
+                     these are separate allowances that fill at different rates, and folding them is how a
+                     screen ends up saying 1% about an account that is actually out of room. -->
+                <section v-if="headroom.length > 0" id="accounts">
+                    <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
+                        <span :class="cmp.sectionLabel()">Plan limits</span>
+                        <span class="text-2xs text-subtle">
+                            your whole Claude plan, not this sandbox — every device on the account spends the same pools
+                        </span>
+                    </div>
+                    <div class="divide-y divide-line overflow-hidden rounded-lg border border-line bg-card">
+                        <div v-for="entry in headroom" :key="entry.account.id" class="flex flex-col gap-2.5 px-4 py-3">
+                            <div class="flex items-baseline gap-2">
+                                <ProviderLogo :provider="entry.provider" class="shrink-0 self-center text-sm text-muted" />
+                                <span class="min-w-0 truncate text-sm text-content">{{ entry.account.label }}</span>
+                                <!-- Freshness belongs on the ACCOUNT, not on each meter: one read produced all
+                                     of these, and it is the single caveat that governs every number below. -->
+                                <span class="ml-auto shrink-0 text-2xs" :class="entry.stale ? `text-muted` : `text-subtle`">
+                                    read {{ formatAge(entry.usage.measuredAt) }}
+                                </span>
                             </div>
-                            <!-- The track is a faint step of the fill's own ramp, so state reads across the
-                                 whole bar rather than only where it happens to stop. -->
-                            <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-content/10">
-                                <div
-                                    class="h-full rounded-full bg-current"
-                                    :class="meterTone(entry.percent, entry.usage.status)"
-                                    :style="{ width: `${entry.percent}%` }"
-                                />
+
+                            <div v-for="window in entry.windows" :key="window.kind" class="flex items-center gap-3">
+                                <span class="w-40 shrink-0 truncate text-2xs text-muted">{{ usageWindowLabel(window) }}</span>
+                                <!-- The track is a faint step of the fill's own ramp, so state reads across the
+                                     whole bar rather than only where it happens to stop. -->
+                                <div class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-content/10">
+                                    <div
+                                        class="h-full rounded-full bg-current"
+                                        :class="usageTone(window.percent)"
+                                        :style="{ width: `${Math.max(window.percent, 1)}%` }"
+                                    />
+                                </div>
+                                <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(window.percent)">
+                                    {{ formatUtilization(window.percent, entry.stale) }}
+                                </span>
+                                <span class="hidden w-32 shrink-0 truncate text-right text-2xs text-subtle sm:block">
+                                    {{ window.resetsAt === undefined ? `` : `resets ${formatReset(window.resetsAt)}` }}
+                                </span>
                             </div>
-                            <p class="mt-1 text-2xs text-subtle">measured {{ formatAge(entry.usage.measuredAt) }}</p>
-                        </div>
-                        <div
-                            v-tooltip.top="usageDetail(entry.usage)"
-                            class="flex shrink-0 items-center gap-1.5"
-                            :class="meterTone(entry.percent, entry.usage.status)"
-                        >
-                            <ProgressRing :value="entry.percent" :size="16" />
-                            <span class="text-xs tabular-nums">{{ entry.percent }}%</span>
                         </div>
                     </div>
-                </RowGroup>
+                    <!-- The honest caveat, spelled out rather than left to a "≥". A reading is taken when a turn
+                         ENDS, so an idle sandbox's is as old as its last turn, and the pools keep draining
+                         elsewhere the whole time — which is the entire distance between "1%" here and 98% in a
+                         terminal on the same account. -->
+                    <p class="mt-2 px-0.5 text-2xs text-subtle">
+                        Read from your plan when a turn finishes, so it can only be a floor: usage never falls inside a window, and other clients on
+                        this account spend the same pools without telling this sandbox. Run a turn to refresh it.
+                    </p>
+                </section>
 
                 <p v-else :class="cmp.emptyState()">
-                    No account has reported a usage window yet. Claude publishes one on its first turn; other providers don't report limits.
+                    No account has reported its plan limits yet. Claude publishes them when a turn finishes; other providers don't report limits.
                 </p>
 
                 <Card>

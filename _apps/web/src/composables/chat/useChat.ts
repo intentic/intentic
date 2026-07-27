@@ -7,6 +7,7 @@ import {
     NATIVE_PROVIDERS,
     type OauthAccount,
     type PermissionMode,
+    type RestoredMessage,
     type TranslatorAccounts,
     type UsageAccount,
 } from "@intentic/sandbox-contract";
@@ -17,7 +18,6 @@ import {
     type ChatAttachment,
     type ChatMessage,
     type CatalogLoadState,
-    type ChatRole,
     Conversation,
     type ModelOption,
     type PendingAttachment,
@@ -898,19 +898,20 @@ const loadSessions = async (query?: string): Promise<void> => {
     }
 };
 
-// Fetch a session's transcript from the daemon's session store into a conversation, arming its session id so
-// the next turn resumes it. Shared by the history menu and the restored-tab rehydration watch.
-const loadRemoteTranscript = async (conversation: Conversation, id: string, title: string | null): Promise<void> => {
+// Read a session's transcript from the daemon's session store, for both the history menu and the restored-tab
+// rehydration watch. Returns undefined when the daemon has nothing, having reported it on the conversation.
+const fetchTranscript = async (conversation: Conversation, id: string): Promise<RestoredMessage[] | undefined> => {
     try {
         const response = await sandboxRequest(`/sessions/${encodeURIComponent(id)}`);
         if (!response.ok) {
             conversation.error.value = `Could not open that conversation.`;
-            return;
+            return undefined;
         }
-        const body = (await response.json()) as { messages?: { role: ChatRole; text: string }[] };
-        conversation.loadTranscript(body.messages ?? [], id, title);
+        const body = (await response.json()) as { messages?: RestoredMessage[] };
+        return body.messages ?? [];
     } catch {
         conversation.error.value = `Could not open that conversation.`;
+        return undefined;
     }
 };
 
@@ -965,7 +966,10 @@ const openConversation = async (id: string): Promise<void> => {
     const conversation = new Conversation(`c${convSeq++}`);
     conversations.value = [...conversations.value, conversation];
     activeId.value = conversation.id;
-    await loadRemoteTranscript(conversation, id, sessions.value.find((session) => session.id === id)?.title ?? null);
+    const restored = await fetchTranscript(conversation, id);
+    if (restored !== undefined) {
+        conversation.loadTranscript(restored, id, sessions.value.find((session) => session.id === id)?.title ?? null);
+    }
 };
 
 // Restored tabs persist as session + title only — once their daemon is reachable, first try to ATTACH: a
@@ -1010,8 +1014,15 @@ watch([reachable, conversations], ([isReachable]) => {
                 return;
             }
             const session = conversation.session.value;
-            if (session !== undefined && session.provider === `claude`) {
-                await loadRemoteTranscript(conversation, session.id, conversation.title.value);
+            if (session === undefined || session.provider !== `claude`) {
+                return;
+            }
+            const restored = await fetchTranscript(conversation, session.id);
+            // An empty replay is not a transcript, it is the absence of one — the same distinction the mirror
+            // makes when it refuses to save a blank. Painting it would blank a good cached transcript on any
+            // daemon that answers but has nothing to say, which is exactly how a reopened tab goes empty.
+            if (restored !== undefined && restored.length > 0) {
+                conversation.restoreMessages(restored);
             }
         })();
     }

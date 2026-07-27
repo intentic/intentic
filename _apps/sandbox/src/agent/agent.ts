@@ -7,12 +7,13 @@ import {
     type Options,
     type PermissionUpdate,
     query,
+    type SDKControlGetUsageResponse,
     type SDKMessage,
     type SDKUserMessage,
     type SlashCommand,
     tool,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, TodoItem } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, TodoItem, UsageWindow } from "@intentic/sandbox-contract";
 import { relative, sep } from "node:path";
 import { z } from "zod";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
@@ -21,7 +22,7 @@ import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { agentSessionName, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
 import { EventQueue } from "./event-queue.js";
-import { editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
+import { editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 
 export interface AgentRequest {
     readonly prompt: string;
@@ -101,11 +102,60 @@ export interface AgentRequest {
     readonly unattended?: boolean;
 }
 
-// What a turn needs from the SDK: the message stream, plus the session's slash-command list. The real
-// `query` returns a Query, which satisfies both; `supportedCommands` is optional because a fake stream
-// legitimately has none (it resolves the CLI's initialize response, which no canned generator produces).
+// What a turn needs from the SDK: the message stream, the session's slash-command list, and the plan's usage
+// windows. The real `query` returns a Query, which satisfies all three; both methods are optional because a
+// fake stream legitimately has neither (they resolve control requests, which no canned generator answers).
 export type AgentQuery = AsyncIterable<SDKMessage> & {
     readonly supportedCommands?: () => Promise<readonly SlashCommand[]>;
+    readonly usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<SDKControlGetUsageResponse>;
+};
+
+// A window the CLI's usage endpoint reports, or nothing when it has no reading for that pool. `resets_at` is
+// ISO-8601 there and epoch SECONDS on our wire (the unit the SDK's own rate_limit frame uses).
+const usageWindow = (
+    kind: string,
+    reading: { utilization: number | null; resets_at: string | null } | null | undefined,
+    label?: string,
+): UsageWindow | undefined => {
+    if (reading?.utilization === null || reading?.utilization === undefined) {
+        return undefined;
+    }
+    const resets = reading.resets_at === null ? Number.NaN : Date.parse(reading.resets_at);
+    return {
+        kind,
+        ...(label !== undefined ? { label } : {}),
+        utilization: reading.utilization,
+        ...(Number.isNaN(resets) ? {} : { resetsAt: Math.floor(resets / 1000) }),
+    };
+};
+
+/* Every plan-limit pool for this session's account, straight from the CLI's usage endpoint — the same read
+ * behind Claude Code's own /usage dialog. A CONTROL request: it never touches the model, so it costs no tokens
+ * and adds no turns to the bill.
+ *
+ * This exists because the stream's rate_limit_event names exactly ONE window (whichever the CLI treated as
+ * binding for that request), and persisting it as the account's headroom is how a Usage tab came to say
+ * "Weekly limit 1%" for an account that was really at 98% on its all-models weekly pool. All pools or none.
+ *
+ * Everything here is best-effort by construction: the SDK marks the method experimental, an API-key session has
+ * no plan limits at all (`rate_limits_available: false`), and a usage read must never be able to fail a turn
+ * that has already produced its answer. */
+const claudeUsageWindows = async (session: AgentQuery): Promise<UsageWindow[]> => {
+    const response = await session.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?.().catch(() => undefined);
+    const limits = response?.rate_limits;
+    if (limits === undefined || limits === null) {
+        return [];
+    }
+    return [
+        usageWindow("five_hour", limits.five_hour),
+        usageWindow("seven_day", limits.seven_day),
+        usageWindow("seven_day_opus", limits.seven_day_opus),
+        usageWindow("seven_day_sonnet", limits.seven_day_sonnet),
+        usageWindow("seven_day_oauth_apps", limits.seven_day_oauth_apps),
+        // Per-model buckets are additive and server-named ('Fable'), so they key off that name and carry it as
+        // their label rather than being mapped onto a fixed list we'd have to chase.
+        ...(limits.model_scoped ?? []).map((entry) => usageWindow(`model:${entry.display_name}`, entry, entry.display_name)),
+    ].filter((window) => window !== undefined);
 };
 
 // The SDK `query` is injected so tests drive a fake message stream — no API calls, no bundled binary.
@@ -134,23 +184,6 @@ async function* steeredInput(first: string, steering: SteeringQueue): AsyncGener
         yield { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null };
     }
 }
-
-// Flatten a tool_result block's content (a string, or an array of text/other blocks) to plain text — the
-// edit diff / bash output the UI shows under the tool card. Non-text blocks are summarised by type.
-const resultText = (content: unknown): string => {
-    if (typeof content === "string") {
-        return content;
-    }
-    if (!Array.isArray(content)) {
-        return "";
-    }
-    return content
-        .map((block) => {
-            const b = block as { type?: string; text?: string };
-            return b.type === "text" && typeof b.text === "string" ? b.text : `[${b.type ?? "block"}]`;
-        })
-        .join("");
-};
 
 // Pull the TodoWrite/Task checklist off a tool_use input, or undefined if the shape doesn't match.
 const todoItems = (input: unknown): TodoItem[] | undefined => {
@@ -507,6 +540,16 @@ async function* streamSdk(
             }
             if (message.subtype !== "success") {
                 yield { kind: "error", message: `agent did not complete (${message.subtype})` };
+            }
+            // The account's headroom, re-read now that the turn has settled — the freshest this account's
+            // limits get without spending anything to find out. After the result frames on purpose: the
+            // control request is a round trip to the CLI, and nothing about it should sit between the user
+            // and the answer they were waiting for. An empty read (API key session, an older CLI, a failed
+            // request) yields no frame at all rather than an empty window list, which would read as
+            // "measured, and you have no limits".
+            const windows = await claudeUsageWindows(session);
+            if (windows.length > 0) {
+                yield { kind: "account_usage", windows };
             }
             // NOT the end of the stream: sdkTurns owns the turn boundary — a steered stream can carry a
             // follow-up turn after this result, whose frames keep flowing through the same cases above.

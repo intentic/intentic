@@ -79,17 +79,17 @@ export const filterEntries = (entries: readonly PickerEntry[], query: string, ra
 };
 
 // The custom-model escape hatch: any id the user types that no catalog row already offers, mirroring Claude
-// Code's own `/model <id>`, which accepts an arbitrary string and lists it as a "Custom model". Both of the
-// catalogs a provider publishes can lag a release — Claude Code's tier aliases lag one by design (`opus` kept
-// resolving to claude-opus-4-8 after claude-opus-5 shipped), and a REST /v1/models entry still has to reach the
-// account — so during that window typing the id is the ONLY way to drive a model that already serves turns.
-// Offered on an exact-id miss only, so it never competes with a real catalog hit, and it carries no metadata
-// because none is published: an unrecognized id is exactly as unknown to us as it looks.
+// Code's own `/model <id>`, which accepts an arbitrary string and lists it as a "Custom model". A provider's
+// catalog can lag a release — a REST /v1/models entry still has to reach the account — so during that window
+// typing the id is the ONLY way to drive a model that already serves turns. Offered on an exact-id miss only,
+// so it never competes with a real catalog hit, and it carries no metadata because none is published: an
+// unrecognized id is exactly as unknown to us as it looks.
 export const customEntryFor = (entries: readonly PickerEntry[], query: string, provider: AgentProvider): PickerEntry | undefined => {
     const value = query.trim();
     // A model id is a hyphenated, whitespace-free token (claude-opus-5, gpt-5.1, grok-4-fast). Requiring the
     // hyphen is what stops an ordinary search word — "fast", "opus" — from offering a junk row on every
-    // keystroke; the bare tier aliases that carry no hyphen are catalog rows already, so nothing is unreachable.
+    // keystroke, and it also keeps Claude's bare tier aliases untypeable, which is deliberate: every model this
+    // app can be pointed at names its own version (see CLAUDE_SEED_MODELS).
     if (!/^[\w.]+(-[\w.]+)+$/.test(value)) {
         return undefined;
     }
@@ -99,12 +99,11 @@ export const customEntryFor = (entries: readonly PickerEntry[], query: string, p
     return { key: `${provider}:${value}`, provider, value, label: value, description: `use as custom model id` };
 };
 
-/* Browse-mode truncation. Merging the REST catalog took Claude's group to fifteen rows — four tier aliases plus
- * every version /v1/models publishes — which pushes the codex/grok/gemini groups below the fold the moment the
- * picker opens. A collapsed group shows the HEAD of the provider's own order, which is already aliases-then-
- * newest-first, so "newest" needs no date field and no local ranking: the same no-curation rule the rest of this
- * module follows delivers it for free. Search never truncates (see the component) — a buried older version is
- * precisely what someone types to find. */
+/* Browse-mode truncation. Claude's group is every version /v1/models publishes for the account — a dozen-odd
+ * rows, which pushes the codex/grok/gemini groups below the fold the moment the picker opens. A collapsed group
+ * shows the HEAD of the provider's own order, which is already newest-first, so "newest" needs no date field and
+ * no local ranking: the same no-curation rule the rest of this module follows delivers it for free. Search never
+ * truncates (see the component) — a buried older version is precisely what someone types to find. */
 export const COLLAPSED_ROWS = 8;
 
 // The rows a collapsed group shows: the head, plus the selected model when truncation would otherwise drop it.

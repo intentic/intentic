@@ -642,18 +642,18 @@ describe(`Conversation`, () => {
         expect(conversation.status.value).not.toBe(`error`);
     });
 
-    it(`stores a rate_limit_info frame against its account, stamped so staleness is comparable`, async () => {
+    it(`stores an account_usage frame against its account, stamped so staleness is comparable`, async () => {
         usageStatusByAccount.value = {};
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 {
-                    kind: `rate_limit_info`,
+                    kind: `account_usage`,
                     account: `acct-1`,
-                    status: `allowed_warning`,
-                    utilization: 87,
-                    rateLimitType: `seven_day`,
-                    resetsAt: 1_800_000,
+                    windows: [
+                        { kind: `five_hour`, utilization: 12, resetsAt: 1_800_000 },
+                        { kind: `seven_day`, utilization: 87, resetsAt: 2_000_000 },
+                    ],
                 },
                 { kind: `done` },
             ]),
@@ -663,20 +663,36 @@ describe(`Conversation`, () => {
         // Keyed by the serving account (not the conversation) and carrying measuredAt, so the next /accounts
         // load can tell this live reading from the daemon's persisted one.
         const stored = usageStatusByAccount.value[`acct-1`]!;
-        expect(stored).toMatchObject({ status: `allowed_warning`, utilization: 87, rateLimitType: `seven_day`, resetsAt: 1_800_000 });
+        expect(stored.windows).toEqual([
+            { kind: `five_hour`, utilization: 12, resetsAt: 1_800_000 },
+            { kind: `seven_day`, utilization: 87, resetsAt: 2_000_000 },
+        ]);
         expect(stored.measuredAt).toBeGreaterThan(0);
         // The frame's envelope fields are not part of the snapshot.
         expect(stored).not.toHaveProperty(`kind`);
         expect(stored).not.toHaveProperty(`account`);
     });
 
-    it(`ignores a rate_limit_info frame the daemon could not attribute to an account`, async () => {
+    it(`ignores an account_usage frame the daemon could not attribute to an account`, async () => {
         usageStatusByAccount.value = {};
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `rate_limit_info`, status: `allowed`, utilization: 5 }, { kind: `done` }]));
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `account_usage`, windows: [{ kind: `seven_day`, utilization: 5 }] }, { kind: `done` }]));
         await conversation.send(`hello`, settings);
 
         // An env-token turn has no account to key the snapshot by — better unknown than misattributed.
+        expect(usageStatusByAccount.value).toEqual({});
+    });
+
+    it(`does not let a rate_limit_info frame stand in for the account's headroom`, async () => {
+        usageStatusByAccount.value = {};
+        const conversation = new Conversation(`c1`);
+        // The gate signal names ONE window — whichever the provider treated as binding for that request. Writing
+        // it into the headroom map is how a weekly pool at 1% came to speak for an account at 98% on another.
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `rate_limit_info`, account: `acct-1`, status: `allowed`, utilization: 1, rateLimitType: `seven_day` }, { kind: `done` }]),
+        );
+        await conversation.send(`hello`, settings);
+
         expect(usageStatusByAccount.value).toEqual({});
     });
 
@@ -939,5 +955,38 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.filter((message) => message.role === `user`)).toHaveLength(1);
         conversation.stop();
         await turn;
+    });
+
+    it(`redraws a restored transcript with its thinking and tool cards`, () => {
+        const conversation = new Conversation(`c1`);
+
+        conversation.restoreMessages([
+            { role: `user`, text: `fix it` },
+            { role: `assistant`, text: `Reading.`, thinking: `hmm`, tools: [{ id: `t1`, name: `Read`, category: `read`, status: `completed` }] },
+        ]);
+
+        expect(conversation.messages.value).toHaveLength(2);
+        expect(conversation.messages.value[1]).toMatchObject({
+            role: `assistant`,
+            text: `Reading.`,
+            thinking: `hmm`,
+            tools: [{ name: `Read`, status: `completed` }],
+        });
+        // Ids are minted locally and must stay unique, so a later streamed bubble can't collide with a restored one.
+        expect(new Set(conversation.messages.value.map((message) => message.id)).size).toBe(2);
+    });
+
+    // A restored tab already carries its own posture from the tab snapshot. loadTranscript's history-menu
+    // defaults would move an isolated agent's next turn onto the main tree — the worktree it has been working
+    // in for the whole conversation.
+    it(`leaves an isolated conversation's posture alone when its transcript is restored`, () => {
+        const conversation = new Conversation(`c1`);
+        conversation.isolated.value = true;
+        conversation.provider.value = `codex`;
+
+        conversation.restoreMessages([{ role: `user`, text: `hi` }]);
+
+        expect(conversation.isolated.value).toBe(true);
+        expect(conversation.provider.value).toBe(`codex`);
     });
 });

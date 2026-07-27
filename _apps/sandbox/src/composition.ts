@@ -9,6 +9,7 @@ import type {
     GitCommit,
     GitRemoteState,
     IntenticLine,
+    RestoredMessage,
     WorkspaceChildren,
     WorkspaceTree,
 } from "@intentic/sandbox-contract";
@@ -94,7 +95,6 @@ import {
     readWorkspaceSession,
     searchWorkspaceSessions,
     type SessionSummary,
-    type SessionTranscriptMessage,
     workspaceSessionExists,
 } from "./sessions/sessions.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
@@ -307,7 +307,7 @@ export interface Services {
     readonly iq: ResidentEngine;
     readonly sessions: {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
-        readonly read: (dir: string, id: string) => Promise<SessionTranscriptMessage[]>;
+        readonly read: (dir: string, id: string) => Promise<RestoredMessage[]>;
         readonly search: (dir: string, query: string) => Promise<SessionSummary[]>;
         readonly exists: (dir: string, id: string) => Promise<boolean>;
     };

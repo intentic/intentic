@@ -14,6 +14,19 @@ const fakeQuery = (...messages: unknown[]): QueryFn =>
         }
     };
 
+// The same fake, plus the control-request methods a real Query answers — a canned generator has none, which is
+// why they're optional on AgentQuery in the first place.
+const fakeQueryWith = (extras: Partial<AgentQuery>, ...messages: unknown[]): QueryFn =>
+    () =>
+        Object.assign(
+            (async function* () {
+                for (const message of messages) {
+                    yield message as SDKMessage;
+                }
+            })(),
+            extras,
+        );
+
 const collect = async (request: Parameters<typeof runAgent>[0], queryFn: QueryFn): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
     for await (const event of runAgent(request, queryFn)) {
@@ -365,6 +378,63 @@ test("a rate_limit_event surfaces the subscription usage snapshot (window, utili
 test("a rate_limit_event with only a status omits the optional usage fields", async () => {
     const events = await collect(request, fakeQuery({ type: "rate_limit_event", session_id: "s", rate_limit_info: { status: "allowed" } }));
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "rate_limit_info", status: "allowed" }, { kind: "done" }]);
+});
+
+const usageResponse = (rateLimits: unknown) => () => Promise.resolve({ rate_limits: rateLimits } as never);
+
+test("a settled turn re-reads EVERY plan-limit pool, not just whichever one was binding", async () => {
+    const events = await collect(
+        request,
+        fakeQueryWith(
+            {
+                usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: usageResponse({
+                    five_hour: { utilization: 12.4, resets_at: "2026-07-27T18:00:00.000Z" },
+                    seven_day: { utilization: 98, resets_at: "2026-07-29T09:00:00.000Z" },
+                    // A pool the plan has but the provider has no reading for — dropped, not shown at 0%.
+                    seven_day_opus: { utilization: null, resets_at: null },
+                    model_scoped: [{ display_name: "Fable", utilization: 100, resets_at: "2026-07-29T09:00:00.000Z" }],
+                }),
+            },
+            { type: "result", subtype: "success", result: "done" },
+        ),
+    );
+    // Both weekly pools ride out side by side, each named: this is the whole point — a 1% pool must never be
+    // able to stand in for a 98% one. ISO reset instants become epoch SECONDS, the unit the rest of the wire uses.
+    expect(events).toEqual([
+        {
+            kind: "account_usage",
+            windows: [
+                { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000 },
+                { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000 },
+                { kind: "model:Fable", label: "Fable", utilization: 100, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000 },
+            ],
+        },
+        { kind: "done" },
+    ]);
+});
+
+test("a session with no plan limits (API key, or an older CLI) yields no account_usage frame at all", async () => {
+    // An empty window list would read as "measured, and you have no limits" — the opposite of unknown.
+    const noLimits = await collect(
+        request,
+        fakeQueryWith({ usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: usageResponse(null) }, { type: "result", subtype: "success" }),
+    );
+    expect(noLimits).toEqual([{ kind: "done" }]);
+
+    const noMethod = await collect(request, fakeQuery({ type: "result", subtype: "success" }));
+    expect(noMethod).toEqual([{ kind: "done" }]);
+});
+
+test("a failed usage read cannot fail the turn it was measuring", async () => {
+    const events = await collect(
+        request,
+        fakeQueryWith(
+            { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => Promise.reject(new Error("control request timed out")) },
+            { type: "result", subtype: "success", total_cost_usd: 0.42 },
+        ),
+    );
+    // The answer the user was waiting for is already accounted for; the headroom read is strictly a bonus.
+    expect(events).toEqual([{ kind: "usage", costUsd: 0.42 }, { kind: "done" }]);
 });
 
 test("a message_start and result surface context-window fill (input + both cache buckets) over the model's window", async () => {

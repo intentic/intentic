@@ -100,7 +100,7 @@ describe(`account usage hydration`, () => {
                     Promise.resolve({
                         accounts: path.startsWith(`/claude`)
                             ? [
-                                  { id: `a1`, label: `Personal`, connectedAt: 0, usage: { status: `allowed`, utilization: 12, measuredAt: 500 } },
+                                  { id: `a1`, label: `Personal`, connectedAt: 0, usage: { windows: [{ kind: `seven_day`, utilization: 12 }], measuredAt: 500 } },
                                   { id: `a2`, label: `Work`, connectedAt: 1 },
                               ]
                             : [],
@@ -109,20 +109,20 @@ describe(`account usage hydration`, () => {
         );
         await loadAccountStatus();
 
-        expect(usageStatusByAccount.value[`a1`]).toMatchObject({ utilization: 12, measuredAt: 500 });
+        expect(usageStatusByAccount.value[`a1`]).toMatchObject({ windows: [{ kind: `seven_day`, utilization: 12 }], measuredAt: 500 });
         // An account the daemon has no reading for stays absent — unknown, not 0%.
         expect(usageStatusByAccount.value[`a2`]).toBeUndefined();
     });
 
     it(`keeps a live streamed reading when the persisted one is older`, async () => {
-        usageStatusByAccount.value = { a1: { status: `allowed`, utilization: 80, measuredAt: 9_000 } };
+        usageStatusByAccount.value = { a1: { windows: [{ kind: `seven_day`, utilization: 80 }], measuredAt: 9_000 } };
         sandboxRequestMock.mockImplementation((path: string) =>
             Promise.resolve({
                 ok: true,
                 json: () =>
                     Promise.resolve({
                         accounts: path.startsWith(`/claude`)
-                            ? [{ id: `a1`, label: `Personal`, connectedAt: 0, usage: { status: `allowed`, utilization: 30, measuredAt: 500 } }]
+                            ? [{ id: `a1`, label: `Personal`, connectedAt: 0, usage: { windows: [{ kind: `seven_day`, utilization: 30 }], measuredAt: 500 } }]
                             : [],
                     }),
             } as Response),
@@ -131,7 +131,7 @@ describe(`account usage hydration`, () => {
 
         // The daemon's write is fire-and-forget, so a refresh can land between a frame and its persist —
         // the newer reading must win, or the chip would flicker backwards mid-session.
-        expect(usageStatusByAccount.value[`a1`]).toMatchObject({ utilization: 80, measuredAt: 9_000 });
+        expect(usageStatusByAccount.value[`a1`]).toMatchObject({ windows: [{ kind: `seven_day`, utilization: 80 }], measuredAt: 9_000 });
     });
 });
 

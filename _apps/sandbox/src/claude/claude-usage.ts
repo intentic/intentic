@@ -1,30 +1,33 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { type AccountUsage, AccountUsageSchema } from "@intentic/sandbox-contract";
+import { type AccountUsage, AccountUsageSchema, type UsageWindow } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
 /* The latest subscription-usage snapshot per Claude account (<historyRoot>/claude-usage.json — on the /history
  * volume beside agents.json, so the agent can't rewrite what the account picker reports, and NOT in the
- * credential dir, whose every .json is read back as an account). The SDK reports rate_limit_event on the turn
- * stream at no token cost; until now the daemon forwarded it and forgot it, so the numbers lived only in
- * browser memory and died on reload. Persisting them is what lets the picker answer "which account has room
- * left" before a turn is spent finding out. */
+ * credential dir, whose every .json is read back as an account). Every plan-limit window, read from the CLI's
+ * usage endpoint at turn end at no token cost (see claudeUsageWindows); until now the daemon forwarded the
+ * stream's single-window rate_limit_event and forgot it, so the numbers lived only in browser memory and died
+ * on reload. Persisting them is what lets the picker answer "which account has room left" before a turn is
+ * spent finding out. */
 
 const StoredUsageSchema = z.record(z.string(), AccountUsageSchema);
 
 export interface ClaudeUsageStore {
     // Every account's snapshot, keyed by account id — windows that have already reset are omitted, so a caller
-    // never sees a utilization the provider has since zeroed.
+    // never sees a utilization the provider has since zeroed, and an account left with no live window at all
+    // is absent rather than reported as measured-and-empty.
     readonly read: () => Promise<Record<string, AccountUsage>>;
     readonly record: (accountId: string, usage: AccountUsage) => Promise<void>;
     readonly clear: (accountId: string) => Promise<void>;
 }
 
-// A snapshot describes its window until that window resets. Utilization only climbs within a window, so an
-// un-reset snapshot is a valid floor however old it is; past `resetsAt` it describes a window that no longer
-// exists. A snapshot the SDK sent without a reset instant has no expiry basis — keep it and let `measuredAt`
-// carry the caveat, rather than silently discarding the only reading we have.
-const live = (usage: AccountUsage, now: number): boolean => usage.resetsAt === undefined || usage.resetsAt * 1000 > now;
+// A window describes its pool until that pool resets. Utilization only climbs within a window, so an un-reset
+// reading is a valid floor however old it is; past `resetsAt` it describes a window that no longer exists. A
+// window the provider sent without a reset instant has no expiry basis — keep it and let `measuredAt` carry
+// the caveat, rather than silently discarding the only reading we have.
+const liveWindows = (usage: AccountUsage, now: number): UsageWindow[] =>
+    usage.windows.filter((window) => window.resetsAt === undefined || window.resetsAt * 1000 > now);
 
 export const fileClaudeUsageStore = (path: string): ClaudeUsageStore => {
     // One in-memory record is the authority (the daemon is the only writer); the file is its durable echo.
@@ -54,7 +57,11 @@ export const fileClaudeUsageStore = (path: string): ClaudeUsageStore => {
     return {
         read: async () => {
             const now = Date.now();
-            return Object.fromEntries(Object.entries(await load()).filter(([, usage]) => live(usage, now)));
+            return Object.fromEntries(
+                Object.entries(await load())
+                    .map(([id, usage]): [string, AccountUsage] => [id, { ...usage, windows: liveWindows(usage, now) }])
+                    .filter(([, usage]) => usage.windows.length > 0),
+            );
         },
         record: (accountId, usage) =>
             persist((current) => {

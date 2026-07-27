@@ -262,10 +262,11 @@ export const SteerSchema = z.object({ conversationId: z.string().min(1), text: z
 export const StopTurnSchema = z.object({ conversationId: z.string().min(1) });
 
 // ---- claude subscription usage ----
-// Which usage window is active for a Claude account, how much of it is spent, and when it resets. Two readers,
-// so it lives here rather than beside the stream frames: the SDK's rate_limit_event rides it out on the agent
-// stream (see the `rate_limit_info` frame in events.ts), and the daemon persists the latest snapshot per
-// account so `/claude/accounts` can answer "how much is left on each" without spending a turn to find out.
+// The GATE signal: whether the provider is letting turns through right now, and — when it is refusing — which
+// window is binding and when it lifts. This is the SDK's rate_limit_event, mapped one-to-one, and it is only
+// ever about the CURRENT moment. It is deliberately NOT the thing the headroom displays read: the event names a
+// single window (whichever the CLI considered binding), which is how "weekly 1%" ended up standing in for an
+// account that was really at 98% on another weekly pool.
 export const RateLimitInfoSchema = z.object({
     status: z.enum(["allowed", "allowed_warning", "rejected"]),
     resetsAt: z.number().optional(), // epoch seconds
@@ -274,11 +275,32 @@ export const RateLimitInfoSchema = z.object({
 });
 export type RateLimitInfo = z.infer<typeof RateLimitInfoSchema>;
 
-// The persisted view: a snapshot plus when it was taken. Within one window utilization only climbs, so a
-// snapshot stays a valid FLOOR until `resetsAt` passes — after that the window has rolled over and the store
-// drops it rather than reporting a stale number. `measuredAt` is epoch MS (matching connectedAt), while
-// `resetsAt` stays epoch SECONDS (matching the SDK frame) — they are deliberately different units.
-export const AccountUsageSchema = RateLimitInfoSchema.extend({ measuredAt: z.number() });
+// One plan-limit pool. `kind` is the provider's own key ('five_hour' | 'seven_day' | 'seven_day_opus' |
+// 'seven_day_sonnet' | 'model:Fable' | …) rather than an enum we'd have to keep in step with the provider: an
+// unrecognised pool is shown under its raw key, which is far better than being silently folded into a
+// neighbour. `label` is the provider's OWN display name where it supplies one (the per-model buckets do) — it
+// wins over anything we'd infer, because the model names in a plan's limits are the provider's to rename.
+// `resetsAt` is epoch SECONDS (matching the SDK's frame).
+export const UsageWindowSchema = z.object({
+    kind: z.string(),
+    label: z.string().optional(),
+    utilization: z.number(), // 0-100
+    resetsAt: z.number().optional(),
+});
+export type UsageWindow = z.infer<typeof UsageWindowSchema>;
+
+// An account's headroom: EVERY window the provider reports, read together, plus when the reading was taken.
+// All of them, not the binding one, because "which pool is binding" changes between turns and a reader
+// comparing accounts needs the same pools on every row. Sourced from the CLI's own usage endpoint at turn end
+// (see claudeUsageWindows) — a control request, so it costs no tokens.
+//
+// Within one window utilization only climbs, so an un-reset window stays a valid FLOOR however old it is; past
+// its `resetsAt` it describes a pool that no longer exists and the store drops it. `measuredAt` is epoch MS
+// (matching connectedAt) — deliberately a different unit from the windows' seconds.
+export const AccountUsageSchema = z.object({
+    windows: z.array(UsageWindowSchema),
+    measuredAt: z.number(),
+});
 export type AccountUsage = z.infer<typeof AccountUsageSchema>;
 
 // ---- provider oauth ----
@@ -376,7 +398,6 @@ export const ModelsSchema = z.object({ models: z.array(ModelSchema), default: z.
 export const SessionIdParamSchema = z.object({ id: z.string() });
 export const SessionSummarySchema = z.object({ id: z.string(), title: z.string(), updatedAt: z.number() });
 export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySchema) });
-export const SessionTranscriptSchema = z.object({ messages: z.array(SessionTranscriptMessageSchema) });
 
 // ---- settings: per-sandbox agent settings (.intentic/settings.json) ----
 // Small user-owned config the /settings routes edit and streamAgent reads — all opt-in booleans the owner
