@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { type IconName, useDevice } from "@intentic-app/ui";
 import type { Disposable } from "@intentic/extension-api";
+import Button from "primevue/button";
 import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
+import { inTabSurface } from "../composables/commands/tabSurface";
 import { commandShortcut, registerCommand, type RegisteredCommand } from "../composables/commands/useCommands";
 import { setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
 import { useTerminalsQuery } from "../composables/terminal/terminalsQuery";
@@ -19,8 +21,9 @@ import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
  * Tabs arrange into split GROUPS (useTerminal.groups): one pill per group, one segment per session; the
  * active group's sessions render side by side in the pane. The strip is a VSCode-style list: Shift/Ctrl+click
  * multi-selects pills, right-click opens the action menu (split / join / unsplit / kill, and per-terminal
- * rename / color / icon overrides from terminalMeta). Right-click on the bar's empty space pops the whole
- * panel out into a floating window (Document PiP, like the chat strip); the shell owns the teleport.
+ * rename / color / icon overrides from terminalMeta). Right-click on the bar's empty space opens the same menu
+ * on its strip-wide rows alone — kill all, sweep the finished, and pop the panel out into a floating window
+ * (Document PiP, like the chat strip); the shell owns the teleport.
  * Every tab gets the hover-×; a finished tab (dimmed, running:false) also sweeps out in bulk via the toolbar's
  * eraser / the menu's "Clear N finished terminals". Restart is shell-only (a dev-server tab is re-run via
  * Start, or ↑ at its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves — they live in
@@ -172,6 +175,41 @@ const clearFinished = (): void => {
     sweepPreview.value = false;
 };
 
+// --- Killing in bulk ---------------------------------------------------------------------------
+// `killable` is what "all terminals" means: every session EXCEPT a background process's log view, whose
+// lifecycle belongs to the processes popover (the sweep above draws the same line, and for the same reason —
+// killing one there would be a no-op that lied about the count).
+//
+// A bulk kill ENDS whatever those sessions are running, so it stops at a confirm listing the live ones. That is
+// the rule the other two strips already follow — the chat's "stop N running agents?", the workspace's
+// unsaved-edits dialog — and this panel's own sweep is the same rule seen from the other side: it never asks,
+// because nothing it takes is running. A single × (and the menu's "Kill terminal") stays silent too: that pill
+// is under the pointer, the one being killed.
+const killable = computed(() => order.value.filter((tab) => tab.kind !== `process`).map((tab) => tab.name));
+const pendingKill = ref<string[]>();
+const runningIn = (names: string[]): TerminalTab[] => order.value.filter((tab) => names.includes(tab.name) && tab.running);
+const pendingKillRunning = computed(() => (pendingKill.value === undefined ? [] : runningIn(pendingKill.value)));
+const requestKill = (names: string[]): void => {
+    if (killTabs === undefined || names.length === 0) {
+        return;
+    }
+    // One session is the single-kill case however it was reached — a lone selected pill, or "kill all" with one
+    // terminal left. It is on screen and named in the gesture, so it goes without a dialog.
+    if (names.length === 1 || runningIn(names).length === 0) {
+        killTabs(names);
+        selectedKeys.value = [];
+        return;
+    }
+    pendingKill.value = names;
+};
+const confirmKill = (): void => {
+    if (pendingKill.value !== undefined) {
+        killTabs?.(pendingKill.value);
+        selectedKeys.value = [];
+    }
+    pendingKill.value = undefined;
+};
+
 // --- Rename (inline, in the strip) -------------------------------------------------------------
 // The pill's label edits IN PLACE — the same gesture as a chat tab and a workspace-tree file, and for the same
 // reason: renaming is a one-field edit of something already on screen, so a modal that hides the strip it
@@ -244,18 +282,32 @@ const openTabMenu = (event: MouseEvent, groupIndex: number, name: string): void 
     menu.value?.show(event);
 };
 
-// The sweep row, appended to whichever branch of the menu is showing — it's about the strip as a whole, so it
-// reads the same next to the single-tab actions and the multi-selection's mass ones. Absent when nothing is
-// finished, so the menu never offers a no-op.
-const clearFinishedItems = (): MenuItem[] =>
-    killTabs === undefined || dead.value.size === 0
-        ? []
-        : [{ label: clearFinishedLabel.value, shortcut: commandShortcut(`terminal.clearFinished`), command: clearFinished }];
+// The rows that name no particular pill: the strip-wide kills, the sweep, and the pop-out toggle. They tail
+// whichever branch of the pill menu is showing AND they are the whole of the menu a right-click on the bar's
+// empty space opens — the same pair of entry points the chat and workspace strips give their Close All. Each
+// row is absent when it would be a no-op, so the menu never offers one.
+const stripItems = computed<MenuItem[]>(() => {
+    const items: MenuItem[] = [];
+    if (killTabs !== undefined && killable.value.length > 0) {
+        items.push({ label: `Kill all terminals`, shortcut: commandShortcut(`terminal.killAll`), command: () => requestKill(killable.value) });
+    }
+    if (killTabs !== undefined && dead.value.size > 0) {
+        items.push({ label: clearFinishedLabel.value, shortcut: commandShortcut(`terminal.clearFinished`), command: clearFinished });
+    }
+    if (popout.supported) {
+        items.push(...(items.length > 0 ? [{ separator: true }] : []), {
+            label: popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`,
+            shortcut: commandShortcut(`terminal.togglePopout`),
+            command: popout.toggle,
+        });
+    }
+    return items;
+});
 
 const menuItems = computed<MenuItem[]>(() => {
     const target = menuTarget.value;
     if (target === undefined) {
-        return [];
+        return stripItems.value;
     }
     const { name } = target;
     const group = groups.value[target.groupIndex] ?? [name];
@@ -276,18 +328,10 @@ const menuItems = computed<MenuItem[]>(() => {
         if (killTabs !== undefined) {
             items.push(
                 { separator: true },
-                {
-                    label: `Kill ${names.length} terminals`,
-                    shortcut: commandShortcut(`terminal.kill`),
-                    command: () => {
-                        killTabs(names);
-                        selectedKeys.value = [];
-                    },
-                },
-                ...clearFinishedItems(),
+                { label: `Kill ${names.length} terminals`, shortcut: commandShortcut(`terminal.kill`), command: () => requestKill(names) },
             );
         }
-        return items;
+        return [...items, ...stripItems.value];
     }
     const items: MenuItem[] = [];
     if (splitTab !== undefined) {
@@ -312,20 +356,9 @@ const menuItems = computed<MenuItem[]>(() => {
                 shortcut: commandShortcut(`terminal.kill`),
                 command: () => closeTab(name),
             },
-            ...clearFinishedItems(),
         );
     }
-    if (popout.supported) {
-        items.push(
-            { separator: true },
-            {
-                label: popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`,
-                shortcut: commandShortcut(`terminal.togglePopout`),
-                command: popout.toggle,
-            },
-        );
-    }
-    return items;
+    return [...items, ...stripItems.value];
 });
 
 // --- Panel geometry ----------------------------------------------------------------------------
@@ -377,11 +410,34 @@ const setCollapsed = (value: boolean): void => {
     write(COLLAPSED_KEY, value ? `1` : `0`);
 };
 
+// Alt+PageDown/PageUp walk the strip in READING order — every session, splits included, not just one pill at a
+// time — wrapping at the ends, and expanding a collapsed panel first (switching to a tab nobody can see is the
+// same trap rename dodges). The chord is the shell-wide one; see the command entries below.
+const cycleTab = (delta: number): void => {
+    const names = groups.value.flat();
+    if (names.length < 2) {
+        return;
+    }
+    const index = names.findIndex((name) => name === activeName.value);
+    const next = names[(index + delta + names.length) % names.length];
+    if (next !== undefined) {
+        setCollapsed(false);
+        switchTab(next);
+    }
+};
+
 // --- Palette commands + shortcuts --------------------------------------------------------------
 // Every strip action is also a registered command, so it lives in `>` (Ctrl+P) and on a shortcut. Registered
 // while THIS panel is mounted (the desktop shell and the mobile route are exclusive, so the ids can't
 // double-register) and disposed on unmount. Join and kill are selection-aware; the rest act on the focused
 // session.
+//
+// The commands split in two. The TAB family — kill, kill all, next/previous, rename — takes the shell-wide
+// chords the workspace's file tabs and the chat's strip also register (Ctrl+Shift+X, Ctrl+Shift+Backspace,
+// Alt+PageUp/PageDown, F2), each gated to a keystroke from inside THIS panel so focus decides which of the three
+// strips a press reaches (tabSurface.ts). One chord per verb beats three chords memorized, and it is what F2
+// has always done here. The panel's OWN verbs — split, unsplit, join — have no counterpart on the other strips,
+// so they keep private chords and stay ungated (splitting the focused terminal from the editor is useful).
 //
 // The chorded defaults are all Ctrl+Shift+<key> — the ONE modifier family that's safe here, for two independent
 // reasons: (1) the shell owns every Ctrl+<letter> (C/D/R/U/K/W/A/E… — SIGINT, EOF, reverse-search, readline
@@ -390,13 +446,12 @@ const setCollapsed = (value: boolean): void => {
 // Windows/Linux (types € @ … and international glyphs) and an ESC-prefixed control code in a terminal — the
 // trap the old Ctrl+Alt+{R,J,U} defaults fell into. Letters steer clear of the browser chords the page can't
 // intercept (Ctrl+Shift+{I,J,C}=DevTools, N=incognito, T=reopen tab, W=close window, C/V=terminal copy/paste),
-// and lean mnemonic: K=kill, U=unsplit, G=group(join). Split keeps Ctrl+Shift+5 and New keeps
+// and lean mnemonic: U=unsplit, G=group(join). Split keeps Ctrl+Shift+5 and New keeps
 // Ctrl+Shift+` — the VSCode/tmux muscle memory — matched by physical key (matchesChord's CODE_TO_KEY path), so
-// the Shift glyph ("%","~"), a dead-key layout, or a non-US layout can't break them. Rename is the exception:
-// a bare F2, panel-scoped by a `when` gate, because rename is F2 app-wide (see its entry below). Everything is rebindable
-// in Settings → Keybindings; the two cosmetic pickers (color, icon) ship UNBOUND — a global chord for a rare
-// "open a swatch grid" earns its keys the least, so they stay palette- and menu-only, exactly as VSCode leaves
-// them (double-click a tab renames without one).
+// the Shift glyph ("%","~"), a dead-key layout, or a non-US layout can't break them. Everything is rebindable
+// in Settings → Keybindings — per surface, so remapping Kill Terminal leaves Close Tab alone; the two cosmetic
+// pickers (color, icon) ship UNBOUND — a global chord for a rare "open a swatch grid" earns its keys the least,
+// so they stay palette- and menu-only, exactly as VSCode leaves them (double-click a tab renames without one).
 // "New Terminal" is NOT here: it registers globally (useShellCommands) so it works with the panel closed,
 // routed through useTerminalPanel's spawn hook.
 let commandDisposables: readonly Disposable[] = [];
@@ -412,7 +467,7 @@ const registerPanelCommands = (): void => {
             // xterm's key hook forward the press to the dispatcher instead of the PTY: a terminal app that wants
             // its own F2 needs the binding remapped in Settings → Keybindings.
             keybinding: `F2`,
-            when: (event): boolean => event.target instanceof Node && root.value?.contains(event.target) === true,
+            when: inTabSurface(`terminal`),
             handler: (): void => {
                 if (renamingName.value !== undefined) {
                     return; // already editing (F2 lands in the field) — restarting would wipe the draft
@@ -468,6 +523,20 @@ const registerPanelCommands = (): void => {
                 }
             },
         },
+        {
+            command: `terminal.nextTab`,
+            title: `Next Terminal`,
+            keybinding: `Alt+PageDown`,
+            when: inTabSurface(`terminal`),
+            handler: () => cycleTab(1),
+        },
+        {
+            command: `terminal.previousTab`,
+            title: `Previous Terminal`,
+            keybinding: `Alt+PageUp`,
+            when: inTabSurface(`terminal`),
+            handler: () => cycleTab(-1),
+        },
     ];
     if (splitTab !== undefined) {
         entries.push({
@@ -487,11 +556,13 @@ const registerPanelCommands = (): void => {
             command: `terminal.kill`,
             title: `Kill Terminal`,
             icon: `trash`,
-            keybinding: `Ctrl+Shift+K`,
+            keybinding: `Ctrl+Shift+X`,
+            when: inTabSurface(`terminal`),
             handler: (): void => {
+                // A selection is what the chord aims at when there is one (the menu's mass row does the same);
+                // requestKill is what turns two or more live sessions into a confirm.
                 if (killTabs !== undefined && selectedNames.value.length > 0) {
-                    killTabs(selectedNames.value);
-                    selectedKeys.value = [];
+                    requestKill(selectedNames.value);
                     return;
                 }
                 if (activeName.value !== undefined) {
@@ -501,6 +572,14 @@ const registerPanelCommands = (): void => {
         });
     }
     if (killTabs !== undefined) {
+        entries.push({
+            command: `terminal.killAll`,
+            title: `Kill All Terminals`,
+            icon: `trash`,
+            keybinding: `Ctrl+Shift+Backspace`,
+            when: inTabSurface(`terminal`),
+            handler: () => requestKill(killable.value),
+        });
         // Unbound by default, like the cosmetic pickers: a strip-hygiene sweep is too rare to earn a global
         // chord, and its toolbar button is one click away. Rebindable in Settings → Keybindings.
         entries.push({
@@ -513,14 +592,20 @@ const registerPanelCommands = (): void => {
     commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
 };
 
-// Right-click on the bar's EMPTY space (not a pill, not a button) pops the panel out / docks it — the same
-// gesture the chat strip uses.
+// Right-click on the bar's EMPTY space (not a pill, not a button) OPENS THE MENU on its strip-wide rows — kill
+// all, sweep the finished, pop the panel out. It used to pop out on the spot, which turned a right-click that
+// merely missed a pill into a whole floating window; the pop-out is a row in the menu now, exactly as on the
+// chat strip. Nothing strip-wide to offer (no kills, no sweep, no pip support) leaves the browser's own menu.
 const onBarContextMenu = (event: MouseEvent): void => {
-    if (!popout.supported || (event.target instanceof Element && event.target.closest(`button, .tterm`) !== null)) {
+    if (event.target instanceof Element && event.target.closest(`button, .tterm`) !== null) {
+        return;
+    }
+    if (stripItems.value.length === 0) {
         return;
     }
     event.preventDefault();
-    popout.toggle();
+    menuTarget.value = undefined;
+    menu.value?.show(event);
 };
 
 // --- Touch extra-keys row --------------------------------------------------------------------
@@ -874,6 +959,34 @@ const endResize = (event: PointerEvent): void => {
                 </a>
             </template>
         </ContextMenu>
+
+        <!-- The confirm a bulk kill gets when it would end sessions that are still running — this panel's
+             counterpart of the chat's "stop N running agents?" and the workspace's unsaved-edits dialog. -->
+        <Dialog
+            :visible="pendingKill !== undefined"
+            :modal="true"
+            :draggable="false"
+            :dismissable-mask="true"
+            :append-to="popout.overlayTarget.value"
+            :style="{ width: '26rem' }"
+            :header="pendingKillRunning.length === 1 ? 'Kill the running terminal?' : `Kill ${pendingKillRunning.length} running terminals?`"
+            @update:visible="pendingKill = undefined"
+        >
+            <ul class="flex flex-col gap-1">
+                <li v-for="tab in pendingKillRunning.slice(0, 5)" :key="tab.name" class="flex min-w-0 items-center gap-2 text-sm">
+                    <Icon :name="segmentIcon(tab.name)" class="shrink-0 text-2xs text-muted" />
+                    <span class="truncate text-content">{{ segmentLabel(tab.name) }}</span>
+                </li>
+                <li v-if="pendingKillRunning.length > 5" class="text-xs text-subtle">…and {{ pendingKillRunning.length - 5 }} more</li>
+            </ul>
+            <p class="mt-3 text-xs text-muted">Killing these ends whatever they are running. Scrollback goes with them.</p>
+            <template #footer>
+                <Button label="Cancel" severity="secondary" :text="true" @click="pendingKill = undefined" />
+                <Button label="Kill anyway" severity="danger" autofocus @click="confirmKill">
+                    <template #icon><Icon name="trash" /></template>
+                </Button>
+            </template>
+        </Dialog>
 
         <!-- One dialog for the two pickers, color and icon: both apply on click, with a leading "default"
              swatch that clears the override. (Rename is inline in the strip, not here.) -->

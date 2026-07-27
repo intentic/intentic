@@ -133,10 +133,10 @@ it(`teaches the shortcut a close command is bound to, and disables the rows with
     await openMenuOn(1);
     expect(row(`Close Others`).className).not.toContain(`p-disabled`);
     expect(row(`Close to the Right`).className).toContain(`p-disabled`);
-    // Rename ships on F2 and the row says so; the closes ship unbound, so their hint slot stays empty until the
-    // user binds one in Settings → Keybindings.
+    // Every row teaches its chord: rename on the app-wide F2, the closes on the shell-wide tab family the
+    // workspace and terminal strips register too (tabSurface.ts) — the chat's were unbound until it joined it.
     expect(row(`Rename`).querySelector(`kbd`)?.textContent).toBe(`F2`);
-    expect(row(`Close All`).querySelector(`kbd`)).toBeNull();
+    expect(row(`Close All`).querySelector(`kbd`)?.textContent).toBe(`Ctrl+Shift+Backspace`);
 
     await clickRow(`Close Others`);
     await openMenuOn(0);
