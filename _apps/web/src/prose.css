@@ -1,0 +1,264 @@
+/* Rendered markdown — the ONE stylesheet for renderMarkdown's output.
+ *
+ * Both surfaces that show that output style it from here: the chat transcript (assistant turns, plan cards)
+ * and the workspace file preview. They render identical markup from identical code, so anything that differs
+ * between them is drift, not design — the two hand-maintained copies this replaces had diverged into a 12px
+ * scale on one side and a 14px scale on the other, and both had lost their list markers the same way.
+ *
+ * What a surface IS allowed to differ on is the tokens below. Set them on the element that carries `md-prose`
+ * (see .chat-markdown in chat/chat.css) and every rule here re-resolves; everything is expressed in `em` or a
+ * token so one number moves a whole surface's rhythm. */
+.md-prose {
+    /* Prose size. 0.875rem is the floor for something read in paragraphs rather than glanced at. */
+    --prose-size: 0.875rem;
+    /* Mono, inline and fenced. A step under the sans around it — mono reads optically larger at the same
+       nominal size, so matching them makes code look bigger than the sentence carrying it. */
+    --prose-code: 0.8125rem;
+    --prose-lead: 1.7;
+    /* Block rhythm. `em` so it tracks --prose-size instead of pinning a second, absolute scale beside it. */
+    --prose-gap: 0.85em;
+    /* Line length. `none` by default — a surface that already caps its container (the file preview's
+       max-w-3xl) needs no second cap. Surfaces that stretch to their column set a real measure; past roughly
+       90 characters the eye loses the start of the next line. Only text blocks take it: code, tables and
+       images stay full width, where the extra room is what makes them readable. */
+    --prose-measure: none;
+
+    font-size: var(--prose-size);
+    line-height: var(--prose-lead);
+    /* Full content color, not a faded one. Long technical prose is the thing being READ on these surfaces —
+       the surrounding chrome is what recedes, and it does that by being smaller and muted, not by dimming
+       the answer. */
+    color: var(--color-content);
+}
+
+/* A block owns the space above it; the container owns its own edges. */
+.md-prose > :first-child {
+    margin-top: 0;
+}
+.md-prose > :last-child {
+    margin-bottom: 0;
+}
+
+.md-prose p,
+.md-prose ul,
+.md-prose ol,
+.md-prose blockquote,
+.md-prose h1,
+.md-prose h2,
+.md-prose h3,
+.md-prose h4 {
+    max-width: var(--prose-measure);
+}
+
+.md-prose p {
+    margin: var(--prose-gap) 0;
+}
+
+/* Headings. Sized in `em` off the prose size, and spaced with a big top margin and a small bottom one so a
+   heading reads as attached to the section it opens rather than floating between two. */
+.md-prose h1,
+.md-prose h2,
+.md-prose h3,
+.md-prose h4 {
+    margin: 1.8em 0 0.6em;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--color-content);
+    /* A long identifier in a heading must wrap rather than widen the column. */
+    overflow-wrap: break-word;
+}
+.md-prose h1 {
+    font-size: 1.55em;
+    letter-spacing: -0.01em;
+}
+/* The hairline is what makes a long answer scannable: h2 is where an agent starts a new section, and at these
+   sizes weight alone does not separate one from a bold paragraph lead-in. */
+.md-prose h2 {
+    font-size: 1.3em;
+    letter-spacing: -0.006em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--color-line);
+}
+.md-prose h3 {
+    font-size: 1.2em;
+}
+.md-prose h4 {
+    font-size: 1em;
+}
+
+/* Lists. Tailwind's preflight sets `list-style: none` on ul/ol, and neither copy of this stylesheet ever put
+   it back — so every numbered list an agent wrote arrived as unnumbered indented paragraphs, which is exactly
+   the structure a "four defects" answer depends on. The markers are restored here, muted so they frame the
+   text without competing with it. */
+.md-prose ul {
+    list-style: disc outside;
+}
+.md-prose ol {
+    list-style: decimal outside;
+}
+.md-prose ul ul {
+    list-style: circle outside;
+}
+.md-prose ul ul ul {
+    list-style: square outside;
+}
+.md-prose ul,
+.md-prose ol {
+    margin: var(--prose-gap) 0;
+    padding-left: 1.6em;
+}
+.md-prose li {
+    margin: 0.35em 0;
+}
+.md-prose li::marker {
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+}
+/* A nested list belongs to the item above it, so it sits closer than two sibling blocks would. */
+.md-prose li > ul,
+.md-prose li > ol {
+    margin: 0.35em 0;
+}
+/* A loose list gives every item a <p>; those paragraphs are the item, so they must not also take the
+   block gap or the list doubles its own spacing. */
+.md-prose li > p {
+    margin: 0.35em 0;
+}
+
+/* 600, not a heavier step: index.html loads Inter/Space Grotesk/JetBrains Mono at 400·500·600·700, so
+   anything between rounds up to 700 and bold prose would outweigh the headings above it. */
+.md-prose strong {
+    font-weight: 600;
+    color: var(--color-content);
+}
+
+.md-prose blockquote {
+    margin: var(--prose-gap) 0;
+    padding: 0.15em 0 0.15em 1em;
+    border-left: 2px solid var(--color-line-strong);
+    color: var(--color-muted);
+}
+
+.md-prose hr {
+    margin: 1.8em 0;
+    border: 0;
+    border-top: 1px solid var(--color-line);
+}
+
+.md-prose img {
+    max-width: 100%;
+    border-radius: var(--radius-md);
+}
+
+/* Inline code. The chip is deliberately quiet: an answer like the ones agents write is half identifiers, and
+   at a heavier tint the page turns into a field of boxes with sentences between them. Tint low, padding tight
+   enough that a trailing comma still reads as punctuation and not as part of the token. */
+.md-prose code {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: var(--prose-code);
+    background: color-mix(in srgb, var(--color-content) 7%, transparent);
+    padding: 0.12em 0.3em;
+    border-radius: var(--radius-xs);
+    /* A long path or model id breaks instead of pushing the column wider than its measure. */
+    overflow-wrap: break-word;
+}
+
+/* Fenced blocks are substituted as raw markup by markdownCode (they live inside v-html, so they can hold no
+   component) and wear `ui-code`, so the design system's Shiki chrome already governs the box. Only the metrics
+   are ours: code.css sizes <Code> for compact UI surfaces, which is a tier below what reading a snippet inside
+   an answer wants, and its 1.33 leading is tight for anything longer than a couple of lines. */
+.md-prose pre {
+    margin: var(--prose-gap) 0;
+    overflow-x: auto;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-canvas);
+    padding: 0.85em;
+}
+.md-prose pre code {
+    background: transparent;
+    padding: 0;
+}
+.md-prose .ui-code .shiki {
+    font-size: var(--prose-code);
+    line-height: 1.65;
+    padding: 0.7em 0.85em;
+}
+
+.md-prose a {
+    color: var(--color-link);
+    text-decoration: none;
+}
+.md-prose a:hover {
+    text-decoration: underline;
+}
+/* A file the prose named, linkified by markdownFileLinks — clicking opens it in the workspace. The dotted rule
+   is the affordance: a path reads as "opens here" before it is hovered, and stays distinguishable from an
+   outbound link, which is undecorated until hover. Written one level more specific than the rule above so it
+   wins the text-decoration regardless of stylesheet order. */
+.md-prose a.md-file-link {
+    text-decoration: underline dotted color-mix(in srgb, var(--color-link) 45%, transparent);
+    text-underline-offset: 0.2em;
+}
+.md-prose a.md-file-link:hover {
+    text-decoration: underline solid var(--color-link);
+}
+
+/* Tables. Full width of the block, never the measure — a comparison table is read column-wise, so squeezing
+   it into a reading column is the one place narrow hurts. */
+.md-prose table {
+    width: 100%;
+    margin: var(--prose-gap) 0;
+    border-collapse: collapse;
+    font-size: var(--prose-size);
+}
+.md-prose th,
+.md-prose td {
+    padding: 0.5em 0.7em;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--color-line);
+}
+.md-prose th {
+    font-weight: 600;
+    color: var(--color-content);
+    border-bottom-color: var(--color-line-strong);
+}
+.md-prose tr:last-child td {
+    border-bottom: 0;
+}
+
+/* The header row markdownCode puts above a fenced block: its language and the copy button. Chrome for the
+   block, so it sits at the smallest tier on the surface and never competes with the code itself. */
+.md-code {
+    /* Fallback carried because this class sits on the block itself, not under a .md-prose selector — a
+       future surface could render one outside a prose container. */
+    margin: var(--prose-gap, 0.85em) 0;
+}
+.md-code-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 0.3rem;
+}
+.md-code-lang {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--color-muted);
+}
+.md-code-copy {
+    cursor: pointer;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    padding: 0.1rem 0.45rem;
+    font-size: 0.6875rem;
+    color: var(--color-muted);
+    transition:
+        color 0.15s,
+        border-color 0.15s;
+}
+.md-code-copy:hover {
+    color: var(--color-content);
+    border-color: var(--color-line-strong);
+}

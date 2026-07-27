@@ -1,0 +1,384 @@
+/* Long transcripts: let the browser skip layout and paint for turns that are scrolled out of view. Every
+   message here has been painted at least once — it streamed in front of the user — so `auto` remembers each
+   one's real height and scrolling back through them needs no size estimator. The intrinsic size only has to
+   carry a transcript restored straight to its bottom, where the rows above have never painted; the browser's
+   scroll anchoring absorbs the correction as they realize. */
+.chat-message {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 3rem;
+}
+/* The prompt stays on screen for as long as its answer does: it pins to the top of the transcript while the
+   turn scrolls beneath it, and the next turn's prompt pushes it out. Claude Code's transcript, and for the same
+   reason — a long turn otherwise buries the question it is answering, and re-finding it means scrolling away
+   from the output you were reading.
+   The pin is bounded by the per-turn <section> the panel groups messages into; without that grouping every
+   prompt would stick to the same top edge and stack.
+   Opaque --color-card (the scroller's own background) because a pinned row floats over the messages it holds
+   above: invisible in place, solid once it lifts. content-visibility is dropped for the same reason — a pinned
+   row is on screen for the whole turn, so it must never be skipped. */
+.chat-prompt {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding-top: 0.75rem;
+    background: var(--color-card);
+    content-visibility: visible;
+}
+.chat-surface {
+    background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-primary-500) 22%, var(--color-line));
+}
+.chat-surface-assistant {
+    background: color-mix(in srgb, var(--color-overlay) 35%, transparent);
+    border: 1px solid var(--color-line);
+}
+/* ── Chat type scale ─────────────────────────────────────────────────────────────────────────────
+   Four tiers, and nothing else in the chat column:
+
+     meta   0.75rem     tool cards, timestamps, badges, hints, option descriptions
+     body   0.8125rem   controls and short strings: bubbles, composer, menu rows, todos
+     title  0.9375rem   card header lines (plan / question / permission)
+     prose  0.875rem    rendered markdown — see prose.css
+
+   Prose is its own tier because it is the only thing here read in paragraphs rather than glanced
+   at, and the two wants pull opposite ways: chrome should stay compact so it frames the answer, the
+   answer should be big enough to read a screenful of at a time. Collapsing them (the column ran a
+   single 0.75rem "prose and controls" tier) is what made a long technical turn punishing — 12px
+   sans carrying 11px mono identifiers, for an answer that is half identifiers.
+
+   HOW THE TIERS REACH THE TEMPLATES: the chat's surfaces reassign Tailwind's own type-scale
+   variables to them, for those subtrees only. `text-2xs` inside the chat column therefore means meta
+   (0.75rem), not the 0.6875rem it means everywhere else, and every existing `text-2xs`/`text-xs`/
+   `text-sm` — including the responsive pairs — moves with the tier it was already standing in.
+   Retune the column by editing the five numbers below; do NOT reintroduce absolute font sizes in the
+   chat templates.
+
+   Touch bumps a step, so shared surfaces are written as a pair — `text-base md:text-xs` on inputs
+   (16px is iOS's zoom threshold, so that half stays absolute), `text-sm md:text-xs` on menu rows.
+   The mobile-only components (ChatTabsMobile) sit at the touch sizes throughout.
+   Labelled .composer-ghost buttons are chrome, not content: they take the meta tier wherever they
+   appear (the composer's model/mode row, the picker's footer, the connect gate's provider tabs), so
+   the controls framing the input never out-weigh the message being written in it.
+   Mono runs a tier below its sans context — it reads optically larger at the same nominal size. */
+
+/* The tier VALUES sit at the root, so a chat surface still resolves them wherever it is rendered. */
+:root {
+    --chat-meta: 0.75rem;
+    --chat-body: 0.8125rem;
+    --chat-title: 0.9375rem;
+    --chat-prose: 0.875rem;
+    --chat-code: 0.8125rem;
+}
+
+/* The REASSIGNMENT is what is scoped — to the column, and to the overlays the column opens. PrimeVue
+   teleports those to the append target (the document body when docked, the pip body when popped out), so
+   they land outside .chat-panel and would otherwise be the one part of the chat left at the app's scale:
+   a model picker a tier smaller than the composer row that opened it. `chat-scale` goes on the content
+   WE author inside each overlay, never on PrimeVue's own nodes. */
+.chat-panel,
+.chat-scale {
+    --text-2xs: var(--chat-meta);
+    --text-2xs--line-height: 1.1rem;
+    --text-xs: var(--chat-body);
+    --text-xs--line-height: 1.3rem;
+    --text-sm: var(--chat-title);
+    --text-sm--line-height: 1.4rem;
+}
+
+/* The assistant's rendered answer. Everything about how markdown looks lives in prose.css, which the
+   workspace file preview shares — this is only the chat's tuning of it. */
+.chat-markdown {
+    --prose-size: var(--chat-prose);
+    --prose-code: var(--chat-code);
+    /* No per-block measure: .chat-turns already caps the whole column at a readable width, and capping
+       the text a second time inside it would set prose short of the code blocks and tables beside it. */
+    --prose-measure: none;
+}
+/* Reading width for the transcript. A docked panel is narrower than this and never sees it; a panel dragged
+   wide, popped out, or on a big screen would otherwise run prose to 150+ characters a line, where the eye
+   loses its place returning to the left edge. Capping the COLUMN rather than the paragraphs keeps one edge
+   for everything in a turn — tool cards, bubbles, prose, code blocks, decision cards — so the ragged right
+   reads as a margin instead of as a block that failed to fill its box. */
+.chat-turns {
+    width: 100%;
+    max-width: 48rem;
+    margin-inline: auto;
+}
+/* A streamed assistant body is split across two .md-part wrappers (settled + still-writing). display:contents
+   removes them from layout so the prose inside still behaves as direct children of .chat-markdown — but
+   prose.css's first/last-child edge rules then match the WRAPPER, where margin does nothing, so they are
+   restated one level down. Both parts are v-if'd on non-empty content, so whichever exists is correctly
+   first/last. */
+.chat-markdown > .md-part {
+    display: contents;
+}
+.chat-markdown > .md-part:first-child > :first-child {
+    margin-top: 0;
+}
+.chat-markdown > .md-part:last-child > :last-child {
+    margin-bottom: 0;
+}
+/* A plan card's body is a card's contents, not a turn's answer: it is bounded by the card and read in one
+   sitting, so it drops the reading measure and flattens the heading scale to the card's own title size. */
+.chat-markdown-compact {
+    --prose-measure: none;
+    --prose-gap: 0.6em;
+}
+.chat-markdown-compact h1,
+.chat-markdown-compact h2,
+.chat-markdown-compact h3,
+.chat-markdown-compact h4 {
+    font-size: 1.05em;
+    margin: 1.1em 0 0.4em;
+    padding-bottom: 0;
+    border-bottom: 0;
+}
+
+/* A Read tool card's highlighted file body (ChatCodeBody.vue). A flex row of a sticky line-number gutter and
+   the Shiki-colored code: the whole box scrolls, long lines don't wrap (one visual row per line keeps every
+   gutter number beside its code), and the gutter stays pinned on horizontal scroll. The gutter and `.shiki`
+   carry identical metrics (inherited font-size/line-height, matched padding-top) so line N sits beside number
+   N. Dark mode flips Shiki's tokens to their `--shiki-dark` var — the same mechanism code.css uses for the
+   design system's <Code>, replicated here since this body carries its own compact chrome, not `ui-code`. */
+.chat-code {
+    display: flex;
+    max-height: 12rem;
+    overflow: auto;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    background-color: var(--color-canvas);
+    font-family: var(--font-mono);
+    font-size: var(--chat-meta);
+    line-height: 1.5;
+}
+.chat-code-gutter {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    flex: none;
+    padding: 0.375rem 0.5rem;
+    text-align: right;
+    white-space: pre;
+    user-select: none;
+    color: var(--color-subtle);
+    background-color: var(--color-canvas);
+    border-right: 1px solid var(--color-line);
+    font-variant-numeric: tabular-nums;
+}
+.chat-code-view {
+    flex: none;
+}
+/* Never wrap — a wrapped line would take two rows in the code but one in the gutter and drift them apart. */
+.chat-code .shiki,
+.chat-code .shiki code {
+    white-space: pre;
+}
+.chat-code .shiki {
+    margin: 0;
+    padding: 0.375rem 0.75rem;
+    /* Over Shiki's inline light-theme background; the plain fallback gets the app's content color (Shiki's own
+       output overrides it per-token). */
+    background-color: var(--color-canvas) !important;
+    color: var(--color-content);
+    font-size: inherit;
+    line-height: inherit;
+    overflow: visible;
+}
+[data-mode="dark"] .chat-code .shiki,
+[data-mode="dark"] .chat-code .shiki span {
+    color: var(--shiki-dark) !important;
+}
+.plan-approve,
+.plan-reject {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    height: 2.125rem;
+    padding: 0 0.9rem;
+    border-radius: var(--radius-md);
+    font-size: var(--chat-body);
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        background-color 0.15s,
+        color 0.15s,
+        border-color 0.15s;
+}
+.plan-approve {
+    background: var(--color-primary-fill);
+    color: var(--color-fill-content);
+    border: 1px solid transparent;
+}
+.plan-approve:hover {
+    background: var(--color-primary-fill-hover);
+}
+.plan-reject {
+    background: transparent;
+    color: var(--color-content);
+    border: 1px solid var(--color-line-strong);
+}
+.plan-reject:hover {
+    background: color-mix(in srgb, var(--color-content) 8%, transparent);
+    border-color: var(--color-content);
+}
+/* The question card's Submit / Dismiss sit inline with smaller controls (option rows, the Other field),
+   so they run a touch tighter than the plan/permission decisions. Desktop only — the mobile block below
+   still lifts .plan-approve/.plan-reject back to full 2.75rem touch targets. */
+.plan-sm {
+    height: 1.875rem;
+    padding: 0 0.75rem;
+    font-size: var(--chat-meta);
+}
+/* The tab strip scrolls sideways once the tabs hit their shrink floor; the native bar is hidden, because 6px of
+   a 35px row is the difference between tabs sitting centred and tabs sitting high (ChatTabs.onWheel scrolls it). */
+.chat-strip {
+    scrollbar-width: none; /* Firefox */
+}
+.chat-strip::-webkit-scrollbar {
+    display: none;
+}
+.chat-tab {
+    color: var(--color-muted);
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition:
+        background-color 0.15s,
+        color 0.15s,
+        border-color 0.15s;
+}
+.chat-tab:hover {
+    background: color-mix(in srgb, var(--color-content) 6%, transparent);
+    color: var(--color-content);
+}
+.chat-tab-on {
+    background: color-mix(in srgb, var(--color-overlay) 70%, transparent);
+    color: var(--color-content);
+    border-color: var(--color-line);
+}
+.qopt {
+    cursor: pointer;
+}
+.qopt:hover {
+    background: color-mix(in srgb, var(--color-content) 5%, transparent);
+}
+.qopt-on {
+    background: color-mix(in srgb, var(--color-primary-500) 14%, transparent);
+}
+.p-popover-content.composer-pop-content {
+    padding: 0.25rem;
+}
+.qopt-on:hover {
+    background: color-mix(in srgb, var(--color-primary-500) 18%, transparent);
+}
+.composer-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-lg);
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+        background-color 0.15s,
+        color 0.15s;
+}
+.composer-ghost:hover {
+    background: color-mix(in srgb, var(--color-content) 8%, transparent);
+    color: var(--color-content);
+}
+.composer-active {
+    background: color-mix(in srgb, var(--color-primary-500) 16%, transparent);
+    color: var(--color-primary-500);
+}
+.composer-active:hover {
+    background: color-mix(in srgb, var(--color-primary-500) 24%, transparent);
+    color: var(--color-primary-500);
+}
+.composer-effort-seg {
+    height: 0.75rem;
+    width: 0.25rem;
+    box-sizing: content-box;
+    background-clip: content-box; /* keep the visible bar thin; the padding-right gap stays transparent */
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
+    transition:
+        background-color 0.15s,
+        filter 0.15s;
+}
+/* The gap between two bars is a click target for the lower (left) level — it lives as this bar's
+   right-padding rather than a flex gap, so clicking the empty space snaps down, not up. */
+.composer-effort-seg:not(:last-child) {
+    padding-right: 0.125rem;
+}
+.composer-effort-seg:hover {
+    background-color: color-mix(in srgb, var(--color-content) 22%, transparent); /* unlit hover */
+    filter: brightness(1.15); /* lit-bar hover feedback (inline bg wins over class bg) */
+}
+.composer-send {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 2rem;
+    width: 2rem;
+    border-radius: 9999px;
+    background: var(--color-primary-fill);
+    color: var(--color-fill-content);
+    cursor: pointer;
+    transition:
+        background-color 0.15s,
+        opacity 0.15s;
+}
+.composer-send:hover {
+    background: var(--color-primary-fill-hover);
+}
+.composer-send:disabled {
+    background: var(--color-overlay);
+    color: var(--color-subtle);
+    cursor: default;
+}
+.composer-stop {
+    background: var(--color-overlay);
+    color: var(--color-content);
+}
+.composer-stop:hover {
+    background: color-mix(in srgb, var(--color-content) 12%, var(--color-overlay));
+}
+.resize-handle {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 20;
+    touch-action: none;
+    transition: background-color 0.15s;
+}
+.resize-handle:hover,
+.chat-panel.is-resizing .resize-handle {
+    background: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
+}
+.chat-panel.is-resizing {
+    user-select: none;
+}
+
+/* Mobile touch sizing: 44px send/stop and plan-decision targets, chunkier effort segments. The utility
+   classes handle the Vue-templated buttons; these cover the fixed-size CSS components (send button, the
+   v-html plan buttons rendered by ChatMessageView). Deliberately viewport-based (device class), unlike the
+   @container variants in the template that thin out labels by panel width — don't unify the two. */
+@media (max-width: 767.98px) {
+    .composer-send {
+        height: 2.75rem;
+        width: 2.75rem;
+    }
+    .plan-approve,
+    .plan-reject {
+        height: 2.75rem;
+        padding: 0 1.25rem;
+    }
+    .composer-effort-seg {
+        height: 1.1rem;
+        width: 0.5rem;
+    }
+    .composer-effort-seg:not(:last-child) {
+        padding-right: 0.3rem; /* chunkier snap-down gap for touch */
+    }
+}

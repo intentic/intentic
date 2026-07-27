@@ -40,7 +40,9 @@ const location = computed(() => props.tool.locations?.[0]);
 
 <template>
     <div class="flex flex-col gap-0.5">
-        <div class="flex items-center gap-1.5 text-2xs text-subtle">
+        <!-- The row is muted, not subtle: the target it carries (a path, a command) is the one thing a folded
+             card still says, and at the meta tier subtle sits too close to the surface to read at a glance. -->
+        <div class="flex items-center gap-1.5 text-2xs text-muted">
             <!-- Header doubles as the fold toggle when there's output — same chevron affordance as the
                  turn's Thinking block. Output-less calls keep a plain, non-clickable header. -->
             <button

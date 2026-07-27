@@ -70,7 +70,7 @@ const openFromHistory = (id: string): void => {
         </button>
 
         <BottomSheet v-model="sheetOpen" header="Chats">
-            <div class="flex flex-col gap-0.5">
+            <div class="chat-scale flex flex-col gap-0.5">
                 <button
                     v-for="c in conversations"
                     :key="c.id"

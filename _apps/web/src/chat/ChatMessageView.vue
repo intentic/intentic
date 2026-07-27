@@ -404,7 +404,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <!-- Two v-html slots, not one: the settled half is unchanged between frames so Vue leaves its DOM
                  (and the user's selection) alone, while only the short tail is re-rendered. `.md-part` is
                  display:contents, so the prose still lays out as direct children of .chat-markdown. -->
-            <div v-if="message.text" class="chat-markdown chat-surface-assistant w-full rounded-lg px-3 py-2 text-content/85">
+            <div v-if="message.text" class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
                 <div v-if="body.settled" class="md-part" v-html="body.settled"></div>
                 <div v-if="body.tail" class="md-part" v-html="body.tail"></div>
             </div>
@@ -428,7 +428,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         <Icon name="window-maximize" class="text-xs" />
                     </button>
                 </div>
-                <div class="chat-markdown chat-markdown-compact px-3.5 py-3 text-content/85" v-html="plan.settled"></div>
+                <div class="md-prose chat-markdown chat-markdown-compact px-3.5 py-3" v-html="plan.settled"></div>
                 <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
                     <!-- The first approval restores the posture the conversation was in before it planned; the
                          rest are the other two postures, so any of them is one click away. -->
@@ -482,9 +482,11 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                     :name="isSelected(index, option.label) ? 'check-circle' : 'circle'"
                                     :class="isSelected(index, option.label) ? 'text-primary-500' : 'text-subtle'"
                                 />
-                                <span class="flex min-w-0 flex-col">
-                                    <span class="text-xs text-content">{{ option.label }}</span>
-                                    <span class="text-2xs text-subtle">{{ option.description }}</span>
+                                <!-- The description carries the actual trade-off between options, so it is muted
+                                     rather than subtle: it is read before choosing, not glanced past. -->
+                                <span class="flex min-w-0 flex-col gap-0.5">
+                                    <span class="text-xs font-medium text-content">{{ option.label }}</span>
+                                    <span class="text-2xs leading-snug text-muted">{{ option.description }}</span>
                                 </span>
                             </button>
                             <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->

@@ -223,7 +223,7 @@ const hidePreview = (): void => {
             <Icon name="history" class="text-sm" />
         </button>
         <Popover ref="history" :append-to="overlayTarget" @show="searchInput?.focus()">
-            <div class="flex w-72 flex-col">
+            <div class="chat-scale flex w-72 flex-col">
                 <div class="relative p-1">
                     <Icon
                         name="search"
@@ -279,7 +279,7 @@ const hidePreview = (): void => {
     <Teleport :to="overlayTarget">
         <div
             v-if="preview"
-            class="pointer-events-none fixed z-50 line-clamp-[12] max-w-[320px] min-w-[12rem] rounded-lg border border-line-strong bg-card px-3 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap text-content shadow-2xl"
+            class="chat-scale pointer-events-none fixed z-50 line-clamp-[12] max-w-[320px] min-w-[12rem] rounded-lg border border-line-strong bg-card px-3 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap text-content shadow-2xl"
             :style="{
                 left: `${preview.left}px`,
                 ...(preview.top !== undefined ? { top: `${preview.top}px` } : {}),
