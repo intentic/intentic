@@ -1,4 +1,4 @@
-import { type AgentProvider, type ModelBadge, PROVIDERS, providerLabel } from "@intentic/sandbox-contract";
+import { type AgentProvider, type ModelBadge, PROVIDERS, compareModelIds, familyOf, providerLabel } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { type ModelOption, acpProviders, modelOptionsFor } from "./conversation";
 
@@ -8,11 +8,13 @@ import { type ModelOption, acpProviders, modelOptionsFor } from "./conversation"
  * picker's footer chips — NOT a row here — because codex/grok run the same subscription model ids under either
  * harness, so the list no longer forks by harness.
  *
- * Every rendered fact about a model — label, description, badges — comes from the provider's own catalog, and so
- * does recency: catalog order IS the provider's newest-first preference, always current, needing no edit when a
- * model ships. Rows a provider publishes nothing about render label-only; that is the intended end state, not a
- * gap to backfill. The single exception is TIER_RANK below, which orders FAMILIES (not models) and is scoped as
- * tightly as it is precisely because a per-model ranking table failed here once already — see its comment. */
+ * Every rendered fact about a model — label, description, badges — comes from the provider's own catalog, always
+ * current, needing no edit when a model ships. Rows a provider publishes nothing about render label-only; that is
+ * the intended end state, not a gap to backfill. What a provider does NOT reliably publish is an ORDER: only
+ * Anthropic's catalog arrives ranked (newest-first), the rest arrive in registry order out of an
+ * OpenAI-compatible /v1/models. So tier and recency are derived from the model id by the contract's
+ * model-order.ts — one rule the daemon's catalogs and this picker share — and catalog order survives only as the
+ * tiebreak between ids that rule cannot separate. */
 
 export interface PickerEntry {
     // `${provider}:${value}` — the model id is unique within a provider's (harness-independent) catalog.
@@ -98,28 +100,18 @@ export const customEntryFor = (entries: readonly PickerEntry[], query: string, p
     return { key: `${provider}:${value}`, provider, value, label: value, description: `use as custom model id` };
 };
 
-/* FAMILY-MAJOR BROWSING. A provider's catalog order is a RELEASE TIMELINE (newest-first), and rendering it
- * straight made the picker a version history rather than a menu: Claude's account list opened with five Opus
- * versions in a row, so Haiku — a whole tier — sat below the fold and the one axis a user actually decides on
- * (how capable vs. how fast/cheap) was never presented at all. So a group opens as ONE ROW PER FAMILY, newest of
- * each, and the older versions live behind the disclosure grouped under their own family — because the intent
- * that reaches for Opus 4.7 is formed as "Opus, an older one", never as "row 11". Search still spans the whole
- * flat catalog and never truncates (see the component).
+/* FAMILY-MAJOR BROWSING. A provider's catalog is a SET OF RELEASES, and rendering it straight made the picker a
+ * version history rather than a menu: Claude's account list opened with five Opus versions in a row, so Haiku —
+ * a whole tier — sat below the fold and the one axis a user actually decides on (how capable vs. how fast/cheap)
+ * was never presented at all. Under the other providers it was worse than a version history: their catalogs
+ * arrive in registry order, so the Codex group opened on GPT 5.4 Mini with GPT 5.6 sorted below it. So a group
+ * opens as ONE ROW PER FAMILY, newest of each, tier-major, and the older versions live behind the disclosure
+ * grouped under their own family — because the intent that reaches for Opus 4.7 is formed as "Opus, an older
+ * one", never as "row 11". Search still spans the whole flat catalog and never truncates (see the component).
  *
- * Catalog order still decides everything it can: which version of a family is newest, and how families that
- * share a rank sit relative to each other. */
-
-// A model's FAMILY — its id with every version-ish segment dropped, so claude-opus-5 and claude-opus-4-8 land
-// together (as do gpt-5.1/gpt-5, and claude-haiku-4-5-20251001 with its date suffix). Derived, never listed:
-// a family that ships tomorrow groups itself. The id is the stable key here — labels get renamed, ids don't.
-const familyOf = (entry: PickerEntry): string => {
-    const stem = entry.value
-        .split(/[-_]/)
-        .filter((segment) => !/^v?[\d.]+$/.test(segment))
-        .join(`-`);
-    // An all-numeric id (and the ACP row's empty one) has no stem to speak of; it stands as its own family.
-    return stem === `` ? entry.value : stem;
-};
+ * Membership, recency and tier are all derived from the model id (compareModelIds/familyOf, shared with the
+ * daemon's catalogs); catalog order decides only what that rule leaves tied — for Claude, whose catalog really
+ * is the provider's own newest-first ranking, that is exactly the tie between two same-tier same-version rows. */
 
 // The family's header, taken from its newest row's label with the trailing version words peeled off ("Claude
 // Opus 5" → "Claude Opus"). Reusing the published label keeps the header in the provider's own naming rather
@@ -132,41 +124,20 @@ const familyLabelOf = (newest: PickerEntry): string => {
     return words.join(` `);
 };
 
-/* The ONE curated fact in this module, and the only one the providers publish nowhere the app can read: which
- * tier is the frontier and which is the cheap one. The SDK's alias list orders opus/sonnet/haiku but has no
- * Fable alias at all, so pure derivation would seat Fable — a frontier model — under Sonnet. Families sharing a
- * rank keep catalog order between them (the sort is stable).
- *
- * An UNKNOWN family LEADS rather than sinks. That direction is the point: the ranking this replaced sank
- * unrecognized ids to a floor below the everyday tier, so a brand-new flagship sorted beneath the model it
- * replaced — whereas a family nobody here has heard of, arriving at the head of a newest-first catalog, is far
- * likelier to be the next flagship than the next budget tier. Being wrong costs one row's position; being wrong
- * the other way hides a launch. */
-const TIER_RANK: Readonly<Record<string, number>> = { opus: 0, fable: 0, sonnet: 1, haiku: 2 };
-
-const rankOf = (family: string): number => {
-    for (const segment of family.split(`-`)) {
-        const rank = TIER_RANK[segment];
-        if (rank !== undefined) {
-            return rank;
-        }
-    }
-    return -1;
-};
-
 export interface FamilyGroup {
     readonly key: string;
     readonly label: string;
-    // The family's newest, i.e. its first row in the provider's own order — the row the collapsed group shows.
+    // The family's newest by version — the row the collapsed group shows.
     readonly latest: PickerEntry;
     readonly older: readonly PickerEntry[];
 }
 
-// One group per family, in tier order. Membership and recency come from the catalog; only the tier order is ours.
+// One group per family: members newest-first, groups tier-major. The same comparator does both jobs, because
+// within a family the tier is constant and only the release differs.
 export const familyGroups = (entries: readonly PickerEntry[]): readonly FamilyGroup[] => {
     const families = new Map<string, PickerEntry[]>();
     for (const entry of entries) {
-        const key = familyOf(entry);
+        const key = familyOf(entry.value);
         const members = families.get(key);
         if (members === undefined) {
             families.set(key, [entry]);
@@ -175,8 +146,12 @@ export const familyGroups = (entries: readonly PickerEntry[]): readonly FamilyGr
         members.push(entry);
     }
     return [...families]
-        .map(([key, members]) => ({ key, label: familyLabelOf(members[0]!), latest: members[0]!, older: members.slice(1) }))
-        .toSorted((a, b) => rankOf(a.key) - rankOf(b.key));
+        .map(([key, members]) => {
+            const ordered = members.toSorted((a, b) => compareModelIds(a.value, b.value));
+            const latest = ordered[0]!;
+            return { key, label: familyLabelOf(latest), latest, older: ordered.slice(1) };
+        })
+        .toSorted((a, b) => compareModelIds(a.latest.value, b.latest.value));
 };
 
 export interface PickerBlock {

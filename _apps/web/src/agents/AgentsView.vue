@@ -2,6 +2,7 @@
 import { cmp, useDevice } from "@intentic-app/ui";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { startAgent } from "../composables/agents/agentActions";
 import { dropActionLabel, dropRejection } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { FINISHED_WINDOW, type FleetAgent, type FleetLane, useAgents } from "../composables/agents/useAgents";
@@ -48,7 +49,7 @@ const {
     dismissNotice,
     busyIds,
 } = useAgents();
-const { newChat, active } = useChat();
+const { active } = useChat();
 const { dragged, dragging, draggedId, over, action, accepts, busyId, ghostStyle, begin, consumeSuppressedOpen } = useAgentDrag();
 
 // The Finished lane's two extra states. Both live here rather than in the store: they are how this ONE board
@@ -149,15 +150,6 @@ const focusAgent = (agent: FleetAgent): void => {
 const reviewAgent = (agent: FleetAgent): void => {
     open(agent);
     void router.push(`/agents/${encodeURIComponent(agent.id)}`);
-};
-
-// "New agent": a fresh isolated conversation. On desktop the board stays put — the draft card appears in
-// Active and the docked composer focuses; on mobile there is no dock, so go straight into the chat.
-const startAgent = (): void => {
-    newChat();
-    if (mobile.value) {
-        void router.push(`/agents/${encodeURIComponent(active.value.conversationId)}`);
-    }
 };
 </script>
 

@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { compareModelIds } from "@intentic/sandbox-contract";
 import { createOpencodeClient, createOpencodeServer, type OpencodeClient } from "@opencode-ai/sdk";
 import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
 
@@ -35,11 +36,13 @@ export interface OpenCodeService {
     readonly disconnect: (providerID: string) => Promise<void>;
 }
 
-// ids → the wire shape ({ models, default }); ids must be non-empty so default is always defined.
-const toCatalog = (ids: string[]): { models: { id: string; label: string }[]; default: string } => ({
-    models: ids.map((id) => ({ id, label: humanizeModelId(id) })),
-    default: ids[0]!,
-});
+// ids → the wire shape ({ models, default }); ids must be non-empty so default is always defined. Neither xAI's
+// REST catalog nor its "Did you mean" rejection publishes a ranking (see model-order.ts), so the app imposes the
+// order — which is what makes `default` the frontier newest rather than whichever id xAI happened to name first.
+const toCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
+    const ordered = ids.toSorted(compareModelIds);
+    return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
+};
 
 // How long `opencode serve` gets to print its listening line. The SDK defaults to 5s, which a cold spawn misses
 // on a loaded host: the binary is ~175 MB of bun paged in from scratch while boot is also warming the search

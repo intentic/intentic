@@ -1,6 +1,8 @@
 import type { LandResult } from "@intentic/sandbox-contract";
-import { useChat } from "../chat/useChat";
+import { useDevice } from "@intentic-app/ui";
+import { focusComposer, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
+import { router } from "../../router";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
 
@@ -8,6 +10,23 @@ import { sandboxKey } from "../sandbox/useSandbox";
  * review panel (useAgentChanges, which binds one agent to its diff query) and the board's drag-to-act drops,
  * which act on whichever card was dropped and own no query at all. Land and discard are refused daemon-side
  * while the agent's turn is running: the worktree is that turn's live working state. */
+
+// "New agent", as ONE action for every surface that offers it: the board's header button and its empty state,
+// the chat strip's "+", and the mobile strip's "+". They all mean the same thing — a fresh isolated
+// conversation, focused and ready to type into — so they must all do the same thing, whole. That is three
+// steps, and a surface that skips any of them reads as a press that did nothing:
+//   · open the tab (the fleet's draft card and the chat's tab are the same conversation under two skins)
+//   · put the caret in its composer, which is what makes the new tab visible as the thing you now type into
+//   · on mobile, go to it — there is no docked chat there, so the agent's own screen IS the result (and a "+"
+//     pressed from an agent's screen would otherwise leave the route pointing at the agent you just left)
+export const startAgent = (): void => {
+    const { newChat } = useChat();
+    const conversation = newChat();
+    focusComposer();
+    if (useDevice().mobile.value) {
+        void router.push(`/agents/${encodeURIComponent(conversation.conversationId)}`);
+    }
+};
 
 // Land: merge the agent's worktree branches into the main tree. A partial result reports per-repo conflicts —
 // the worktree keeps everything, so the user can resolve (main-side), discard, or keep working.

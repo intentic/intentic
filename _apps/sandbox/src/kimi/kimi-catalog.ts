@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { compareModelIds } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import { type KimiStore, resolveKimiKey } from "./kimi-credentials.js";
 import { discoverKimiModels, humanizeModelId, SEED_KIMI_MODELS } from "./kimi-models.js";
@@ -18,10 +19,13 @@ export interface KimiCatalog {
 
 const MODELS_TTL_MS = 60_000;
 
-const toCatalog = (ids: string[]): { models: { id: string; label: string }[]; default: string } => ({
-    models: ids.map((id) => ({ id, label: humanizeModelId(id) })),
-    default: ids[0]!,
-});
+// Moonshot's OpenAI-compatible /v1/models publishes a SET, not a ranking (see model-order.ts), so the app
+// imposes the order — which is what makes `default` the frontier newest rather than whichever id the endpoint
+// happened to list first.
+const toCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
+    const ordered = ids.toSorted(compareModelIds);
+    return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
+};
 
 export const createKimiCatalog = (store: KimiStore, config: Config, persistPath: string, fetchImpl: typeof fetch = fetch): KimiCatalog => {
     let cache: { value: { models: { id: string; label: string }[]; default: string }; expiresAt: number } | undefined;

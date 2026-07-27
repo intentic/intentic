@@ -2,6 +2,7 @@
 import type { Disposable } from "@intentic/extension-api";
 import Popover from "primevue/popover";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { startAgent } from "../composables/agents/agentActions";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { relativeTime, statusTabClass } from "../composables/chat/catalog";
 import type { Conversation } from "../composables/chat/conversation";
@@ -12,12 +13,13 @@ import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
 
 /* The tab strip + history menu. Reads the conversation list from the useChat singleton; the panel owns the
- * side effects of switching (scroll pinning, composer focus), so tab actions are emitted rather than applied. */
+ * side effects of SWITCHING (scroll pinning), so select/close/open are emitted rather than applied. "New
+ * agent" is not one of them: it means the same thing here as on the fleet board, so both call the one
+ * startAgent action (agents/agentActions.ts) instead of each surface assembling its own half of it. */
 
 const emit = defineEmits<{
     select: [id: string];
     close: [id: string];
-    new: [];
     open: [id: string];
 }>();
 
@@ -193,7 +195,7 @@ const hidePreview = (): void => {
         <span v-if="edit.error !== undefined" class="min-w-0 shrink truncate text-2xs text-danger" v-tooltip.bottom="edit.error">{{
             edit.error
         }}</span>
-        <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="emit('new')" v-tooltip.bottom="'New agent'" aria-label="New agent">
+        <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent" v-tooltip.bottom="'New agent'" aria-label="New agent">
             <Icon name="plus" class="text-sm" />
         </button>
         <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="openHistory" v-tooltip.bottom="'History'" aria-label="Chat history">

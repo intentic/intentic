@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { compareModelIds } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import { discoverGeminiModels, humanizeModelId, SEED_GEMINI_MODELS } from "./gemini-models.js";
 
@@ -21,10 +22,13 @@ export interface GeminiCatalog {
 
 const MODELS_TTL_MS = 60_000;
 
-const toCatalog = (ids: string[]): { models: { id: string; label: string }[]; default: string } => ({
-    models: ids.map((id) => ({ id, label: humanizeModelId(id) })),
-    default: ids[0]!,
-});
+// The translator's OpenAI-compatible /v1/models publishes a SET, not a ranking (see model-order.ts), so the app
+// imposes the order — which is what keeps Pro above Flash in the picker and makes `default` the frontier newest
+// rather than whichever id the endpoint happened to list first.
+const toCatalog = (ids: readonly string[]): { models: { id: string; label: string }[]; default: string } => {
+    const ordered = ids.toSorted(compareModelIds);
+    return { models: ordered.map((id) => ({ id, label: humanizeModelId(id) })), default: ordered[0]! };
+};
 
 export const createGeminiCatalog = (config: Config, persistPath: string, fetchImpl: typeof fetch = fetch): GeminiCatalog => {
     let cache: { value: { models: { id: string; label: string }[]; default: string }; expiresAt: number } | undefined;

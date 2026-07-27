@@ -97,10 +97,64 @@ test("leads with a family no tier rank names, so a brand-new flagship is never b
     expect(groups[0]?.key).toBe(`claude-mythos`);
 });
 
-test("keeps catalog order between families that share a rank, so recency still breaks the tie", () => {
+test("breaks a tier tie by release, so the family that shipped last leads the ones that share its rank", () => {
     const groups = familyGroups([entry(`claude`, `claude-fable-6`, `Claude Fable 6`), ...CLAUDE]);
 
     expect(groups.map((group) => group.key)).toEqual([`claude-fable`, `claude-opus`, `claude-sonnet`, `claude-haiku`]);
+});
+
+test("keeps catalog order between families that tie on BOTH, since Anthropic's catalog is itself a ranking", () => {
+    // Opus 5 and Fable 5: same tier, same version. Nothing derived can separate them, so the order the provider
+    // reported stands — which is the one place this module still defers to the catalog, and the only place it can.
+    const opus = entry(`claude`, `claude-opus-5`, `Claude Opus 5`);
+    const fable = entry(`claude`, `claude-fable-5`, `Claude Fable 5`);
+
+    expect(familyGroups([opus, fable]).map((group) => group.key)).toEqual([`claude-opus`, `claude-fable`]);
+    expect(familyGroups([fable, opus]).map((group) => group.key)).toEqual([`claude-fable`, `claude-opus`]);
+});
+
+/* THE OTHER PROVIDERS. Anthropic's catalog arrives ranked newest-first; Codex, Gemini, Kimi and Grok arrive from
+ * an OpenAI-compatible /v1/models in registry order — alphabetical in practice. Reading that as a preference is
+ * what opened the Codex group on GPT 5.4 Mini, and it put the NEWEST member of a family behind the "show older"
+ * disclosure, since the collapsed band shows each family's first catalog row. Both facts now come off the id. */
+
+// Codex exactly as the endpoint hands it over: alphabetical, i.e. meaningless.
+const CODEX: readonly PickerEntry[] = [
+    entry(`codex`, `gpt-5.1-codex`, `GPT 5.1 Codex`),
+    entry(`codex`, `gpt-5.4-mini`, `GPT 5.4 Mini`),
+    entry(`codex`, `gpt-5.5`, `GPT 5.5`),
+    entry(`codex`, `gpt-5.6-sol`, `GPT 5.6 Sol`),
+    entry(`codex`, `gpt-5.6-terra`, `GPT 5.6 Terra`),
+];
+
+test("opens a registry-ordered group on the frontier line, with the cheap rung last instead of first", () => {
+    expect(pickerBlocks(familyGroups(CODEX), undefined, false)[0]?.entries.map((row) => row.label)).toEqual([
+        `GPT 5.6 Sol`,
+        `GPT 5.6 Terra`,
+        `GPT 5.5`,
+        `GPT 5.1 Codex`,
+        `GPT 5.4 Mini`,
+    ]);
+});
+
+test("shows a family's NEWEST version collapsed, not whichever version the endpoint listed first", () => {
+    // Alphabetically gpt-5.1 leads its family, so the band used to offer it and hide gpt-5.6 behind the
+    // disclosure — the picker's one row for that family naming its oldest member.
+    const gpt = [entry(`codex`, `gpt-5.1`, `GPT 5.1`), entry(`codex`, `gpt-5.6`, `GPT 5.6`)];
+
+    expect(familyGroups(gpt)[0]).toMatchObject({ latest: gpt[1], older: [gpt[0]] });
+});
+
+test("ranks each vendor's own tier words, so no provider is left in registry order", () => {
+    const gemini = [
+        entry(`gemini`, `gemini-3-flash`, `Gemini 3 Flash`),
+        entry(`gemini`, `gemini-3-flash-lite`, `Gemini 3 Flash Lite`),
+        entry(`gemini`, `gemini-3-pro`, `Gemini 3 Pro`),
+    ];
+    const grok = [entry(`grok`, `grok-3`, `Grok 3`), entry(`grok`, `grok-4-fast`, `Grok 4 Fast`), entry(`grok`, `grok-4`, `Grok 4`)];
+
+    expect(familyGroups(gemini).map((group) => group.latest.label)).toEqual([`Gemini 3 Pro`, `Gemini 3 Flash`, `Gemini 3 Flash Lite`]);
+    expect(familyGroups(grok).map((group) => group.latest.label)).toEqual([`Grok 4`, `Grok 4 Fast`]);
 });
 
 test("opens a group at one row per family — every tier visible, no version history", () => {
