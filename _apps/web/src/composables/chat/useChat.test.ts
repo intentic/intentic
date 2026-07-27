@@ -204,6 +204,78 @@ describe(`per-tab drafts`, () => {
     });
 });
 
+/* The strip's close sets (the tab ×, and the right-click menu's Close Others / Close to the Right / Close All)
+ * all land here. The invariant the menu leans on: the strip is never left empty, and focus only moves when the
+ * tab that had it is one of the closed ones. */
+describe(`closing tabs`, () => {
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+    });
+
+    // Four tabs, the third active — the shape every case below closes a different slice out of.
+    const openFour = (): readonly string[] => {
+        const chat = useChat();
+        const ids = [chat.active.value.id, chat.newChat().id, chat.newChat().id, chat.newChat().id];
+        chat.setActive(ids[2]!);
+        return ids;
+    };
+
+    it(`closes one tab and leaves the active one alone`, () => {
+        const chat = useChat();
+        const ids = openFour();
+
+        chat.closeTabs(new Set([ids[0]!]));
+
+        expect(chat.conversations.value.map((c) => c.id)).toEqual([ids[1], ids[2], ids[3]]);
+        expect(chat.activeId.value).toBe(ids[2]); // untouched — it wasn't in the set
+    });
+
+    it(`closes every other tab and moves focus to the survivor`, () => {
+        const chat = useChat();
+        const ids = openFour();
+        // "Close Others" from a right-click on the FIRST tab: the menu acts on the right-clicked tab, not the
+        // active one, so the active tab is among the closed and focus has to move.
+        chat.closeTabs(new Set([ids[1]!, ids[2]!, ids[3]!]));
+
+        expect(chat.conversations.value.map((c) => c.id)).toEqual([ids[0]]);
+        expect(chat.activeId.value).toBe(ids[0]);
+    });
+
+    it(`closes the tabs to the right of the right-clicked one`, () => {
+        const chat = useChat();
+        const ids = openFour();
+
+        chat.closeTabs(new Set([ids[2]!, ids[3]!])); // to the right of the second tab
+
+        expect(chat.conversations.value.map((c) => c.id)).toEqual([ids[0], ids[1]]);
+        expect(chat.activeId.value).toBe(ids[1]); // the active tab went; focus falls to the last remaining one
+    });
+
+    // "Close All" can't leave the panel with nothing to render — the composer needs a conversation to write into.
+    it(`replaces the strip with one fresh conversation when everything closes`, () => {
+        const chat = useChat();
+        const ids = openFour();
+
+        chat.closeTabs(new Set(ids));
+
+        expect(chat.conversations.value).toHaveLength(1);
+        expect(chat.conversations.value[0]!.id).not.toBeOneOf([...ids]);
+        expect(chat.activeId.value).toBe(chat.conversations.value[0]!.id);
+        expect(chat.draft.value).toBe(``);
+    });
+
+    it(`ignores ids that aren't open`, () => {
+        const chat = useChat();
+        const ids = openFour();
+
+        chat.closeTabs(new Set([`c999`]));
+
+        expect(chat.conversations.value.map((c) => c.id)).toEqual(ids);
+        expect(chat.activeId.value).toBe(ids[2]);
+    });
+});
+
 /* Claude's API rejects effort 'max' with extended thinking disabled — a 400 that kills the turn before the
  * model sees the prompt, and reaches the user only as the SDK's opaque `unknown` error category. Both halves
  * persist into turnDefaults, so an unclamped pair would poison every NEW conversation too, not just the tab it

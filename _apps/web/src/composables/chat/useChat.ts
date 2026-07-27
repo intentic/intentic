@@ -830,20 +830,23 @@ const setActive = (id: string): void => {
     activeId.value = id;
 };
 
-// Close a tab: abort its in-flight turn, drop it, and keep at least one (a fresh chat if it was the last).
-// Closing the active tab moves focus to the last remaining one.
-const closeTab = (id: string): void => {
-    const closing = conversations.value.find((conversation) => conversation.id === id);
-    closing?.abort();
-    if (closing !== undefined) {
-        void dropTranscript(closing.conversationId);
+// Close a set of tabs (the tab ×, or the strip menu's Close / Close Others / Close to the Right / Close All):
+// abort each in-flight turn, drop each cached transcript, and keep at least one conversation — a fresh chat when
+// the set empties the strip. Closing the active tab moves focus to the last remaining one (VSCode behaviour, the
+// same rule the workspace's closeTabs follows). The daemon-side sessions survive: a closed chat is still in History.
+const closeTabs = (ids: ReadonlySet<string>): void => {
+    for (const conversation of conversations.value) {
+        if (ids.has(conversation.id)) {
+            conversation.abort();
+            void dropTranscript(conversation.conversationId);
+        }
     }
-    let next = conversations.value.filter((conversation) => conversation.id !== id);
+    let next = conversations.value.filter((conversation) => !ids.has(conversation.id));
     if (next.length === 0) {
         next = [new Conversation(`c${convSeq++}`)];
     }
     conversations.value = next;
-    if (activeId.value === id) {
+    if (ids.has(activeId.value)) {
         activeId.value = next[next.length - 1]!.id;
     }
 };
@@ -1277,7 +1280,7 @@ export function useChat() {
         newChat,
         composerFocus,
         setActive,
-        closeTab,
+        closeTabs,
         send,
         queued,
         removeQueued,

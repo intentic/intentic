@@ -71,7 +71,7 @@ const {
     decidePlan,
     openConversation,
     composerFocus,
-    closeTab: closeTabAction,
+    closeTabs: closeTabsAction,
     availableCommands,
 } = useChat();
 const router = useRouter();
@@ -672,8 +672,9 @@ const selectTab = (id: string): void => {
     atBottom.value = true;
 };
 
-const closeTab = (id: string): void => {
-    closeTabAction(id);
+// One or many — the strip's × sends a single id, its context menu the Close Others / to-the-Right / All sets.
+const closeTabs = (ids: ReadonlySet<string>): void => {
+    closeTabsAction(ids);
     atBottom.value = true;
 };
 
@@ -792,8 +793,8 @@ watch(keyboardInset, () => {
             title="Drag to resize · double-click to reset"
         ></div>
 
-        <ChatTabsMobile v-if="mobile" @select="selectTab" @close="closeTab" @open="openFromHistory" />
-        <ChatTabs v-else @select="selectTab" @close="closeTab" @open="openFromHistory" />
+        <ChatTabsMobile v-if="mobile" @select="selectTab" @close="closeTabs" @open="openFromHistory" />
+        <ChatTabs v-else @select="selectTab" @close="closeTabs" @open="openFromHistory" />
 
         <!-- The inner wrapper is what the autoscroll ResizeObserver measures; the scroller itself never
              changes height, so it can't report the transcript growing.
