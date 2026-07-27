@@ -11,7 +11,11 @@ import { createApp, h, nextTick } from "vue";
 // The import-time globals a mounted chat component needs (see startAgent.test.ts): ui's useDevice reads
 // window.matchMedia at module scope, environment.ts reads window.env, and jsdom ships no ResizeObserver.
 // matches:false keeps the device DESKTOP — the only form factor this strip renders on.
-vi.hoisted(() => {
+// documentPictureInPicture is read once at module scope too (usePopout's `supported`), so the stub has to be in
+// place before the import — without it the strip would render as it does on Firefox, with no pop-out row at all.
+// requestWindow never settles: the assertion is only that the row CALLS it, and a resolved undefined would send
+// popOut on into a pip document that isn't there.
+const { requestWindow } = vi.hoisted(() => {
     globalThis.ResizeObserver ??= class {
         observe(): void {}
         unobserve(): void {}
@@ -31,6 +35,9 @@ vi.hoisted(() => {
         auth: { googleClientId: `` },
         analytics: { posthogKey: ``, posthogHost: `` },
     };
+    const pipApi = { requestWindow: vi.fn(() => new Promise<Window>(() => {})) };
+    (globalThis.window as Window & { documentPictureInPicture?: unknown }).documentPictureInPicture = pipApi;
+    return pipApi;
 });
 
 let strip: HTMLElement;
@@ -88,6 +95,11 @@ const openMenuOn = async (index: number): Promise<void> => {
     tabs()[index]!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
     await flush();
 };
+// The scroll box the tabs sit in: a right-click that lands on IT rather than on a tab is the empty-space gesture.
+const openStripMenu = async (): Promise<void> => {
+    strip.querySelector<HTMLElement>(`header > div`)!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
+    await flush();
+};
 
 it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () => {
     const chat = useChat();
@@ -98,7 +110,7 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
 
     // Right-click the second tab: "Close to the Right" takes the two after it, leaving the first two.
     await openMenuOn(1);
-    expect(labels()).toEqual([`Rename`, `Close`, `Close Others`, `Close to the Right`, `Close All`]);
+    expect(labels()).toEqual([`Rename`, `Close`, `Close Others`, `Close to the Right`, `Close All`, `Move chat into new window`]);
     await clickRow(`Close to the Right`);
 
     expect(chat.conversations.value.map((c) => c.id)).toEqual([ids[0], ids[1]]);
@@ -130,6 +142,18 @@ it(`teaches the shortcut a close command is bound to, and disables the rows with
     await openMenuOn(0);
     expect(row(`Close Others`).className).toContain(`p-disabled`);
     expect(row(`Close to the Right`).className).toContain(`p-disabled`);
+});
+
+it(`offers the pop-out from the empty strip's menu instead of popping out on the right-click itself`, async () => {
+    // The gesture used to toggle the pop-out on the spot, which tore the panel into its own window on a
+    // right-click that only just missed a tab. It opens the menu now; the pop-out is one row in it.
+    await openStripMenu();
+    expect(labels()).toEqual([`Move chat into new window`]);
+    expect(requestWindow).not.toHaveBeenCalled();
+
+    // The row itself still pops out — the menu is a step in front of the gesture, not a replacement for it.
+    await clickRow(`Move chat into new window`);
+    expect(requestWindow).toHaveBeenCalled();
 });
 
 it(`holds a mass close at a confirm when it would abort a running agent`, async () => {

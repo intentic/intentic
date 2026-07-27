@@ -17,9 +17,21 @@ import { usePushNotifications } from "../../composables/usePushNotifications";
  * rows get read as bugs. Everything on the bordered surface does something; everything that only explains sits
  * outside it, in the small muted type a grouped list already uses for footnotes. */
 
-const { state, busy, error, canToggle, enable, disable, sendTest } = usePushNotifications();
+const { state, busy, error, delivered, canToggle, enable, disable, sendTest } = usePushNotifications();
 
 const enabled = computed(() => state.value === `on`);
+
+// What a successful test proves, said in the only terms that help when nothing appears on screen: the daemon
+// did its half. That leaves exactly one suspect — this device's own notification settings (Focus/Do Not
+// Disturb, or the browser muted at OS level) — which is worth naming, because it is the one place the page
+// cannot see and the user can. The plural matters: other browsers you enabled also got it.
+const sent = computed(() => {
+    if (delivered.value === undefined) {
+        return undefined;
+    }
+    const where = delivered.value === 1 ? `1 subscribed browser` : `${delivered.value} subscribed browsers`;
+    return `Sent to ${where}. If nothing appeared, the send worked and your system swallowed it — check notification settings and Do Not Disturb for your browser.`;
+});
 
 const toggle = (next: boolean): void => void (next ? enable() : disable());
 
@@ -72,5 +84,6 @@ const status = computed(() => {
         </div>
 
         <p v-if="error" class="text-xs text-danger">{{ error }}</p>
+        <p v-else-if="sent" class="text-xs text-muted">{{ sent }}</p>
     </div>
 </template>

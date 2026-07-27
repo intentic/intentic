@@ -36,6 +36,22 @@ test("the VAPID keypair is generated once and reused across store instances", as
     expect(await filePushStore(path).keys()).toEqual(first);
 });
 
+test("the first request cannot mint two keypairs — the browser must subscribe with the key the daemon keeps", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+
+    // Exactly what /push/config does, on a store nothing has loaded yet: keys() and list() concurrently. If
+    // each load generates its own pair, the response carries whichever keys() made while the file keeps
+    // whichever write landed last — so the browser subscribes with a key the daemon does not hold, every send
+    // is refused 403, and the row is pruned as dead. A toggle that enables cleanly and never notifies, on the
+    // first attempt of every new sandbox.
+    const [keys] = await Promise.all([store.keys(), store.list()]);
+
+    const persisted = JSON.parse(await readFile(path, "utf8"));
+    expect(keys.publicKey).toBe(persisted.publicKey);
+    expect(keys.privateKey).toBe(persisted.privateKey);
+});
+
 test("the private key is written 0600 — it can forge notifications to the owner's devices", async () => {
     const path = await storePath();
     await filePushStore(path).keys();
@@ -130,9 +146,21 @@ test("a transient 500 keeps the subscription and does not fail the caller", asyn
     await store.add(subscription("https://push.example/flaky"));
     stubSends({ "https://push.example/flaky": 500 });
 
-    // A turn must complete identically whether the push service is up, down, or slow.
-    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toBeUndefined();
+    // A turn must complete identically whether the push service is up, down, or slow — it resolves, reporting
+    // that nothing landed, rather than throwing at a caller for whom a missed notification is not a failure.
+    await expect(createPushSender(store, silentLogger).notify(sample)).resolves.toEqual({ delivered: 0, failed: 1 });
     expect(await store.list()).toHaveLength(1);
+});
+
+test("a send to nobody is reported as such — the test button's whole job is to catch a silent zero", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+    stubSends({});
+
+    // No subscriptions at all: the settings page's "Send test" reaches this and must be able to say so. It
+    // used to answer {ok:true} to a page that then said nothing, which is indistinguishable from a delivered
+    // notification the operating system chose not to show.
+    expect(await createPushSender(store, silentLogger).notify(sample)).toEqual({ delivered: 0, failed: 0 });
 });
 
 test("one dead endpoint does not stop the others being notified", async () => {

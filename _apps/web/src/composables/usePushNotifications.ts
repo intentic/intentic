@@ -1,5 +1,6 @@
 import type { PushConfig } from "@intentic-app/api-contract";
-import { computed, onMounted, ref } from "vue";
+import type { PushTest } from "@intentic/sandbox-contract";
+import { computed, ref, watch } from "vue";
 import { sandboxJson } from "./sandbox/sandboxClient";
 import { useSandbox } from "./sandbox/useSandbox";
 
@@ -97,6 +98,10 @@ export function usePushNotifications() {
     const state = ref<PushState>(supported() ? `off` : `unsupported`);
     const busy = ref(false);
     const error = ref<string | undefined>(undefined);
+    // How many browsers the last test send actually reached. Undefined until one is sent — the count is the
+    // only part of the chain the page can observe, and it is what separates "your OS swallowed it" from "the
+    // daemon sent nothing", which look identical from a button that just goes quiet.
+    const delivered = ref<number | undefined>(undefined);
     const canToggle = computed(() => state.value !== `unsupported` && state.value !== `denied` && !busy.value && reachable.value);
 
     const registration = async (): Promise<ServiceWorkerRegistration> => navigator.serviceWorker.register(SW_URL);
@@ -105,6 +110,13 @@ export function usePushNotifications() {
     // disagree (a sandbox reset drops the server row while the browser subscription lives on), and `refresh`
     // below is what reconciles them.
     const localSubscription = async (): Promise<PushSubscription | null> => (await registration()).pushManager.getSubscription();
+
+    // Bumped by every user action. `refresh` is a slow read — a service-worker lookup plus a daemon round-trip —
+    // and it now runs the moment the daemon comes online, which is exactly when someone is likely to be
+    // reaching for the toggle. A read that lands after a write and reports the world as it was before it is
+    // the same "it forgot my setting" the page is being fixed for, so each refresh notes the revision it began
+    // under and declines to write if anything happened since.
+    let revision = 0;
 
     // Read the true state: the browser's permission, its subscription, and whether the daemon knows about it.
     const refresh = async (): Promise<void> => {
@@ -119,10 +131,14 @@ export function usePushNotifications() {
         if (!reachable.value) {
             return;
         }
+        const started = revision;
         try {
             const existing = await localSubscription();
             const query = existing === null ? `` : `?endpoint=${encodeURIComponent(existing.endpoint)}`;
             const config = await sandboxJson<PushConfig>(`/push/config${query}`);
+            if (revision !== started) {
+                return;
+            }
             // "On" requires all three. A browser subscription the daemon has forgotten would notify nothing,
             // and one minted for a key the daemon no longer holds is refused on every send — both are exactly
             // the silent failure this feature can't afford to report as working.
@@ -135,6 +151,9 @@ export function usePushNotifications() {
 
     const enable = async (): Promise<void> => {
         error.value = undefined;
+        // A count from the previous registration says nothing about this one.
+        delivered.value = undefined;
+        revision += 1;
         busy.value = true;
         try {
             const permission = await Notification.requestPermission();
@@ -162,6 +181,8 @@ export function usePushNotifications() {
 
     const disable = async (): Promise<void> => {
         error.value = undefined;
+        delivered.value = undefined;
+        revision += 1;
         busy.value = true;
         try {
             const subscription = await localSubscription();
@@ -187,20 +208,33 @@ export function usePushNotifications() {
 
     // Proves the whole chain end-to-end — daemon key, push service, service worker, OS. Four failure points
     // the user cannot inspect, so a button that either produces a notification or doesn't is worth more than
-    // any amount of status text.
+    // any amount of status text — provided it also reports the half the user CAN'T see. The daemon answers
+    // with how many browsers it reached and errors on a zero, so "nothing appeared" now splits into "the
+    // daemon sent to nobody" (actionable, and it says how) and "it sent to you and your OS didn't show it".
     const sendTest = async (): Promise<void> => {
         error.value = undefined;
+        delivered.value = undefined;
         busy.value = true;
         try {
-            await sandboxJson(`/push/test`, { method: `POST` });
+            delivered.value = (await sandboxJson<PushTest>(`/push/test`, { method: `POST` })).delivered;
         } catch (cause) {
             error.value = cause instanceof Error ? cause.message : `Could not send a test notification.`;
+            // A push service that refuses a send makes the daemon drop that registration, so a failed test can
+            // mean this browser is no longer subscribed. Re-read instead of leaving a toggle reading "on" for a
+            // device the daemon just forgot — the error says to toggle it again, which needs a visible toggle.
+            await refresh();
         } finally {
             busy.value = false;
         }
     };
 
-    onMounted(() => void refresh());
+    /* Reconcile on mount AND every time the daemon comes online — not on mount alone. The settings page can
+     * mount while the connection is still being established (the shell paints a hydrated workspace rather than
+     * the connecting gate for a sandbox that is merely slow), and a `refresh` that lands in that window has
+     * nobody to ask: it returns leaving `state` at its initial `off`, and nothing ever asks again. The result
+     * read as the setting not being persisted — every reload showed the toggle off for a browser that was in
+     * fact subscribed, and turning it "on" again was really just the first read that ever succeeded. */
+    watch(reachable, () => void refresh(), { immediate: true });
 
-    return { state, busy, error, canToggle, enable, disable, sendTest, refresh };
+    return { state, busy, error, delivered, canToggle, enable, disable, sendTest, refresh };
 }

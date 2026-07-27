@@ -147,17 +147,33 @@ const confirmClose = (): void => {
     pendingClose.value = undefined;
 };
 
-// --- Right-click tab menu -------------------------------------------------------------------------
-// The same close set the workspace's file tabs carry, plus this strip's own rename and the pop-out toggle — which
-// the empty-strip right-click below stops reaching once the tabs wrap and fill both rows. The menu acts on the
-// RIGHT-CLICKED tab (`menuTabId`); the commands further down act on the ACTIVE one — the split the workspace makes.
+// --- Right-click menu -----------------------------------------------------------------------------
+// The same close set the workspace's file tabs carry, plus this strip's own rename and the pop-out toggle. One
+// menu serves both right-click targets: on a tab it acts on the RIGHT-CLICKED one (`menuTabId`), while on the
+// strip's empty space (`menuTabId` undefined) only the rows that need no tab survive. The commands further down
+// act on the ACTIVE tab instead — the split the workspace makes.
 const tabMenu = ref<{ show: (event: Event) => void } | undefined>();
 const menuTabId = ref<string>();
 
+// The one row that isn't about a particular tab, so it is the whole of the empty-space menu and the tail of a
+// tab's. Undefined off Chromium, where there is no pip window to move the chat into.
+const popoutItem = computed<MenuItem | undefined>(() =>
+    popoutSupported
+        ? {
+              label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
+              shortcut: commandShortcut(`chat.togglePopout`),
+              command: togglePopout,
+          }
+        : undefined,
+);
+
 const tabMenuItems = computed<MenuItem[]>(() => {
     const id = menuTabId.value;
-    if (id === undefined || !conversations.value.some((c) => c.id === id)) {
-        return [];
+    if (id === undefined) {
+        return popoutItem.value === undefined ? [] : [popoutItem.value];
+    }
+    if (!conversations.value.some((c) => c.id === id)) {
+        return []; // the right-clicked tab closed under the open menu
     }
     const others = othersOf(id);
     const toRight = toRightOf(id);
@@ -180,15 +196,8 @@ const tabMenuItems = computed<MenuItem[]>(() => {
         { separator: true },
         { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => requestClose(allTabs()) },
     ];
-    if (popoutSupported) {
-        items.push(
-            { separator: true },
-            {
-                label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
-                shortcut: commandShortcut(`chat.togglePopout`),
-                command: togglePopout,
-            },
-        );
+    if (popoutItem.value !== undefined) {
+        items.push({ separator: true }, popoutItem.value);
     }
     return items;
 });
@@ -274,11 +283,15 @@ const closeTab = (event: Event, id: string): void => {
     emit(`close`, new Set([id]));
 };
 
-// Right-click on the empty strip area pops the chat out / docks it (replaces the old pop-out button).
-const onContextMenu = (event: MouseEvent): void => {
-    if (!popoutSupported || event.target !== event.currentTarget) return; // only empty strip, not a tab
+// Right-click on the strip's empty space OPENS THE MENU (holding the pop-out toggle) rather than popping the
+// chat out on the spot — an accidental right-click near the tabs shouldn't tear the panel into its own window.
+// With nothing strip-wide to offer (no pip support), the browser's own menu is left alone.
+const onStripContextMenu = (event: MouseEvent): void => {
+    if (event.target !== event.currentTarget) return; // a tab handles its own right-click
+    if (popoutItem.value === undefined) return;
     event.preventDefault();
-    togglePopout();
+    menuTabId.value = undefined;
+    tabMenu.value?.show(event);
 };
 
 const openHistory = (event: Event): void => {
@@ -306,7 +319,7 @@ const openHistory = (event: Event): void => {
         <div
             ref="strip"
             class="scrollbar-thin flex max-h-16 min-w-0 flex-1 flex-wrap items-center gap-1 overflow-x-hidden overflow-y-auto py-0.5"
-            @contextmenu="onContextMenu"
+            @contextmenu="onStripContextMenu"
         >
             <template v-for="c in conversations" :key="c.id">
                 <!-- Renaming REPLACES the tab rather than nesting a field inside it: an input in a button is
@@ -430,8 +443,9 @@ const openHistory = (event: Event): void => {
         </div>
     </Teleport>
 
-    <!-- Right-click tab menu. Rendered into the pop-out window while the chat floats there (`append-to`), with the
-         same dense pt and shortcut-hint row the workspace's file-tab menu uses — one tab menu, two strips. -->
+    <!-- Right-click menu, for a tab and for the strip's empty space alike. Rendered into the pop-out window while
+         the chat floats there (`append-to`), with the same dense pt and shortcut-hint row the workspace's file-tab
+         menu uses — one tab menu, two strips. -->
     <ContextMenu
         ref="tabMenu"
         :model="tabMenuItems"

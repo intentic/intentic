@@ -112,6 +112,44 @@ test(`the same failure in a non-Brave browser points at the push connection inst
     expect(push.error.value).not.toContain(`brave://`);
 });
 
+test(`the state is read again once the daemon comes online, not only on mount`, async () => {
+    // This page can mount before the daemon answers — the shell paints a hydrated workspace rather than the
+    // connecting gate for a sandbox that is merely slow — and a read that lands in that window has nobody to
+    // ask. Mounting was the only trigger, so the toggle stayed at its initial `off` for a browser that was in
+    // fact subscribed: every reload looked like the setting had been forgotten.
+    stubBrowser(`granted`, false);
+    manager.getSubscription.mockResolvedValue(subscription(`https://push.example/live`, KEY_A));
+    sandboxJson.mockResolvedValue({ publicKey: KEY_A, subscribed: true });
+    reachable.value = false;
+
+    const push = usePushNotifications();
+    await vi.waitFor(() => expect(sandboxJson).not.toHaveBeenCalled());
+    expect(push.state.value).toBe(`off`);
+
+    reachable.value = true;
+
+    await vi.waitFor(() => expect(push.state.value).toBe(`on`));
+});
+
+test(`a stale read cannot overwrite the toggle the user just moved`, async () => {
+    // The read above now fires exactly when someone is reaching for the toggle. It is the slower of the two
+    // (a service-worker lookup plus a daemon round-trip), so without a guard it lands last and reports the
+    // world as it was before the click — the same "it forgot my setting" from the other direction.
+    stubBrowser(`granted`, false);
+    manager.getSubscription.mockResolvedValue(null);
+    manager.subscribe.mockResolvedValue(subscription(`https://push.example/fresh`, KEY_A));
+    sandboxJson.mockImplementation(async (path: string) =>
+        path.startsWith(`/push/config`) ? { publicKey: KEY_A, subscribed: false } : { ok: true },
+    );
+
+    const push = usePushNotifications();
+    // The mount-time read is still in flight — deliberately not awaited — when the user turns it on.
+    await push.enable();
+    expect(push.state.value).toBe(`on`);
+
+    await vi.waitFor(() => expect(push.state.value).toBe(`on`));
+});
+
 test(`refresh reports "off" for a subscription bound to a superseded key`, async () => {
     // Both halves exist — the browser has a subscription and the daemon has its row — but the key moved on.
     // Reporting that as "on" is the silent failure the whole state machine exists to prevent.

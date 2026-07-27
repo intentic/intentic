@@ -52,27 +52,41 @@ export const filePushStore = (path: string): PushStore => {
     // Serializes read-modify-write so two concurrent subscribes can't lose one another's row. The whole file
     // is small and writes are rare, so one chained promise is the entire concurrency story.
     let queue: Promise<PushState> = Promise.resolve(undefined as unknown as PushState);
-    let loaded: PushState | undefined;
+    let loaded: Promise<PushState> | undefined;
 
     const write = async (state: PushState): Promise<void> => {
         await mkdir(dirname(path), { recursive: true });
         await writeFile(path, `${JSON.stringify(state, undefined, 2)}\n`, { mode: 0o600 });
-        loaded = state;
+        loaded = Promise.resolve(state);
     };
 
-    const load = async (): Promise<PushState> => {
+    // The PROMISE is cached, not the state it resolves to — the difference is the whole correctness of first
+    // use. `/push/config` reads keys() and list() with Promise.all, so on a fresh sandbox two loads run
+    // concurrently; caching only the settled value leaves BOTH seeing "nothing loaded yet", and each mints its
+    // own VAPID keypair. The browser then subscribes with the pair keys() happened to return while the daemon
+    // keeps whichever write landed last — so every send to that browser is refused 403, the row is pruned as
+    // dead, and notifications silently never arrive on a toggle that enabled cleanly.
+    const load = (): Promise<PushState> => {
         if (loaded !== undefined) {
             return loaded;
         }
-        const existing = await read(path);
-        if (existing !== undefined) {
-            loaded = existing;
-            return existing;
-        }
-        const generated = webpush.generateVAPIDKeys();
-        const fresh: PushState = { publicKey: generated.publicKey, privateKey: generated.privateKey, subscriptions: [] };
-        await write(fresh);
-        return fresh;
+        const pending = (async (): Promise<PushState> => {
+            const existing = await read(path);
+            if (existing !== undefined) {
+                return existing;
+            }
+            const generated = webpush.generateVAPIDKeys();
+            const fresh: PushState = { publicKey: generated.publicKey, privateKey: generated.privateKey, subscriptions: [] };
+            await write(fresh);
+            return fresh;
+        })();
+        // An unwritable history volume must not poison the cache: a rejected promise left in place would keep
+        // answering with the same stale failure long after the disk came back.
+        loaded = pending.catch((error: unknown) => {
+            loaded = undefined;
+            throw error;
+        });
+        return loaded;
     };
 
     const mutate = (change: (state: PushState) => PushState): Promise<PushState> => {

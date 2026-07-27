@@ -2106,3 +2106,9 @@ export const PushConfigSchema = z.object({ publicKey: z.string(), subscribed: z.
 export const PushEndpointSchema = z.object({ endpoint: z.string().url() });
 // `endpoint` identifies which browser is asking, so `subscribed` can be answered for THIS one.
 export const PushConfigQuerySchema = z.object({ endpoint: z.string().url().optional() });
+
+// What a test send actually achieved. `{ ok: true }` would be a lie the one place it matters most: the button
+// exists to prove a chain the user cannot inspect, so "the daemon accepted the request" is not the answer to
+// the question being asked. A count separates "your OS swallowed it" from "nothing was sent at all".
+export const PushTestSchema = z.object({ delivered: z.number().int().nonnegative() });
+export type PushTest = z.infer<typeof PushTestSchema>;

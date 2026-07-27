@@ -24,30 +24,41 @@ import type { PushStore } from "./push-store.js";
 // would let the settings toggle keep claiming "on" for a device that can no longer be reached.
 const DEAD = new Set([403, 404, 410]);
 
+// How many devices a send actually reached. The turn lifecycle ignores it — a missed notification is never
+// worth failing a turn over — but the settings page's test button has no other way to tell the user whether
+// the chain it claims to prove is intact, and a silent zero is precisely the failure it exists to catch.
+export interface PushDelivery {
+    readonly delivered: number;
+    readonly failed: number;
+}
+
 export interface PushSender {
     // Fan out to every subscribed device. Resolves once every send settles; never rejects.
-    readonly notify: (notification: PushNotification) => Promise<void>;
+    readonly notify: (notification: PushNotification) => Promise<PushDelivery>;
     // The same, but skipped entirely when anyone is actively watching this sandbox. This is what the turn
     // lifecycle calls; `notify` stays available for the settings page's explicit "send a test" button, which
     // must fire even though the user is by definition looking at the screen when they press it.
-    readonly notifyIfAway: (notification: PushNotification) => Promise<void>;
+    readonly notifyIfAway: (notification: PushNotification) => Promise<PushDelivery>;
 }
 
+const NOTHING_SENT: PushDelivery = { delivered: 0, failed: 0 };
+
 export const createPushSender = (store: PushStore, logger: Logger): PushSender => {
-    const notify = async (notification: PushNotification): Promise<void> => {
+    const notify = async (notification: PushNotification): Promise<PushDelivery> => {
         const [keys, subscriptions] = await Promise.all([store.keys(), store.list()]);
         if (subscriptions.length === 0) {
-            return;
+            return NOTHING_SENT;
         }
         // `mailto:` is required by the VAPID spec as the contact a push service can reach; it is never sent
         // anywhere else and identifies the software, not the user (the daemon has no address of its own).
         webpush.setVapidDetails("mailto:agent@intentic.dev", keys.publicKey, keys.privateKey);
         const payload = JSON.stringify(notification);
         // Every device is independent — one failing endpoint must not delay or cancel the others.
-        await Promise.all(
+        const outcomes = await Promise.all(
             subscriptions.map(async (subscription) => {
                 try {
                     await webpush.sendNotification(subscription, payload, { TTL: 600 });
+                    return true;
                 } catch (error) {
                     if (error instanceof WebPushError && DEAD.has(error.statusCode)) {
                         await store.remove(subscription.endpoint).catch(() => undefined);
@@ -55,23 +66,26 @@ export const createPushSender = (store: PushStore, logger: Logger): PushSender =
                             { endpoint: subscription.endpoint, statusCode: error.statusCode },
                             "push: dropped a subscription we can no longer send to",
                         );
-                        return;
+                        return false;
                     }
                     // Anything else is transient (a 5xx, a timeout). Warn and move on: there is nothing to
                     // retry against, and a missed notification is never worth failing the caller over.
                     logger.warn({ err: error, endpoint: subscription.endpoint }, "push: send failed");
+                    return false;
                 }
             }),
         );
+        const delivered = outcomes.filter(Boolean).length;
+        return { delivered, failed: outcomes.length - delivered };
     };
 
     return {
         notify,
         notifyIfAway: async (notification) => {
             if (!idleEverywhere()) {
-                return;
+                return NOTHING_SENT;
             }
-            await notify(notification);
+            return notify(notification);
         },
     };
 };
