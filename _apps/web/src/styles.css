@@ -13,6 +13,14 @@
 @import "../../../_libs/ui/src/styles/shared/index.css";
 @import "../../../_libs/ui/src/styles/core/index.css";
 
+/* Rendered markdown, then the conversation column that is its biggest consumer. Both are unlayered on
+ * purpose (they must beat the `components` layer), and both load here rather than from a component's
+ * <style> because neither is scoped to one component: prose.css styles v-html output shared by the chat
+ * and the workspace preview, and chat.css holds the chat's type scale plus the class names its components
+ * pass between each other. Order matters — chat.css tunes prose.css's tokens. */
+@import "./prose.css";
+@import "./chat/chat.css";
+
 /* Scan the @intentic-app/ui library's source for class names (it lives outside this app's tree,
  * so Tailwind won't auto-detect it). The app's own files are auto-detected. */
 @source "../../../_libs/ui/src/**/*.{ts,html,vue}";
@@ -81,97 +89,6 @@
         height: auto;
         min-height: 2.25rem;
     }
-}
-
-/* Fenced code blocks inside rendered markdown. markdownCode.ts substitutes them as raw markup (they live
- * inside v-html, so they can hold no component), and both surfaces that render markdown — the chat transcript
- * and the workspace file preview — get the same thing from the same renderer, so the rules live here rather
- * than in either one. The wrapper carries `ui-code`, the design system's own class, so the Shiki container
- * chrome and its dark-mode token flip (code.css) already govern the block itself; only the header row with the
- * language label and the copy button is ours. */
-.md-code {
-    margin: 0.7rem 0;
-}
-.md-code-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: 0.25rem;
-}
-.md-code-lang {
-    font-size: 0.625rem;
-    font-weight: 500;
-    color: var(--color-muted);
-}
-.md-code-copy {
-    cursor: pointer;
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-md);
-    padding: 0 0.4rem;
-    font-size: 0.625rem;
-    color: var(--color-muted);
-    transition:
-        color 0.15s,
-        border-color 0.15s;
-}
-.md-code-copy:hover {
-    color: var(--color-content);
-    border-color: var(--color-line-strong);
-}
-
-/* A Read tool card's highlighted file body (ChatCodeBody.vue). A flex row of a sticky line-number gutter and
- * the Shiki-colored code: the whole box scrolls, long lines don't wrap (one visual row per line keeps every
- * gutter number beside its code), and the gutter stays pinned on horizontal scroll. The gutter and `.shiki`
- * carry identical metrics (inherited font-size/line-height, matched padding-top) so line N sits beside number
- * N. Dark mode flips Shiki's tokens to their `--shiki-dark` var — the same mechanism code.css uses for the
- * design system's <Code>, replicated here since this body carries its own compact chrome, not `ui-code`. */
-.chat-code {
-    display: flex;
-    max-height: 10rem;
-    overflow: auto;
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-md);
-    background-color: var(--color-canvas);
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    line-height: 1.125rem;
-}
-.chat-code-gutter {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-    flex: none;
-    padding: 0.375rem 0.5rem;
-    text-align: right;
-    white-space: pre;
-    user-select: none;
-    color: var(--color-subtle);
-    background-color: var(--color-canvas);
-    border-right: 1px solid var(--color-line);
-    font-variant-numeric: tabular-nums;
-}
-.chat-code-view {
-    flex: none;
-}
-/* Never wrap — a wrapped line would take two rows in the code but one in the gutter and drift them apart. */
-.chat-code .shiki,
-.chat-code .shiki code {
-    white-space: pre;
-}
-.chat-code .shiki {
-    margin: 0;
-    padding: 0.375rem 0.75rem;
-    /* Over Shiki's inline light-theme background; the plain fallback gets the app's content color (Shiki's own
-     * output overrides it per-token). */
-    background-color: var(--color-canvas) !important;
-    color: var(--color-content);
-    font-size: inherit;
-    line-height: inherit;
-    overflow: visible;
-}
-[data-mode="dark"] .chat-code .shiki,
-[data-mode="dark"] .chat-code .shiki span {
-    color: var(--shiki-dark) !important;
 }
 
 /* GSI injects its One Tap / verifying prompt iframe at body level. Match its light color-scheme

@@ -182,7 +182,25 @@ const submitAnswers = (): void => {
     void answerQuestion(props.message, answers);
 };
 
-const answerSummary = (question: AskQuestion): string => (props.message.question?.answers?.[question.question] ?? []).join(`, `);
+// A DECIDED question card is the record of the decision, so it keeps every option that was on the table and
+// marks the one(s) taken — read back a week later, "Your original ×" means nothing without the alternatives it
+// was chosen over. A free-text answer belongs to no option, so it joins the list as a row of its own: it is
+// the one answer that would otherwise vanish from the transcript entirely.
+interface DecidedOption {
+    readonly label: string;
+    readonly description?: string;
+    readonly preview?: string;
+    readonly picked: boolean;
+}
+
+const decidedOptions = (question: AskQuestion): DecidedOption[] => {
+    const picks = props.message.question?.answers?.[question.question] ?? [];
+    const typed = picks.filter((pick) => !question.options.some((option) => option.label === pick));
+    return [
+        ...question.options.map((option) => ({ ...option, picked: picks.includes(option.label) })),
+        ...typed.map((label) => ({ label, picked: true })),
+    ];
+};
 
 // --- Per-message workspace restore (hover history icon on user bubbles) -----------------------
 // Restores /work to the checkpoint captured before this turn ran (the daemon's checkpoint frame). Gated on
@@ -210,6 +228,45 @@ const restoreToCheckpoint = async (): Promise<void> => {
         await restoreSnapshot(queryClient, checkpointId);
     } finally {
         restoring.value = false;
+    }
+};
+
+// --- Long prompt clamp (see .chat-prompt-text) ------------------------------------------------
+// The bubble is clamped in CSS; whether the clamp actually bites is a question of wrapping, and wrapping
+// depends on a panel width the user can drag. So the element is measured rather than its text guessed at,
+// and re-measured whenever it resizes — a prompt that fits at a wide panel clips at a narrow one, and a
+// faded-out prompt with no way to open it is just lost text.
+const bubble = ref<HTMLElement>();
+const overflowing = ref(false);
+const expanded = ref(false);
+
+watch(
+    bubble,
+    (element, _previous, onCleanup) => {
+        if (element === undefined) {
+            overflowing.value = false;
+            return;
+        }
+        const observer = new ResizeObserver(() => {
+            // Open, the clamp is off and the box always fits — there is nothing to measure, and measuring
+            // would clear the flag that keeps the collapse control on screen. The next collapse re-measures.
+            if (!expanded.value) {
+                overflowing.value = element.scrollHeight > element.clientHeight + 1;
+            }
+        });
+        observer.observe(element);
+        onCleanup(() => observer.disconnect());
+    },
+    { immediate: true },
+);
+
+// A clamped box has no scrollbar and cannot be scrolled by hand, so any scroll it reports came from the
+// browser revealing something inside it — find-in-page landing on a match below the fold, or a screen reader
+// moving to it. Both mean the same thing: open the message, and put the box back where it belongs.
+const onBubbleScroll = (): void => {
+    if (bubble.value !== undefined && bubble.value.scrollTop > 0) {
+        expanded.value = true;
+        bubble.value.scrollTop = 0;
     }
 };
 
@@ -283,7 +340,11 @@ const onEditKeydown = (event: KeyboardEvent): void => {
 <template>
     <!-- The click handler is delegated for the markdown's own controls — copy buttons and file links — which
          live inside v-html and so can hold no component of their own (see onMarkdownClick). -->
-    <div class="chat-message flex flex-col gap-1" :class="{ 'chat-prompt items-end': message.role === 'user' }" @click="onMarkdownClick">
+    <div
+        class="chat-message flex flex-col gap-1"
+        :class="{ 'chat-prompt items-end': message.role === 'user', 'chat-prompt-open': expanded }"
+        @click="onMarkdownClick"
+    >
         <div v-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
             <!-- The chip/thumbnail row stays visible in edit mode (read-only — the attachments ride the re-run). -->
             <div v-if="message.attachments?.length" class="flex flex-wrap justify-end gap-1.5">
@@ -350,10 +411,21 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 >
                     <Icon name="pencil" class="text-2xs" />
                 </button>
-                <div v-if="message.text" class="chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content/90">
+                <div
+                    v-if="message.text"
+                    ref="bubble"
+                    class="chat-prompt-text chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content/90"
+                    @scroll="onBubbleScroll"
+                >
                     {{ message.text }}
                 </div>
             </div>
+            <!-- Only for a prompt the clamp actually cut. Opening it also unpins it, so a long message can be
+                 read in full without taking the screen over for the rest of the turn. -->
+            <button v-if="overflowing" type="button" class="composer-ghost h-5 gap-1 px-1.5 text-2xs" @click="expanded = !expanded">
+                {{ expanded ? `Show less` : `Show more` }}
+                <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+            </button>
         </div>
         <div v-else-if="message.role === 'notice'" class="flex items-center gap-2 self-center py-0.5 text-2xs text-subtle">
             <Icon name="info-circle" class="text-2xs" />
@@ -391,7 +463,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <!-- Two v-html slots, not one: the settled half is unchanged between frames so Vue leaves its DOM
                  (and the user's selection) alone, while only the short tail is re-rendered. `.md-part` is
                  display:contents, so the prose still lays out as direct children of .chat-markdown. -->
-            <div v-if="message.text" class="chat-markdown chat-surface-assistant w-full rounded-lg px-3 py-2 text-content/85">
+            <div v-if="message.text" class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
                 <div v-if="body.settled" class="md-part" v-html="body.settled"></div>
                 <div v-if="body.tail" class="md-part" v-html="body.tail"></div>
             </div>
@@ -415,7 +487,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         <Icon name="window-maximize" class="text-xs" />
                     </button>
                 </div>
-                <div class="chat-markdown chat-markdown-compact px-3.5 py-3 text-content/85" v-html="plan.settled"></div>
+                <div class="md-prose chat-markdown chat-markdown-compact px-3.5 py-3" v-html="plan.settled"></div>
                 <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
                     <!-- The first approval restores the posture the conversation was in before it planned; the
                          rest are the other two postures, so any of them is one click away. -->
@@ -469,9 +541,11 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                     :name="isSelected(index, option.label) ? 'check-circle' : 'circle'"
                                     :class="isSelected(index, option.label) ? 'text-primary-500' : 'text-subtle'"
                                 />
-                                <span class="flex min-w-0 flex-col">
-                                    <span class="text-xs text-content">{{ option.label }}</span>
-                                    <span class="text-2xs text-subtle">{{ option.description }}</span>
+                                <!-- The description carries the actual trade-off between options, so it is muted
+                                     rather than subtle: it is read before choosing, not glanced past. -->
+                                <span class="flex min-w-0 flex-col gap-0.5">
+                                    <span class="text-xs font-medium text-content">{{ option.label }}</span>
+                                    <span class="text-2xs leading-snug text-muted">{{ option.description }}</span>
                                 </span>
                             </button>
                             <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
@@ -483,7 +557,36 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                                 class="rounded-lg border border-line bg-card px-2.5 py-1.5 text-base text-content placeholder:text-subtle focus:border-line-strong focus:outline-none md:text-xs"
                             />
                         </div>
-                        <span v-else class="text-xs text-content/85">{{ answerSummary(question) || "—" }}</span>
+                        <!-- Decided (answered or dismissed): the same options, frozen. Nothing here may read as
+                             a control — no button, no hover, no focus stop, and no empty radio, which is the
+                             one mark that says "still yours to pick". Only the check moves. -->
+                        <div v-else class="flex flex-col gap-1.5" role="list">
+                            <div
+                                v-for="option in decidedOptions(question)"
+                                :key="option.label"
+                                role="listitem"
+                                class="flex items-start gap-2 rounded-lg border border-transparent px-2.5 py-2"
+                                :class="{ 'qopt-picked': option.picked }"
+                                v-tooltip.left="option.preview ?? ''"
+                            >
+                                <span class="mt-0.5 flex w-3 shrink-0 justify-center">
+                                    <Icon v-if="option.picked" name="check" class="text-2xs text-primary-500" />
+                                </span>
+                                <span class="flex min-w-0 flex-col gap-0.5">
+                                    <span class="text-xs font-medium" :class="option.picked ? 'text-content' : 'text-muted'">
+                                        <span v-if="option.picked" class="sr-only">Chosen: </span>{{ option.label }}
+                                    </span>
+                                    <!-- The rejected options keep the LIVE card's description colour: dimming
+                                         the label is what says "not this one", and fading the reasoning under
+                                         it past legibility would leave the alternatives on screen as texture
+                                         rather than as the record they are here to be. (That colour is muted,
+                                         not subtle — the live card moved with the type scale, and this rule is
+                                         stated against it, so it moves too. Weight and gap match the live row
+                                         for the same reason: answering a card must not reflow it.) -->
+                                    <span v-if="option.description" class="text-2xs leading-snug text-muted">{{ option.description }}</span>
+                                </span>
+                            </div>
+                        </div>
                     </div>
 
                     <div v-if="message.question.status === 'pending'" class="flex items-center gap-2 pt-1">

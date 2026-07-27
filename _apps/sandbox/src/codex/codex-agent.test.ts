@@ -185,8 +185,14 @@ test("a plan turn proposes read-only, then executes full-access on the same thre
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-2" },
         { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route, then test." },
-        // The card's release, carrying the id it went up with — what tells the fleet the turn stopped waiting.
-        { kind: "resolved", requestId: expect.any(String) as string },
+        // The card's release, carrying the id it went up with — what tells the fleet the turn stopped waiting,
+        // and the approval itself, which is what stops a client replaying this run from rebuilding the plan
+        // card and asking to have it approved all over again.
+        {
+            kind: "resolved",
+            requestId: expect.any(String) as string,
+            reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
+        },
         { kind: "delta", text: "Done." },
         { kind: "text_end" },
         { kind: "done" },
@@ -274,6 +280,11 @@ test("a plan turn survives an advisory and still proposes its plan", async () =>
         { kind: "session", sessionId: "thr-10" },
         { kind: "error", code: "codex-advisory", message: ADVISORY },
         { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route." },
+        {
+            kind: "resolved",
+            requestId: expect.any(String) as string,
+            reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
+        },
         { kind: "delta", text: "Done." },
         { kind: "text_end" },
         { kind: "done" },

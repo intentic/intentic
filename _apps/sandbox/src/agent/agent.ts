@@ -777,8 +777,10 @@ const askServer = (request: AgentRequest, push: (event: AgentEvent) => void): Mc
                     const questions = args.questions as AskQuestion[];
                     const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true });
                     push({ kind: "question", requestId: id, questions });
-                    const reply = await wait(request.signal);
-                    push({ kind: "resolved", requestId: id });
+                    const { reply, resolved } = await wait(request.signal);
+                    // The picks belong in the frame log, not just in this tool result: they are what a replayed
+                    // or second-window transcript freezes the card with (see the `resolved` frame).
+                    push(resolved);
                     return { content: [{ type: "text", text: formatAnswers(questions, reply) }] };
                 },
             ),
@@ -832,8 +834,8 @@ const permissionGate =
         if (toolName === "ExitPlanMode") {
             const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
             push({ kind: "plan", requestId: id, text: String((input as { plan?: unknown }).plan ?? "") });
-            const reply = await wait(request.signal);
-            push({ kind: "resolved", requestId: id });
+            const { reply, resolved } = await wait(request.signal);
+            push(resolved);
             if (!reply.approve) {
                 return { behavior: "deny", message: reply.feedback?.trim() || "Keep refining the plan — do not exit plan mode yet." };
             }
@@ -874,8 +876,8 @@ const permissionGate =
             // the SDK suggesting one of its own.
             alwaysLabel: `Don't ask again for ${options.displayName ?? toolName}`,
         });
-        const reply = await wait(request.signal);
-        push({ kind: "resolved", requestId: id });
+        const { reply, resolved } = await wait(request.signal);
+        push(resolved);
         if (reply.decision === "deny") {
             return {
                 behavior: "deny",

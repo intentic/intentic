@@ -71,7 +71,7 @@ const {
     decidePlan,
     openConversation,
     composerFocus,
-    closeTab: closeTabAction,
+    closeTabs: closeTabsAction,
     availableCommands,
 } = useChat();
 const router = useRouter();
@@ -686,8 +686,9 @@ const selectTab = (id: string): void => {
     atBottom.value = true;
 };
 
-const closeTab = (id: string): void => {
-    closeTabAction(id);
+// One or many — the strip's × sends a single id, its context menu the Close Others / to-the-Right / All sets.
+const closeTabs = (ids: ReadonlySet<string>): void => {
+    closeTabsAction(ids);
     atBottom.value = true;
 };
 
@@ -806,8 +807,8 @@ watch(keyboardInset, () => {
             title="Drag to resize · double-click to reset"
         ></div>
 
-        <ChatTabsMobile v-if="mobile" @select="selectTab" @close="closeTab" @open="openFromHistory" />
-        <ChatTabs v-else @select="selectTab" @close="closeTab" @open="openFromHistory" />
+        <ChatTabsMobile v-if="mobile" @select="selectTab" @close="closeTabs" @open="openFromHistory" />
+        <ChatTabs v-else @select="selectTab" @close="closeTabs" @open="openFromHistory" />
 
         <!-- The inner wrapper is what the autoscroll ResizeObserver measures; the scroller itself never
              changes height, so it can't report the transcript growing.
@@ -815,7 +816,7 @@ watch(keyboardInset, () => {
              PADDING edge, so a pt-4 out here would leave a 1rem band above the pinned row for the previous
              turn to slide through. Inside the wrapper the same inset is content, and the prompt pins flush. -->
         <div ref="scroller" class="scrollbar-thin flex flex-1 flex-col overflow-auto px-4 pb-4" @scroll="onScroll">
-            <div ref="content" class="flex flex-1 flex-col gap-1 pt-4">
+            <div ref="content" class="chat-turns flex flex-1 flex-col gap-1 pt-4">
                 <template v-if="messages.length > 0">
                     <!-- One section per turn, purely so each prompt's sticky range ends where its answer does. -->
                     <section v-for="turn in turns" :key="turn.id" class="flex flex-col gap-1">
@@ -1088,402 +1089,25 @@ watch(keyboardInset, () => {
         <!-- The pickers: anchored popovers on desktop, bottom sheets on mobile — same menu bodies. -->
         <template v-if="mobile">
             <BottomSheet v-model="modelSheetOpen" header="Model">
-                <ChatModelPicker @selected="modelSheetOpen = false" />
+                <div class="chat-scale"><ChatModelPicker @selected="modelSheetOpen = false" /></div>
             </BottomSheet>
             <BottomSheet v-model="modeSheetOpen" header="Agent mode">
-                <ChatModeMenu @selected="modeSheetOpen = false" />
+                <div class="chat-scale"><ChatModeMenu @selected="modeSheetOpen = false" /></div>
             </BottomSheet>
         </template>
         <template v-else>
             <!-- Flush content (no composer-pop-content padding): the picker's search bar and rail sit
                  edge-to-edge against the popover chrome. -->
             <Popover ref="providerModel" :append-to="overlayTarget" :pt="{ content: { class: '!p-0' } }">
-                <div class="w-[26rem]">
+                <div class="chat-scale w-[26rem]">
                     <ChatModelPicker @selected="providerModel?.hide()" />
                 </div>
             </Popover>
             <Popover ref="modeMenu" :append-to="overlayTarget" :pt="{ content: { class: 'composer-pop-content' } }">
-                <div class="w-56">
+                <div class="chat-scale w-56">
                     <ChatModeMenu @selected="modeMenu?.hide()" />
                 </div>
             </Popover>
         </template>
     </div>
 </template>
-
-<!-- Unscoped on purpose: .chat-markdown targets v-html-injected prose, and the rest are class names shared
-     across the chat components (tabs, message view, account panel), so they live once here at the panel root. -->
-<style>
-/* Long transcripts: let the browser skip layout and paint for turns that are scrolled out of view. Every
-   message here has been painted at least once — it streamed in front of the user — so `auto` remembers each
-   one's real height and scrolling back through them needs no size estimator. The intrinsic size only has to
-   carry a transcript restored straight to its bottom, where the rows above have never painted; the browser's
-   scroll anchoring absorbs the correction as they realize. */
-.chat-message {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 3rem;
-}
-/* The prompt stays on screen for as long as its answer does: it pins to the top of the transcript while the
-   turn scrolls beneath it, and the next turn's prompt pushes it out. Claude Code's transcript, and for the same
-   reason — a long turn otherwise buries the question it is answering, and re-finding it means scrolling away
-   from the output you were reading.
-   The pin is bounded by the per-turn <section> the panel groups messages into; without that grouping every
-   prompt would stick to the same top edge and stack.
-   Opaque --color-card (the scroller's own background) because a pinned row floats over the messages it holds
-   above: invisible in place, solid once it lifts. content-visibility is dropped for the same reason — a pinned
-   row is on screen for the whole turn, so it must never be skipped. */
-.chat-prompt {
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    padding-top: 0.75rem;
-    background: var(--color-card);
-    content-visibility: visible;
-}
-.chat-surface {
-    background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-primary-500) 22%, var(--color-line));
-}
-.chat-surface-assistant {
-    background: color-mix(in srgb, var(--color-overlay) 35%, transparent);
-    border: 1px solid var(--color-line);
-}
-/* Chat type scale — three tiers, and nothing else in the chat column:
-     meta   0.6875rem  (text-2xs)  tool cards, timestamps, badges, hints, descriptions, code
-     body   0.75rem    (text-xs)   all prose and controls: bubbles, markdown, composer, menu rows
-     title  0.875rem   (text-sm)   card header lines only (plan / question / permission)
-   Touch bumps a step, so shared surfaces are written as a pair — `text-base md:text-xs` on inputs
-   (16px is iOS's zoom threshold), `text-sm md:text-xs` on menu rows. The `md:` half is always a tier
-   from this table; the mobile-only components (ChatTabsMobile) sit at the touch sizes throughout.
-   Labelled .composer-ghost buttons are chrome, not content: they take the meta tier wherever they
-   appear (the composer's model/mode row, the picker's footer, the connect gate's provider tabs), so
-   the controls framing the input never out-weigh the message being written in it.
-   Mono runs a tier below its sans context — it reads optically larger at the same nominal size.
-   The rules below are stated in `em` so the prose scales with the body tier instead of pinning a
-   second, absolute scale beside it. */
-.chat-markdown {
-    font-size: 0.75rem;
-    line-height: 1.625;
-}
-.chat-markdown > :first-child {
-    margin-top: 0;
-}
-.chat-markdown > :last-child {
-    margin-bottom: 0;
-}
-/* A streamed assistant body is split across two .md-part wrappers (settled + still-writing). display:contents
-   removes them from layout so the prose inside still behaves as direct children of .chat-markdown — but the
-   two rules above then match the WRAPPER, where margin does nothing, so the edge rules are restated one level
-   down. Both parts are v-if'd on non-empty content, so whichever exists is correctly first/last. */
-.chat-markdown > .md-part {
-    display: contents;
-}
-.chat-markdown > .md-part:first-child > :first-child {
-    margin-top: 0;
-}
-.chat-markdown > .md-part:last-child > :last-child {
-    margin-bottom: 0;
-}
-.chat-markdown p {
-    margin: 0.6rem 0;
-}
-.chat-markdown h1,
-.chat-markdown h2,
-.chat-markdown h3,
-.chat-markdown h4 {
-    margin: 1.1rem 0 0.5rem;
-    font-weight: 600;
-    line-height: 1.3;
-}
-.chat-markdown h1 {
-    font-size: 1.45em;
-}
-.chat-markdown h2 {
-    font-size: 1.25em;
-}
-.chat-markdown h3 {
-    font-size: 1.1em;
-}
-.chat-markdown h4 {
-    font-size: 1em;
-}
-.chat-markdown ul,
-.chat-markdown ol {
-    margin: 0.6rem 0;
-    padding-left: 1.35rem;
-}
-.chat-markdown li {
-    margin: 0.25rem 0;
-}
-.chat-markdown li > ul,
-.chat-markdown li > ol {
-    margin: 0.25rem 0;
-}
-.chat-markdown strong {
-    font-weight: 600;
-}
-.chat-markdown blockquote {
-    margin: 0.6rem 0;
-    padding: 0.1rem 0 0.1rem 0.85rem;
-    border-left: 3px solid var(--color-line-strong);
-    color: var(--color-muted);
-}
-.chat-markdown hr {
-    margin: 1rem 0;
-    border: 0;
-    border-top: 1px solid var(--color-line);
-}
-.chat-markdown pre {
-    margin: 0.7rem 0;
-    overflow-x: auto;
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-md);
-    background: var(--color-canvas);
-    padding: 0.8rem;
-}
-.chat-markdown pre code {
-    background: transparent;
-    padding: 0;
-}
-/* Fenced code blocks are substituted as raw markup by markdownCode and styled app-wide in styles.css — the
-   workspace markdown preview renders the same markup from the same renderer.
-   One size for inline and fenced code: the meta tier, which lands a step under the prose because mono runs
-   optically larger than the sans body at the same nominal size. */
-.chat-markdown code {
-    font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 0.6875rem;
-    background: color-mix(in srgb, var(--color-content) 9%, transparent);
-    padding: 0.1em 0.34em;
-    border-radius: var(--radius-xs);
-}
-.chat-markdown a {
-    color: var(--color-link);
-    text-decoration: none;
-}
-.chat-markdown a:hover {
-    text-decoration: underline;
-}
-/* A file the agent named, linkified by markdownFileLinks — clicking opens it in the Workspace. The dotted rule
-   is the affordance: a path reads as "opens here" before it is hovered, and stays distinguishable from an
-   outbound link, which is undecorated until hover. Written one level more specific than the rule above so it
-   wins the text-decoration regardless of stylesheet order. */
-.chat-markdown a.md-file-link {
-    text-decoration: underline dotted color-mix(in srgb, var(--color-link) 45%, transparent);
-    text-underline-offset: 0.2em;
-}
-.chat-markdown a.md-file-link:hover {
-    text-decoration: underline solid var(--color-link);
-}
-.chat-markdown table {
-    width: 100%;
-    margin: 0.7rem 0;
-    border-collapse: collapse;
-    font-size: 0.6875rem;
-}
-.chat-markdown th,
-.chat-markdown td {
-    padding: 0.4rem 0.6rem;
-    text-align: left;
-    border-bottom: 1px solid var(--color-line);
-}
-.chat-markdown th {
-    font-weight: 600;
-    color: var(--color-content);
-}
-.chat-markdown-compact h1,
-.chat-markdown-compact h2,
-.chat-markdown-compact h3,
-.chat-markdown-compact h4 {
-    font-size: 1.1em;
-    margin: 0.7rem 0 0.35rem;
-}
-.chat-markdown-compact p {
-    margin: 0.45rem 0;
-}
-.plan-approve,
-.plan-reject {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    height: 2rem;
-    padding: 0 0.85rem;
-    border-radius: var(--radius-md);
-    font-size: 0.75rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition:
-        background-color 0.15s,
-        color 0.15s,
-        border-color 0.15s;
-}
-.plan-approve {
-    background: var(--color-primary-fill);
-    color: var(--color-fill-content);
-    border: 1px solid transparent;
-}
-.plan-approve:hover {
-    background: var(--color-primary-fill-hover);
-}
-.plan-reject {
-    background: transparent;
-    color: var(--color-content);
-    border: 1px solid var(--color-line-strong);
-}
-.plan-reject:hover {
-    background: color-mix(in srgb, var(--color-content) 8%, transparent);
-    border-color: var(--color-content);
-}
-/* The question card's Submit / Dismiss sit inline with smaller controls (option rows, the Other field),
-   so they run a touch tighter than the plan/permission decisions. Desktop only — the mobile block below
-   still lifts .plan-approve/.plan-reject back to full 2.75rem touch targets. */
-.plan-sm {
-    height: 1.75rem;
-    padding: 0 0.7rem;
-    font-size: 0.6875rem;
-}
-.chat-tab {
-    color: var(--color-muted);
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition:
-        background-color 0.15s,
-        color 0.15s,
-        border-color 0.15s;
-}
-.chat-tab:hover {
-    background: color-mix(in srgb, var(--color-content) 6%, transparent);
-    color: var(--color-content);
-}
-.chat-tab-on {
-    background: color-mix(in srgb, var(--color-overlay) 70%, transparent);
-    color: var(--color-content);
-    border-color: var(--color-line);
-}
-.qopt {
-    cursor: pointer;
-}
-.qopt:hover {
-    background: color-mix(in srgb, var(--color-content) 5%, transparent);
-}
-.qopt-on {
-    background: color-mix(in srgb, var(--color-primary-500) 14%, transparent);
-}
-.p-popover-content.composer-pop-content {
-    padding: 0.25rem;
-}
-.qopt-on:hover {
-    background: color-mix(in srgb, var(--color-primary-500) 18%, transparent);
-}
-.composer-ghost {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-lg);
-    color: var(--color-muted);
-    cursor: pointer;
-    transition:
-        background-color 0.15s,
-        color 0.15s;
-}
-.composer-ghost:hover {
-    background: color-mix(in srgb, var(--color-content) 8%, transparent);
-    color: var(--color-content);
-}
-.composer-active {
-    background: color-mix(in srgb, var(--color-primary-500) 16%, transparent);
-    color: var(--color-primary-500);
-}
-.composer-active:hover {
-    background: color-mix(in srgb, var(--color-primary-500) 24%, transparent);
-    color: var(--color-primary-500);
-}
-.composer-effort-seg {
-    height: 0.75rem;
-    width: 0.25rem;
-    box-sizing: content-box;
-    background-clip: content-box; /* keep the visible bar thin; the padding-right gap stays transparent */
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
-    transition:
-        background-color 0.15s,
-        filter 0.15s;
-}
-/* The gap between two bars is a click target for the lower (left) level — it lives as this bar's
-   right-padding rather than a flex gap, so clicking the empty space snaps down, not up. */
-.composer-effort-seg:not(:last-child) {
-    padding-right: 0.125rem;
-}
-.composer-effort-seg:hover {
-    background-color: color-mix(in srgb, var(--color-content) 22%, transparent); /* unlit hover */
-    filter: brightness(1.15); /* lit-bar hover feedback (inline bg wins over class bg) */
-}
-.composer-send {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 2rem;
-    width: 2rem;
-    border-radius: 9999px;
-    background: var(--color-primary-fill);
-    color: var(--color-fill-content);
-    cursor: pointer;
-    transition:
-        background-color 0.15s,
-        opacity 0.15s;
-}
-.composer-send:hover {
-    background: var(--color-primary-fill-hover);
-}
-.composer-send:disabled {
-    background: var(--color-overlay);
-    color: var(--color-subtle);
-    cursor: default;
-}
-.composer-stop {
-    background: var(--color-overlay);
-    color: var(--color-content);
-}
-.composer-stop:hover {
-    background: color-mix(in srgb, var(--color-content) 12%, var(--color-overlay));
-}
-.resize-handle {
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 6px;
-    cursor: col-resize;
-    z-index: 20;
-    touch-action: none;
-    transition: background-color 0.15s;
-}
-.resize-handle:hover,
-.chat-panel.is-resizing .resize-handle {
-    background: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
-}
-.chat-panel.is-resizing {
-    user-select: none;
-}
-
-/* Mobile touch sizing: 44px send/stop and plan-decision targets, chunkier effort segments. The utility
-   classes handle the Vue-templated buttons; these cover the fixed-size CSS components (send button, the
-   v-html plan buttons rendered by ChatMessageView). Deliberately viewport-based (device class), unlike the
-   @container variants in the template that thin out labels by panel width — don't unify the two. */
-@media (max-width: 767.98px) {
-    .composer-send {
-        height: 2.75rem;
-        width: 2.75rem;
-    }
-    .plan-approve,
-    .plan-reject {
-        height: 2.75rem;
-        padding: 0 1.25rem;
-    }
-    .composer-effort-seg {
-        height: 1.1rem;
-        width: 0.5rem;
-    }
-    .composer-effort-seg:not(:last-child) {
-        padding-right: 0.3rem; /* chunkier snap-down gap for touch */
-    }
-}
-</style>

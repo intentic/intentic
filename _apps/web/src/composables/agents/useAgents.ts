@@ -87,6 +87,11 @@ export const resetAgents = (): void => {
     registry.value = [];
     pending.clear();
     appliedRev = -1;
+    // An undo is a promise to a particular daemon about particular ids; the next one we speak to may be a
+    // restart that has never heard of them. The reports offering it go with it.
+    undoable.value = [];
+    receipt.value = undefined;
+    notice.value = undefined;
 };
 
 // Unread tracking: an agent whose updatedAt outruns the last time it was OPENED, while it isn't running, "has
@@ -280,19 +285,42 @@ const loadArchived = async (): Promise<void> => {
     }
 };
 
-// The board's ONE inline report — it has no toast surface, so an action that needs to say something (a failed
-// drop, or an archive offering its way back) says it in a strip under the header. An `undo` makes it the
-// board's undo affordance; `tone` is the only thing that distinguishes a failure from a receipt.
-export interface FleetNotice {
+/* --- What an archive says ------------------------------------------------------------------------------------
+ * Feedback proportional to consequence. Archiving is the action a user performs dozens of times a session, and
+ * it is lossless (branch, transcript and counters all stay), so what it says has to be worth what it costs:
+ *
+ *   · ONE card archived → nothing. The card visibly leaves its lane and the Finished header's archive counter
+ *     ticks up, so a strip that repeats the animation is chrome paid for on every press and read on none. It
+ *     also SHIFTED the board, which is how a routine action came to feel like an interruption.
+ *   · A BULK sweep      → a receipt, because the thing that vouches for a single archive — watching the card
+ *     go — is exactly what clearing twelve at once denies you. It floats over the board instead of shifting
+ *     it, and it retires itself.
+ *   · A FAILURE         → the persistent strip. An error has to be read, so it must not expire on a timer.
+ *
+ * None of them OWNS the undo. The way back is a fact about the store (`undoable`), so Mod+Z reaches the last
+ * archive whether a receipt was ever raised or has long since faded. */
+
+// The board's must-read strip: an action that failed (a drop, an archive, a restore). No timer — an error the
+// user never saw is one that surprises them later.
+const notice = ref<string | undefined>(undefined);
+
+// The self-retiring report a bulk archive raises. The VIEW owns its expiry (a hovered receipt must not vanish
+// under the cursor that came for its Undo), which also keeps this module timer-free.
+export interface FleetReceipt {
     readonly message: string;
-    readonly tone: "error" | "info";
     readonly undo?: () => Promise<void>;
-    // The ids `undo` would put back. Carried ON the notice rather than beside it so the set can never outlive
-    // the message offering it: replacing the notice — with an error, a drag's report, or nothing at all —
-    // retires the undo with it, and there is no second place to remember to clear.
-    readonly restores?: readonly string[];
 }
-const notice = ref<FleetNotice | undefined>(undefined);
+const receipt = ref<FleetReceipt | undefined>(undefined);
+
+// The ids an undo would put back. Consecutive archives MERGE: clicking down the Finished lane is one intent,
+// and a stack remembering only the newest press would silently drop the way back to everything before it —
+// which is the whole reason archiving is allowed to skip its confirmation. Unbounded in time on purpose: undo
+// means "undo what I did", and putting a card back costs no more than taking it off did.
+const undoable = ref<readonly string[]>([]);
+
+// Bumped by every archive that moved something — the ambient signal the archive counter pulses on. A counter
+// rather than a flag because it is the EVENT that matters: two archives in a row owe the user two pulses.
+const archivedFlash = ref(0);
 
 // Which cards are mid-action. A COUNTER per id, not a list: archiving is something the user does card by card
 // as fast as they can click, so two calls overlap constantly, and a shared "the ids in flight" ref meant the
@@ -322,6 +350,10 @@ const dismissNotice = (): void => {
     notice.value = undefined;
 };
 
+const dismissReceipt = (): void => {
+    receipt.value = undefined;
+};
+
 // Archive the named agents, or — with no ids — every finished agent that is archivable right now (the lane
 // header's "Clear"). The daemon answers with the agents that actually moved: "everything finished" cannot be
 // re-derived once the lane is empty, and the summaries are what the archive list renders.
@@ -329,6 +361,8 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
     // The bulk press has no ids of its own, so it borrows the lane's — otherwise "Clear" would sit silent
     // through the round-trip while the cards it is about to take carried on looking untouched.
     const release = claimBusy(ids ?? lanes.value.finished.map((agent) => agent.id));
+    // A sweep is the archive with no per-card animation to vouch for it, so it is the archive that reports.
+    const sweep = ids === undefined || ids.length > 1;
     try {
         const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(`/agents/archive`, {
             method: `POST`,
@@ -336,7 +370,9 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
             body: JSON.stringify(ids === undefined ? {} : { ids }),
         });
         if (moved.length === 0) {
-            notice.value = { message: `Nothing to archive — every finished agent is already off the board.`, tone: `info` };
+            // A press that changed nothing always says so, however few cards it aimed at: silence is the one
+            // reading the user can't distinguish from a broken button.
+            receipt.value = { message: `Nothing to archive — every finished agent is already off the board.` };
             return;
         }
         // A DELTA, not the roster the daemon happens to hold now: two archives in flight would otherwise race,
@@ -357,18 +393,19 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
             ...moved.map((agent) => Object.assign(agent, { open: false, unread: false })),
             ...archived.value.filter((agent) => !gone.has(agent.id)),
         ];
-        // Archiving several cards in a row is ONE intent, so consecutive receipts merge into one undo. The
-        // alternative — newest notice wins — quietly threw away the way back to everything archived before it,
-        // which is the worst thing to lose from the affordance that makes archiving safe enough not to confirm.
-        const restorable = [...moved.map((agent) => agent.id), ...(notice.value?.restores ?? []).filter((id) => !gone.has(id))];
-        notice.value = {
-            message: `${restorable.length} agent${restorable.length === 1 ? `` : `s`} archived. Their work and transcripts are kept.`,
-            tone: `info`,
-            undo: () => restore(restorable),
-            restores: restorable,
-        };
+        // Archiving several cards in a row is ONE intent, so consecutive archives merge into one undo (see
+        // `undoable`). The receipt counts that merged set rather than this press alone — it is the number the
+        // Undo beside it would put back, and a receipt whose count disagrees with its own button is a lie.
+        undoable.value = [...moved.map((agent) => agent.id), ...undoable.value.filter((id) => !gone.has(id))];
+        archivedFlash.value += 1;
+        // The archive worked, so whatever failure the strip was still holding is stale.
+        notice.value = undefined;
+        if (sweep) {
+            const count = undoable.value.length;
+            receipt.value = { message: `${count} agent${count === 1 ? `` : `s`} archived`, undo: undoArchive };
+        }
     } catch (error) {
-        notice.value = { message: errorMessage(error, `Couldn't archive that.`), tone: `error` };
+        notice.value = errorMessage(error, `Couldn't archive that.`);
     } finally {
         release();
     }
@@ -393,12 +430,26 @@ const restore = async (ids: readonly string[]): Promise<void> => {
             moved.map((agent) => ({ id: agent.id, present: agent })),
             rev,
         );
+        // What is back on the board is no longer anyone's to undo — including when the user restored it card
+        // by card from the archive view rather than through the undo itself.
+        undoable.value = undoable.value.filter((id) => !back.has(id));
+        receipt.value = undefined;
         notice.value = undefined;
     } catch (error) {
-        notice.value = { message: errorMessage(error, `Couldn't restore that.`), tone: `error` };
+        notice.value = errorMessage(error, `Couldn't restore that.`);
     } finally {
         release();
     }
+};
+
+// The ONE undo, so the two affordances offering it — a sweep's receipt and Mod+Z — can never come to mean
+// different things. A no-op with nothing to put back, which is also what lets the keybinding stay out of the
+// way of everything else Mod+Z means (see AgentsView's `when` gate).
+const undoArchive = async (): Promise<void> => {
+    if (undoable.value.length === 0) {
+        return;
+    }
+    await restore(undoable.value);
 };
 
 // Resolve one agent by id across BOTH halves of the fleet. The board's roster deliberately drops archived
@@ -484,8 +535,13 @@ export function useAgents() {
         loadArchived,
         archive,
         restore,
+        undoArchive,
+        undoable,
+        archivedFlash,
         notice,
         dismissNotice,
+        receipt,
+        dismissReceipt,
         busyIds,
     };
 }

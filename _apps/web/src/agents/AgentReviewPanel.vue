@@ -6,6 +6,7 @@ import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import DiffStat from "../components/DiffStat.vue";
 import { type AgentReviewFile, useAgentChanges } from "../composables/agents/useAgentChanges";
+import { useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
 import { diffRawUrls } from "../composables/workspace/diffRaw";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
@@ -44,6 +45,15 @@ const { openDiff } = useWorkspaceTabs();
 
 const { conversations } = useChat();
 const streaming = computed(() => conversations.value.find((c) => c.conversationId === props.agentId)?.streaming.value === true);
+
+// Archiving reports itself by the card leaving the board — which this surface cannot show, since there is no
+// board on it. So the button is the report: it becomes the way back the moment it succeeds, the same flip the
+// fleet card makes. Without it, the one archive affordance in the app with no visible consequence would be
+// the one on the page dedicated to a single agent.
+const { agentById, restore, busyIds } = useAgents();
+const archived = computed(() => agentById(props.agentId)?.archivedAt !== undefined);
+// Both directions claim the same per-id counter in the fleet store, so one flag covers the round trip either way.
+const archiveBusy = computed(() => busyIds.value.includes(props.agentId));
 
 // --- the list ------------------------------------------------------------------------------------------
 // "Not landed" narrows the list to the remainder Land now would apply. It only exists while that remainder is
@@ -325,15 +335,26 @@ const confirmDiscard = (): void => {
                  agent off the board, discard is the one that throws work away. The safe one goes first and
                  asks nothing; the destructive one keeps its dialog. -->
             <button
+                v-if="!archived"
                 type="button"
                 class="inline-flex items-center whitespace-nowrap rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
-                :disabled="changes.actionBusy.value || streaming"
+                :disabled="changes.actionBusy.value || archiveBusy || streaming"
                 @click="changes.archive()"
                 v-tooltip.bottom="
                     streaming ? 'Wait for the agent turn to finish' : 'Take this agent off the board. Its branch, diff and conversation are kept.'
                 "
             >
                 <Icon name="box" class="mr-1 text-2xs" />Archive
+            </button>
+            <button
+                v-else
+                type="button"
+                class="inline-flex items-center whitespace-nowrap rounded border border-line px-2 py-0.5 text-2xs text-link transition-colors hover:bg-overlay disabled:opacity-40"
+                :disabled="archiveBusy"
+                @click="restore([agentId])"
+                v-tooltip.bottom="'Archived. Put it back on the board.'"
+            >
+                <Icon name="history" class="mr-1 text-2xs" />Restore
             </button>
             <button
                 type="button"

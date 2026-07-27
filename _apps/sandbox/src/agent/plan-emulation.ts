@@ -42,8 +42,10 @@ export async function* runPlanEmulation(
         }
         const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
         yield { kind: "plan", requestId: id, text: capture.planText };
-        const decision = await wait(signal);
-        yield { kind: "resolved", requestId: id };
+        const { reply: decision, resolved } = await wait(signal);
+        // Frees the turn AND freezes the card in every client's transcript — including the ones replaying this
+        // run later, which have no other record that the plan stopped being live (see the `resolved` frame).
+        yield resolved;
         if (signal.aborted) {
             return;
         }

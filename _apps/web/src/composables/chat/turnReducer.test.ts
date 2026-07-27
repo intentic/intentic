@@ -130,7 +130,14 @@ describe(`tool calls`, () => {
 
     it(`falls back to a top-level append when the parent card is missing`, () => {
         // A malformed stream: dropping the call outright would lose work the agent actually did.
-        const { state } = run(started(), { kind: `tool_call`, id: `t2`, name: `Read`, category: `read`, status: `completed`, parentToolUseId: `gone` });
+        const { state } = run(started(), {
+            kind: `tool_call`,
+            id: `t2`,
+            name: `Read`,
+            category: `read`,
+            status: `completed`,
+            parentToolUseId: `gone`,
+        });
         expect(state.messages[1]!.tools?.[0]?.id).toBe(`t2`);
     });
 
@@ -202,6 +209,56 @@ describe(`interactive cards`, () => {
         expect(state.messages[1]!.permission).toMatchObject({ requestId: `perm1`, toolName: `Bash`, status: `pending` });
         // `kind` is wire framing, not part of the ask the card renders.
         expect(state.messages[1]!.permission).not.toHaveProperty(`kind`);
+    });
+});
+
+/* A card the user answered in ANOTHER window — or in this one, before a reload replayed the run from seq 0 —
+ * is decided, and a transcript that rebuilt it from its own frame has no way to know that. The resolution
+ * frame is that record, and these are the shapes it has to freeze. */
+describe(`resolved cards`, () => {
+    const asked = (): TurnState =>
+        run(started(), {
+            kind: `question`,
+            requestId: `q1`,
+            questions: [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }],
+        }).state;
+
+    it(`freezes an answered question with the picks that settled it`, () => {
+        const { state } = run(asked(), {
+            kind: `resolved`,
+            requestId: `q1`,
+            reply: { kind: `question`, requestId: `q1`, answers: { Which: [`A`] } },
+        });
+        expect(state.messages[1]!.question).toMatchObject({ status: `answered`, answers: { Which: [`A`] } });
+    });
+
+    it(`freezes a dismissed question as cancelled`, () => {
+        const { state } = run(asked(), { kind: `resolved`, requestId: `q1`, reply: { kind: `question`, requestId: `q1`, cancelled: true } });
+        expect(state.messages[1]!.question).toMatchObject({ status: `cancelled` });
+    });
+
+    it(`freezes a card nobody answered as cancelled — a turn that died under it is no one's decision`, () => {
+        const { state } = run(asked(), { kind: `resolved`, requestId: `q1` });
+        expect(state.messages[1]!.question).toMatchObject({ status: `cancelled` });
+        expect(state.messages[1]!.question).not.toHaveProperty(`answers`);
+    });
+
+    it(`freezes plan and permission cards from the same frame`, () => {
+        const { state } = run(
+            started(),
+            { kind: `plan`, requestId: `p1`, text: `# Do it` },
+            { kind: `permission`, requestId: `perm1`, toolName: `Bash` },
+            { kind: `resolved`, requestId: `p1`, reply: { kind: `plan`, requestId: `p1`, approve: true } },
+            { kind: `resolved`, requestId: `perm1`, reply: { kind: `permission`, requestId: `perm1`, decision: `always` } },
+        );
+        expect(state.messages[1]!.plan).toMatchObject({ status: `approved` });
+        expect(state.messages[2]!.permission).toMatchObject({ status: `always` });
+    });
+
+    it(`ignores a resolution for a card this transcript never rendered`, () => {
+        const before = asked();
+        const { state } = run(before, { kind: `resolved`, requestId: `nobody`, reply: { kind: `plan`, requestId: `nobody`, approve: true } });
+        expect(state.messages).toEqual(before.messages);
     });
 });
 
