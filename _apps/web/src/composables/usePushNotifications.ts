@@ -118,7 +118,8 @@ export function usePushNotifications() {
     // under and declines to write if anything happened since.
     let revision = 0;
 
-    // Read the true state: the browser's permission, its subscription, and whether the daemon knows about it.
+    // Establish what is actually true, from all three sources at once: the permission the browser granted, the
+    // subscription it is holding, and whether the daemon has a row for that subscription.
     const refresh = async (): Promise<void> => {
         if (!supported()) {
             state.value = `unsupported`;
@@ -139,9 +140,9 @@ export function usePushNotifications() {
             if (revision !== started) {
                 return;
             }
-            // "On" requires all three. A browser subscription the daemon has forgotten would notify nothing,
-            // and one minted for a key the daemon no longer holds is refused on every send — both are exactly
-            // the silent failure this feature can't afford to report as working.
+            // All three have to line up before this reads "on". A subscription the daemon has since forgotten
+            // delivers nothing, and one bound to a retired key is rejected at every send. Either would let the
+            // page advertise a working notification chain that is quietly dead — the exact lie to avoid here.
             state.value = existing !== null && config.subscribed && boundTo(existing, config.publicKey) ? `on` : `off`;
         } catch {
             // A daemon that can't be read tells us nothing about the subscription — leave the last known
@@ -206,11 +207,12 @@ export function usePushNotifications() {
         }
     };
 
-    // Proves the whole chain end-to-end — daemon key, push service, service worker, OS. Four failure points
-    // the user cannot inspect, so a button that either produces a notification or doesn't is worth more than
-    // any amount of status text — provided it also reports the half the user CAN'T see. The daemon answers
-    // with how many browsers it reached and errors on a zero, so "nothing appeared" now splits into "the
-    // daemon sent to nobody" (actionable, and it says how) and "it sent to you and your OS didn't show it".
+    // An end-to-end proof of the chain: daemon key -> push service -> service worker -> OS. Not one of those
+    // four hops is visible from the settings page, and no status text can stand in for the thing itself, so
+    // the button's whole value is that a notification either shows up on the machine or it doesn't —
+    // provided it also reports the half the user CAN'T see. The daemon answers with how many browsers it
+    // reached and errors on a zero, so "nothing appeared" now splits into "the daemon sent to nobody"
+    // (actionable, and it says how) and "it sent to you and your OS didn't show it".
     const sendTest = async (): Promise<void> => {
         error.value = undefined;
         delivered.value = undefined;

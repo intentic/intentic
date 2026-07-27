@@ -33,11 +33,13 @@ export interface PushDelivery {
 }
 
 export interface PushSender {
-    // Fan out to every subscribed device. Resolves once every send settles; never rejects.
+    // Fan out to every subscribed device. Resolves once every send settles; never rejects — a failing device
+    // is a logged warning, since callers get no say in the outcome and nothing to retry with.
     readonly notify: (notification: PushNotification) => Promise<PushDelivery>;
-    // The same, but skipped entirely when anyone is actively watching this sandbox. This is what the turn
-    // lifecycle calls; `notify` stays available for the settings page's explicit "send a test" button, which
-    // must fire even though the user is by definition looking at the screen when they press it.
+    // The same, but skipped entirely when anyone is actively watching this sandbox — nobody wants a phone
+    // buzzing about a screen they are already looking at. This is what the turn lifecycle calls; `notify`
+    // stays available for the settings page's explicit "send a test" button, which must fire even though the
+    // user is by definition looking at the screen when they press it.
     readonly notifyIfAway: (notification: PushNotification) => Promise<PushDelivery>;
 }
 
@@ -53,7 +55,8 @@ export const createPushSender = (store: PushStore, logger: Logger): PushSender =
         // anywhere else and identifies the software, not the user (the daemon has no address of its own).
         webpush.setVapidDetails("mailto:agent@intentic.dev", keys.publicKey, keys.privateKey);
         const payload = JSON.stringify(notification);
-        // Every device is independent — one failing endpoint must not delay or cancel the others.
+        // Fan out, don't chain: each endpoint stands alone, and one that hangs or 500s must not hold up or
+        // abort the sends to every other device the user owns.
         const outcomes = await Promise.all(
             subscriptions.map(async (subscription) => {
                 try {

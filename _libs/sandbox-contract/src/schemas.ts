@@ -2087,7 +2087,10 @@ export type PushSubscription = z.infer<typeof PushSubscriptionSchema>;
 
 // What the service worker renders. `url` is the in-app route the notification opens (the click handler
 // focuses an existing tab there rather than spawning a new one); `tag` collapses repeats — a second
-// "waiting on you" for the same conversation REPLACES the first instead of stacking.
+// "waiting on you" for the same conversation REPLACES the first instead of stacking. Push payloads are
+// capped by the push services themselves (~4KB after encryption), which is why nothing here carries a
+// transcript or a diff — the notification is a pointer back into the workspace, not a delivery mechanism
+// for content.
 export const PushNotificationSchema = z.object({
     title: z.string().min(1),
     body: z.string(),
@@ -2104,7 +2107,8 @@ export type PushNotification = z.infer<typeof PushNotificationSchema>;
 // granted permission with no server-side row would notify nothing).
 export const PushConfigSchema = z.object({ publicKey: z.string(), subscribed: z.boolean() });
 export const PushEndpointSchema = z.object({ endpoint: z.string().url() });
-// `endpoint` identifies which browser is asking, so `subscribed` can be answered for THIS one.
+// The optional `endpoint` says WHICH browser is asking; without it `subscribed` could only speak for the
+// sandbox as a whole, which is never the question the settings toggle needs answered.
 export const PushConfigQuerySchema = z.object({ endpoint: z.string().url().optional() });
 
 // What a test send actually achieved. `{ ok: true }` would be a lie the one place it matters most: the button
