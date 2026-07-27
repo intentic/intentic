@@ -310,6 +310,7 @@ export interface Services {
     // Resident workspace search: one iq engine instance holding the index DB open with its sweep cached in
     // memory — /workspace/search runs in-process (no per-query CLI spawn), revalidation rides the workspace
     // watcher (main.ts) instead of the query path. The agent's Bash `iq` calls share the same on-disk index.
+    // Indexing itself runs on the engine's own worker thread; only queries touch this one.
     readonly iq: ResidentEngine;
     readonly sessions: {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
@@ -499,6 +500,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         workspaceChildren: listWorkspaceChildren,
         iq: createResidentEngine({
             root: workspace.root,
+            // An index pass that fails once warm() has settled has no caller to reject — without this the index
+            // would stop tracking disk and search would just quietly get older.
+            onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed — search results may be stale"),
             ...(config.iqModelDir !== "" ? { modelDir: config.iqModelDir } : {}),
             ...(config.iqRgPath !== "" ? { rgPath: config.iqRgPath } : {}),
         }),

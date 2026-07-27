@@ -270,14 +270,44 @@ describe("agents registry", () => {
         await registry.init();
         await registry.begin(turn(), 1_000);
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
-        await registry.recordLanded("c1", [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }], {
-            files: 12,
-            insertions: 412,
-            deletions: 96,
+        await registry.recordLanded("c1", {
+            landed: true,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }],
+            diff: { files: 12, insertions: 412, deletions: 96 },
         });
         await registry.finish("c1", 2_000, "landed");
         expect(store.saved().find((entry) => entry.id === "c1")?.repos).toEqual([{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }]);
         expect(registry.get("c1")?.diff).toEqual({ files: 12, insertions: 412, deletions: 96 });
+    });
+
+    // The conflict report and the `conflict` status are one fact: a card that says "Resolve conflict" but
+    // cannot say WHAT blocked is the dead end this pairing exists to prevent. So the report has to outlive the
+    // land that produced it — and has to disappear the moment a later land succeeds, or the review keeps
+    // offering a resolution for something already resolved.
+    it("recordLanded stores the land's conflict report, and a later clean land clears it", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store);
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
+        const conflicts = [{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" as const }], clean: 2 }];
+        await registry.recordLanded("c1", {
+            landed: false,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40) }],
+            diff: { files: 3, insertions: 10, deletions: 1 },
+            conflicts,
+        });
+        expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toEqual(conflicts);
+
+        await registry.recordLanded("c1", {
+            landed: true,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }],
+            diff: { files: 3, insertions: 10, deletions: 1 },
+        });
+        expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toBeUndefined();
     });
 
     it("counts turns and tool uses — live during the turn, folded at finish, never inflated by manual lands", async () => {

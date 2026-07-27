@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { MODEL_ID } from "../embed/embedder.js";
 import type { IndexDb } from "../store/db.js";
 import { bumpGeneration, deleteFile, generationOf, getMeta, listFiles, replaceFile, setMeta, touchFile } from "../store/index-store.js";
 import type { ChunkRow, FileEntry, SymbolRow } from "../types.js";
@@ -22,6 +23,18 @@ export interface RevalidateResult {
 }
 
 const isBinary = (buf: Buffer): boolean => buf.includes(0);
+
+// A model swap invalidates every stored vector, never the chunks themselves. A WRITE, so it belongs to whoever
+// owns writing the index — the CLI engine's own revalidation pass, or the daemon's index worker.
+export const syncModel = (db: IndexDb, modelDir: string | undefined): void => {
+    if (modelDir === undefined) {
+        return;
+    }
+    if (getMeta(db, "model_id") !== MODEL_ID) {
+        db.run("UPDATE chunks SET embedding = NULL");
+        setMeta(db, "model_id", MODEL_ID);
+    }
+};
 
 // Bring the index in line with the sweep: mtime+size diff, content-hash confirmation for touched files, and a
 // transactional delete+reinsert per genuinely changed file. Read cost is paid only for new/changed files.

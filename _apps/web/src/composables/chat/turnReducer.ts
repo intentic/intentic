@@ -375,9 +375,15 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                     state,
                     event.landed
                         ? `Changes landed in your workspace — review them in the Changes panel.`
-                        : `Some changes couldn't land automatically — your own edits overlap in ${(event.conflicts ?? [])
+                        : // Named, not explained: the cause is per-FILE (your edits, a moved main line, a binary),
+                          // and the review is where each one is spelled out with the action that fits it. A
+                          // notice that guesses one cause for all of them sends the user looking for an
+                          // overlapping edit of their own that may not exist.
+                          `${(event.conflicts ?? []).flatMap((conflict) => conflict.paths).length} file(s) couldn't land automatically in ${(
+                              event.conflicts ?? []
+                          )
                               .map((conflict) => conflict.repo)
-                              .join(`, `)}. Resolve them, then use Land now in the agent's review.`,
+                              .join(`, `)}. Open the agent's review to see what blocked them and land from there.`,
                 ),
             );
         case `commands`:

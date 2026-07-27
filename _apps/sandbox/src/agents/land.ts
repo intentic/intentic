@@ -11,12 +11,18 @@ import type { AgentWorktrees } from "./worktrees.js";
 // Land a conversation's work into the main tree as UNCOMMITTED changes — the Claude Code review model: the
 // agent's finished delta appears in the user's normal Changes panel and their own commit is the review
 // boundary. Per repo of the composition: preserve the worktree's dirty state as an agent-authored commit on
-// agent/<id> (provenance — nothing is ever lost), take the delta `landedTip ?? base → tip` as a binary
-// rename-aware patch, `git apply --check` it against the main tree, and apply working-tree-only. Main's HEAD
-// never moves; landedTip advances so the next land applies only the new delta. A patch that can't apply
-// (the user edited the same lines, or an overlapping dirty/untracked path) lands NOTHING for that repo and
-// reports it — the worktree keeps everything and "Land now" recovers once the user resolves. Called
+// agent/<id> (provenance — nothing is ever lost), take the delta from its anchor to the tip (see anchorOf) as
+// a binary rename-aware patch, `git apply --check` it against the main tree, and apply working-tree-only.
+// Main's HEAD never moves; landedTip advances so the next land applies only the new delta. A patch that can't
+// apply (the user edited the same lines, or an overlapping dirty/untracked path) lands NOTHING for that repo
+// and reports it — the worktree keeps everything and "Land now" recovers once the user resolves. Called
 // automatically at clean turn completion (streamAgent) and manually from the /agents land route.
+//
+// The one thing land must never call a conflict is work that ALREADY REACHED the main tree by another road —
+// an agent that committed onto the main line itself, a user who committed the branch by hand. It is not a
+// state anyone can resolve, and reporting it strands the agent on a red card with nothing to do about it.
+// Two independent mechanisms rule it out: anchorOf, when the main line's history contains the work, and the
+// reverse probe in classifyDelta, when it holds the CONTENT but not the commits.
 
 const exists = async (path: string): Promise<boolean> => {
     try {
@@ -89,6 +95,29 @@ const anchorOf = async (
     return base;
 };
 
+/* Does a patch fit the main tree — and, asked in `reverse`, is it ALREADY IN IT?
+ *
+ * `git apply --check` answers by exit code, which the runner surfaces as a throw. The reverse question is the
+ * one that separates the two ways a patch can fail to apply: content that CLASHES with the main tree, and
+ * content the main tree already has. Only the first is a conflict. (Reverse is exact, not a guess: a patch
+ * un-applies cleanly precisely when its post-image is what is sitting there — `--binary` emits both
+ * directions for binary files for exactly this reason.) */
+const applies = async (main: string, patch: string, direction: "forward" | "reverse", git: GitRunner): Promise<boolean> => {
+    try {
+        await git(main, ["apply", "--check", ...(direction === "reverse" ? ["--reverse"] : []), patch]);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+// A delta's paths, split by what the main tree makes of each one: `clean` is what a land would carry, `blocked`
+// is the genuine conflict set. Paths already IN the main tree are in neither — see classifyDelta.
+interface DeltaReport {
+    readonly blocked: { path: string; reason: LandConflictReason }[];
+    readonly clean: string[];
+}
+
 /* WHICH paths of a delta actually refuse to apply, and why.
  *
  * `git apply` is ATOMIC: one unapplicable file rejects the entire patch. So a failed bulk check says only
@@ -99,15 +128,15 @@ const anchorOf = async (
  *
  * Re-checking each path on its own is the only way to tell four real conflicts from the fourteen an atomic
  * failure implicates. Rename detection stays on so each probe sees the same patch shape the real apply will;
- * a rename probed one leg at a time degrades to a delete plus an add, which is accurate enough for a report. */
-const classifyConflicts = async (
-    main: string,
-    from: string,
-    tip: string,
-    patchDir: string,
-    repo: string,
-    git: GitRunner,
-): Promise<{ paths: { path: string; reason: LandConflictReason }[]; clean: number }> => {
+ * a rename probed one leg at a time degrades to a delete plus an add, which is accurate enough for a report.
+ *
+ * The reverse probe is what keeps ALREADY-LANDED work out of the report. An agent that commits its own delta
+ * straight onto the main line — pushing to main, or a user committing the branch by hand — leaves content git
+ * cannot recognize as this branch's, because it arrived as a DIFFERENT commit: ancestry says the work is
+ * unmerged, so the anchor still spans it and the patch re-offers what the main tree already holds. Every path
+ * of it then fails to apply, and reporting that as a conflict is a dead end — there is nothing for the user to
+ * resolve and no edit of theirs to point at. Asked in reverse, those paths answer plainly: already here. */
+const classifyDelta = async (main: string, from: string, tip: string, patchDir: string, repo: string, git: GitRunner): Promise<DeltaReport> => {
     const deltaPaths = (await git(main, ["diff", "--name-only", "-z", from, tip])).stdout.split("\0").filter((path) => path !== "");
     // A path the user STAGED conflicts with the incoming patch exactly as much as one they left unstaged, so
     // "yours is the copy at risk" has to consider the union — rename `from` legs included.
@@ -119,26 +148,30 @@ const classifyConflicts = async (
             mainDirty.add(change.from);
         }
     }
-    const paths: { path: string; reason: LandConflictReason }[] = [];
-    let clean = 0;
+    const blocked: { path: string; reason: LandConflictReason }[] = [];
+    const clean: string[] = [];
     for (const [index, path] of deltaPaths.entries()) {
         const single = (await git(main, ["diff", "--binary", "-M", from, tip, "--", path])).stdout;
         if (single === "") {
-            clean += 1;
+            clean.push(path);
             continue;
         }
         const probePath = join(patchDir, `${repo.replaceAll("/", "_")}.probe.${index}.patch`);
         await writeFile(probePath, single);
-        try {
-            await git(main, ["apply", "--check", probePath]);
-            clean += 1;
-        } catch {
-            // Binary first: it outranks the other two, because no three-way merge of it exists to offer.
-            const reason: LandConflictReason = single.includes("GIT binary patch") ? "binary" : mainDirty.has(path) ? "workspace" : "diverged";
-            paths.push({ path, reason });
+        if (await applies(main, probePath, "forward", git)) {
+            clean.push(path);
+            continue;
         }
+        if (await applies(main, probePath, "reverse", git)) {
+            // Already in the main tree: not clean (re-applying it would fail) and not a conflict (there is
+            // nothing to resolve). It simply drops out of the land — nothing to carry, nothing to report.
+            continue;
+        }
+        // Binary first: it outranks the other two, because no three-way merge of it exists to offer.
+        const reason: LandConflictReason = single.includes("GIT binary patch") ? "binary" : mainDirty.has(path) ? "workspace" : "diverged";
+        blocked.push({ path, reason });
     }
-    return { paths, clean };
+    return { blocked, clean };
 };
 
 export const landAgent = async (
@@ -195,6 +228,17 @@ export const landAgent = async (
                     return; // Everything already landed for this repo.
                 }
                 changed = true;
+                // How this delta gets marked accounted-for — every ending below that puts it in the main tree
+                // finishes here. `landedTip` stops it being re-offered; `landedHead`/`landedAt` record where the
+                // main tree stood when it went in. That stamp dates the per-file attribution the Changes
+                // panel draws: while HEAD still stands here, this agent's delta IS part of the repo's
+                // uncommitted content, so those paths can be credited to it. Once the user commits, HEAD moves
+                // and the claim expires rather than following a path they may since have re-edited themselves
+                // (agents/origins.ts). An unborn HEAD records none, and claims nothing.
+                const advanced = async (): Promise<PersistedAgent["repos"][number]> => {
+                    const landedHead = await headSha(main, git);
+                    return { repo, base, landedTip: tip, ...(landedHead !== undefined ? { landedHead } : {}), landedAt: Date.now() };
+                };
                 // 2. Patch-apply the delta onto the main WORKING TREE only — no index, no commit: the result
                 // is plain unstaged changes, exactly what the Changes panel reviews. `apply --check` is the
                 // conflict gate, and it is CONTEXT-based, which is what makes incremental landing work: a
@@ -212,21 +256,36 @@ export const landAgent = async (
                 }
                 const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
                 await writeFile(patchPath, patch);
-                try {
-                    await git(main, ["apply", "--check", patchPath]);
-                } catch {
-                    const report = await classifyConflicts(main, from, tip, patchDir, repo, git);
+                if (!(await applies(main, patchPath, "forward", git))) {
+                    const report = await classifyDelta(main, from, tip, patchDir, repo, git);
+                    /* NOTHING here is in conflict — the atomic check failed only because part of this delta is
+                     * already in the main tree. That is a land, not a refusal: apply whatever is genuinely
+                     * outstanding (nothing at all, when the agent put its whole delta on the main line itself)
+                     * and advance, so the work stops being re-offered on every future land. */
+                    if (report.blocked.length === 0) {
+                        if (report.clean.length > 0) {
+                            // Re-diffed over just those paths rather than sliced out of `patch`: one git
+                            // invocation over the subset keeps rename detection coherent within it.
+                            const remainder = (await git(main, ["diff", "--binary", "-M", from, tip, "--", ...report.clean])).stdout;
+                            const remainderPath = join(patchDir, `${repo.replaceAll("/", "_")}.remainder.patch`);
+                            await writeFile(remainderPath, remainder);
+                            await git(main, ["apply", remainderPath]);
+                        }
+                        next = await advanced();
+                        return;
+                    }
                     /* A three-way apply merges THROUGH THE INDEX, so git refuses it outright — applying not
                      * one file, not even the clean ones — as soon as any path it must fall back on differs
                      * between the working tree and the index ("does not match index"). That is precisely the
                      * `workspace` cause. So merge mode is offered only where git can actually merge: the
                      * user's own uncommitted copy has to be committed or stashed first, and saying so beats
                      * attempting it and reporting a failure they cannot read. */
-                    const mergeable = report.paths.every((conflict) => conflict.reason !== "workspace");
+                    const mergeable = report.blocked.every((conflict) => conflict.reason !== "workspace");
                     if (mode === "check" || !mergeable) {
                         // What `check` promises is that a refusal leaves the workspace byte-identical. Report
                         // and stop: the worktree keeps everything, and "Land now" recovers once the user acts.
-                        conflicts.push({ repo, ...report });
+                        // Only `blocked` is reported: an already-in-main path is not something to resolve.
+                        conflicts.push({ repo, paths: report.blocked, clean: report.clean.length });
                         return;
                     }
                     /* `merge`: the user has read the report and asked for the three-way anyway. Every clean
@@ -241,24 +300,15 @@ export const landAgent = async (
                     } catch {
                         // Nothing to add: `report` already names what was left open, and it is reported below.
                     }
-                    if (report.paths.length > 0) {
-                        resolving.push({ repo, paths: report.paths.map((conflict) => conflict.path) });
-                    }
+                    resolving.push({ repo, paths: report.blocked.map((conflict) => conflict.path) });
                     // The tip advances even with paths still open, because the delta IS in the main tree now.
                     // Holding it back would re-apply the whole thing over the user's half-finished resolution
                     // the next time anything lands.
-                    const merged = await headSha(main, git);
-                    next = { repo, base, landedTip: tip, ...(merged !== undefined ? { landedHead: merged } : {}), landedAt: Date.now() };
+                    next = await advanced();
                     return;
                 }
                 await git(main, ["apply", patchPath]);
-                // 3. Record where the main tree stood when this delta went in. It is what dates the per-file
-                // attribution the Changes panel draws: while HEAD still stands here, this agent's delta IS part
-                // of the repo's uncommitted content, so those paths can be credited to it. Once the user
-                // commits, HEAD moves and the claim expires rather than following a path they may since have
-                // re-edited themselves (agents/origins.ts). An unborn HEAD records none, and claims nothing.
-                const landedHead = await headSha(main, git);
-                next = { repo, base, landedTip: tip, ...(landedHead !== undefined ? { landedHead } : {}), landedAt: Date.now() };
+                next = await advanced();
             });
             repos.push(next);
         }

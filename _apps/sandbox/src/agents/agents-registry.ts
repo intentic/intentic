@@ -1,5 +1,6 @@
 import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, planParts } from "@intentic/sandbox-contract";
 import type { AgentsStore, AgentTitleSource, PersistedAgent } from "./agents-store.js";
+import type { LandOutcome } from "./land.js";
 
 // The runtime half of the fleet registry: holds the authoritative in-memory entry list (loaded once from the
 // store, write-through on persisted mutations) plus per-conversation turn state rebuilt from AgentEvent frames
@@ -100,13 +101,11 @@ export interface AgentsRegistry {
     readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
     // "Mark all read" — one stamp across the whole fleet, so a board full of badges has a single escape hatch.
     readonly markAllSeen: (now: number) => Promise<void>;
-    // Persist a land's advanced per-repo landedTips (partial lands included — conflicted repos keep theirs)
-    // and the refreshed cumulative diffstat.
-    readonly recordLanded: (
-        id: string,
-        repos: readonly PersistedAgent["repos"][number][],
-        diff?: { files: number; insertions: number; deletions: number },
-    ) => Promise<void>;
+    // Persist a land's outcome: the advanced per-repo landedTips (partial lands included — conflicted repos
+    // keep theirs), the refreshed cumulative diffstat, and the conflict report behind the `conflict` status.
+    // Takes the whole outcome rather than its pieces so the report cannot drift from the tips it belongs to —
+    // an outcome with no conflicts CLEARS the stored one, which is what makes a resolved conflict resolve.
+    readonly recordLanded: (id: string, outcome: LandOutcome) => Promise<void>;
     // Fold one turn frame into runtime state; broadcasts only on card-visible changes.
     readonly observe: (id: string, event: AgentEvent) => void;
     // End of turn (aborted included): flush pending usage/session into the entry, release the mutex.
@@ -470,15 +469,19 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             }
             broadcast();
         },
-        recordLanded: async (id, repos, diff) => {
+        recordLanded: async (id, outcome) => {
             const entry = entryOf(id);
             if (entry === undefined) {
                 return;
             }
+            const { conflicts: _cleared, ...carried } = entry;
             replace({
-                ...entry,
-                repos: [...repos],
-                ...(diff !== undefined ? { diffFiles: diff.files, diffInsertions: diff.insertions, diffDeletions: diff.deletions } : {}),
+                ...carried,
+                repos: [...outcome.repos],
+                diffFiles: outcome.diff.files,
+                diffInsertions: outcome.diff.insertions,
+                diffDeletions: outcome.diff.deletions,
+                ...(outcome.conflicts !== undefined ? { conflicts: [...outcome.conflicts] } : {}),
             });
             await persist();
             broadcast();

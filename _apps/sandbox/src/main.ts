@@ -264,10 +264,12 @@ const main = async (): Promise<void> => {
     // discovered repo list on /events (the watcher itself never sees .git paths).
     startRepoWatch(services.workspace.root, logger);
 
-    // Warm the resident search engine (sweep + symbols + the embedding backlog) so the first search hits a
-    // ready index. In-process and incremental — a valid on-disk index survives boot instead of being dropped
-    // and rebuilt. Best-effort: on failure the first query triggers its own refresh.
-    void services.iq.warm().catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed — first query builds incrementally"));
+    // Warm the resident search engine (sweep + symbols + the embedding backlog) so the first search hits a ready
+    // index. Incremental — a valid on-disk index survives boot instead of being dropped and rebuilt — and it runs
+    // on the engine's own worker thread: this used to be minutes of parse/chunk/SQLite work on THIS loop, which
+    // put every browser request behind it (seconds each, for 0.4 kB reads) for as long as a boot re-index took.
+    // Awaiting it is just an observation point; nothing here blocks on it.
+    void services.iq.warm().catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed — search runs on the index as it stands"));
 
     // Warm the Grok provider's OpenCode server at boot instead of lazily on the first /grok/oauth/start. The cold
     // `opencode serve` spawn is CPU-heavy; in a constrained container it can deschedule the daemon long enough to

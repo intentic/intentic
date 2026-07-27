@@ -28,6 +28,10 @@ export interface DispatchContext {
     readonly freshness: WorkspaceSearchFreshness;
     readonly getEmbedder: () => Promise<Embedder | undefined>;
     readonly getReranker: () => Promise<Reranker | undefined>;
+    // Whether `ask` may spend part of its own latency budget filling NULL embeddings. True for the one-shot CLI
+    // engine, where a query is the only thing that ever runs; false for the resident engine, whose worker owns
+    // every write to the index and keeps the backlog at zero without borrowing the request path to do it.
+    readonly topUpEmbeddings: boolean;
     readonly features: ReadonlySet<Feature>;
     readonly rgPath?: string;
     // Aborts cancellable work (the rg child) when the caller's request dies mid-query.
@@ -422,7 +426,9 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         if (embedder === undefined) {
             notes.push(on("semantic") ? "no embedding backend — BM25 only" : "semantic off");
         } else {
-            const remaining = await embedPending(context.db, embedder);
+            const remaining = context.topUpEmbeddings
+                ? await embedPending(context.db, embedder)
+                : Number(context.db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NULL")?.["n"] ?? 0);
             results.push({ engine: "semantic", hits: semanticSearch(context.db, await embedder.embedQuery(request.query), allowed) });
             if (remaining > 0) {
                 const total = Number(context.db.get("SELECT COUNT(*) AS n FROM chunks")?.["n"] ?? 0);

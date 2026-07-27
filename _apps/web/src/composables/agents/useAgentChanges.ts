@@ -96,25 +96,28 @@ export function useAgentChanges(agentId: Ref<string>) {
     };
 
     const { busy: actionBusy, error: actionError, run } = useAsyncAction();
-    // The conflicts of the last land attempt, for the conflict panel; cleared by a clean land or discard.
-    const conflicts = ref<LandResult[`conflicts`]>(undefined);
+    /* Why the last land refused — read from the DAEMON, not from the land call this browser made. The land
+     * that conflicts is almost always the automatic one at turn completion, which no browser asked for: the
+     * user learns about it from the card and clicks "Resolve conflict", which opens this panel cold. Held in a
+     * local ref, the report was empty on exactly that path — the panel rendered no explanation and no merge
+     * action, so the one affordance the board offers for a conflict led nowhere. Landing invalidates this
+     * query, so an attempt made here still refreshes it, one round trip later. */
+    const conflicts = computed<LandResult[`conflicts`]>(() => query.data.value?.conflicts);
 
     // Paths a `merge` land wrote into the workspace with conflict markers on them, for the panel to hand back
-    // to the user as work to finish. Like `conflicts`, it describes the LAST attempt only.
+    // to the user as work to finish. Local, because unlike `conflicts` it describes an attempt rather than a
+    // state: nothing on the daemon still knows those markers are outstanding once the user resolves them.
     const resolving = ref<LandResult[`resolving`]>(undefined);
 
     const land = (mode: LandMode = `check`): Promise<void> =>
         run(async () => {
-            const result = await landAgent(agentId.value, mode);
-            conflicts.value = result.conflicts;
-            resolving.value = result.resolving;
+            resolving.value = (await landAgent(agentId.value, mode)).resolving;
             await invalidateAgentAction(agentId.value);
         }, `Land failed.`);
 
     const discard = (): Promise<void> =>
         run(async () => {
             await discardAgent(agentId.value);
-            conflicts.value = undefined;
             resolving.value = undefined;
             await invalidateAgentAction(agentId.value);
         }, `Discard failed.`);

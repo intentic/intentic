@@ -95,7 +95,9 @@ export const createAgentsRoutes = (services: Services) => {
                     services.logger.warn({ err: error, repo, id: entry.id }, "agents diff: repo skipped");
                 }
             }
-            return { repos };
+            // The last land's refusal travels with the review it is about: the panel is opened FROM the
+            // conflicted card, so it has to arrive already knowing what blocked and why (see AgentChangesSchema).
+            return { repos, ...(entry.conflicts !== undefined ? { conflicts: entry.conflicts } : {}) };
         }),
         // Against `base`, matching the list: one row means one question — "what did this agent do to this
         // file" — and its answer must not change the moment the work lands. (Diffing from `landedTip` would
@@ -134,7 +136,7 @@ export const createAgentsRoutes = (services: Services) => {
                 dir: services.agentWorktrees.worktreeDir(entry.id, repo),
             }));
             const result = await landAgent(services.agentWorktrees, entry, input.mode);
-            await services.agents.recordLanded(input.id, result.repos, result.diff);
+            await services.agents.recordLanded(input.id, result);
             await services.agents.finish(input.id, Date.now(), result.landed ? "landed" : "conflict");
             if (result.landed && result.changed) {
                 // The main tree changed under the user — same attribution convention as git.discard.

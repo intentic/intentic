@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema } from "@intentic/sandbox-contract";
+import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, LandConflictSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
 // The persisted half of the fleet registry (<historyRoot>/agents.json — on the /history volume so a
@@ -54,6 +54,10 @@ export const PersistedAgentSchema = z.object({
         }),
     ),
     status: PersistedAgentStatusSchema,
+    // Why the last land refused, kept alongside the `conflict` status it produced — the two are one fact, and
+    // a status the UI can render but not explain is what makes a conflicted card a dead end. Written and
+    // cleared by the same recordLanded that advances the tips, so it is exactly as current as they are.
+    conflicts: z.array(LandConflictSchema).optional(),
     costUsd: z.number(),
     inputTokens: z.number(),
     outputTokens: z.number(),

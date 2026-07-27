@@ -197,7 +197,7 @@ async function* runConversationTurn(
         if (!failed && signal?.aborted !== true && finished !== undefined) {
             const landed = await landAgent(services.agentWorktrees, finished);
             if (landed.changed) {
-                await services.agents.recordLanded(conversationId, landed.repos, landed.diff);
+                await services.agents.recordLanded(conversationId, landed);
                 outcome = landed.landed ? "landed" : "conflict";
                 yield { kind: "landed", landed: landed.landed, ...(landed.conflicts !== undefined ? { conflicts: landed.conflicts } : {}) };
                 if (landed.landed) {

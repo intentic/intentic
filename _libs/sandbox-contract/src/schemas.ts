@@ -731,7 +731,15 @@ export const AgentRepoChangesSchema = z.object({
     changes: z.array(AgentChangeSchema),
 });
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
-export const AgentChangesSchema = z.object({ repos: z.array(AgentRepoChangesSchema) });
+/* The review, plus WHY the last land refused — because a conflict is discovered by the daemon (a clean turn
+ * auto-lands the moment it finishes) and acted on in the browser, possibly hours later, on a surface the user
+ * reaches by clicking the card's "Resolve conflict". Carrying the report only in the land RESPONSE meant the
+ * one path that opens the review already knowing there is a conflict was the one path that could not show it:
+ * the panel opened with an empty report, no explanation, and no merge affordance — a dead end at the exact
+ * moment the UI had promised something to resolve. It rides the review because that is the surface that
+ * resolves it, and it refreshes with it: every land invalidates this query, so the report is never staler
+ * than the last attempt. */
+export const AgentChangesSchema = z.object({ repos: z.array(AgentRepoChangesSchema), conflicts: z.array(LandConflictSchema).optional() });
 export type AgentChanges = z.infer<typeof AgentChangesSchema>;
 
 // ---- git history graph (the "Git Graph" view over a repo's real commits) ----

@@ -1,4 +1,4 @@
-import type { ChunkRow, SymbolRow } from "../types.js";
+import type { ChunkRow, IndexStatus, SymbolRow } from "../types.js";
 import type { IndexDb } from "./db.js";
 
 export interface StoredFile {
@@ -101,3 +101,17 @@ export const bumpGeneration = (db: IndexDb): number => {
 };
 
 export const generationOf = (db: IndexDb): number => Number(getMeta(db, "generation") ?? "0");
+
+// What the index holds right now. Reported only by callers that have just finished revalidating it, which is
+// why freshness is flatly "fresh" — a query's own view of staleness is the engine's business, not the store's.
+export const readIndexStatus = (db: IndexDb, generation: number): IndexStatus => {
+    const count = (sql: string): number => Number(db.get(sql)?.["n"] ?? 0);
+    return {
+        files: count("SELECT COUNT(*) AS n FROM files"),
+        symbols: count("SELECT COUNT(*) AS n FROM symbols"),
+        chunks: count("SELECT COUNT(*) AS n FROM chunks"),
+        embedded: count("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NOT NULL"),
+        generation,
+        freshness: { state: "fresh", ageMs: 0 },
+    };
+};

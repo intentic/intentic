@@ -44,7 +44,7 @@
     "scripts": {
         "build": "tsgo",
         "watch": "tsgo --build --watch",
-        "test": "vitest run",
+        "test": "tsgo && vitest run",
         "test:watch": "vitest"
     },
     "dependencies": {

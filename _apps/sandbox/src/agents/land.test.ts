@@ -179,6 +179,53 @@ test("re-anchors on the merge-base, so an agent rebased onto the moved main line
     expect(await readFile(join(work, "main-only.ts"), "utf8")).toBe("main work\n");
 });
 
+/* The failure this pair exists to prevent: an agent that put its OWN work on the main line — pushed to main,
+ * or had the user commit its branch by hand — arriving as a different commit than the one on its branch. The
+ * merge-base anchor cannot see that (ancestry says the work is unmerged), so the patch re-offers content the
+ * main tree already holds and every path of it refuses to apply. Reported as a conflict, that is a dead end:
+ * a red card naming files the user never touched, with nothing to resolve and no way to clear it. */
+test("work the agent committed onto the main line itself lands as a no-op instead of conflicting", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const recorded = entryFor(conversation.repos);
+    await writeFile(join(conversation.cwd, "agent.ts"), "agent work\n");
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "agent");
+    // The same content reaches main as its OWN commit — identical tree, unrelated sha.
+    await writeFile(join(work, "agent.ts"), "agent work\n");
+    await writeFile(join(work, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "the same work, by hand");
+
+    const result = await landAgent(worktrees, recorded);
+
+    expect(result.conflicts).toBeUndefined();
+    expect(result.landed).toBe(true);
+    // Nothing was applied and nothing was disturbed — main is exactly where its own commit left it.
+    expect(await sh(work, "status", "--porcelain")).toBe("");
+    // The tip advances regardless: without it every later land re-offers this same delta forever.
+    expect(result.repos[0]?.landedTip).toBe(await sh(conversation.cwd, "rev-parse", "HEAD"));
+});
+
+test("a delta half-landed by hand lands its remainder, and reports no conflict for the half already there", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const recorded = entryFor(conversation.repos);
+    await writeFile(join(conversation.cwd, "already.ts"), "already on main\n");
+    await writeFile(join(conversation.cwd, "outstanding.ts"), "still to land\n");
+    await sh(conversation.cwd, "add", "-A");
+    await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "agent");
+    // Only one of the two files was carried over to main.
+    await writeFile(join(work, "already.ts"), "already on main\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "half of it, by hand");
+
+    const result = await landAgent(worktrees, recorded);
+
+    expect(result.conflicts).toBeUndefined();
+    expect(result.landed).toBe(true);
+    expect(await readFile(join(work, "outstanding.ts"), "utf8")).toBe("still to land\n");
+});
+
 test("merge mode lands every clean path and leaves the diverged one with conflict markers to finish", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
