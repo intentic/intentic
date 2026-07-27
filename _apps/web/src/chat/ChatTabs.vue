@@ -2,6 +2,7 @@
 import Popover from "primevue/popover";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { relativeTime, statusTabClass } from "../composables/chat/catalog";
+import type { Conversation } from "../composables/chat/conversation";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { viewersOfSession } from "../composables/usePresence";
@@ -51,6 +52,35 @@ const openHistory = (event: Event): void => {
     void loadSessions();
     history.value?.toggle(event);
 };
+
+// Hover preview: a compact card that reveals a tab's FIRST message IN FULL, standing in for the terse title
+// tooltip (which only ever repeats the 40-char header). It teleports to the overlay target (the pip body while
+// popped out, else <body>) so it escapes the tab strip's overflow-auto clipping, and flips above/below the tab
+// depending on the room in that window — the same floating-preview idiom as the image attachments.
+const preview = ref<{ text: string; left: number; top?: number; bottom?: number }>();
+
+const PREVIEW_WIDTH = 320; // px — matches the card's max-w below.
+const PREVIEW_GAP = 8;
+
+const showPreview = (event: MouseEvent, conversation: Conversation): void => {
+    const firstUser = conversation.messages.value.find((message) => message.role === `user`);
+    const text = (firstUser && firstUser.text.trim() !== `` ? firstUser.text : conversation.title.value) ?? ``;
+    if (text.trim() === ``) return; // a fresh "New chat"/"New agent" tab has no first message to preview.
+    const el = event.currentTarget as HTMLElement;
+    // The tab may live in the pip window, whose viewport (and fixed-position origin) is its own — measure and
+    // clamp against that window, not the main realm's globalThis.
+    const win = el.ownerDocument.defaultView ?? globalThis;
+    const rect = el.getBoundingClientRect();
+    const left = Math.min(Math.max(PREVIEW_GAP, rect.left), win.innerWidth - PREVIEW_WIDTH - PREVIEW_GAP);
+    // Anchor below the tab (the strip sits at the top, so there's room) and only flip above when there isn't.
+    preview.value =
+        rect.top >= win.innerHeight - rect.bottom
+            ? { text, left, bottom: win.innerHeight - rect.top + PREVIEW_GAP }
+            : { text, left, top: rect.bottom + PREVIEW_GAP };
+};
+const hidePreview = (): void => {
+    preview.value = undefined;
+};
 </script>
 
 <template>
@@ -68,7 +98,8 @@ const openHistory = (event: Event): void => {
                 class="chat-tab group flex min-w-0 max-w-40 shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-2xs"
                 :class="{ 'chat-tab-on': activeId === c.id }"
                 @click="emit('select', c.id)"
-                v-tooltip.bottom="c.title.value ?? (c.isolated.value ? 'New agent' : 'New chat')"
+                @mouseenter="showPreview($event, c)"
+                @mouseleave="hidePreview"
             >
                 <!-- One noun with the fleet: an untitled isolated conversation IS a draft agent card there. -->
                 <span class="min-w-0 flex-1 truncate text-left" :class="statusTabClass(c.status.value)">{{
@@ -142,4 +173,19 @@ const openHistory = (event: Event): void => {
             </div>
         </Popover>
     </header>
+    <!-- Full first message on tab hover: a compact card, teleported out of the strip's clipping and clamped to
+         the window. pointer-events-none so it never eats the hover that summons it. -->
+    <Teleport :to="overlayTarget">
+        <div
+            v-if="preview"
+            class="pointer-events-none fixed z-50 line-clamp-[12] max-w-[320px] min-w-[12rem] rounded-lg border border-line-strong bg-card px-3 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap text-content shadow-2xl"
+            :style="{
+                left: `${preview.left}px`,
+                ...(preview.top !== undefined ? { top: `${preview.top}px` } : {}),
+                ...(preview.bottom !== undefined ? { bottom: `${preview.bottom}px` } : {}),
+            }"
+        >
+            {{ preview.text }}
+        </div>
+    </Teleport>
 </template>

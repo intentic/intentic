@@ -55,6 +55,28 @@ test("an unreadable proc tree yields an empty scan, not a rejection", async () =
     await expect(scanListeningPorts(join(tmpdir(), "port-scan-missing"))).resolves.toEqual([]);
 });
 
+test("names the Docker embedded DNS bind (127.0.0.11) it can't attribute to any process", async () => {
+    const root = mkdtempSync(join(tmpdir(), "port-scan-"));
+    mkdirSync(join(root, "net"), { recursive: true });
+    // 127.0.0.11:45661 LISTEN — libnetwork's embedded resolver. dockerd answers it from outside this PID
+    // namespace, so no /proc/*/fd owns inode 1005 and the pid walk comes up empty — but the address names it.
+    writeFileSync(join(root, "net", "tcp"), [HEADER, row("0B00007F:B25D", "0A", "1005")].join("\n"));
+    writeFileSync(join(root, "net", "tcp6"), HEADER);
+    await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 45661, host: "127.0.0.1", command: "Docker embedded DNS" }]);
+});
+
+test("falls back to /proc/<pid>/comm when a listening process has an empty cmdline", async () => {
+    const root = mkdtempSync(join(tmpdir(), "port-scan-"));
+    mkdirSync(join(root, "net"), { recursive: true });
+    writeFileSync(join(root, "net", "tcp"), [HEADER, row("0100007F:1F91", "0A", "1006")].join("\n")); // 127.0.0.1:8081
+    writeFileSync(join(root, "net", "tcp6"), HEADER);
+    mkdirSync(join(root, "200", "fd"), { recursive: true });
+    symlinkSync("socket:[1006]", join(root, "200", "fd", "5"));
+    writeFileSync(join(root, "200", "cmdline"), ""); // argv cleared — nothing to join
+    writeFileSync(join(root, "200", "comm"), "cloudflared\n"); // kernel-maintained executable name, the fallback
+    await expect(scanListeningPorts(root)).resolves.toEqual([{ port: 8081, host: "127.0.0.1", pid: 200, command: "cloudflared" }]);
+});
+
 test("portKind: repo cwds and terminal processes are workspace; sandbox machinery and unknowns are system", () => {
     // A cwd inside a repo wins outright — even for a binary that is otherwise sandbox machinery.
     expect(portKind({ command: "node /work/intentic/_apps/web/node_modules/.bin/vite", cwd: "/work/intentic/_apps/web" }, "/work")).toBe("workspace");
@@ -66,6 +88,8 @@ test("portKind: repo cwds and terminal processes are workspace; sandbox machiner
     expect(portKind({ command: "/usr/bin/docker-proxy -proto tcp -host-port 5440", cwd: "/" }, "/work")).toBe("workspace");
     // Anything else run from the workspace root is a user terminal process (shells open there).
     expect(portKind({ command: "python -m http.server 8000", cwd: "/work" }, "/work")).toBe("workspace");
+    // The synthesized Docker-DNS label (no cwd) files under system like other unattributed infrastructure.
+    expect(portKind({ command: "Docker embedded DNS" }, "/work")).toBe("system");
     // Unattributable listeners default to system.
     expect(portKind({}, "/work")).toBe("system");
 });

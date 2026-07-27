@@ -1542,7 +1542,9 @@ export const PortSummarySchema = z.object({
     kind: z.enum(["workspace", "system"]),
     // The owning process, resolved from procfs; absent when no /proc/*/fd entry matched the socket's inode.
     pid: z.number().optional(),
-    // The process argv joined with spaces ("node /work/app/node_modules/.bin/vite").
+    // How the row is labeled: the process argv joined with spaces ("node /work/app/node_modules/.bin/vite"),
+    // falling back to the kernel `comm` name when argv is empty, or a synthesized name for attributable
+    // infrastructure the pid walk can't reach ("Docker embedded DNS"). Absent only when wholly unattributable.
     command: z.string().optional(),
     // The process working directory (how the UI attributes a port to a repo).
     cwd: z.string().optional(),

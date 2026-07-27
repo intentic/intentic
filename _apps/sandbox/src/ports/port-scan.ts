@@ -36,8 +36,8 @@ const dialHost = (hexAddress: string): LoopbackHost | undefined => {
 
 // LISTEN rows from one /proc/net/tcp{,6} table: whitespace-split fields are
 // [sl, local_address, rem_address, st, tx:rx, tr:tm, retrnsmt, uid, timeout, inode, …]; st 0A is LISTEN.
-const parseListeners = (table: string): { port: number; host: LoopbackHost; inode: string }[] => {
-    const listeners: { port: number; host: LoopbackHost; inode: string }[] = [];
+const parseListeners = (table: string): { port: number; host: LoopbackHost; address: string; inode: string }[] => {
+    const listeners: { port: number; host: LoopbackHost; address: string; inode: string }[] = [];
     for (const line of table.split("\n").slice(1)) {
         const fields = line.trim().split(/\s+/);
         const local = fields[1]?.split(":");
@@ -45,11 +45,12 @@ const parseListeners = (table: string): { port: number; host: LoopbackHost; inod
         if (fields[3] !== "0A" || local?.[0] === undefined || local[1] === undefined || inode === undefined) {
             continue;
         }
-        const host = dialHost(local[0].toUpperCase());
+        const address = local[0].toUpperCase();
+        const host = dialHost(address);
         if (host === undefined) {
             continue;
         }
-        listeners.push({ port: Number.parseInt(local[1], 16), host, inode });
+        listeners.push({ port: Number.parseInt(local[1], 16), host, address, inode });
     }
     return listeners;
 };
@@ -107,12 +108,17 @@ const resolvePids = async (procRoot: string, wanted: ReadonlySet<string>): Promi
     return owners;
 };
 
+// Docker's embedded DNS resolver binds the fixed 127.0.0.11 alias (libnetwork) and is answered by dockerd from
+// outside the container's PID namespace — so no /proc/*/fd owns its socket and the pid walk comes up empty. It's
+// the one otherwise-unattributable listener the scan can still name, by its unmistakable bind address.
+const DOCKER_EMBEDDED_DNS_ADDRESS = "0B00007F"; // 127.0.0.11, /proc/net/tcp little-endian hex
+
 // Every TCP port listening in the sandbox's network namespace that the preview proxy could forward, each
 // attributed to its owning process where procfs allows. `procRoot` is injectable so tests run against a
 // fixture tree. Dual-stack listeners (the same port on tcp and tcp6) collapse to one row.
 export const scanListeningPorts = async (procRoot = "/proc"): Promise<ListeningPort[]> => {
     const tables = await Promise.all(["tcp", "tcp6"].map((table) => readFile(join(procRoot, "net", table), "utf8").catch(() => "")));
-    const byPort = new Map<number, { port: number; host: LoopbackHost; inode: string }>();
+    const byPort = new Map<number, { port: number; host: LoopbackHost; address: string; inode: string }>();
     for (const listener of tables.flatMap(parseListeners)) {
         const existing = byPort.get(listener.port);
         // A dual-stack port collapses to one row, preferring the 127.0.0.1-dialable side.
@@ -124,15 +130,21 @@ export const scanListeningPorts = async (procRoot = "/proc"): Promise<ListeningP
     return Promise.all(
         [...byPort.values()]
             .toSorted((a, b) => a.port - b.port)
-            .map(async ({ port, host, inode }) => {
+            .map(async ({ port, host, address, inode }) => {
                 const pid = owners.get(inode);
                 if (pid === undefined) {
-                    return { port, host };
+                    // No /proc/*/fd owns the socket — usually plumbing served from outside this PID namespace.
+                    // Docker's embedded DNS is the one we can still name, from its fixed 127.0.0.11 bind address.
+                    return address === DOCKER_EMBEDDED_DNS_ADDRESS ? { port, host, command: "Docker embedded DNS" } : { port, host };
                 }
-                // cmdline is NUL-separated argv; empty for kernel threads. cwd needs the same-user privilege the
-                // daemon (root in the container) has — either read failing just drops the annotation.
+                // cmdline is the full NUL-separated argv, but it reads empty for kernel threads and any process
+                // that cleared its argv (some daemons, a defunct process still holding the socket) — fall back to
+                // `comm`, the kernel-maintained executable name (truncated to 15 chars), so the row shows a real
+                // name rather than nothing. cwd needs the same-user privilege the daemon (root in the container)
+                // has — any of these reads failing just drops that annotation.
                 const cmdline = await readFile(join(procRoot, String(pid), "cmdline"), "utf8").catch(() => "");
-                const command = cmdline.split("\0").filter(Boolean).join(" ");
+                const command =
+                    cmdline.split("\0").filter(Boolean).join(" ") || (await readFile(join(procRoot, String(pid), "comm"), "utf8").catch(() => "")).trim();
                 const cwd = await readlink(join(procRoot, String(pid), "cwd")).catch(() => undefined);
                 const listener: { port: number; host: LoopbackHost; pid: number; command?: string; cwd?: string } = { port, host, pid };
                 if (command !== "") {
