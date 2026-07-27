@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SandboxSummary, SetupCode, SetupCodeTarget } from "@intentic-app/api-contract";
-import { sandboxSubdomain } from "@intentic/sandbox-contract";
+import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
 import { cmp, Code, CopyButton, InfoHint, Segmented, StepSection, useOsPreference } from "@intentic-app/ui";
 import Button from "primevue/button";
 import Select from "primevue/select";
@@ -13,7 +13,6 @@ import { errorMessage } from "../composables/useAsyncAction";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { useCloudflareZones } from "../composables/extensions/useCloudflareZones";
-import { syncFolder } from "../composables/sandbox/syncFolder";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { environment } from "../environments/environment";
 import { bashCommand, psCommand } from "../environments/scriptCommand";
@@ -96,9 +95,11 @@ const subdomainValid = computed(() => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(su
 // --- desktop sync opt-in (step 3) ---
 // On by default: the same pasted command also enrolls the sync agent. The folder rides the command as a
 // SYNC_DIR env var (a path, not a secret), so toggling this just adds/removes it — no re-mint. The folder is
-// derived from the sandbox name (not user-editable) — shown as info, not a field.
+// derived from the sandbox name AND the hostname the mint just provisioned (not user-editable) — shown as
+// info, not a field — so it carries the same id the sandbox's address does. Empty until the mint lands, which
+// is also when the command that would carry it appears.
 const syncEnabled = ref(true);
-const syncDir = computed(() => (created.value ? syncFolder(created.value.name, created.value.id) : ``));
+const syncDir = computed(() => (created.value && setup.value ? syncFolder(created.value.name, setup.value.hostname) : ``));
 
 // --- attach lane (step 1's one-step alternative) ---
 // Which spine step 1 heads: `provision` (reachability → run → wait, steps 2-4) or `attach` (paste the domain
@@ -930,7 +931,8 @@ watch(commandReady, (ready) => {
                 </p>
 
                 <!-- Desktop sync opt-in: the same command also installs the sync agent. Toggling just adds/removes
-                     the SYNC_DIR env on the command below — no re-mint. The folder is derived from the name.
+                     the SYNC_DIR env on the command below — no re-mint. The folder is derived from the name + the
+                     minted hostname, so it names the same id the sandbox's address does.
                      Hidden on the compose tab: that path has no place to carry SYNC_DIR, so the toggle would do
                      nothing there — the compose panel points at the workspace's Desktop sync card instead. -->
                 <label v-if="runTab !== `compose`" class="flex cursor-pointer items-center gap-3 rounded-lg bg-canvas p-4">
@@ -938,7 +940,7 @@ watch(commandReady, (ready) => {
                     <div class="flex flex-col gap-0.5">
                         <span class="text-sm font-semibold text-content">Also sync a local folder with this sandbox</span>
                         <span class="text-xs text-muted">
-                            <template v-if="syncEnabled"
+                            <template v-if="syncEnabled && syncDir !== ``"
                                 >Mirrors to <code>{{ syncDir }}</code> so you can use your own editor.</template
                             >
                             <template v-else>Mirror a local folder here so you can use your own editor.</template>

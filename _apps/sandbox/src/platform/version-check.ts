@@ -10,6 +10,8 @@
 // /info reads the cached value synchronously via latestVersion(), so a hot route is never coupled to the
 // registry and unit tests (which build the app without running main.ts) see a cold cache and no network.
 
+import { isDevBuild } from "../version.js";
+
 const LATEST_URL = "https://registry.npmjs.org/@intentic/sync/latest";
 // A moved release isn't urgent, so refresh cheaply: ~1 request/sandbox/hour to npm.
 const REFRESH_MS = 60 * 60_000;
@@ -54,7 +56,16 @@ export const refreshLatestVersion = async (): Promise<void> => {
 
 // Boot-time background refresh (main.ts): warm the cache now, then hourly. The interval is unref'd so it never
 // holds the event loop open. Started only at boot — tests that build the app directly never trigger a fetch.
+//
+// A dev build never checks. Its baked version is the unstamped 0.0.0 sentinel, which every published release
+// outranks, so the comparison below would report "0.0.0 → x.y.z available" forever — a permanent, unfixable
+// update prompt on a sandbox freshly built from the newest source, whose fix (recreate on :stable) would
+// actually move it BACKWARDS. Leaving the cache cold is what makes /info omit latest/updateAvailable entirely,
+// so both the hub card and the global banner stay hidden; it also spares npm an hourly request per dev sandbox.
 export const startVersionCheck = (): { stop: () => void } => {
+    if (isDevBuild) {
+        return { stop: () => undefined };
+    }
     void refreshLatestVersion();
     const timer = setInterval(() => void refreshLatestVersion(), REFRESH_MS);
     timer.unref?.();

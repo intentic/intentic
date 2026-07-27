@@ -6,13 +6,13 @@
 # `intentic-sync uninstall` removes everything.
 #
 # Usage (the platform's Desktop sync card hands you this):
-#   curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://sandbox-<id>.<zone>' PAIR_TOKEN='<token>' SYNC_DIR="$HOME/intentic/<name>" sh
+#   curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://sandbox-<id>.<zone>' PAIR_TOKEN='<token>' SYNC_DIR="$HOME/intentic/<name>-<id>" sh
 #
 # Required env:
 #   SANDBOX_URL  your sandbox's public URL (from the card).
 #   PAIR_TOKEN   the one-time pairing token from the card (single-use, expires in ~10 min).
 # Optional env:
-#   SYNC_DIR     local folder to sync (default: ~/intentic/<sandbox-host>)
+#   SYNC_DIR     local folder to sync (default: ~/intentic/<id>, the same id the sandbox's own URL carries)
 #   TAKEOVER     any non-empty value takes over sync from another machine already enrolled on this sandbox.
 #   AGENT_BIN    run THIS agent command instead of downloading a release — for local dev / dogfooding an
 #                unreleased build, e.g. AGENT_BIN="node /path/to/intentic/_apps/sync/dist/cli.js".

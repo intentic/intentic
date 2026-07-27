@@ -5,10 +5,10 @@
 # reboot. `intentic-sync uninstall` removes everything.
 #
 # Usage (the platform's Desktop sync card hands you this):
-#   $env:SANDBOX_URL='https://sandbox-<id>.<zone>'; $env:PAIR_TOKEN='<token>'; $env:SYNC_DIR="$HOME\intentic\<name>"; irm https://intentic.dev/sync.ps1 | iex
+#   $env:SANDBOX_URL='https://sandbox-<id>.<zone>'; $env:PAIR_TOKEN='<token>'; $env:SYNC_DIR="$HOME\intentic\<name>-<id>"; irm https://intentic.dev/sync.ps1 | iex
 #
 # Required env: SANDBOX_URL, PAIR_TOKEN (the one-time token from the card).
-# Optional: SYNC_DIR (default: ~\intentic\<host>); TAKEOVER (any non-empty value takes over sync from another machine).
+# Optional: SYNC_DIR (default: ~\intentic\<id>, the same id the sandbox's own URL carries); TAKEOVER (any non-empty value takes over sync from another machine).
 #   AGENT_BIN  local dev / dogfooding an unreleased build: run this command instead of downloading a release,
 #              whitespace-separated (e.g. "node C:\intentic\_apps\sync\dist\cli.js"; a path with spaces needs a wrapper .cmd).
 $ErrorActionPreference = 'Stop'

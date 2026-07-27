@@ -1,7 +1,7 @@
+import { syncFolder } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import { sandboxRequest } from "./sandboxClient";
-import { syncFolder } from "./syncFolder";
 import { useSandbox } from "./useSandbox";
 
 /* Drives the Desktop sync card. "Enable" mints a short-lived, single-use pairing token from the daemon; the
@@ -49,7 +49,7 @@ export function useDesktopSync() {
     // machine's key. The user opts in explicitly (the card only offers it when another machine holds sync).
     const takeover = ref(false);
 
-    const defaultFolder = computed(() => syncFolder(active.value?.name ?? `sandbox`, active.value?.id ?? ``));
+    const defaultFolder = computed(() => syncFolder(active.value?.name ?? `sandbox`, daemonUrl.value));
     const folder = ref(defaultFolder.value);
     // Re-seed the folder + drop any stale token when the active sandbox changes (a new context).
     watch(

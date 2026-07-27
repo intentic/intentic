@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { gitCommitAll, INTENT_TSCONFIG, intentPackageJson } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
 import { AGENT_GIT_AUTHOR, terminalGit } from "../git/git.js";
-import { version } from "../version.js";
+import { isDevBuild, version } from "../version.js";
 
 const require = createRequire(import.meta.url);
 
@@ -38,7 +38,7 @@ const packageRoot = (pkg: string): string => {
 // image carries the unpublished 0.0.0 sentinel — its packages aren't on npm, so `~0.0.0` can't resolve; link
 // instead to the copy bundled in THIS image. The linked packages' own deps resolve from their bundled store
 // siblings, so the intent repo's deploy.config.ts imports load under `resolve`.
-export const dependencySpec = (pkg: string): string => (version === "0.0.0" ? `link:${packageRoot(pkg)}` : `~${version}`);
+export const dependencySpec = (pkg: string): string => (isDevBuild ? `link:${packageRoot(pkg)}` : `~${version}`);
 
 // Make the intent repo provisionable. `resolve` dynamically imports deploy.config.ts, which needs @intentic/graph
 // and @intentic/sdk installed in /work/intent. The neutral first-boot ledger deliberately skips the skeleton +

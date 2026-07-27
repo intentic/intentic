@@ -7,7 +7,8 @@
 // the zone's SOA TTL. This module is that agreement.
 
 // The sandbox daemon's subdomain + hostname: `sandbox-<id>` / `sandbox-<id>.<zone>`.
-export const sandboxSubdomain = (id: string): string => `sandbox-${id}`;
+const SANDBOX_PREFIX = "sandbox-";
+export const sandboxSubdomain = (id: string): string => `${SANDBOX_PREFIX}${id}`;
 export const sandboxHostname = (id: string, zone: string): string => `${sandboxSubdomain(id)}.${zone}`;
 
 // The container sshd hostname the desktop-sync (Mutagen) reaches over the sandbox tunnel: `ssh-<id>.<zone>`.
@@ -72,6 +73,44 @@ export const panelFromHost = (hostHeader: string | undefined, sandboxId: string 
     keyFromHost("preview-", hostHeader, sandboxId);
 export const portSlotFromHost = (hostHeader: string | undefined, sandboxId: string | undefined): string | undefined =>
     keyFromHost("port-", hostHeader, sandboxId);
+
+// The sandbox's identity AS THE USER SEES IT: the leading DNS label of its public URL, minus the `sandbox-`
+// prefix — `https://sandbox-0f310c3c4db4.intentic.dev` → `0f310c3c4db4`, i.e. sandboxIdFromToken's digest read
+// back off the wire by anyone holding only the URL. On the own-Cloudflare path the label is whatever subdomain
+// the owner chose, so that is the id there. undefined until the sandbox has a URL at all.
+export const sandboxIdFromUrl = (url: string | undefined): string | undefined => {
+    if (url === undefined || url === "") {
+        return undefined;
+    }
+    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : `https://${url}`;
+    let label: string;
+    try {
+        label = new URL(withScheme).hostname.split(".")[0] ?? "";
+    } catch {
+        return undefined;
+    }
+    if (label === "" || label === SANDBOX_PREFIX) {
+        return undefined;
+    }
+    return label.startsWith(SANDBOX_PREFIX) ? label.slice(SANDBOX_PREFIX.length) : label;
+};
+
+// The LOCAL folder desktop sync mirrors /work into: `~/intentic/<sandbox name>-<sandboxIdFromUrl>`. Both halves
+// are strings the user already has in front of them — the name in the sandbox switcher, the id in the address
+// bar — so the folder on disk and the sandbox it mirrors read as ONE identity: `~/intentic/shop-0f310c3c4db4`
+// belongs to `https://sandbox-0f310c3c4db4.intentic.dev` and nothing else. Keyed on the URL rather than the
+// name alone for the same reason the hostname is: a torn-down sandbox recreated under the same name gets a new
+// id, hence its own fresh folder instead of reusing the dead one's (which cleanup never deletes) and colliding
+// on the two-way sync. Lives here, beside the hostname builders, because that match IS the contract.
+export const syncFolder = (name: string, url: string | undefined): string => {
+    const slug =
+        name
+            .replace(/[^a-zA-Z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .toLowerCase() || "sandbox";
+    const id = sandboxIdFromUrl(url);
+    return `~/intentic/${slug}${id === undefined ? "" : `-${id}`}`;
+};
 
 // The Cloudflare zone from a sandbox public URL (https://sandbox-<id>.<zone> → <zone>): the hostname minus its
 // first DNS label. undefined when the URL is unparsable OR the hostname has fewer than three labels (no zone

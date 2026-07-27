@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildCommand, type CommandContext } from "@stricli/core";
+import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { registerAutostart, unregisterAutostart } from "./autostart.js";
 import { knownHostsPath, readConfig, type SyncConfig, type SyncMode, sshKeyPath, writeConfig } from "./config.js";
 import { type CliLauncher, type Log, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
@@ -96,7 +97,7 @@ const setup = buildCommand<SetupFlags>({
         flags: {
             url: { kind: "parsed", parse: String, brief: "The sandbox's public URL (e.g. https://sandbox-xxx.example.dev)" },
             pair: { kind: "parsed", parse: String, brief: "The one-time pairing token from the Desktop sync card" },
-            dir: { kind: "parsed", parse: String, optional: true, brief: "Local directory to sync (default: ~/intentic/<sandbox>)" },
+            dir: { kind: "parsed", parse: String, optional: true, brief: "Local directory to sync (default: ~/intentic/<sandbox id>, the id in the sandbox's own URL)" },
             sandboxId: { kind: "parsed", parse: String, optional: true, brief: "Session/alias id (default: the sandbox URL host)" },
             takeover: { kind: "boolean", brief: "Take over sync from another machine already enrolled on this sandbox (revokes its key)" },
         },
@@ -127,9 +128,16 @@ const setup = buildCommand<SetupFlags>({
         // File sync exists only in "sync" mode — a mirror-only enrollment (a collaborator) has no local dir and
         // no sync session, just port forwards. A `~` prefix can reach us verbatim (SYNC_DIR travels as data from
         // the claim payload — no shell expands it), so expand it here where every entry path converges.
+        // The default folder is named for the id in the sandbox's own URL (the browser's SYNC_DIR prefixes that
+        // with the sandbox's name), never the whole sanitized host — so `~/intentic/<id>` and
+        // `https://sandbox-<id>.<zone>` are visibly the same sandbox.
         const localDir =
             mode === "sync"
-                ? resolve(flags.dir === undefined ? join(homedir(), "intentic", sandboxId) : flags.dir.replace(/^~(?=[\\/]|$)/, homedir()))
+                ? resolve(
+                      flags.dir === undefined
+                          ? join(homedir(), "intentic", sandboxIdFromUrl(flags.url) ?? sandboxId)
+                          : flags.dir.replace(/^~(?=[\\/]|$)/, homedir()),
+                  )
                 : undefined;
         if (localDir !== undefined) {
             // Create the local root up front — an immediately-visible folder is the user's anchor that setup worked.

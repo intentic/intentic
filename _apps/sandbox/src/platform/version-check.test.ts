@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { isNewer, latestVersion, refreshLatestVersion } from "./version-check.js";
+import { isDevBuild } from "../version.js";
+import { isNewer, latestVersion, refreshLatestVersion, startVersionCheck } from "./version-check.js";
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -18,6 +19,19 @@ test("refreshLatestVersion populates the cache from the npm packument version", 
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ version: "9.9.9" }), { status: 200 }));
     await refreshLatestVersion();
     expect(latestVersion()).toBe("9.9.9");
+});
+
+test("a dev build never checks, so /info can't offer an update that would move it backwards", async () => {
+    let fetched = false;
+    vi.stubGlobal("fetch", async () => {
+        fetched = true;
+        return new Response(JSON.stringify({ version: "9.9.9" }), { status: 200 });
+    });
+    // The repo's own package.json carries the unstamped sentinel, so a test run IS a dev build.
+    expect(isDevBuild).toBe(true);
+    startVersionCheck().stop();
+    await Promise.resolve();
+    expect(fetched).toBe(false);
 });
 
 test("a failed refresh keeps the previous cached value", async () => {
