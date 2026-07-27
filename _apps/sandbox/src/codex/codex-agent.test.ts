@@ -67,6 +67,8 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
         },
         { kind: "todos", items: [{ content: "add route", status: "pending" }] },
         { kind: "delta", text: "Added the route." },
+        // Codex only reports a completed agent_message, so every delta is a whole prose block and closes one.
+        { kind: "text_end" },
         { kind: "usage", inputTokens: 10, outputTokens: 5, cacheReadTokens: 3 },
         { kind: "done" },
     ]);
@@ -162,7 +164,9 @@ test("a plan turn sends attached images on the first planning turn only — the 
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const, attachments: ["/work/a/shot.png"] }, () => ({ approve: true }));
+    await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const, attachments: ["/work/a/shot.png"] }, () => ({
+        approve: true,
+    }));
     expect(calls).toHaveLength(2);
     expect(calls[0]!.images).toEqual(["/work/a/shot.png"]);
     expect(calls[1]!.images).toBeUndefined();
@@ -182,6 +186,7 @@ test("a plan turn proposes read-only, then executes full-access on the same thre
         { kind: "session", sessionId: "thr-2" },
         { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route, then test." },
         { kind: "delta", text: "Done." },
+        { kind: "text_end" },
         { kind: "done" },
     ]);
     expect(calls).toHaveLength(2);
@@ -207,7 +212,7 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
     });
 
     expect(events.filter((event) => event.kind === "plan").map((event) => (event as { text: string }).text)).toEqual(["Plan v1", "Plan v2"]);
-    expect(events.at(-2)).toEqual({ kind: "delta", text: "Executed." });
+    expect(events.slice(-3)).toEqual([{ kind: "delta", text: "Executed." }, { kind: "text_end" }, { kind: "done" }]);
     expect(calls).toHaveLength(3);
     expect(calls[1]!.prompt).toContain("use fastify");
     expect(calls[1]!.options.sandboxMode).toBe("read-only");
@@ -223,11 +228,7 @@ test("a plan turn that fails after holding a message emits the error and NO plan
         { type: "turn.failed", error: { message: "Payment Required" } },
     ]);
     const events = await collect(createCodexAgent("/home", runner), { ...request, permissionMode: "plan" as const });
-    expect(events).toEqual([
-        { kind: "session", sessionId: "thr-7" },
-        { kind: "error", message: "Payment Required" },
-        { kind: "done" },
-    ]);
+    expect(events).toEqual([{ kind: "session", sessionId: "thr-7" }, { kind: "error", message: "Payment Required" }, { kind: "done" }]);
     expect(events.some((event) => event.kind === "plan")).toBe(false);
     expect(calls).toHaveLength(1);
 });

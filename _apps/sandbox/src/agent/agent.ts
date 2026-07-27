@@ -268,6 +268,13 @@ async function* streamSdk(
     // context_usage frame at the result so the UI can warn as the chat nears auto-compaction.
     let contextTokens: number | undefined;
     let contextModel: string | undefined;
+    // The text content block currently streaming, per agent — the main turn under "", each subagent under its
+    // Task tool id — so a content_block_stop closes exactly the prose its own deltas were writing (see the
+    // text_end frame). Keyed and index-matched rather than a bare flag so neither a stop belonging to some
+    // other block (thinking, a tool's input JSON) nor a subagent's interleaved stream can retire the wrong one.
+    // A block's stop always precedes its message's `assistant` frame, so the boundary lands BEFORE the tool
+    // calls that block introduced, which is what puts them under it rather than above it in the transcript.
+    const textBlocks = new Map<string, number>();
     // The turn's live permission mode, so the composer can follow it. The SDK has no mode-change message —
     // `init` states the resolved starting mode, `status` piggybacks the current one, and the agent's own
     // EnterPlanMode is only visible as a tool call — so the three are folded here and de-duplicated.
@@ -297,6 +304,8 @@ async function* streamSdk(
             // request's message_start also reports its usage, which is the current context-window fill.
             const event = message.event as {
                 type: string;
+                index?: number;
+                content_block?: { type?: string };
                 delta?: { type: string; text?: string; thinking?: string };
                 message?: {
                     model?: string;
@@ -307,6 +316,11 @@ async function* streamSdk(
                 yield { kind: "delta", text: event.delta.text, ...withParent };
             } else if (event.type === "content_block_delta" && event.delta?.type === "thinking_delta" && typeof event.delta.thinking === "string") {
                 yield { kind: "thinking", text: event.delta.thinking, ...withParent };
+            } else if (event.type === "content_block_start" && event.content_block?.type === "text" && event.index !== undefined) {
+                textBlocks.set(parent ?? "", event.index);
+            } else if (event.type === "content_block_stop" && event.index !== undefined && textBlocks.get(parent ?? "") === event.index) {
+                textBlocks.delete(parent ?? "");
+                yield { kind: "text_end", ...withParent };
             } else if (event.type === "message_start" && event.message?.usage !== undefined) {
                 // Full input sent for this request = the context fill right now (input + both cache buckets).
                 const usage = event.message.usage;

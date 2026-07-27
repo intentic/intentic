@@ -64,6 +64,81 @@ test("a turn surfaces session, text deltas, tool actions, and a terminal done", 
     ]);
 });
 
+test("each prose block closes with text_end, before the tool calls that block introduced", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "stream_event", session_id: "s1", event: { type: "content_block_start", index: 0, content_block: { type: "text" } } },
+            {
+                type: "stream_event",
+                session_id: "s1",
+                event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Reading the router." } },
+            },
+            { type: "stream_event", session_id: "s1", event: { type: "content_block_stop", index: 0 } },
+            // The tool_use block's own start/stop must not close a prose bubble — only a text block's does.
+            { type: "stream_event", session_id: "s1", event: { type: "content_block_start", index: 1, content_block: { type: "tool_use" } } },
+            { type: "stream_event", session_id: "s1", event: { type: "content_block_stop", index: 1 } },
+            { type: "assistant", session_id: "s1", message: { content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "ls" } }] } },
+            { type: "stream_event", session_id: "s1", event: { type: "content_block_start", index: 0, content_block: { type: "text" } } },
+            {
+                type: "stream_event",
+                session_id: "s1",
+                event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Found it." } },
+            },
+            { type: "stream_event", session_id: "s1", event: { type: "content_block_stop", index: 0 } },
+            { type: "result", subtype: "success", result: "done" },
+        ),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s1" },
+        { kind: "delta", text: "Reading the router." },
+        { kind: "text_end" },
+        { kind: "tool_call", id: "b1", name: "Bash", category: "execute", status: "in_progress", target: "ls" },
+        { kind: "delta", text: "Found it." },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+});
+
+test("a subagent's prose block closes its own bubble, not the parent turn's", async () => {
+    // Both streams number their blocks from 0, so a shared index would let the subagent's stop retire the
+    // parent's still-open block. The boundary is keyed per agent precisely to make this ordering hold.
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "stream_event", session_id: "s1", event: { type: "content_block_start", index: 0, content_block: { type: "text" } } },
+            {
+                type: "stream_event",
+                session_id: "s1",
+                event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Delegating." } },
+            },
+            {
+                type: "stream_event",
+                session_id: "s1",
+                parent_tool_use_id: "t1",
+                event: { type: "content_block_start", index: 0, content_block: { type: "text" } },
+            },
+            {
+                type: "stream_event",
+                session_id: "s1",
+                parent_tool_use_id: "t1",
+                event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "sub prose" } },
+            },
+            { type: "stream_event", session_id: "s1", parent_tool_use_id: "t1", event: { type: "content_block_stop", index: 0 } },
+            { type: "stream_event", session_id: "s1", event: { type: "content_block_stop", index: 0 } },
+            { type: "result", subtype: "success", result: "done" },
+        ),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s1" },
+        { kind: "delta", text: "Delegating." },
+        { kind: "delta", text: "sub prose", parentToolUseId: "t1" },
+        { kind: "text_end", parentToolUseId: "t1" },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+});
+
 test("the SDK env always marks the sandbox and carries the per-turn oauth token only when given", async () => {
     let captured: Options | undefined;
     const capture: QueryFn = async function* (args) {
@@ -429,7 +504,8 @@ test("a thrown error from the SDK is reported as an error event, then done", asy
 });
 
 // A fake whose stream is paired with a supportedCommands(), the shape the real SDK Query satisfies.
-const queryWithCommands = (commands: unknown, ...messages: unknown[]): QueryFn =>
+const queryWithCommands =
+    (commands: unknown, ...messages: unknown[]): QueryFn =>
     (args) =>
         Object.assign(fakeQuery(...messages)(args), {
             supportedCommands: async () => commands as Awaited<ReturnType<NonNullable<AgentQuery["supportedCommands"]>>>,
@@ -461,7 +537,12 @@ test("a commands_changed push republishes the whole list mid-turn", async () => 
         request,
         fakeQuery(
             { type: "system", subtype: "init", session_id: "s", model: "sonnet" },
-            { type: "system", subtype: "commands_changed", session_id: "s", commands: [{ name: "deploy", description: "Ship it", argumentHint: "" }] },
+            {
+                type: "system",
+                subtype: "commands_changed",
+                session_id: "s",
+                commands: [{ name: "deploy", description: "Ship it", argumentHint: "" }],
+            },
             { type: "result", subtype: "success" },
         ),
     );
@@ -475,9 +556,12 @@ test("a stream with no command list publishes no commands frame", async () => {
 
 test("a failing supportedCommands never breaks the turn", async () => {
     const rejecting: QueryFn = (args) =>
-        Object.assign(fakeQuery({ type: "system", subtype: "init", session_id: "s", model: "sonnet" }, { type: "result", subtype: "success" })(args), {
-            supportedCommands: () => Promise.reject(new Error("CLI has no command list")),
-        });
+        Object.assign(
+            fakeQuery({ type: "system", subtype: "init", session_id: "s", model: "sonnet" }, { type: "result", subtype: "success" })(args),
+            {
+                supportedCommands: () => Promise.reject(new Error("CLI has no command list")),
+            },
+        );
     const events = await collect(request, rejecting);
     expect(events.some((event) => event.kind === "commands")).toBe(false);
     expect(events.at(-1)).toEqual({ kind: "done" });

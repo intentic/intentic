@@ -128,6 +128,12 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // Absent on isolated turns (they snapshot nothing) and when the tree was already clean at turn start.
     z.object({ kind: z.literal("checkpoint"), id: z.string() }),
     z.object({ kind: z.literal("delta"), text: z.string(), parentToolUseId: z.string().optional() }),
+    // The prose block the `delta` frames were writing is finished. A turn emits several: the model says what
+    // it is about to do, runs tools, reports what it found, runs more, then summarizes — each a separate text
+    // block in the SDK stream. Without this boundary the client has no way to tell them apart and glues the
+    // whole turn's narration into one paragraph run, so the client retires its current bubble here and lets
+    // what follows (the tool calls this block introduced, or the next block of prose) open a fresh one.
+    z.object({ kind: z.literal("text_end"), parentToolUseId: z.string().optional() }),
     z.object({ kind: z.literal("thinking"), text: z.string(), parentToolUseId: z.string().optional() }),
     // A tool call starting (or, for backends that only report completions, arriving whole). `content` carries
     // structured output known at call time — an Edit's diff is derived from its input, no result needed.

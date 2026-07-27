@@ -461,8 +461,7 @@ export class Conversation {
     // isn't generating, so the composer should drop the Stop spinner and show a ready Send (Claude Code style).
     readonly awaitingDecision = computed(() =>
         this.messages.value.some(
-            (message) =>
-                message.plan?.status === `pending` || message.question?.status === `pending` || message.permission?.status === `pending`,
+            (message) => message.plan?.status === `pending` || message.question?.status === `pending` || message.permission?.status === `pending`,
         ),
     );
 
@@ -1162,6 +1161,23 @@ export class Conversation {
                 }
                 this.appendDelta(this.currentTextId(turn), event.text);
                 return;
+            case `text_end`:
+                // The agent finished a block of prose. Retire the bubble it was writing into so whatever comes
+                // next — the tool calls that block introduced, or the next block after they return — opens a
+                // fresh one below it. That is what restores Claude Code's interleaving (says what it's about to
+                // do → the tool cards → what it found → more cards → the summary); with one bubble per turn the
+                // whole narration glued into a single paragraph run with every tool card hoisted above it.
+                // A subagent's blocks are its own: its prose never enters the parent bubble (see `delta`), so
+                // its boundaries must not retire the parent's either.
+                //
+                // Deliberately NOT flushed: the typewriter keeps draining into the retired bubble by id, and the
+                // next delta flushes the remainder there before typing into the new one (see appendDelta). A
+                // flush here would snap the whole tail of every block — including the closing summary, whose
+                // block ends the moment the model stops writing — into place with no typing at all.
+                if (event.parentToolUseId === undefined && this.hasProse(turn.id)) {
+                    turn.id = null;
+                }
+                return;
             case `thinking`: {
                 const thinking = event.text;
                 if (!thinking) {
@@ -1343,6 +1359,20 @@ export class Conversation {
             default:
                 return;
         }
+    }
+
+    // Whether the turn's current bubble holds any of the agent's prose — counting text still queued in the
+    // typewriter, which hasn't reached the message yet. Guards the text_end split: a block that wrote nothing
+    // (the empty text block a model can open before going straight to a tool) has no bubble to close, and
+    // retiring one there would strand it empty in the transcript for the rest of the turn.
+    private hasProse(id: number | null): boolean {
+        if (id === null) {
+            return false;
+        }
+        if (this.typeId === id && this.typeBuffer !== ``) {
+            return true;
+        }
+        return (this.messages.value.find((message) => message.id === id)?.text ?? ``) !== ``;
     }
 
     // The id of the bubble the current frame writes to, allocating a fresh assistant message when the turn's

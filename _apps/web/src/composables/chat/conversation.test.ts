@@ -95,7 +95,9 @@ const chunkStream = (chunks: unknown[], end: `close` | `error`): ReadableStream<
 // The parsed bodies of the turn STARTS among the mock's calls — attach/control posts interleave, so tests
 // assert on turn inputs through this instead of raw call indexes.
 const turnBodies = (): Record<string, unknown>[] =>
-    sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent`).map(([, init]) => JSON.parse(init!.body as string) as Record<string, unknown>);
+    sandboxRequestMock.mock.calls
+        .filter(([path]) => path === `/agent`)
+        .map(([, init]) => JSON.parse(init!.body as string) as Record<string, unknown>);
 
 const settings = { agent: `claude`, harness: `native`, account: undefined, model: `opus`, effort: `high`, thinking: false } as const;
 
@@ -343,6 +345,72 @@ describe(`Conversation`, () => {
         expect(assistant.usage).toMatchObject({ costUsd: 0.5, numTurns: 1 });
     });
 
+    it(`splits a turn's prose at each text_end, so tool cards sit under the block that introduced them`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `delta`, text: `Reading the router.` },
+                { kind: `text_end` },
+                { kind: `tool_call`, id: `b1`, name: `Bash`, category: `execute`, status: `in_progress`, target: `ls` },
+                { kind: `delta`, text: `Found it — fixing.` },
+                { kind: `text_end` },
+                { kind: `tool_call`, id: `e1`, name: `Edit`, category: `edit`, status: `in_progress`, target: `src/app.ts` },
+                { kind: `delta`, text: `Done.` },
+                { kind: `text_end` },
+                { kind: `usage`, costUsd: 0.3 },
+            ]),
+        );
+
+        await conversation.send(`fix the router`, settings);
+
+        // One bubble per prose block, each carrying the tools that ran after it — the transcript reads
+        // narration → cards → narration instead of every card hoisted above one glued-together paragraph.
+        const [, first, second, third] = conversation.messages.value;
+        expect(conversation.messages.value).toHaveLength(4);
+        expect(first).toMatchObject({ role: `assistant`, text: `Reading the router.` });
+        expect(first!.tools).toBeUndefined();
+        expect(second).toMatchObject({ role: `assistant`, text: `Found it — fixing.` });
+        expect(second!.tools?.map((tool) => tool.id)).toEqual([`b1`]);
+        expect(third).toMatchObject({ role: `assistant`, text: `Done.`, usage: { costUsd: 0.3 } });
+        expect(third!.tools?.map((tool) => tool.id)).toEqual([`e1`]);
+    });
+
+    it(`ignores a text_end that closed no prose, so an empty block leaves no stranded bubble`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                // An empty text block opened and closed before the model went straight to its first tool.
+                { kind: `text_end` },
+                { kind: `tool_call`, id: `b1`, name: `Bash`, category: `execute`, status: `in_progress`, target: `ls` },
+                { kind: `delta`, text: `Listed them.` },
+                { kind: `text_end` },
+            ]),
+        );
+
+        await conversation.send(`list them`, settings);
+
+        expect(conversation.messages.value).toHaveLength(2);
+        expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `Listed them.` });
+        expect(conversation.messages.value[1]!.tools?.map((tool) => tool.id)).toEqual([`b1`]);
+    });
+
+    it(`ignores a sub-agent's text_end: its blocks never split the parent turn's bubble`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `tool_call`, id: `agent1`, name: `Agent`, category: `other`, status: `in_progress`, target: `explore` },
+                { kind: `delta`, text: `sub prose`, parentToolUseId: `agent1` },
+                { kind: `text_end`, parentToolUseId: `agent1` },
+                { kind: `delta`, text: `main answer` },
+            ]),
+        );
+
+        await conversation.send(`explore it`, settings);
+
+        expect(conversation.messages.value).toHaveLength(2);
+        expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `main answer` });
+    });
+
     it(`opens a fresh bubble per turn: a stream carrying several turns splits at each usage boundary`, async () => {
         const conversation = new Conversation(`c1`);
         // A steered conversation's stream carries one turn per queued message; usage is each turn's boundary.
@@ -579,7 +647,14 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
             sseResponse([
-                { kind: `rate_limit_info`, account: `acct-1`, status: `allowed_warning`, utilization: 87, rateLimitType: `seven_day`, resetsAt: 1_800_000 },
+                {
+                    kind: `rate_limit_info`,
+                    account: `acct-1`,
+                    status: `allowed_warning`,
+                    utilization: 87,
+                    rateLimitType: `seven_day`,
+                    resetsAt: 1_800_000,
+                },
                 { kind: `done` },
             ]),
         );

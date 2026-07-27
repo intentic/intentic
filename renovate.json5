@@ -19,6 +19,18 @@
     ],
     packageRules: [
         {
+            // The Agent SDK BUNDLES the Claude Code CLI binary the sandbox actually executes (see its
+            // manifest.json — the SDK version maps 1:1 onto a `claude` release), and the image bakes
+            // node_modules, so this pin IS the harness version. A stale pin runs every Claude turn on a build
+            // that predates the models it serves — its system prompt branches on the model id, so an unknown
+            // model silently falls into the wrong prompt family. Track upstream as tightly as Renovate allows:
+            // every release, unscheduled, automerged.
+            groupName: "claude agent sdk",
+            matchPackageNames: ["@anthropic-ai/claude-agent-sdk", "@anthropic-ai/claude-agent-sdk-*"],
+            schedule: ["at any time"],
+            automerge: true,
+        },
+        {
             // The SigNoz stack (server + collector + zookeeper + clickhouse) is version-interdependent and its bumps
             // re-port the compose/collector/cluster configs in signoz.ts from SigNoz's reference deploy — group them
             // into one PR so a reviewer sees and validates the whole stack move together.

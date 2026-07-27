@@ -145,11 +145,16 @@ async function* streamTurn(events: AsyncIterable<ThreadEvent>, cwd: string, capt
                 if (event.type !== "item.completed") {
                     continue;
                 }
+                // Only `item.completed` reaches here, so each delta below is a WHOLE message block — its
+                // text_end follows immediately, which retires the client's prose bubble so the tool calls this
+                // message introduced render under it instead of being hoisted above the turn's whole narration.
                 if (capture === undefined) {
                     yield { kind: "delta", text: item.text };
+                    yield { kind: "text_end" };
                 } else {
                     if (capture.heldMessage !== undefined) {
                         yield { kind: "delta", text: capture.heldMessage };
+                        yield { kind: "text_end" };
                     }
                     capture.heldMessage = item.text;
                 }
