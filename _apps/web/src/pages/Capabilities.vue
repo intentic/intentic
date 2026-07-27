@@ -22,6 +22,7 @@ import { sandboxJson } from "../composables/sandbox/sandboxClient";
 import { errorMessage } from "../composables/useAsyncAction";
 import { browseMarketplace, useCapabilities } from "../composables/extensions/useCapabilities";
 import { useExtensions } from "../composables/extensions/useExtensions";
+import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../composables/terminal/useBackgroundProcesses";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { importForticlient, useVpn } from "../composables/sandbox/useVpn";
 
@@ -88,6 +89,29 @@ const instancesOf = (entry: CapabilityCatalogEntry): CapabilitySummary[] => {
     );
 };
 const selectedInstances = computed<CapabilitySummary[]>(() => (selected.value ? instancesOf(selected.value) : []));
+
+// --- the connection's background process (a gateway's liveness, where the user forms the intent) ---
+// A connector that relays events (Discord, IMAP) only works while its extension's gateway runs, and "my bot
+// went quiet" sends people to the connector — not to a process list behind the terminal panel. So the same
+// rows the panel's popover shows render here too, scoped to the extension serving THIS card.
+const { rows: processRows, busy: processBusy, start: startProcess, stop: stopProcess } = useBackgroundProcesses();
+
+// The extension that runs an instance's processes: an extension-kind capability IS the extension; a connector
+// instance is served by whichever extension declares its provider (resolved per INSTANCE, not per card — the
+// SQL card owns two providers, and they need not come from the same extension).
+const ownerExtensionId = (instance: CapabilitySummary): string | undefined =>
+    instance.kind === `extension`
+        ? instance.id
+        : extensions.value.find((extension) =>
+              (extension.manifest.contributes?.connectors ?? []).some((connector) => connector.provider === String(instance.config[`provider`])),
+          )?.id;
+
+// Empty until something is actually connected: a declared-but-idle gateway on a card you never configured is
+// noise, not health. Several instances of one provider share a single gateway, hence the owner set.
+const cardProcesses = computed<BackgroundProcessRow[]>(() => {
+    const owners = new Set(selectedInstances.value.map(ownerExtensionId).filter((id) => id !== undefined));
+    return processRows.value.filter((row) => row.extensionId !== undefined && owners.has(row.extensionId));
+});
 
 // A free instance name: the provider id if unused, else the first `<id>-2`, `-3`, … so repeat adds create
 // distinct connections instead of upserting the same id (the silent-overwrite trap).
@@ -663,6 +687,46 @@ const submitLabel = computed(() =>
                             <Icon name="exclamation-triangle" />
                             {{ instance.status.detail ?? "Needs a sandbox rebuild" }} — Finish setup →
                         </RouterLink>
+                    </div>
+                </RowGroup>
+
+                <!-- The gateway serving those connections. It answers the question the connector page is
+                     actually visited with once something is set up — "is this still working?" — so it lives
+                     here rather than only in the terminal panel's popover. Same rows, same actions. -->
+                <RowGroup
+                    v-if="cardProcesses.length > 0"
+                    label="Background process"
+                    caption="Relays events to your agent — restart it if this connection stops responding."
+                >
+                    <div v-for="row in cardProcesses" :key="row.id" class="flex items-center gap-2 px-4 py-3 text-xs">
+                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="row.running ? 'bg-success' : 'bg-content/25'"></span>
+                        <span class="font-medium text-content">{{ row.name }}</span>
+                        <span class="text-2xs" :class="row.running ? 'text-muted' : 'text-warning'">{{ row.running ? "running" : "stopped" }}</span>
+                        <div class="ml-auto flex items-center gap-1">
+                            <Button v-if="row.session" label="Logs" size="small" :text="true" @click="viewProcessLogs(row)">
+                                <template #icon><Icon name="align-left" /></template>
+                            </Button>
+                            <Button
+                                :label="row.running ? 'Restart' : 'Start'"
+                                size="small"
+                                :text="true"
+                                :disabled="processBusy === row.id"
+                                @click="void startProcess(row)"
+                            >
+                                <template #icon><Icon :name="row.running ? 'refresh' : 'play'" /></template>
+                            </Button>
+                            <Button
+                                v-if="row.running"
+                                label="Stop"
+                                size="small"
+                                severity="danger"
+                                :text="true"
+                                :disabled="processBusy === row.id"
+                                @click="void stopProcess(row)"
+                            >
+                                <template #icon><Icon name="stop" /></template>
+                            </Button>
+                        </div>
                     </div>
                 </RowGroup>
 

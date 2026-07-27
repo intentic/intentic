@@ -1,8 +1,5 @@
-import { TerminalsListSchema } from "@intentic-app/api-contract";
 import { computed, type ComputedRef } from "vue";
-import { sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
-import { useSandboxQuery } from "../sandbox/useSandboxQuery";
+import { useTerminalsQuery } from "./terminalsQuery";
 
 /* The terminal's presence on the rail: how many live sessions there are RIGHT NOW, from any view, whether or
  * not the panel is mounted. The panel keeps its own imperative list (globalTerminalSource) because it relists
@@ -12,9 +9,9 @@ import { useSandboxQuery } from "../sandbox/useSandboxQuery";
  *
  * `process` sessions are excluded: dockerd and the extensions' declared background processes are always up, so
  * counting them would pin a meaningless number to the rail forever. They are not tabs in the panel either —
- * they live in its background-processes popover — so the count matches what opening the panel would show. */
+ * they live in the background-process rows (useBackgroundProcesses), so the count matches what opening the
+ * panel would show. */
 
-const QUERY_KEY = sandboxKey(`terminal-activity`);
 // Sessions come and go through paths the browser never sees (the agent's Bash, an extension's Start, a tmux
 // exit), so the badge polls rather than waiting for an invalidation that no client action would fire.
 const POLL_MS = 10_000;
@@ -29,13 +26,9 @@ interface TerminalActivity {
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
 export function useTerminalActivity(): TerminalActivity {
-    const { query } = useSandboxQuery({
-        queryKey: QUERY_KEY,
-        queryFn: async () => TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)),
-        refetchInterval: POLL_MS,
-    });
+    const { sessions } = useTerminalsQuery(POLL_MS);
 
-    const live = computed(() => (query.data.value?.sessions ?? []).filter((session) => session.running && session.kind !== `process`));
+    const live = computed(() => sessions.value.filter((session) => session.running && session.kind !== `process`));
 
     const summary = computed<string | undefined>(() => {
         const parts = [

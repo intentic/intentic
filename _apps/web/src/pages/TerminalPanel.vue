@@ -752,7 +752,7 @@ const endResize = (event: PointerEvent): void => {
             >
                 <Icon name="eraser" class="text-xs" />
             </button>
-            <BackgroundProcesses :tabs="tabs" />
+            <BackgroundProcesses />
             <button
                 v-if="restart !== undefined && activeShell"
                 type="button"
