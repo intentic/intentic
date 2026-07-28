@@ -26,6 +26,7 @@ import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { agentSessionName, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
 import { EventQueue } from "./event-queue.js";
+import { harnessEnv } from "./harness-credentials.js";
 import { TaskChecklist } from "./task-checklist.js";
 import { editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 
@@ -740,19 +741,12 @@ const baseOptions = (
         // forwards the KEY NAMES per command, so the values also reach the tmux panes commands actually run in
         // (pane env is the tmux server's snapshot, not this subprocess env).
         ...request.cliEnv,
-        // We run with --dangerously-skip-permissions (bypassPermissions) because the container IS the
-        // isolation boundary. Claude Code refuses that flag under root (the sandbox runs as root) unless
-        // IS_SANDBOX marks the environment as already-sandboxed — which this container is.
-        IS_SANDBOX: "1",
-        // A custom endpoint (the Claude Code harness serving a non-Claude provider through the translator) points
-        // the harness at ANTHROPIC_BASE_URL + its bearer token, and WITHHOLDS the subscription OAuth token so it
-        // never leaves for a foreign endpoint. A native Claude turn (no baseUrl) keeps the OAuth token and the
-        // default (unset) base URL. The per-turn value wins over any container-env ANTHROPIC_BASE_URL default.
-        ...(request.baseUrl !== undefined
-            ? { ANTHROPIC_BASE_URL: request.baseUrl, ...(request.authToken !== undefined ? { ANTHROPIC_AUTH_TOKEN: request.authToken } : {}) }
-            : request.oauthToken !== undefined
-              ? { CLAUDE_CODE_OAUTH_TOKEN: request.oauthToken }
-              : {}),
+        // IS_SANDBOX (we run with --dangerously-skip-permissions, which Claude Code refuses under root unless
+        // the environment is marked already-sandboxed) plus this turn's credential. A custom endpoint points the
+        // harness at ANTHROPIC_BASE_URL + its bearer and WITHHOLDS the subscription OAuth token; a native Claude
+        // turn keeps the token and the default (unset) base URL. The per-turn value wins over any container-env
+        // ANTHROPIC_BASE_URL default. Shared with the quick-model one-shot — see harnessEnv.
+        ...harnessEnv(request),
         // The output-cleaner spec/holdout (or the filter-off flag) that the agent's Bash → tmux-run → agent-output-filter reads.
         ...cleanerEnv(request),
     },

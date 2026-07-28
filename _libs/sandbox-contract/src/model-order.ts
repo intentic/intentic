@@ -138,3 +138,18 @@ export const compareModelIds = (left: string, right: string): number =>
  * So a set breaks its own ties on the id. Which sibling that seats first is arbitrary — but it is the same
  * arbitrary answer every refresh, which is the property `default` actually needs. */
 export const compareUnrankedModelIds = (left: string, right: string): number => compareModelIds(left, right) || left.localeCompare(right);
+
+/* THE SAME TIER SCALE READ FROM THE OTHER END, for the one caller that wants the WEAKEST model rather than the
+ * strongest: the quick model behind a one-click helper (the commit box's autofill). A picker orders a catalog by
+ * what a user reaches for; this orders it by what a helper should spend, and the two are exact opposites — so
+ * they share TIER_RANK rather than each naming its own list of cheap ids.
+ *
+ * The direction of UNRANKED is the reason this can't just be compareModelIds reversed. There, an unrecognized
+ * family LEADS, because an id carrying no tier word is the provider's base line and a family nobody here has
+ * heard of is likelier the next flagship than the next budget tier. Reversing would therefore seat exactly that
+ * unknown-probably-flagship id as the cheap pick. So unknown sinks to LAST here too — both orders agree it is
+ * not the efficient rung — and the cheap end is only ever a family whose tier word is actually recognized.
+ * Falling off the end of a catalog with no efficient tier at all (Kimi publishes none) is then honest: the
+ * newest of what it does publish, chosen by the release tiebreak below. */
+export const compareCheapestFirst = (left: string, right: string): number =>
+    tierRankOf(familyOf(right)) - tierRankOf(familyOf(left)) || compareRelease(releaseOf(left), releaseOf(right));

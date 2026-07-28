@@ -2,11 +2,13 @@
 import type { KeyedProvider } from "@intentic/sandbox-contract";
 import { Card, cmp, CopyButton, InfoHint, Row, RowGroup, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
+import Select from "primevue/select";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { providerReady } from "../../composables/chat/access";
 import { providerTabs } from "../../composables/chat/conversation";
+import { quickModelGroups, useQuickModel } from "../../composables/chat/quickModel";
 import { useChat } from "../../composables/chat/useChat";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { errorMessage } from "../../composables/useAsyncAction";
@@ -206,6 +208,35 @@ const toggleIqSearch = (value: boolean): void => {
         return;
     }
     saveSandboxSettings.mutate({ ...current, iqSearch: value });
+};
+
+/* --- Quick model ---------------------------------------------------------------------------------------------
+ * The cheap, fast model behind the one-click helpers that are not a conversation (today: the commit box's AI
+ * autofill). It belongs on THIS tab and not in personal Settings for one decisive reason — the provider
+ * accounts it names live inside the sandbox, listed directly above on this very page, so a model pinned here
+ * can never name a provider this sandbox has no credential for. A cross-sandbox preference could not promise
+ * that.
+ *
+ * AUTO IS THE DEFAULT AND IT IS DERIVED, NOT STORED: the empty string means "work it out from whatever is
+ * connected right now" (resolveQuickModel — cheapest tier first, free channel before a paid one). So connecting
+ * an account tomorrow improves the answer by itself, and the row's label shows what it currently resolves to
+ * rather than making the user guess. */
+const quickModel = useQuickModel();
+const quickModelOptions = computed(() => [
+    {
+        label: quickModel.label.value === undefined ? `Auto` : `Auto — ${quickModel.label.value}`,
+        value: ``,
+    },
+    // Flattened rather than grouped: a sandbox has a handful of connected providers, and PrimeVue's option
+    // groups would add a layer of chrome to a list that is usually five rows long.
+    ...quickModelGroups.value.flatMap((group) => group.options.map((option) => ({ label: `${group.label} · ${option.label}`, value: option.key }))),
+]);
+const setQuickModel = (value: string): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, quickModel: value });
 };
 
 // How long a finished agent stays on the fleet board before the daemon archives it (and reclaims its worktree
@@ -686,6 +717,32 @@ const importMemory = async (): Promise<void> => {
                         :disabled="sandboxSettings === undefined"
                         @update:model-value="toggleIqSearch"
                     />
+                </template>
+            </Row>
+
+            <!-- Quick model — the cheap rung the one-click helpers spend, kept off the frontier model the chat
+                 runs on. Auto leads and states what it resolves to, because the useful thing to know here is
+                 not that a default exists but WHICH model a click is about to bill. -->
+            <Row
+                icon="sparkles"
+                title="Quick model"
+                description="The cheap, fast model behind one-click helpers like the commit-message autofill — never the model your chat runs on."
+            >
+                <template #control>
+                    <Select
+                        :model-value="quickModel.pinned.value"
+                        :options="quickModelOptions"
+                        option-label="label"
+                        option-value="value"
+                        :disabled="sandboxSettings === undefined"
+                        class="w-56 text-xs"
+                        @update:model-value="setQuickModel"
+                    />
+                </template>
+                <!-- Nothing connected: the helpers are inert and the dropdown has only Auto in it, which on its
+                     own reads as a broken control rather than a missing account. -->
+                <template v-if="quickModel.choice.value === undefined && sandboxSettings !== undefined" #below>
+                    <p class="text-2xs text-muted">Connect an AI account above to enable the one-click helpers.</p>
                 </template>
             </Row>
 

@@ -1,0 +1,74 @@
+import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
+import { type HarnessCredentials, harnessEnv } from "./harness-credentials.js";
+
+/* ONE PROMPT IN, ONE STRING OUT — no tools, no session, no transcript, no events. The shape a helper needs
+ * (draft me a commit message) as opposed to the shape a chat needs, and the two have almost nothing in common:
+ * streamAgent exists to run an AGENT — hooks, tmux panes, MCP servers, plugin dirs, a resumable session, an
+ * event stream several surfaces attach to — and every one of those is dead weight, latency and risk here. A
+ * helper that loaded the workspace's CLAUDE.md and skills would also be a helper whose output changed when
+ * someone edited a memory file, which is the opposite of what a mechanical one-liner should do.
+ *
+ * So the settings are deliberately the empty ones:
+ *   settingSources: []  — no CLAUDE.md, no skills, no subagents, no project hooks. The SDK's own default,
+ *                         restated here because streamAgent overrides it and this is the exception.
+ *   allowedTools: []    — nothing to call. The model answers from the prompt or not at all.
+ *   maxTurns: 1         — with no tools there is nothing to iterate on; this is the backstop that says so.
+ *   no systemPrompt     — the SDK then sends an EMPTY one, which for a text task is right: the claude_code
+ *                         preset is a coding agent's instructions and would only argue with the prompt.
+ *
+ * It runs on the same credentials the chat does (harness-credentials.ts), including the withholding rule that
+ * keeps a subscription token away from a foreign endpoint — a helper is not a reason to authenticate a second
+ * way. Errors propagate: every caller here is a click that can report its own failure, and swallowing a
+ * credential problem into an empty string would make it look like the model had nothing to say. */
+
+export const runOneShot = async (params: {
+    readonly prompt: string;
+    // The tree the model runs in. Nothing is read from it (no tools), but the SDK spawns the CLI there and a
+    // path that doesn't exist fails the spawn.
+    readonly cwd: string;
+    readonly model: string;
+    readonly credentials: HarnessCredentials;
+    readonly signal: AbortSignal;
+}): Promise<string> => {
+    const abort = new AbortController();
+    // The caller's signal is the user's cancel (a second click, a closed panel). Forwarded rather than passed
+    // straight through because the session must also be torn down on the success path.
+    const forward = (): void => abort.abort();
+    params.signal.addEventListener(`abort`, forward, { once: true });
+    const { endpoint, oauthToken } = params.credentials;
+    const options: Options = {
+        cwd: params.cwd,
+        abortController: abort,
+        settingSources: [],
+        allowedTools: [],
+        maxTurns: 1,
+        // A routed provider is reached through a translator that maps model → upstream, so its endpoint names
+        // the id; a native Claude call uses the resolved quick model directly.
+        model: endpoint?.model ?? params.model,
+        env: {
+            ...process.env,
+            ...harnessEnv({
+                ...(endpoint !== undefined ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken } : {}),
+                ...(oauthToken !== undefined ? { oauthToken } : {}),
+            }),
+        },
+    };
+    const session = query({ prompt: params.prompt, options });
+    try {
+        for await (const message of session) {
+            if (message.type !== `result`) {
+                continue;
+            }
+            if (message.subtype !== `success`) {
+                throw new Error(`the model did not answer (${message.subtype})`);
+            }
+            return message.result;
+        }
+        // The stream ended without a result: the CLI died, or the turn was aborted mid-flight.
+        throw new Error(`the model did not answer`);
+    } finally {
+        params.signal.removeEventListener(`abort`, forward);
+        abort.abort();
+        await session.return(undefined).catch(() => {});
+    }
+};
