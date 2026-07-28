@@ -25,6 +25,7 @@ Dependencies are limited **by lint** (`.oxlintrc.json`, scoped to `_extensions/*
 | `repo-apps` | UI view | Per-repo apps: preview URLs, add/start/stop, vitest. |
 | `automations` | UI view | Cron / webhook / listener automations. |
 | `logs` | UI view | Workspace log tail. |
+| `memory` | UI view | The agent's persistent memory notes: review, edit, delete. |
 | `preview` | UI view | Per-repo dev-server preview panels. |
 | `viewers` | UI viewers | File renderers (docx / xlsx / svg) via `contributes.viewers`. |
 | `connectors` | data-only | CLI-tool connectors as manifest data — no code. |

@@ -1,0 +1,12 @@
+{
+    "publisher": "intentic",
+    "name": "memory",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.2.0" },
+    "permissions": {
+        "sandbox": ["GET /memory", "GET /memory/file", "PUT /memory/file", "DELETE /memory/file"]
+    },
+    "contributes": {
+        "views": [{ "id": "memory", "label": "Memory", "surface": "rail" }]
+    }
+}

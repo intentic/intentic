@@ -15,7 +15,7 @@ import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
 import ProviderLogo from "./ProviderLogo.vue";
 import { activityIcon, agentStatusMeta, attentionReason, formatCost, formatElapsed } from "../composables/agents/agentStatus";
-import { relativeTime, statusTabClass } from "../composables/chat/catalog";
+import { relativeTime, statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
 import { type Conversation, modelLabelFor } from "../composables/chat/conversation";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
@@ -131,6 +131,20 @@ const RAIL_LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
 const railCards = (lane: FleetLane): RailEntry[] => railLanes.value[lane].filter(tabMatches);
 const railCount = (lane: FleetLane): string =>
     filtering.value ? `${railCards(lane).length} of ${railLanes.value[lane].length}` : String(railLanes.value[lane].length);
+
+// The card's status glyph, worn ON THE TITLE ROW like the docked tabs wear theirs — status is the first
+// question a rail answers, so it doesn't belong buried in the numbers line. Fleet-carded tabs read the
+// agent's own status (the richer machine: landed, conflict…); a plain chat degrades to what its
+// conversation is doing right now, through the same statusIcon the docked strip draws.
+const railStatus = (entry: RailEntry): { icon: IconName; spin?: boolean; label: string; class: string } => {
+    if (entry.agent !== undefined) {
+        const meta = agentStatusMeta(entry.agent.status);
+        return { ...meta, class: `text-2xs ${meta.class}` };
+    }
+    const status = entry.conversation.status.value;
+    const icon = statusIcon(status);
+    return { icon: icon.name, spin: icon.spin, label: statusLabel(status), class: icon.class };
+};
 
 /* What the query found that ISN'T open in this window — the whole point of the rail's filter reaching past its
  * own list. Live fleet agents first (the likeliest thing to want), then the archive, each as a row that opens
@@ -540,8 +554,8 @@ const openHistory = (event: Event): void => {
              cards simply stack, and the list scrolls only when it outgrows the window. -->
         <div
             ref="strip"
-            class="scrollbar-thin flex min-w-0 flex-1 gap-1 overflow-x-hidden overflow-y-auto"
-            :class="vertical ? 'min-h-0 flex-col items-stretch' : 'max-h-16 flex-wrap items-center py-0.5'"
+            class="scrollbar-thin flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+            :class="vertical ? 'min-h-0 flex-col items-stretch gap-1.5' : 'max-h-16 flex-wrap items-center gap-1 py-0.5'"
             @contextmenu="onStripContextMenu"
         >
             <template v-if="!vertical">
@@ -574,6 +588,11 @@ const openHistory = (event: Event): void => {
                         @mouseenter="showPreview($event, c)"
                         @mouseleave="hidePreview"
                     >
+                        <!-- What this tab is doing, in the leading slot the mobile strip and the rail already give
+                             it. Rendered for IDLE too (a dim dot, not nothing) so the slot's width is constant:
+                             a glyph that appears only while streaming reflows every label in the strip on each
+                             turn. `times` is a sibling, not an overlay — status never hides behind the close ×. -->
+                        <Icon v-bind="statusIcon(c.status.value)" :aria-label="statusLabel(c.status.value)" class="shrink-0" />
                         <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
                         <OriginMark :origin="originOf(c)" compact />
                         <!-- Archived: the agent is off the board, but its conversation is still right here. -->
@@ -596,14 +615,19 @@ const openHistory = (event: Event): void => {
 
             <!-- The rail: the fleet board's three lanes over the OPEN tabs, empty lanes hidden. Each card is
                  the tab it always was (click selects, double-click renames, right-click menus, × closes) —
-                 wearing the crucial slice of its /agents card: provider mark, two lines of title, the
-                 attention chip or status glyph, cost / diff / elapsed, and the live activity line. -->
+                 wearing the crucial slice of its /agents card: status glyph on the title row, two lines of
+                 title, cost / diff / elapsed, and the live activity line. The cards carry the BOARD's skin
+                 (a bordered surface, AgentCard's) rather than the docked strip's transparent pill: a pill
+                 disappears into a rail of pills, and "which sessions do I have" is the rail's first job.
+                 Colour is spent the way the board spends it — status lives in the glyph and the semantic
+                 chips; the title, the numbers and the activity line stay neutral, so the accent colour means
+                 something when it does appear (the attention chip, a diff, an error). -->
             <template v-else>
                 <template v-for="railLane in RAIL_LANES" :key="railLane.key">
                     <!-- A lane with nothing in it is hidden as before; a lane the FILTER emptied keeps its
                          header and says so, so the rail doesn't reshuffle under the cursor mid-keystroke. -->
                     <template v-if="railLanes[railLane.key].length > 0">
-                        <div class="mt-1.5 flex items-center gap-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle first:mt-0">
+                        <div class="mt-2.5 flex items-center gap-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle first:mt-0">
                             <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="railLane.dot"></span>
                             <span>{{ railLane.label }}</span>
                             <span class="font-normal">{{ railCount(railLane.key) }}</span>
@@ -627,8 +651,8 @@ const openHistory = (event: Event): void => {
                                 v-else
                                 type="button"
                                 :data-chat-tab="c.conversationId"
-                                class="chat-tab group flex w-full min-w-0 shrink-0 flex-col gap-1 rounded-md px-2 py-1.5 text-left text-2xs"
-                                :class="{ 'chat-tab-on': activeId === c.conversationId, 'ring-1 ring-warning/40': railLane.key === 'attention' }"
+                                class="chat-tab rail-card group flex w-full min-w-0 shrink-0 flex-col gap-1 rounded-lg px-2.5 py-2 text-left text-2xs"
+                                :class="{ 'chat-tab-on': activeId === c.conversationId, 'rail-card-attention': railLane.key === 'attention' }"
                                 @click="emit('select', c.conversationId)"
                                 @dblclick.prevent.stop="beginRename(c.conversationId)"
                                 @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"
@@ -636,7 +660,17 @@ const openHistory = (event: Event): void => {
                                 @mouseleave="hidePreview"
                             >
                                 <span class="flex w-full min-w-0 items-start gap-1.5">
-                                    <ProviderLogo v-if="agent !== undefined" :provider="agent.provider" class="mt-px shrink-0 text-2xs text-muted" />
+                                    <!-- Status leads the TITLE row, where the docked tabs wear it — it is the
+                                         first thing a glance at the rail asks. Native title, not v-tooltip: a
+                                         pop-out's PrimeVue tooltips render into the main window. -->
+                                    <span class="flex h-4 shrink-0 items-center" :title="railStatus({ conversation: c, agent }).label">
+                                        <Icon
+                                            :name="railStatus({ conversation: c, agent }).icon"
+                                            :spin="railStatus({ conversation: c, agent }).spin"
+                                            :class="railStatus({ conversation: c, agent }).class"
+                                            :aria-label="railStatus({ conversation: c, agent }).label"
+                                        />
+                                    </span>
                                     <OriginMark :origin="originOf(c)" compact />
                                     <!-- Sideways, not down: the rail is a stack of cards, so a tooltip under one
                                          covers the next. Right of it is the transcript, which has room to spare. -->
@@ -647,8 +681,10 @@ const openHistory = (event: Event): void => {
                                     >
                                         <Icon name="box" class="text-2xs text-subtle" />
                                     </span>
-                                    <!-- Two lines before the clamp — a card has the width for most titles whole. -->
-                                    <span class="line-clamp-2 min-w-0 flex-1 leading-4" :class="statusTabClass(c.status.value)">
+                                    <!-- Two lines before the clamp — a card has the width for most titles whole.
+                                         Neutral, always: the status colour lives in the glyph beside it, and a
+                                         rail of orange titles is a rail where nothing stands out. -->
+                                    <span class="line-clamp-2 min-w-0 flex-1 font-medium leading-4 text-content">
                                         <span
                                             v-for="(run, at) in markSegments(tabLabel(c), needle)"
                                             :key="at"
@@ -669,25 +705,22 @@ const openHistory = (event: Event): void => {
                                     />
                                 </span>
                                 <template v-if="agent !== undefined">
-                                    <!-- The crucial numbers, one wrapping line: model, cost, diff, and — right-
-                                         aligned — the running elapsed (ticking) or the last-activity age. -->
+                                    <!-- The crucial numbers, one wrapping line: model (with its provider mark —
+                                         they are one fact), cost, diff, and — right-aligned — the running
+                                         elapsed (ticking) or the last-activity age. All quiet: these are
+                                         reference numbers, not events. -->
                                     <span class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
                                         <span
                                             v-if="attentionReason(agent) !== undefined"
                                             class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
                                             >{{ attentionReason(agent) }}</span
                                         >
-                                        <Icon
-                                            v-else
-                                            :name="agentStatusMeta(agent.status).icon"
-                                            :spin="agentStatusMeta(agent.status).spin"
-                                            class="shrink-0 text-2xs"
-                                            :class="agentStatusMeta(agent.status).class"
-                                            v-tooltip.right="agentStatusMeta(agent.status).label"
-                                        />
-                                        <span v-if="agent.model !== undefined" class="max-w-28 truncate">{{
-                                            modelLabelFor(agent.provider, agent.model)
-                                        }}</span>
+                                        <span class="flex min-w-0 items-center gap-1">
+                                            <ProviderLogo :provider="agent.provider" class="shrink-0 text-2xs" />
+                                            <span v-if="agent.model !== undefined" class="max-w-28 truncate">{{
+                                                modelLabelFor(agent.provider, agent.model)
+                                            }}</span>
+                                        </span>
                                         <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
                                         <span
                                             v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)"
@@ -696,17 +729,20 @@ const openHistory = (event: Event): void => {
                                             <span class="text-success">+{{ agent.diff.insertions }}</span>
                                             <span class="text-danger"> −{{ agent.diff.deletions }}</span>
                                         </span>
-                                        <span v-if="agent.status === 'running' && agent.startedAt !== undefined" class="ml-auto shrink-0 text-link">{{
+                                        <span v-if="agent.status === 'running' && agent.startedAt !== undefined" class="ml-auto shrink-0">{{
                                             formatElapsed(agent.startedAt, now)
                                         }}</span>
                                         <span v-else-if="agent.updatedAt > 0" class="ml-auto shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
                                     </span>
-                                    <!-- What it is doing RIGHT NOW — the board card's live line, one truncated row. -->
+                                    <!-- What it is doing RIGHT NOW — the board card's live line, one truncated
+                                         row. Muted, not accent-coloured: the spinner already says "working",
+                                         and this line changes every few seconds — painting the noisiest line
+                                         on the card in the loudest colour inverts the hierarchy. -->
                                     <span
                                         v-if="agent.status === 'running' && agent.activity !== undefined"
-                                        class="flex w-full min-w-0 items-center gap-1 text-2xs text-link"
+                                        class="flex w-full min-w-0 items-center gap-1 text-2xs text-muted"
                                     >
-                                        <Icon :name="activityIcon(agent.activity.tool)" class="shrink-0 text-2xs" />
+                                        <Icon :name="activityIcon(agent.activity.tool)" class="shrink-0 text-2xs text-subtle" />
                                         <span class="min-w-0 flex-1 truncate">{{
                                             agent.activity.todo ?? [agent.activity.tool, agent.activity.target].filter(Boolean).join(" · ")
                                         }}</span>
@@ -908,6 +944,28 @@ const openHistory = (event: Event): void => {
 </template>
 
 <style scoped>
+/* The rail card's surface — AgentCard's skin (visible border, distinct fill) over .chat-tab's behaviour.
+ * The docked strip's transparent pills blend into one column when stacked; a bordered card is what makes
+ * each session a countable thing. Scoped selectors outweigh chat.css's single-class rules, so these win
+ * without !important. */
+.rail-card {
+    border-color: var(--color-line);
+    background: color-mix(in srgb, var(--color-canvas) 45%, transparent);
+}
+.rail-card:hover {
+    border-color: var(--color-line-strong);
+}
+/* The active card is the one the transcript beside the rail is showing — the board marks its focused card
+ * with a primary border, and this is the same fact on the same design. */
+.rail-card.chat-tab-on {
+    border-color: color-mix(in srgb, var(--color-primary-500) 70%, transparent);
+}
+/* Attention wears a warning border (the board's lane treatment), unless the card is also the active one —
+ * "you are here" outranks "this needs you", since being here is how it gets dealt with. */
+.rail-card-attention:not(.chat-tab-on) {
+    border-color: color-mix(in srgb, var(--color-warning) 50%, transparent);
+}
+
 /* Drag-to-resize handle on the rail's right edge (pointer-capture, mirrors the panel's .resize-handle). */
 .rail-resize {
     position: absolute;
