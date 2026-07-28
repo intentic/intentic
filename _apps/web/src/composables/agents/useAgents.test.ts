@@ -182,8 +182,8 @@ describe("diff invalidation", () => {
 /* The DRAFT card — the fleet's one client-only state, there so "New agent" has a visible result on the board
  * before the first turn registers anything. It used to be derived from "this open tab has no entry on the live
  * roster", which is also true of every agent the user ARCHIVES (the roster carries live agents only) and of
- * every agent at all while the events stream is down. So an archived agent whose chat tab stayed open — the
- * normal case, since the tab is how you were reading it — came straight back as a brand-new card in the ACTIVE
+ * every agent at all while the events stream is down. So an archived agent with a tab still open — read from the
+ * archive view, or caught by the daemon's retention sweep — came straight back as a brand-new card in the ACTIVE
  * lane. The rule is now a one-way latch on the conversation: a draft is one the fleet has NEVER registered. */
 describe("draft cards", () => {
     const registered = (id: string): AgentSummary => ({
@@ -237,14 +237,16 @@ describe("draft cards", () => {
         expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`a1`]);
     });
 
-    // The reported bug, end to end: archive from the board while the agent's chat is open in the dock.
-    it("leaves an archived agent off the board while its chat tab stays open", async () => {
+    // Archive from the board while the agent's chat is open in the dock: the card leaves BOTH views, and the tab
+    // it closes must not come back as a phantom draft in the Active lane (the reported bug).
+    it("takes the chat tab with the card, leaving nothing behind in either view", async () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a1`)];
         setAgents([registered(`a1`)], 1);
         vi.mocked(sandboxJson).mockResolvedValueOnce({ moved: [{ ...registered(`a1`), archivedAt: 2_000 }], rev: 2 } as never);
 
         await useAgents().archive([`a1`]);
 
+        expect(useChat().conversations.value.some((conversation) => conversation.conversationId === `a1`)).toBe(false);
         expect(activeIds()).toEqual([]);
         expect(useAgents().lanes.value.finished).toEqual([]);
         expect(useAgents().archived.value.map((entry) => entry.id)).toEqual([`a1`]);
@@ -289,13 +291,27 @@ describe("archive", () => {
     });
     const archivedAgent = (id: string): AgentSummary => ({ ...agent(id), archivedAt: 2_000 });
     const post = vi.mocked(sandboxJson);
+    // The tabs whose conversation is one of THIS suite's agents — the strip also carries the main-tree chat the
+    // reset installs, which no archive is about.
+    const openTabs = (): string[] =>
+        useChat()
+            .conversations.value.map((conversation) => conversation.conversationId)
+            .filter((id) => [`a`, `b`].includes(id));
 
     // The store is a module singleton (one board per app), so each case resets what it looks at — resetAgents
-    // drops the roster, the undo set and both reports, since all of them were promises about one daemon.
+    // drops the roster, the undo set and both reports, since all of them were promises about one daemon. The
+    // tab strip is reset too, since archiving now writes to it: one MAIN-TREE chat, which is not fleet work and
+    // cards nothing, so a case that wants an agent's tab open installs it itself.
     beforeEach(() => {
-        post.mockReset();
+        // Answered by default rather than left bare: an archive fires the daemon's best-effort side calls (the
+        // read marker), and an undefined return is not something they know how to survive. The per-case
+        // mockResolvedValueOnce/mockRejectedValueOnce still take precedence.
+        post.mockReset().mockResolvedValue({} as never);
         resetAgents();
         useAgents().archived.value = [];
+        const other = new Conversation();
+        other.isolated.value = false;
+        useChat().conversations.value = [other];
     });
 
     it("moves what the daemon says moved, and keeps a way back without saying a word", async () => {
@@ -385,6 +401,32 @@ describe("archive", () => {
         await restore([`a`]);
 
         expect(undoable.value).toEqual([`b`]);
+    });
+
+    // One agent is a card and a tab, so the archive moves both — driven off `moved`, so a bulk sweep closes
+    // exactly the chats whose cards left and no others.
+    it("closes the chat tabs of the cards that moved, and only those", async () => {
+        const { archive } = useAgents();
+        setAgents([agent(`a`), agent(`b`)], 1);
+        useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a`), new Conversation(`b`)];
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 11 } as never);
+
+        await archive();
+
+        expect(openTabs()).toEqual([`b`]);
+    });
+
+    // A press the daemon refused leaves the tab where it was: the close is a consequence of the card leaving the
+    // board, not of the button being pressed.
+    it("leaves the chat tab open when the archive failed", async () => {
+        const { archive } = useAgents();
+        setAgents([agent(`a`)], 1);
+        useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a`)];
+        post.mockRejectedValueOnce(new Error(`the agent's turn is running`));
+
+        await archive([`a`]);
+
+        expect(openTabs()).toEqual([`a`]);
     });
 
     it("says so plainly when there was nothing to archive, with nothing to undo", async () => {

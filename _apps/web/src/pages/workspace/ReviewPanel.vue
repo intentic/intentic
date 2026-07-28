@@ -2,7 +2,7 @@
 import type { GitChange, GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
 import { cmp, useDevice } from "@intentic-app/ui";
 import Dialog from "primevue/dialog";
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, watchEffect } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import DiffStat from "../../components/DiffStat.vue";
 import HoverCard from "../../components/HoverCard.vue";
@@ -10,7 +10,8 @@ import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useQuickModel } from "../../composables/chat/quickModel";
 import { useLayout } from "../../composables/useLayout";
-import { commitMessage } from "../../composables/workspace/commitMessage";
+import { commitMessage, commitSuggestion } from "../../composables/workspace/commitMessage";
+import { suggestCommitMessage } from "../../composables/workspace/commitSuggestion";
 import { useCommitDraft } from "../../composables/workspace/useCommitDraft";
 import { originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
@@ -113,11 +114,20 @@ const toggleOrigin = (id: string): void => {
     originFilter.value = originFilter.value === id ? undefined : id;
 };
 
-// The fleet roster is already mirrored in this browser, so the wire carries ids and the name is resolved here.
-// An id with no card (a discarded agent, a roster that hasn't painted yet) still gets a chip — it is a real
-// origin, and hiding it would silently re-attribute the file to the user.
+/* Resolving an origin id to a name and a provider logo, from two sources in this order:
+ *   - THE OPEN FLEET CARD, when there is one, because it is the LIVE copy: a rename repaints the chip on the
+ *     keystroke rather than on the next poll of this panel's query.
+ *   - THE REVIEW ITSELF (`changes.originAgents`), which is the one that always answers. The roster is the live
+ *     board and deliberately drops archived agents, but a landing outlives the card — land, archive the
+ *     finished agent, commit at leisure is the ordinary flow — so a roster-only lookup missed exactly the
+ *     agents whose work is most likely to still be sitting here, and the chip read "Agent ec437c" with a
+ *     generic sparkle for them. The daemon reads attribution and identity from one registry in one pass.
+ * The id-shaped fallback survives for the case neither can cover: an entry the retention sweep has retired.
+ * A chip is still drawn for it, because hiding one would silently re-attribute the file to the user. */
 const agentOf = (id: string) => fleet.value.find((agent) => agent.id === id);
-const originLabel = (id: string): string => agentOf(id)?.title ?? `Agent ${id.slice(0, 6)}`;
+const originOf = (id: string) => changes.originAgents.value[id];
+const originLabel = (id: string): string => agentOf(id)?.title ?? originOf(id)?.title ?? `Agent ${id.slice(0, 6)}`;
+const originProvider = (id: string): string | undefined => agentOf(id)?.provider ?? originOf(id)?.provider;
 
 // A chip is a 14px logo and, at best, a title truncated to max-w-24 — so hovering one (on a file row, or in the
 // From legend above the list) raises the SAME card the chat tab strip raises for that session: the full derived
@@ -307,6 +317,15 @@ const commitReady = computed(
     () => commitTarget.value.length > 0 && commitMessage.value.trim().length > 0 && !blockedByConflicts.value && !changes.actionBusy.value,
 );
 const commitLabel = computed(() => (commitAll.value ? `Commit all` : `Commit`));
+
+// The box's starting text, while the user has typed nothing of their own: the "From" legend's session titles,
+// read as a Conventional Commits subject (commitSuggestion.ts). Pushed from here because the derivation needs
+// the review set — a query, which only a component can own — while the fallback rule belongs next to the draft
+// it competes with. Kept current, not seeded once: a title that changes, or work that lands from another
+// session, must change the suggestion it produced.
+watchEffect(() => {
+    commitSuggestion.value = suggestCommitMessage(scannable.value, (id) => agentOf(id)?.title);
+});
 
 /* --- committing while an agent works ------------------------------------------------------------------------
  * THE INDEX IS ALREADY THE ISOLATION, which is why nothing here blocks. A plain Commit records what you
@@ -851,7 +870,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 @mouseenter="showOrigins($event, [entry.id])"
                 @mouseleave="hoverCard?.hide()"
             >
-                <ProviderLogo v-if="agentOf(entry.id)" :provider="agentOf(entry.id)!.provider" class="shrink-0 text-2xs" />
+                <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="shrink-0 text-2xs" />
                 <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
                 <span class="min-w-0 truncate">{{ originLabel(entry.id) }}</span>
                 <span class="shrink-0 opacity-70">{{ entry.files }}</span>
@@ -1077,7 +1096,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                             class="flex h-3.5 w-3.5 items-center justify-center rounded-full"
                                             :class="originHue(id).chip"
                                         >
-                                            <ProviderLogo v-if="agentOf(id)" :provider="agentOf(id)!.provider" class="text-[0.55rem]" />
+                                            <ProviderLogo v-if="originProvider(id)" :provider="originProvider(id)!" class="text-[0.55rem]" />
                                             <Icon v-else name="sparkles" class="text-[0.55rem]" />
                                         </span>
                                         <span v-if="originsOf(group, change.path).length > 2" class="text-2xs text-subtle">

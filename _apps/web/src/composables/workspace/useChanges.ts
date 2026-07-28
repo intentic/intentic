@@ -1,4 +1,4 @@
-import type { FileDiffResponse, GitActionResult, GitChangesResponse, GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
+import type { FileDiffResponse, GitActionResult, GitChangesResponse, GitDiffSide, OriginAgent, RepoChanges } from "@intentic-app/api-contract";
 import { computed, ref, watch } from "vue";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
@@ -262,6 +262,10 @@ export function useChanges() {
     // unpushed repo has no reviewable work — and the panel, the only consumer that iterates the list, splits
     // them out itself.
     const repos = computed<readonly RepoChanges[]>(() => query.data.value?.repos ?? []);
+    // Who the agent ids in `repo.origins` are, straight off the response. The panel does NOT resolve them
+    // against the fleet roster alone: that roster is the live board and drops archived agents, while a landing
+    // outlives the card — see OriginAgentSchema in the contract for why the identity rides the review instead.
+    const originAgents = computed<Readonly<Record<string, OriginAgent>>>(() => query.data.value?.originAgents ?? {});
     const count = computed(() => repos.value.reduce((total, repo) => total + repo.staged.length + repo.unstaged.length, 0));
     const hasChanges = computed(() => count.value > 0);
     // How much a plain Commit would record, across every repo — what the commit box reads out, and what decides
@@ -272,6 +276,7 @@ export function useChanges() {
 
     return {
         repos,
+        originAgents,
         count,
         stagedCount,
         hasChanges,

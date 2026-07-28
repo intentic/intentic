@@ -22,8 +22,8 @@ const emit = defineEmits<{
 const { conversations, activeId, sessions, loadSessions } = useChat();
 const active = computed(() => conversations.value.find((c) => c.conversationId === activeId.value));
 
-// Archiving an agent leaves its chat alone (see the archive note in useAgents), so the sheet marks the ones
-// that are off the board — the panel's own line only speaks for whichever chat is open.
+// Archiving closes an agent's chat (see the archive note in useAgents), but one opened from the archive is still
+// off the board, so the sheet marks those — the panel's own line only speaks for whichever chat is open.
 const { agentById } = useAgents();
 const isArchived = (conversationId: string): boolean => agentById(conversationId)?.archivedAt !== undefined;
 

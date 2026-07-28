@@ -45,6 +45,7 @@ import {
     GitLogSchema,
     GitRemoteStateSchema,
     GitReposSchema,
+    OriginAgentSchema,
     RepoChangesSchema,
     SnapshotChangeSchema,
     SnapshotDiffSchema,
@@ -224,6 +225,8 @@ export type GitDiffSide = z.infer<typeof GitDiffSideSchema>;
 // The Changes review (uncommitted work per repo, VSCode-SCM style).
 export type GitChange = z.infer<typeof GitChangeSchema>;
 export type RepoChanges = z.infer<typeof RepoChangesSchema>;
+// Who an agent id named in a repo's `origins` is — the review carries it, the fleet roster can't (archived).
+export type OriginAgent = z.infer<typeof OriginAgentSchema>;
 export type GitChangesResponse = z.infer<typeof GitChangesSchema>;
 export type GitCommit = z.infer<typeof GitCommitSchema>;
 export type GitLogResponse = z.infer<typeof GitLogSchema>;

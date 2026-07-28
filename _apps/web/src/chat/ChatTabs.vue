@@ -49,15 +49,25 @@ const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
 const vertical = computed(() => poppedOut.value);
 
 // --- Undocked rail: the board's lanes in miniature ----------------------------------------------
-// laneOf is the board's own projection, so a tab can never sit in a different lane here than its card does on
-// /agents. A conversation the fleet has never carded (a plain non-isolated chat, or the roster briefly down)
-// still needs a shelf: streaming or empty reads as Active, anything else as Finished.
 interface RailEntry {
     readonly conversation: Conversation;
     readonly agent: FleetAgent | undefined;
 }
 const fleetById = computed(() => new Map(fleet.value.map((agent) => [agent.id, agent])));
 const lastActive = (entry: RailEntry): number => entry.agent?.updatedAt ?? 0;
+
+/* Which lane a TAB belongs to. laneOf is the board's own projection, so a tab can never sit in a different lane
+ * here than its card does on /agents. A conversation the fleet has never carded (a plain non-isolated chat, or
+ * the roster briefly down) still needs a shelf: streaming or empty reads as Active, anything else as Finished.
+ * The rail groups its cards by this, and the right-click menu's "Close Finished" takes exactly the lane it
+ * names — one definition of "finished", so the row can't close a card the rail is still showing as Active. */
+const laneOfTab = (conversation: Conversation): FleetLane => {
+    const agent = fleetById.value.get(conversation.conversationId);
+    if (agent !== undefined) {
+        return laneOf(agent);
+    }
+    return conversation.streaming.value || conversation.messages.value.length === 0 ? `active` : `finished`;
+};
 
 /* --- The rail's filter -------------------------------------------------------------------------
  * The same field, the same rule and the same evidence as the fleet board's (useAgentFilter): match what the
@@ -104,10 +114,7 @@ const tabMatches = (entry: RailEntry): boolean => {
 const railLanes = computed<Record<FleetLane, RailEntry[]>>(() => {
     const grouped: Record<FleetLane, RailEntry[]> = { attention: [], active: [], finished: [] };
     for (const conversation of conversations.value) {
-        const agent = fleetById.value.get(conversation.conversationId);
-        const lane: FleetLane =
-            agent !== undefined ? laneOf(agent) : conversation.streaming.value || conversation.messages.value.length === 0 ? `active` : `finished`;
-        grouped[lane].push({ conversation, agent });
+        grouped[laneOfTab(conversation)].push({ conversation, agent: fleetById.value.get(conversation.conversationId) });
     }
     // The board's own orderings (useAgents.lanes): fresh drafts lead Active, then turn start — fixed for the
     // turn's life, so a running card holds its slot; the other two lanes read newest-first.
@@ -244,9 +251,10 @@ const tabLabel = (conversation: Conversation): string => conversation.title.valu
 // already leads with who sent the message.
 const originOf = (conversation: Conversation): AgentOrigin | undefined => agentById(conversation.conversationId)?.origin;
 
-// Off the board, still open. Archiving an agent deliberately leaves its tab alone (see the archive note in
-// useAgents), so the strip is what says so for a BACKGROUND tab — the panel's own line only speaks for the
-// active one, and a tab that looks identical to a live agent is how "didn't I just archive that?" starts.
+// Off the board, still open. Archiving CLOSES an agent's tab (see the archive note in useAgents), so what lands
+// here is the other way round: a tab opened FROM the archive, or one whose agent the daemon's retention sweep
+// filed away. The strip is what says so for a BACKGROUND tab — the panel's own line only speaks for the active
+// one, and a tab that looks identical to a live agent is how "didn't I just archive that?" starts.
 const isArchived = (conversation: Conversation): boolean => agentById(conversation.conversationId)?.archivedAt !== undefined;
 
 const history = ref<InstanceType<typeof Popover> | null>(null);
@@ -316,6 +324,15 @@ const toRightOf = (id: string): ReadonlySet<string> => {
 };
 const allTabs = (): ReadonlySet<string> => new Set(conversations.value.map((c) => c.conversationId));
 
+/* Every tab that has stopped working — the Finished lane, whatever the strip's orientation. This is the sweep a
+ * long session actually wants: a dozen tabs accumulate, two are still running, and neither Close Others nor
+ * Close to the Right can express "clear the done ones" without hunting for them one × at a time. The ACTIVE tab
+ * is not spared if it is finished; being the tab you are looking at is not a reason to keep a landed agent open,
+ * and closing it selects the last survivor the way every other close here does. */
+const finishedTabs = computed<ReadonlySet<string>>(
+    () => new Set(conversations.value.filter((c) => laneOfTab(c) === `finished`).map((c) => c.conversationId)),
+);
+
 // No close asks for a confirm, mass or single — unlike the workspace's file tabs, where closing discards unsaved
 // edits, closing a chat destroys nothing. A running agent's turn is detached daemon-side (Conversation.abort is
 // soft by design), so it keeps working and lands its work with the tab gone; the conversation stays in the
@@ -331,6 +348,12 @@ const menuTabId = ref<string>();
 
 // The rows that name no particular tab: they tail a tab's menu and they ARE the empty-space one.
 const stripItems = computed<MenuItem[]>(() => [
+    {
+        label: `Close Finished`,
+        disabled: finishedTabs.value.size === 0,
+        shortcut: commandShortcut(`chat.closeFinishedTabs`),
+        command: () => emit(`close`, finishedTabs.value),
+    },
     { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
     { separator: true },
     {
@@ -455,6 +478,21 @@ onMounted(() => {
             },
         },
         {
+            // Unbound by default: the shell-wide tab family (Ctrl+Shift+{X , . Backspace}) is the set the
+            // workspace's file tabs share, and "finished" is a fact only an agent chat has — there is no file-tab
+            // verb to pair a chord with. It reaches the palette and Settings → Keybindings like any other command,
+            // and the menu row shows a chord the moment one is bound.
+            command: `chat.closeFinishedTabs`,
+            title: `Close Finished Chats`,
+            icon: `times`,
+            when: inTabSurface(`chat`),
+            handler: (): void => {
+                if (finishedTabs.value.size > 0) {
+                    emit(`close`, finishedTabs.value);
+                }
+            },
+        },
+        {
             command: `chat.closeAllTabs`,
             title: `Close All Chats`,
             icon: `times`,
@@ -480,10 +518,20 @@ const closeTab = (event: Event, id: string): void => {
     emit(`close`, new Set([id]));
 };
 
-// Right-click on the strip's empty space OPENS THE MENU (Close All, and the pop-out toggle) rather than popping
-// the chat out on the spot — an accidental right-click near the tabs shouldn't tear the panel into its own window.
+/* Right-click anywhere on the strip that ISN'T a tab opens the tab-less menu (Close Finished, Close All, the
+ * pop-out toggle) rather than popping the chat out on the spot — an accidental right-click near the tabs shouldn't
+ * tear the panel into its own window.
+ *
+ * The handler sits on the whole header, not on the scroll box the tabs live in: the ✚ and history buttons are
+ * SIBLINGS of that box (they stay put while the tabs scroll), and so is the rename error line, so a right-click
+ * on or around them used to fall through to the browser's own menu — the one bit of the strip that looked like
+ * tab chrome and behaved like a web page. Tab and rail-card right-clicks stop the event themselves, so anything
+ * arriving here is chrome by construction; the only thing spared is a text field, which keeps the browser's
+ * editing menu (the rename input, the rail's filter box). */
 const onStripContextMenu = (event: MouseEvent): void => {
-    if (event.target !== event.currentTarget) return; // a tab handles its own right-click
+    if (event.target instanceof Element && event.target.closest(`input, textarea`) !== null) {
+        return;
+    }
     event.preventDefault();
     menuTabId.value = undefined;
     tabMenu.value?.show(event);
@@ -507,6 +555,7 @@ const openHistory = (event: Event): void => {
             { 'rail-resizing': railResizing },
         ]"
         :style="vertical ? { width: `${railWidth}px` } : undefined"
+        @contextmenu="onStripContextMenu"
     >
         <div
             v-if="vertical"
@@ -556,7 +605,6 @@ const openHistory = (event: Event): void => {
             ref="strip"
             class="scrollbar-thin flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
             :class="vertical ? 'min-h-0 flex-col items-stretch gap-1.5' : 'max-h-16 flex-wrap items-center gap-1 py-0.5'"
-            @contextmenu="onStripContextMenu"
         >
             <template v-if="!vertical">
                 <template v-for="c in conversations" :key="c.conversationId">

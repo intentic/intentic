@@ -1,4 +1,4 @@
-import type { RepoChanges } from "@intentic-app/api-contract";
+import type { GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
 
 /* WHO PUT THIS FILE IN THE TREE — the Changes panel's attribution layer over the daemon's per-repo `origins`
  * map (path → agent ids that landed it, newest land first; derived from the landed shas in
@@ -21,14 +21,25 @@ export interface OriginSummary {
     readonly files: number;
 }
 
+// Every side a change can sit on — the legend's scope, because the legend answers "whose work is in my tree"
+// and the index has no bearing on that question.
+export const ALL_SIDES: readonly GitDiffSide[] = [`conflicted`, `staged`, `unstaged`];
+
 // The legend, across every repo in the review. Counts DISTINCT FILES, not rows: a path that is staged and
 // edited again is two rows and one file, and "3 files from this agent" must not read 4 because one of them was
 // half-staged. A file two agents landed counts for both — that is the whole reason origins is a list.
-export const summarizeOrigins = (repos: readonly RepoChanges[]): { agents: readonly OriginSummary[]; yours: number } => {
+//
+// `sides` narrows WHICH changes are counted, for the one caller that asks a different question: the commit box's
+// suggested subject (commitSuggestion.ts) describes what the commit will RECORD, so with something staged it
+// counts the index alone. The legend takes every side.
+export const summarizeOrigins = (
+    repos: readonly RepoChanges[],
+    sides: readonly GitDiffSide[] = ALL_SIDES,
+): { agents: readonly OriginSummary[]; yours: number } => {
     const files = new Map<string, number>();
     let yours = 0;
     for (const repo of repos) {
-        for (const path of new Set([...repo.conflicted, ...repo.staged, ...repo.unstaged].map((change) => change.path))) {
+        for (const path of new Set(sides.flatMap((side) => repo[side]).map((change) => change.path))) {
             const ids = originsOf(repo, path);
             if (ids.length === 0) {
                 yours += 1;

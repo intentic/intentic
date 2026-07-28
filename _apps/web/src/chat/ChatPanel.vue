@@ -137,10 +137,10 @@ const enableAutoResume = async (): Promise<void> => {
     active.value.armLimitResume();
 };
 
-/* Archiving an agent does NOT close its chat tab — see the archive note in useAgents for why the quiet,
- * undoable action is the wrong one to hang a tab close off. What it must not do either is leave the tab
- * looking live, so the panel says the agent is off the board and offers the one press back. The line also
- * spends its second half on the fact nothing else here could tell the user: a message sent from this tab
+/* Archiving an agent closes its chat tab (see the archive note in useAgents), but an archived agent can still be
+ * READ in a tab — opened from the archive view, or filed away by the daemon's retention sweep while it sat open.
+ * Such a tab must not look live, so the panel says the agent is off the board and offers the one press back. The
+ * line also spends its second half on the fact nothing else here could tell the user: a message sent from this tab
  * un-archives the agent (the daemon rebuilds the entry without its marker — registry.begin), which is a
  * feature, not a surprise to walk into.
  *

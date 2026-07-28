@@ -758,7 +758,7 @@ export const RepoChangesSchema = z.object({
     // edited again) and its origin is the same fact for both. Only agents can appear here — a main-tree turn,
     // a terminal edit and your own typing never pass through land, so they are simply absent (see
     // agents/origins.ts), which is why the panel badges an agent and says nothing at all for anyone else.
-    // Ids, not titles: every client already mirrors the fleet registry and can resolve one to the other.
+    // Ids, not titles: the identity for every id named here rides the response once, in `originAgents`.
     origins: z.record(z.string(), z.array(z.string())).optional(),
     // Why the repo could not be scanned at all, condensed to git's own one-line reason ("fatal: bad object HEAD").
     // A repo left torn by a canceled or failed upload used to be dropped from the response entirely, so it just
@@ -766,9 +766,31 @@ export const RepoChangesSchema = z.object({
     error: z.string().optional(),
 });
 export type RepoChanges = z.infer<typeof RepoChangesSchema>;
+
+// WHO AN ORIGIN ID IS — the display identity of one agent named in `origins`, carried BY THE RESPONSE rather
+// than looked up in the client's fleet roster. The roster is the LIVE board and deliberately drops archived
+// agents (AgentsRegistry.list), while a landing outlives the agent that made it: archiving a finished agent
+// does not commit its lines, so the very common case — land, archive the card, review at leisure — is exactly
+// the one a roster lookup cannot answer, and the panel fell back to "Agent 1a2b3c" with a generic icon for it.
+// The daemon reads attribution and identity from the same registry in the same pass, so it is the one place
+// they cannot disagree. Per response, not per repo: one agent commonly lands into several.
+export const OriginAgentSchema = z.object({
+    // Absent for an entry that never got a title (a turn that failed before one was derived).
+    title: z.string().optional(),
+    provider: AgentProviderSchema,
+});
+export type OriginAgent = z.infer<typeof OriginAgentSchema>;
+
 // The aggregated review set across every repo (root + every discovered repo); a repo appears when it has changes,
 // when it is out of sync with its remote, or when it failed to scan.
-export const GitChangesSchema = z.object({ repos: z.array(RepoChangesSchema) });
+export const GitChangesSchema = z.object({
+    repos: z.array(RepoChangesSchema),
+    // Keyed by agent id; covers every id any repo's `origins` names, and only those. Absent when nothing in
+    // the review is attributable. An id can still be missing from it — the retention sweep can retire an
+    // entry whose landed lines are somehow still uncommitted — and the panel keeps its id-shaped fallback for
+    // exactly that, rather than dropping the chip and re-attributing the file to the user.
+    originAgents: z.record(z.string(), OriginAgentSchema).optional(),
+});
 export type GitChanges = z.infer<typeof GitChangesSchema>;
 
 // One file an agent touched, plus whether that change is ALREADY in the main tree. The review lists the

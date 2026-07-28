@@ -2,11 +2,12 @@
 //
 // The strip's CLOSE surfaces, driven through the real component: the tab's own × and the right-click menu the
 // workspace's file tabs have carried
-// Close / Close Others / Close to the Right / Close All for a while, and a chat tab now offers the same set.
+// Close / Close Others / Close to the Right / Close All for a while, and a chat tab now offers the same set —
+// plus Close Finished, which only an agent chat can mean anything by.
 // Mounted rather than unit-tested against the store, because the interesting part is the wiring — which tab the
-// menu acts on (the RIGHT-CLICKED one, not the active one), which rows go disabled at the ends of the strip, and
-// that a mass close fires with no confirm even over a running agent — closing detaches from the turn
-// (Conversation.abort is soft), it doesn't stop it.
+// menu acts on (the RIGHT-CLICKED one, not the active one), where on the strip the right-click is even heard,
+// which rows go disabled at the ends of the strip, and that a mass close fires with no confirm even over a
+// running agent — closing detaches from the turn (Conversation.abort is soft), it doesn't stop it.
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
 
@@ -119,6 +120,14 @@ const openStripMenu = async (): Promise<void> => {
     strip.querySelector<HTMLElement>(`header > div`)!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
     await flush();
 };
+// The ✚ / history pair, which lives OUTSIDE the scroll box (it must not scroll with the tabs). Right-clicking it
+// is the same tab-management gesture as right-clicking the strip's gap — it just used to land on nothing.
+const openMenuOnNewChatButton = async (): Promise<boolean> => {
+    const event = new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true });
+    strip.querySelector<HTMLElement>(`[aria-label="New agent"]`)!.dispatchEvent(event);
+    await flush();
+    return event.defaultPrevented; // the strip took the gesture instead of leaving the browser its own menu
+};
 
 /* The × the tab wears is a HIT TARGET carrying the glyph, not the glyph with a handler on it: at text-2xs the
  * svg is an 11px square, and a click that misses one lands on the tab instead — which, on the tab being closed
@@ -148,7 +157,7 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
 
     // Right-click the second tab: "Close to the Right" takes the two after it, leaving the first two.
     await openMenuOn(1);
-    expect(labels()).toEqual([`Rename`, `Close`, `Close Others`, `Close to the Right`, `Close All`, `Move chat into new window`]);
+    expect(labels()).toEqual([`Rename`, `Close`, `Close Others`, `Close to the Right`, `Close Finished`, `Close All`, `Move chat into new window`]);
     await clickRow(`Close to the Right`);
 
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[1]]);
@@ -190,7 +199,7 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
     // right-click that only just missed a tab. It opens the menu now, carrying the rows that need no tab
     // under the pointer; the pop-out is one of them.
     await openStripMenu();
-    expect(labels()).toEqual([`Close All`, `Move chat into new window`]);
+    expect(labels()).toEqual([`Close Finished`, `Close All`, `Move chat into new window`]);
     expect(open).not.toHaveBeenCalled();
 
     // Close All means here what it means on a tab: the strip comes back as one fresh conversation.
@@ -202,6 +211,47 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
     await openStripMenu();
     await clickRow(`Move chat into new window`);
     expect(open).toHaveBeenCalled();
+});
+
+/* The ✚ and history buttons are siblings of the tab scroll box — they stay put while the tabs scroll — so the
+ * empty-space handler used to sit on the box and miss them entirely: the one patch of the strip that looks like
+ * tab chrome and behaved like a web page, handing back the browser's own menu. The handler lives on the whole
+ * header now. */
+it(`opens the tab menu from the ✚ / history pair beside the strip, not the browser's own`, async () => {
+    openTabs(2);
+    await nextTick();
+
+    expect(await openMenuOnNewChatButton()).toBe(true);
+    expect(labels()).toEqual([`Close Finished`, `Close All`, `Move chat into new window`]);
+});
+
+/* "Clear the done ones" is the sweep a long session actually wants, and neither Close Others nor Close to the
+ * Right can say it: the finished tabs are scattered through the strip between the running ones. Finished means
+ * exactly what the rail's Finished lane means — has messages, isn't streaming (or, for a fleet-carded tab, the
+ * board's own lane) — so the row can't close a card the rail still shows as Active. */
+it(`closes every finished tab and leaves the working ones, disabled when nothing has finished`, async () => {
+    const chat = useChat();
+    const ids = openTabs(4);
+    // Two are done: a plain (non-isolated) chat with a transcript and no live turn — no card on the board, and
+    // nothing running. The other two are the two ways a tab reads as Active: an untouched isolated draft (which
+    // the fleet cards as `draft`) and a tab mid-turn.
+    for (const at of [0, 2]) {
+        chat.conversations.value[at]!.isolated.value = false;
+        chat.conversations.value[at]!.restoreMessages([
+            { role: `user`, text: `do the thing` },
+            { role: `assistant`, text: `done` },
+        ]);
+    }
+    chat.conversations.value[3]!.streaming.value = true;
+    await nextTick();
+
+    await openStripMenu();
+    await clickRow(`Close Finished`);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[1], ids[3]]);
+
+    // Nothing left that has finished: the row goes disabled rather than quietly closing nothing.
+    await openStripMenu();
+    expect(row(`Close Finished`).className).toContain(`p-disabled`);
 });
 
 it(`mass closes past a running agent with no confirm — closing detaches from the turn, it doesn't stop it`, async () => {

@@ -1,6 +1,6 @@
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { gitContract, type RepoChanges } from "@intentic/sandbox-contract";
+import { gitContract, type GitChanges, type RepoChanges } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
@@ -91,7 +91,7 @@ export const createGitRoutes = (services: Services) => {
     // The coalesced Changes scan's memo (built below). Every mutation this router performs is one the user just
     // asked for and expects to see at once, so it drops the memo: the panel's own post-action refetch must never
     // be answered from a scan that predates the action it is refetching for.
-    let scan: Promise<{ repos: RepoChanges[] }> | undefined;
+    let scan: Promise<GitChanges> | undefined;
     let reusableUntil = 0;
     const invalidateScan = (): void => {
         scan = undefined;
@@ -109,7 +109,7 @@ export const createGitRoutes = (services: Services) => {
             }
             return result;
         });
-    const scanAll = async (): Promise<{ repos: RepoChanges[] }> => {
+    const scanAll = async (): Promise<GitChanges> => {
         const repoIds = await discoverRepos(services.workspace.root);
         // A Changes review right after a clone must not sweep the new repo's files into the root scope —
         // converge the root excludes on the repo set we're about to scan.
@@ -182,7 +182,13 @@ export const createGitRoutes = (services: Services) => {
                 }
             }),
         );
-        return { repos: scanned.filter((repo) => repo !== undefined) };
+        const repos = scanned.filter((repo) => repo !== undefined);
+        // The identity of every agent named anywhere in the review, resolved once against the FULL registry —
+        // the client's roster holds only live agents, and an archived one's landed lines are still sitting in
+        // the tree (see OriginAgentSchema). Ids only ever come from `origins`, so a repo with no attribution
+        // adds nothing here.
+        const originAgents = services.agentOrigins.identify(new Set(repos.flatMap((repo) => Object.values(repo.origins ?? {}).flat())));
+        return { repos, ...(Object.keys(originAgents).length > 0 ? { originAgents } : {}) };
     };
 
     // The panel refetches on every workspace-change batch — several times a second while a drop or a build lands,
@@ -190,7 +196,7 @@ export const createGitRoutes = (services: Services) => {
     // Collapse them: callers arriving while a scan runs share it, and its result is reused for COALESCE_MS after it
     // settles, so a burst costs one scan instead of one per observer per batch. `reusableUntil` is 0 for the whole
     // time a scan is in flight, which is what makes the sharing (not just the caching) work.
-    const coalescedScan = (): Promise<{ repos: RepoChanges[] }> => {
+    const coalescedScan = (): Promise<GitChanges> => {
         if (scan !== undefined && (reusableUntil === 0 || Date.now() < reusableUntil)) {
             return scan;
         }

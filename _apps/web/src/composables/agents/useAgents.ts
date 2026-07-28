@@ -361,12 +361,18 @@ const refresh = async (): Promise<void> => {
  * Archived agents are absent from the roster the /events stream carries, which is the point: the board's live
  * state stays the size of the work in flight. They load on demand instead, when the archive is opened.
  *
- * It deliberately does NOT close the agent's open chat tab. Archiving is the quiet action — no confirmation,
- * bulk, undoable — and closing a tab is not: it takes the unsent composer draft, the scroll position and, for
- * the tab being read, the user's place, none of which the undo could give back. Nor would it fix anything, since
- * reading an archived agent from the archive view opens the tab again by design (the transcript, the branch and
- * the diff all survive, and a follow-up message is how you un-archive it — see the daemon's registry.begin). So
- * the tab stays open and SAYS it is archived instead, with the way back on it (ChatTabs, ChatPanel). */
+ * Archiving TAKES THE AGENT'S CHAT TAB WITH IT. One agent is one thing under two skins — a card on the board and
+ * a tab in the strip — so filing it away has to move both, or the strip keeps a row for work the board says is
+ * over and the user is left closing everything twice. Nothing is lost with the tab: the transcript, the branch
+ * and the diff all survive daemon-side, and opening the agent from the archive brings the tab straight back.
+ *
+ * The undo does NOT reopen what it closed. It puts the CARD back — which is the thing the archive took away —
+ * and opening a chat is the user's own action, one click from the restored card. Reopening tabs on the user's
+ * behalf would also have to guess which of a swept dozen were open before, and be wrong about most of them.
+ *
+ * A tab CAN still show an archived agent: reading one from the archive view opens it by design, and a follow-up
+ * message un-archives it (see the daemon's registry.begin). Such a tab says what it is, with the way back on it
+ * (ChatTabs, ChatPanel). */
 const archived = ref<FleetAgent[]>([]);
 const archiveLoading = ref(false);
 
@@ -498,6 +504,10 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
         // Undo beside it would put back, and a receipt whose count disagrees with its own button is a lie.
         undoable.value = [...moved.map((agent) => agent.id), ...undoable.value.filter((id) => !gone.has(id))];
         archivedFlash.value += 1;
+        // The board and the strip are two views of one fleet, so the cards that just left take their tabs with
+        // them (see the archive note above). Driven off `moved` like every other effect here: a press that aimed
+        // at an agent the daemon declined to archive must not close its chat.
+        useChat().closeTabs(gone);
         // The archive worked, so whatever failure the strip was still holding is stale.
         notice.value = undefined;
         if (sweep) {
