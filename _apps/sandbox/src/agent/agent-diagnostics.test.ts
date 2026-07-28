@@ -16,7 +16,7 @@ const fire = async (hooks: ReturnType<typeof editDiagnosticsHooks>, toolInput: u
 // Drive the PostToolUse hook directly with a fake lsp runner — no binary, no filesystem. Dependencies are
 // present unless a test says otherwise, which is the case every pre-existing assertion assumes.
 const runHook = async (diag: DiagRunner, toolInput: unknown, modules: ModulesProbe = RESOLVABLE) =>
-    fire(editDiagnosticsHooks("/work", diag, modules), toolInput);
+    fire(editDiagnosticsHooks("/work", undefined, diag, modules), toolInput);
 
 const withErrors: DiagRunner = async () => [
     "src/app.ts:12:5: error TS2304: Cannot find name 'foo'.",
@@ -78,7 +78,7 @@ test("with no resolvable node_modules the type-check never runs", async () => {
 });
 
 test("the missing-dependency reason is told ONCE per turn, not stapled to every edit", async () => {
-    const hooks = editDiagnosticsHooks("/work", withErrors, MISSING);
+    const hooks = editDiagnosticsHooks("/work", undefined, withErrors, MISSING);
     const first = await fire(hooks, { file_path: "/work/src/a.ts" });
     const second = await fire(hooks, { file_path: "/work/src/b.ts" });
     expect((first.hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain("dependencies are not installed");

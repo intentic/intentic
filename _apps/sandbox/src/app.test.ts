@@ -281,6 +281,10 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         prune: async () => {},
         withRepoLock: (_repo, task) => task(),
     },
+    // Namespace isolation off, which is what a test runner (and any container without CAP_SYS_ADMIN) really
+    // gets: turns then run straight in the worktree path, the behaviour every route assertion below expects.
+    // The isolation.test.ts suite covers the plan these routes would build when it IS available.
+    turnIsolation: { available: async () => false, planFor: async () => undefined },
     // No agent has landed anything into these fake repos, so every changed file is the user's.
     agentOrigins: { forRepo: async () => ({}) },
     files: fakeFiles(),

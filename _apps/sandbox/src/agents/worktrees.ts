@@ -1,4 +1,4 @@
-import { access, readdir, rm, symlink } from "node:fs/promises";
+import { access, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
@@ -6,6 +6,7 @@ import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
+import type { TurnIsolation } from "./isolation.js";
 
 // A conversation's isolated checkout: one git worktree per workspace repo, mirroring the /work layout —
 // <worktreesRoot>/<id>/ is the ROOT repo's worktree and <worktreesRoot>/<id>/<repo>/ each nested
@@ -70,6 +71,12 @@ const exists = async (path: string): Promise<boolean> => {
 // the main checkout's node_modules (its package.json/lockfile edits stay in the worktree, where they belong),
 // and a monorepo's workspace links resolve cross-package imports to /work's sources rather than the worktree's
 // edited ones. Both beat the alternative, which is that nothing resolves at all.
+//
+// WHERE ISOLATION IS AVAILABLE, this is done with BIND MOUNTS instead (agents/isolation.ts) and only the empty
+// mount point is created here. That is strictly better and not just different: an absolute symlink into
+// /work/... would, inside the namespace, point back into the worktree that now occupies /work — a loop. A bind
+// also keeps the source's st_dev, so pnpm's hardlinking works in a worktree for the first time (the symlink
+// layout is why `pnpm run` in a worktree dies with EXDEV today).
 const MODULES = "node_modules";
 
 // Deep enough for the layouts that exist (a monorepo's `_apps/<pkg>`, `_libs/<pkg>`), bounded so a pathological
@@ -106,10 +113,10 @@ const packagesWithModules = async (main: string): Promise<string[]> => {
 };
 
 export const createAgentWorktrees = (
-    options: { readonly workspace: WorkspacePaths; readonly worktreesRoot: string; readonly logger: Logger },
+    options: { readonly workspace: WorkspacePaths; readonly worktreesRoot: string; readonly isolation: TurnIsolation; readonly logger: Logger },
     git: GitRunner = defaultGit,
 ): AgentWorktrees => {
-    const { workspace, worktreesRoot, logger } = options;
+    const { workspace, worktreesRoot, isolation, logger } = options;
 
     const conversationDir = (id: string): string => join(worktreesRoot, id);
     const worktreeDir = (id: string, repo: string): string => (repo === "root" ? conversationDir(id) : join(conversationDir(id), repo));
@@ -215,10 +222,20 @@ export const createAgentWorktrees = (
         const packages = await packagesWithModules(main);
         const linkOf = (pkg: string): string => (pkg === "" ? MODULES : `${pkg}/${MODULES}`);
         const ignored = await ignoredLinks(worktree, packages.map(linkOf));
+        // An isolated turn gets these as bind mounts inside its namespace, so all this has to leave behind is
+        // something to mount ONTO. The gitignore check still gates it: an empty dir git would commit is just
+        // as unwelcome on the branch as a machine-local symlink.
+        const isolated = await isolation.available();
         await Promise.all(
             packages.map(async (pkg) => {
                 const rel = linkOf(pkg);
                 if (!ignored.has(rel) || !(await exists(join(worktree, pkg)))) {
+                    return;
+                }
+                if (isolated) {
+                    await mkdir(join(worktree, rel), { recursive: true }).catch((error: unknown) =>
+                        logger.warn({ err: error, repo, package: pkg }, "agents: node_modules mount point failed"),
+                    );
                     return;
                 }
                 await symlink(join(main, rel), join(worktree, rel), "dir").catch((error: unknown) => {

@@ -49,6 +49,7 @@ import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
 import { fileAgentsStore } from "./agents/agents-store.js";
+import { createTurnIsolation, type TurnIsolation } from "./agents/isolation.js";
 import { createAgentOrigins, type AgentOrigins } from "./agents/origins.js";
 import { createAgentWorktrees, type AgentWorktrees } from "./agents/worktrees.js";
 import {
@@ -297,6 +298,10 @@ export interface Services {
     readonly agents: AgentsRegistry;
     // The per-conversation worktree compositions on /history/worktrees (create/repair/remove/prune).
     readonly agentWorktrees: AgentWorktrees;
+    // Builds an isolated turn's mount namespace, where the conversation's worktree stands in for the
+    // workspace root. Probes the container's capability once and reports "unavailable" forever after when it
+    // has none, so a sandbox launched without CAP_SYS_ADMIN keeps running turns the old way.
+    readonly turnIsolation: TurnIsolation;
     // Which agent an uncommitted main-tree file came from, derived from the landed shas (agents/origins.ts).
     readonly agentOrigins: AgentOrigins;
     readonly files: {
@@ -403,6 +408,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the Changes scan's per-file attribution reads the SAME registry the turns write to — a
     // second instance would answer from a stale agents.json.
     const agents = createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json")));
+    // Shared by the turn path (which builds a namespace per isolated turn) and worktree creation (which plants
+    // mount points rather than symlinks when it knows the namespace is coming), so both read ONE probe.
+    const turnIsolation = createTurnIsolation({ root: workspace.root, logger });
 
     return {
         config,
@@ -496,7 +504,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
             dropCommit,
         },
         agents,
-        agentWorktrees: createAgentWorktrees({ workspace, worktreesRoot: join(config.historyRoot, "worktrees"), logger }),
+        agentWorktrees: createAgentWorktrees({ workspace, worktreesRoot: join(config.historyRoot, "worktrees"), isolation: turnIsolation, logger }),
+        turnIsolation,
         agentOrigins: createAgentOrigins({ agents, logger }),
         files: {
             read: readWorkspaceFile,

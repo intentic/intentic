@@ -2,6 +2,7 @@ import { access } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { diagnoseVia } from "@intentic/lsp/client";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { fromNamespace, type IsolationPlan } from "../agents/isolation.js";
 
 /* Post-edit diagnostics feedback — the VSCode Claude Code loop, reproduced daemon-side: after every native
  * Edit/Write the touched file is type-checked and any COMPILE ERRORS ride back to the model as additionalContext,
@@ -71,6 +72,11 @@ const hasResolvableModules: ModulesProbe = async (file) => {
 // model needs the reason once, not stapled to every edit it makes for the rest of the conversation.
 export const editDiagnosticsHooks = (
     cwd: string,
+    // An isolated turn names its files inside its own namespace (/work/...), which from the daemon — where
+    // this hook body and the resident type-checker both run — is the MAIN checkout: the same path, a different
+    // file. Everything below therefore works on the translated path, and only the message the agent reads
+    // keeps the name the agent used.
+    isolation?: IsolationPlan,
     diag: DiagRunner = runResidentDiag,
     modules: ModulesProbe = hasResolvableModules,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
@@ -88,7 +94,8 @@ export const editDiagnosticsHooks = (
                         if (typeof file !== "string" || !CHECKED_EXTENSIONS.has(extname(file))) {
                             return {};
                         }
-                        if (!(await modules(file))) {
+                        const target = fromNamespace(file, isolation);
+                        if (!(await modules(target))) {
                             if (explained) {
                                 return {};
                             }
@@ -103,7 +110,7 @@ export const editDiagnosticsHooks = (
                                 },
                             };
                         }
-                        const output = await diag(file, cwd);
+                        const output = await diag(target, cwd);
                         if (output === undefined) {
                             return {};
                         }

@@ -71,3 +71,22 @@ test("agentSessionName derives the same agent-* name the hook routes commands th
     expect(agentSessionName("!@#$")).toBeUndefined();
     expect(agentSessionName("")).toBeUndefined();
 });
+
+test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrapper", async () => {
+    const anchor = { pid: 4321, cwd: "/work", plan: { worktree: "/history/worktrees/abc", root: "/work", modules: [] }, dispose: () => {} };
+    const command = await rewritten({ command: "sed -i s/a/b/ x.ts", description: "edit" }, bashTmuxHooks(undefined, [], anchor));
+    // tmux-run stays OUTSIDE: the server, the pane logs and the terminals panel are daemon-side, and only the
+    // command the pane runs crosses into the namespace. Without this, `sed -i` would rewrite the shared tree
+    // while the same turn's Edit tool wrote to the worktree.
+    expect(command).toBe(
+        `/usr/local/bin/tmux-run agent-3f2a9b1c 'nsenter --mount=/proc/4321/ns/mnt --wd='\\''/work'\\'' -- bash -c '\\''sed -i s/a/b/ x.ts'\\''' edit`,
+    );
+});
+
+test("the rtk backend's prefix rides inside the namespace with the command it wraps", async () => {
+    const anchor = { pid: 9, cwd: "/work", plan: { worktree: "/wt", root: "/work", modules: [] }, dispose: () => {} };
+    const command = await rewritten({ command: "ls" }, bashTmuxHooks("rtk", [], anchor));
+    expect(command).toContain(`bash -c '\\''rtk ls'\\''`);
+    // rtk is the agent's own command line, so it must not run outside the tree the agent is working in.
+    expect(command).not.toContain("-- rtk");
+});

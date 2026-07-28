@@ -25,6 +25,10 @@ const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot:
 const LINES = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`);
 const edited = (line: number): string => `${LINES.map((text, index) => (index === line - 1 ? `${text} EDITED` : text)).join("\n")}\n`;
 
+// No mount namespace here: these suites assert the SYMLINK mirroring, which is what a container without
+// CAP_SYS_ADMIN (and every test runner) actually gets. The bind-mount branch is isolation.test.ts's.
+const noIsolation = { available: async () => false, planFor: async () => undefined };
+
 const tempDirs: string[] = [];
 afterEach(async () => {
     for (const dir of tempDirs.splice(0)) {
@@ -45,7 +49,7 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     await writeFile(join(work, "other.ts"), "untouched\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "baseline");
-    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), logger });
+    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), isolation: noIsolation, logger });
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 
