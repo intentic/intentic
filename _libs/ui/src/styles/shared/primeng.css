@@ -42,10 +42,6 @@
     [data-mode="dark"] .p-button-danger.p-button-text:enabled:hover {
         background: color-mix(in srgb, var(--color-danger-500) 18%, transparent);
     }
-
-    .p-tooltip-text {
-        font-size: var(--text-xs); /* 0.75rem — smaller than the Aura default */
-    }
 }
 
 /* Reusable presentational classes. @layer components sits below utilities so per-element

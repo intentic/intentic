@@ -48,4 +48,11 @@
     --ui-control-padding-x: calc(var(--spacing) * 3);
     --ui-control-padding-y: calc(var(--spacing) * 2);
     --ui-field-gap: calc(var(--spacing) * 2);
+
+    /* Tooltip box (see tooltip.css). 17rem is measured, not guessed: across the app's longest labels it is the
+     * cap with BOTH the least ink and the fewest lines. Narrower (PrimeVue's old 12.5rem default) wraps the
+     * same sentence into a five-line column tall enough to cover the control it describes; wider only
+     * stretches those same lines. Lines are the backstop for copy that outgrew a tooltip and wants a panel. */
+    --ui-tooltip-max-width: 17rem;
+    --ui-tooltip-max-lines: 5;
 }

@@ -79,12 +79,6 @@ const custom = {
                 },
             },
         },
-        tooltip: {
-            root: {
-                // Shrink the box to match the smaller text-xs label (≈ py-1 px-2).
-                padding: `calc(var(--spacing) * 1) calc(var(--spacing) * 2)`,
-            },
-        },
     },
 };
 
