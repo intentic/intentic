@@ -113,8 +113,45 @@ export const router = createRouter({
     routes,
 });
 
+/* A redeploy replaces every content-hashed chunk, and every route above is a lazy import — so a window opened
+ * before the deploy holds an index.html whose routes point at files that no longer exist. Clicking one made the
+ * URL flicker and settle back where it was: the dynamic import rejects, vue-router aborts the navigation, and
+ * nothing said why — the app just looked broken until the user happened to hard-refresh. A failed chunk load IS
+ * "this window is stale", so answer it with the reload the user would eventually perform by hand, landed on the
+ * route they asked for rather than the one they were leaving.
+ *
+ * Matched on the wording the runtimes actually produce (Chromium/Firefox/Safari phrase the import failure
+ * differently, and Vite's own preload helper rethrows CSS failures with its own message) rather than on error
+ * class — a TypeError is also what a coding bug inside a route component throws, and reloading on those would
+ * turn any real regression into a reload loop. The per-target flag is the loop guard for a chunk that is
+ * GENUINELY gone (a broken deploy): one reload per destination, then the old silent abort; cleared by any
+ * navigation that lands, so the next redeploy gets its one reload again. */
+const CHUNK_RELOADED_KEY = `intentic.chunkReloaded`;
+const STALE_CHUNK_MESSAGE = /error loading dynamically imported module|failed to fetch dynamically imported module|importing a module script failed|unable to preload css/i;
+router.onError((error, to) => {
+    if (!STALE_CHUNK_MESSAGE.test(String(error))) {
+        return;
+    }
+    try {
+        if (sessionStorage.getItem(CHUNK_RELOADED_KEY) === to.fullPath) {
+            return;
+        }
+        sessionStorage.setItem(CHUNK_RELOADED_KEY, to.fullPath);
+    } catch {
+        return; // no storage, no loop guard — the silent abort is safer than a possible reload loop
+    }
+    location.assign(to.fullPath);
+});
+
 // Formats the browser tab as `<Page> / intentic` from each route's `title`, falling back to the bare brand
 // when a route declares none (replaces the route title strategy).
-router.afterEach((to) => {
+router.afterEach((to, _from, failure) => {
+    if (failure === undefined) {
+        try {
+            sessionStorage.removeItem(CHUNK_RELOADED_KEY);
+        } catch {
+            // No storage to clean.
+        }
+    }
     document.title = to.meta.title ? `${to.meta.title} / intentic` : `intentic`;
 });
