@@ -1011,8 +1011,8 @@ watch(keyboardInset, () => {
                     >
                         <Icon name="clock" class="mt-0.5 shrink-0" />
                         <span class="min-w-0 flex-1"
-                            >Usage limit reached — resets {{ formatReset(limitResume.resetsAt) }}. Auto-resume can continue this chat by itself
-                            about a minute after.</span
+                            >Usage limit reached — resets {{ formatReset(limitResume.resetsAt) }}. Auto-resume can continue this chat by itself about
+                            a minute after.</span
                         >
                         <button
                             type="button"
