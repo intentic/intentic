@@ -176,9 +176,9 @@ describe(`tool calls`, () => {
         expect(state.messages).toEqual(before.messages);
     });
 
-    it(`asks the caller to follow along to the file an edit touched`, () => {
+    it(`hands the caller each tool call so it can record the turn's writes`, () => {
         const { effects } = run(started(), { kind: `tool_call`, id: `t1`, name: `Edit`, category: `edit`, status: `completed` });
-        expect(effects).toEqual([expect.objectContaining({ kind: `followToolCall` })]);
+        expect(effects).toEqual([expect.objectContaining({ kind: `toolCall` })]);
     });
 });
 

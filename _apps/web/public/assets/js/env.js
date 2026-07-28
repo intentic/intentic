@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  // ../../../work/intentic/_apps/web/src/environments/environment.default.ts
+  // src/environments/environment.default.ts
   var defaultEnv = {
     production: false,
     // Browser-facing origin of the API the SPA calls directly (no dev-server proxy).
@@ -12,7 +12,7 @@
     analytics: { posthogKey: ``, posthogHost: `https://us.i.posthog.com` }
   };
 
-  // ../../../work/intentic/_apps/web/src/environments/environment.local.ts
+  // src/environments/environment.local.ts
   window.env = {
     ...defaultEnv,
     api: { url: "https://localhost:6480" },

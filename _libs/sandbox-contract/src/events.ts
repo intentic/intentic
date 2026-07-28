@@ -80,7 +80,7 @@ export const ContextUsageSchema = z.object({
 export type ContextUsage = z.infer<typeof ContextUsageSchema>;
 
 // ACP-aligned tool taxonomy (Agent Client Protocol's ToolKind, verbatim): what a tool call *does*, driving
-// the card icon and follow-along behavior regardless of which backend named the tool.
+// the card icon and the live-writes bookkeeping regardless of which backend named the tool.
 export const ToolKindSchema = z.enum(["read", "edit", "delete", "move", "search", "execute", "think", "fetch", "other"]);
 export type ToolKind = z.infer<typeof ToolKindSchema>;
 

@@ -16,7 +16,6 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSpeechInput } from "../composables/chat/useSpeechInput";
 import { sandboxJson, sandboxUpload } from "../composables/sandbox/sandboxClient";
 import { useEditorSelection } from "../composables/workspace/useEditorSelection";
-import { useFollowAlong } from "../composables/workspace/useFollowAlong";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import { useLayout } from "../composables/useLayout";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -79,7 +78,6 @@ const {
 } = useChat();
 const router = useRouter();
 const layout = useLayout();
-const followAlong = useFollowAlong();
 const { overlayTarget, poppedOut } = useChatPopout();
 const { activeSandboxId, reachable, connection } = useSandbox();
 // The daemon refused this Google account outright — a different sentence than "not connected yet", because
@@ -1167,18 +1165,6 @@ watch(keyboardInset, () => {
                                     <Icon :name="modeIcon" class="text-2xs text-link" />
                                     <span class="@max-md:hidden">{{ modeLabel }}</span>
                                     <Icon name="chevron-down" class="text-2xs text-subtle" />
-                                </button>
-
-                                <button
-                                    type="button"
-                                    class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
-                                    :class="{ 'composer-active': followAlong.enabled.value }"
-                                    @click="followAlong.setEnabled(!followAlong.enabled.value)"
-                                    v-tooltip.top="followAlong.enabled.value ? 'Stop following agent edits' : 'Follow agent edits live'"
-                                    :aria-pressed="followAlong.enabled.value"
-                                    aria-label="Follow agent edits"
-                                >
-                                    <Icon :name="followAlong.enabled.value ? 'eye' : 'eye-slash'" class="text-xs max-md:text-base" />
                                 </button>
 
                                 <button

@@ -60,8 +60,8 @@ export type TurnEffect =
     | { readonly kind: "totals"; readonly usage: ChatUsage }
     // Account-wide subscription headroom, keyed by the account that served the turn. Not tied to any bubble.
     | { readonly kind: "accountUsage"; readonly account: string; readonly windows: readonly UsageWindow[] }
-    // Auto-open the file an edit touches.
-    | { readonly kind: "followToolCall"; readonly call: Extract<AgentEvent, { kind: "tool_call" }> }
+    // A tool call the turn just made, for the caller to record as this turn's live writes.
+    | { readonly kind: "toolCall"; readonly call: Extract<AgentEvent, { kind: "tool_call" }> }
     // Surface the agent's live tmux terminal as a tab in the global panel.
     | { readonly kind: "surfaceTerminal"; readonly session: string }
     // A turn-level failure. Wording and severity are the caller's: several codes need state this module has no
@@ -309,7 +309,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         }
         case `tool_call`: {
             const opened = withBubble(state);
-            return step(appendTool(opened.state, opened.id, event), { kind: `followToolCall`, call: event });
+            return step(appendTool(opened.state, opened.id, event), { kind: `toolCall`, call: event });
         }
         case `tool_call_update`:
             // Merge the update into the call that produced it (matched by id); present fields REPLACE the prior

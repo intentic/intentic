@@ -42,7 +42,7 @@ const DISPLAY_NAMES: Record<string, string> = {
 };
 export const displayNameOf = (raw: string): string => DISPLAY_NAMES[raw] ?? raw;
 
-// The ONE display-name → ACP ToolKind table (case-insensitive), driving card icons and follow-along.
+// The ONE display-name → ACP ToolKind table (case-insensitive), driving card icons and live-writes.
 const CATEGORIES: ReadonlyArray<readonly [string, ToolKind]> = [
     ["read", "read"],
     ["edit", "edit"],
@@ -124,7 +124,7 @@ export const workspacePath = (raw: string, cwd: string): string | undefined => {
 
 const PATH_KEYS = ["file_path", "filePath", "notebook_path", "path"] as const;
 
-// The workspace files a tool call touches, for clickable cards and follow-along. `line` comes from Read's
+// The workspace files a tool call touches, for clickable cards and live-writes. `line` comes from Read's
 // 1-based `offset` when present. Undefined when the input names no workspace-addressable file.
 export const toolLocations = (input: unknown, cwd: string): ToolCallLocation[] | undefined => {
     if (typeof input !== "object" || input === null) {

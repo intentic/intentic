@@ -129,6 +129,22 @@ test("committing one agent's work leaves another agent's landed files attributed
     expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
 });
 
+test("identify names an ARCHIVED agent — the roster the client mirrors no longer carries it", async () => {
+    // The whole reason identity rides the response: archiving a finished agent takes it off the fleet roster
+    // (AgentsRegistry.list drops archived entries) but does NOT commit its landed lines, so the panel is
+    // reviewing work whose author the client can no longer look up. Reading `entry` covers both halves.
+    const archived = { ...entryFor([], "c1"), archivedAt: 1 };
+    const untitled = { ...entryFor([], "c2") };
+    delete untitled.title;
+    const origins = createAgentOrigins({ agents: registryOf(archived, untitled), logger });
+    expect(origins.identify(["c1", "c2", "gone"])).toEqual({
+        c1: { provider: "claude", title: "fix the thing" },
+        // No title ⇒ the key is absent rather than empty, and an id with no entry left at all is omitted
+        // entirely — the panel's id-shaped fallback is what covers it.
+        c2: { provider: "claude" },
+    });
+});
+
 test("the claim expires when the user commits — a file that goes dirty again is theirs, not the agent's", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));

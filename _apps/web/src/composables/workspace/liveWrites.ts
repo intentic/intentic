@@ -11,7 +11,7 @@ import { ref } from "vue";
  * carry is `locations` on every tool_call — already workspace-root-relative — so the paths ARE the signal,
  * and they arrive as the writes happen rather than after them.
  *
- * Deliberately BEST-EFFORT, exactly like follow-along: a turn a different browser started and this one never
+ * Deliberately BEST-EFFORT: a turn a different browser started and this one never
  * attached to leaves no trace here. That is affordable because nothing gates on this — it decorates a commit
  * the user may make either way, and the daemon's per-repo lock (git.routes.ts) is what actually keeps a
  * commit and an agent's land from interleaving. A missed advisory costs a word, not a repo. */

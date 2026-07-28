@@ -1397,11 +1397,8 @@ export class Conversation {
                     [effect.account]: { windows: [...effect.windows], measuredAt: Date.now() },
                 };
                 return;
-            case `followToolCall`: {
-                // Auto-open the file an edit touches. Lazily imported so the chat model doesn't statically pull
-                // in the workspace-tabs chain.
+            case `toolCall`: {
                 const { call } = effect;
-                void import(`../workspace/useFollowAlong`).then((m) => m.useFollowAlong().followToolCall(call));
                 // A MAIN-TREE turn writes the files the Changes panel commits, so its paths are recorded for the
                 // panel to warn against — per repo, so an agent working in one repo says nothing about the rest.
                 // An isolated turn writes its own worktree and lands as a reviewable diff, so it records nothing:
