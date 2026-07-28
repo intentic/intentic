@@ -17,6 +17,7 @@ import { intenticContract } from "./contracts/intentic.contract.js";
 import { inventoryContract } from "./contracts/inventory.contract.js";
 import { kimiContract } from "./contracts/kimi.contract.js";
 import { logsContract } from "./contracts/logs.contract.js";
+import { memoryContract } from "./contracts/memory.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
@@ -46,6 +47,7 @@ export { intenticContract } from "./contracts/intentic.contract.js";
 export { inventoryContract } from "./contracts/inventory.contract.js";
 export { kimiContract } from "./contracts/kimi.contract.js";
 export { logsContract } from "./contracts/logs.contract.js";
+export { memoryContract } from "./contracts/memory.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
@@ -94,6 +96,7 @@ export const sandboxContract = {
     workspace: workspaceContract,
     inventory: inventoryContract,
     logs: logsContract,
+    memory: memoryContract,
     panels: panelsContract,
     ports: portsContract,
     push: pushContract,

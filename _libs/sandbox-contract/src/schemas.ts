@@ -2172,6 +2172,45 @@ export const LogReadSchema = z.object({
 });
 export type LogRead = z.infer<typeof LogReadSchema>;
 
+// ---- memory: the agent's persistent memory notes (.intentic/claude/projects/<project>/memory) ----
+// The markdown files the agent curates across sessions — MEMORY.md (the index) plus one file per fact. They
+// live under the workspace's .intentic/claude control plane (symlinked from ~/.claude/projects), which the
+// generic /workspace file API deliberately refuses (session transcripts and provider state share that tree),
+// so these purpose-built routes are the only browser surface — scoped to the memory dirs and nothing else.
+
+export const MemoryFileEntrySchema = z.object({
+    // The project slug the memory belongs to (one dir per agent cwd, e.g. "-history-gits-root").
+    project: z.string(),
+    // Path relative to that project's memory dir, e.g. "MEMORY.md" or "team-conventions.md".
+    name: z.string(),
+    sizeBytes: z.number(),
+    // Epoch ms mtime.
+    modifiedAt: z.number(),
+});
+export type MemoryFileEntry = z.infer<typeof MemoryFileEntrySchema>;
+export const MemoryListSchema = z.object({ files: z.array(MemoryFileEntrySchema) });
+
+// `project` + `name` ride the query (names may contain slashes, which don't fit a path segment).
+export const MemoryFileQuerySchema = z.object({
+    project: z.string().min(1),
+    name: z.string().min(1),
+});
+export const MemoryFileSchema = z.object({
+    project: z.string(),
+    name: z.string(),
+    content: z.string(),
+    sizeBytes: z.number(),
+    modifiedAt: z.number(),
+});
+export type MemoryFile = z.infer<typeof MemoryFileSchema>;
+
+// Memory notes are small by construction (one fact per file); the cap guards the route, not real usage.
+export const MemoryWriteSchema = z.object({
+    project: z.string().min(1),
+    name: z.string().min(1),
+    content: z.string().max(1_048_576),
+});
+
 // A tab's self-report of what it is looking at, keyed by its /events connection's clientId. Full replace,
 // not a merge — an absent field means "cleared", so a tab leaving a file drops the path with the same report.
 export const PresenceReportSchema = z.object({

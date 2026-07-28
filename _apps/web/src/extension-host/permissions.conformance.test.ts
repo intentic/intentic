@@ -11,7 +11,7 @@ import { describe, expect, test } from "vitest";
 const extensionsRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../_extensions");
 
 // The builtin UI extensions loaded by extension-host/builtins.ts (each reaches the daemon via api.sandbox).
-const BUILTINS = ["activity", "automations", "logs", "preview", "repo-apps"];
+const BUILTINS = ["activity", "automations", "logs", "memory", "preview", "repo-apps"];
 
 const sourceFiles = (dir: string): string[] => {
     const out: string[] = [];

@@ -17,6 +17,7 @@ import { createIntenticRoutes } from "./intentic/intentic.routes.js";
 import { createInventoryRoutes } from "./inventory/inventory.routes.js";
 import { createKimiRoutes } from "./kimi/kimi.routes.js";
 import { createLogsRoutes } from "./logs/logs.routes.js";
+import { createMemoryRoutes } from "./memory/memory.routes.js";
 import { createPanelsRoutes } from "./panels/panels.routes.js";
 import { createPortsRoutes } from "./ports/ports.routes.js";
 import { createPushRoutes } from "./push/push.routes.js";
@@ -51,6 +52,7 @@ export const createRouter = (services: Services) => ({
     workspace: createWorkspaceRoutes(services),
     inventory: createInventoryRoutes(services),
     logs: createLogsRoutes(services),
+    memory: createMemoryRoutes(services),
     panels: createPanelsRoutes(services),
     ports: createPortsRoutes(services),
     push: createPushRoutes(services),

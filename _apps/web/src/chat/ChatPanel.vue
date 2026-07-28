@@ -950,7 +950,14 @@ watch(keyboardInset, () => {
             <!-- The whole footer (account connect + composer) talks to the daemon, so it yields to a hint while the
                  sandbox is unreachable. The transcript above stays readable. On mobile the footer pads itself above
                  the on-screen keyboard (iOS Safari only shrinks the visual viewport, not the layout). -->
-            <div class="flex flex-col gap-2 p-3" :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 12}px` } : undefined">
+            <!-- The footer shares the transcript's reading cap (.chat-turns' 48rem) instead of running wall to
+                 wall: in a popped-out window a full-width composer is a 150-character line under a capped
+                 transcript, with its Send button half a screen away from the text. px-4 matches the scroller's
+                 own inset, so at 50rem outer the composer's edges land exactly on the transcript's. -->
+            <div
+                class="mx-auto flex w-full max-w-[50rem] flex-col gap-2 px-4 py-3"
+                :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 12}px` } : undefined"
+            >
                 <p v-if="!reachable" class="px-1 text-2xs text-subtle">
                     {{
                         denied
@@ -1004,8 +1011,8 @@ watch(keyboardInset, () => {
                     >
                         <Icon name="clock" class="mt-0.5 shrink-0" />
                         <span class="min-w-0 flex-1"
-                            >Usage limit reached — resets {{ formatReset(limitResume.resetsAt) }}. Auto-resume can continue this chat by itself
-                            about a minute after.</span
+                            >Usage limit reached — resets {{ formatReset(limitResume.resetsAt) }}. Auto-resume can continue this chat by itself about
+                            a minute after.</span
                         >
                         <button
                             type="button"

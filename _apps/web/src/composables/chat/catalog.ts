@@ -78,7 +78,22 @@ export const statusIcon = (status: ConversationStatus): { name: IconName; spin?:
     return { name: `circle-fill`, class: `text-[0.5rem] text-subtle` };
 };
 
-// Desktop tab title color by status (icon-free; streaming pulses to signal "working").
+// What statusIcon's glyph means, for the screen readers that can't see it.
+export const statusLabel = (status: ConversationStatus): string => {
+    if (status === `streaming`) {
+        return `Working`;
+    }
+    if (status === `awaiting`) {
+        return `Needs you`;
+    }
+    if (status === `error`) {
+        return `Error`;
+    }
+    return `Idle`;
+};
+
+// Desktop tab title color by status — layered UNDER statusIcon's glyph rather than replacing it: colour alone
+// is invisible to colourblind users and near-illegible on a truncated 2xs string.
 export const statusTabClass = (status: ConversationStatus): string => {
     if (status === `streaming`) {
         return `text-link animate-pulse`;
