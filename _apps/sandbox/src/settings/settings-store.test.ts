@@ -28,6 +28,7 @@ const DEFAULTS: SandboxSettings = {
     // read, so there is no id for a fresh sandbox to store.
     quickModel: "",
     agentRetentionDays: 3,
+    autoResumeOnLimit: false,
 };
 
 test("get returns the defaults when the file is absent", async () => {

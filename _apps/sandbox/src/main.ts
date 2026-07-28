@@ -6,6 +6,7 @@ import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
 import { sweepAgedAgents } from "./agents/archive.js";
 import { streamAgent } from "./agent/agent.routes.js";
+import { createLimitResumeScheduler } from "./agent/limit-resume.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { restoreConnectorGitAccess } from "./capabilities/cli/git-access.js";
@@ -241,6 +242,11 @@ const main = async (): Promise<void> => {
     const scheduler = createAutomationsScheduler(services, streamAgent);
     scheduler.start();
 
+    // Usage-limit auto-resume: re-run turns the Claude subscription's limit killed, once their window reopens
+    // (gated by the autoResumeOnLimit setting; the failures are remembered regardless — see limit-resume.ts).
+    const limitResume = createLimitResumeScheduler(services, streamAgent);
+    limitResume.start();
+
     // Warm the "latest released sandbox version" cache in the background so /info can offer a non-blocking
     // update without ever fetching on the request path.
     const versionCheck = startVersionCheck();
@@ -299,6 +305,7 @@ const main = async (): Promise<void> => {
         clearInterval(logsSweep);
         clearInterval(webSessionSweep);
         scheduler.stop();
+        limitResume.stop();
         versionCheck.stop();
         announcer.stop();
         services.history.stop();

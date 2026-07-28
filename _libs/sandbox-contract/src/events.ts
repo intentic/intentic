@@ -281,6 +281,14 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 "agent-busy",
             ])
             .optional(),
+        // rate_limit only: when the exhausted window reopens (epoch seconds, from the stream's own
+        // rate_limit_event or the account's persisted usage windows), and what the daemon did about it —
+        // "scheduled" = auto-resume is on and this turn re-runs itself a minute after `resetsAt`;
+        // "available" = the daemon remembered the failed turn and enabling the autoResumeOnLimit setting
+        // arms that same resume, which is what the chat's offer banner hangs off. Absent together when the
+        // reset instant is unknown (nothing to schedule against).
+        resetsAt: z.number().optional(),
+        autoResume: z.enum(["scheduled", "available"]).optional(),
     }),
     z.object({ kind: z.literal("done") }),
 ]);
