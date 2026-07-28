@@ -557,6 +557,12 @@ export const SandboxSettingsSchema = z.object({
     // terminal state: without a sweep the Finished lane grows for the life of the sandbox, and each card it
     // holds is a live worktree checkout, not just a row.
     agentRetentionDays: z.number().min(0).max(365).default(3),
+    // When a turn dies on the Claude subscription's usage limit, re-run it automatically once the limit
+    // window resets (a minute after, so a skewed clock can't retry into the same closed window). Off by
+    // default: an unattended retry spends the fresh window without the user in the room, so the daemon
+    // records every limit-hit either way and the chat OFFERS the toggle at the moment it would have helped —
+    // enabling it then still resumes the turn that just bounced.
+    autoResumeOnLimit: z.boolean().default(false),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 

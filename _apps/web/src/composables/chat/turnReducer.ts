@@ -66,7 +66,15 @@ export type TurnEffect =
     | { readonly kind: "surfaceTerminal"; readonly session: string }
     // A turn-level failure. Wording and severity are the caller's: several codes need state this module has no
     // business reading (the account's usage windows, the provider's account list) to phrase themselves.
-    | { readonly kind: "error"; readonly message: string; readonly code: Extract<AgentEvent, { kind: "error" }>["code"] };
+    // rate_limit failures also carry the daemon's resume verdict: when the spent window reopens, and whether
+    // an auto-resume is scheduled ("scheduled") or merely on offer behind the setting ("available").
+    | {
+          readonly kind: "error";
+          readonly message: string;
+          readonly code: Extract<AgentEvent, { kind: "error" }>["code"];
+          readonly resetsAt: number | undefined;
+          readonly autoResume: Extract<AgentEvent, { kind: "error" }>["autoResume"];
+      };
 
 export interface TurnStep {
     readonly state: TurnState;
@@ -404,7 +412,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         case `terminal`:
             return step(state, { kind: `surfaceTerminal`, session: event.session });
         case `error`:
-            return step(state, { kind: `error`, message: event.message, code: event.code });
+            return step(state, { kind: `error`, message: event.message, code: event.code, resetsAt: event.resetsAt, autoResume: event.autoResume });
         case `rate_limit_info`:
         // The live gate, not a headroom reading: it names whichever single window the provider considered
         // binding for that request. `account_usage` carries every pool, and is what the readouts use.

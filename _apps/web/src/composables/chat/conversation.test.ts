@@ -908,6 +908,44 @@ describe(`Conversation`, () => {
         expect(conversation.status.value).not.toBe(`error`);
     });
 
+    it(`says when the chat continues by itself when the daemon scheduled the auto-resume`, async () => {
+        const conversation = new Conversation(`c1`);
+        // Far-future reset so the re-attach probe this arms stays parked for the test's lifetime.
+        const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `scheduled` }, { kind: `done` }]),
+        );
+        await conversation.send(`hello`, settings);
+
+        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
+        expect(conversation.messages.value.at(-1)!.text).toContain(`Auto-resume is on`);
+        // Scheduled daemon-side — nothing to offer, so no banner state.
+        expect(conversation.limitResume.value).toBeUndefined();
+        expect(conversation.error.value).toBeNull();
+        // Tears down the armed probe timer so the test leaves no open handle behind.
+        conversation.abort();
+    });
+
+    it(`offers enabling auto-resume when the daemon only remembered the failed turn, and arming retires the offer`, async () => {
+        const conversation = new Conversation(`c1`);
+        const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `available` }, { kind: `done` }]),
+        );
+        await conversation.send(`hello`, settings);
+
+        // The offer banner's state, alongside the usual muted notice.
+        expect(conversation.limitResume.value).toEqual({ resetsAt });
+        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
+        expect(conversation.error.value).toBeNull();
+
+        // The user enabled the setting: the offer retires and the transcript says when the chat continues.
+        conversation.armLimitResume();
+        expect(conversation.limitResume.value).toBeUndefined();
+        expect(conversation.messages.value.at(-1)!.text).toContain(`Auto-resume enabled`);
+        conversation.abort();
+    });
+
     it(`stores an account_usage frame against its account, stamped so staleness is comparable`, async () => {
         usageStatusByAccount.value = {};
         const conversation = new Conversation(`c1`);

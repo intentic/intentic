@@ -18,7 +18,13 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
         outputCleaners: "-cap",
         outputHoldout: 0.1,
     };
-    expect(SandboxSettingsSchema.parse(older)).toEqual({ ...older, filterBackend: "native", quickModel: "", agentRetentionDays: 3 });
+    expect(SandboxSettingsSchema.parse(older)).toEqual({
+        ...older,
+        filterBackend: "native",
+        quickModel: "",
+        agentRetentionDays: 3,
+        autoResumeOnLimit: false,
+    });
 });
 
 test("an empty object is the full default settings object", () => {
@@ -38,6 +44,7 @@ test("an empty object is the full default settings object", () => {
         // The one default that isn't "off": the fleet board's Finished lane has no exit of its own, and each
         // card it holds is a worktree checkout. Opting INTO cleanup would mean shipping a leak by default.
         agentRetentionDays: 3,
+        autoResumeOnLimit: false,
     });
 });
 
