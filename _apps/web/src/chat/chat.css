@@ -1,11 +1,21 @@
-/* Long transcripts: let the browser skip layout and paint for turns that are scrolled out of view. Every
-   message here has been painted at least once — it streamed in front of the user — so `auto` remembers each
-   one's real height and scrolling back through them needs no size estimator. The intrinsic size only has to
-   carry a transcript restored straight to its bottom, where the rows above have never painted; the browser's
-   scroll anchoring absorbs the correction as they realize. */
+/* Long transcripts: let the browser skip layout and paint for turns that are scrolled out of view. A message
+   that has painted once keeps its real height (the `auto` remembered size); the 3rem estimate only carries a
+   row that has never painted — a transcript restored straight to its bottom, or streamed in while the user was
+   scrolled away. Estimated rows must NOT be left to realize lazily on scroll: real messages run hundreds of px,
+   so each realization rewrites scrollHeight (measured at ~4× the estimate over a whole transcript), and the
+   native scrollbar maps the thumb against the CURRENT scrollHeight — a drag through estimated rows had the
+   thumb leaping hundreds of px away from the cursor on every jump. Scroll anchoring never covers this case:
+   it stabilizes content, not the thumb-to-scrollTop mapping. So ChatPanel warms every wholesale-swapped
+   transcript through .chat-realize below, and this rule only ever skips rows whose height is already known. */
 .chat-message {
     content-visibility: auto;
     contain-intrinsic-size: auto 3rem;
+}
+/* The warm-up pass (ChatPanel.warmTranscript): while the scroller holds this class nothing may be skipped, so
+   one idle-time layout records every row's real height as its remembered size. The class then comes off and
+   skipping resumes with truthful heights — the scrollbar stays stable through the whole transcript. */
+.chat-realize .chat-message {
+    content-visibility: visible;
 }
 /* The prompt stays on screen for as long as its answer does: it pins to the top of the transcript while the
    turn scrolls beneath it, and the next turn's prompt pushes it out. Claude Code's transcript, and for the same

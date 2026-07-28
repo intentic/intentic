@@ -760,6 +760,60 @@ const pinToBottom = (): void => {
     }
 };
 
+/* Make the native scrollbar truthful after a transcript lands wholesale.
+ *
+ * .chat-message rows are content-visibility:auto with a 3rem estimate (chat.css), so a freshly swapped-in
+ * transcript reports a scrollHeight built almost entirely of estimates. Left alone, every row realizing on
+ * the way past rewrites scrollHeight mid-scroll — and a native scrollbar DRAG maps the thumb against the
+ * current scrollHeight, so the thumb kept leaping hundreds of px away from the cursor. The cure is one
+ * idle-time realization pass: .chat-realize forces every row to lay out for real, `auto` records those
+ * heights as remembered sizes, and skipping resumes with a scrollHeight that no longer moves.
+ *
+ * Two frames under the class on purpose: the first lays the realized transcript out and records remembered
+ * sizes (that happens at resize-observer timing, at the end of the frame), the second may drop back to
+ * skipping. The at-bottom pin survives the growth spurt via the ResizeObserver below; elsewhere scroll
+ * anchoring holds the view. requestIdleCallback keeps the one full layout off the restore's critical path
+ * (Safari has no idle callback — a beat of setTimeout is the same bargain). */
+const realizing = ref(false);
+let warmQueued = false;
+const warmTranscript = (): void => {
+    if (warmQueued) {
+        return;
+    }
+    warmQueued = true;
+    const idle = globalThis.requestIdleCallback ?? ((task: () => void) => setTimeout(task, 200));
+    idle(() => {
+        realizing.value = true;
+        void nextTick(() => {
+            requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                    realizing.value = false;
+                    warmQueued = false;
+                }),
+            );
+        });
+    });
+};
+
+// Every path that mounts never-painted rows outside the viewport, and nothing that fires per streamed frame:
+// a tab switch or history open swaps the whole list (conversationId), the IndexedDB repaint and the daemon's
+// replay land in bulk (length jumps while idle — a live turn only ever appends one bubble per flush), and a
+// turn's end covers an answer that streamed in below the fold while the user was scrolled up reading.
+watch(() => active.value.conversationId, warmTranscript, { immediate: true });
+watch(
+    () => messages.value.length,
+    (now, before) => {
+        if (!streaming.value && Math.abs(now - before) > 1) {
+            warmTranscript();
+        }
+    },
+);
+watch(streaming, (now, was) => {
+    if (was && !now) {
+        warmTranscript();
+    }
+});
+
 // Keep the newest tokens in view as the transcript grows — but only while the user is already at the bottom,
 // so scrolling up to read isn't fought by streaming tokens.
 //
@@ -845,7 +899,12 @@ watch(keyboardInset, () => {
              PADDING edge, so a pt-4 out here would leave a 1rem band above the pinned row for the previous
              turn to slide through. Inside the wrapper the same inset is content, and the prompt pins flush. -->
         <!-- .chat-scroller is the IntersectionObserver root each prompt uses to tell whether it is pinned. -->
-        <div ref="scroller" class="chat-scroller scrollbar-thin flex flex-1 flex-col overflow-auto px-4 pb-4" @scroll="onScroll">
+        <div
+            ref="scroller"
+            class="chat-scroller scrollbar-thin flex flex-1 flex-col overflow-auto px-4 pb-4"
+            :class="{ 'chat-realize': realizing }"
+            @scroll="onScroll"
+        >
             <div ref="content" class="chat-turns flex flex-1 flex-col gap-1 pt-4">
                 <template v-if="messages.length > 0">
                     <!-- One section per turn, purely so each prompt's sticky range ends where its answer does. -->

@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import type { KeyedProvider } from "@intentic/sandbox-contract";
-import { Card, cmp, CopyButton, InfoHint, Row, RowGroup, Segmented } from "@intentic-app/ui";
+import { type AgentProvider, type KeyedProvider, quickModelKey } from "@intentic/sandbox-contract";
+import { Card, cmp, CopyButton, InfoHint, Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
-import Select from "primevue/select";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -16,6 +15,7 @@ import { useCleanerSavings } from "../../composables/sandbox/useCleanerSavings";
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
+import ProviderLogo from "../../chat/ProviderLogo.vue";
 import AssistantInfo from "./AssistantInfo.vue";
 import CommandOutputInfo from "./CommandOutputInfo.vue";
 import NativeConnectFlow from "./NativeConnectFlow.vue";
@@ -222,15 +222,36 @@ const toggleIqSearch = (value: boolean): void => {
  * an account tomorrow improves the answer by itself, and the row's label shows what it currently resolves to
  * rather than making the user guess. */
 const quickModel = useQuickModel();
-const quickModelOptions = computed(() => [
+// The model Auto currently resolves to, by its SHORT label — the trigger is 14rem wide, and "Auto — Claude
+// Code · Claude Haiku 4.5" truncated to "Auto — Claude Code · Cla…" hid exactly the part worth showing. The
+// provider rides on the row's logo and the full resolution sits in the Auto row's description instead.
+const autoModelLabel = computed<string | undefined>(() => {
+    const choice = quickModel.choice.value;
+    if (choice === undefined) {
+        return undefined;
+    }
+    const key = quickModelKey(choice);
+    return quickModelGroups.value.flatMap((group) => group.options).find((option) => option.key === key)?.label ?? choice.model;
+});
+// Auto leads as its own ungrouped row; the connected providers follow as labelled groups, so a model row can
+// drop the "Claude Code · " prefix that used to eat the width of every line.
+const quickModelPickerOptions = computed<PickerOptions>(() => [
     {
-        label: quickModel.label.value === undefined ? `Auto` : `Auto — ${quickModel.label.value}`,
-        value: ``,
+        options: [
+            {
+                value: ``,
+                label: autoModelLabel.value === undefined ? `Auto` : `Auto · ${autoModelLabel.value}`,
+                description: `Cheapest connected model`,
+            },
+        ],
     },
-    // Flattened rather than grouped: a sandbox has a handful of connected providers, and PrimeVue's option
-    // groups would add a layer of chrome to a list that is usually five rows long.
-    ...quickModelGroups.value.flatMap((group) => group.options.map((option) => ({ label: `${group.label} · ${option.label}`, value: option.key }))),
+    ...quickModelGroups.value.map((group) => ({
+        label: group.label,
+        options: group.options.map((option) => ({ value: option.key, label: option.label })),
+    })),
 ]);
+// A pinned key is `${provider}:${model}` (quickModelKey) — the provider prefix drives the row's brand mark.
+const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`:`)) as AgentProvider;
 const setQuickModel = (value: string): void => {
     const current = sandboxSettings.value;
     if (current === undefined) {
@@ -729,15 +750,21 @@ const importMemory = async (): Promise<void> => {
                 description="The cheap, fast model behind one-click helpers like the commit-message autofill — never the model your chat runs on."
             >
                 <template #control>
-                    <Select
+                    <Picker
                         :model-value="quickModel.pinned.value"
-                        :options="quickModelOptions"
-                        option-label="label"
-                        option-value="value"
+                        :options="quickModelPickerOptions"
                         :disabled="sandboxSettings === undefined"
-                        class="w-56 text-xs"
-                        @update:model-value="setQuickModel"
-                    />
+                        class="w-56 py-1.5 text-xs"
+                        aria-label="Quick model"
+                        @update:model-value="(value: string | undefined) => setQuickModel(value ?? ``)"
+                    >
+                        <!-- Auto keeps the sparkle the helpers themselves wear; a pinned model wears its
+                             provider's mark, so the trigger names the account a click will spend at a glance. -->
+                        <template #icon="{ option }">
+                            <Icon v-if="option.value === ``" name="sparkles" class="shrink-0 text-xs text-muted" aria-hidden="true" />
+                            <ProviderLogo v-else :provider="providerOfKey(option.value)" class="shrink-0 text-xs text-muted" />
+                        </template>
+                    </Picker>
                 </template>
                 <!-- Nothing connected: the helpers are inert and the dropdown has only Auto in it, which on its
                      own reads as a broken control rather than a missing account. -->

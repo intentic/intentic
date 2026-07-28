@@ -10,6 +10,7 @@ import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useQuickModel } from "../../composables/chat/quickModel";
 import { useLayout } from "../../composables/useLayout";
+import { commitMessage } from "../../composables/workspace/commitMessage";
 import { useCommitDraft } from "../../composables/workspace/useCommitDraft";
 import { originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
@@ -285,7 +286,8 @@ const byRepo = (rows: readonly Row[]): RepoPaths[] => {
 };
 
 // --- commit ------------------------------------------------------------------------------------------------
-const commitMessage = ref(``);
+// The message is NOT component state: this panel is mounted behind a v-if, and going to look at the files you
+// are describing must not throw away what you typed (see composables/workspace/commitMessage.ts).
 // Staged repos are the commit target, full stop. With nothing staged anywhere but changes present, the button
 // becomes "Commit all" — VSCode's "would you like to stage all your changes and commit them directly?", made
 // an explicit label instead of a dialog, and served by the daemon's `all` shape.

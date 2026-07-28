@@ -11,6 +11,8 @@ export { default as InfoHint } from "./components/InfoHint.vue";
 export { default as InfoTable } from "./components/InfoTable.vue";
 export { default as Page } from "./components/Page.vue";
 export { default as PageHeader } from "./components/PageHeader.vue";
+export { default as Picker } from "./components/Picker.vue";
+export { type PickerGroup, type PickerOption, type PickerOptions } from "./components/picker.js";
 export { default as ProgressRing } from "./components/ProgressRing.vue";
 export { default as PullToRefresh } from "./components/PullToRefresh.vue";
 export { default as Row } from "./components/Row.vue";

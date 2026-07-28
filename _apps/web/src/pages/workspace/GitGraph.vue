@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { GitActionResult, GitChange, GitCommit } from "@intentic-app/api-contract";
-import { cmp, Segmented, timeAgo } from "@intentic-app/ui";
+import { cmp, Picker, Segmented, timeAgo } from "@intentic-app/ui";
 import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
@@ -269,19 +269,17 @@ const runAction = (kind: ActionKind, commit: GitCommit, name: string): Promise<u
              between per-repo graph tabs rather than mutating this one, so each repo keeps its own tab + query. -->
         <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line bg-card px-3">
             <Icon name="sitemap" class="shrink-0 text-xs text-subtle" />
-            <!-- Repo switcher (root + nested repos) — a clean borderless control; switching navigates between
+            <!-- Repo switcher (root + nested repos) — a borderless ghost Picker; switching navigates between
                  per-repo graph tabs. A single-repo workspace shows the name as static text (nothing to pick). -->
-            <div v-if="options.length > 1" class="relative flex items-center">
-                <select
-                    :value="repo"
-                    class="max-w-48 cursor-pointer appearance-none rounded-md bg-transparent py-0.5 pl-1.5 pr-5 text-xs font-medium text-content transition-colors hover:bg-overlay focus:bg-overlay focus:outline-none"
-                    aria-label="Repository"
-                    @change="emit('switch-repo', ($event.target as HTMLSelectElement).value)"
-                >
-                    <option v-for="option in options" :key="option" :value="option">{{ option }}</option>
-                </select>
-                <Icon name="chevron-down" class="pointer-events-none absolute right-1.5 text-[0.5rem] text-subtle" />
-            </div>
+            <Picker
+                v-if="options.length > 1"
+                :model-value="repo"
+                :options="options.map((option) => ({ value: option, label: option }))"
+                variant="ghost"
+                class="max-w-48"
+                aria-label="Repository"
+                @update:model-value="(value: string | undefined) => value !== undefined && emit('switch-repo', value)"
+            />
             <span v-else class="text-xs font-medium text-content">{{ repo }}</span>
             <!-- The checked-out branch, and the switch/create/delete popover behind it. A detached HEAD has
                  no branch to show as a pill, but the switcher is still the way BACK onto one. -->

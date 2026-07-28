@@ -2,7 +2,7 @@
 import type { SettingContribution, SettingValue } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-api";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { cmp, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic-app/ui";
+import { cmp, Picker, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic-app/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { watch } from "vue";
 import { extensionSettingsStore } from "../../composables/extensions/useExtensionSettings";
@@ -120,14 +120,15 @@ const contributionSummary = (extension: ExtensionSummary): string => {
                                 :model-value="valueOf(extension, setting) === true"
                                 @update:model-value="(value: boolean) => setValue(extension, setting, value)"
                             />
-                            <select
+                            <Picker
                                 v-else-if="setting.type === `enum`"
-                                :class="cmp.input(`w-44 shrink-0`)"
-                                :value="String(valueOf(extension, setting) ?? ``)"
-                                @change="(event) => setValue(extension, setting, (event.target as HTMLSelectElement).value)"
-                            >
-                                <option v-for="option in setting.enum ?? []" :key="option" :value="option">{{ option }}</option>
-                            </select>
+                                class="w-44 shrink-0"
+                                :model-value="String(valueOf(extension, setting) ?? ``) || undefined"
+                                :options="(setting.enum ?? []).map((option) => ({ value: option, label: option }))"
+                                placeholder="Choose…"
+                                :aria-label="setting.title"
+                                @update:model-value="(value: string | undefined) => value !== undefined && setValue(extension, setting, value)"
+                            />
                             <input
                                 v-else
                                 :class="cmp.input(`w-44 shrink-0`)"

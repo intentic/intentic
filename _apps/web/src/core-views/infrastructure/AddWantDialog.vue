@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { cmp, type IconName } from "@intentic-app/ui";
+import { cmp, type IconName, Picker, type PickerOption } from "@intentic-app/ui";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic-app/capability-catalog";
 import { AppsListSchema } from "@intentic-app/api-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
-import Select from "primevue/select";
 import { computed, reactive, ref, watch } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { errorMessage } from "../../composables/useAsyncAction";
@@ -73,6 +72,7 @@ const declaredApps = computed(() => new Set(entries.value.filter((entry) => entr
 
 // Host / Cloudflare binding names the user already declared (a want references them by name).
 const hostOptions = computed(() => entries.value.filter((entry) => entry.kind === `backend` && entry.provider === `host`).map((entry) => entry.name));
+const hostPickerOptions = computed<PickerOption[]>(() => hostOptions.value.map((host) => ({ value: host, label: host, icon: `server`, mono: true })));
 const cloudflareEntries = computed(() => entries.value.filter((entry) => entry.kind === `backend` && entry.provider === `cloudflare`));
 // Exposure is derived, never asked: Cloudflare is the single exposure mechanism, so the want binds to the
 // (only) declared cloudflare entry.
@@ -249,7 +249,16 @@ const submit = async (): Promise<void> => {
                 <!-- Placement is derived (single host, single Cloudflare); only a genuine choice is asked. -->
                 <label v-if="hostOptions.length > 1" class="ui-field">
                     <span class="ui-field-label">Server</span>
-                    <Select v-model="on" :options="hostOptions" placeholder="Pick a server" />
+                    <!-- `on` holds `` for "none yet" (the Picker's empty state), never undefined — hence the
+                         explicit binding instead of v-model. -->
+                    <Picker
+                        :model-value="on === `` ? undefined : on"
+                        :options="hostPickerOptions"
+                        placeholder="Pick a server"
+                        class="w-full"
+                        aria-label="Server"
+                        @update:model-value="(value: string | undefined) => (on = value ?? ``)"
+                    />
                 </label>
                 <div class="flex justify-end">
                     <Button type="submit" label="Add" :disabled="!canSubmit || submitting" :loading="submitting">

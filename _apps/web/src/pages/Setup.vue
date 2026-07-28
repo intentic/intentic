@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import type { SandboxSummary, SetupCode, SetupCodeTarget } from "@intentic-app/api-contract";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
-import { cmp, Code, CopyButton, InfoHint, Segmented, StepSection, useOsPreference } from "@intentic-app/ui";
+import { cmp, Code, CopyButton, InfoHint, Picker, type PickerOption, Segmented, StepSection, useOsPreference } from "@intentic-app/ui";
 import Button from "primevue/button";
-import Select from "primevue/select";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -85,6 +84,8 @@ let mintTimer: ReturnType<typeof setTimeout> | undefined;
 // Token + zone discovery is shared with the in-app Connect Cloudflare step (useCloudflareZones). Here it only
 // feeds the setup-code target — on this path the token rides the install command, it isn't written to .env.
 const { cfToken, cfTokenValid, zones, selectedZone, zonesLoading, zonesError, setToken } = useCloudflareZones();
+// Zones are domains — monospace rows behind a filterable picker, since an account-wide token can carry dozens.
+const zoneOptions = computed<PickerOption[]>(() => zones.value.map((zone) => ({ value: zone, label: zone, icon: `globe`, mono: true })));
 const showToken = ref(false);
 // The editable subdomain prefix, pre-filled with the derived `sandbox-<hash>` default (so an untouched field
 // reproduces the CLI's default). The full hostname is `<subdomain>.<selectedZone>`.
@@ -851,7 +852,7 @@ watch(commandReady, (ready) => {
                     </div>
                     <label v-else-if="zones.length > 1" class="ui-field">
                         <span class="ui-field-label">Cloudflare zone</span>
-                        <Select v-model="selectedZone" :options="zones" placeholder="Pick the domain to use" />
+                        <Picker v-model="selectedZone" :options="zoneOptions" placeholder="Pick the domain to use" class="w-full" aria-label="Cloudflare zone" />
                         <span class="text-xs text-muted">This token can reach several domains — choose which one your sandbox should use.</span>
                     </label>
 

@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { cmp, InfoHint } from "@intentic-app/ui";
+import { cmp, InfoHint, Picker, type PickerOption } from "@intentic-app/ui";
 import Button from "primevue/button";
-import Select from "primevue/select";
 import { computed, ref } from "vue";
 import SecretField from "../../components/SecretField.vue";
 import { useCloudflareZones } from "../../composables/extensions/useCloudflareZones";
@@ -32,6 +31,9 @@ const submitting = ref(false);
 const error = ref<string | undefined>(undefined);
 
 const canConnect = computed(() => tokenAlreadySet.value || (cfTokenValid.value && selectedZone.value !== undefined));
+
+// Zones are domains — monospace rows behind a filterable picker, since an account-wide token can carry dozens.
+const zoneOptions = computed<PickerOption[]>(() => zones.value.map((zone) => ({ value: zone, label: zone, icon: `globe`, mono: true })));
 
 const connect = async (): Promise<void> => {
     if (!canConnect.value || submitting.value) {
@@ -116,7 +118,7 @@ const connect = async (): Promise<void> => {
             <div v-else-if="zonesError" :class="cmp.alertDanger('text-2xs')">{{ zonesError }}</div>
             <label v-else-if="zones.length > 1" class="ui-field">
                 <span class="ui-field-label">Cloudflare zone</span>
-                <Select v-model="selectedZone" :options="zones" placeholder="Pick the domain to use" />
+                <Picker v-model="selectedZone" :options="zoneOptions" placeholder="Pick the domain to use" class="w-full" aria-label="Cloudflare zone" />
                 <span class="text-xs text-muted">This token can reach several domains — choose which one to use.</span>
             </label>
             <p v-else-if="selectedZone" class="text-xs text-success">
