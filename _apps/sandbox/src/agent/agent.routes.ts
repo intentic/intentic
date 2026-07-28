@@ -33,6 +33,7 @@ import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { accountLimitReset, clearLimitHit, recordLimitHit } from "./limit-resume.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
+import { summarizeAgentTitle } from "./title-summary.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
 import { delegationNote } from "./delegation.js";
@@ -166,11 +167,25 @@ async function* runConversationTurn(
         const base = (worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0])?.base.slice(0, 7) ?? "";
         yield { kind: "worktree", branch: worktree.branch, base };
         // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
+        // The agent's top-level text is accumulated on the way past: the CLOSING block is what the title-
+        // summary pass below reads, and collecting it here costs nothing a transcript re-read would.
+        let textBlock = "";
+        let closing = "";
         for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd }, steering)) {
             if (event.kind === "error") {
                 failed = true;
             }
+            if (event.kind === "delta" && event.parentToolUseId === undefined) {
+                textBlock += event.text;
+            }
+            if (event.kind === "text_end" && event.parentToolUseId === undefined && textBlock !== "") {
+                closing = textBlock;
+                textBlock = "";
+            }
             yield event;
+        }
+        if (textBlock !== "") {
+            closing = textBlock;
         }
         // Auto-land at clean turn completion — the Claude Code review model: the delta arrives in the main
         // tree as UNCOMMITTED changes and the user's ordinary Changes-panel commit is the review. Aborted or
@@ -208,6 +223,11 @@ async function* runConversationTurn(
                     );
                 }
             }
+            // A whole turn is now readable — name the job. Fire-and-forget: a title is never worth failing a
+            // turn over, and the gate inside skips conversations already carrying a better-than-derived name.
+            summarizeAgentTitle(services, conversationId, { prompt: input.prompt, closing }).catch((error: unknown) =>
+                services.logger.debug({ err: error }, "agents: title summary failed"),
+            );
         }
     } finally {
         await services.agents.finish(conversationId, Date.now(), outcome);

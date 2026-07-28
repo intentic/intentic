@@ -101,6 +101,30 @@ test("reads past quoted material to the user's own words", () => {
     expect(deriveTitle("> previous message\nWhat changed here?")).toBe("What changed here?");
 });
 
+test("skips past-work narration to the instruction behind it", () => {
+    // `We have recently added…` is the scene, not the ask — titling from it names every such conversation
+    // after last week's work. The instruction further in is what the conversation is about.
+    expect(deriveTitle("We have recently added iq map and iq deps commands. Now let's also add a health contract for the daemon.")).toBe(
+        "Add a health contract for the daemon",
+    );
+    expect(deriveTitle("We've just landed the fleet board.\n\nRename the Attention lane to Blocked.")).toBe("Rename the Attention lane to Blocked");
+});
+
+test("skips narration to an outright question", () => {
+    expect(deriveTitle("I've implemented the empty state. What should the loading state show?")).toBe("What should the loading state show?");
+});
+
+test("keeps narration when nothing behind it is unmistakably the ask", () => {
+    // A hazy follow-up is not worth skipping for — better a title about last week's work than one about `it`.
+    expect(deriveTitle("We migrated the board to SSE last week. It feels slower since.")).toBe("We migrated the board to SSE last week");
+});
+
+test("keeps a declarative problem report even when advice follows it", () => {
+    // Only NARRATION is skippable. A problem statement is the ask, and the imperative behind it is merely a
+    // pointer — `Check the broadcast path` names a step, not the conversation.
+    expect(deriveTitle("The fleet board flickers when agents land. Check the broadcast path.")).toBe("The fleet board flickers when agents land");
+});
+
 test("strips control characters the same way the registry's sanitiser does", () => {
     expect(deriveTitle("Fix\u0000 the\u200b bug")).toBe("Fix the bug");
 });

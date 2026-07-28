@@ -11,7 +11,7 @@ import type { LandOutcome } from "./land.js";
 const MAX_TITLE_LENGTH = 80;
 // The source ranking as a number, so promoteTitle's comparison is one `<=`. An entry written before it had a
 // source reads as `derived`, i.e. as replaceable by anything better.
-const TITLE_RANK: Record<AgentTitleSource, number> = { derived: 0, plan: 1, user: 2 };
+const TITLE_RANK: Record<AgentTitleSource, number> = { derived: 0, summary: 1, plan: 2, user: 3 };
 const sanitizeTitle = (prompt: string): string | undefined => {
     const clean = prompt
         .replaceAll(/[\p{Cc}\p{Cf}]+/gu, " ")
@@ -214,10 +214,12 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
      * applied, so the rename route and the frame path cannot disagree about who may rename what.
      *
      * A rename always lands — including the second one, which an ordinary rank comparison would reject as a
-     * sideways move. Everything else has to strictly outrank what is already there: a plan heading may replace
-     * the prompt the title was derived from, nothing may replace a rename, and a REPLAN may not rename the job
-     * the first plan already named. Returns whether the entry changed, so callers persist and broadcast only
-     * when something actually did. */
+     * sideways move. Everything else has to strictly outrank what is already there: a summary or a plan
+     * heading may replace the prompt the title was derived from, a plan may replace a summary but never the
+     * reverse, nothing may replace a rename, and a REPLAN may not rename the job the first plan already named.
+     * The strictness is also what makes the summary pass self-limiting: once one summary lands, the next
+     * turn's would be a sideways move and is never even attempted. Returns whether the entry changed, so
+     * callers persist and broadcast only when something actually did. */
     const promoteTitle = (id: string, title: string | undefined, source: AgentTitleSource): boolean => {
         const entry = entryOf(id);
         const clean = title === undefined ? undefined : sanitizeTitle(title);
