@@ -137,6 +137,9 @@ export type RestoredToolCall = z.infer<typeof RestoredToolCallSchema>;
 export const RestoredMessageSchema = z.object({
     role: z.enum(["user", "assistant"]),
     text: z.string(),
+    // Files the user attached to this turn (user bubbles only) as workspace-relative paths, recovered from
+    // the stored prompt's attachment note — so a reopened tab redraws chips, not the injected protocol text.
+    attachments: z.array(z.string()).optional(),
     thinking: z.string().optional(),
     tools: z.array(RestoredToolCallSchema).optional(),
 });

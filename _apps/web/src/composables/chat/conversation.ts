@@ -648,6 +648,11 @@ export class Conversation {
                 appendMessage(state, {
                     role: message.role,
                     text: message.text,
+                    // Chips from the restored workspace-relative paths; thumbnails re-mint from the
+                    // workspace bytes at render time (attachmentPreview) — object URLs don't survive here.
+                    ...(message.attachments !== undefined && message.attachments.length > 0
+                        ? { attachments: message.attachments.map((path) => ({ name: path.split(`/`).at(-1) ?? path, path })) }
+                        : {}),
                     ...(message.thinking !== undefined ? { thinking: message.thinking } : {}),
                     ...(message.tools !== undefined ? { tools: message.tools } : {}),
                 }),

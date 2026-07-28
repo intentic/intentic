@@ -1,5 +1,7 @@
+import { basename } from "node:path";
 import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
 import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
+import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import { stripTurnPreamble } from "../agent/turn-preamble.js";
 
@@ -33,13 +35,22 @@ interface AnthropicMessageLike {
 // persisted by the SDK keyed on the working dir, so passing the workspace root scopes them to this sandbox.
 // ponytail: Claude sessions only — Codex threads persist as rollout JSONL under CODEX_HOME/sessions and a live
 // Codex tab resumes fine; merge them here with a provider tag when users ask for Codex history.
+// The list title a stored first prompt yields: the user's words with the daemon's injections removed — an
+// opening turn preamble ("Dependencies are NOT installed…") and the trailing attachment note. An
+// attachment-only opener is titled by what was dropped in, matching what the send derived locally.
+const promptTitle = (firstPrompt: string | undefined): string | undefined => {
+    if (firstPrompt === undefined) {
+        return undefined;
+    }
+    const { text, attachments } = stripAttachmentNote(stripTurnPreamble(firstPrompt));
+    return text.length > 0 ? text : attachments.map((path) => basename(path)).join(", ") || undefined;
+};
+
 export const listWorkspaceSessions = async (dir: string): Promise<SessionSummary[]> => {
     const sessions = await listSessions({ dir, limit: 50 });
     return sessions.map((session) => ({
         id: session.sessionId,
-        // firstPrompt is the stored first user message, which may open with an injected turn preamble — a
-        // history list titled "Dependencies are NOT installed…" names the daemon's note, not the chat.
-        title: session.customTitle ?? session.summary ?? (session.firstPrompt !== undefined ? stripTurnPreamble(session.firstPrompt) : undefined) ?? "New chat",
+        title: session.customTitle ?? session.summary ?? promptTitle(session.firstPrompt) ?? "New chat",
         updatedAt: session.lastModified,
     }));
 };
@@ -128,9 +139,17 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
                 }
             }
             // A user message carrying only tool_results is the SDK's plumbing, not something the user said.
-            // Neither is an injected turn preamble — the stored prompt carries it, the redrawn bubble must not.
+            // Neither is an injected turn preamble or the trailing attachment note — the stored prompt
+            // carries them, the redrawn bubble must not: the note's paths become attachment chips again
+            // (workspace-relative, the shape the client uploads and fetches previews by; the turn resolved
+            // them against the main root even for worktree turns, so `dir` — always the root here — is the
+            // right base). An attachment-only message strips to empty text but still redraws its chips.
             if (text.length > 0) {
-                out.push({ role: "user", text: stripTurnPreamble(text) });
+                const stripped = stripAttachmentNote(stripTurnPreamble(text));
+                const attachments = stripped.attachments.map((path) => (path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path));
+                if (stripped.text.length > 0 || attachments.length > 0) {
+                    out.push({ role: "user", text: stripped.text, ...(attachments.length > 0 ? { attachments } : {}) });
+                }
             }
             continue;
         }

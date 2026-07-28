@@ -1352,6 +1352,20 @@ describe(`Conversation`, () => {
         expect(new Set(conversation.messages.value.map((message) => message.id)).size).toBe(2);
     });
 
+    // The daemon recovers a turn's attached files from the stored prompt's note; the redrawn bubble shows
+    // them as chips again (named by file), not as the injected protocol text.
+    it(`redraws a restored message's attachments as chips`, () => {
+        const conversation = new Conversation(`c1`);
+
+        conversation.restoreMessages([{ role: `user`, text: `analyze this`, attachments: [`.intentic/attachments/uuid-1/image.png`] }]);
+
+        expect(conversation.messages.value[0]).toMatchObject({
+            role: `user`,
+            text: `analyze this`,
+            attachments: [{ name: `image.png`, path: `.intentic/attachments/uuid-1/image.png` }],
+        });
+    });
+
     // A restored tab already carries its own posture from the tab snapshot. loadTranscript's history-menu
     // defaults would move an isolated agent's next turn onto the main tree — the worktree it has been working
     // in for the whole conversation.

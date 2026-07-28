@@ -25,6 +25,7 @@ import { resolveWithin } from "../workspace/workspace-files.js";
 import { setupNoticeFor, workspaceSetup } from "../workspace/workspace-setup.js";
 import { landAgent } from "../agents/land.js";
 import type { AgentRequest } from "./agent.js";
+import { withAttachmentNote } from "./attachment-note.js";
 import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
@@ -34,14 +35,6 @@ import { sumUsage, type UsageFrame } from "./turn-usage.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
 import { delegationNote } from "./delegation.js";
 import { withTurnPreamble } from "./turn-preamble.js";
-
-// Fold attached-file paths into the prompt — Claude Code's canonical attachment mechanism (its Read tool
-// handles images and PDFs from disk natively, same as dragging a file into the CLI). An empty prompt is the
-// attachment-only message (a screenshot with nothing typed), where the note IS the message.
-const withAttachmentNote = (prompt: string, paths: readonly string[]): string => {
-    const note = `The user attached these files — read them with the Read tool as needed:\n${paths.map((path) => `- ${path}`).join("\n")}`;
-    return prompt === "" ? note : `${prompt}\n\n${note}`;
-};
 
 // Fold the opt-in editor context (the composer chip, off by default) into the prompt: the file the user is
 // looking at and, when they selected text, the lines themselves — so deictic prompts ("fix this") ground

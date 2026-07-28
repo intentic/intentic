@@ -3,6 +3,7 @@ import { useDevice } from "@intentic-app/ui";
 import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
+import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { type ChatMessage, type PlanRequest } from "../composables/chat/transcript";
 import { copyCodeFromEvent } from "../composables/markdownCode";
 import { useMarkdown } from "../composables/useMarkdown";
@@ -322,6 +323,17 @@ const canEdit = computed(() => props.message.role === `user` && !conversationStr
 // Mirrors send's guard: an attachment-only re-run is legal, an entirely empty one is not.
 const canSubmitEdit = computed(() => editText.value.trim().length > 0 || (props.message.attachments?.length ?? 0) > 0);
 
+// The chip row with thumbs resolved: the send-time object URL while this window still holds it, else one
+// re-minted from the workspace bytes for a restored/cached bubble (attachmentPreview — reactive, so the name
+// chip flips to a thumb when the bytes land).
+const attachmentThumbs = computed(() =>
+    (props.message.attachments ?? []).map((attachment) => ({
+        name: attachment.name,
+        path: attachment.path,
+        previewUrl: attachment.previewUrl ?? attachmentPreview(attachment.path),
+    })),
+);
+
 // Manual auto-grow, the composer's grow() pattern bound to this instance's textarea.
 const growEdit = (): void => {
     const el = editInput.value;
@@ -393,8 +405,8 @@ const onEditKeydown = (event: KeyboardEvent): void => {
     >
         <div v-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
             <!-- The chip/thumbnail row stays visible in edit mode (read-only — the attachments ride the re-run). -->
-            <div v-if="message.attachments?.length" class="flex flex-wrap justify-end gap-1.5">
-                <template v-for="attachment in message.attachments" :key="attachment.path">
+            <div v-if="attachmentThumbs.length" class="flex flex-wrap justify-end gap-1.5">
+                <template v-for="attachment in attachmentThumbs" :key="attachment.path">
                     <ChatImageThumb v-if="attachment.previewUrl" :src="attachment.previewUrl" :alt="attachment.name" size="h-14 w-14" />
                     <span v-else class="chat-surface flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-content/90">
                         <Icon name="file" class="text-2xs text-subtle" />
