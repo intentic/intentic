@@ -253,13 +253,15 @@ const onPick = (event: Event): void => {
                 <Segmented v-model="segment" size="sm" :options="segmentOptions" />
                 <span class="flex-1"></span>
                 <Icon name="spinner" v-if="busy" class="text-sm text-muted" spin />
+                <!-- One refresh for the row, refetching whichever segment is showing — the Changes panel below
+                     no longer carries a header row (and its own refresh) of its own. -->
                 <button
                     type="button"
                     class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted transition-colors active:bg-overlay"
-                    @click="refetch()"
+                    @click="segment === 'changes' ? changes.refresh() : refetch()"
                     aria-label="Refresh"
                 >
-                    <Icon name="refresh" class="text-base" :spin="isLoading" />
+                    <Icon name="refresh" class="text-base" :spin="segment === 'changes' ? changes.loading.value : isLoading" />
                 </button>
             </div>
             <p v-if="actionError ?? error" class="shrink-0 border-b border-danger/30 bg-danger/10 px-3 py-1.5 text-xs text-danger">

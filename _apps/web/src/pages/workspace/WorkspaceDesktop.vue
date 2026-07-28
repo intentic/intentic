@@ -544,10 +544,38 @@ const endResize = (event: PointerEvent): void => {
                 <!-- The sidebar's three modes (VSCode SCM pattern): the file explorer, the agent-changes review, or
                      the snapshot timeline. One column, one resize handle — review/history never steal width from
                      the diff view in the main area. The mode switch sits ON the sidebar it switches. -->
-                <div class="view-header flex items-center border-b border-line px-1.5">
+                <div class="view-header flex items-center gap-1 border-b border-line px-1.5">
                     <Segmented v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
+                    <span class="flex-1"></span>
+                    <!-- Changes' panel-wide actions ride the switch's row rather than a header row of their own:
+                         the switch's "Changes" tab already titles the panel and carries its count, so a second
+                         line below it spent height restating both before a single file was named. -->
+                    <template v-if="layout.sidebarPanel.value === 'changes'">
+                        <Icon name="spinner" v-if="changes.actionBusy.value" v-tooltip.right="'Working…'" class="text-xs text-muted" spin />
+                        <!-- Git history: the committed side of the same real-git story the panel below reviews
+                             uncommitted. Opens the /work root repo's graph — as does the Files toolbar's icon,
+                             root having no tree row of its own; nested repos open theirs from their tree row. -->
+                        <button
+                            type="button"
+                            class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                            @click="openGraph('root')"
+                            v-tooltip.right="'Git history'"
+                            aria-label="Open git history"
+                        >
+                            <Icon name="sitemap" class="text-xs" />
+                        </button>
+                        <button
+                            type="button"
+                            class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                            @click="changes.refresh()"
+                            v-tooltip.right="'Refresh'"
+                            aria-label="Refresh changes"
+                        >
+                            <Icon name="refresh" class="text-xs" :spin="changes.loading.value" />
+                        </button>
+                    </template>
                 </div>
-                <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" :show-history="true" @open-diff="openDiff" @open-graph="openGraph" />
+                <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" @open-diff="openDiff" />
                 <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" />
                 <!-- Search header: input hero on row 1; mode switch + ignored-scope toggle on row 2. One `filter`
                      ref, two scopes (name = instant client-side tree filter, content = debounced daemon search). The

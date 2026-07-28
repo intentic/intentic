@@ -61,10 +61,7 @@ const changes = useChanges();
 // alongside a failure.
 const scannable = computed(() => changes.repos.value.filter((repo) => repo.error === undefined));
 const unscannable = computed(() => changes.repos.value.filter((repo) => repo.error !== undefined));
-// The git-history graph is a wide document tab (desktop only) — mobile leaves it off, so the header button is
-// opt-in rather than a dead control on a surface that can't open it.
-const { showHistory = false } = defineProps<{ showHistory?: boolean }>();
-const emit = defineEmits<{ "open-diff": [payload: DiffTabPayload]; "open-graph": [repo: string] }>();
+const emit = defineEmits<{ "open-diff": [payload: DiffTabPayload] }>();
 
 const collapsed = ref<ReadonlySet<string>>(new Set());
 const toggleGroup = (repo: string): void => {
@@ -658,35 +655,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
 <template>
     <div class="flex min-h-0 flex-1 flex-col">
-        <!-- No count badge here: the Changes tab directly above this row already carries it, and repeating it
-             one line below was the same number twice before a single file had been named. -->
-        <div class="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
-            <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Changes</span>
-            <span class="flex-1"></span>
-            <Icon name="spinner" v-if="changes.actionBusy.value" v-tooltip.right="'Working…'" class="text-xs text-muted" spin />
-            <!-- Git history: the committed side of this same real-git story (uncommitted work is above). Opens
-                 the /work root repo's graph — as does the Files toolbar's icon, root having no tree row of its
-                 own; nested repos open theirs from their file-tree row. -->
-            <button
-                v-if="showHistory"
-                type="button"
-                class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                @click="emit('open-graph', 'root')"
-                v-tooltip.right="'Git history'"
-                aria-label="Open git history"
-            >
-                <Icon name="sitemap" class="text-xs" />
-            </button>
-            <button
-                type="button"
-                class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                @click="changes.refresh()"
-                v-tooltip.right="'Refresh'"
-                aria-label="Refresh changes"
-            >
-                <Icon name="refresh" class="text-xs" :spin="changes.loading.value" />
-            </button>
-        </div>
+        <!-- No header row of its own: the mode switch directly above already reads "Changes" WITH the count, and
+             a second title line one pixel below it spent a row restating both. The panel's two panel-wide
+             actions (git history, refresh) live on that switch's row instead — see WorkspaceDesktop. -->
 
         <!-- The ONE genuinely panel-wide failure: the review set itself could not be read, so nothing below is
              trustworthy. Every other error belongs to a repo row or the commit box and is drawn there. -->
@@ -856,25 +827,34 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              filter: it narrows the list (and every section verb below it) to that origin's files, so "stage
              everything this agent did" is two clicks and no path-picking. "you" is the complement — the files
              no agent landed, which is also every terminal edit and anything the daemon can't attribute.
-             A chip is a logo and a title squeezed into a shared row, so it hovers into the SAME card its file
-             rows (and the chat tab strip) raise for that session — the full derived title and the message it
-             came from. What the click does is the one thing a hover need not spell out: the chips visibly dim
-             to leave the filtered one lit, which says it better than a sentence restating the label. -->
+             A chip is a logo and a file count — NOT a title. Six sessions with their titles spelled out wrapped
+             this strip to five rows and pushed the file list, the thing being reviewed, off the fold; and the
+             title was the one part already written twice elsewhere (the hover card, and the file rows' own
+             origin column). So the compact chip is the resting state, and the ONE chip whose identity is
+             load-bearing — the one you have filtered to, which is now silently hiding rows — earns its title
+             inline. Everything else stays a hover away, on the SAME card the file rows and the chat tab strip
+             raise for that session. What the click does needs no words either: the chips visibly dim to leave
+             the filtered one lit. -->
         <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
             <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">From</span>
             <button
                 v-for="entry in legend.agents"
                 :key="entry.id"
                 type="button"
-                class="flex min-w-0 max-w-full shrink items-center gap-1 rounded-full py-px pl-1 pr-1.5 text-2xs transition-opacity"
-                :class="[originHue(entry.id).chip, originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '']"
+                class="flex min-w-0 max-w-full items-center gap-1 rounded-full py-px pl-1 pr-1.5 text-2xs transition-opacity"
+                :class="[
+                    originHue(entry.id).chip,
+                    originFilter === entry.id ? 'shrink' : 'shrink-0',
+                    originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
+                ]"
                 @click="toggleOrigin(entry.id)"
                 @mouseenter="showOrigins($event, [entry.id])"
                 @mouseleave="hoverCard?.hide()"
+                :aria-label="`${originFilter === entry.id ? `Clear the filter on` : `Show only`} ${originLabel(entry.id)} — ${plural(entry.files, `file`)}`"
             >
                 <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="shrink-0 text-2xs" />
                 <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
-                <span class="min-w-0 truncate">{{ originLabel(entry.id) }}</span>
+                <span v-if="originFilter === entry.id" class="min-w-0 truncate">{{ originLabel(entry.id) }}</span>
                 <span class="shrink-0 opacity-70">{{ entry.files }}</span>
             </button>
             <button
@@ -1075,7 +1055,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                     <span class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[change.status]">{{
                                         STATUS_LETTER[change.status]
                                     }}</span>
-                                    <span class="min-w-0 flex-1 truncate text-2xs text-muted max-md:text-xs" dir="rtl">{{ change.path }}</span>
+                                    <!-- dir="rtl" ellipsizes the head of the path so the filename survives truncation, but it
+                                         also lets bidi-neutral edge characters jump sides: a leading "_" in "_apps/…" renders
+                                         at the far right. <bdi> isolates the path as one LTR run, keeping the glyphs in order. -->
+                                    <span class="min-w-0 flex-1 truncate text-2xs text-muted max-md:text-xs" dir="rtl"
+                                        ><bdi>{{ change.path }}</bdi></span
+                                    >
                                     <!-- Who landed it: a provider chip per agent (two, then a count), and the name
                                          itself only once the panel is wide enough to hold it AND the file has a
                                          single owner — the path keeps first claim on the width. -->
@@ -1167,7 +1152,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </p>
                     <ul class="mt-1 max-h-24 overflow-auto">
                         <li v-for="path in pendingDiscard.deletes" :key="path" class="truncate font-mono text-2xs text-muted" dir="rtl">
-                            {{ path }}
+                            <bdi>{{ path }}</bdi>
                         </li>
                     </ul>
                 </div>
