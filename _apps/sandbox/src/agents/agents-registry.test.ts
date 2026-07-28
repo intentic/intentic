@@ -198,6 +198,41 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.title).toBe("Fix the fleet broadcast fan-out");
     });
 
+    it("refuses a usage-limit refusal as any automatic title — it names the failure, not the work", async () => {
+        const registry = createAgentsRegistry(memoryStore());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+
+        // A summary pass whose own quick-model call hit the limit hands the refusal sentence over as if it
+        // were the name. The derived title must stand, and stand REPLACEABLE (the next honest summary lands).
+        await registry.setTitle("c1", "You've hit your session limit · resets 11:50pm (UTC)", "summary");
+        expect(registry.get("c1")?.title).toBe("Fix the login bug");
+        expect((await registry.setTitle("c1", "Wire the fleet board broadcast", "summary"))?.title).toBe("Wire the fleet board broadcast");
+    });
+
+    it("a stolen limit-sentence title forfeits its rank, so the next summary heals it", async () => {
+        // An entry poisoned before the refusal guard existed: the sentence sits at `summary` rank, where the
+        // sideways-move rule would protect it forever.
+        const poisoned: PersistedAgent = {
+            id: "c1",
+            branch: "agent/c1",
+            provider: "claude",
+            harness: "native",
+            repos: [],
+            status: "idle",
+            costUsd: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            createdAt: 1_000,
+            updatedAt: 1_000,
+            title: "You've hit your session limit · resets 11:50pm (UTC)",
+            titleSource: "summary",
+        };
+        const registry = createAgentsRegistry(memoryStore([poisoned]));
+        await registry.init();
+        expect((await registry.setTitle("c1", "Wire the fleet board broadcast", "summary"))?.title).toBe("Wire the fleet board broadcast");
+    });
+
     it("never lets a plan rename what the user named, and still allows a second rename", async () => {
         const registry = createAgentsRegistry(memoryStore());
         await registry.init();

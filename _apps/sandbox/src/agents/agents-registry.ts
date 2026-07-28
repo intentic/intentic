@@ -1,4 +1,5 @@
 import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, planParts } from "@intentic/sandbox-contract";
+import { isUsageLimitText } from "../agent/usage-limit-text.js";
 import { recordPrompt } from "../sessions/prompt-index.js";
 import type { AgentsStore, AgentTitleSource, PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
@@ -239,7 +240,16 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
         if (entry === undefined || clean === undefined) {
             return false;
         }
-        if (source !== "user" && TITLE_RANK[source] <= TITLE_RANK[entry.titleSource ?? "derived"]) {
+        // A provider refusal ("You've hit your session limit · resets …") is never a NAME, however it got
+        // here — a summary pass whose own model call hit the limit, a plan heading quoting the failure. Only
+        // a rename may say it, because a rename is the user's to waste. And a STORED title that is the
+        // refusal was stolen exactly that way before this guard existed: it forfeits its source's rank, so
+        // the next honest promotion replaces it instead of bouncing off the sideways-move rule below.
+        if (source !== "user" && isUsageLimitText(clean)) {
+            return false;
+        }
+        const currentRank = entry.title !== undefined && isUsageLimitText(entry.title) ? -1 : TITLE_RANK[entry.titleSource ?? "derived"];
+        if (source !== "user" && TITLE_RANK[source] <= currentRank) {
             return false;
         }
         if (entry.title === clean && entry.titleSource === source) {
