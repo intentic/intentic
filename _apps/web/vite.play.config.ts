@@ -10,6 +10,8 @@ const fakes = fileURLToPath(new URL(`./src/__play/fakes.ts`, import.meta.url));
 
 export default {
     ...base,
+    // The playground renders no code blocks and no graph, so skip the app's grammar pre-bundling.
+    optimizeDeps: undefined,
     resolve: {
         alias: [
             { find: `../composables/chat/useChat`, replacement: fakes },
@@ -22,5 +24,5 @@ export default {
             })),
         ],
     },
-    server: { host: `localhost`, port: 47199, strictPort: true },
+    server: { host: `localhost`, port: 47205, strictPort: true },
 };
