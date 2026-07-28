@@ -29,6 +29,10 @@ export interface StoredTab {
     readonly conversationId: string;
     // Whether the conversation runs in its own isolated worktree rather than on the shared /work tree.
     readonly isolated: boolean;
+    // Whether the fleet has ever registered this conversation (Conversation.registered). Persisted so a reload
+    // doesn't hand every open agent tab back to the board as a fresh draft card while the first roster frame
+    // is still in flight — and never at all for one whose agent has since been archived.
+    readonly registered: boolean;
     // The tab's turn selection; the session's provider may differ while a switch is picked but not yet sent.
     readonly provider?: AgentProvider;
     // The tab's harness selection (native vs the Claude Code loop); absent ⇒ the current default on restore.
@@ -98,6 +102,8 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         conversationId: raw[`conversationId`],
         // A tab that names no tree runs in its own worktree — the default a fresh one gets.
         isolated: raw[`isolated`] !== false,
+        // ...and one that doesn't say the fleet knows it is a draft until a roster frame says otherwise.
+        registered: raw[`registered`] === true,
         draft: raw[`draft`],
         attachments: readAttachments(raw[`attachments`]),
         queued: (Array.isArray(raw[`queued`]) ? (raw[`queued`] as Record<string, unknown>[]) : [])

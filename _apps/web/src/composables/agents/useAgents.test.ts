@@ -14,7 +14,7 @@ vi.mock("../sandbox/useSandbox", async () => {
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { sandboxJson } from "../sandbox/sandboxClient";
+import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { nextTick } from "vue";
 import { Conversation } from "../chat/conversation";
 import { useChat } from "../chat/useChat";
@@ -121,6 +121,103 @@ describe("roster titles", () => {
         await nextTick();
 
         expect(conversation.title.value).toBe(`The login page throws on submit`);
+    });
+});
+
+/* The DRAFT card — the fleet's one client-only state, there so "New agent" has a visible result on the board
+ * before the first turn registers anything. It used to be derived from "this open tab has no entry on the live
+ * roster", which is also true of every agent the user ARCHIVES (the roster carries live agents only) and of
+ * every agent at all while the events stream is down. So an archived agent whose chat tab stayed open — the
+ * normal case, since the tab is how you were reading it — came straight back as a brand-new card in the ACTIVE
+ * lane. The rule is now a one-way latch on the conversation: a draft is one the fleet has NEVER registered. */
+describe("draft cards", () => {
+    const registered = (id: string): AgentSummary => ({
+        id,
+        status: `landed`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 1_000,
+        attention: { plan: false, question: false, permission: false, conflict: false },
+    });
+
+    // The lane the phantom card landed in, by id — the board's own list, not a count, so a case can say which
+    // agent is on it and not merely how many.
+    const activeIds = (): string[] => useAgents().lanes.value.active.map((entry) => entry.id);
+
+    beforeEach(() => {
+        // These cases drive the real open path, which fires the daemon's best-effort side calls (the read
+        // marker, the attach probe). Both are answered rather than left as bare vi.fn()s: an undefined return
+        // is not a rejection either function knows how to survive, and the noise would be this file's, not the
+        // code's.
+        vi.mocked(sandboxJson)
+            .mockReset()
+            .mockResolvedValue({} as never);
+        vi.mocked(sandboxRequest)
+            .mockReset()
+            .mockResolvedValue({ ok: false } as never);
+        resetAgents();
+        useAgents().archived.value = [];
+        // One open tab per case, installed by the case itself. The list is never emptied — useChat guarantees
+        // an active conversation at all times — so it starts on a MAIN-TREE chat, which is not fleet work at
+        // all and cards nothing either way.
+        const other = new Conversation();
+        other.isolated.value = false;
+        useChat().conversations.value = [other];
+    });
+
+    it("cards an isolated conversation the fleet has never seen, so New agent lands on the board at once", () => {
+        useChat().conversations.value = [...useChat().conversations.value, new Conversation(`fresh`)];
+
+        expect(activeIds()).toEqual([`fresh`]);
+    });
+
+    it("stops carding a conversation once the roster registers it — one card, from the registry", () => {
+        const conversation = new Conversation(`a1`);
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        setAgents([registered(`a1`)], 1);
+
+        expect(conversation.registered.value).toBe(true);
+        expect(activeIds()).toEqual([]);
+        expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`a1`]);
+    });
+
+    // The reported bug, end to end: archive from the board while the agent's chat is open in the dock.
+    it("leaves an archived agent off the board while its chat tab stays open", async () => {
+        useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a1`)];
+        setAgents([registered(`a1`)], 1);
+        vi.mocked(sandboxJson).mockResolvedValueOnce({ moved: [{ ...registered(`a1`), archivedAt: 2_000 }], rev: 2 } as never);
+
+        await useAgents().archive([`a1`]);
+
+        expect(activeIds()).toEqual([]);
+        expect(useAgents().lanes.value.finished).toEqual([]);
+        expect(useAgents().archived.value.map((entry) => entry.id)).toEqual([`a1`]);
+    });
+
+    // The same hole, reached from the other side: an archived agent keeps its branch, its diff and its
+    // transcript, so reading one from the archive is a real destination — and it OPENS the tab, which must not
+    // put the card the user just filed away straight back on the board.
+    it("leaves it off the board when its tab is opened from the archive", () => {
+        const { archived, open } = useAgents();
+        const entry = { ...registered(`a1`), archivedAt: 2_000 };
+        archived.value = [{ ...entry, open: false, unread: false }];
+
+        open(entry);
+
+        expect(activeIds()).toEqual([]);
+        expect(useChat().conversations.value.some((conversation) => conversation.conversationId === `a1`)).toBe(true);
+    });
+
+    // A dropped events stream empties the roster wholesale. Reading that as "every open agent is a draft" put
+    // the whole fleet into the Active lane as fresh cards until the reconnect's first frame repainted it.
+    it("does not turn every open agent tab into a draft when the stream drops", () => {
+        useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a1`)];
+        setAgents([registered(`a1`)], 1);
+
+        resetAgents();
+
+        expect(activeIds()).toEqual([]);
     });
 });
 

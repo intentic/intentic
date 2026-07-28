@@ -50,6 +50,20 @@ const withPending = (agents: AgentSummary[]): AgentSummary[] => {
     return [...kept, ...restored];
 };
 
+// Every conversation in this roster is one the fleet KNOWS, so its open tab is no longer a draft — latched on
+// the conversation (see Conversation.registered) rather than re-derived from the roster, because the whole
+// point is to outlive the entry: archiving takes it off the roster, and so does a dropped stream.
+// Latched off the server's own list, before the pending projection: a snapshot that still carries an agent
+// this browser has locally archived is nonetheless proof the daemon registered it.
+const latchRegistered = (agents: readonly AgentSummary[]): void => {
+    const known = new Set(agents.map((agent) => agent.id));
+    for (const conversation of useChat().conversations.value) {
+        if (known.has(conversation.conversationId)) {
+            conversation.registered.value = true;
+        }
+    }
+};
+
 // Retire every intent the server has now demonstrably absorbed, then re-project what remains.
 const applySnapshot = (agents: AgentSummary[], rev: number): void => {
     for (const [id, move] of pending) {
@@ -57,6 +71,7 @@ const applySnapshot = (agents: AgentSummary[], rev: number): void => {
             pending.delete(id);
         }
     }
+    latchRegistered(agents);
     registry.value = withPending(agents);
 };
 
@@ -123,8 +138,8 @@ const markAllSeen = (): void => {
 };
 
 // One fleet entry. Two sources merged by conversationId: the registry (authoritative once a turn has run) and
-// the open tabs — an open ISOLATED conversation with no registry entry yet is a DRAFT card, so "New agent" has
-// a visible result on the board the instant it's pressed. `status` widens the wire enum with that
+// the open tabs — an open ISOLATED conversation the fleet has NEVER registered is a DRAFT card, so "New agent"
+// has a visible result on the board the instant it's pressed. `status` widens the wire enum with that
 // client-only draft state; the registry wins the merge the moment the first turn registers the conversation.
 export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly status: AgentSummary["status"] | "draft";
@@ -159,9 +174,13 @@ const weight = (entry: FleetAgent): number =>
 const fleet = computed<FleetAgent[]>(() => {
     const { conversations } = useChat();
     const openIds = new Set(conversations.value.map((conversation) => conversation.conversationId));
-    const registered = new Set(registry.value.map((agent) => agent.id));
+    const carded = new Set(registry.value.map((agent) => agent.id));
+    // A draft is a conversation the fleet has never heard of — NOT one that is merely absent from the live
+    // roster, which is also true of every agent the user has archived and of every agent at all while the
+    // events stream is down. `carded` is the join's own guard: an id the registry half already rendered must
+    // not be rendered a second time by this one, whatever the latch says.
     const drafts = conversations.value
-        .filter((conversation) => conversation.isolated.value && !registered.has(conversation.conversationId))
+        .filter((conversation) => conversation.isolated.value && !conversation.registered.value && !carded.has(conversation.conversationId))
         .map((conversation): FleetAgent => {
             const draft: FleetAgent = {
                 id: conversation.conversationId,
@@ -320,7 +339,14 @@ const refresh = async (): Promise<void> => {
  * and discard stays the destructive one. See the daemon's agents/archive.ts for what it actually costs.
  *
  * Archived agents are absent from the roster the /events stream carries, which is the point: the board's live
- * state stays the size of the work in flight. They load on demand instead, when the archive is opened. */
+ * state stays the size of the work in flight. They load on demand instead, when the archive is opened.
+ *
+ * It deliberately does NOT close the agent's open chat tab. Archiving is the quiet action — no confirmation,
+ * bulk, undoable — and closing a tab is not: it takes the unsent composer draft, the scroll position and, for
+ * the tab being read, the user's place, none of which the undo could give back. Nor would it fix anything, since
+ * reading an archived agent from the archive view opens the tab again by design (the transcript, the branch and
+ * the diff all survive, and a follow-up message is how you un-archive it — see the daemon's registry.begin). So
+ * the tab stays open and SAYS it is archived instead, with the way back on it (ChatTabs, ChatPanel). */
 const archived = ref<FleetAgent[]>([]);
 const archiveLoading = ref(false);
 

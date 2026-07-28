@@ -103,6 +103,7 @@ let scopedSandboxId: string | undefined;
 const restoreTab = (tab: StoredTab): Conversation => {
     const conversation = new Conversation(tab.conversationId);
     conversation.isolated.value = tab.isolated;
+    conversation.registered.value = tab.registered;
     // The posture isn't part of the snapshot (it is a per-task choice, not a preference) — a restored tab
     // starts from the mode its tree calls for, same as a fresh one.
     conversation.mode.value = startingMode(conversation.isolated.value);
@@ -164,6 +165,7 @@ watch(
                 // JSON.stringify drops undefined keys, matching StoredTab's optional fields.
                 conversationId: conversation.conversationId,
                 isolated: conversation.isolated.value,
+                registered: conversation.registered.value,
                 provider: conversation.provider.value,
                 harness: conversation.harness.value,
                 session: conversation.session.value && { id: conversation.session.value.id, provider: conversation.session.value.provider },
@@ -936,9 +938,14 @@ export const openAgentConversation = (agent: {
     const existing = conversations.value.find((conversation) => conversation.conversationId === agent.id);
     if (existing !== undefined) {
         setActive(existing.conversationId);
+        // The fleet handed us this id, so the tab is a view of a real agent whatever the live roster says right
+        // now — which is how an ARCHIVED agent opened from the archive view stopped painting a phantom "New
+        // agent" card back onto the Active lane it had just left.
+        existing.registered.value = true;
         return existing;
     }
     const conversation = new Conversation(agent.id);
+    conversation.registered.value = true;
     conversation.provider.value = agent.provider;
     conversation.harness.value = agent.harness;
     conversation.account.value = agent.account ?? rememberedAccountFor(agent.provider);

@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import { DAEMON_CONTAINER } from "../stack.js";
 
-// The terminal pop-out journey: docked panel → right-click the strip → Document PiP window → pip-side resize →
-// dock back. The panel's live xterm moves documents wholesale (the shell's Teleport), so the regression surface
+// The terminal pop-out journey: docked panel → right-click the strip → its menu's pop-out row → Document PiP
+// window → pip-side resize → dock back. The panel's live xterm moves documents wholesale (the shell's Teleport), so the regression surface
 // is the remount: the fit must re-measure in the PIP window and the PTY must follow every step. The machinery
 // under test is per-window (the fit ResizeObserver, the post-move redraw jiggle) — when a document move goes
 // undetected, fits silently stop, tmux stays at the docked grid, and the prompt strands mid-window.
@@ -32,6 +32,10 @@ const recordResizeFrames = `
     };
 `;
 
+// The bar menu's pop-out row. The bar's empty space opens the strip-wide menu (kill all / sweep / pop out)
+// rather than popping out on the spot, so every pop-out here goes through this row.
+const popoutRow = (page: Page): Locator => page.locator(`.p-contextmenu-item`, { hasText: `Move panel into new window` });
+
 // The daemon's view of the attach client — the end-to-end proof a fit actually landed.
 const tmuxClient = (session: string): string =>
     execFileSync(`docker`, [`exec`, DAEMON_CONTAINER, `tmux`, `list-clients`, `-t`, session, `-F`, `#{client_width}x#{client_height}`], {
@@ -50,13 +54,15 @@ test(`popping the terminal panel out refits the grid to the floating window and 
     await page.waitForFunction(() => window.__termFrames.length > 0, undefined, { timeout: 30_000 });
     await page.waitForTimeout(2_000);
 
-    // Right-click the strip's empty space (the flex-1 spacer) — the pop-out gesture.
+    // Right-click the strip's empty space (the flex-1 spacer) for the bar's own menu, then take its pop-out
+    // row — the click on the row is what carries the user activation requestWindow needs.
     const bar = page.locator(`.term > div`).nth(1);
     const box = await bar.boundingBox();
     if (box === null) {
         throw new Error(`terminal bar not found`);
     }
     await page.mouse.click(box.x + box.width * 0.55, box.y + box.height / 2, { button: `right` });
+    await popoutRow(page).click();
     await page.waitForFunction(() => window.documentPictureInPicture?.window !== null, undefined, { timeout: 10_000 });
     // Let the PIP window settle (Chrome adjusts the bounds after open) and the moved-mount refit run.
     await page.waitForTimeout(3_000);
@@ -121,6 +127,7 @@ test(`popping the terminal panel out refits the grid to the floating window and 
         throw new Error(`terminal bar not found after dock`);
     }
     await page.mouse.click(box2.x + box2.width * 0.55, box2.y + box2.height / 2, { button: `right` });
+    await popoutRow(page).click();
     await page.waitForFunction(() => window.documentPictureInPicture?.window !== null, undefined, { timeout: 10_000 });
     await page.waitForTimeout(3_000);
     const popped2 = await page.evaluate(() => {

@@ -113,6 +113,7 @@ describe(`reading a tab snapshot`, () => {
         expect(readTabSnapshot(`sb1`)?.tabs[0]).toEqual({
             conversationId: `a`,
             isolated: true,
+            registered: false,
             draft: `half a sentence`,
             provider: `codex`,
             harness: `claude-code`,

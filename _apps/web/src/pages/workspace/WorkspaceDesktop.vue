@@ -6,6 +6,7 @@ import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { inTabSurface } from "../../composables/commands/tabSurface";
 import { commandShortcut, registerCommand, type RegisteredCommand } from "../../composables/commands/useCommands";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
@@ -182,10 +183,24 @@ const pendingCloseDirty = computed(() =>
         ? []
         : tabs.value.flatMap((tab) => (pendingClose.value?.has(tab.id) && tab.kind === `file` && dirtyPaths.value.has(tab.path) ? [tab.path] : [])),
 );
+// The row that names no particular tab: it tails a tab's menu and it IS the menu a right-click on the strip's
+// empty space opens (the chat and terminal strips carry the same pair of entry points).
+const stripItems = computed<MenuItem[]>(() =>
+    tabs.value.length === 0
+        ? []
+        : [
+              {
+                  label: `Close All`,
+                  shortcut: commandShortcut(`workspace.closeAllTabs`),
+                  command: () => requestClose(new Set(tabs.value.map((tab) => tab.id))),
+              },
+          ],
+);
+
 const tabMenuItems = computed<MenuItem[]>(() => {
     const id = menuTabId.value;
     if (id === undefined) {
-        return [];
+        return stripItems.value;
     }
     const index = tabs.value.findIndex((tab) => tab.id === id);
     const menuTab = tabs.value[index];
@@ -194,7 +209,6 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     }
     const others = new Set(tabs.value.filter((tab) => tab.id !== id).map((tab) => tab.id));
     const toRight = new Set(tabs.value.slice(index + 1).map((tab) => tab.id));
-    const all = new Set(tabs.value.map((tab) => tab.id));
     return [
         { label: `Close`, icon: `times`, shortcut: commandShortcut(`workspace.closeTab`), command: () => closeTab(id) },
         {
@@ -210,7 +224,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
             command: () => requestClose(toRight),
         },
         { separator: true },
-        { label: `Close All`, shortcut: commandShortcut(`workspace.closeAllTabs`), command: () => requestClose(all) },
+        ...stripItems.value, // Close All — the one row the empty-space menu shows on its own
         // Only file/diff tabs have a filesystem path to copy (a plan preview and a directory panel don't).
         // Clipboard may be unavailable (insecure context) — swallow, matching CopyButton.
         ...(menuTab.kind === `file` || menuTab.kind === `diff`
@@ -221,7 +235,13 @@ const tabMenuItems = computed<MenuItem[]>(() => {
             : []),
     ];
 });
-const openTabMenu = (id: string, event: Event): void => {
+// `id` is undefined for a right-click on the strip's empty space — the menu then holds only the strip-wide rows.
+// An empty strip has none, so the browser's own menu is left alone there.
+const openTabMenu = (id: string | undefined, event: Event): void => {
+    if (id === undefined && stripItems.value.length === 0) {
+        return;
+    }
+    event.preventDefault();
     menuTabId.value = id;
     tabMenu.value?.show(event);
 };
@@ -230,7 +250,8 @@ const openTabMenu = (id: string, event: Event): void => {
 // one earns its keys, all rebindable in Settings → Keybindings and shown as hints in the tab menu above.
 // Registered while the Workspace is mounted (scoped to /workspace) and disposed on unmount. Keyboard/palette
 // close commands act on the ACTIVE tab (the context menu keeps acting on the right-clicked one) and no-op on
-// an empty strip.
+// an empty strip. The close + cycle chords below are the shell-wide tab family: the chat and terminal strips
+// register the SAME chords for their own tabs, and focus decides which one a press reaches (tabSurface.ts).
 //
 // Chord choices dodge three owners of the keyboard. The BROWSER: Ctrl+W / Ctrl+Shift+W / Ctrl+Tab AND
 // Ctrl+PageUp/PageDown (VSCode's editor-cycling pair) are un-interceptable tab chords, so Close is
@@ -318,12 +339,50 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     // keyboard/palette route to the graph — the same target the explorer toolbar's icon opens.
     { command: `workspace.gitHistory`, title: `Show Git History`, icon: `sitemap`, handler: () => openGraph(`root`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => layout.toggleSidebar() },
-    { command: `workspace.nextTab`, title: `Next Tab`, keybinding: `Alt+PageDown`, handler: () => cycleTab(1) },
-    { command: `workspace.previousTab`, title: `Previous Tab`, keybinding: `Alt+PageUp`, handler: () => cycleTab(-1) },
-    { command: `workspace.closeTab`, title: `Close Tab`, icon: `times`, keybinding: `Ctrl+Shift+X`, handler: closeActiveTab },
-    { command: `workspace.closeOtherTabs`, title: `Close Other Tabs`, icon: `times`, keybinding: `Ctrl+Shift+,`, handler: closeOtherTabs },
-    { command: `workspace.closeTabsToRight`, title: `Close Tabs to the Right`, icon: `times`, keybinding: `Ctrl+Shift+.`, handler: closeTabsToRight },
-    { command: `workspace.closeAllTabs`, title: `Close All Tabs`, icon: `times`, keybinding: `Ctrl+Shift+Backspace`, handler: closeAllTabs },
+    // The tab family is shared with the chat and terminal strips and resolved by focus (tabSurface.ts). The
+    // workspace is the FALLBACK surface, so its gate is "the keystroke came from neither of the other two" —
+    // a chord pressed with focus on the shell chrome, the explorer or the editor still closes an editor tab,
+    // exactly as it did before the family was shared.
+    { command: `workspace.nextTab`, title: `Next Tab`, keybinding: `Alt+PageDown`, when: inTabSurface(`workspace`), handler: () => cycleTab(1) },
+    {
+        command: `workspace.previousTab`,
+        title: `Previous Tab`,
+        keybinding: `Alt+PageUp`,
+        when: inTabSurface(`workspace`),
+        handler: () => cycleTab(-1),
+    },
+    {
+        command: `workspace.closeTab`,
+        title: `Close Tab`,
+        icon: `times`,
+        keybinding: `Ctrl+Shift+X`,
+        when: inTabSurface(`workspace`),
+        handler: closeActiveTab,
+    },
+    {
+        command: `workspace.closeOtherTabs`,
+        title: `Close Other Tabs`,
+        icon: `times`,
+        keybinding: `Ctrl+Shift+,`,
+        when: inTabSurface(`workspace`),
+        handler: closeOtherTabs,
+    },
+    {
+        command: `workspace.closeTabsToRight`,
+        title: `Close Tabs to the Right`,
+        icon: `times`,
+        keybinding: `Ctrl+Shift+.`,
+        when: inTabSurface(`workspace`),
+        handler: closeTabsToRight,
+    },
+    {
+        command: `workspace.closeAllTabs`,
+        title: `Close All Tabs`,
+        icon: `times`,
+        keybinding: `Ctrl+Shift+Backspace`,
+        when: inTabSurface(`workspace`),
+        handler: closeAllTabs,
+    },
     { command: `workspace.refresh`, title: `Refresh Workspace Files`, icon: `refresh`, handler: () => refetch() },
 ];
 let workspaceCommandDisposables: readonly Disposable[] = [];

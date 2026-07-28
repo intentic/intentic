@@ -630,7 +630,16 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                             <Icon name="check" class="text-2xs" />
                             Submit
                         </button>
-                        <button type="button" class="plan-reject plan-sm" @click="cancelQuestion(message)">Dismiss</button>
+                        <!-- Dismissing ends the turn (see Conversation.cancelQuestion), which the label alone
+                             does not say — so the tooltip does, before the click rather than after it. -->
+                        <button
+                            type="button"
+                            class="plan-reject plan-sm"
+                            v-tooltip.bottom="'Dismiss and stop the turn'"
+                            @click="cancelQuestion(message)"
+                        >
+                            Dismiss
+                        </button>
                     </div>
                 </div>
             </div>
@@ -662,7 +671,14 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         <Icon name="lock" class="text-xs" />
                         {{ message.permission.alwaysLabel }}
                     </button>
-                    <button type="button" class="plan-reject" @click="decidePermission(message, 'deny')">
+                    <!-- Same as the question card's Dismiss: a refusal with nothing to redirect the agent to
+                         ends the turn rather than leaving it to work around the answer it was just given. -->
+                    <button
+                        type="button"
+                        class="plan-reject"
+                        v-tooltip.bottom="'Decline and stop the turn'"
+                        @click="decidePermission(message, 'deny')"
+                    >
                         <Icon name="times" class="text-xs" />
                         No
                     </button>

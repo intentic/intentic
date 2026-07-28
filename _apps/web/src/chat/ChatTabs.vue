@@ -17,6 +17,7 @@ import { relativeTime, statusTabClass } from "../composables/chat/catalog";
 import type { Conversation } from "../composables/chat/conversation";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
+import { inTabSurface } from "../composables/commands/tabSurface";
 import { commandShortcut, registerCommand, type RegisteredCommand } from "../composables/commands/useCommands";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
@@ -45,6 +46,11 @@ const tabLabel = (conversation: Conversation): string => conversation.title.valu
 // fact lives, so it's read from the fleet). The strip wears the source glyph alone — the title of such a tab
 // already leads with who sent the message.
 const originOf = (conversation: Conversation): AgentOrigin | undefined => agentById(conversation.conversationId)?.origin;
+
+// Off the board, still open. Archiving an agent deliberately leaves its tab alone (see the archive note in
+// useAgents), so the strip is what says so for a BACKGROUND tab — the panel's own line only speaks for the
+// active one, and a tab that looks identical to a live agent is how "didn't I just archive that?" starts.
+const isArchived = (conversation: Conversation): boolean => agentById(conversation.conversationId)?.archivedAt !== undefined;
 
 const history = ref<InstanceType<typeof Popover> | null>(null);
 const searchInput = ref<HTMLInputElement | null>(null);
@@ -200,15 +206,28 @@ const openTabMenu = (id: string, event: Event): void => {
 };
 
 // Registered while THIS strip is mounted — the desktop strip and the mobile one are exclusive, so the ids can't
-// double-register. Rename is gated to a keystroke from inside the chat panel: elsewhere F2 belongs to whoever owns
-// the focus (the workspace tree renames its file, the terminal panel its terminal).
+// double-register.
 //
-// The four closes ship UNBOUND, unlike the workspace file tabs' Ctrl+Shift+{X , . Backspace} family. The chat
-// panel is mounted beside the Workspace in the desktop shell, so those chords are already claimed there whenever
-// /workspace is open, and a second claim on them would resolve by registration order rather than by focus. They
-// stay palette-only (Ctrl+Shift+P) and rebindable in Settings → Keybindings — the menu reads whatever chord the
-// registry ends up holding, so binding one lights its hint up here.
+// Every chord here is the SHELL-WIDE tab family (tabSurface.ts): the same Ctrl+Shift+{X , . Backspace} the
+// workspace's file tabs carry and the same Alt+PageUp/PageDown cycling, claimed only while the focus is inside
+// the chat panel. Three strips are on screen at once, so one chord per verb resolved by focus beats three
+// chords per verb memorized — it's what F2/rename has always done here. Each is rebindable in
+// Settings → Keybindings, per surface: remapping Close Chat leaves Close Tab where it was.
+//
+// Cycling emits `select` rather than writing activeId, because switching a chat is not just a pointer move —
+// the panel re-pins the transcript scroller on the way (see ChatPanel.selectTab).
 let commandDisposables: readonly Disposable[] = [];
+const cycleTab = (delta: number): void => {
+    const list = conversations.value;
+    if (list.length < 2) {
+        return;
+    }
+    const index = list.findIndex((c) => c.conversationId === activeId.value);
+    const next = list[(index + delta + list.length) % list.length];
+    if (next !== undefined) {
+        emit(`select`, next.conversationId);
+    }
+};
 onMounted(() => {
     const entries: Omit<RegisteredCommand, `owner`>[] = [
         {
@@ -216,7 +235,7 @@ onMounted(() => {
             title: `Rename Chat…`,
             icon: `pencil`,
             keybinding: `F2`,
-            when: (event): boolean => event.target instanceof Element && event.target.closest(`.chat-panel`) !== null,
+            when: inTabSurface(`chat`),
             handler: (): void => {
                 if (edit.editing) {
                     return; // already renaming — a second F2 would wipe the draft
@@ -231,12 +250,16 @@ onMounted(() => {
             command: `chat.closeTab`,
             title: `Close Chat`,
             icon: `times`,
+            keybinding: `Ctrl+Shift+X`,
+            when: inTabSurface(`chat`),
             handler: () => emit(`close`, new Set([activeId.value])),
         },
         {
             command: `chat.closeOtherTabs`,
             title: `Close Other Chats`,
             icon: `times`,
+            keybinding: `Ctrl+Shift+,`,
+            when: inTabSurface(`chat`),
             handler: (): void => {
                 const others = othersOf(activeId.value);
                 if (others.size > 0) {
@@ -248,6 +271,8 @@ onMounted(() => {
             command: `chat.closeTabsToRight`,
             title: `Close Chats to the Right`,
             icon: `times`,
+            keybinding: `Ctrl+Shift+.`,
+            when: inTabSurface(`chat`),
             handler: (): void => {
                 const toRight = toRightOf(activeId.value);
                 if (toRight.size > 0) {
@@ -255,7 +280,16 @@ onMounted(() => {
                 }
             },
         },
-        { command: `chat.closeAllTabs`, title: `Close All Chats`, icon: `times`, handler: () => requestClose(allTabs()) },
+        {
+            command: `chat.closeAllTabs`,
+            title: `Close All Chats`,
+            icon: `times`,
+            keybinding: `Ctrl+Shift+Backspace`,
+            when: inTabSurface(`chat`),
+            handler: () => requestClose(allTabs()),
+        },
+        { command: `chat.nextTab`, title: `Next Chat`, keybinding: `Alt+PageDown`, when: inTabSurface(`chat`), handler: () => cycleTab(1) },
+        { command: `chat.previousTab`, title: `Previous Chat`, keybinding: `Alt+PageUp`, when: inTabSurface(`chat`), handler: () => cycleTab(-1) },
     ];
     commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
 });
@@ -339,6 +373,10 @@ const openHistory = (event: Event): void => {
                 >
                     <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
                     <OriginMark :origin="originOf(c)" compact />
+                    <!-- Archived: the agent is off the board, but its conversation is still right here. -->
+                    <span v-if="isArchived(c)" v-tooltip.bottom="'Archived — off the agents board'" class="flex shrink-0 items-center">
+                        <Icon name="box" class="text-2xs text-subtle" />
+                    </span>
                     <!-- One noun with the fleet: an untitled isolated conversation IS a draft agent card there. -->
                     <span class="min-w-0 flex-1 truncate text-left" :class="statusTabClass(c.status.value)">{{ tabLabel(c) }}</span>
                     <!-- Members with this same conversation active right now. -->
