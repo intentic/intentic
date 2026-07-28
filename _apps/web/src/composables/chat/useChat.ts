@@ -639,6 +639,28 @@ const addAccount = (target: AgentProvider, added: OauthAccount): void => {
     const existing = accountsOf(target).filter((a) => a.id !== added.id);
     providerAccounts.value = { ...providerAccounts.value, [target]: [...existing, added] };
     selectedAccountId.value = { ...selectedAccountId.value, [target]: added.id };
+    adoptStranded(target, added);
+};
+
+/* A reconnect mints a NEW account id, which leaves every chat still pinned to the old one sending against a
+ * credential that no longer exists — measured in the incident this all comes from: a session kept failing for
+ * a full minute AFTER the account was reconnected, purely because its tab held the dead id. Reconnecting means
+ * "carry on", so the stranded chats move across and anything held for the outage goes now.
+ *
+ * Only chats whose account is missing or flagged for reauth move: adding a SECOND account alongside a healthy
+ * one must not quietly redirect conversations away from the account the user chose for them. */
+const adoptStranded = (target: AgentProvider, added: OauthAccount): void => {
+    const live = accountsOf(target);
+    for (const conversation of conversations.value) {
+        if (conversation.provider.value !== target) {
+            continue;
+        }
+        const current = conversation.account.value;
+        if (current !== undefined && current !== added.id && !live.some((entry) => entry.id === current && entry.needsReauth !== true)) {
+            conversation.rebindAccount(added.id);
+        }
+        void conversation.resume();
+    }
 };
 
 // Pull a provider's account list from its daemon and keep the selection valid (first account when the current
@@ -949,9 +971,35 @@ const fetchTranscript = async (conversation: Conversation, id: string): Promise<
 // message read as an ordinary chat: its whole transcript (the configured prompt, the message that woke it,
 // the reply) exists only daemon-side until this runs.
 const hydrate = async (conversation: Conversation): Promise<void> => {
-    if (await conversation.reattach()) {
-        return;
+    /* The transcript has to be in place BEFORE attaching to anything live. reattach appends the running turn's
+     * prompt bubble to whatever the transcript currently holds, and marks the conversation streaming — which
+     * makes the cache paint stand down — so attaching first renders the live turn onto an EMPTY transcript and
+     * then persists that stub over a perfectly good local mirror when the run settles. That is how a chat comes
+     * back from a reload showing nothing but the message you just sent, with its whole history still sitting
+     * intact in the daemon's session store.
+     *
+     * The mirror read is local and cheap, so it always goes first. Only when it comes up empty — a conversation
+     * this device has never painted, e.g. a fleet agent opened for the first time — is the daemon's session
+     * store worth waiting on before attaching; that is also the only case where there is nothing to show
+     * meanwhile, so the round-trip costs nothing the user can see. */
+    await conversation.paintCached();
+    // Whether anything is THERE, not whether this call is what put it there: the restore sweep paints the
+    // mirror on its own, so a paint that declines because the transcript is already populated must not be read
+    // as "empty" and pay a session fetch the user would wait through on every restored tab.
+    const seeded = conversation.messages.value.length === 0;
+    if (seeded) {
+        await replayStoredSession(conversation);
     }
+    // With nothing running, what the mirror painted still has to be reconciled against the daemon — unless the
+    // seeding above already read the very same store a moment ago.
+    if (!(await conversation.reattach()) && !seeded) {
+        await replayStoredSession(conversation);
+    }
+};
+
+// Redraw a conversation from the daemon's own session store — the authoritative transcript, and the only copy
+// that survives a device with no local mirror.
+const replayStoredSession = async (conversation: Conversation): Promise<void> => {
     const session = conversation.session.value;
     // /sessions/:id reads the Claude Code Agent SDK's own store, so a transcript is replayable for exactly the
     // sessions that loop minted — which is NOT "provider is claude": kimi and gemini have no native runtime and

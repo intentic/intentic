@@ -163,6 +163,17 @@ export interface PendingAttachment {
 // injected into the running turn where the harness accepts that (Claude Code's queue-and-steer), else sent as
 // the next turn the moment this one settles. Carries everything a fresh message can (files, the editor chip),
 // so "add more while it works" isn't a lesser kind of message.
+// An assistant bubble a turn opened for an answer that never arrived. A turn the daemon refused before running
+// it leaves one behind, and a rewound turn must take it back too rather than leave a blank agent reply.
+const blank = (message: ChatMessage): boolean =>
+    message.role === `assistant` &&
+    message.text === `` &&
+    (message.thinking ?? ``) === `` &&
+    message.tools === undefined &&
+    message.plan === undefined &&
+    message.question === undefined &&
+    message.permission === undefined;
+
 export interface QueuedMessage {
     readonly id: string;
     readonly text: string;
@@ -528,6 +539,18 @@ export class Conversation {
         this.refreshSwitchNotice();
     }
 
+    // Retract the pending "switched" divider — the change it announced is no longer what the next send does.
+    private dropSwitchNotice(): void {
+        if (this.pendingSwitchNoticeId === undefined) {
+            return;
+        }
+        this.state.value = {
+            ...this.state.value,
+            messages: this.state.value.messages.filter((message) => message.id !== this.pendingSwitchNoticeId),
+        };
+        this.pendingSwitchNoticeId = undefined;
+    }
+
     // Upsert/remove the one pending "switched" divider as the user toggles provider/account: no notice when the
     // next send still resumes the session (the selection matches it) or the chat hasn't begun; otherwise one
     // notice says what the next message starts. send() freezes it into the transcript at the segment cut.
@@ -540,13 +563,7 @@ export class Conversation {
             session.harness === this.harness.value;
         const started = this.messages.value.length > 0 || session !== undefined;
         if (resumes || !started) {
-            if (this.pendingSwitchNoticeId !== undefined) {
-                this.state.value = {
-                    ...this.state.value,
-                    messages: this.state.value.messages.filter((message) => message.id !== this.pendingSwitchNoticeId),
-                };
-                this.pendingSwitchNoticeId = undefined;
-            }
+            this.dropSwitchNotice();
             return;
         }
         // ACP providers have no tab entry — the shared label fallback (capability name layered by the picker,
@@ -570,8 +587,10 @@ export class Conversation {
     // Mirror the settled transcript to the local cache (see transcriptCache), so reopening this conversation
     // paints from disk rather than waiting on the sandbox. Fire-and-forget, and only where the transcript has
     // settled — a turn ending, a remote transcript landing — never per streamed frame.
-    private persist(): void {
-        void saveTranscript(this.conversationId, this.messages.value);
+    // `authoritative` is the daemon's own replay, which may legitimately shrink the mirror; everything else is
+    // this window reporting what it is showing, which can be a fraction of the conversation (see saveTranscript).
+    private persist(authoritative = false): void {
+        void saveTranscript(this.conversationId, this.messages.value, authoritative);
     }
 
     // Paint the locally cached transcript, if there is one and nothing has been rendered yet. Returns whether
@@ -629,7 +648,7 @@ export class Conversation {
             emptyTurnState,
         );
         this.error.value = null;
-        this.persist();
+        this.persist(true);
     }
 
     // Restore a past conversation pulled from the history menu: build bubbles from the stored transcript and
@@ -795,6 +814,47 @@ export class Conversation {
     // Drop a queued message before it reaches the agent (the × on its chip).
     removeQueued(id: string): void {
         this.queued.value = this.queued.value.filter((message) => message.id !== id);
+    }
+
+    // Take a user bubble the daemon turned away back OUT of the transcript and put it at the FRONT of the
+    // queue. A turn refused before it ran produced nothing, so leaving the bubble in place would show a message
+    // as said-and-answered when the agent never saw it — and a later replay would then say it twice.
+    private requeueUndelivered(userMessageId: number): void {
+        const index = this.messages.value.findIndex((message) => message.id === userMessageId);
+        const bubble = this.messages.value[index];
+        if (bubble === undefined || bubble.role !== `user`) {
+            return;
+        }
+        this.state.value = {
+            ...this.state.value,
+            messages: this.state.value.messages.filter((message, at) => message.id !== userMessageId && !(at > index && blank(message))),
+            bubbleId: null,
+        };
+        this.queued.value = [{ id: crypto.randomUUID(), text: bubble.text, attachments: bubble.attachments ?? [] }, ...this.queued.value];
+    }
+
+    // Release a hold placed by a failure the user has now fixed (reconnecting a revoked account) and let
+    // whatever was held ride immediately. Nothing happens when the queue is empty, so calling it on every
+    // conversation after a reconnect is safe.
+    resume(): Promise<void> {
+        this.interrupted = false;
+        this.error.value = null;
+        return this.drainQueue();
+    }
+
+    // Move this conversation onto a re-connected credential for the SAME human account. The session ref moves
+    // with it: a reconnect mints a new local account id, and leaving the old one on the session would read as a
+    // deliberate account switch and retire a live session that resumes perfectly well — the user reconnected to
+    // carry on, not to start over.
+    rebindAccount(accountId: string): void {
+        this.account.value = accountId;
+        const session = this.session.value;
+        if (session !== undefined) {
+            this.session.value = { ...session, account: accountId };
+        }
+        // Not a switch the user made — the same human account, re-credentialled — so no "switched to…" divider.
+        // A pending one is retracted: whatever it announced, the next send now just carries on.
+        this.dropSwitchNotice();
     }
 
     /* Deliver what's waiting, oldest first. A running turn takes them one at a time over /agent/steer; the
@@ -1265,7 +1325,7 @@ export class Conversation {
                 return;
             }
             case `error`:
-                this.applyTurnError(effect.message, effect.code);
+                this.applyTurnError(effect.message, effect.code, turn);
                 return;
         }
     }
@@ -1274,7 +1334,26 @@ export class Conversation {
     // business reaching for — the account's usage windows, the provider's account list — to phrase themselves,
     // and because the choice between a muted notice and the red error line is a product decision rather than a
     // transcript rule.
-    private applyTurnError(message: string, code: Extract<AgentEvent, { kind: "error" }>["code"]): void {
+    private applyTurnError(message: string, code: Extract<AgentEvent, { kind: "error" }>["code"], turn: TurnContext): void {
+        if (code === `claude-reauth`) {
+            /* The Claude credential is dead and the daemon refused the turn before running any of it. Nothing
+             * was processed, so the message is not part of the conversation yet — pull the bubble back out of
+             * the transcript and return it to the queue, which is exactly what the queue means (written, not
+             * delivered) and what makes reconnecting REPLAY it instead of asking the user to retype into every
+             * chat that bounced. `interrupted` holds the drain until then, so it can't immediately re-fail. */
+            this.requeueUndelivered(turn.userMessageId);
+            this.interrupted = true;
+            const provider = this.provider.value;
+            const accounts = providerAccounts.value[provider] ?? [];
+            const accountId = this.account.value ?? accounts[0]?.id;
+            const markReauth = (account: OauthAccount): OauthAccount =>
+                account.id === accountId ? { ...account, needsReauth: true, detail: message } : account;
+            providerAccounts.value = { ...providerAccounts.value, [provider]: accounts.map(markReauth) };
+            // Muted, like session-not-found: the condition has a one-click fix sitting right above the composer
+            // (ChatPanel's reauth banner, which this needsReauth flag raises), so the red line would overstate it.
+            this.appendNotice(`${message} Your message is held here and goes as soon as the account is back.`);
+            return;
+        }
         if (code === `session-not-found`) {
             // The sandbox no longer has this chat's transcript — drop the dead session so the next send starts
             // a fresh one instead of replaying the failure forever. A muted notice, not the error ref: the

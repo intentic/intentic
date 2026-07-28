@@ -17,7 +17,7 @@ import { mcpToolsOf } from "../capabilities/mcp-tools.js";
 import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
 import { extensionEnvOf } from "../extensions/extension-env.js";
 import { extensionAgentDirsOf, extensionBinDirsOf } from "../extensions/installed-extensions.js";
-import { ensureFreshToken } from "../claude/claude-credentials.js";
+import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
 import { resolveKimiKey } from "../kimi/kimi-credentials.js";
 import { MOONSHOT_ANTHROPIC_BASE } from "../kimi/kimi-models.js";
 import type { Services } from "../composition.js";
@@ -413,6 +413,7 @@ async function* runTurn(
         // Codex and Grok reach this only under harness "claude-code" (their native runtimes are handled above);
         // Gemini has no native runtime, so every Gemini turn is routed.
         let oauthToken: string | undefined;
+        let refreshOauthToken: ((context: { readonly signal: AbortSignal }) => Promise<string | undefined>) | undefined;
         let endpoint: { baseUrl: string; authToken: string; model: string } | undefined;
         if (input.agent === "codex" || input.agent === "grok" || input.agent === "gemini") {
             if (services.config.translator.url === "") {
@@ -478,10 +479,36 @@ async function* runTurn(
                     yield { kind: "done" };
                     return;
                 }
+                // Hand the CLI a way to re-mint the token it was given. It calls this on a 401 and carries on
+                // with the result, so a credential that expires or is revoked mid-turn costs a pause instead of
+                // the turn's work. `oauthToken` tracks what the CLI currently holds so the rotation supersedes
+                // exactly that one — and so a token another turn already rotated is adopted, never re-refreshed.
+                refreshOauthToken = async (): Promise<string | undefined> => {
+                    if (oauthToken === undefined) {
+                        return undefined;
+                    }
+                    const replacement = await replaceRejectedToken(services.claudeStore, accountId, oauthToken).catch((error: unknown) => {
+                        services.logger.warn({ err: error, account: accountId }, "claude mid-turn token refresh failed");
+                        return undefined;
+                    });
+                    oauthToken = replacement;
+                    return replacement;
+                };
             }
             resolvedAccount = oauthToken !== undefined ? accountId : undefined;
             if (oauthToken === undefined && services.config.claudeCodeOauthToken === "" && services.config.anthropicApiKey === "") {
-                yield { kind: "error", message: "No Claude account connected — connect it in Setup before chatting." };
+                // A connected-but-revoked account is a different problem from having no account at all, and it
+                // has a different fix: reconnect this one, in place, rather than go find Setup. The code lets the
+                // UI offer that inline and hold the message for replay once it lands.
+                const revoked =
+                    accountId !== undefined && (await services.claudeStore.list()).some((a) => a.id === accountId && a.needsReauth === true);
+                yield revoked
+                    ? {
+                          kind: "error",
+                          code: "claude-reauth",
+                          message: "Claude sign-in was revoked — reconnect the account to pick this conversation back up.",
+                      }
+                    : { kind: "error", message: "No Claude account connected — connect it in Setup before chatting." };
                 yield { kind: "done" };
                 return;
             }
@@ -591,6 +618,7 @@ async function* runTurn(
                           ? { model: services.config.intenticAgentModel }
                           : {}),
                       ...(oauthToken !== undefined ? { oauthToken } : {}),
+                      ...(refreshOauthToken !== undefined ? { refreshOauthToken } : {}),
                   }),
             ...(plugins.length > 0 ? { plugins } : {}),
             ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),

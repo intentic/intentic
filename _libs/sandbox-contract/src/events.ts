@@ -268,6 +268,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // Codex ran the turn but warned about it (fallback model metadata) — a notice, not a failure.
                 "codex-advisory",
                 "codex-reauth",
+                // The Claude subscription credential is dead (revoked, or its refresh token rejected) and only a
+                // reconnect fixes it. Distinct from "no account connected": the account IS there, so the UI can
+                // offer reconnect where the user already is and replay the message that bounced.
+                "claude-reauth",
                 "grok-model-invalid",
                 "codex-model-invalid",
                 "subscription-required",

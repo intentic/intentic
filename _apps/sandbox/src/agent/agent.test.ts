@@ -1,7 +1,7 @@
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { type AgentQuery, mergeHooks, type QueryFn, runAgent } from "./agent.js";
+import { type AgentQuery, mergeHooks, type OauthRecoveryOptions, type QueryFn, runAgent } from "./agent.js";
 import { resolveRequest } from "./agent-requests.js";
 import { SteeringQueue } from "./agent-steering.js";
 
@@ -169,6 +169,32 @@ test("the SDK env always marks the sandbox and carries the per-turn oauth token 
     await collect(request, capture);
     expect(captured?.env?.["IS_SANDBOX"]).toBe("1");
     expect(captured?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
+});
+
+/* The env token is a SNAPSHOT taken at spawn: a turn that outlives it — or one caught by an account-wide
+ * revocation, which kills tokens that still look valid by the clock — used to die mid-work with
+ * "Failed to authenticate. API Error: 401 ...". getOAuthToken is how the CLI asks for a replacement and
+ * carries on, and it is the option the VSCode extension's equivalent machinery stands in for. */
+test("a native Claude turn hands the SDK a way to re-mint its token mid-turn", async () => {
+    let captured: OauthRecoveryOptions | undefined;
+    const capture: QueryFn = async function* (args) {
+        captured = args.options;
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+
+    const refreshOauthToken = async (): Promise<string> => "tok-2";
+    await collect({ ...request, oauthToken: "tok-1", refreshOauthToken }, capture);
+    expect(await captured?.getOAuthToken?.({ signal: new AbortController().signal })).toBe("tok-2");
+
+    // A routed turn authenticates with the translator's own bearer, and the container-env fallback has no
+    // refresh token behind it — neither has anything to re-mint, so neither offers the callback.
+    captured = undefined;
+    await collect({ ...request, baseUrl: "http://127.0.0.1:8788", authToken: "router-key", refreshOauthToken }, capture);
+    expect(captured?.getOAuthToken).toBeUndefined();
+
+    captured = undefined;
+    await collect(request, capture);
+    expect(captured?.getOAuthToken).toBeUndefined();
 });
 
 test("a custom endpoint points the SDK at ANTHROPIC_BASE_URL and withholds the subscription OAuth token", async () => {

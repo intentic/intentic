@@ -46,6 +46,11 @@ export interface AgentRequest {
     // the sandbox's own stored credentials (the platform no longer relays it); undefined falls back to the
     // container's ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN env.
     readonly oauthToken?: string;
+    // Re-mint `oauthToken` mid-turn. The CLI calls this when the API refuses the token it was given — expired
+    // under a long turn, or revoked account-wide — and carries on with what comes back, so a credential that
+    // dies while the agent is working costs a pause rather than the turn. Returning undefined (or the same
+    // token) means no replacement exists, and the turn fails as it did before.
+    readonly refreshOauthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
     // A custom Anthropic-Messages endpoint + bearer token for this turn, set when the Claude Code harness serves
     // a non-Claude provider (codex/grok) through the sandbox's translator. Injected as ANTHROPIC_BASE_URL /
     // ANTHROPIC_AUTH_TOKEN; when baseUrl is present the subscription OAuth token is WITHHELD so it never reaches
@@ -679,9 +684,31 @@ const disallowedToolsOf = (request: AgentRequest): string[] => [
     ...(request.unattended === true ? PLAN_TOOLS : []),
 ];
 
+/* The CLI's mid-turn credential recovery. On a 401 it raises an `oauth_token_refresh` control request; the SDK
+ * answers it from this callback and the turn RESUMES on the returned token instead of dying. Without it the
+ * subscription token is a snapshot taken at spawn: a turn outliving its token — or caught by an account-wide
+ * revocation, which kills tokens that still look valid — fails outright, mid-work, with
+ * "Failed to authenticate. API Error: 401 ...". That is the difference between this harness and the VSCode
+ * extension, which owns the whole credential (refresh token included) and re-mints it in place.
+ *
+ * Declared here because `@anthropic-ai/claude-agent-sdk@0.3.220` implements the option in sdk.mjs (it is
+ * destructured alongside `canUseTool` and gates `hasBidirectionalNeeds`) but omits it from sdk.d.ts. Returning
+ * the SAME token the CLI already holds is how we say "no refresh available"; it detects that and stops. */
+export type OauthRecoveryOptions = Options & {
+    getOAuthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
+};
+
 // Base SDK options for the turn.
-const baseOptions = (request: AgentRequest, abortController: AbortController, permissionMode: PermissionMode, tmuxEnabled: boolean): Options => ({
+const baseOptions = (
+    request: AgentRequest,
+    abortController: AbortController,
+    permissionMode: PermissionMode,
+    tmuxEnabled: boolean,
+): OauthRecoveryOptions => ({
     cwd: request.cwd,
+    // Only for a native Claude turn on a sandbox-owned credential: a translator endpoint authenticates with its
+    // own bearer, and the container-env fallback has no refresh token behind it to mint from.
+    ...(request.baseUrl === undefined && request.refreshOauthToken !== undefined ? { getOAuthToken: request.refreshOauthToken } : {}),
     includePartialMessages: true,
     permissionMode,
     abortController,
