@@ -39,6 +39,7 @@ import { summarizeAgentTitle } from "./title-summary.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
 import { delegationNote } from "./delegation.js";
+import { systemAppendOf } from "./system-append.js";
 import { withTurnPreamble } from "./turn-preamble.js";
 
 // Fold the opt-in editor context (the composer chip, off by default) into the prompt: the file the user is
@@ -51,11 +52,6 @@ const editorContextNote = (context: EditorContext): string => {
     const range = context.startLine !== undefined && context.endLine !== undefined ? ` (lines ${context.startLine}-${context.endLine})` : "";
     return `The user has \`${context.file}\` open in the editor with this text selected${range} — "this" likely refers to it:\n\`\`\`\`\n${context.selection}\n\`\`\`\``;
 };
-
-// Appended to the system prompt when terseOutput is on (verbosity steering): a stable suffix that trims the
-// model's OWN output tokens without dropping substance. Kept short so it barely costs tokens itself each turn.
-const TERSE_NOTE =
-    "Response style: be concise — don't restate the request, re-quote files you just read, or echo tool output the user can already see. Lead with the answer or the action; expand only where detail changes a decision.";
 
 // Run one agent turn, streaming typed AgentEvents. `input.agent` picks the provider adapter (absent =
 // claude); each provider's token is the sandbox's own credential, never held by the platform, with the
@@ -461,8 +457,16 @@ async function* runTurn(
         // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the
         // provider prompt cache survives the turn — the cross-provider delegation note then rides the user
         // message instead of the system prompt.
-        const { stableSystemPrompt, hashlineEdits, iqSearch, outputCleaners, outputHoldout, filterBackend, terseOutput } =
-            await services.sandboxSettings.get();
+        const {
+            stableSystemPrompt,
+            hashlineEdits,
+            iqSearch,
+            outputCleaners,
+            outputHoldout,
+            filterBackend,
+            terseOutput,
+            systemAppend: customInstructions,
+        } = await services.sandboxSettings.get();
         // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
         // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle
         // (opt-in, default off). Empty dir outside the container ⇒ skipped regardless.
@@ -531,11 +535,15 @@ async function* runTurn(
             [...(stableSystemPrompt && note !== undefined ? [note] : []), ...(setupNotice !== undefined ? [setupNotice] : [])],
             promptWithAttachments,
         );
-        // System-prompt suffix: the delegation note (unless stableSystemPrompt moved it into the user message)
-        // followed by the terse-output steer. Both are stable across a session, so appending here keeps the cached
-        // system+tools prefix intact (the point of stableSystemPrompt).
-        const systemAppend =
-            [...(note !== undefined && !stableSystemPrompt ? [note] : []), ...(terseOutput ? [TERSE_NOTE] : [])].join("\n\n") || undefined;
+        // The system-prompt suffix for this turn (system-append.ts owns the pieces and their order). The
+        // delegation note is handed over only when stableSystemPrompt hasn't already moved it into the user
+        // message, and `origin` marks a turn that is answering someone outside the sandbox.
+        const systemAppend = systemAppendOf({
+            ...(note !== undefined && !stableSystemPrompt ? { note } : {}),
+            terseOutput,
+            customInstructions,
+            external: input.origin !== undefined,
+        });
         run = services.agent;
         request = {
             ...base,

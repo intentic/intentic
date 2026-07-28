@@ -1,14 +1,10 @@
 <script setup lang="ts">
-import { type AgentProvider, type KeyedProvider, quickModelKey } from "@intentic/sandbox-contract";
-import { Card, cmp, CopyButton, InfoHint, Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic-app/ui";
+import { type AgentProvider, quickModelKey } from "@intentic/sandbox-contract";
+import { Card, cmp, CopyButton, formatTokens, Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
-import { providerReady } from "../../composables/chat/access";
-import { providerTabs } from "../../composables/chat/conversation";
+import { computed, ref } from "vue";
 import { quickModelGroups, useQuickModel } from "../../composables/chat/quickModel";
-import { useChat } from "../../composables/chat/useChat";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { useCleanerSavings } from "../../composables/sandbox/useCleanerSavings";
@@ -16,136 +12,17 @@ import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
+import AiAccountSection from "./AiAccountSection.vue";
 import AssistantInfo from "./AssistantInfo.vue";
 import CommandOutputInfo from "./CommandOutputInfo.vue";
-import NativeConnectFlow from "./NativeConnectFlow.vue";
-import TranslatorConnectFlow from "./TranslatorConnectFlow.vue";
 
 /* The Sandbox hub's "Agent" tab — the home for everything about the AI the sandbox runs. The AI provider
  * accounts (Claude / ChatGPT / Grok / Kimi / Gemini) it authenticates as — each provider's native-harness
- * account plus, for codex/grok/gemini, the subscription the translator serves them on — its behavior settings, and
- * the import-memory tool. Accounts and memory live INSIDE the sandbox, never on the platform, which is why this
- * is a sandbox tab. Both connection surfaces reuse useChat's shared state/handshakes unchanged; opening the tab
- * loads usage and preps the provider (openAccountManage); closing it just hides the card (closeAccountManage) —
- * an in-flight connect keeps running so a device sign-in the user is completing at x.ai / ChatGPT still lands. */
+ * account plus, for codex/grok/gemini, the subscription the translator serves them on, all of which live in
+ * AiAccountSection — its behavior settings, and the import-memory tool. Accounts and memory live INSIDE the
+ * sandbox, never on the platform, which is why this is a sandbox tab. */
 
 const sandbox = useSandbox();
-
-// --- AI provider accounts (native + routed, one grouped list) ------------------------------------------------
-const {
-    managedProvider,
-    setManagedProvider,
-    managedAccounts,
-    authorizeUrl,
-    accountUsage,
-    error: chatError,
-    openAccountManage,
-    closeAccountManage,
-    startConnect,
-    disconnect,
-    translatorAccounts,
-    translatorConnectFlow,
-    translatorBusy,
-    connectTranslator,
-    disconnectTranslator,
-} = useChat();
-
-// Arriving from a chat's "Connect account" gate carries `?connect=<provider>`: open that provider's card and
-// flash it, so the user lands looking straight at the inputs they need (mirrors SandboxSync's desktop-sync jump).
-// Driven by a watch, not just onMounted: the chat panel lives in the persistent shell, so the gate can deep-link
-// here while this tab is already open — a query-only navigation doesn't remount the component.
-const route = useRoute();
-const ringing = ref(false);
-let ringTimer: ReturnType<typeof setTimeout> | undefined;
-
-const focusConnect = (): void => {
-    const requested = providerTabs.find((tab) => tab.value === route.query[`connect`]);
-    if (requested === undefined) {
-        return;
-    }
-    setManagedProvider(requested.value);
-    // Re-arm the flash cleanly on a repeat jump so a prior timer can't cut the ring short.
-    ringing.value = true;
-    clearTimeout(ringTimer);
-    ringTimer = setTimeout(() => (ringing.value = false), 2500);
-    // Let the card render, then bring it into view.
-    setTimeout(() => document.getElementById(`ai-account`)?.scrollIntoView({ behavior: `smooth`, block: `center` }), 50);
-};
-
-onMounted(() => {
-    openAccountManage();
-    focusConnect();
-});
-watch(() => route.query[`connect`], focusConnect);
-onUnmounted(closeAccountManage);
-
-// The subscription connections, served by the sandbox's translator (CLIProxyAPI). For ChatGPT (codex) they are
-// the ONLY connections — Codex authenticates through the translator everywhere (native and under the Claude
-// Code harness), so there's no separate account. For Grok they're secondary rows beneath the native account
-// (the account runs Grok's own harness; a subscription runs Grok models UNDER the Claude Code harness). Claude
-// has no row: it IS the Claude Code harness. A provider can hold several subscription accounts — the translator
-// balances turns across them — so each renders as a row of its own.
-const routedProvider = computed<KeyedProvider | undefined>(() =>
-    managedProvider.value === `codex` || managedProvider.value === `grok` || managedProvider.value === `gemini` ? managedProvider.value : undefined,
-);
-// Each routed row carries two registers of explanation, because they are read at different moments. `hint` is
-// the glanceable one — what this connection costs you, in a fragment — and it is the only one on screen. `about`
-// is the full mechanic, parked behind the row's (i) for the reader who actually wants it: printing both is what
-// turned this card into a wall of prose. The live sign-in's own copy (destination button, login hint) lives in
-// TranslatorConnectFlow beside the flow it narrates.
-const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; about: string }> = {
-    codex: {
-        title: `ChatGPT subscription`,
-        hint: `The only connection Codex needs.`,
-        about: `Runs Codex on your ChatGPT subscription — everywhere: on its own and under the Claude Code harness.`,
-    },
-    grok: {
-        title: `Under Claude Code`,
-        hint: `Your SuperGrok / X Premium subscription.`,
-        about: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription — a separate sign-in from the Grok account above.`,
-    },
-    gemini: {
-        title: `Google account`,
-        // The models are worth naming even in the short line, because they are not the ones a "Google" tab
-        // implies: Google's Antigravity channel vends Claude and GPT-OSS on the same ordinary sign-in (see
-        // gemini-models.ts). Free is the other half — it is the only free row on this page.
-        hint: `Free — Gemini, Claude and GPT-OSS models.`,
-        about: `Runs Gemini, Claude and GPT-OSS models under the Claude Code harness on your Google account — free, and the one connection this provider needs.`,
-    },
-};
-
-// The dot per tab, so the switcher itself answers "which AI can my agent use?" — the card can only ever show one
-// provider, and without it that question costs five clicks. `providerReady` (access.ts) is the shared rule every
-// surface that offers a provider reads; this card must not carry a second opinion about what "connected" means,
-// least of all one that would call a provider ready here and locked in the picker.
-
-// Compact "142k" token count and a short usage summary line per account (from /system/usage).
-const shortTokens = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
-const usageLine = (id: string): string | undefined => {
-    const usage = accountUsage.value[id];
-    if (usage === undefined || usage.turns === 0) {
-        return undefined;
-    }
-    const cost = usage.costUsd > 0 ? ` · $${usage.costUsd.toFixed(2)}` : ``;
-    // Cache read = prompt tokens served from the provider's cache; the rate is the share of prompt input that
-    // hit the cache (read / (read + uncached input)) — how effective prefix caching is for this account.
-    const cacheDenom = usage.cacheReadTokens + usage.inputTokens;
-    const cache =
-        usage.cacheReadTokens > 0 && cacheDenom > 0
-            ? ` · ${shortTokens(usage.cacheReadTokens)} cached (${Math.round((100 * usage.cacheReadTokens) / cacheDenom)}%)`
-            : ``;
-    return `${usage.turns} turns · ${shortTokens(usage.inputTokens)} in / ${shortTokens(usage.outputTokens)} out${cache}${cost}`;
-};
-
-const managedLabel = computed(() => providerTabs.find((tab) => tab.value === managedProvider.value)?.label ?? managedProvider.value);
-// Codex and Gemini own no native account — the subscription row IS their connection, so the accounts list is
-// theirs to skip entirely.
-const hasNativeAccounts = computed(() => managedProvider.value !== `codex` && managedProvider.value !== `gemini`);
-// Grok holds a single account (OpenCode owns the xAI credential), so hide "connect another" once it's linked.
-const canConnectMore = computed(() => managedProvider.value !== `grok` || managedAccounts.value.length === 0);
-// A connect handshake is live once startConnect has produced its authorize URL / device code; the flow itself
-// (and everything provider-specific about it) lives in NativeConnectFlow.
-const connecting = computed(() => authorizeUrl.value !== null);
 
 // --- Agent behavior toggles (per-sandbox, daemon .intentic/settings.json) ----------------------------------
 // The daemon overwrites the whole settings object, so each toggle spreads the current settings and flips just
@@ -183,6 +60,43 @@ const toggleTerseOutput = (value: boolean): void => {
         return;
     }
     saveSandboxSettings.mutate({ ...current, terseOutput: value });
+};
+
+/* --- Custom instructions -------------------------------------------------------------------------------------
+ * The owner's standing instructions, appended to the end of the agent's system prompt (the Agent SDK's
+ * `systemPrompt.append` — the seam `--append-system-prompt` writes to). Terse responses above is the same
+ * mechanism with the text written for you; this is that text, opened up.
+ *
+ * A LOCAL draft rather than a computed over settings, because saving is a whole-object POST that every other
+ * control on this page renders from, and the value is a system-prompt prefix every live conversation is caching:
+ * a per-keystroke save would thrash both. It commits on blur (the textarea's own `change`) or from the Save
+ * button, which is there because a save nobody can see is a save nobody trusts. */
+const INSTRUCTIONS_MAX = 8000; // SandboxSettingsSchema.systemAppend's cap — the daemon rejects more.
+const instructions = ref(``);
+const instructionsDirty = computed(() => sandboxSettings.value !== undefined && instructions.value !== sandboxSettings.value.systemAppend);
+// Seed from the daemon on load, and follow a change made in ANOTHER window — but never over an unsaved edit in
+// this one, which is what the dirty check guards: the settings query refetches on every mutation from anywhere.
+watch(
+    () => sandboxSettings.value?.systemAppend,
+    (saved) => {
+        if (saved !== undefined && !instructionsDirty.value) {
+            instructions.value = saved;
+        }
+    },
+    { immediate: true },
+);
+const saveInstructions = (): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    // Normalise BEFORE the dirty check, not inside the payload: saving a trimmed copy of an untrimmed draft
+    // leaves the two permanently unequal, and the row would sit there claiming unsaved changes forever.
+    instructions.value = instructions.value.trim();
+    if (!instructionsDirty.value) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, systemAppend: instructions.value });
 };
 
 // iq code search: load the iq plugin so the agent reaches for the iq CLI over grep/find/glob.
@@ -400,209 +314,10 @@ const importMemory = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-6">
-        <!-- AI provider accounts the agent runs as. A RowGroup like every other section on this page, NOT a
-             Card: the connections are a grouped list, and wrapping that list in a card put a bordered surface
-             inside a bordered surface for no gain — the group label carries the heading, so the sub-card,
-             the icon and the standalone <h2> all come off. -->
-        <!-- The deep-link flash rings the whole group (label included). `-m-1 p-1` holds the layout still while
-             it does: the ring needs room to sit outside the surface, and growing the section for 2.5s would
-             shove the page. -->
-        <RowGroup id="ai-account" label="AI account" :class="ringing ? '-m-1 rounded-xl p-1 ring-2 ring-info' : ''">
-            <template #info>
-                <InfoHint label="About AI accounts">
-                    <span class="block text-xs text-content">
-                        The accounts your agent signs in as. Every credential is stored inside your sandbox, never on the platform — connecting here
-                        signs the sandbox in, not this browser.
-                    </span>
-                </InfoHint>
-            </template>
-            <!-- The provider switcher rides the group label (where "Command output" carries its own trailing
-                 controls), and the dot per chip is the point: this group shows ONE provider at a time, so
-                 without it the question it exists to answer — which AI can my agent use? — costs a click each. -->
-            <template #actions>
-                <div class="flex flex-wrap items-center justify-end gap-1">
-                    <button
-                        v-for="tab in providerTabs"
-                        :key="tab.value"
-                        type="button"
-                        class="composer-ghost h-6 gap-1.5 px-2 text-2xs font-medium"
-                        :class="{ 'composer-active': managedProvider === tab.value }"
-                        @click="setManagedProvider(tab.value)"
-                        :aria-pressed="managedProvider === tab.value"
-                    >
-                        <span
-                            class="h-1.5 w-1.5 shrink-0 rounded-full"
-                            :class="providerReady(tab.value) ? 'bg-success' : 'bg-content/25'"
-                            :aria-label="providerReady(tab.value) ? `connected` : `not connected`"
-                        />
-                        {{ tab.label }}
-                    </button>
-                </div>
-            </template>
-
-            <!-- Every connection this provider has — native accounts and the translator subscription alike — as
-                 rows of ONE list. They are different mechanisms but the same question ("what am I signed in
-                 with, and can I drop it?"), so they share a row shape: status dot, name, live state, action.
-                 A sign-in in progress opens in the row's own #below, so it stays inside that row's hairline
-                 instead of spawning an inset panel detached from the thing it connects. -->
-            <p v-if="chatError" :class="cmp.alertDanger('m-3')">{{ chatError }}</p>
-
-            <!-- Native accounts (Claude, Grok, Kimi), each disconnectable on its own. Codex and Gemini have
-                 none — the subscription row below IS their connection — so they skip straight to it. -->
-            <template v-if="hasNativeAccounts">
-                <Row v-for="account in managedAccounts" :key="account.id" :class="account.needsReauth ? 'bg-warning/10' : ''">
-                    <template #title>
-                        <span class="flex min-w-0 items-center gap-2.5">
-                            <span class="flex w-[1.125rem] shrink-0 justify-center">
-                                <span class="h-1.5 w-1.5 rounded-full" :class="account.needsReauth ? 'bg-warning' : 'bg-success'" />
-                            </span>
-                            <span class="truncate">{{ account.label }}</span>
-                        </span>
-                    </template>
-                    <!-- A revoked/expired credential explains itself and offers reconnect; else the usage line. -->
-                    <template #description>
-                        <span v-if="account.needsReauth" class="block pl-7 text-warning">{{
-                            account.detail ?? `Signed out — reconnect to keep using it.`
-                        }}</span>
-                        <span v-else-if="usageLine(account.id)" class="block pl-7">{{ usageLine(account.id) }}</span>
-                    </template>
-                    <template #control>
-                        <Button v-if="account.needsReauth && canConnectMore" label="Reconnect" size="small" @click="startConnect" />
-                        <Button label="Disconnect" size="small" severity="danger" :text="true" @click="disconnect(account.id)" />
-                    </template>
-                </Row>
-
-                <!-- No account yet is a ROW, not a sentence floating above a button: same shape as a connected
-                     one, so the empty state reads as the connection that is missing rather than as an apology,
-                     and its action sits where every other row's action sits. -->
-                <Row v-if="managedAccounts.length === 0">
-                    <template #title>
-                        <span class="flex min-w-0 flex-wrap items-center gap-x-2.5">
-                            <span class="flex w-[1.125rem] shrink-0 justify-center">
-                                <span class="h-1.5 w-1.5 rounded-full bg-content/25" />
-                            </span>
-                            <span>{{ managedLabel }} account</span>
-                            <span class="text-2xs font-normal text-subtle">not connected</span>
-                        </span>
-                    </template>
-                    <template #control>
-                        <!-- Filled: with no account at all, this is the one thing the group is asking for. -->
-                        <Button v-if="!connecting" label="Connect" size="small" @click="startConnect">
-                            <template #icon><Icon name="link" /></template>
-                        </Button>
-                    </template>
-                    <template v-if="connecting" #below><NativeConnectFlow /></template>
-                </Row>
-
-                <!-- Adding a SECOND account is a different act from having none: its own quiet row at the end of
-                     the list, which is also where the handshake it starts unfolds. -->
-                <Row v-else-if="canConnectMore" :interactive="!connecting" @click="!connecting && startConnect()">
-                    <template #title>
-                        <span class="flex min-w-0 items-center gap-2.5 text-muted">
-                            <span class="flex w-[1.125rem] shrink-0 justify-center"><Icon name="plus" class="text-2xs" /></span>
-                            <span>Add another account</span>
-                        </span>
-                    </template>
-                    <template v-if="connecting" #below><NativeConnectFlow /></template>
-                </Row>
-            </template>
-
-            <!-- The subscription connection (translator). ChatGPT/Codex and Gemini: the ONE connection kind, so
-                 it's the group's primary control. Grok: rows beneath the native account, for running Grok UNDER
-                 the Claude Code harness. A provider can hold SEVERAL subscription accounts side by side — the
-                 translator balances turns across them, so a second account is more headroom — and each renders
-                 as its own row with its own Disconnect, mirroring the native list above. Codex/Grok mint a
-                 one-time code and the translator connects on its own; Google redirects instead, so that flow
-                 asks for the landing URL back. Either way the shared poll lands the new account's row. -->
-            <template v-if="routedProvider">
-                <Row v-for="account in translatorAccounts[routedProvider]" :key="account.name">
-                    <template #title>
-                        <!-- Wraps rather than truncates: the connection kind stays first (a Grok subscription row
-                             must never read as the native account above it), the sign-in identity beside it. -->
-                        <span class="flex min-w-0 flex-wrap items-center gap-x-2.5">
-                            <span class="flex w-[1.125rem] shrink-0 justify-center"><span class="h-1.5 w-1.5 rounded-full bg-success" /></span>
-                            <span>{{ ROUTED_ROW[routedProvider].title }}</span>
-                            <span class="text-2xs font-normal text-subtle">{{ account.label }}</span>
-                            <!-- The full mechanic lives here rather than on screen: it is a paragraph, and a
-                                 paragraph per row is what made this group unreadable. -->
-                            <InfoHint :label="`About ${ROUTED_ROW[routedProvider].title}`">
-                                <span class="block text-xs text-content">{{ ROUTED_ROW[routedProvider].about }}</span>
-                            </InfoHint>
-                        </span>
-                    </template>
-                    <template #description
-                        ><span class="block pl-7">{{ ROUTED_ROW[routedProvider].hint }}</span></template
-                    >
-                    <template #control>
-                        <Button
-                            label="Disconnect"
-                            size="small"
-                            severity="danger"
-                            :text="true"
-                            :loading="translatorBusy === routedProvider"
-                            @click="disconnectTranslator(routedProvider, account.name)"
-                        />
-                    </template>
-                </Row>
-
-                <!-- No subscription yet: the row states what is missing and offers the one action that fixes it.
-                     With one connected, the same slot quiets down to "Add another account" — a different act
-                     from having none, so it borrows the native list's quiet plus-row shape. Either way the
-                     sign-in it starts unfolds below this row. -->
-                <Row
-                    v-if="translatorAccounts[routedProvider].length === 0"
-                    :key="`connect-${routedProvider}`"
-                >
-                    <template #title>
-                        <span class="flex min-w-0 flex-wrap items-center gap-x-2.5">
-                            <span class="flex w-[1.125rem] shrink-0 justify-center"><span class="h-1.5 w-1.5 rounded-full bg-content/25" /></span>
-                            <span>{{ ROUTED_ROW[routedProvider].title }}</span>
-                            <span class="text-2xs font-normal text-subtle">not connected</span>
-                            <InfoHint :label="`About ${ROUTED_ROW[routedProvider].title}`">
-                                <span class="block text-xs text-content">{{ ROUTED_ROW[routedProvider].about }}</span>
-                            </InfoHint>
-                        </span>
-                    </template>
-                    <template #description
-                        ><span class="block pl-7">{{ ROUTED_ROW[routedProvider].hint }}</span></template
-                    >
-                    <template #control>
-                        <!-- Filled accent only where this row IS the group's one connection (Codex/Gemini). Under
-                             Grok it's the alternative to the native account right above it, and a filled accent
-                             there makes the lesser path the loudest thing on the page. -->
-                        <Button
-                            v-if="translatorConnectFlow?.provider !== routedProvider"
-                            label="Connect"
-                            size="small"
-                            :severity="routedProvider === `grok` ? `secondary` : undefined"
-                            :loading="translatorBusy === routedProvider"
-                            @click="connectTranslator(routedProvider)"
-                        >
-                            <template #icon><Icon name="link" /></template>
-                        </Button>
-                    </template>
-                    <template v-if="translatorConnectFlow && translatorConnectFlow.provider === routedProvider" #below>
-                        <TranslatorConnectFlow :provider="routedProvider" />
-                    </template>
-                </Row>
-                <Row
-                    v-else
-                    :key="`add-${routedProvider}`"
-                    :interactive="translatorConnectFlow?.provider !== routedProvider"
-                    @click="translatorConnectFlow?.provider !== routedProvider && connectTranslator(routedProvider)"
-                >
-                    <template #title>
-                        <span class="flex min-w-0 items-center gap-2.5 text-muted">
-                            <span class="flex w-[1.125rem] shrink-0 justify-center"><Icon name="plus" class="text-2xs" /></span>
-                            <span>Add another account</span>
-                        </span>
-                    </template>
-                    <template v-if="translatorConnectFlow && translatorConnectFlow.provider === routedProvider" #below>
-                        <TranslatorConnectFlow :provider="routedProvider" />
-                    </template>
-                </Row>
-            </template>
-        </RowGroup>
+        <!-- The AI accounts the agent signs in as: the provider switcher, one row per connection, and the
+             live sign-in each row can unfold. Its own component — it is the only stateful, network-driven part
+             of this page, and everything below is a settings toggle. -->
+        <AiAccountSection />
 
         <!-- Why every control below is inert, whenever it is: a settings read that hasn't landed (or failed)
              disables all of them, and an unexplained dead switch is indistinguishable from a broken page. -->
@@ -675,7 +390,7 @@ const importMemory = async (): Promise<void> => {
                  can see what each cleaner is worth and where to add the next handler. -->
             <Row v-if="savings !== undefined && savings.commands > 0" icon="wave-pulse" title="Output savings">
                 <template #description>
-                    {{ savings.commands }} commands · ~{{ shortTokens(savings.rawTokens) }} → ~{{ shortTokens(savings.emittedTokens) }} tokens ·
+                    {{ savings.commands }} commands · ~{{ formatTokens(savings.rawTokens) }} → ~{{ formatTokens(savings.emittedTokens) }} tokens ·
                     <span class="font-medium text-success">{{ savings.savedPct }}% saved</span>
                     <span v-if="savings.holdout.measuredSavedPct !== undefined"> · {{ savings.holdout.measuredSavedPct }}% measured (holdout)</span>
                 </template>
@@ -688,7 +403,7 @@ const importMemory = async (): Promise<void> => {
                     <div v-if="savings.gaps.length > 0" class="mt-2 flex flex-col gap-1 border-t border-line pt-2">
                         <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Un-cleaned (add a handler)</p>
                         <p v-for="gap in savings.gaps.slice(0, 5)" :key="gap.command" class="truncate font-mono text-2xs text-muted">
-                            ~{{ shortTokens(gap.tokens) }} · {{ gap.command }}
+                            ~{{ formatTokens(gap.tokens) }} · {{ gap.command }}
                         </p>
                     </div>
                 </template>
@@ -711,6 +426,53 @@ const importMemory = async (): Promise<void> => {
                         :disabled="sandboxSettings === undefined"
                         @update:model-value="toggleTerseOutput"
                     />
+                </template>
+            </Row>
+
+            <!-- Custom instructions — the owner's own text on the end of the system prompt. Sits directly under
+                 Terse responses because it IS Terse responses generalised, and its help text has one job the
+                 toggles above don't: saying which of the two instruction surfaces this sandbox already has is
+                 the right one, so this doesn't become a third place people scatter standing orders. -->
+            <Row
+                icon="pencil"
+                title="Custom instructions"
+                description="Your standing instructions, added to the end of the assistant's system prompt on every turn in this sandbox."
+            >
+                <template #below>
+                    <textarea
+                        v-model="instructions"
+                        rows="4"
+                        :maxlength="INSTRUCTIONS_MAX"
+                        :disabled="sandboxSettings === undefined"
+                        placeholder="e.g. Answer in Polish. Never run migrations without asking. Prefer pnpm over npm."
+                        :class="cmp.input('w-full resize-y text-xs')"
+                        aria-label="Custom instructions"
+                        @change="saveInstructions"
+                    ></textarea>
+                    <div class="mt-1.5 flex items-center justify-between gap-3">
+                        <p class="text-2xs text-subtle">
+                            Working on the code itself? That belongs in
+                            <RouterLink to="/workspace/CLAUDE.md" class="font-medium text-primary-500 hover:underline">CLAUDE.md</RouterLink>, which
+                            is committed with the repo and read by every assistant. This is for how the agent works with
+                            <span class="font-medium text-content">you</span> — it stays in this sandbox.
+                        </p>
+                        <span class="flex shrink-0 items-center gap-2">
+                            <span v-if="instructions.length > INSTRUCTIONS_MAX - 500" class="text-2xs text-muted">
+                                {{ instructions.length }} / {{ INSTRUCTIONS_MAX }}
+                            </span>
+                            <!-- Blur already saves; the button is for the user who can't tell that it did.
+                                 `mousedown.prevent` keeps focus in the textarea, so pressing it doesn't blur-save
+                                 the field and unmount the button out from under the click that was landing on it. -->
+                            <Button
+                                v-if="instructionsDirty"
+                                label="Save"
+                                size="small"
+                                :loading="saveSandboxSettings.isPending.value"
+                                @mousedown.prevent
+                                @click="saveInstructions"
+                            />
+                        </span>
+                    </div>
                 </template>
             </Row>
 

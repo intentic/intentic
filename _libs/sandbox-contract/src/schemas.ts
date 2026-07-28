@@ -559,6 +559,9 @@ export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySch
 //                        guard + fewer output tokens); off ⇒ the native file tools.
 //   terseOutput       — appends a concise-response steer to the end of the system prompt (a stable suffix, so it
 //                        composes with stableSystemPrompt) to cut the model's OWN output tokens.
+//   systemAppend      — the owner's own standing instructions, appended to the system prompt after everything
+//                        the daemon composes. The generalisation of terseOutput: same position, same stability,
+//                        arbitrary text. "" ⇒ nothing is appended.
 //   iqSearch          — loads the image-baked iq Claude Code plugin (skill + SessionStart nudge) so the agent
 //                        prefers the iq CLI over grep/find/Glob; off ⇒ plugin not loaded, native search tools
 //                        only. Opt-in (default off); the browser Search box uses iq regardless.
@@ -586,6 +589,15 @@ export const SandboxSettingsSchema = z.object({
     skills: z.array(z.string()).default([]),
     hashlineEdits: z.boolean().default(false),
     terseOutput: z.boolean().default(false),
+    /* The owner's standing instructions for this sandbox's agent — the SDK's `systemPrompt.append`, opened up
+     * to the user. It APPENDS to Claude Code's preset prompt and never replaces it: the preset is what makes
+     * the agent good at coding, and the blocks the daemon appends beside it are what the chat's own widgets
+     * are driven by (the question card, the plan approval, the checklist panel). A replaced prompt is a chat
+     * whose cards silently stop appearing, which reaches the user as a broken app rather than a changed agent.
+     *
+     * Bounded because every turn pays for it, and last in the append order so the cached system prefix stays
+     * byte-stable while it is untouched (an edit costs one miss, then re-stabilises). Empty ⇒ nothing appended. */
+    systemAppend: z.string().max(8000).default(""),
     iqSearch: z.boolean().default(false),
     outputCleaners: z.string().default("off"),
     outputHoldout: z.number().min(0).max(1).default(0),

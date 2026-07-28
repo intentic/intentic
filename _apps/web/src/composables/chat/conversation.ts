@@ -297,6 +297,15 @@ export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>(
 // rules can be derived from one place without importing useChat (a cycle).
 export const translatorAccounts = ref<TranslatorAccounts>({ codex: [], grok: [], gemini: [] });
 
+/* Whether the lists above have been READ from this sandbox's daemon yet — the difference between "you have no
+ * account" and "we haven't asked". They are the same empty list, and every surface that offers a provider used
+ * to state the first while it meant the second: the Agent tab's rows said "not connected" and the composer put
+ * up its connect gate, on every page load, for as long as the liveness probe and the tunnel round-trip took —
+ * then took it all back when the accounts landed. A claim a UI has to retract is worse than a spinner, so the
+ * unknown moment gets a shape of its own (skeleton rows, a "checking…" gate) and this flag is what marks it.
+ * Written by useChat (loadAccountStatus / resetChat), and false again for each new sandbox. */
+export const accountsLoaded = ref(false);
+
 // The account a fresh turn on a provider uses: the user's explicit pick when it's still connected, else the
 // provider's first connected account. The single source every account-reset site routes through.
 export const rememberedAccountFor = (provider: AgentProvider): string | undefined => {

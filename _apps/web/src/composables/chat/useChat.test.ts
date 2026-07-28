@@ -45,10 +45,31 @@ const storage = {
 const { sandboxJson, sandboxRequest } = await import("../sandbox/sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 const sandboxJsonMock = vi.mocked(sandboxJson);
+
+// The daemon's connection reads, as one mock. Both halves go through sandboxJson — a read that fails THROWS
+// rather than returning an empty list (refreshAccounts), which is what lets the UI tell "you have no account"
+// apart from "the daemon didn't answer". `accounts` is keyed by the provider route prefix the call carries.
+type Subscriptions = { codex: unknown[]; grok: unknown[]; gemini: unknown[] };
+const NO_SUBSCRIPTIONS: Subscriptions = { codex: [], grok: [], gemini: [] };
+const mockConnections = (connections: { subscriptions?: Subscriptions; accounts?: (path: string) => unknown[] } = {}): void => {
+    sandboxJsonMock.mockImplementation((path: string) =>
+        Promise.resolve(
+            path === `/translator/accounts` ? (connections.subscriptions ?? NO_SUBSCRIPTIONS) : { accounts: connections.accounts?.(path) ?? [] },
+        ),
+    );
+};
 const { useSandbox } = await import("../sandbox/useSandbox");
 const { setDaemonRoutes } = await import("../sandbox/useDaemonRoutes");
 const { loadAccountStatus, openAgentConversation, resetChat, useChat } = await import("./useChat");
 const { usageStatusByAccount } = await import("./usageStatus");
+
+beforeEach(() => {
+    // A daemon with nothing to say, unless the test says otherwise. The singleton keeps background work in
+    // flight across tests (a tab hydrating, a turn reattaching), and an unmocked call resolving to `undefined`
+    // surfaces as an unhandled rejection attributed to whichever test happens to be running.
+    sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));
+    mockConnections();
+});
 
 afterEach(() => {
     vi.clearAllMocks();
@@ -62,8 +83,7 @@ describe(`useChat provider reconciliation`, () => {
         expect(chat.connected.value).toBe(false);
 
         // No native accounts anywhere; only the ChatGPT subscription is connected in the translator.
-        sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ accounts: [] }) } as Response));
-        sandboxJsonMock.mockResolvedValue({ codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], gemini: [] });
+        mockConnections({ subscriptions: { codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], gemini: [] } });
         await loadAccountStatus();
         await nextTick();
 
@@ -78,13 +98,7 @@ describe(`useChat provider reconciliation`, () => {
         resetChat();
         const chat = useChat();
         // Grok's native account is connected, but the translator holds no SuperGrok subscription yet.
-        sandboxRequestMock.mockImplementation((path: string) =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({ accounts: path.startsWith(`/grok`) ? [{ id: `xai`, label: `Grok`, connectedAt: 0 }] : [] }),
-            } as Response),
-        );
-        sandboxJsonMock.mockResolvedValue({ codex: [], grok: [], gemini: [] });
+        mockConnections({ accounts: (path) => (path.startsWith(`/grok`) ? [{ id: `xai`, label: `Grok`, connectedAt: 0 }] : []) });
         await loadAccountStatus();
         await nextTick();
 
@@ -94,7 +108,10 @@ describe(`useChat provider reconciliation`, () => {
         expect(chat.connected.value).toBe(false); // routed: only the translator subscription serves the turn
 
         // The subscription connects (via the Agent tab's "Under Claude Code" row) — the same gate opens.
-        sandboxJsonMock.mockResolvedValue({ codex: [], grok: [{ name: `xai-user.json`, label: `user@x.ai` }], gemini: [] });
+        mockConnections({
+            accounts: (path) => (path.startsWith(`/grok`) ? [{ id: `xai`, label: `Grok`, connectedAt: 0 }] : []),
+            subscriptions: { codex: [], grok: [{ name: `xai-user.json`, label: `user@x.ai` }], gemini: [] },
+        });
         await loadAccountStatus();
         expect(chat.connected.value).toBe(true);
     });
@@ -105,31 +122,26 @@ describe(`account usage hydration`, () => {
         storage.clear();
         resetChat();
         usageStatusByAccount.value = {};
-        sandboxJsonMock.mockResolvedValue({ codex: [], grok: [], gemini: [] });
+        mockConnections();
     });
 
     // The daemon persists each account's usage window; without this the picker stays blank on a fresh load
     // until that account happens to run a turn — which is exactly the turn the user wanted to spend wisely.
     it(`seeds the usage map from the persisted snapshots on the account list`, async () => {
-        sandboxRequestMock.mockImplementation((path: string) =>
-            Promise.resolve({
-                ok: true,
-                json: () =>
-                    Promise.resolve({
-                        accounts: path.startsWith(`/claude`)
-                            ? [
-                                  {
-                                      id: `a1`,
-                                      label: `Personal`,
-                                      connectedAt: 0,
-                                      usage: { windows: [{ kind: `seven_day`, utilization: 12 }], measuredAt: 500 },
-                                  },
-                                  { id: `a2`, label: `Work`, connectedAt: 1 },
-                              ]
-                            : [],
-                    }),
-            } as Response),
-        );
+        mockConnections({
+            accounts: (path) =>
+                path.startsWith(`/claude`)
+                    ? [
+                          {
+                              id: `a1`,
+                              label: `Personal`,
+                              connectedAt: 0,
+                              usage: { windows: [{ kind: `seven_day`, utilization: 12 }], measuredAt: 500 },
+                          },
+                          { id: `a2`, label: `Work`, connectedAt: 1 },
+                      ]
+                    : [],
+        });
         await loadAccountStatus();
 
         expect(usageStatusByAccount.value[`a1`]).toMatchObject({ windows: [{ kind: `seven_day`, utilization: 12 }], measuredAt: 500 });
@@ -139,24 +151,12 @@ describe(`account usage hydration`, () => {
 
     it(`keeps a live streamed reading when the persisted one is older`, async () => {
         usageStatusByAccount.value = { a1: { windows: [{ kind: `seven_day`, utilization: 80 }], measuredAt: 9_000 } };
-        sandboxRequestMock.mockImplementation((path: string) =>
-            Promise.resolve({
-                ok: true,
-                json: () =>
-                    Promise.resolve({
-                        accounts: path.startsWith(`/claude`)
-                            ? [
-                                  {
-                                      id: `a1`,
-                                      label: `Personal`,
-                                      connectedAt: 0,
-                                      usage: { windows: [{ kind: `seven_day`, utilization: 30 }], measuredAt: 500 },
-                                  },
-                              ]
-                            : [],
-                    }),
-            } as Response),
-        );
+        mockConnections({
+            accounts: (path) =>
+                path.startsWith(`/claude`)
+                    ? [{ id: `a1`, label: `Personal`, connectedAt: 0, usage: { windows: [{ kind: `seven_day`, utilization: 30 }], measuredAt: 500 } }]
+                    : [],
+        });
         await loadAccountStatus();
 
         // The daemon's write is fire-and-forget, so a refresh can land between a frame and its persist —

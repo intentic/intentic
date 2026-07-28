@@ -24,7 +24,7 @@ export { Theme } from "./styles/theme.js";
 export { installUi } from "./plugin.js";
 export { vTw } from "./composables/tw.js";
 export { useHighlighter } from "./composables/useHighlighter.js";
-export { formatBytes, timeAgo } from "./format.js";
+export { formatBytes, formatTokens, timeAgo } from "./format.js";
 export { type IconName, type IconSet, iconSets } from "./icons/iconSets.js";
 export { type ExplorerStyle, explorerStyles } from "./icons/explorerStyle.js";
 export {

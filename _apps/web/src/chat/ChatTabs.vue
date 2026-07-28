@@ -24,10 +24,11 @@ import { commandShortcut, registerCommand, type RegisteredCommand } from "../com
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
 
-/* The tab strip + history menu. Reads the conversation list from the useChat singleton; the panel owns the
- * side effects of SWITCHING (scroll pinning), so select/close/open are emitted rather than applied. "New
- * agent" is not one of them: it means the same thing here as on the fleet board, so both call the one
- * startAgent action (agents/agentActions.ts) instead of each surface assembling its own half of it. */
+/* The tab strip + history menu. Reads the conversation list from the useChat singleton and emits select /
+ * close / open rather than writing it: the strip is a view of the tabs, and the panel it lives in is what
+ * hands each verb to the store. "New agent" is not one of them: it means the same thing here as on the fleet
+ * board, so both call the one startAgent action (agents/agentActions.ts) instead of each surface assembling
+ * its own half of it. */
 
 const emit = defineEmits<{
     select: [id: string];
@@ -411,8 +412,8 @@ const openTabMenu = (id: string, event: Event): void => {
 // chords per verb memorized — it's what F2/rename has always done here. Each is rebindable in
 // Settings → Keybindings, per surface: remapping Close Chat leaves Close Tab where it was.
 //
-// Cycling emits `select` rather than writing activeId, because switching a chat is not just a pointer move —
-// the panel re-pins the transcript scroller on the way (see ChatPanel.selectTab).
+// Cycling emits `select` rather than writing activeId, so it takes the same road as a click on a tab: through
+// the panel, which routes it to the store's one writer of the tab list and of the focus (see useChat.setActive).
 let commandDisposables: readonly Disposable[] = [];
 const cycleTab = (delta: number): void => {
     const list = conversations.value;

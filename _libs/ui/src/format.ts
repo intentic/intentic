@@ -16,6 +16,11 @@ export const formatBytes = (bytes: number | undefined): string => {
     return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 };
 
+// Token counts, at the width a chip or a summary line can spare: "142k" once thousands are reached, the exact
+// number below that. The same rounding wherever tokens are quoted (context meter, per-account usage, cleaner
+// savings), so two surfaces quoting the same number never disagree about it.
+export const formatTokens = (tokens: number): string => (tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : String(tokens));
+
 // Coarse "time since" for activity/log/history rows: "just now" under a minute, "Nm ago"/"Nh ago" within a
 // day, else the absolute local timestamp. Distinct on purpose from chat's compact `relativeTime` (no "ago",
 // adds a day tier) — different surfaces want different formats.

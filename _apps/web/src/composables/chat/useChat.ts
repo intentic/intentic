@@ -18,6 +18,7 @@ import {
 import { computed, ref, shallowRef, watch } from "vue";
 import { router } from "../../router";
 import {
+    accountsLoaded,
     acpProviders,
     type CatalogLoadState,
     Conversation,
@@ -417,26 +418,21 @@ const loadUsage = async (): Promise<void> => {
     }
 };
 
-// Point the account card at a provider and prep its connect handshake: an in-progress handshake belongs to
-// the previous account, so drop it, and (when the card is open on a provider with no account) start a fresh one.
+/* Point the account card at a provider. That is ALL it does, and the emptiness is the point.
+ *
+ * It used to fire a connect handshake by itself whenever the card landed on an account-less native provider,
+ * which is what made the switcher flicker: the row painted its "Connect" button, the /oauth/start round-trip
+ * landed a moment later, and the button was yanked out from under the pointer and replaced by a device code
+ * nobody had asked for. It also meant merely LOOKING at a provider minted a one-time code and started a
+ * 15-minute poll, and it did so for three of the five tabs — the two that authenticate through the translator
+ * never armed anything, so the same click did two different things depending on which chip it hit.
+ *
+ * Browsing is browsing: every provider now shows its state and waits to be asked (startConnect /
+ * connectTranslator, from the row's own button). A live handshake is deliberately NOT cancelled here either —
+ * both flows carry the provider they belong to, so a sign-in the user is completing at x.ai survives a look at
+ * another tab instead of being silently killed by it. */
 const setManagedProvider = (target: AgentProvider): void => {
-    // Re-selecting the already-managed provider while a handshake is live must NOT re-authorize: a fresh device
-    // code would diverge from the sign-in tab the user already opened. Only (re)start on an actual switch.
-    if (managedProvider.value === target && (authorizeUrl.value !== null || userCode.value !== null)) {
-        return;
-    }
     managedProvider.value = target;
-    // Codex and Gemini have no native account handshake — both connect through the translator subscription
-    // (connectTranslator), its own control in the card. And no up-front handshake when the active conversation
-    // runs this provider ROUTED (under the Claude Code harness): that too is the translator subscription.
-    // Otherwise, when the card is open on an account-less provider, prep the native handshake so the open-URL
-    // anchor is a real user gesture.
-    const routedActive = target === provider.value && target === `grok` && harness.value === `claude-code`;
-    if (accountManageOpen.value && !subscriptionOnly(target) && accountsOf(target).length === 0 && !routedActive) {
-        void startConnect(); // startConnect drops any prior handshake first
-        return;
-    }
-    cancelConnect();
 };
 
 // --- Routed-provider subscriptions (codex/grok UNDER the Claude Code harness) ------------------
@@ -452,7 +448,21 @@ const setManagedProvider = (target: AgentProvider): void => {
 // the provider held when the login started — a provider can hold several, so "connected" is the count GROWING
 // past it, not the provider being truthy (which an "add another account" login already is from the start).
 const translatorConnectFlow = ref<{ provider: KeyedProvider; url: string; code: string; state: string; baseline: number } | undefined>(undefined);
-const translatorBusy = ref<KeyedProvider | undefined>(undefined);
+/* The account write in flight right now, as the KEY of the thing being written: the provider id while a sign-in
+ * is being started or finished, the account id / auth-file name while one is being dropped. One ref for both
+ * mechanisms (native handshake and translator subscription alike), because it exists to answer one question the
+ * card asks in one place: does THIS row's button spin?
+ *
+ * Keyed rather than boolean so the answer is that row's and not the whole card's — a click is acknowledged in
+ * the button the user pressed, at the moment they press it, instead of by something appearing elsewhere a
+ * round-trip later. Its other half is serialization: one account write at a time, which is the honest reading
+ * of a card that shows one provider at a time. */
+const accountBusy = ref<string | undefined>(undefined);
+/* A routed row's key. Namespaced away from the provider id on purpose: under Grok the native xAI account and
+ * the translator subscription are two connections of the SAME provider, sitting one above the other, and keying
+ * both as `grok` made a click on either spin both their buttons. With `name`, one specific subscription (auth
+ * file names are unique per provider, not across them); without it, that provider's sign-in. */
+const translatorKey = (target: AgentProvider, name?: string): string => `translator:${target}${name === undefined ? `` : `:${name}`}`;
 let translatorPollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const refreshTranslatorAccounts = async (): Promise<void> => {
@@ -492,10 +502,10 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
 // that mint one, a one-time code. The user approves upstream and the poll flips the row to connected. One flow
 // at a time — a new connect supersedes a prior one (mirroring the daemon, which kills a superseded subprocess).
 const connectTranslator = async (target: KeyedProvider): Promise<void> => {
-    if (translatorBusy.value !== undefined) {
+    if (accountBusy.value !== undefined) {
         return;
     }
-    translatorBusy.value = target;
+    accountBusy.value = translatorKey(target);
     error.value = null;
     clearTimeout(translatorPollTimer);
     try {
@@ -508,7 +518,7 @@ const connectTranslator = async (target: KeyedProvider): Promise<void> => {
     } catch (caught) {
         error.value = errorMessage(caught, `Could not start the subscription connection — is your sandbox online?`);
     } finally {
-        translatorBusy.value = undefined;
+        accountBusy.value = undefined;
     }
 };
 
@@ -521,7 +531,7 @@ const completeTranslator = async (redirectUrl: string): Promise<void> => {
     if (flow === undefined) {
         return;
     }
-    translatorBusy.value = flow.provider;
+    accountBusy.value = translatorKey(flow.provider);
     error.value = null;
     try {
         await sandboxJson(`/translator/${flow.provider}/complete`, {
@@ -533,13 +543,13 @@ const completeTranslator = async (redirectUrl: string): Promise<void> => {
     } catch (caught) {
         error.value = errorMessage(caught, `That sign-in link could not be completed — copy the whole URL and try again.`);
     } finally {
-        translatorBusy.value = undefined;
+        accountBusy.value = undefined;
     }
 };
 
 // Drop ONE of the provider's connected accounts, addressed by its translator auth-file name.
 const disconnectTranslator = async (target: KeyedProvider, name: string): Promise<void> => {
-    translatorBusy.value = target;
+    accountBusy.value = translatorKey(target, name);
     try {
         await sandboxRequest(`/translator/${target}/disconnect`, {
             method: `POST`,
@@ -552,7 +562,7 @@ const disconnectTranslator = async (target: KeyedProvider, name: string): Promis
         }
         await refreshTranslatorAccounts();
     } finally {
-        translatorBusy.value = undefined;
+        accountBusy.value = undefined;
     }
 };
 
@@ -606,19 +616,24 @@ watch([providerAccounts, translatorAccounts], () => {
         }
     }
 });
-const authorizeUrl = ref<string | null>(null);
-// Shared account-management panel state. The chat panel renders it, but other workspace areas can open it to
-// hand users back to the single place where provider authorization is managed.
-const accountManageOpen = ref(false);
-
-// In-progress connect handshake, held only between start and completion. Claude round-trips PKCE
-// verifier/state to `completeConnect`; Grok (xAI OAuth via OpenCode) just tracks the poll — OpenCode owns the
-// tokens. (Codex has no native connect: it authenticates through the translator subscription, whose device
-// login is a separate flow — connectTranslator above.)
-type PendingAuth = { provider: "claude"; verifier: string; state: string } | { provider: "grok" } | { provider: "kimi" };
-let pendingAuth: PendingAuth | null = null;
-// Grok's xAI device code, surfaced in the card (pre-filled at x.ai; the user just approves).
-const userCode = ref<string | null>(null);
+/* The in-flight NATIVE sign-in (Claude / Grok / Kimi), held between start and completion — deliberately the
+ * same shape as translatorConnectFlow above, because the card renders the two identically and a difference in
+ * the state is a difference the user ends up looking at.
+ *
+ * It carries the PROVIDER it belongs to, which is what lets a handshake outlive a look at another tab: the flow
+ * unfolds under the row that started it and nowhere else, so browsing the switcher can neither smear a Grok
+ * device code onto Claude's row nor force us to kill a sign-in the user is still completing at x.ai.
+ *
+ * `code` is the device code to approve upstream (Grok's, pre-filled at x.ai); it is empty for the flows that
+ * hand the user something to paste back instead (Claude's authorization code, Kimi's API key). `pkce` is
+ * Claude's verifier/state round-trip, carried to completeConnect and to nothing else. */
+interface NativeConnectFlow {
+    readonly provider: AgentProvider;
+    readonly url: string;
+    readonly code: string;
+    readonly pkce?: { readonly verifier: string; readonly state: string };
+}
+const nativeConnectFlow = ref<NativeConnectFlow | undefined>(undefined);
 // The display label the user typed for the account being connected (blank ⇒ the daemon derives one from the
 // sign-in identity or a provider default). Bound by the account panel; read when a connect completes.
 const connectLabel = ref(``);
@@ -653,13 +668,11 @@ const adoptStranded = (target: AgentProvider, added: OauthAccount): void => {
 };
 
 // Pull a provider's account list from its daemon and keep the selection valid (first account when the current
-// pick is gone). The single reader of the `/accounts` routes.
+// pick is gone). The single reader of the `/accounts` routes. THROWS when the read fails (sandboxJson): a
+// daemon that didn't answer has not told us the user has no accounts, and callers that treat the two the same
+// are how an empty card comes to claim "not connected" during an outage.
 const refreshAccounts = async (target: AgentProvider): Promise<OauthAccount[]> => {
-    const response = await sandboxRequest(`${providerBase(target)}/accounts`);
-    if (!response.ok) {
-        return [...accountsOf(target)];
-    }
-    const list = ((await response.json()) as { accounts?: OauthAccount[] }).accounts ?? [];
+    const list = (await sandboxJson<{ accounts?: OauthAccount[] }>(`${providerBase(target)}/accounts`)).accounts ?? [];
     providerAccounts.value = { ...providerAccounts.value, [target]: list };
     // Seed the shared usage map from the daemon's persisted snapshots, so a fresh page load shows each account's
     // remaining headroom immediately instead of staying blank until that account's next turn. A reading this
@@ -756,18 +769,17 @@ const cancelConnect = (): void => {
         clearTimeout(grokPollTimer);
         grokPollTimer = undefined;
     }
-    pendingAuth = null;
-    authorizeUrl.value = null;
-    userCode.value = null;
+    nativeConnectFlow.value = undefined;
     connectLabel.value = ``;
 };
 
 // One tick of the Grok device-flow poll: OpenCode completes the xAI token exchange on approval, so we just ask
 // the sandbox whether xAI is connected yet, flipping to connected on success. Only the no-paste (device) flow
-// polls; a paste-back method finishes via completeConnect instead.
+// polls; a paste-back method finishes via completeConnect instead. Supersession is checked against the flow
+// OBJECT the tick was started for, so a restarted (or cancelled) handshake retires the ticks of the old one.
 const pollGrokOnce = async (deadline: number): Promise<void> => {
-    const auth = pendingAuth;
-    if (auth?.provider !== `grok`) {
+    const flow = nativeConnectFlow.value;
+    if (flow?.provider !== `grok`) {
         return;
     }
     if (Date.now() > deadline) {
@@ -777,13 +789,12 @@ const pollGrokOnce = async (deadline: number): Promise<void> => {
     }
     try {
         const grokAccounts = await refreshAccounts(`grok`);
-        if (pendingAuth !== auth) {
+        if (nativeConnectFlow.value !== flow) {
             return;
         }
         if (grokAccounts.length > 0) {
             cancelConnect();
             error.value = null;
-            accountManageOpen.value = false;
             // The account just connected — load its model catalog now so the picker is populated immediately,
             // not only after the next reselect or reload.
             void loadProviderModels(`grok`);
@@ -792,7 +803,7 @@ const pollGrokOnce = async (deadline: number): Promise<void> => {
     } catch {
         // Transient (sandbox blip); keep polling until the deadline.
     }
-    if (pendingAuth !== auth) {
+    if (nativeConnectFlow.value !== flow) {
         return;
     }
     grokPollTimer = setTimeout(() => void pollGrokOnce(deadline), 3000);
@@ -820,10 +831,12 @@ export const resetChat = (): void => {
     cancelConnect();
     clearTimeout(translatorPollTimer);
     translatorConnectFlow.value = undefined;
-    translatorBusy.value = undefined;
+    accountBusy.value = undefined;
     translatorAccounts.value = { codex: [], grok: [], gemini: [] };
+    // Cleared with the lists it qualifies: the incoming sandbox's connections are unknown until ITS daemon
+    // answers, and every surface shows that as a wait rather than as "you have nothing connected".
+    accountsLoaded.value = false;
     error.value = null;
-    accountManageOpen.value = false;
 };
 
 // --- Tabs -------------------------------------------------------------------------------------
@@ -1228,87 +1241,94 @@ watch([reachable, conversations], ([isReachable]) => {
 // Moonshot's API-key page, surfaced as the "get your key" link in the Kimi connect card.
 const KIMI_KEY_URL = `https://platform.moonshot.ai/console/api-keys`;
 
+// Started by the row's own Connect button (never by a provider switch — see setManagedProvider), so the whole
+// handshake is a thing the user asked for. `accountBusy` holds the provider for the length of the round-trip:
+// that is the click's acknowledgement, and it is why the sign-in can only ever REPLACE the button that started
+// it rather than appear next to a button still inviting the same click.
 const startConnect = async (): Promise<void> => {
     const target = managedProvider.value;
+    if (accountBusy.value !== undefined) {
+        return;
+    }
     cancelConnect();
     error.value = null;
     if (target === `kimi`) {
         // Kimi authenticates with an API key, not OAuth — there's no server `start`. Arm the paste UI (a link to
-        // Moonshot's key page + the paste field) and finish in completeConnect by POSTing the key. Reuses
-        // authorizeUrl/pendingAuth so the card's existing paste flow (shared with Claude) renders unchanged.
-        pendingAuth = { provider: `kimi` };
-        authorizeUrl.value = KIMI_KEY_URL;
+        // Moonshot's key page + the paste field) and finish in completeConnect by POSTing the key. No device
+        // code: an empty `code` is what tells the card to render its paste field instead.
+        nativeConnectFlow.value = { provider: `kimi`, url: KIMI_KEY_URL, code: `` };
         return;
     }
-    let response: Response;
+    // Busy for the WHOLE start, not just the fetch: clearing it a parse earlier would drop the button back to
+    // "Connect" for a tick before the flow lands under it — the very blink this is here to remove.
+    accountBusy.value = target;
     try {
-        response = await sandboxRequest(`${providerBase(target)}/oauth/start`, { method: `POST` });
-    } catch (err) {
-        error.value = errorMessage(err, `Could not start the ${providerLabel(target)} connection — is your sandbox online?`);
-        return;
+        let response: Response;
+        try {
+            response = await sandboxRequest(`${providerBase(target)}/oauth/start`, { method: `POST` });
+        } catch (err) {
+            error.value = errorMessage(err, `Could not start the ${providerLabel(target)} connection — is your sandbox online?`);
+            return;
+        }
+        if (!response.ok) {
+            const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
+            error.value = body?.error ?? `Could not start the ${providerLabel(target)} connection — is your sandbox online?`;
+            return;
+        }
+        if (target === `grok`) {
+            // xAI's headless device-code flow: the URL is x.ai's verification page with the code pre-filled, so
+            // the user just opens it and approves (no paste-back). `code` is that same pre-filled code, shown
+            // for reassurance. OpenCode polls to completion — we poll /grok/accounts until connected.
+            const body = (await response.json()) as { url: string; code: string };
+            nativeConnectFlow.value = { provider: `grok`, url: body.url, code: body.code };
+            grokPollTimer = setTimeout(() => void pollGrokOnce(Date.now() + CODEX_POLL_DEADLINE_MS), 3000);
+            return;
+        }
+        const body = (await response.json()) as { authorizeUrl: string; verifier: string; state: string };
+        nativeConnectFlow.value = { provider: `claude`, url: body.authorizeUrl, code: ``, pkce: { verifier: body.verifier, state: body.state } };
+    } finally {
+        accountBusy.value = undefined;
     }
-    if (!response.ok) {
-        const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
-        error.value = body?.error ?? `Could not start the ${providerLabel(target)} connection — is your sandbox online?`;
-        return;
-    }
-    if (target === `grok`) {
-        // xAI's headless device-code flow: the URL is x.ai's verification page with the code pre-filled, so the
-        // user just opens it and approves (no paste-back). `code` is that same pre-filled code, shown for
-        // reassurance. OpenCode polls to completion — we poll /grok/accounts until connected.
-        const body = (await response.json()) as { url: string; code: string };
-        pendingAuth = { provider: `grok` };
-        authorizeUrl.value = body.url;
-        userCode.value = body.code;
-        grokPollTimer = setTimeout(() => void pollGrokOnce(Date.now() + CODEX_POLL_DEADLINE_MS), 3000);
-        return;
-    }
-    const body = (await response.json()) as { authorizeUrl: string; verifier: string; state: string };
-    pendingAuth = { provider: `claude`, verifier: body.verifier, state: body.state };
-    authorizeUrl.value = body.authorizeUrl;
 };
 
-const openAccountManage = (): void => {
-    accountManageOpen.value = true;
-    void loadUsage();
-    // Another device may have (dis)connected a subscription since the reachable-seam load — show fresh state.
-    void refreshTranslatorAccounts();
-    // A connect handshake already in flight (a device poll that outlived a card close / the reachable-flash
-    // remount) owns the managed provider — leave it be. Re-running setManagedProvider here would either mint a
-    // fresh device code that diverges from the sign-in tab the user already opened, or hit its cancelConnect
-    // path and kill the live poll.
-    if (pendingAuth !== null) {
-        return;
+/* Point the account card at the provider the active conversation would send to — what it shows when it opens.
+ * Skipped while a sign-in is in flight: that handshake (a device poll can outlive the card being closed and the
+ * reachable-flash remounting it) owns what the card is looking at, and moving to another provider's rows would
+ * hide the code the user is in the middle of approving.
+ *
+ * Nothing here tears a handshake down, and nothing does on the way out either — there is no "close" hook at all.
+ * The Grok device flow completes out-of-band (the user approves at x.ai and the daemon exchanges tokens
+ * server-side later), so cancelConnect stays the sole teardown, driven only by genuine invalidation:
+ * completion (pollGrokOnce), the 15-minute deadline, a fresh startConnect, the user's own Cancel, or resetChat. */
+const showActiveProvider = (): void => {
+    if (nativeConnectFlow.value === undefined && translatorConnectFlow.value === undefined) {
+        managedProvider.value = provider.value;
     }
-    // Manage the accounts of the provider the active conversation would send to; setManagedProvider preps a
-    // connect handshake up front only when that provider has no account yet (so the open-URL anchor is a real
-    // gesture, never a browser-blocked programmatic popup).
-    setManagedProvider(provider.value);
 };
 
-// Closing the card is a pure UI action — it must NOT abort an in-flight connect. The Grok device flow completes
-// out-of-band (the user approves at x.ai and the daemon exchanges tokens server-side later), so its poll has to
-// outlive both this close and the reachable-flash that unmounts SandboxAgent. cancelConnect stays the sole
-// handshake teardown, driven only by genuine invalidation: completion (pollGrokOnce), the 15-min deadline, a
-// fresh startConnect, a deliberate provider switch, or resetChat (sandbox switch).
-const closeAccountManage = (): void => {
-    accountManageOpen.value = false;
+/* Read every connection this sandbox holds — the providers' own accounts AND the translator's subscriptions.
+ * One call, because to a user they are one question ("what is my agent signed in with?"), and because the
+ * answer has to arrive as one state: two independently-landing halves is a card that rearranges itself twice.
+ *
+ * Landing the reads is also what earns the right to say "not connected": `accountsLoaded` flips only if a read
+ * actually came back, so a daemon that is unreachable or mid-restart leaves the surfaces waiting (the reachable
+ * seam retries) instead of asserting an empty state it cannot back up. The translator read is excluded from
+ * that vote deliberately — it swallows its own failure, so it always "succeeds". */
+const refreshConnections = async (): Promise<void> => {
+    const natives = NATIVE_PROVIDERS.filter((target) => !subscriptionOnly(target));
+    const [reads] = await Promise.all([Promise.allSettled(natives.map((target) => refreshAccounts(target))), refreshTranslatorAccounts()]);
+    if (reads.some((read) => read.status === `fulfilled`)) {
+        accountsLoaded.value = true;
+    }
 };
 
-// Reflects the server's view of provider connections so the UI shows the right control on load and when the
-// user switches provider. Module-exported (like resetChat) for sandboxScope, which re-runs it whenever the
-// active daemon becomes reachable — connections live on the daemon, so reachability is the moment the status
-// can actually be read. Codex and Gemini have no account list (both ride a translator subscription, loaded
-// below), so only the providers with a sandbox-owned credential store are listed here.
+// Everything daemon-owned the chat needs, on the seam where it can first be read. Module-exported (like
+// resetChat) for sandboxScope, which re-runs it whenever the active daemon becomes reachable — connections and
+// catalogs live on the daemon, so reachability is the moment either can actually be asked for.
 export const loadAccountStatus = async (): Promise<void> => {
     await Promise.all([
-        ...NATIVE_PROVIDERS.filter((target) => !subscriptionOnly(target)).map(async (target) => {
-            try {
-                await refreshAccounts(target);
-            } catch {
-                // Leave the lists as-is; the composer hint covers the account-less case.
-            }
-        }),
+        // Which accounts and subscriptions this sandbox is signed in with — the gate every provider surface reads.
+        refreshConnections(),
         // Model lists are daemon-owned too — load them on the same reachable seam so the pickers are ready.
         loadAllProviderModels(),
         // Installed ACP agents are providers too — surface them in the picker on the same seam.
@@ -1317,8 +1337,6 @@ export const loadAccountStatus = async (): Promise<void> => {
         // before its first turn. Claude only: the ACP list arrives per session on the wire anyway, and an ACP
         // provider isn't known until loadAcpProviders resolves.
         loadProviderCommands(`claude`),
-        // The translator's subscription connections gate routed chats (codex/gemini always, grok under claude-code).
-        refreshTranslatorAccounts(),
     ]);
 };
 
@@ -1338,66 +1356,76 @@ const loadAcpProviders = async (): Promise<void> => {
 // Only Claude has a paste-back step (exchange the code Anthropic showed against the PKCE handshake). Codex and
 // Grok complete via their device poll loops — no code is entered in this app.
 const completeConnect = async (code: string): Promise<boolean> => {
-    // Kimi: the pasted value is a Moonshot API key, stored as a new account (no OAuth exchange).
-    if (pendingAuth?.provider === `kimi`) {
+    const flow = nativeConnectFlow.value;
+    accountBusy.value = flow?.provider;
+    try {
+        // Kimi: the pasted value is a Moonshot API key, stored as a new account (no OAuth exchange).
+        if (flow?.provider === `kimi`) {
+            let response: Response;
+            try {
+                response = await sandboxRequest(`/kimi/account/connect`, {
+                    method: `POST`,
+                    headers: { "content-type": `application/json` },
+                    body: JSON.stringify({ apiKey: code.trim(), label: connectLabel.value.trim() || undefined }),
+                });
+            } catch {
+                error.value = `Could not connect your Kimi account — check the API key and try again.`;
+                return false;
+            }
+            if (!response.ok) {
+                error.value = `Could not connect your Kimi account — check the API key and try again.`;
+                return false;
+            }
+            addAccount(`kimi`, (await response.json()) as OauthAccount);
+            cancelConnect();
+            error.value = null;
+            // The key just connected — its catalog (Moonshot /v1/models) may only now be discoverable.
+            void loadProviderModels(`kimi`);
+            return true;
+        }
+        if (flow?.pkce === undefined) {
+            error.value = `Start the connection first.`;
+            return false;
+        }
         let response: Response;
         try {
-            response = await sandboxRequest(`/kimi/account/connect`, {
+            response = await sandboxRequest(`/claude/oauth/exchange`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
-                body: JSON.stringify({ apiKey: code.trim(), label: connectLabel.value.trim() || undefined }),
+                body: JSON.stringify({ code, ...flow.pkce, label: connectLabel.value.trim() || undefined }),
             });
         } catch {
-            error.value = `Could not connect your Kimi account — check the API key and try again.`;
+            error.value = `Could not connect your Claude account — check the code and try again.`;
             return false;
         }
         if (!response.ok) {
-            error.value = `Could not connect your Kimi account — check the API key and try again.`;
+            error.value = `Could not connect your Claude account — check the code and try again.`;
             return false;
         }
-        addAccount(`kimi`, (await response.json()) as OauthAccount);
+        addAccount(`claude`, (await response.json()) as OauthAccount);
         cancelConnect();
         error.value = null;
-        // The key just connected — its catalog (Moonshot /v1/models) may only now be discoverable.
-        void loadProviderModels(`kimi`);
+        // The account just connected — supportedModels() needs a Claude credential, so the catalog may only now
+        // be discoverable.
+        void loadProviderModels(`claude`);
         return true;
+    } finally {
+        accountBusy.value = undefined;
     }
-    if (pendingAuth?.provider !== `claude`) {
-        error.value = `Start the connection first.`;
-        return false;
-    }
-    let response: Response;
-    try {
-        response = await sandboxRequest(`/claude/oauth/exchange`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ code, verifier: pendingAuth.verifier, state: pendingAuth.state, label: connectLabel.value.trim() || undefined }),
-        });
-    } catch {
-        error.value = `Could not connect your Claude account — check the code and try again.`;
-        return false;
-    }
-    if (!response.ok) {
-        error.value = `Could not connect your Claude account — check the code and try again.`;
-        return false;
-    }
-    addAccount(`claude`, (await response.json()) as OauthAccount);
-    cancelConnect();
-    error.value = null;
-    // The account just connected — supportedModels() needs a Claude credential, so the catalog may only now
-    // be discoverable.
-    void loadProviderModels(`claude`);
-    return true;
 };
 
-// Disconnect one account of the managed provider by id; drop it from the list and fix the selection.
+// Disconnect one account of the managed provider by id; drop it from the list and fix the selection. Busy for
+// the round-trip, like every other account write — the row's own button says so.
 const disconnect = async (id: string): Promise<void> => {
     const target = managedProvider.value;
+    accountBusy.value = target;
     await sandboxRequest(`${providerBase(target)}/account/disconnect`, {
         method: `POST`,
         headers: { "content-type": `application/json` },
         body: JSON.stringify({ id }),
-    }).catch(() => undefined);
+    })
+        .catch(() => undefined)
+        .finally(() => (accountBusy.value = undefined));
     const remaining = accountsOf(target).filter((entry) => entry.id !== id);
     providerAccounts.value = { ...providerAccounts.value, [target]: remaining };
     if (selectedAccountId.value[target] === id) {
@@ -1440,10 +1468,11 @@ export function useChat() {
         claudeConnected,
         managedProvider,
         setManagedProvider,
-        authorizeUrl,
-        userCode,
+        nativeConnectFlow,
         connectLabel,
-        accountManageOpen,
+        accountsLoaded,
+        accountBusy,
+        translatorKey,
         newChat,
         composerFocus,
         setActive,
@@ -1461,15 +1490,15 @@ export function useChat() {
         decidePermission,
         loadSessions,
         openConversation,
-        openAccountManage,
-        closeAccountManage,
+        showActiveProvider,
+        refreshConnections,
+        loadUsage,
         startConnect,
         completeConnect,
         cancelConnect,
         disconnect,
         translatorAccounts,
         translatorConnectFlow,
-        translatorBusy,
         connectTranslator,
         completeTranslator,
         cancelTranslatorConnect,
