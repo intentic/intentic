@@ -229,8 +229,13 @@ describe(`per-tab drafts`, () => {
  * strip because a window that still had it open wrote it again. */
 describe(`tab snapshots across windows and sandboxes`, () => {
     // What another window would leave in the shared seed: a snapshot naming conversations by id.
+    // Each tab carries composer text, which is what makes it a tab worth restoring at all: an EMPTY isolated tab
+    // is an untouched "New agent" draft, and the strip keeps one of those only while it holds the focus.
     const foreignSnapshot = (active: string, ids: readonly string[]): string =>
-        JSON.stringify({ active, tabs: ids.map((conversationId) => ({ conversationId, isolated: true, draft: ``, attachments: [], queued: [] })) });
+        JSON.stringify({
+            active,
+            tabs: ids.map((conversationId) => ({ conversationId, isolated: true, draft: `typed in another window`, attachments: [], queued: [] })),
+        });
 
     beforeEach(() => {
         storage.clear();
@@ -264,6 +269,30 @@ describe(`tab snapshots across windows and sandboxes`, () => {
         const chat = useChat();
         expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([`conv-a`, `conv-b`]);
         expect(chat.activeId.value).toBe(`conv-b`);
+    });
+
+    /* A restore is a write like any other, so the one-untouched-draft invariant holds across it: an empty
+     * isolated tab that isn't the one holding the focus does not come back. Without that, a snapshot written
+     * while such a tab existed (another window's, or one persisted a beat before the focus moved off it) came
+     * back as a permanent "New agent" tab — one no focus change could ever take, because the focus had already
+     * left it before the reload. It sat in the strip and carded itself on the fleet board indefinitely. */
+    it(`drops a restored "New agent" tab that isn't the one holding the focus`, () => {
+        session.clear();
+        local.set(
+            `intentic.chatTabs.sb1`,
+            JSON.stringify({
+                active: `conv-real`,
+                tabs: [
+                    { conversationId: `conv-empty`, isolated: true, draft: ``, attachments: [], queued: [] },
+                    { conversationId: `conv-real`, isolated: true, draft: `carry on`, attachments: [], queued: [] },
+                ],
+            }),
+        );
+
+        resetChat();
+        const chat = useChat();
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([`conv-real`]);
+        expect(chat.activeId.value).toBe(`conv-real`);
     });
 
     /* The switch flips activeSandboxId a flush before sandboxScope's watch re-scopes the chat. Anything that
@@ -300,10 +329,18 @@ describe(`closing tabs`, () => {
         resetChat();
     });
 
-    // Four tabs, the third active — the shape every case below closes a different slice out of.
+    /* Four tabs, the third active — the shape every case below closes a different slice out of. Each one gets
+     * composer text as it opens: an untouched "New agent" tab is not a tab the strip can hold alongside another
+     * (setConversations enforces one at most, and only as the focused one), so four EMPTY presses would collapse
+     * into a single reused draft. */
     const openFour = (): readonly string[] => {
         const chat = useChat();
-        const ids = [chat.active.value.conversationId, chat.newChat().conversationId, chat.newChat().conversationId, chat.newChat().conversationId];
+        const ids: string[] = [];
+        for (let at = 0; at < 4; at++) {
+            const conversation = at === 0 ? chat.active.value : chat.newChat();
+            conversation.draft.value = `tab ${at}`;
+            ids.push(conversation.conversationId);
+        }
         chat.setActive(ids[2]!);
         return ids;
     };
@@ -378,28 +415,29 @@ describe(`closing tabs`, () => {
 });
 
 /* The strip must not hoard what the user walked away from: an untouched "New agent" tab (no text, no
- * attachment, nothing queued, no turn, no name) closes itself the moment focus moves to another tab. It is
- * also the fleet board's draft card, so an abandoned press otherwise squats in the Active lane looking like
- * work in flight. Anything at all in the tab makes it real and it stays. */
-describe(`abandoned draft sweep`, () => {
-    // The sweep watches activeId, and a real focus change is its own tick — flush after the reset and after
-    // each move so the watcher sees the same sequence a user produces, not one batched endpoint pair.
+ * attachment, nothing queued, no turn, no name) exists only while it holds the focus. It is also the fleet
+ * board's draft card, so an abandoned press otherwise squats in the Active lane looking like work in flight.
+ * Anything at all in the tab makes it real and it stays.
+ *
+ * The rule is an invariant of the ONE writer (setConversations), enforced in the same write that moves the
+ * focus — not a watcher reaping afterwards, which is what it was. Every case here therefore asserts
+ * SYNCHRONOUSLY: the list a caller reads back is already the list the user sees, so no surface can render or
+ * persist the doomed in-between, and an explicit action can't be quietly cancelled out by a reaper racing it. */
+describe(`abandoned drafts`, () => {
     beforeEach(async () => {
         storage.clear();
         resetChat();
         await nextTick();
     });
 
-    it(`closes an untouched New agent tab when focus leaves it — whitespace alone isn't text`, async () => {
+    it(`closes an untouched New agent tab when focus leaves it — whitespace alone isn't text`, () => {
         const chat = useChat();
         const first = chat.active.value.conversationId;
         chat.draft.value = `real work`;
         const abandoned = chat.newChat();
         abandoned.draft.value = `   `;
-        await nextTick();
 
         chat.setActive(first);
-        await nextTick();
 
         expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first]);
         expect(chat.activeId.value).toBe(first);
@@ -419,12 +457,38 @@ describe(`abandoned draft sweep`, () => {
         expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first, kept.conversationId]);
     });
 
-    it(`never stacks two untouched drafts — a second "New agent" press replaces the first`, async () => {
+    /* "New agent" pressed while an untouched one is already open hands THAT tab back. It used to append a
+     * second and let the reaper close the first, which came to the same list one flush later — and so read as a
+     * press that did nothing at all, because the two drafts were indistinguishable: same name, same emptiness,
+     * same board card. There is nothing for a second one to be, so the press is about the caret (startAgent
+     * asks for it either way) and the tab count is deliberately unchanged. */
+    it(`hands back the untouched draft already open instead of minting a second`, () => {
         const chat = useChat();
-        const second = chat.newChat().conversationId;
-        await nextTick();
+        chat.draft.value = `real work`;
+        const first = chat.newChat();
 
-        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([second]);
+        const again = chat.newChat();
+
+        expect(again).toBe(first);
+        expect(chat.conversations.value).toHaveLength(2);
+        expect(chat.activeId.value).toBe(first.conversationId);
+    });
+
+    // The same reuse from a DIFFERENT tab: the press lands the user on the draft they already have, which is a
+    // visible tab switch rather than a silent no-op.
+    it(`focuses an untouched draft the press finds on another tab`, () => {
+        const chat = useChat();
+        const first = chat.active.value.conversationId;
+        chat.draft.value = `real work`;
+        const draft = chat.newChat();
+        // A conversation that opened alongside it (a fleet card, a history row) takes the focus but not the draft.
+        const opened = openAgentConversation({ id: `agent-1`, provider: `claude`, harness: `native`, title: `Someone else's work` });
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first, opened.conversationId]);
+
+        const pressed = chat.newChat();
+
+        expect(pressed).not.toBe(draft); // that one went with the focus it lost
+        expect(chat.activeId.value).toBe(pressed.conversationId);
     });
 
     it(`leaves a draft the fleet has registered alone — that tab is a real agent now`, async () => {

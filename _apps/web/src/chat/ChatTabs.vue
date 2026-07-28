@@ -575,12 +575,24 @@ const openHistory = (event: Event): void => {
                         <span class="min-w-0 flex-1 truncate text-left" :class="statusTabClass(c.status.value)">{{ tabLabel(c) }}</span>
                         <!-- Members with this same conversation active right now. -->
                         <PresenceAvatars v-if="c.session.value !== undefined" :viewers="viewersOfSession(c.session.value.id)" label="in this chat" />
-                        <Icon
-                            name="times"
+                        <!-- The × is a HIT TARGET carrying the glyph, not the glyph itself: at text-2xs the svg
+                             is an 11px square, and a click that misses it lands on the tab — which, on the tab it
+                             is closing (the one the user is looking at), selects an already-selected tab and so
+                             reads as a close that did nothing. The span is the row's full height and wears the
+                             tab's own padding as slop, the same shape FileTabs and the mobile strip give it.
+                             -my-1 cancels the py, so the target is the tab's full 24px height for free; -mr-2
+                             spends the tab's right padding, leaving the target ~27×24 for 12px of title. It stops
+                             short of the title on purpose — reaching further left would trade this miss for the
+                             worse one, a click meant for the tab closing it. -->
+                        <span
                             v-if="conversations.length > 1"
+                            role="button"
+                            aria-label="Close chat"
+                            class="-my-1 -mr-2 flex shrink-0 items-center px-2 py-1 opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
                             @click="closeTab($event, c.conversationId)"
-                            class="-mr-1 shrink-0 text-2xs opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
-                        />
+                        >
+                            <Icon name="times" class="text-2xs" />
+                        </span>
                     </button>
                 </template>
             </template>
@@ -652,12 +664,17 @@ const openHistory = (event: Event): void => {
                                         :viewers="viewersOfSession(c.session.value.id)"
                                         label="in this chat"
                                     />
-                                    <Icon
-                                        name="times"
+                                    <!-- Same hit target as the flat strip's (see there): the glyph is 11px, the
+                                         span is what the pointer actually has to find. -->
+                                    <span
                                         v-if="conversations.length > 1"
+                                        role="button"
+                                        aria-label="Close chat"
+                                        class="-mr-2 -mt-1 flex shrink-0 items-center px-2 py-1 opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
                                         @click="closeTab($event, c.conversationId)"
-                                        class="-mr-1 mt-px shrink-0 text-2xs opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
-                                    />
+                                    >
+                                        <Icon name="times" class="mt-px text-2xs" />
+                                    </span>
                                 </span>
                                 <template v-if="agent !== undefined">
                                     <!-- The crucial numbers, one wrapping line: model, cost, diff, and — right-

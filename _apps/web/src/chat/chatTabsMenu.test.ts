@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 //
-// The strip's right-click menu, driven through the real component: the workspace's file tabs have carried
+// The strip's CLOSE surfaces, driven through the real component: the tab's own × and the right-click menu the
+// workspace's file tabs have carried
 // Close / Close Others / Close to the Right / Close All for a while, and a chat tab now offers the same set.
 // Mounted rather than unit-tested against the store, because the interesting part is the wiring — which tab the
 // menu acts on (the RIGHT-CLICKED one, not the active one), which rows go disabled at the ends of the strip, and
@@ -79,13 +80,19 @@ const flush = async (): Promise<void> => {
     await nextTick();
 };
 
-// Tabs here exist to be closed by the MENU, so each gets composer text before the first flush — an untouched
-// New agent tab closes itself when focus leaves it (useChat's abandoned-draft sweep), and these fixtures
-// change focus with every newChat.
-const pin = (): void => {
-    for (const conversation of useChat().conversations.value) {
-        conversation.draft.value = `pinned`;
+// Tabs here exist to be closed by the MENU, so each is opened WITH composer text. An untouched "New agent" tab
+// is the one thing the strip won't hold two of (useChat's setConversations keeps at most one, and only as the
+// focused tab), so four empty presses would collapse into a single reused draft; and a closed tab has to be a
+// tab first. The last one opened is the active one, the way a press leaves it.
+const openTabs = (count: number): string[] => {
+    const chat = useChat();
+    const ids: string[] = [];
+    for (let at = 0; at < count; at++) {
+        const conversation = at === 0 ? chat.active.value : chat.newChat();
+        conversation.draft.value = `pinned ${at}`;
+        ids.push(conversation.conversationId);
     }
+    return ids;
 };
 
 const tabs = (): HTMLElement[] => [...strip.querySelectorAll<HTMLElement>(`[data-chat-tab]`)];
@@ -113,11 +120,29 @@ const openStripMenu = async (): Promise<void> => {
     await flush();
 };
 
+/* The × the tab wears is a HIT TARGET carrying the glyph, not the glyph with a handler on it: at text-2xs the
+ * svg is an 11px square, and a click that misses one lands on the tab instead — which, on the tab being closed
+ * (the one the user is looking at), selects an already-selected tab and so reads as a close that did nothing.
+ * The reachable size is layout, which jsdom has none of; what is assertable here is that the target exists as its
+ * own labelled element and that hitting it closes THAT tab without also selecting it. */
+it(`closes a tab from the × it wears, without selecting it on the way`, async () => {
+    const chat = useChat();
+    const ids = openTabs(3);
+    chat.setActive(ids[0]!);
+    await nextTick();
+
+    const target = tabs()[2]!.querySelector<HTMLElement>(`[aria-label="Close chat"]`);
+    expect(target).not.toBeNull();
+    target!.click();
+    await flush();
+
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[1]]);
+    expect(chat.activeId.value).toBe(ids[0]); // the click never reached the tab under it
+});
+
 it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () => {
     const chat = useChat();
-    const ids = [chat.active.value.conversationId, chat.newChat().conversationId, chat.newChat().conversationId, chat.newChat().conversationId];
-    chat.setActive(ids[3]!); // the LAST tab is active — every close below is aimed elsewhere
-    pin();
+    const ids = openTabs(4); // the LAST tab is active — every close below is aimed elsewhere
     await nextTick();
     expect(tabs()).toHaveLength(4);
 
@@ -138,9 +163,7 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
 });
 
 it(`teaches the shortcut a close command is bound to, and disables the rows with nothing left to take`, async () => {
-    const chat = useChat();
-    chat.newChat();
-    pin();
+    openTabs(2);
     await nextTick();
 
     // The last tab: nothing to its right, but there is still an "other" to close.
@@ -160,8 +183,7 @@ it(`teaches the shortcut a close command is bound to, and disables the rows with
 
 it(`offers the tab-less rows from the empty strip's menu instead of popping out on the right-click itself`, async () => {
     const chat = useChat();
-    const ids = [chat.active.value.conversationId, chat.newChat().conversationId];
-    pin();
+    const ids = openTabs(2);
     await nextTick();
 
     // The gesture used to toggle the pop-out on the spot, which tore the panel into its own window on a
@@ -184,8 +206,7 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
 
 it(`mass closes past a running agent with no confirm — closing detaches from the turn, it doesn't stop it`, async () => {
     const chat = useChat();
-    const ids = [chat.active.value.conversationId, chat.newChat().conversationId];
-    pin();
+    const ids = openTabs(2);
     // The second tab is mid-turn. Its run is detached daemon-side, so closing the tab leaves the agent working
     // and the chat reopenable from History mid-turn — there is nothing to warn about.
     chat.conversations.value[1]!.streaming.value = true;

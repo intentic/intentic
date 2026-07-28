@@ -77,13 +77,50 @@ const { activeSandboxId, reachable } = useSandbox();
 const conversations = shallowRef<Conversation[]>([]);
 const activeId = ref<string>(``);
 
-// The one writer of the tab list: whatever it is set to, the focus lands on a tab that is actually in it, and
-// on the LAST one when the tab that had it is gone (VSCode behaviour, the rule the workspace's tabs follow
-// too). A focus naming nothing is invisible rather than loud — the strip highlights no tab while the panel
-// quietly shows the first one, so every click afterwards looks like it did nothing.
+/* An untouched "New agent" tab exists only while the focus is ON it. The tab and the fleet board's draft card
+ * are one conversation under two skins, so an abandoned empty draft doesn't just crowd the strip — it squats in
+ * the board's Active lane looking like work in flight. Anything at all in it makes it real and it stays:
+ * composer text (whitespace alone isn't text — send() refuses it too), an attachment staged or still uploading,
+ * a queued message, a transcript, a session, a running turn, a rename, an unread error, or a fleet
+ * registration. */
+const untouchedDraft = (conversation: Conversation): boolean =>
+    conversation.isolated.value &&
+    !conversation.registered.value &&
+    !conversation.streaming.value &&
+    conversation.messages.value.length === 0 &&
+    conversation.draft.value.trim() === `` &&
+    conversation.attachments.value.length === 0 &&
+    conversation.queued.value.length === 0 &&
+    conversation.session.value === undefined &&
+    conversation.title.value === null &&
+    conversation.error.value === null;
+
+/* The one writer of the tab list AND of the focus (setActive routes through it too), holding both of the
+ * strip's invariants in the same write:
+ *   · the focus lands on a tab that is actually in the list, and on the LAST one when the tab that had it is
+ *     gone (VSCode behaviour, the rule the workspace's tabs follow too). A focus naming nothing is invisible
+ *     rather than loud — the strip highlights no tab while the panel quietly shows the first one, so every
+ *     click afterwards looks like it did nothing.
+ *   · at most ONE untouched draft is open, and only as the focused tab.
+ *
+ * The draft rule is enforced HERE rather than by a watcher reacting to the focus afterwards, which is what it
+ * used to be. Reaping after the fact meant the outcome of an explicit action was decided by an implicit reaper
+ * racing it: "New agent" pressed while sitting on an empty draft appended one and the reaper closed the other,
+ * so the press was a visual no-op — and every intermediate state (a focus already moved, the doomed draft still
+ * listed) was live long enough to render and to be persisted by the snapshot watch. It also only ever looked at
+ * the tab that LOST the focus, so a draft that lost it to a list rewrite instead (a close reseating the focus on
+ * the last tab) survived as a permanent, unsweepable "New agent" tab. One synchronous write, no ordering. */
 const setConversations = (next: readonly Conversation[], focus: string): void => {
-    conversations.value = [...next];
-    activeId.value = next.some((conversation) => conversation.conversationId === focus) ? focus : next[next.length - 1]!.conversationId;
+    const focused = next.some((conversation) => conversation.conversationId === focus) ? focus : next[next.length - 1]!.conversationId;
+    // The focused tab is always kept, so the list can never come out empty. A dropped draft needs no teardown:
+    // untouched means no turn to detach from and no transcript to evict.
+    const kept = next.filter((conversation) => conversation.conversationId === focused || !untouchedDraft(conversation));
+    // Reassigned only when the list actually moved, so a plain tab switch doesn't re-fire every list watcher
+    // (the snapshot write, the hydrate sweep) for a change that is only about the focus.
+    if (kept.length !== conversations.value.length || kept.some((conversation, at) => conversation !== conversations.value[at])) {
+        conversations.value = kept;
+    }
+    activeId.value = focused;
 };
 
 // The focused conversation. The find always hits — setConversations reconciles the focus with every list it
@@ -780,10 +817,21 @@ export const resetChat = (): void => {
 };
 
 // --- Tabs -------------------------------------------------------------------------------------
-// Open a fresh empty conversation and focus it. The store half of "New agent" — every surface that offers the
-// action goes through startAgent (agents/agentActions.ts), which is the one place that also puts the caret in
-// the composer and, on mobile, navigates to the new agent's screen. Other tabs keep streaming.
+/* Open a fresh empty conversation and focus it. The store half of "New agent" — every surface that offers the
+ * action goes through startAgent (agents/agentActions.ts), which is the one place that also puts the caret in
+ * the composer and, on mobile, navigates to the new agent's screen. Other tabs keep streaming.
+ *
+ * IDEMPOTENT, because the strip holds at most one untouched draft (see setConversations): pressed while such a
+ * tab is already open, this hands that one back and focuses it rather than minting a second the write would drop
+ * on the spot. The two are indistinguishable to the user — an empty draft has nothing in it to tell them apart —
+ * so the difference was only ever visible as a "+" that did nothing. What the press is FOR then is the caret,
+ * which startAgent asks for either way. */
 const newChat = (): Conversation => {
+    const open = conversations.value.find(untouchedDraft);
+    if (open !== undefined) {
+        setConversations(conversations.value, open.conversationId);
+        return open;
+    }
     const conversation = new Conversation();
     setConversations([...conversations.value, conversation], conversation.conversationId);
     return conversation;
@@ -798,11 +846,12 @@ export const focusComposer = (): void => {
     composerFocus.value++;
 };
 
-// Focus a tab. An id that names no open conversation is ignored rather than written: `active` would fall back
-// to the first tab, so a stale click would silently surface a chat the user didn't ask for.
+// Focus a tab, through the one writer — so leaving an untouched draft takes it with the same write that moves
+// the focus. An id that names no open conversation is ignored rather than written: setConversations would seat
+// the focus on the last tab instead, and a stale click would silently surface a chat the user didn't ask for.
 const setActive = (conversationId: string): void => {
     if (conversations.value.some((conversation) => conversation.conversationId === conversationId)) {
-        activeId.value = conversationId;
+        setConversations(conversations.value, conversationId);
     }
 };
 
@@ -822,38 +871,6 @@ const closeTabs = (ids: ReadonlySet<string>): void => {
     const next = remaining.length > 0 ? remaining : [new Conversation()];
     setConversations(next, activeId.value);
 };
-
-/* An untouched "New agent" tab disappears the moment focus leaves it. The tab and the fleet board's draft
- * card are one conversation under two skins, so an abandoned empty draft doesn't just crowd the strip — it
- * squats in the board's Active lane looking like work in flight. Anything at all in it makes it real and it
- * stays: composer text (whitespace alone isn't text — send() refuses it too), an attachment staged or still
- * uploading, a queued message, a transcript, a session, a running turn, a rename, an unread error, or a
- * fleet registration. */
-const untouchedDraft = (conversation: Conversation): boolean =>
-    conversation.isolated.value &&
-    !conversation.registered.value &&
-    !conversation.streaming.value &&
-    conversation.messages.value.length === 0 &&
-    conversation.draft.value.trim() === `` &&
-    conversation.attachments.value.length === 0 &&
-    conversation.queued.value.length === 0 &&
-    conversation.session.value === undefined &&
-    conversation.title.value === null &&
-    conversation.error.value === null;
-
-watch(activeId, (next, previous) => {
-    // A pre-flush watch can fire with the two equal (focus bounced away and back inside one tick), and the
-    // leaver must never be the tab the user is looking at.
-    if (next === previous) {
-        return;
-    }
-    // Re-looked-up in the live list, so a focus move caused by rewriting the list itself (a close, a sandbox
-    // switch) finds no leaver and sweeps nothing.
-    const left = conversations.value.find((conversation) => conversation.conversationId === previous);
-    if (left !== undefined && untouchedDraft(left)) {
-        closeTabs(new Set([left.conversationId]));
-    }
-});
 
 // --- Active-conversation actions (forwarded) --------------------------------------------------
 // The composer's one send path, whatever the conversation is doing: an idle chat starts a turn, a running one

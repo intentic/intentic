@@ -80,8 +80,8 @@ it(`opens, focuses and hands the composer a tab from the fleet board and from th
     await nextTick();
 
     const { conversations, activeId, composerFocus, draft } = useChat();
-    // The tab a press moves focus OFF has to hold something, or the abandoned-draft sweep (an untouched New
-    // agent tab closes itself when focus leaves it) folds each press into a replacement instead of an addition.
+    // The tab a press moves focus OFF has to hold something, or the one-untouched-draft invariant (an empty New
+    // agent tab exists only while it holds the focus) makes the press hand that same tab back instead of adding.
     draft.value = `work in progress`;
     const before = tabs(strip).length;
     const focusRequests = composerFocus.value;
