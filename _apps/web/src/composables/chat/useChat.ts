@@ -54,6 +54,9 @@ export interface ChatSession {
     readonly id: string;
     readonly title: string;
     readonly updatedAt: number;
+    // Why a searched row matched: the line of the user's own prompt the query hit. Absent on an unfiltered
+    // list, and on a title match — the row already shows the title, so repeating it under itself is noise.
+    readonly snippet?: string;
 }
 
 /* Manages the shared Claude Code chat as a module-level singleton: a set of concurrent conversations (the

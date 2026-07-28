@@ -4,6 +4,7 @@ import { streamAgent } from "../agent/agent.routes.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { matchPrompts } from "../sessions/prompt-index.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import type { PersistedAgent } from "./agents-store.js";
 import { archivable, archiveAgents } from "./archive.js";
@@ -31,7 +32,35 @@ export const createAgentsRoutes = (services: Services) => {
         // Every roster read carries the revision it was taken at, so the browser can tell this answer apart from
         // the /events snapshots racing it — see AgentsListSchema.
         list: i.list.handler(() => ({ agents: services.agents.list(), rev: services.agents.revision() })),
-        archived: i.archived.handler(() => ({ agents: services.agents.listArchived(), rev: services.agents.revision() })),
+        /* The board's filter, and the popped-out rail's. Answers over BOTH halves of the fleet in one pass —
+         * the live roster and the archive — because the board hides by design (its Finished lane windows to a
+         * handful, archived agents are off the roster entirely), and a filter that reports "no matches" while
+         * the agent sits one click away is a lie the user only catches once.
+         *
+         * Matches the TITLE (which is the sanitized first prompt) or any later prompt the user wrote — see
+         * AgentSearchQuerySchema for why an agent's own replies and its tool output are excluded. A title match
+         * carries no snippet: the card already shows it.
+         *
+         * A draft agent has no session and so no prompts, and never appears here — the browser matches those
+         * against the title it holds locally, which is all a conversation with no turn yet has.
+         */
+        search: i.search.handler(async ({ input }) => {
+            const needle = input.query.toLowerCase();
+            const entries = [...services.agents.list(), ...services.agents.listArchived()];
+            const matches = await Promise.all(
+                entries.map(async (agent) => {
+                    if (agent.title?.toLowerCase().includes(needle) === true) {
+                        return { id: agent.id };
+                    }
+                    if (agent.sessionId === undefined) {
+                        return undefined;
+                    }
+                    const snippet = matchPrompts(await services.sessions.prompts(services.workspace.root, agent.sessionId), needle);
+                    return snippet === undefined ? undefined : { id: agent.id, snippet };
+                }),
+            );
+            return { matches: matches.filter((match) => match !== undefined), scanned: entries.length };
+        }),
         get: i.get.handler(({ input }) => {
             const summary = services.agents.get(input.id);
             if (summary === undefined) {

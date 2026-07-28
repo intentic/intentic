@@ -102,6 +102,7 @@ import {
     type SessionSummary,
     workspaceSessionExists,
 } from "./sessions/sessions.js";
+import { readSessionPrompts } from "./sessions/prompt-index.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
 import { postToPlatform, type PlatformResponse } from "./platform/platform-client.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
@@ -327,6 +328,10 @@ export interface Services {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
         readonly read: (dir: string, id: string) => Promise<RestoredMessage[]>;
         readonly search: (dir: string, query: string) => Promise<SessionSummary[]>;
+        // The user's own prompts in one session, for the fleet filter (agents.search matches them per AGENT,
+        // which the session list can't do — an archived agent's transcript is keyed by a worktree path
+        // `listSessions` no longer enumerates). Cached and append-fed daemon-side; see sessions/prompt-index.ts.
+        readonly prompts: (dir: string, id: string) => Promise<readonly string[]>;
         readonly exists: (dir: string, id: string) => Promise<boolean>;
     };
     // platformHostTunnel relays to the platform (connect-token auth) to mint an intentic-provided host tunnel,
@@ -529,7 +534,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
             ...(config.iqModelDir !== "" ? { modelDir: config.iqModelDir } : {}),
             ...(config.iqRgPath !== "" ? { rgPath: config.iqRgPath } : {}),
         }),
-        sessions: { list: listWorkspaceSessions, read: readWorkspaceSession, search: searchWorkspaceSessions, exists: workspaceSessionExists },
+        sessions: {
+            list: listWorkspaceSessions,
+            read: readWorkspaceSession,
+            search: searchWorkspaceSessions,
+            prompts: readSessionPrompts,
+            exists: workspaceSessionExists,
+        },
         platformHostTunnel: (hostName) => postToPlatform(config, "/sandbox/host-tunnel", { hostName }),
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),
         members,

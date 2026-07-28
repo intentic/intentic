@@ -15,6 +15,7 @@ import {
     reviewAction,
 } from "../composables/agents/agentStatus";
 import { createTitleEdit } from "../composables/agents/titleEdit";
+import { markSegments } from "../composables/agents/useAgentFilter";
 import { canArchive, laneOf, type FleetAgent } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/conversation";
@@ -30,7 +31,20 @@ import { modelLabelFor } from "../composables/chat/conversation";
  * wrapping line instead, and a card that cost five rows of height costs two — the difference between five
  * agents on screen and a dozen. Nothing is dropped or added: same DOM, same facts, different flow. */
 
-const props = defineProps<{ agent: FleetAgent; now: number; dense?: boolean; dragging?: boolean; busy?: boolean; selected?: boolean }>();
+const props = defineProps<{
+    agent: FleetAgent;
+    now: number;
+    dense?: boolean;
+    dragging?: boolean;
+    busy?: boolean;
+    selected?: boolean;
+    // The board's filter, when one is on. `match` is the line of the user's own prompt the query hit — the
+    // EVIDENCE for this card being in a filtered lane. Absent when the hit was the title (already on the card,
+    // and marked below instead). A card that matches for a reason the user can't see is what teaches people
+    // to stop trusting a search, so the filter never narrows a lane without this.
+    match?: string;
+    query?: string;
+}>();
 const emit = defineEmits<{ open: []; review: []; archive: []; restore: []; grab: [event: PointerEvent, card: HTMLElement] }>();
 
 const { mobile } = useDevice();
@@ -51,6 +65,9 @@ const review = computed(() => (mobile.value ? undefined : reviewAction(props.age
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
 const model = computed(() => (props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.model) : undefined));
 const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
+// The title with the filter's term marked, and one plain run when no filter is on.
+const titleRuns = computed(() => markSegments(displayTitle.value, props.query?.toLowerCase() ?? ``));
+const matchRuns = computed(() => (props.match === undefined ? undefined : markSegments(props.match, props.query?.toLowerCase() ?? ``)));
 // The unread chip, in the two flavours worth telling apart: an agent nobody has opened yet is "New"; one you
 // HAVE opened that has worked since is "Updated" — with "New" on both, every returning agent reads as a
 // stranger. The marker behind it lives on the daemon entry, so opening it anywhere clears it everywhere.
@@ -137,7 +154,11 @@ const grab = (event: PointerEvent): void => {
                 @vue:mounted="edit.focusInput"
             />
             <template v-else>
-                <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{ displayTitle }}</span>
+                <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">
+                    <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
+                        run.text
+                    }}</span>
+                </span>
                 <button
                     type="button"
                     aria-label="Rename agent"
@@ -186,6 +207,22 @@ const grab = (event: PointerEvent): void => {
              that fits a kanban lane. Row (`dense`): the same blocks along one wrapping line — each block already
              shrinks or wraps internally, so the line degrades on its own as the board narrows. -->
         <div :class="dense ? 'flex flex-wrap items-center gap-x-3 gap-y-1' : 'flex flex-col gap-1.5'">
+            <!-- WHY this card survived the filter: the line of the user's own prompt the query hit. Leads the
+                 body, because while a filter is on that is the question the card is being read to answer —
+                 and only renders when the hit was NOT the title, which is marked in place above instead
+                 (echoing it here would push every other card down the lane to repeat what is already on
+                 screen). Two lines before the clamp: a snippet cut to one is usually cut mid-phrase, and a
+                 fragment that doesn't contain the sentence is no longer evidence. Full width in the `dense`
+                 row form, so it stays a line of prose rather than a column squeezed between two stat blocks. -->
+            <p v-if="matchRuns !== undefined" class="flex min-w-0 items-start gap-1.5 text-2xs text-muted" :class="dense ? 'w-full' : ''">
+                <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
+                <span class="line-clamp-2 min-w-0 flex-1 italic leading-4">
+                    <span v-for="(run, at) in matchRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''">{{
+                        run.text
+                    }}</span>
+                </span>
+            </p>
+
             <!-- Provenance, ahead of the model/branch line: for an agent the user never started, "who asked for
                  this" outranks what it runs on. Renders nothing for a user-started agent. -->
             <OriginMark :origin="agent.origin" />

@@ -300,7 +300,7 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh" as const, ageMs: 0 } }),
         close: () => {},
     },
-    sessions: { list: async () => [], read: async () => [], search: async () => [], exists: async () => true },
+    sessions: { list: async () => [], read: async () => [], search: async () => [], prompts: async () => [], exists: async () => true },
     platformHostTunnel: async () => ({ status: 200, json: { hostname: "ssh-abc.example.com", tunnelToken: "tok" } }),
     ensurePreviewRoutes: async () => {},
     members: { list: async () => [], add: async () => {}, remove: async () => {} },
@@ -749,7 +749,7 @@ test("a bridge token reaches the agent-conversation surface and NOTHING else", a
     const app = createApp(
         services({
             auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
-            sessions: { list: async () => [], read: async () => [], search: async () => [], exists: async () => true },
+            sessions: { list: async () => [], read: async () => [], search: async () => [], prompts: async () => [], exists: async () => true },
         }),
     );
     const bridge = { "x-intentic-bridge": "ibt_valid" };
@@ -800,7 +800,12 @@ test("sessions.list returns the full list, and routes to search when a query is 
     const client = clientFor(
         createApp(
             services({
-                sessions: { list: async () => all, read: async () => [], search: async (_root, query) => (query === "auth" ? matches : []) },
+                sessions: {
+                    list: async () => all,
+                    read: async () => [],
+                    search: async (_root, query) => (query === "auth" ? matches : []),
+                    prompts: async () => [],
+                },
             }),
         ),
     );
@@ -821,7 +826,9 @@ test("sessions.get restores a transcript, and a session the store cannot read is
             { role: "assistant" as const, text: dir, tools: [{ id: "t1", name: "Read", category: "read" as const, status: "completed" as const }] },
         ];
     });
-    const client = clientFor(createApp(services({ sessions: { list: async () => [], read, search: async () => [], exists: async () => true } })));
+    const client = clientFor(
+        createApp(services({ sessions: { list: async () => [], read, search: async () => [], prompts: async () => [], exists: async () => true } })),
+    );
 
     // The tool cards ride along, which is what lets a reopened tab show the run and not just the prose.
     expect(await client.sessions.get({ id: "s1" })).toEqual({
@@ -1622,7 +1629,7 @@ test("agent.run pre-flights a dead resume target with a coded error instead of s
     const client = clientFor(
         createApp(
             services({
-                sessions: { list: async () => [], read: async () => [], search: async () => [], exists: async () => false },
+                sessions: { list: async () => [], read: async () => [], search: async () => [], prompts: async () => [], exists: async () => false },
                 agent: async function* () {
                     agentCalled = true;
                     yield { kind: "done" };
@@ -1841,6 +1848,52 @@ test("a turn's title seeds a fresh entry and agents.rename overwrites it", async
     expect(renamed.title).toBe("Login fix");
     expect((await client.agents.list()).agents[0]?.title).toBe("Login fix");
     expect(await errorCode(client.agents.rename({ id: "nope", title: "x" }))).toBe("NOT_FOUND");
+});
+
+/* The fleet filter. Matches the title (which IS the sanitized first prompt) or any later prompt the user
+ * wrote, and — the part the board depends on and no session-level search can give it — it answers over the
+ * ARCHIVE too. A board whose filter stopped at the live roster would report "no matches" for an agent sitting
+ * one click away behind the archive button. */
+test("agents.search matches titles and later prompts, across the archive, and never the agent's own words", async () => {
+    // Prompts keyed by session id, standing in for the transcripts the daemon would read.
+    const prompts: Record<string, string[]> = {
+        "sess-1": ["fix the login bug", "actually make it use landAgent instead"],
+        "sess-2": ["tidy the readme"],
+    };
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield { kind: "session", sessionId: "pending" };
+                    yield { kind: "done" };
+                },
+                sessions: {
+                    list: async () => [],
+                    read: async () => [],
+                    search: async () => [],
+                    prompts: async (_root, id) => prompts[id] ?? [],
+                    exists: async () => true,
+                },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "fix the login bug", conversationId: "conv1", isolated: true });
+    await runAgentTurn(client, { prompt: "tidy the readme", conversationId: "conv2", isolated: true });
+
+    // Under two characters the contract refuses: below that everything matches and the scan is pure cost.
+    expect(await errorCode(client.agents.search({ query: "a" }))).toBe("BAD_REQUEST");
+
+    // A title hit needs no transcript, so it reports no snippet — the card already shows what it matched on.
+    expect(await client.agents.search({ query: "login" })).toEqual({ matches: [{ id: "conv1" }], scanned: 2 });
+    // …and a hit in a LATER prompt reports the line, which is the whole reason a filtered card is believable.
+    expect(await client.agents.search({ query: "readme" })).toMatchObject({ matches: [{ id: "conv2" }] });
+
+    // Archiving takes conv1 off the roster; the filter must still find it.
+    await client.agents.archive({ ids: ["conv1"] });
+    expect((await client.agents.list()).agents.map((agent) => agent.id)).toEqual(["conv2"]);
+    expect(await client.agents.search({ query: "login" })).toEqual({ matches: [{ id: "conv1" }], scanned: 2 });
+
+    expect(await client.agents.search({ query: "nothing here" })).toEqual({ matches: [], scanned: 2 });
 });
 
 test("git.status resolves the repo dir, and rejects an unknown repo", async () => {

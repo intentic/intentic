@@ -25,6 +25,7 @@ import { resolveWithin } from "../workspace/workspace-files.js";
 import { setupNoticeFor, workspaceSetup } from "../workspace/workspace-setup.js";
 import { startAnchor } from "../agents/isolation.js";
 import { landAgent } from "../agents/land.js";
+import { recordPrompt } from "../sessions/prompt-index.js";
 import type { AgentRequest } from "./agent.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { resolveRequest } from "./agent-requests.js";
@@ -774,6 +775,15 @@ export const createAgentRoutes = (services: Services) => {
                 .join("\n\n");
             if (!steerTurn(input.conversationId, paths.length > 0 ? withAttachmentNote(withEditor, paths) : withEditor)) {
                 throw new ORPCError("NOT_FOUND", { message: "no steerable turn running for that conversation" });
+            }
+            // A steered message is something the user SAID, so the fleet filter has to find it. Recorded here
+            // rather than left to the transcript because the prompt index reads a session's file once and holds
+            // it (prompt-index.ts) — a mid-turn message that only ever landed in the file would be invisible to
+            // every search until the daemon restarted. `input.text`, not the composed prompt: the editor-context
+            // note and the attachment note are protocol, and matching them would hit every steered turn at once.
+            const sessionId = services.agents.sessionIdOf(input.conversationId);
+            if (sessionId !== undefined) {
+                recordPrompt(sessionId, input.text);
             }
             return { ok: true } as const;
         }),

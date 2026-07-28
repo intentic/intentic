@@ -10,35 +10,90 @@ const { listSessions, getSessionMessages, getSessionInfo } = vi.hoisted(() => ({
 }));
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({ listSessions, getSessionMessages, getSessionInfo }));
 
-// N sessions newest-first: s0..s{n-1}. Titles are "chat 0".. so a title needle can target one precisely.
-const seed = (n: number): void => {
-    listSessions.mockResolvedValue(Array.from({ length: n }, (_, i) => ({ sessionId: `s${i}`, customTitle: `chat ${i}`, lastModified: n - i })));
-    // Each transcript holds one user turn whose text is "body <id>", so a content needle can target one session.
+/* N sessions newest-first: <tag>0..<tag>{n-1}. Titles are "chat 0".. so a title needle can target one
+ * precisely, and each transcript holds one user turn reading "body <id>" so a prompt needle can too.
+ *
+ * The `tag` is not decoration: the prompt index caches a session's prompts by id for the life of the process
+ * (they are append-only, so nothing invalidates them), which means two tests sharing an id would share a
+ * transcript. Each test seeds its own namespace instead of the module exporting a reset nothing in production
+ * would ever call.
+ */
+const seed = (tag: string, n: number): void => {
+    listSessions.mockResolvedValue(Array.from({ length: n }, (_, i) => ({ sessionId: `${tag}${i}`, customTitle: `chat ${i}`, lastModified: n - i })));
     getSessionMessages.mockImplementation(async (id: string) => [{ type: "user", message: { content: `body ${id}` } }]);
 };
 
 test("title match returns without reading the transcript", async () => {
-    seed(3);
+    seed("t", 3);
     getSessionMessages.mockClear();
     const hits = await searchWorkspaceSessions("/work", "chat 1");
-    expect(hits.map((s) => s.id)).toEqual(["s1"]);
-    // s1 matched by title; the other two are read for content, s1 is not.
-    expect(getSessionMessages).not.toHaveBeenCalledWith("s1", expect.anything());
+    expect(hits.map((s) => s.id)).toEqual(["t1"]);
+    // t1 matched by title; the other two are read for prompts, t1 is not.
+    expect(getSessionMessages).not.toHaveBeenCalledWith("t1", expect.anything());
+    // …and a title match carries no snippet: the row already shows the title it matched on.
+    expect(hits[0]?.snippet).toBeUndefined();
 });
 
-test("content match within the recent-N window is found", async () => {
-    seed(3);
-    const hits = await searchWorkspaceSessions("/work", "body s2", 10);
-    expect(hits.map((s) => s.id)).toEqual(["s2"]);
+test("a prompt match is found and reports the line it hit", async () => {
+    seed("p", 3);
+    const hits = await searchWorkspaceSessions("/work", "body p2");
+    expect(hits.map((s) => s.id)).toEqual(["p2"]);
+    expect(hits[0]?.snippet).toBe("body p2");
 });
 
-test("a content match beyond the content limit is not returned or even read", async () => {
-    seed(12);
-    getSessionMessages.mockClear();
-    // "body s11" lives in the 12th-newest session; with contentLimit 10 it's outside the scanned slice.
-    const hits = await searchWorkspaceSessions("/work", "body s11", 10);
-    expect(hits).toEqual([]);
-    expect(getSessionMessages).not.toHaveBeenCalledWith("s11", expect.anything());
+// The scan used to read transcripts for the ten most recent sessions only, because each read rebuilt the whole
+// transcript. It reads the user half alone now, and holds it — so recall no longer falls off a cliff at the
+// tenth chat, which is precisely where "the one I'm looking for" tends to live.
+test("a prompt match past the tenth-newest session is still found", async () => {
+    seed("w", 12);
+    const hits = await searchWorkspaceSessions("/work", "body w11");
+    expect(hits.map((s) => s.id)).toEqual(["w11"]);
+});
+
+/* The whole point of the rule: YOUR words, not the agent's. On a fleet where every transcript names most of
+ * the workspace's identifiers, matching assistant prose or tool output returns nearly everything. */
+test("assistant prose and tool output are not matches", async () => {
+    listSessions.mockResolvedValue([{ sessionId: "r0", customTitle: "chat", lastModified: 1 }]);
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "check the config" } },
+        { type: "assistant", message: { content: [{ type: "text", text: "landAgent lives in laneDrop.ts" }] } },
+        { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "grep found landAgent 214 times" }] } },
+    ]);
+    expect(await searchWorkspaceSessions("/work", "landAgent")).toEqual([]);
+    expect((await searchWorkspaceSessions("/work", "check the config")).map((s) => s.id)).toEqual(["r0"]);
+});
+
+// The daemon staples a readiness/delegation preamble on the front of a prompt and an attachment note on the
+// end (agent.routes.ts). Both are stored verbatim, and both are protocol — matching them would make
+// "dependencies" or "attached" hit every agent that ever ran with a setup notice.
+test("the injected preamble and attachment note are not searchable text", async () => {
+    const notice = "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet";
+    listSessions.mockResolvedValue([{ sessionId: "i0", customTitle: "chat", lastModified: 1 }]);
+    getSessionMessages.mockResolvedValue([
+        {
+            type: "user",
+            message: {
+                content: `${notice}\n\n---\n\nrename the lane\n\nThe user attached these files — read them with the Read tool as needed:\n- /work/shot.png`,
+            },
+        },
+    ]);
+    expect(await searchWorkspaceSessions("/work", "Dependencies are NOT")).toEqual([]);
+    expect(await searchWorkspaceSessions("/work", "shot.png")).toEqual([]);
+    expect((await searchWorkspaceSessions("/work", "rename the lane")).map((s) => s.id)).toEqual(["i0"]);
+});
+
+// A snippet is EVIDENCE, so it has to carry the hit and enough around it to read — windowed, not truncated
+// from the front, and with the newlines collapsed so one match can't push the rest of a lane off screen.
+test("a long prompt is windowed around the hit rather than cut from the start", async () => {
+    const long = `${"filler ".repeat(40)}\n\nthe landAgent bug\n\n${"more ".repeat(40)}`;
+    listSessions.mockResolvedValue([{ sessionId: "n0", customTitle: "chat", lastModified: 1 }]);
+    getSessionMessages.mockResolvedValue([{ type: "user", message: { content: long } }]);
+    const snippet = (await searchWorkspaceSessions("/work", "landagent"))[0]?.snippet ?? "";
+    expect(snippet).toContain("landAgent");
+    expect(snippet).not.toContain("\n");
+    expect(snippet.startsWith("…")).toBe(true);
+    expect(snippet.endsWith("…")).toBe(true);
+    expect(snippet.length).toBeLessThanOrEqual(122);
 });
 
 // A stored turn as the SDK files it: the assistant's prose and tool_use blocks on one message, their results

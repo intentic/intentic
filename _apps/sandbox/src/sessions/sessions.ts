@@ -4,13 +4,16 @@ import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contra
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import { stripTurnPreamble } from "../agent/turn-preamble.js";
+import { matchPrompts, readSessionPrompts } from "./prompt-index.js";
 
 // A past conversation in this workspace, for the platform's chat-history list. `title` is the SDK's
 // resolved display summary (custom title / auto-summary / first prompt); `updatedAt` is its last-modified ms.
+// `snippet` is set only by a search, and only when the hit was in a prompt the title doesn't already show.
 export interface SessionSummary {
     readonly id: string;
     readonly title: string;
     readonly updatedAt: number;
+    readonly snippet?: string;
 }
 
 // The `message` field of a stored turn is an Anthropic message: content is a string or a block array. The
@@ -55,24 +58,32 @@ export const listWorkspaceSessions = async (dir: string): Promise<SessionSummary
     }));
 };
 
-// Filter the history list by a keyword, for the chat-history search box. Titles are matched across every
-// listed session (cheap, already loaded); content is scanned only for the most recent `contentLimit` sessions,
-// since each content match reads that session's transcript. Result keeps the newest-first order of `list`.
-// ponytail: case-insensitive substring scan, content read for ≤contentLimit recent sessions; add an index or
-// ranking if recall over older chats matters.
-export const searchWorkspaceSessions = async (dir: string, query: string, contentLimit = 10): Promise<SessionSummary[]> => {
+/* Filter the history list by a keyword, for the chat-history search box — by the SAME rule the fleet board's
+ * filter runs (agents.search): the session's title, and the prompts the USER wrote in it. Two search boxes in
+ * one window that disagree about what "matches" means is worse than one of them not existing.
+ *
+ * That rule is also what let the old per-session content cap go. This used to read transcripts for the ten
+ * most recent sessions only, because each hit cost a full readWorkspaceSession (tool cards, call-time diffs,
+ * result settling — all of it thrown away by a substring test). readSessionPrompts reads the user half alone
+ * and holds it, so scanning the whole listed set costs one pass per session for the life of the daemon.
+ *
+ * Result keeps the newest-first order of `list`. A session whose TITLE matched carries no snippet: the title
+ * is the row's own heading, and repeating it under itself is noise rather than evidence.
+ */
+export const searchWorkspaceSessions = async (dir: string, query: string): Promise<SessionSummary[]> => {
     const needle = query.toLowerCase();
     const sessions = await listWorkspaceSessions(dir);
-    const contentHits = await Promise.all(
-        sessions.slice(0, contentLimit).map(async (session) => {
+    const matched = await Promise.all(
+        sessions.map(async (session): Promise<SessionSummary | undefined> => {
             if (session.title.toLowerCase().includes(needle)) {
-                return false; // Already a title match; no need to read the transcript.
+                return session;
             }
-            const messages = await readWorkspaceSession(dir, session.id);
-            return messages.some((message) => message.text.toLowerCase().includes(needle));
+            const snippet = matchPrompts(await readSessionPrompts(dir, session.id), needle);
+            // Object.assign, not a spread — these summaries are this call's own, built fresh by the list above.
+            return snippet === undefined ? undefined : Object.assign(session, { snippet });
         }),
     );
-    return sessions.filter((session, index) => session.title.toLowerCase().includes(needle) || contentHits[index] === true);
+    return matched.filter((session) => session !== undefined);
 };
 
 // Cheap existence probe for the pre-flight resume check: getSessionInfo reads only that session's file

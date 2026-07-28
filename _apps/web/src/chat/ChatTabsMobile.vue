@@ -129,6 +129,9 @@ const openFromHistory = (id: string): void => {
                             <span class="min-w-0 flex-1 truncate text-sm text-content">{{ session.title }}</span>
                             <PresenceAvatars :viewers="viewersOfSession(session.id)" label="in this chat" />
                         </span>
+                        <!-- Why this row matched, when it wasn't the title: the line of the user's own prompt
+                             the query hit — the same evidence the desktop history menu and the fleet board show. -->
+                        <span v-if="session.snippet !== undefined" class="line-clamp-2 text-2xs italic text-muted">{{ session.snippet }}</span>
                         <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
                     </button>
                 </template>

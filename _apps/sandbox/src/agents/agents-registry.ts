@@ -1,4 +1,5 @@
 import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, planParts } from "@intentic/sandbox-contract";
+import { recordPrompt } from "../sessions/prompt-index.js";
 import type { AgentsStore, AgentTitleSource, PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
 
@@ -36,6 +37,11 @@ interface RuntimeState {
     contextWindow: number | undefined;
     startedAt: number | undefined;
     lastAt: number | undefined;
+    // This turn's prompt, held only until it can be filed under a session id. A FIRST turn has none at begin
+    // (the SDK mints it and announces it on the `session` frame), and the fleet filter searches by what the
+    // user wrote — so without this the prompt that just started an agent is the one prompt that agent can't
+    // be found by, for as long as its turn runs. Cleared the moment it is filed.
+    pendingPrompt: string | undefined;
     // Frame-carried fields flushed into the persisted entry at finish (one write per turn, not per frame).
     pendingSessionId: string | undefined;
     pendingCostUsd: number;
@@ -53,6 +59,7 @@ const freshRuntime = (): RuntimeState => ({
     contextWindow: undefined,
     startedAt: undefined,
     lastAt: undefined,
+    pendingPrompt: undefined,
     pendingSessionId: undefined,
     pendingCostUsd: 0,
     pendingInputTokens: 0,
@@ -85,6 +92,9 @@ export interface AgentsRegistry {
     // pane liveness alone would call that done. Known from the turn's first SDK frame (`session`), well before
     // its first command; an id the entry has not been flushed with yet falls back to the last turn's.
     readonly liveSessionIds: () => string[];
+    // One conversation's CURRENT session id, including a running first turn's — the entry is only flushed with
+    // it at finish, so `entry(id).sessionId` alone is undefined for exactly the turn most likely to be steered.
+    readonly sessionIdOf: (id: string) => string | undefined;
     // Acquire the conversation's turn mutex and mark it running, creating/updating the entry. False ⇒ a turn
     // is already running for that conversation (the caller surfaces the coded busy error).
     readonly begin: (turn: AgentTurnIdentity, now: number) => Promise<boolean>;
@@ -266,6 +276,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
         },
         entry: entryOf,
         running: (id) => runtime.get(id)?.running === true,
+        sessionIdOf: (id) => runtime.get(id)?.pendingSessionId ?? entryOf(id)?.sessionId,
         liveSessionIds: () =>
             [...runtime]
                 .filter(([, state]) => state.running)
@@ -327,6 +338,15 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             state.running = true;
             state.startedAt = now;
             state.lastAt = now;
+            // File this turn's prompt against the session the fleet filter will search — right now if the
+            // conversation already has one, else on the `session` frame that mints it (see observe). The
+            // transcript gets the same prompt moments later, but "moments" is a whole turn long when the turn
+            // is a twenty-minute one, and the prompt just sent is the likeliest thing to be searched for.
+            if (existing?.sessionId !== undefined) {
+                recordPrompt(existing.sessionId, turn.prompt);
+            } else {
+                state.pendingPrompt = turn.prompt;
+            }
             runtime.set(turn.conversationId, state);
             await persist();
             broadcast();
@@ -385,6 +405,12 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             switch (event.kind) {
                 case "session":
                     state.pendingSessionId = event.sessionId;
+                    // The turn's own prompt has been waiting for exactly this id (see begin) — file it so the
+                    // agent is findable by what started it from its first frame, not from its last.
+                    if (state.pendingPrompt !== undefined) {
+                        recordPrompt(event.sessionId, state.pendingPrompt);
+                        state.pendingPrompt = undefined;
+                    }
                     return;
                 case "usage":
                     state.pendingCostUsd += event.costUsd ?? 0;

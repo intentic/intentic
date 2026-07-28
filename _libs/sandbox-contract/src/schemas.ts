@@ -248,6 +248,26 @@ export const AgentIdsSchema = z.object({ ids: z.array(z.string().min(1)).min(1).
 // browser holds its optimistic add/remove of exactly these ids until it sees a roster at or past `rev`.
 export const AgentsMovedSchema = z.object({ moved: z.array(AgentSummarySchema), rev: z.number() });
 export type AgentsMoved = z.infer<typeof AgentsMovedSchema>;
+/* Search the fleet by what the USER wrote — the board's filter (and the popped-out rail's).
+ *
+ * Deliberately the user's own prompts and nothing else. An agent's replies and its tool output mention
+ * nearly every identifier in the workspace, so a transcript-wide match on a fleet this size returns most of
+ * the board and the filter stops filtering; the words the user typed are both what they remember and what
+ * tells two agents apart. The card TITLE is the first of those prompts (sanitized), so a title match and a
+ * prompt match are one rule, not two.
+ *
+ * Two chars minimum: below that every agent matches and the scan is pure cost.
+ */
+export const AgentSearchQuerySchema = z.object({ query: z.string().trim().min(2) });
+// One matching agent, and the evidence for it. `snippet` is the matched prompt windowed around the hit —
+// absent when the match is the title, which the card already shows. A card that matches for a reason the user
+// cannot see is worse than no filter at all.
+export const AgentMatchSchema = z.object({ id: z.string(), snippet: z.string().optional() });
+export type AgentMatch = z.infer<typeof AgentMatchSchema>;
+// `scanned` is how many agents the daemon actually read prompts for, so the board can say when a query saw
+// less than the whole fleet rather than implying it saw all of it.
+export const AgentSearchResultSchema = z.object({ matches: z.array(AgentMatchSchema), scanned: z.number() });
+export type AgentSearchResult = z.infer<typeof AgentSearchResultSchema>;
 // rename's input: the user-chosen display title (bounded like sanitizeTitle's cap).
 export const AgentRenameSchema = z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(80) });
 export const AgentFileDiffQuerySchema = z.object({ id: z.string().min(1), repo: z.string().min(1), path: z.string().min(1) });
@@ -499,7 +519,15 @@ export const ModelsSchema = z.object({ models: z.array(ModelSchema), default: z.
 // ---- sessions ----
 
 export const SessionIdParamSchema = z.object({ id: z.string() });
-export const SessionSummarySchema = z.object({ id: z.string(), title: z.string(), updatedAt: z.number() });
+export const SessionSummarySchema = z.object({
+    id: z.string(),
+    title: z.string(),
+    updatedAt: z.number(),
+    // Why a searched session matched: the line of the USER's own prompt the query hit, windowed around it.
+    // Absent on an unfiltered list, and on a match the title already shows — a snippet repeating the row's
+    // own heading is noise, not evidence. See AgentMatchSchema for the same field on the fleet's side.
+    snippet: z.string().optional(),
+});
 export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySchema) });
 
 // ---- settings: per-sandbox agent settings (.intentic/settings.json) ----

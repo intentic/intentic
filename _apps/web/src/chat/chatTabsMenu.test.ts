@@ -45,11 +45,14 @@ let resetChat: typeof import("../composables/chat/useChat").resetChat;
 
 // Mounted ONCE for the file: ChatTabs registers the chat.* commands on mount and the registry throws on a
 // duplicate id, so each test resets the conversation list instead of remounting. installUi rather than
-// startAgent.test.ts's stub Icon — the menu IS a PrimeVue overlay, so it needs the real plugin.
+// startAgent.test.ts's stub Icon — the menu IS a PrimeVue overlay, so it needs the real plugin. vue-query goes
+// on too: the strip carries the agents filter, whose daemon tier is a useQuery.
 // `onClose` is the one line ChatPanel adds around the store call (it also re-pins the transcript scroller).
 beforeAll(async () => {
     const ChatTabs = (await import(`./ChatTabs.vue`)).default;
     const { installUi } = await import(`@intentic-app/ui`);
+    const { VueQueryPlugin } = await import(`@tanstack/vue-query`);
+    const { queryClient } = await import(`../composables/queryPersistence`);
     const { router } = await import(`../router`);
     ({ useChat, resetChat } = await import(`../composables/chat/useChat`));
 
@@ -57,6 +60,7 @@ beforeAll(async () => {
     document.body.appendChild(strip);
     const app = createApp({ render: () => h(ChatTabs, { onClose: (ids: ReadonlySet<string>) => useChat().closeTabs(ids) }) });
     app.use(router);
+    app.use(VueQueryPlugin, { queryClient });
     installUi(app);
     app.mount(strip);
 });

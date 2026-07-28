@@ -7,6 +7,8 @@ import {
     AgentIdsSchema,
     AgentLandSchema,
     AgentRenameSchema,
+    AgentSearchQuerySchema,
+    AgentSearchResultSchema,
     AgentsListSchema,
     AgentsMovedSchema,
     AgentSummarySchema,
@@ -33,6 +35,11 @@ import {
 export const agentsContract = {
     list: oc.route({ method: "GET", path: "/agents" }).output(AgentsListSchema),
     archived: oc.route({ method: "GET", path: "/agents/archived" }).output(AgentsListSchema),
+    // The board's filter. Answers over BOTH halves of the fleet — the live roster and the archive — because
+    // the board hides by design (the Finished lane windows to a handful, archived agents are off the roster
+    // entirely), and a filter that reports "no matches" while the agent sits one click away is a lie. The
+    // never-carded conversations that are neither are `sessions.list`'s query, which matches by the same rule.
+    search: oc.route({ method: "GET", path: "/agents/search" }).input(AgentSearchQuerySchema).output(AgentSearchResultSchema),
     get: oc.route({ method: "GET", path: "/agents/{id}" }).input(AgentIdSchema).output(AgentSummarySchema),
     rename: oc.route({ method: "POST", path: "/agents/{id}/rename" }).input(AgentRenameSchema).output(AgentSummarySchema),
     seen: oc.route({ method: "POST", path: "/agents/{id}/seen" }).input(AgentIdSchema).output(AgentSummarySchema),

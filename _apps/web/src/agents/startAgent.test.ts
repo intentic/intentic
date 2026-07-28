@@ -5,8 +5,10 @@
 // press ANYWHERE opens a chat tab, focuses it, and asks for the composer caret. Each surface used to assemble
 // its own half of that (the board skipped the caret, the strip skipped the mobile route), which is exactly the
 // drift a store-level unit test cannot see — so this one presses the real buttons and reads the real strip.
+import { VueQueryPlugin } from "@tanstack/vue-query";
 import { beforeAll, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
+import { queryClient } from "../composables/queryPersistence";
 
 // Same import-time globals the other mounted-component tests stand up (see ChatToolCard.test.ts): ui's
 // useDevice reads window.matchMedia at module scope, environment.ts reads window.env. matches:false keeps the
@@ -47,8 +49,9 @@ beforeAll(async () => {
     router = (await import(`../router`)).router;
 });
 
-// A bare mount with the two app-level registrations the real app makes (the global Icon component and
-// PrimeVue's v-tooltip) plus the router, which both surfaces inject.
+// A bare mount with the app-level registrations the real app makes (the global Icon component and PrimeVue's
+// v-tooltip), the router, and vue-query — both surfaces carry the agents filter, whose daemon tier is a
+// useQuery and so needs the client the real app provides in main.ts.
 const mount = (component: unknown): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
@@ -56,6 +59,7 @@ const mount = (component: unknown): HTMLElement => {
     app.component(`Icon`, { render: () => null });
     app.directive(`tooltip`, {});
     app.use(router);
+    app.use(VueQueryPlugin, { queryClient });
     app.mount(el);
     return el;
 };

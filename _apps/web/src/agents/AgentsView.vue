@@ -6,9 +6,12 @@ import { useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
 import { dropActionLabel, dropRejection } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
+import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import { FINISHED_WINDOW, type FleetAgent, type FleetLane, useAgents } from "../composables/agents/useAgents";
+import { relativeTime } from "../composables/chat/catalog";
 import { useChat } from "../composables/chat/useChat";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
+import FilterField from "../components/FilterField.vue";
 import AgentCard from "./AgentCard.vue";
 
 /* The fleet as a kanban: Attention | Active | Finished — attention leftmost because the board's whole job is
@@ -71,27 +74,81 @@ const {
     dismissReceipt,
     busyIds,
 } = useAgents();
-const { active } = useChat();
+const { active, openConversation } = useChat();
 const { dragged, dragging, draggedId, over, action, accepts, busyId, ghostStyle, begin, consumeSuppressedOpen } = useAgentDrag();
+
+/* --- The filter ------------------------------------------------------------------------------------------
+ * Matches what the USER wrote — the card's title (which IS their sanitized first prompt) and every later
+ * prompt in that agent's transcript. Local for the tabs this browser holds, daemon-side for everything else;
+ * see useAgentFilter for why the two tiers exist and why it's a factory rather than a singleton.
+ *
+ * The field is always on the header rather than hiding behind a glyph, so nobody has to learn that the board
+ * can be searched at all. The cost is a header that WRAPS on a squeezed board — which is exactly what the
+ * chat panel's drag handle produces (see NARROW_BOARD_PX below), so the bar is a .view-header-wrap and the
+ * field grows into whatever room is left, the pills and New agent keeping theirs. */
+const { query, needle, active: filtering, matches, snippetOf, archivedMatches, sessionMatches, searching } = useAgentFilter();
+const filterField = ref<InstanceType<typeof FilterField> | undefined>(undefined);
 
 // The Finished lane's two extra states. Both live here rather than in the store: they are how this ONE board
 // is being looked at, and a second surface opening the fleet should not inherit a scroll-position-like choice.
 const showAllFinished = ref(false);
 const archiveOpen = ref(false);
 
+// The results that are OFF the board — expanded by the footer row below the lanes. Collapsed by default so a
+// query answers with the board first and its outskirts second; reset whenever the query changes, since "show
+// me the rest" was said about a set that no longer exists.
+const showBeyond = ref(false);
+watch(needle, () => (showBeyond.value = false));
+
 // The lane's visible cards. Finished shows its window (or the archive, when open); the other two lanes are
 // self-emptying and show everything.
+//
+// A FILTER lifts the Finished window: that cap exists to keep a browsing list short (and to keep the
+// TransitionGroup off several hundred cards), and a result set is neither — hiding four of a query's six hits
+// behind "6 earlier" would be the board deciding which of the user's own matches they meant.
 const cardsFor = (lane: FleetLane): FleetAgent[] => {
-    if (lane !== `finished`) {
-        return lanes.value[lane];
-    }
-    if (archiveOpen.value) {
-        return archived.value;
-    }
-    return showAllFinished.value ? lanes.value.finished : lanes.value.finished.slice(0, FINISHED_WINDOW);
+    const source =
+        lane !== `finished`
+            ? lanes.value[lane]
+            : archiveOpen.value
+              ? archived.value
+              : filtering.value || showAllFinished.value
+                ? lanes.value.finished
+                : lanes.value.finished.slice(0, FINISHED_WINDOW);
+    return filtering.value ? source.filter(matches) : source;
+};
+
+// How many of the lane's agents the filter kept, against how many it holds — the `3 of 12` on its header. The
+// denominator is the lane, not the window: while filtering the window is lifted anyway, and a count that
+// disagreed with the cards under it would be worse than none.
+const laneCount = (lane: FleetLane): string => {
+    const total = archiveOpen.value && lane === `finished` ? archived.value.length : lanes.value[lane].length;
+    return filtering.value ? `${cardsFor(lane).length} of ${total}` : `${total}`;
 };
 
 const hiddenFinished = computed(() => Math.max(0, lanes.value.finished.length - FINISHED_WINDOW));
+
+// What a query found that the board isn't showing: agents in the archive, and conversations no agent owns
+// (a plain chat, or one whose registry entry is long gone). Without this the filter would answer "nothing"
+// for something sitting one click away, which is the failure a search is least forgiven for.
+const beyondCount = computed(() => archivedMatches.value.length + sessionMatches.value.length);
+// Suppressed while the archive is the Finished column: those cards are already on screen there.
+const beyondVisible = computed(() => filtering.value && !archiveOpen.value && beyondCount.value > 0);
+const beyondLabel = computed(() => {
+    const parts: string[] = [];
+    if (archivedMatches.value.length > 0) {
+        parts.push(`${archivedMatches.value.length} in the archive`);
+    }
+    if (sessionMatches.value.length > 0) {
+        parts.push(`${sessionMatches.value.length} in earlier chats`);
+    }
+    return parts.join(` · `);
+});
+
+// A never-carded conversation opens as an ordinary tab — the same route the History menu's rows take.
+const openSession = (id: string): void => {
+    void openConversation(id);
+};
 
 const toggleArchive = (): void => {
     archiveOpen.value = !archiveOpen.value;
@@ -145,7 +202,7 @@ watch(archivedFlash, () => {
 const editable = (target: EventTarget | null): boolean =>
     target instanceof HTMLElement && (target.isContentEditable || target.tagName === `INPUT` || target.tagName === `TEXTAREA`);
 const undoShortcut = computed(() => commandShortcut(`agents.undoArchive`));
-let undoCommand: Disposable | undefined;
+let boardCommands: readonly Disposable[] = [];
 
 // A lane's drop affordance, as ONE class string per state — two ring widths or two min-heights in the same
 // list would resolve by Tailwind's emit order rather than by intent. The min-height only exists mid-drag, to
@@ -199,22 +256,39 @@ onMounted(() => {
     // anything, and an empty board would hide every agent they ever ran behind an unlabelled button.
     void loadArchived();
     ticker = setInterval(() => (now.value = Date.now()), 1000);
-    undoCommand = registerCommand({
-        owner: `builtin`,
-        command: `agents.undoArchive`,
-        title: `Undo Archive`,
-        icon: `history`,
-        keybinding: `Mod+Z`,
-        when: (event) => undoable.value.length > 0 && !editable(event.target),
-        handler: undoArchive,
-    });
+    boardCommands = [
+        registerCommand({
+            owner: `builtin`,
+            command: `agents.undoArchive`,
+            title: `Undo Archive`,
+            icon: `history`,
+            keybinding: `Mod+Z`,
+            when: (event) => undoable.value.length > 0 && !editable(event.target),
+            handler: undoArchive,
+        }),
+        // The field is on the header already, so this is an accelerator rather than the way in. Focus AND
+        // select, so a chord pressed with a stale query in the box starts a new one by typing (VS Code's find
+        // flow). Claimed only while the board is mounted — Mod+F outside it is still the browser's own find —
+        // and rebindable in Settings → Keybindings like every other command here.
+        registerCommand({
+            owner: `builtin`,
+            command: `agents.filter`,
+            title: `Filter Agents…`,
+            icon: `search`,
+            keybinding: `Mod+F`,
+            handler: () => filterField.value?.focus(),
+        }),
+    ];
 });
 onUnmounted(() => {
     clearInterval(ticker);
     clearTimeout(receiptTimer);
     clearTimeout(pulseTimer);
     boardObserver?.disconnect();
-    undoCommand?.dispose();
+    for (const disposable of boardCommands) {
+        disposable.dispose();
+    }
+    boardCommands = [];
     // The receipt is the board's, not the app's: leaving it set would float it over whatever surface the user
     // came back to the board from.
     dismissReceipt();
@@ -227,6 +301,15 @@ const LANES: readonly { key: FleetLane; label: string; dot: string; empty: strin
 ];
 
 const total = computed(() => LANES.reduce((sum, lane) => sum + lanes.value[lane.key].length, 0));
+
+// The header's tally. Summed over the same cardsFor the lanes render, so it can never disagree with the
+// `n of m` counts under it.
+const kept = computed(() => LANES.reduce((sum, lane) => sum + cardsFor(lane.key).length, 0));
+const matchTally = computed(() => `${kept.value} of ${total.value}`);
+
+// Nothing on the board AND nothing beyond it — the filter's own empty state, which is a different thing from
+// an empty fleet (there ARE agents; none of them is this one).
+const noMatches = computed(() => filtering.value && !archiveOpen.value && kept.value === 0 && beyondCount.value === 0);
 
 // "Clear" only appears when it would do something — the Finished lane holds the archivable set exactly (it is
 // landed-or-idle by construction), so its length is the answer.
@@ -254,6 +337,18 @@ const reviewAgent = (agent: FleetAgent): void => {
     open(agent);
     void router.push(`/agents/${encodeURIComponent(agent.id)}`);
 };
+
+// A FILTERED board is a result set wearing the lanes' shape, so it does not drag. Half the lanes may be
+// reading "no matches", the archive's own matches sit in a group with no lane at all, and a card dropped onto
+// a lane that is currently a lens would be acted on for a reason the user never sees. The gesture comes
+// straight back when the query is cleared — nothing about the board's state changed, only how it is being
+// looked at.
+const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): void => {
+    if (filtering.value) {
+        return;
+    }
+    begin(event, agent, card);
+};
 </script>
 
 <template>
@@ -261,13 +356,18 @@ const reviewAgent = (agent: FleetAgent): void => {
          mobile tab bar and the docked terminal without either of them having to be measured. It is not a
          containing block for the fixed drag ghost — only transforms and containment would be. -->
     <div ref="boardEl" class="relative flex h-full min-h-0 flex-col">
-        <div class="view-header flex items-center gap-2 border-b border-line px-3">
-            <span class="text-sm font-semibold text-content">Agents</span>
+        <!-- The bar WRAPS rather than shaving its contents: the filter field is permanent, and /agents lives in
+             the shell's middle column, which the chat panel's drag handle squeezes to a few hundred pixels
+             while the window stays wide. Given the choice between three shrunken controls on one line and the
+             field dropping to a full-width second row, the row wins — a 90px search box is not a search box.
+             The field is the only thing that grows; the pills and New agent keep their size. -->
+        <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1">
+            <span class="shrink-0 text-sm font-semibold text-content">Agents</span>
             <!-- Two different facts, two different pills: "needs you" is BLOCKED work (an approval, a question,
                  a conflict, an error) and earns the warning colour; "unread" is only "you haven't looked yet"
                  and stays informational — with its own way out, so silencing the board never means clicking
                  through every card. -->
-            <span v-if="blocking > 0" class="rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">
+            <span v-if="blocking > 0" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">
                 {{ blocking }} need{{ blocking === 1 ? "s" : "" }} you
             </span>
             <button
@@ -275,13 +375,23 @@ const reviewAgent = (agent: FleetAgent): void => {
                 type="button"
                 aria-label="Mark all agents read"
                 v-tooltip.bottom="'Mark all read'"
-                class="inline-flex items-center gap-1 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link transition-colors hover:bg-primary-600/25"
+                class="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link transition-colors hover:bg-primary-600/25"
                 @click="markAllSeen"
             >
                 <Icon name="check" class="text-2xs" />{{ unread }} unread
             </button>
-            <span class="flex-1"></span>
-            <button type="button" :class="cmp.buttonPrimary('gap-1 px-2.5 py-1 text-2xs')" @click="startAgent">
+            <FilterField
+                ref="filterField"
+                v-model="query"
+                :busy="searching"
+                label="Filter agents by your messages"
+                placeholder="Filter by your messages…"
+                class="min-w-32 flex-1 basis-40"
+            />
+            <!-- The tally, so an empty board under a query reads as "nothing matched" rather than as a board
+                 that broke. Only while filtering: the lane headers already carry the unfiltered counts. -->
+            <span v-if="filtering" class="shrink-0 text-2xs text-muted">{{ matchTally }}</span>
+            <button type="button" :class="cmp.buttonPrimary('shrink-0 gap-1 px-2.5 py-1 text-2xs')" @click="startAgent">
                 <Icon name="plus" class="text-2xs" />New agent
             </button>
         </div>
@@ -355,13 +465,16 @@ const reviewAgent = (agent: FleetAgent): void => {
                                 <Icon name="arrow-left" class="text-2xs" />
                             </button>
                             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Archived</span>
-                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ archived.length }}</span>
+                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ laneCount("finished") }}</span>
                             <Icon v-if="archiveLoading" name="spinner" spin class="text-2xs text-muted" />
                         </template>
                         <template v-else>
                             <span class="h-2 w-2 rounded-full" :class="lane.dot"></span>
                             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
-                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ lanes[lane.key].length }}</span>
+                            <!-- `3 of 12` while filtering: WHICH LANE a match sits in is half the answer ("still
+                                 running" vs "already finished"), so the lanes stay and say how much of
+                                 themselves is on screen rather than silently shrinking. -->
+                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ laneCount(lane.key) }}</span>
                         </template>
                         <span class="flex-1"></span>
                         <template v-if="lane.key === 'finished' && !archiveOpen">
@@ -384,8 +497,11 @@ const reviewAgent = (agent: FleetAgent): void => {
                             >
                                 <Icon name="history" class="text-2xs" />{{ archived.length }}
                             </button>
+                            <!-- Gone while filtering, for the reason the drag is (grabCard): "Clear" archives
+                                 the WHOLE lane, and offering it above a lane showing "1 of 12" is offering a
+                                 bulk action whose scope is not the one on screen. -->
                             <button
-                                v-if="clearable > 0"
+                                v-if="clearable > 0 && !filtering"
                                 type="button"
                                 aria-label="Archive every finished agent"
                                 v-tooltip.bottom="`Archive all ${clearable} — nothing is lost, and you can undo it`"
@@ -399,7 +515,12 @@ const reviewAgent = (agent: FleetAgent): void => {
                     <p v-if="lane.key === 'finished' && archiveOpen && archived.length === 0" class="px-3 pb-3 text-2xs text-subtle">
                         Nothing archived yet. Finished agents land here on their own after a few quiet days.
                     </p>
-                    <p v-else-if="cardsFor(lane.key).length === 0" class="px-3 pb-3 text-2xs text-subtle">{{ lane.empty }}</p>
+                    <!-- An emptied lane keeps its header and says so on one line. It does NOT disappear: three
+                         columns collapsing to one as the query lands makes the whole board jump under the
+                         cursor mid-keystroke, and the lane you were about to read moves out from under it. -->
+                    <p v-else-if="cardsFor(lane.key).length === 0" class="px-3 pb-3 text-2xs text-subtle">
+                        {{ filtering ? "No matches in this lane." : lane.empty }}
+                    </p>
                     <TransitionGroup v-else tag="div" name="lane" class="relative flex flex-col gap-2 px-2 pb-2">
                         <AgentCard
                             v-for="agent in cardsFor(lane.key)"
@@ -410,17 +531,20 @@ const reviewAgent = (agent: FleetAgent): void => {
                             :dragging="draggedId === agent.id && dragging"
                             :busy="busyId === agent.id || busyIds.includes(agent.id)"
                             :selected="!mobile && active.conversationId === agent.id"
+                            :match="snippetOf(agent)"
+                            :query="needle"
                             @open="focusAgent(agent)"
                             @review="reviewAgent(agent)"
                             @archive="archive([agent.id])"
                             @restore="restore([agent.id])"
-                            @grab="(event, card) => begin(event, agent, card)"
+                            @grab="(event, card) => grabCard(event, agent, card)"
                         />
                     </TransitionGroup>
                     <!-- The lane's tail, not a pager: the count is the point ("there are 12 more"), and the row
-                         is what keeps them one press away instead of gone. -->
+                         is what keeps them one press away instead of gone. Gone while filtering — the window is
+                         lifted there (see cardsFor), so there is nothing behind it to offer. -->
                     <button
-                        v-if="lane.key === 'finished' && !archiveOpen && hiddenFinished > 0"
+                        v-if="lane.key === 'finished' && !archiveOpen && !filtering && hiddenFinished > 0"
                         type="button"
                         class="mx-2 mb-2 inline-flex items-center justify-center gap-1 rounded-lg border border-dashed border-line py-1.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
                         @click="showAllFinished = !showAllFinished"
@@ -430,6 +554,86 @@ const reviewAgent = (agent: FleetAgent): void => {
                     </button>
                 </section>
             </div>
+
+            <!-- WHAT THE QUERY FOUND OFF THE BOARD. The board hides by design — the Finished lane windows to a
+                 handful and archived agents leave the roster entirely — so a filter confined to the lanes would
+                 answer "no matches" for an agent sitting one click away, and the user only has to catch that
+                 once to stop believing the field. One row reports the count; expanding it puts the archive's
+                 hits on real cards (restore and all) and the never-carded conversations on history rows.
+                 Collapsed by default, and re-collapsed on every new query: the board is the answer, this is
+                 its footnote. -->
+            <div v-if="beyondVisible" class="border-t border-line px-3 pb-3 pt-2">
+                <button
+                    type="button"
+                    class="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-2xs text-muted transition-colors hover:text-content"
+                    :aria-expanded="showBeyond"
+                    @click="showBeyond = !showBeyond"
+                >
+                    <Icon name="search" class="shrink-0 text-2xs text-subtle" />
+                    <span class="min-w-0 flex-1 truncate text-left">{{ beyondLabel }}</span>
+                    <span class="shrink-0 font-medium text-link">{{ showBeyond ? "Hide" : "Show" }}</span>
+                    <Icon :name="showBeyond ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs" />
+                </button>
+
+                <div v-if="showBeyond" class="mt-2 flex flex-col gap-3">
+                    <section v-if="archivedMatches.length > 0" class="flex min-w-0 flex-col gap-2">
+                        <div class="flex items-center gap-2 px-1">
+                            <Icon name="box" class="shrink-0 text-2xs text-subtle" />
+                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In the archive</span>
+                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ archivedMatches.length }}</span>
+                        </div>
+                        <!-- Real cards, not a stripped-down list: an archived agent keeps its branch, its diff
+                             and its transcript, so the thing the user wants to do with a hit here — read it,
+                             restore it — is exactly what the card already offers. -->
+                        <div class="grid gap-2" :class="narrow ? '' : 'grid-cols-3 items-start'">
+                            <AgentCard
+                                v-for="agent in archivedMatches"
+                                :key="agent.id"
+                                :agent="agent"
+                                :now="now"
+                                :dense="narrow"
+                                :busy="busyIds.includes(agent.id)"
+                                :selected="!mobile && active.conversationId === agent.id"
+                                :match="snippetOf(agent)"
+                                :query="needle"
+                                @open="focusAgent(agent)"
+                                @review="reviewAgent(agent)"
+                                @restore="restore([agent.id])"
+                            />
+                        </div>
+                    </section>
+
+                    <section v-if="sessionMatches.length > 0" class="flex min-w-0 flex-col gap-1">
+                        <div class="flex items-center gap-2 px-1">
+                            <Icon name="history" class="shrink-0 text-2xs text-subtle" />
+                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In earlier chats</span>
+                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ sessionMatches.length }}</span>
+                        </div>
+                        <!-- Conversations no agent entry owns — a plain chat, or one whose entry is long gone.
+                             There is no card to draw for them, so they read as history rows and open as tabs,
+                             the same act the History menu performs. -->
+                        <button
+                            v-for="session in sessionMatches"
+                            :key="session.id"
+                            type="button"
+                            class="flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-overlay"
+                            @click="openSession(session.id)"
+                        >
+                            <span class="truncate text-xs text-content">{{ session.title }}</span>
+                            <span v-if="session.snippet !== undefined" class="line-clamp-2 text-2xs italic text-muted">{{ session.snippet }}</span>
+                            <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
+                        </button>
+                    </section>
+                </div>
+            </div>
+
+            <!-- The filter's own empty state, which is NOT the empty board's: there are agents, just none of
+                 them this one. Says what was searched, so a typo is visible without looking back up at the
+                 field, and names the rule — the commonest reason for a miss is searching for something the
+                 AGENT said rather than something you did. -->
+            <p v-if="noMatches" class="px-4 pb-6 text-center text-2xs text-subtle">
+                No agent of yours mentions “{{ query.trim() }}”. This searches the messages you wrote — not the agents' replies.
+            </p>
         </div>
 
         <!-- The sweep's receipt. It OVERLAYS the board rather than sitting in the column, so the cards it is

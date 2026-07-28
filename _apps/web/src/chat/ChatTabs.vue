@@ -8,7 +8,9 @@ import Popover from "primevue/popover";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { createTitleEdit } from "../composables/agents/titleEdit";
+import { markSegments, useAgentFilter } from "../composables/agents/useAgentFilter";
 import { type FleetAgent, type FleetLane, laneOf, useAgents } from "../composables/agents/useAgents";
+import FilterField from "../components/FilterField.vue";
 import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
 import ProviderLogo from "./ProviderLogo.vue";
@@ -35,7 +37,7 @@ const emit = defineEmits<{
 }>();
 
 const { conversations, activeId, sessions, loadSessions } = useChat();
-const { agentById, fleet } = useAgents();
+const { agentById, fleet, archived, loadArchived } = useAgents();
 const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
 
 /* Undocked, the strip stands up the window's LEFT EDGE as a resizable rail of CARDS instead of wrapping pill
@@ -56,6 +58,49 @@ interface RailEntry {
 }
 const fleetById = computed(() => new Map(fleet.value.map((agent) => [agent.id, agent])));
 const lastActive = (entry: RailEntry): number => entry.agent?.updatedAt ?? 0;
+
+/* --- The rail's filter -------------------------------------------------------------------------
+ * The same field, the same rule and the same evidence as the fleet board's (useAgentFilter): match what the
+ * USER wrote — the title, which is their sanitized first prompt, and every later prompt in the transcript.
+ * Two search boxes in one product that disagree about what "matches" means is worse than one of them not
+ * existing, so both mount the one composable rather than each rolling its own.
+ *
+ * What differs is the SET. The board filters the fleet; this rail lists the OPEN TABS, which is a much
+ * smaller thing to be looking through — a user in a popped-out window asking "where did I say X" is almost
+ * never asking only about the eight tabs they happen to have open. So the query reaches the whole fleet here
+ * too, and everything it finds that ISN'T open lands in a group below the lanes that opens on click. The
+ * history popover keeps its own box for browsing; this one is for finding.
+ *
+ * Its state is per-INSTANCE, which for a rail means per-window: a query typed on the board must not narrow a
+ * pop-out the user isn't looking at.
+ */
+const {
+    query: filterQuery,
+    needle,
+    active: filtering,
+    matches: agentMatches,
+    snippetOf,
+    archivedMatches,
+    sessionMatches,
+    searching,
+} = useAgentFilter();
+
+// A tab with no fleet entry (a plain chat, or the roster briefly down) has no transcript the daemon can
+// search under an agent id, so it is matched on what this browser holds: its title and its own user messages.
+const tabMatches = (entry: RailEntry): boolean => {
+    if (!filtering.value) {
+        return true;
+    }
+    if (entry.agent !== undefined) {
+        return agentMatches(entry.agent);
+    }
+    const title = entry.conversation.title.value;
+    return (
+        title?.toLowerCase().includes(needle.value) === true ||
+        entry.conversation.messages.value.some((message) => message.role === `user` && message.text.toLowerCase().includes(needle.value))
+    );
+};
+
 const railLanes = computed<Record<FleetLane, RailEntry[]>>(() => {
     const grouped: Record<FleetLane, RailEntry[]> = { attention: [], active: [], finished: [] };
     for (const conversation of conversations.value) {
@@ -80,6 +125,37 @@ const RAIL_LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
     { key: `active`, label: `Active`, dot: `bg-success` },
     { key: `finished`, label: `Finished`, dot: `bg-line-strong` },
 ];
+
+// A lane's visible tabs, and how many of its own it is showing. Same `n of m` the board's lane headers carry,
+// for the same reason: a lane that silently shrinks is a lane that has stopped saying anything.
+const railCards = (lane: FleetLane): RailEntry[] => railLanes.value[lane].filter(tabMatches);
+const railCount = (lane: FleetLane): string =>
+    filtering.value ? `${railCards(lane).length} of ${railLanes.value[lane].length}` : String(railLanes.value[lane].length);
+
+/* What the query found that ISN'T open in this window — the whole point of the rail's filter reaching past its
+ * own list. Live fleet agents first (the likeliest thing to want), then the archive, each as a row that opens
+ * the conversation. Conversations no agent owns come from `sessionMatches` and open the same way.
+ *
+ * The archive is off the live roster, so its contents have to be asked for; the board does that at mount, but
+ * a user who popped the chat out and never opened /agents has no reason to have paid for it. Asked for once,
+ * the first time a query is typed here.
+ */
+const openIds = computed(() => new Set(conversations.value.map((conversation) => conversation.conversationId)));
+const notOpen = computed<FleetAgent[]>(() => {
+    if (!filtering.value) {
+        return [];
+    }
+    return [...fleet.value.filter((agent) => agentMatches(agent)), ...archivedMatches.value].filter((agent) => !openIds.value.has(agent.id));
+});
+const notOpenCount = computed(() => notOpen.value.length + sessionMatches.value.length);
+
+let archiveAsked = false;
+watch(filtering, (on) => {
+    if (on && !archiveAsked) {
+        archiveAsked = true;
+        void loadArchived();
+    }
+});
 
 // One second ticks every running card's elapsed readout together (the board's `now` pattern) — armed only
 // while the rail is up, so the docked strip pays for no timer it doesn't render.
@@ -426,6 +502,18 @@ const openHistory = (event: Event): void => {
             @dblclick="setRailWidth(DEFAULT_RAIL_WIDTH)"
             title="Drag to resize · double-click to reset"
         ></div>
+        <!-- The rail's filter, pinned above the list. Only undocked: the docked strip is a row of pill tabs in
+             a ~22rem column that already fights for width, and a field there would cost more than the handful
+             of tabs it could narrow. The ✚ / history pair stays at the bottom where it has always been —
+             this is where you look for something, that is where you start or browse for one. -->
+        <FilterField
+            v-if="vertical"
+            v-model="filterQuery"
+            :busy="searching"
+            label="Filter chats by your messages"
+            placeholder="Filter by your messages…"
+            class="shrink-0"
+        />
         <!-- Tabs fill one row, then wrap to a second; only past two rows does the strip scroll vertically. It
              never scrolls sideways, so no tab hides off the right edge. One row still measures exactly a
              .view-header (a 26px tab row plus its py-1 is under the 2.25rem floor), so the shell-wide header
@@ -503,13 +591,16 @@ const openHistory = (event: Event): void => {
                  attention chip or status glyph, cost / diff / elapsed, and the live activity line. -->
             <template v-else>
                 <template v-for="railLane in RAIL_LANES" :key="railLane.key">
+                    <!-- A lane with nothing in it is hidden as before; a lane the FILTER emptied keeps its
+                         header and says so, so the rail doesn't reshuffle under the cursor mid-keystroke. -->
                     <template v-if="railLanes[railLane.key].length > 0">
                         <div class="mt-1.5 flex items-center gap-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle first:mt-0">
                             <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="railLane.dot"></span>
                             <span>{{ railLane.label }}</span>
-                            <span class="font-normal">{{ railLanes[railLane.key].length }}</span>
+                            <span class="font-normal">{{ railCount(railLane.key) }}</span>
                         </div>
-                        <template v-for="{ conversation: c, agent } in railLanes[railLane.key]" :key="c.conversationId">
+                        <p v-if="railCards(railLane.key).length === 0" class="px-1 pb-1 text-2xs text-subtle">No matches</p>
+                        <template v-for="{ conversation: c, agent } in railCards(railLane.key)" :key="c.conversationId">
                             <input
                                 v-if="edit.editing && renamingId === c.conversationId"
                                 v-model="edit.draft"
@@ -546,9 +637,14 @@ const openHistory = (event: Event): void => {
                                         <Icon name="box" class="text-2xs text-subtle" />
                                     </span>
                                     <!-- Two lines before the clamp — a card has the width for most titles whole. -->
-                                    <span class="line-clamp-2 min-w-0 flex-1 leading-4" :class="statusTabClass(c.status.value)">{{
-                                        tabLabel(c)
-                                    }}</span>
+                                    <span class="line-clamp-2 min-w-0 flex-1 leading-4" :class="statusTabClass(c.status.value)">
+                                        <span
+                                            v-for="(run, at) in markSegments(tabLabel(c), needle)"
+                                            :key="at"
+                                            :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''"
+                                            >{{ run.text }}</span
+                                        >
+                                    </span>
                                     <PresenceAvatars
                                         v-if="c.session.value !== undefined"
                                         :viewers="viewersOfSession(c.session.value.id)"
@@ -604,10 +700,93 @@ const openHistory = (event: Event): void => {
                                             agent.activity.todo ?? [agent.activity.tool, agent.activity.target].filter(Boolean).join(" · ")
                                         }}</span>
                                     </span>
+                                    <!-- WHY this tab survived the filter, when the reason isn't its title (that
+                                         one is marked in place above). The board's cards carry the same line for
+                                         the same reason: a result the user can't see the cause of is one they
+                                         stop believing. -->
+                                    <span v-if="snippetOf(agent) !== undefined" class="flex w-full min-w-0 items-start gap-1 text-2xs text-muted">
+                                        <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
+                                        <span class="line-clamp-2 min-w-0 flex-1 italic leading-4">
+                                            <span
+                                                v-for="(run, at) in markSegments(snippetOf(agent) ?? '', needle)"
+                                                :key="at"
+                                                :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''"
+                                                >{{ run.text }}</span
+                                            >
+                                        </span>
+                                    </span>
                                 </template>
                             </button>
                         </template>
                     </template>
+                </template>
+
+                <!-- WHAT THE QUERY FOUND THAT ISN'T OPEN HERE. The rail lists the tabs of this window, which
+                     is almost never the set the question "where did I say X" is about — so the filter reaches
+                     the whole fleet (live agents, the archive) and the conversations no agent owns, and puts
+                     them here. A row opens the conversation, which is exactly the act the History menu below
+                     performs; the difference is that this list was found rather than browsed. -->
+                <template v-if="filtering && notOpenCount > 0">
+                    <div
+                        class="mt-2 flex items-center gap-1.5 border-t border-line px-1 pt-2 text-2xs font-semibold uppercase tracking-wide text-subtle"
+                    >
+                        <Icon name="search" class="shrink-0 text-2xs" />
+                        <span>Not open</span>
+                        <span class="font-normal">{{ notOpenCount }}</span>
+                    </div>
+                    <button
+                        v-for="agent in notOpen"
+                        :key="agent.id"
+                        type="button"
+                        class="chat-tab flex w-full min-w-0 shrink-0 flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-2xs"
+                        @click="emit('open', agent.id)"
+                    >
+                        <span class="flex w-full min-w-0 items-start gap-1.5">
+                            <ProviderLogo :provider="agent.provider" class="mt-px shrink-0 text-2xs text-muted" />
+                            <!-- Off the board but not gone: the branch, the diff and the transcript all survive
+                                 an archive, so a hit here is a real destination rather than a tombstone. -->
+                            <Icon
+                                v-if="agent.archivedAt !== undefined"
+                                name="box"
+                                class="mt-px shrink-0 text-2xs text-subtle"
+                                v-tooltip.bottom="'Archived — off the agents board'"
+                            />
+                            <span class="line-clamp-2 min-w-0 flex-1 leading-4 text-muted">
+                                <span
+                                    v-for="(run, at) in markSegments(agent.title ?? 'Untitled agent', needle)"
+                                    :key="at"
+                                    :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''"
+                                    >{{ run.text }}</span
+                                >
+                            </span>
+                            <span v-if="agent.updatedAt > 0" class="mt-px shrink-0 text-subtle">{{ relativeTime(agent.updatedAt) }}</span>
+                        </span>
+                        <span v-if="snippetOf(agent) !== undefined" class="line-clamp-2 pl-4 italic leading-4 text-subtle">
+                            <span
+                                v-for="(run, at) in markSegments(snippetOf(agent) ?? '', needle)"
+                                :key="at"
+                                :class="run.hit ? 'rounded-sm bg-primary-600/30 not-italic text-content' : ''"
+                                >{{ run.text }}</span
+                            >
+                        </span>
+                    </button>
+                    <!-- Conversations no agent entry owns — a plain chat, or one whose entry is long gone.
+                         Nothing to draw a provider mark or a status for; the title and the matched line are
+                         the whole of what is known about them. -->
+                    <button
+                        v-for="session in sessionMatches"
+                        :key="session.id"
+                        type="button"
+                        class="chat-tab flex w-full min-w-0 shrink-0 flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-2xs"
+                        @click="emit('open', session.id)"
+                    >
+                        <span class="flex w-full min-w-0 items-start gap-1.5">
+                            <Icon name="comments" class="mt-px shrink-0 text-2xs text-subtle" />
+                            <span class="line-clamp-2 min-w-0 flex-1 leading-4 text-muted">{{ session.title }}</span>
+                            <span class="mt-px shrink-0 text-subtle">{{ relativeTime(session.updatedAt) }}</span>
+                        </span>
+                        <span v-if="session.snippet !== undefined" class="line-clamp-2 pl-4 italic leading-4 text-subtle">{{ session.snippet }}</span>
+                    </button>
                 </template>
             </template>
         </div>
@@ -669,6 +848,10 @@ const openHistory = (event: Event): void => {
                                 <!-- Members with this session open right now. -->
                                 <PresenceAvatars :viewers="viewersOfSession(session.id)" label="in this chat" />
                             </span>
+                            <!-- Why this row matched, when it wasn't the title: the line of the user's own
+                                 prompt the query hit. Same rule and same evidence as the rail's filter, so the
+                                 two boxes in this one window can't come to mean different things. -->
+                            <span v-if="session.snippet !== undefined" class="line-clamp-2 text-2xs italic text-muted">{{ session.snippet }}</span>
                             <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
                         </button>
                     </template>
