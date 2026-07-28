@@ -41,11 +41,11 @@ export type TerminalSession = {
     // Persistent xterm mount — moves in/out of containers as the surface shows/hides it.
     readonly host: HTMLElement;
     // Tears down the fit triggers (ResizeObserver + window resize listener) for the WINDOW the host last lived
-    // in — rebuilt when a mount moves the host into another document (the pop-out pip window), since both are
+    // in — rebuilt when a mount moves the host into another document (the pop-out window), since both are
     // per-window machinery that stops tracking an element adopted elsewhere.
     unobserve?: () => void;
     // The document of the LAST mount — mountTerminalSession's move signal. host.ownerDocument can't be it: the
-    // pop-out Teleport adopts the mounted host (with the whole panel) into the pip document BEFORE the remount
+    // pop-out Teleport adopts the mounted host (with the whole panel) into the pop-out document BEFORE the remount
     // watcher runs, so by then host and container already agree and the move would go undetected.
     mountedDocument: Document;
     // The session-over handoff: the daemon's `exit` frame, or a dispose. Never called twice. Mutable because a
@@ -245,7 +245,7 @@ const SCROLLBAR_PX = 14;
 
 // Fit the grid to the host's box, measured in the HOST'S OWN realm (clientWidth/Height). Not @xterm/addon-fit:
 // its proposeDimensions measures through the GLOBAL window's getComputedStyle, which is cross-realm for a host
-// living in the pop-out pip document — where it can silently misresolve, no-oping every fit and leaving the
+// living in the pop-out document — where it can silently misresolve, no-oping every fit and leaving the
 // PTY at the docked grid while the window floats at another size entirely.
 const fitSession = (s: TerminalSession): void => {
     const cell = coreOf(s.term)._renderService.dimensions.css.cell;
@@ -262,9 +262,9 @@ const fitSession = (s: TerminalSession): void => {
 
 // (Re)build the session's fit triggers against the window its host currently lives in. A ResizeObserver — and
 // the rAF that coalesces its fits (the panel's drag handle fires it per pointermove) — is per-window machinery:
-// after the host is adopted into the pop-out pip document, the ORIGINAL window's observer no longer tracks it,
+// after the host is adopted into the pop-out document, the ORIGINAL window's observer no longer tracks it,
 // so every document move rebuilds both from the host's own view. The window resize listener doubles the
-// observer on purpose: a pip window's OS-level resize (Chrome restoring its remembered bounds, the user
+// observer on purpose: a pop-out window's OS-level resize (the user maximizing it, or
 // dragging its frame) must refit even where the observer's delivery proves unreliable; a duplicate trigger
 // collapses in the rAF and a same-size fit is a no-op.
 const observeHost = (s: TerminalSession): void => {
@@ -495,7 +495,7 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
     if (moved) {
         observeHost(s);
         // A document move (pop-out/dock) leaves xterm's grid and tmux's screen laid out for the OLD window,
-        // and the fit above may have measured mid-layout (the pip's cloned styles/fonts still settling): snap
+        // and the fit above may have measured mid-layout (the pop-out's cloned styles/fonts still settling): snap
         // the viewport back to the live screen, jiggle the PTY one row so tmux issues a full clear+redraw even
         // when the fitted size happens to match, and refit on the new window's next frame once layout is real.
         s.term.scrollToBottom();
@@ -516,7 +516,7 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
 };
 
 // Unmount a session's host WITHOUT losing it to a dying document. A host merely .remove()d while the panel
-// floats stays ADOPTED by the pip document; when that window closes, the whole rendered realm dies with it —
+// floats stays ADOPTED by the pop-out document; when that window closes, the whole rendered realm dies with it —
 // the WebGL context is lost inside a dead document and the fallback DOM renderer rebuilds against it, leaving
 // the terminal a blank white pane. Adopting the detached host home (and re-open()ing to re-point xterm's
 // window binding) keeps every hidden session anchored to the main realm. mountedDocument is deliberately NOT

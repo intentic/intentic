@@ -41,9 +41,10 @@ import ProviderLogo from "./ProviderLogo.vue";
  * (the full-screen /chat tab) the tab strip becomes a compact header, the pickers become bottom sheets, the
  * resize handle disappears, and the composer pads itself above the on-screen keyboard.
  *
- * The panel root is a @container: composer/status label density keys off the panel's own width (it can be
- * 288px while the viewport is desktop-wide — docked column or PiP popout), while touch-target sizing keys
- * off the max-md: device class. Two intentional axes — don't unify them. */
+ * The transcript column is a @container: composer/status label density keys off the width the messages get
+ * (288px docked while the viewport is desktop-wide, or whatever is left beside the rail in the pop-out
+ * window), while touch-target sizing keys off the max-md: device class. Two intentional axes — don't unify
+ * them. Popped out the panel turns on its side: the strip becomes that left rail, the column holds the rest. */
 
 const {
     active,
@@ -868,9 +869,12 @@ watch(keyboardInset, () => {
 </script>
 
 <template>
+    <!-- Docked, the panel is a column: tab strip on top, transcript, composer. Undocked, the strip becomes a
+         rail down the window's left edge, so the panel's own axis flips and everything else stacks in the
+         column beside it. -->
     <div
-        class="chat-panel @container relative flex h-full min-h-0 flex-col overflow-hidden bg-card"
-        :class="{ 'is-resizing': resizing }"
+        class="chat-panel relative flex h-full min-h-0 overflow-hidden bg-card"
+        :class="[poppedOut ? 'flex-row' : 'flex-col', { 'is-resizing': resizing }]"
         @dragenter="onDragEnter"
         @dragover.prevent
         @dragleave="onDragLeave"
@@ -893,307 +897,316 @@ watch(keyboardInset, () => {
         <ChatTabsMobile v-if="mobile" @select="selectTab" @close="closeTabs" @open="openFromHistory" />
         <ChatTabs v-else @select="selectTab" @close="closeTabs" @open="openFromHistory" />
 
-        <!-- The inner wrapper is what the autoscroll ResizeObserver measures; the scroller itself never
-             changes height, so it can't report the transcript growing.
-             The top inset lives on the wrapper, not the scroller: a sticky prompt pins to the scroller's
-             PADDING edge, so a pt-4 out here would leave a 1rem band above the pinned row for the previous
-             turn to slide through. Inside the wrapper the same inset is content, and the prompt pins flush. -->
-        <!-- .chat-scroller is the IntersectionObserver root each prompt uses to tell whether it is pinned. -->
-        <div
-            ref="scroller"
-            class="chat-scroller scrollbar-thin flex flex-1 flex-col overflow-auto px-4 pb-4"
-            :class="{ 'chat-realize': realizing }"
-            @scroll="onScroll"
-        >
-            <div ref="content" class="chat-turns flex flex-1 flex-col gap-1 pt-4">
-                <template v-if="messages.length > 0">
-                    <!-- One section per turn, purely so each prompt's sticky range ends where its answer does. -->
-                    <section v-for="turn in turns" :key="turn.id" class="flex flex-col gap-1">
-                        <ChatMessageView v-for="message in turn.messages" :key="message.id" :message="message" :streaming="isStreaming(message)" />
-                    </section>
-                </template>
-                <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">Start a conversation with {{ providerName }}.</p>
-                <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
-            </div>
-        </div>
-
-        <!-- The whole footer (account connect + composer) talks to the daemon, so it yields to a hint while the
-             sandbox is unreachable. The transcript above stays readable. On mobile the footer pads itself above
-             the on-screen keyboard (iOS Safari only shrinks the visual viewport, not the layout). -->
-        <div class="flex flex-col gap-2 p-3" :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 12}px` } : undefined">
-            <p v-if="!reachable" class="px-1 text-2xs text-subtle">
-                {{
-                    denied
-                        ? `Chat is unavailable — this Google account has no access to this sandbox.`
-                        : `Chat is available once your sandbox is connected.`
-                }}
-            </p>
-            <template v-else>
-                <!-- This conversation's agent is off the board. Muted, not a warning: archiving loses nothing
-                     (the branch, the diff, the transcript and every counter stay — this tab is the proof), so
-                     the line states a fact rather than raising an alarm. It carries the one thing no other
-                     surface could tell the user in time — that sending from here un-archives the agent — and
-                     the press that does it deliberately, without sending anything. -->
-                <div
-                    v-if="activeArchived !== undefined"
-                    class="flex items-center gap-2 rounded-xl border border-line bg-overlay/60 px-3 py-2 text-2xs text-muted"
-                >
-                    <Icon name="box" class="shrink-0" />
-                    <span class="min-w-0 flex-1">Archived — off the agents board. Sending a message puts it back.</span>
-                    <button
-                        type="button"
-                        class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-                        :disabled="busyIds.includes(activeArchived.id)"
-                        v-tooltip.top="'Put this agent back on the board now'"
-                        @click="restore([activeArchived.id])"
-                    >
-                        Restore
-                    </button>
+        <!-- Everything the strip is NOT. It carries the @container, so the composer's density keys off the
+             width left for the transcript rather than off the panel plus its rail. -->
+        <div class="@container flex min-h-0 min-w-0 flex-1 flex-col">
+            <!-- The inner wrapper is what the autoscroll ResizeObserver measures; the scroller itself never
+                 changes height, so it can't report the transcript growing.
+                 The top inset lives on the wrapper, not the scroller: a sticky prompt pins to the scroller's
+                 PADDING edge, so a pt-4 out here would leave a 1rem band above the pinned row for the previous
+                 turn to slide through. Inside the wrapper the same inset is content, and the prompt pins flush. -->
+            <!-- .chat-scroller is the IntersectionObserver root each prompt uses to tell whether it is pinned. -->
+            <div
+                ref="scroller"
+                class="chat-scroller scrollbar-thin flex flex-1 flex-col overflow-auto px-4 pb-4"
+                :class="{ 'chat-realize': realizing }"
+                @scroll="onScroll"
+            >
+                <div ref="content" class="chat-turns flex flex-1 flex-col gap-1 pt-4">
+                    <template v-if="messages.length > 0">
+                        <!-- One section per turn, purely so each prompt's sticky range ends where its answer does. -->
+                        <section v-for="turn in turns" :key="turn.id" class="flex flex-col gap-1">
+                            <ChatMessageView
+                                v-for="message in turn.messages"
+                                :key="message.id"
+                                :message="message"
+                                :streaming="isStreaming(message)"
+                            />
+                        </section>
+                    </template>
+                    <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">Start a conversation with {{ providerName }}.</p>
+                    <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
                 </div>
-                <ChatAccountPanel />
-                <!-- Proactive re-auth prompt: the account is connected (a credential exists) but can no longer be
-                     refreshed, so surface it here — before a send fails opaquely — with a jump to reconnect. -->
-                <button
-                    v-if="activeAccountReauth"
-                    type="button"
-                    class="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
-                    @click="router.push({ path: '/sandbox/agent', query: { connect: provider } })"
-                >
-                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
-                    <span
-                        >{{ activeAccountReauth.detail ?? `This account needs to be reconnected.` }}
-                        <span class="font-semibold underline">Reconnect</span></span
+            </div>
+
+            <!-- The whole footer (account connect + composer) talks to the daemon, so it yields to a hint while the
+                 sandbox is unreachable. The transcript above stays readable. On mobile the footer pads itself above
+                 the on-screen keyboard (iOS Safari only shrinks the visual viewport, not the layout). -->
+            <div class="flex flex-col gap-2 p-3" :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 12}px` } : undefined">
+                <p v-if="!reachable" class="px-1 text-2xs text-subtle">
+                    {{
+                        denied
+                            ? `Chat is unavailable — this Google account has no access to this sandbox.`
+                            : `Chat is available once your sandbox is connected.`
+                    }}
+                </p>
+                <template v-else>
+                    <!-- This conversation's agent is off the board. Muted, not a warning: archiving loses nothing
+                         (the branch, the diff, the transcript and every counter stay — this tab is the proof), so
+                         the line states a fact rather than raising an alarm. It carries the one thing no other
+                         surface could tell the user in time — that sending from here un-archives the agent — and
+                         the press that does it deliberately, without sending anything. -->
+                    <div
+                        v-if="activeArchived !== undefined"
+                        class="flex items-center gap-2 rounded-xl border border-line bg-overlay/60 px-3 py-2 text-2xs text-muted"
                     >
-                </button>
-                <template v-if="connected">
-                    <!-- Messages written while the agent was busy that haven't reached it yet. They sit here
-                         rather than in the transcript because they are not part of the conversation until the
-                         agent has them — a steered one moves into the transcript the moment the daemon takes
-                         it. Each is removable, so a queued thought can be withdrawn before it lands. -->
-                    <div v-if="queued.length > 0" class="flex flex-col gap-1">
-                        <div
-                            v-for="message in queued"
-                            :key="message.id"
-                            class="flex items-start gap-2 rounded-xl border border-dashed border-line-strong bg-overlay/60 px-3 py-2"
+                        <Icon name="box" class="shrink-0" />
+                        <span class="min-w-0 flex-1">Archived — off the agents board. Sending a message puts it back.</span>
+                        <button
+                            type="button"
+                            class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
+                            :disabled="busyIds.includes(activeArchived.id)"
+                            v-tooltip.top="'Put this agent back on the board now'"
+                            @click="restore([activeArchived.id])"
                         >
-                            <Icon name="clock" class="mt-0.5 shrink-0 text-2xs text-subtle" />
-                            <div class="min-w-0 flex-1">
-                                <p v-if="message.text" class="truncate text-2xs text-muted">{{ message.text }}</p>
-                                <p v-if="message.attachments.length > 0" class="truncate text-2xs text-subtle">
-                                    <Icon name="file" class="text-2xs" />
-                                    {{ message.attachments.map((file) => file.name).join(`, `) }}
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                class="composer-ghost h-5 w-5 shrink-0"
-                                @click="removeQueued(message.id)"
-                                v-tooltip.top="'Remove — this message will not be sent'"
-                                aria-label="Remove queued message"
-                            >
-                                <Icon name="times" class="text-2xs" />
-                            </button>
-                        </div>
-                        <p class="px-1 text-2xs text-subtle">{{ queuedHint }}</p>
+                            Restore
+                        </button>
                     </div>
-                    <form
-                        class="relative flex flex-col rounded-2xl border border-line-strong bg-overlay shadow-lg transition-colors focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/25"
-                        @submit.prevent="submit"
+                    <ChatAccountPanel />
+                    <!-- Proactive re-auth prompt: the account is connected (a credential exists) but can no longer be
+                         refreshed, so surface it here — before a send fails opaquely — with a jump to reconnect. -->
+                    <button
+                        v-if="activeAccountReauth"
+                        type="button"
+                        class="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
+                        @click="router.push({ path: '/sandbox/agent', query: { connect: provider } })"
                     >
-                        <ChatMentionPopover v-if="mentionOpen" ref="mentionPopover" :query="activeMention?.query ?? ''" @pick="pickMention" />
-                        <ChatCommandPopover
-                            v-if="commandOpen"
-                            ref="commandPopover"
-                            :query="slashQuery ?? ''"
-                            :commands="availableCommands"
-                            @pick="pickCommand"
-                        />
-                        <div v-if="attachments.length > 0 || editorTarget !== undefined" class="flex flex-wrap gap-2 px-3 pt-3">
-                            <!-- Editor-context chip: off by default, one click attaches the open file /
-                                 selection to the next message — the inverse of VSCode Claude Code. Sized
-                                 like the attachment chips beside it. -->
-                            <button
-                                v-if="editorTarget !== undefined"
-                                type="button"
-                                class="flex items-center gap-1.5 rounded-lg border py-1.5 px-2 text-xs transition-colors"
-                                :class="
-                                    includeEditorContext
-                                        ? 'border-primary-500 bg-primary-500/10 text-content'
-                                        : 'border-dashed border-line text-subtle hover:text-content'
-                                "
-                                @click="includeEditorContext = !includeEditorContext"
-                                :aria-pressed="includeEditorContext"
-                                aria-label="Attach editor context"
-                            >
-                                <Icon name="code" class="shrink-0 text-2xs" />
-                                <span class="max-w-36 truncate">{{ editorChipLabel }}</span>
-                            </button>
+                        <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
+                        <span
+                            >{{ activeAccountReauth.detail ?? `This account needs to be reconnected.` }}
+                            <span class="font-semibold underline">Reconnect</span></span
+                        >
+                    </button>
+                    <template v-if="connected">
+                        <!-- Messages written while the agent was busy that haven't reached it yet. They sit here
+                             rather than in the transcript because they are not part of the conversation until the
+                             agent has them — a steered one moves into the transcript the moment the daemon takes
+                             it. Each is removable, so a queued thought can be withdrawn before it lands. -->
+                        <div v-if="queued.length > 0" class="flex flex-col gap-1">
                             <div
-                                v-for="a in attachments"
-                                :key="a.id"
-                                class="relative flex items-center gap-2 overflow-hidden rounded-lg border py-1.5 pl-2 pr-1 text-xs"
-                                :class="a.status === 'failed' ? 'border-danger' : 'border-line bg-card'"
+                                v-for="message in queued"
+                                :key="message.id"
+                                class="flex items-start gap-2 rounded-xl border border-dashed border-line-strong bg-overlay/60 px-3 py-2"
                             >
-                                <ChatImageThumb v-if="a.previewUrl" :src="a.previewUrl" :alt="a.name" size="h-9 w-9" />
-                                <Icon name="file" v-else class="text-sm text-subtle" />
-                                <span class="max-w-36 truncate text-content" v-tooltip.top="a.error ?? a.name">{{ a.name }}</span>
+                                <Icon name="clock" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                                <div class="min-w-0 flex-1">
+                                    <p v-if="message.text" class="truncate text-2xs text-muted">{{ message.text }}</p>
+                                    <p v-if="message.attachments.length > 0" class="truncate text-2xs text-subtle">
+                                        <Icon name="file" class="text-2xs" />
+                                        {{ message.attachments.map((file) => file.name).join(`, `) }}
+                                    </p>
+                                </div>
                                 <button
                                     type="button"
                                     class="composer-ghost h-5 w-5 shrink-0"
-                                    @click="removeAttachment(a)"
-                                    aria-label="Remove attachment"
+                                    @click="removeQueued(message.id)"
+                                    v-tooltip.top="'Remove — this message will not be sent'"
+                                    aria-label="Remove queued message"
                                 >
                                     <Icon name="times" class="text-2xs" />
                                 </button>
+                            </div>
+                            <p class="px-1 text-2xs text-subtle">{{ queuedHint }}</p>
+                        </div>
+                        <form
+                            class="relative flex flex-col rounded-2xl border border-line-strong bg-overlay shadow-lg transition-colors focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/25"
+                            @submit.prevent="submit"
+                        >
+                            <ChatMentionPopover v-if="mentionOpen" ref="mentionPopover" :query="activeMention?.query ?? ''" @pick="pickMention" />
+                            <ChatCommandPopover
+                                v-if="commandOpen"
+                                ref="commandPopover"
+                                :query="slashQuery ?? ''"
+                                :commands="availableCommands"
+                                @pick="pickCommand"
+                            />
+                            <div v-if="attachments.length > 0 || editorTarget !== undefined" class="flex flex-wrap gap-2 px-3 pt-3">
+                                <!-- Editor-context chip: off by default, one click attaches the open file /
+                                     selection to the next message — the inverse of VSCode Claude Code. Sized
+                                     like the attachment chips beside it. -->
+                                <button
+                                    v-if="editorTarget !== undefined"
+                                    type="button"
+                                    class="flex items-center gap-1.5 rounded-lg border py-1.5 px-2 text-xs transition-colors"
+                                    :class="
+                                        includeEditorContext
+                                            ? 'border-primary-500 bg-primary-500/10 text-content'
+                                            : 'border-dashed border-line text-subtle hover:text-content'
+                                    "
+                                    @click="includeEditorContext = !includeEditorContext"
+                                    :aria-pressed="includeEditorContext"
+                                    aria-label="Attach editor context"
+                                >
+                                    <Icon name="code" class="shrink-0 text-2xs" />
+                                    <span class="max-w-36 truncate">{{ editorChipLabel }}</span>
+                                </button>
                                 <div
-                                    v-if="a.status === 'uploading'"
-                                    class="absolute inset-x-0 bottom-0 h-0.5 bg-primary-500"
-                                    :style="{ width: `${Math.round(a.progress * 100)}%` }"
-                                ></div>
-                            </div>
-                        </div>
-                        <!-- Body tier on desktop: what you type must read at the size it will land in the
-                             transcript. text-base below md: 16px is the iOS threshold under which focusing
-                             zooms the page. -->
-                        <textarea
-                            ref="input"
-                            rows="1"
-                            v-model="draft"
-                            name="draft"
-                            :placeholder="composerPlaceholder"
-                            class="scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 py-3 text-base leading-relaxed text-content placeholder:text-subtle focus:outline-none md:text-xs"
-                            @input="onInput"
-                            @keydown="onKeydown"
-                            @keyup="syncCaret"
-                            @click="syncCaret"
-                            @paste="onPaste"
-                        ></textarea>
-
-                        <div class="flex items-center gap-1 px-2.5 pb-2.5">
-                            <button
-                                type="button"
-                                class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                @click="mobile ? (modelSheetOpen = true) : providerModel?.toggle($event)"
-                                v-tooltip.top="activeModel ?? `${providerName} · ${modelLabelText}`"
-                                aria-label="Provider and model"
-                            >
-                                <ProviderLogo :provider="provider" class="shrink-0 text-2xs text-link" />
-                                <span class="truncate @max-xs:hidden">{{ modelLabelText }}</span>
-                                <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
-                            </button>
-
-                            <div v-if="efforts.length > 0" class="flex shrink-0 items-center gap-1.5" role="group" aria-label="Reasoning effort">
-                                <div class="flex items-center">
+                                    v-for="a in attachments"
+                                    :key="a.id"
+                                    class="relative flex items-center gap-2 overflow-hidden rounded-lg border py-1.5 pl-2 pr-1 text-xs"
+                                    :class="a.status === 'failed' ? 'border-danger' : 'border-line bg-card'"
+                                >
+                                    <ChatImageThumb v-if="a.previewUrl" :src="a.previewUrl" :alt="a.name" size="h-9 w-9" />
+                                    <Icon name="file" v-else class="text-sm text-subtle" />
+                                    <span class="max-w-36 truncate text-content" v-tooltip.top="a.error ?? a.name">{{ a.name }}</span>
                                     <button
-                                        v-for="(e, i) in efforts"
-                                        :key="e.value"
                                         type="button"
-                                        class="composer-effort-seg"
-                                        :style="i <= effortIndex ? { backgroundColor: effortFill(i) } : undefined"
-                                        @click="effort = e.value"
-                                        :aria-label="e.label"
-                                        :aria-pressed="effort === e.value"
-                                    ></button>
+                                        class="composer-ghost h-5 w-5 shrink-0"
+                                        @click="removeAttachment(a)"
+                                        aria-label="Remove attachment"
+                                    >
+                                        <Icon name="times" class="text-2xs" />
+                                    </button>
+                                    <div
+                                        v-if="a.status === 'uploading'"
+                                        class="absolute inset-x-0 bottom-0 h-0.5 bg-primary-500"
+                                        :style="{ width: `${Math.round(a.progress * 100)}%` }"
+                                    ></div>
                                 </div>
-                                <span class="text-2xs text-subtle @max-sm:hidden">{{ effortLabel }}</span>
                             </div>
+                            <!-- Body tier on desktop: what you type must read at the size it will land in the
+                                 transcript. text-base below md: 16px is the iOS threshold under which focusing
+                                 zooms the page. -->
+                            <textarea
+                                ref="input"
+                                rows="1"
+                                v-model="draft"
+                                name="draft"
+                                :placeholder="composerPlaceholder"
+                                class="scrollbar-thin block max-h-48 w-full resize-none overflow-y-auto bg-transparent px-4 py-3 text-base leading-relaxed text-content placeholder:text-subtle focus:outline-none md:text-xs"
+                                @input="onInput"
+                                @keydown="onKeydown"
+                                @keyup="syncCaret"
+                                @click="syncCaret"
+                                @paste="onPaste"
+                            ></textarea>
 
-                            <button
-                                type="button"
-                                class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                @click="mobile ? (modeSheetOpen = true) : modeMenu?.toggle($event)"
-                                v-tooltip.top="modeDescription"
-                                aria-label="Agent mode"
-                            >
-                                <Icon :name="modeIcon" class="text-2xs text-link" />
-                                <span class="@max-md:hidden">{{ modeLabel }}</span>
-                                <Icon name="chevron-down" class="text-2xs text-subtle" />
-                            </button>
+                            <div class="flex items-center gap-1 px-2.5 pb-2.5">
+                                <button
+                                    type="button"
+                                    class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                    @click="mobile ? (modelSheetOpen = true) : providerModel?.toggle($event)"
+                                    v-tooltip.top="activeModel ?? `${providerName} · ${modelLabelText}`"
+                                    aria-label="Provider and model"
+                                >
+                                    <ProviderLogo :provider="provider" class="shrink-0 text-2xs text-link" />
+                                    <span class="truncate @max-xs:hidden">{{ modelLabelText }}</span>
+                                    <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
+                                </button>
 
-                            <button
-                                type="button"
-                                class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
-                                :class="{ 'composer-active': followAlong.enabled.value }"
-                                @click="followAlong.setEnabled(!followAlong.enabled.value)"
-                                v-tooltip.top="followAlong.enabled.value ? 'Stop following agent edits' : 'Follow agent edits live'"
-                                :aria-pressed="followAlong.enabled.value"
-                                aria-label="Follow agent edits"
-                            >
-                                <Icon :name="followAlong.enabled.value ? 'eye' : 'eye-slash'" class="text-xs max-md:text-base" />
-                            </button>
+                                <div v-if="efforts.length > 0" class="flex shrink-0 items-center gap-1.5" role="group" aria-label="Reasoning effort">
+                                    <div class="flex items-center">
+                                        <button
+                                            v-for="(e, i) in efforts"
+                                            :key="e.value"
+                                            type="button"
+                                            class="composer-effort-seg"
+                                            :style="i <= effortIndex ? { backgroundColor: effortFill(i) } : undefined"
+                                            @click="effort = e.value"
+                                            :aria-label="e.label"
+                                            :aria-pressed="effort === e.value"
+                                        ></button>
+                                    </div>
+                                    <span class="text-2xs text-subtle @max-sm:hidden">{{ effortLabel }}</span>
+                                </div>
 
-                            <button
-                                v-if="speechSupported"
-                                type="button"
-                                class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
-                                :class="{ 'composer-active': listening }"
-                                @click="toggleSpeech"
-                                v-tooltip.top="listening ? 'Stop dictation' : 'Dictate'"
-                                :aria-pressed="listening"
-                                aria-label="Dictate"
-                            >
-                                <Icon name="microphone" class="text-xs max-md:text-base" />
-                            </button>
+                                <button
+                                    type="button"
+                                    class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                    @click="mobile ? (modeSheetOpen = true) : modeMenu?.toggle($event)"
+                                    v-tooltip.top="modeDescription"
+                                    aria-label="Agent mode"
+                                >
+                                    <Icon :name="modeIcon" class="text-2xs text-link" />
+                                    <span class="@max-md:hidden">{{ modeLabel }}</span>
+                                    <Icon name="chevron-down" class="text-2xs text-subtle" />
+                                </button>
 
-                            <!-- Stop is present for the whole live turn — generating OR parked on a plan /
-                                 question / permission card. A parked turn still holds the conversation's run
-                                 lock, so without this the user's only exits were answering a card they didn't
-                                 want to answer or closing the tab. -->
-                            <button
-                                v-if="streaming"
-                                type="button"
-                                class="composer-send composer-stop shrink-0"
-                                @click="stop"
-                                v-tooltip.top="stopHint"
-                                :aria-label="stopLabel"
-                            >
-                                <Icon name="stop" class="text-sm" />
-                            </button>
-                            <!-- Send stays alongside Stop for the whole live turn: mid-turn text goes into the
-                                 running turn where the harness takes it, and queues behind the turn where it
-                                 doesn't. There is no state in which the composer has nowhere to put a message,
-                                 so there is no state in which this button is missing. -->
-                            <button type="submit" class="composer-send shrink-0" :disabled="!canSend" v-tooltip.top="sendHint" aria-label="Send">
-                                <Icon name="send" class="text-sm" />
-                            </button>
+                                <button
+                                    type="button"
+                                    class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
+                                    :class="{ 'composer-active': followAlong.enabled.value }"
+                                    @click="followAlong.setEnabled(!followAlong.enabled.value)"
+                                    v-tooltip.top="followAlong.enabled.value ? 'Stop following agent edits' : 'Follow agent edits live'"
+                                    :aria-pressed="followAlong.enabled.value"
+                                    aria-label="Follow agent edits"
+                                >
+                                    <Icon :name="followAlong.enabled.value ? 'eye' : 'eye-slash'" class="text-xs max-md:text-base" />
+                                </button>
+
+                                <button
+                                    v-if="speechSupported"
+                                    type="button"
+                                    class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
+                                    :class="{ 'composer-active': listening }"
+                                    @click="toggleSpeech"
+                                    v-tooltip.top="listening ? 'Stop dictation' : 'Dictate'"
+                                    :aria-pressed="listening"
+                                    aria-label="Dictate"
+                                >
+                                    <Icon name="microphone" class="text-xs max-md:text-base" />
+                                </button>
+
+                                <!-- Stop is present for the whole live turn — generating OR parked on a plan /
+                                     question / permission card. A parked turn still holds the conversation's run
+                                     lock, so without this the user's only exits were answering a card they didn't
+                                     want to answer or closing the tab. -->
+                                <button
+                                    v-if="streaming"
+                                    type="button"
+                                    class="composer-send composer-stop shrink-0"
+                                    @click="stop"
+                                    v-tooltip.top="stopHint"
+                                    :aria-label="stopLabel"
+                                >
+                                    <Icon name="stop" class="text-sm" />
+                                </button>
+                                <!-- Send stays alongside Stop for the whole live turn: mid-turn text goes into the
+                                     running turn where the harness takes it, and queues behind the turn where it
+                                     doesn't. There is no state in which the composer has nowhere to put a message,
+                                     so there is no state in which this button is missing. -->
+                                <button type="submit" class="composer-send shrink-0" :disabled="!canSend" v-tooltip.top="sendHint" aria-label="Send">
+                                    <Icon name="send" class="text-sm" />
+                                </button>
+                            </div>
+                        </form>
+
+                        <p v-if="speechErrorMessage" class="px-1 text-2xs text-danger">{{ speechErrorMessage }}</p>
+
+                        <div class="flex items-center gap-2 px-1 text-2xs text-subtle">
+                            <!-- Keyboard hint is meaningless on a virtual keyboard (Enter is a newline there),
+                                 and doesn't earn its width in a narrow panel. An empty composer is the one moment
+                                 message recall is available, so the slot advertises it instead. -->
+                            <span v-if="!mobile" class="@max-md:hidden">{{ composerHint }}</span>
+                            <div class="ml-auto flex items-center gap-3">
+                                <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
+                                    <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
+                                    <span class="@max-xs:hidden">{{ contextRing.label }}</span>
+                                </span>
+                                <!-- The chip answers "am I about to get rate-limited"; a click goes to the screen
+                                     that answers "and what has it cost me". -->
+                                <button
+                                    v-if="usageRing"
+                                    type="button"
+                                    class="inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-content"
+                                    v-tooltip.top="usageRing.tooltip"
+                                    @click="router.push('/sandbox/usage')"
+                                >
+                                    <ProgressRing :value="usageRing.value" :class="usageRing.warn ? 'text-warning' : 'text-primary-500'" />
+                                    <span class="@max-xs:hidden">{{ usageRing.label }}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 transition-colors hover:text-content"
+                                    @click="router.push('/sandbox/agent')"
+                                >
+                                    <span class="inline-block h-1.5 w-1.5 rounded-full bg-success"></span> Ready · Manage
+                                </button>
+                            </div>
                         </div>
-                    </form>
-
-                    <p v-if="speechErrorMessage" class="px-1 text-2xs text-danger">{{ speechErrorMessage }}</p>
-
-                    <div class="flex items-center gap-2 px-1 text-2xs text-subtle">
-                        <!-- Keyboard hint is meaningless on a virtual keyboard (Enter is a newline there),
-                             and doesn't earn its width in a narrow panel. An empty composer is the one moment
-                             message recall is available, so the slot advertises it instead. -->
-                        <span v-if="!mobile" class="@max-md:hidden">{{ composerHint }}</span>
-                        <div class="ml-auto flex items-center gap-3">
-                            <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
-                                <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
-                                <span class="@max-xs:hidden">{{ contextRing.label }}</span>
-                            </span>
-                            <!-- The chip answers "am I about to get rate-limited"; a click goes to the screen
-                                 that answers "and what has it cost me". -->
-                            <button
-                                v-if="usageRing"
-                                type="button"
-                                class="inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-content"
-                                v-tooltip.top="usageRing.tooltip"
-                                @click="router.push('/sandbox/usage')"
-                            >
-                                <ProgressRing :value="usageRing.value" :class="usageRing.warn ? 'text-warning' : 'text-primary-500'" />
-                                <span class="@max-xs:hidden">{{ usageRing.label }}</span>
-                            </button>
-                            <button
-                                type="button"
-                                class="inline-flex items-center gap-1 transition-colors hover:text-content"
-                                @click="router.push('/sandbox/agent')"
-                            >
-                                <span class="inline-block h-1.5 w-1.5 rounded-full bg-success"></span> Ready · Manage
-                            </button>
-                        </div>
-                    </div>
+                    </template>
                 </template>
-            </template>
+            </div>
         </div>
 
         <!-- The pickers: anchored popovers on desktop, bottom sheets on mobile — same menu bodies. -->
@@ -1207,7 +1220,7 @@ watch(keyboardInset, () => {
         </template>
         <template v-else>
             <!-- Flush content (no composer-pop-content padding): the picker's search bar and rail sit
-                 edge-to-edge against the popover chrome. -->
+                     edge-to-edge against the popover chrome. -->
             <Popover ref="providerModel" :append-to="overlayTarget" :pt="{ content: { class: '!p-0' } }">
                 <div class="w-[26rem]">
                     <ChatModelPicker @selected="providerModel?.hide()" />

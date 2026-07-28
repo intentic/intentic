@@ -42,10 +42,13 @@ printf '%s\n' "$cmd" > "$d/cmd"
 : > "$d/out"
 # Runner executed inside the pane. tee mirrors output to the pane tty AND the capture file; PIPESTATUS[0]
 # preserves the command's exit code through the pipe.
-printf 'bash %q/cmd 2>&1 | tee -a %q/out\necho "${PIPESTATUS[0]}" > %q/status\n' "$d" "$d" "$d" > "$d/runner"
-
-tmux has-session -t "=$session" 2>/dev/null \
-    || tmux new-session -d -s "$session" -c "$PWD" || fallback
+#
+# remain-on-exit (keeps the finished command's output readable until the next command prunes it) is set from
+# INSIDE the pane, on the pane's own window, before the command runs — the only race-free moment. Setting it
+# from the wrapper after creating the window loses to any fast command: tmux destroys the window the instant
+# the child exits, so `echo hi` was gone before the option landed — taking the whole session with it now that
+# no bootstrap shell holds it open. Here the window cannot have exited: its own shell is what runs this line.
+printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on 2>/dev/null\nbash %q/cmd 2>&1 | tee -a %q/out\necho "${PIPESTATUS[0]}" > %q/status\n' "$d" "$d" "$d" > "$d/runner"
 
 # The persistent pane log (written by the global pipe-pane hooks, src/logs/log-files.ts, VT-rendered to clean
 # text by pane-log-clean) — the filter's footer points the agent here for the full output. Path known only
@@ -72,16 +75,23 @@ emit() {
     fi
 }
 
+# New ACTIVE window (an attached client follows the newest command). This command IS the session's first
+# window when the session doesn't exist yet: a bare `tmux new-session` would leave a shell running in window 0
+# forever, and one never-dying pane makes the daemon read the whole session as `running` for good (paneStates,
+# src/system/system.routes.ts) — so a finished agent's session would never dim, and the panel's "clear
+# finished terminals" sweep could never take it. Both creation forms take the same flags; nothing needs the
+# shell window, since agent/job sessions are attach-only (src/terminal/terminal.ts).
+create=(new-window -t "=$session:")
+tmux has-session -t "=$session" 2>/dev/null || create=(new-session -d -s "$session")
+pane="$(tmux "${create[@]}" -P -F '#{pane_id}' -n "$name" -c "$PWD" ${envflags[@]+"${envflags[@]}"} "bash $d/runner")" || fallback
+[ -n "${INTENTIC_TERMINAL_LOGS_DIR:-}" ] && logfile="$INTENTIC_TERMINAL_LOGS_DIR/$session-$pane.log"
+
 # Prune windows of finished commands, so the last output stays readable until the next command but dead
-# windows don't accumulate.
+# windows don't accumulate. AFTER this command's window exists, never before: with no bootstrap shell holding
+# the session open, a session whose windows are ALL dead (every command finished) would be destroyed by its
+# own prune, and the creation above would then have no session to add a window to.
 tmux list-panes -s -t "=$session" -F '#{pane_dead} #{window_id}' 2>/dev/null \
     | awk '$1==1{print $2}' | xargs -rn1 tmux kill-window -t
-
-# New ACTIVE window (an attached client follows the newest command) with remain-on-exit so finished output
-# stays visible until pruned.
-pane="$(tmux new-window -P -F '#{pane_id}' -t "=$session:" -n "$name" -c "$PWD" ${envflags[@]+"${envflags[@]}"} "bash $d/runner" \; \
-    set-option -w -t "=$session:" remain-on-exit on)" || fallback
-[ -n "${INTENTIC_TERMINAL_LOGS_DIR:-}" ] && logfile="$INTENTIC_TERMINAL_LOGS_DIR/$session-$pane.log"
 
 # A SIGTERM (the SDK's Bash timeout, or the daemon runner's abort/watchdog) takes the pane down with the
 # wrapper so timeout semantics match the plain Bash tool, and still returns whatever the command printed
@@ -91,8 +101,7 @@ trap 'tmux kill-window -t "$pane" 2>/dev/null; emit 143; rm -rf "$d"; exit 143' 
 # Completion is the status file, not tail/pane timing: the runner writes it strictly AFTER `tee` closes
 # $d/out (line above), so once it exists the captured output is complete and flushed — no tail-follow,
 # inotify, or flush-window race. Pane liveness stays only as the kill escape hatch: a user ×-killing the
-# session (or the fast-exit case that destroys the window before remain-on-exit lands) would otherwise hang
-# this wrapper — and its caller — forever waiting for a status that never comes.
+# session would otherwise hang this wrapper — and its caller — forever waiting for a status that never comes.
 # Soft timeout for long-running commands (dev servers, watch, tail -f): return early with the output so
 # far and a follow handle instead of hanging until the SDK's Bash timeout kills the pane. The pane (and
 # $d — the runner still tees into it) stays alive; the dead-window prune sweeps it once it exits. Default

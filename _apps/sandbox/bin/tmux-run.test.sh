@@ -21,6 +21,19 @@ bash "$W" "$S" 'exit 7' run >/dev/null; [ $? = 7 ] || { echo "FAIL: exit-code no
 out="$(bash "$W" "$S" 'echo hi; exit 3' run)"; rc=$?
 [ "$out" = hi ] && [ "$rc" = 3 ] || { echo "FAIL: got out='$out' rc=$rc (want hi/3)"; exit 1; }
 
+# Both halves of the finished-session contract, checked on a session whose every command has completed.
+# 1. The session SURVIVES with its last command's output still readable — a dead window (remain-on-exit) is
+#    what the terminal panel shows after a turn. remain-on-exit has to be set from inside the pane: a fast
+#    command exits before an option set from outside lands, and tmux then destroys the window — the whole
+#    session with it, since no bootstrap shell holds it open.
+# 2. NO pane is alive — not even the shell `tmux new-session` would leave in window 0. One never-dying pane
+#    makes the daemon report the agent session as `running` forever (paneStates, src/system/system.routes.ts),
+#    so the panel's "clear finished terminals" sweep can never take a finished agent's terminal.
+panes="$(tmux list-panes -s -t "=$S" -F '#{pane_dead} #{window_name} #{pane_current_command}' 2>&1)" \
+    || { echo "FAIL: session gone after a finished command (want it kept, dead, readable): $panes"; exit 1; }
+printf '%s\n' "$panes" | grep -q '^0 ' \
+    && { echo "FAIL: live pane left in a session whose commands all finished:"; printf '  %s\n' "$panes"; exit 1; }
+
 # -e NAME resolves from the wrapper's own env onto the window (name-only; the value never rides an argv).
 out="$(FOO=bar bash "$W" -e FOO "$S" 'echo "$FOO"' run)"; rc=$?
 [ "$out" = bar ] && [ "$rc" = 0 ] || { echo "FAIL: -e name got out='$out' rc=$rc (want bar/0)"; exit 1; }

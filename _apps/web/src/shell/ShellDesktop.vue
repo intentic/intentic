@@ -49,7 +49,7 @@ const changes = useChanges();
 // "Agents need you" (pending plans/questions, land conflicts, unread finishes) badges the Agents tile.
 const { attention: agentAttention } = useAgents();
 const layout = useLayout();
-const { poppedOut, pipBody, dock } = useChatPopout();
+const { poppedOut, body: chatPopoutBody, dock } = useChatPopout();
 const route = useRoute();
 
 // The connected tunnels behind the rail's VPN indicator. Shown only when non-empty: a VPN badge that is always
@@ -113,7 +113,7 @@ const initials = (name: string): string => {
     return raw.toUpperCase();
 };
 
-// Collapse the chat column to nothing while the panel is popped out (it's teleported into the pip window), so
+// Collapse the chat column to nothing while the panel is popped out (it's teleported into its own window), so
 // the workspace reclaims the full width.
 const gridStyle = computed(() => ({ "--chat-width": poppedOut.value ? `0px` : `${layout.chatWidth.value}px` }));
 
@@ -131,16 +131,16 @@ const terminalLabel = computed(() => {
     const what = terminalActivity.summary.value === undefined ? `Terminal` : `Terminal — ${terminalActivity.summary.value} running`;
     return chord === undefined ? what : `${what} (${chord})`;
 });
-// Like the chat, the whole panel can float in its own pip window (right-click its tab strip) — teleported
-// there, docked back on window close. Maximized makes no sense while floating (the panel isn't over the
-// workspace), and a hidden RouterView must not linger, so popping out resets it.
-const { poppedOut: terminalPoppedOut, pipBody: terminalPipBody, dock: dockTerminal } = useTerminalPopout();
+// Like the chat, the whole panel can float in its own window (right-click its tab strip) — teleported there,
+// docked back on window close. Maximized makes no sense while floating (the panel isn't over the workspace),
+// and a hidden RouterView must not linger, so popping out resets it.
+const { poppedOut: terminalPoppedOut, body: terminalPopoutBody, dock: dockTerminal } = useTerminalPopout();
 watch(terminalPoppedOut, (out) => {
     if (out) {
         terminalMaximized.value = false;
     }
 });
-// Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pip window.
+// Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pop-out window.
 watch(terminal.open, (open) => {
     if (!open) {
         dockTerminal();
@@ -256,7 +256,7 @@ onUnmounted(() => {
                 <Icon name="plus" class="text-lg" />
             </RouterLink>
 
-            <!-- Return the popped-out chat to its docked column (only while it floats in a separate window). -->
+            <!-- Return the popped-out chat to its docked column (only while it floats in its own window). -->
             <button
                 v-if="poppedOut"
                 type="button"
@@ -272,9 +272,9 @@ onUnmounted(() => {
             <AccountPanel />
         </nav>
 
-        <!-- Docked in the grid's chat column, or teleported into the pip window when popped out — same live DOM
-             either way, so the useChat singleton and the streaming turn are untouched by the move. -->
-        <Teleport :to="pipBody" :disabled="!poppedOut">
+        <!-- Docked in the grid's chat column, or teleported into the pop-out window — same live DOM either way,
+             so the useChat singleton and the streaming turn are untouched by the move. -->
+        <Teleport :to="chatPopoutBody" :disabled="!poppedOut">
             <ChatPanel class="border-l border-line" style="grid-area: chat" />
         </Teleport>
 
@@ -284,10 +284,10 @@ onUnmounted(() => {
                     <RouterView />
                 </div>
                 <!-- The ONE terminal panel — sandbox-global (shells + dev servers), persistent across views.
-                     Docked below the workspace, or teleported into its pip window when popped out — same live
+                     Docked below the workspace, or teleported into its own window when popped out — same live
                      DOM either way, so the session cache and running shells are untouched by the move (the
                      panel fills the floating window, hence resizable off there). -->
-                <Teleport :to="terminalPipBody" :disabled="!terminalPoppedOut">
+                <Teleport :to="terminalPopoutBody" :disabled="!terminalPoppedOut">
                     <TerminalPanel
                         v-if="terminal.open.value"
                         v-model:maximized="terminalMaximized"

@@ -12,11 +12,9 @@ import { createApp, h, nextTick } from "vue";
 // The import-time globals a mounted chat component needs (see startAgent.test.ts): ui's useDevice reads
 // window.matchMedia at module scope, environment.ts reads window.env, and jsdom ships no ResizeObserver.
 // matches:false keeps the device DESKTOP — the only form factor this strip renders on.
-// documentPictureInPicture is read once at module scope too (usePopout's `supported`), so the stub has to be in
-// place before the import — without it the strip would render as it does on Firefox, with no pop-out row at all.
-// requestWindow never settles: the assertion is only that the row CALLS it, and a resolved undefined would send
-// popOut on into a pip document that isn't there.
-const { requestWindow } = vi.hoisted(() => {
+// window.open is stubbed to null — jsdom opens nothing, and the assertion here is only that the pop-out row
+// CALLS it; a real window handed back would send the panel teleporting into a document jsdom never laid out.
+const { open } = vi.hoisted(() => {
     globalThis.ResizeObserver ??= class {
         observe(): void {}
         unobserve(): void {}
@@ -36,9 +34,9 @@ const { requestWindow } = vi.hoisted(() => {
         auth: { googleClientId: `` },
         analytics: { posthogKey: ``, posthogHost: `` },
     };
-    const pipApi = { requestWindow: vi.fn(() => new Promise<Window>(() => {})) };
-    (globalThis.window as Window & { documentPictureInPicture?: unknown }).documentPictureInPicture = pipApi;
-    return pipApi;
+    const openWindow = vi.fn(() => null);
+    globalThis.window.open = openWindow;
+    return { open: openWindow };
 });
 
 let strip: HTMLElement;
@@ -167,7 +165,7 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
     // under the pointer; the pop-out is one of them.
     await openStripMenu();
     expect(labels()).toEqual([`Close All`, `Move chat into new window`]);
-    expect(requestWindow).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
 
     // Close All means here what it means on a tab: the strip comes back as one fresh conversation.
     await clickRow(`Close All`);
@@ -177,7 +175,7 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
     // The pop-out row still pops out — the menu is a step in front of the gesture, not a replacement for it.
     await openStripMenu();
     await clickRow(`Move chat into new window`);
-    expect(requestWindow).toHaveBeenCalled();
+    expect(open).toHaveBeenCalled();
 });
 
 it(`mass closes past a running agent with no confirm — closing detaches from the turn, it doesn't stop it`, async () => {
