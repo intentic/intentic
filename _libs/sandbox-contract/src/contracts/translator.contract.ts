@@ -4,7 +4,8 @@ import { KeyedProviderSchema, OkSchema, TranslatorAccountsSchema, TranslatorComp
 
 // Routed-provider subscriptions (Sandbox ▸ Agent). The bundled translator (CLIProxyAPI) runs a non-Claude model
 // UNDER the Claude Code harness on the user's SUBSCRIPTION, so each provider connects via an OAuth login rather
-// than an API key. `accounts` reports which subscriptions are connected; `disconnect` clears a provider's tokens.
+// than an API key. A provider can hold several accounts side by side (the translator balances across them);
+// `accounts` lists what's connected per provider and `disconnect` clears ONE account by its auth-file `name`.
 //
 // Two login shapes ride one pair of routes. Codex and Grok mint a one-time device `code`: the user enters it at
 // the provider's site and the translator polls to completion in the background, so the UI just polls `accounts`
@@ -21,6 +22,6 @@ export const translatorContract = {
     complete: oc.route({ method: "POST", path: "/translator/{provider}/complete" }).input(TranslatorCompleteSchema).output(OkSchema),
     disconnect: oc
         .route({ method: "POST", path: "/translator/{provider}/disconnect" })
-        .input(z.object({ provider: KeyedProviderSchema }))
+        .input(z.object({ provider: KeyedProviderSchema, name: z.string().min(1) }))
         .output(OkSchema),
 };

@@ -213,7 +213,7 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     claudeUsage: { read: async () => ({}), record: async () => {}, clear: async () => {} },
     // Nothing connected in the translator by default; tests exercising the Codex subscription path override this.
     cliProxy: {
-        accounts: async () => ({ codex: false, grok: false, gemini: false }),
+        accounts: async () => ({ codex: [], grok: [], gemini: [] }),
         connect: async () => ({ url: "", code: "", state: "" }),
         complete: async () => {},
         disconnect: async () => {},
@@ -1345,7 +1345,7 @@ test("agent.run selects the Claude account named on the turn and forwards its to
 
 const withTranslator = { ...baseConfig, translator: { url: "http://127.0.0.1:8788", token: "local-bearer" } };
 const codexConnectedProxy = {
-    accounts: async () => ({ codex: true, grok: false, gemini: false }),
+    accounts: async () => ({ codex: [{ name: "codex-user.json", label: "user@example.com" }], grok: [], gemini: [] }),
     connect: async () => ({ url: "", code: "", state: "" }),
     complete: async () => {},
     disconnect: async () => {},
@@ -1399,7 +1399,7 @@ test("agent.run serves a Gemini turn on the translator subscription, withholding
             services({
                 config: withTranslator,
                 cliProxy: {
-                    accounts: async () => ({ codex: false, grok: false, gemini: true }),
+                    accounts: async () => ({ codex: [], grok: [], gemini: [{ name: "antigravity-user.json", label: "user@gmail.com" }] }),
                     connect: async () => ({ url: "", code: "", state: "" }),
                     complete: async () => {},
                     disconnect: async () => {},
@@ -1424,7 +1424,7 @@ test("agent.run serves a Gemini turn on the translator subscription, withholding
 test("agent.run keeps a pinned Gemini model the catalog still offers, and drops one it doesn't", async () => {
     const models = ["gemini-pro-agent", "gemini-3-flash"];
     const geminiConnected = {
-        accounts: async () => ({ codex: false, grok: false, gemini: true }),
+        accounts: async () => ({ codex: [], grok: [], gemini: [{ name: "antigravity-user.json", label: "user@gmail.com" }] }),
         connect: async () => ({ url: "", code: "", state: "" }),
         complete: async () => {},
         disconnect: async () => {},

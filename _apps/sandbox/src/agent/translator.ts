@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { KeyedProvider } from "@intentic/sandbox-contract";
+import type { KeyedProvider, TranslatorAccounts } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
 import type { Services } from "../composition.js";
 
@@ -86,9 +86,10 @@ export const startTranslator = (services: Services): void => {
 };
 
 // The CLIProxyAPI Management API client + login orchestration the /translator routes and the routed-turn gate
-// use. `accounts` reads the connected-subscription set; `connect` starts a provider's login and returns what the
-// card shows; `complete` finishes the one provider whose login can't self-complete (see below); `disconnect`
-// clears a provider's tokens.
+// use. `accounts` reads the connected subscriptions per provider — a LIST, because CLIProxyAPI holds any number
+// of auth files per provider and balances requests across them, so a second account is more headroom; `connect`
+// starts a provider's login and returns what the card shows; `complete` finishes the one provider whose login
+// can't self-complete (see below); `disconnect` clears ONE account's tokens by auth-file name.
 //
 // Codex and Grok are device-code logins: the user opens a URL and enters the code, and CLIProxyAPI polls to
 // completion in the background and writes the token to auth-dir, so the UI polls `accounts` until connected and
@@ -96,23 +97,23 @@ export const startTranslator = (services: Services): void => {
 // container, so nothing can observe the grant — the user pastes the URL they landed on and `complete` hands it
 // back to CLIProxyAPI, which then finishes the exchange on its own and the UI polls `accounts` the same way.
 export interface CliProxyClient {
-    readonly accounts: () => Promise<Record<KeyedProvider, boolean>>;
+    readonly accounts: () => Promise<TranslatorAccounts>;
     readonly connect: (provider: KeyedProvider) => Promise<{ url: string; code: string; state: string }>;
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
-    readonly disconnect: (provider: KeyedProvider) => Promise<void>;
+    readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
 }
 
 export const createCliProxyClient = (params: { managementUrl: string; token: string; configPath: string }): CliProxyClient => {
     const { managementUrl, token, configPath } = params;
     const auth = { authorization: `Bearer ${token}` };
 
-    const listFiles = async (): Promise<{ name?: string; provider?: string }[]> => {
+    const listFiles = async (): Promise<{ name?: string; provider?: string; email?: string; label?: string }[]> => {
         const response = await fetch(`${managementUrl}/auth-files`, { headers: auth });
         // Management not reachable (proxy still booting / not baked) ⇒ treat as nothing connected rather than throw.
         if (!response.ok) {
             return [];
         }
-        return ((await response.json()) as { files?: { name?: string; provider?: string }[] }).files ?? [];
+        return ((await response.json()) as { files?: { name?: string; provider?: string; email?: string; label?: string }[] }).files ?? [];
     };
 
     // Grok: CLIProxyAPI's xAI login is a device-code flow (headless-friendly) exposed over the Management API. It
@@ -210,14 +211,17 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
             });
         });
 
-    const disconnect = async (provider: KeyedProvider): Promise<void> => {
+    // Drop ONE account: the provider check keeps a name from another provider's file (or a stale row) from
+    // deleting a credential the user didn't point at. A pending codex device login still dies with any codex
+    // disconnect — its poll would otherwise re-land a token into a store the user is clearing out.
+    const disconnect = async (provider: KeyedProvider, name: string): Promise<void> => {
         if (provider === "codex") {
             codexChild?.kill("SIGTERM");
             codexChild = undefined;
         }
         const cliproxyProvider = CLIPROXY_PROVIDER[provider];
         for (const file of await listFiles()) {
-            if (file.provider === cliproxyProvider && file.name !== undefined) {
+            if (file.provider === cliproxyProvider && file.name === name) {
                 await fetch(`${managementUrl}/auth-files?name=${encodeURIComponent(file.name)}`, { method: "DELETE", headers: auth });
             }
         }
@@ -225,12 +229,14 @@ export const createCliProxyClient = (params: { managementUrl: string; token: str
 
     return {
         accounts: async () => {
-            const providers = new Set((await listFiles()).map((file) => file.provider));
-            return {
-                codex: providers.has(CLIPROXY_PROVIDER.codex),
-                grok: providers.has(CLIPROXY_PROVIDER.grok),
-                gemini: providers.has(CLIPROXY_PROVIDER.gemini),
-            };
+            const files = await listFiles();
+            const of = (provider: KeyedProvider) =>
+                files.flatMap((file) =>
+                    file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined
+                        ? [{ name: file.name, label: file.email ?? file.label ?? file.name }]
+                        : [],
+                );
+            return { codex: of("codex"), grok: of("grok"), gemini: of("gemini") };
         },
         connect: (provider) => (provider === "grok" ? connectGrok() : provider === "gemini" ? connectGemini() : connectCodex()),
         complete,

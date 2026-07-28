@@ -19,6 +19,7 @@ import ProviderLogo from "../../chat/ProviderLogo.vue";
 import AssistantInfo from "./AssistantInfo.vue";
 import CommandOutputInfo from "./CommandOutputInfo.vue";
 import NativeConnectFlow from "./NativeConnectFlow.vue";
+import TranslatorConnectFlow from "./TranslatorConnectFlow.vue";
 
 /* The Sandbox hub's "Agent" tab — the home for everything about the AI the sandbox runs. The AI provider
  * accounts (Claude / ChatGPT / Grok / Kimi / Gemini) it authenticates as — each provider's native-harness
@@ -46,8 +47,6 @@ const {
     translatorConnectFlow,
     translatorBusy,
     connectTranslator,
-    completeTranslator,
-    cancelTranslatorConnect,
     disconnectTranslator,
 } = useChat();
 
@@ -80,33 +79,30 @@ onMounted(() => {
 watch(() => route.query[`connect`], focusConnect);
 onUnmounted(closeAccountManage);
 
-// The subscription connection, served by the sandbox's translator (CLIProxyAPI). For ChatGPT (codex) it is the
-// ONE connection — Codex authenticates through it everywhere (native and under the Claude Code harness), so
-// there's no separate account. For Grok it's a secondary row beneath the native account (the account runs
-// Grok's own harness; the subscription runs Grok models UNDER the Claude Code harness). Claude has no row: it
-// IS the Claude Code harness.
+// The subscription connections, served by the sandbox's translator (CLIProxyAPI). For ChatGPT (codex) they are
+// the ONLY connections — Codex authenticates through the translator everywhere (native and under the Claude
+// Code harness), so there's no separate account. For Grok they're secondary rows beneath the native account
+// (the account runs Grok's own harness; a subscription runs Grok models UNDER the Claude Code harness). Claude
+// has no row: it IS the Claude Code harness. A provider can hold several subscription accounts — the translator
+// balances turns across them — so each renders as a row of its own.
 const routedProvider = computed<KeyedProvider | undefined>(() =>
     managedProvider.value === `codex` || managedProvider.value === `grok` || managedProvider.value === `gemini` ? managedProvider.value : undefined,
 );
 // Each routed row carries two registers of explanation, because they are read at different moments. `hint` is
 // the glanceable one — what this connection costs you, in a fragment — and it is the only one on screen. `about`
 // is the full mechanic, parked behind the row's (i) for the reader who actually wants it: printing both is what
-// turned this card into a wall of prose. `open` names the destination on its own button so "Open sign-in" never
-// has to be guessed at, and `loginHint` appears only while that sign-in is live.
-const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; about: string; open: string; loginHint: string }> = {
+// turned this card into a wall of prose. The live sign-in's own copy (destination button, login hint) lives in
+// TranslatorConnectFlow beside the flow it narrates.
+const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; about: string }> = {
     codex: {
         title: `ChatGPT subscription`,
         hint: `The only connection Codex needs.`,
         about: `Runs Codex on your ChatGPT subscription — everywhere: on its own and under the Claude Code harness.`,
-        open: `Open ChatGPT`,
-        loginHint: `Sign in, then enter this code.`,
     },
     grok: {
         title: `Under Claude Code`,
         hint: `Your SuperGrok / X Premium subscription.`,
         about: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription — a separate sign-in from the Grok account above.`,
-        open: `Open x.ai`,
-        loginHint: `Sign in, then enter this code.`,
     },
     gemini: {
         title: `Google account`,
@@ -115,9 +111,6 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; about: st
         // gemini-models.ts). Free is the other half — it is the only free row on this page.
         hint: `Free — Gemini, Claude and GPT-OSS models.`,
         about: `Runs Gemini, Claude and GPT-OSS models under the Claude Code harness on your Google account — free, and the one connection this provider needs.`,
-        open: `Open Google`,
-        // The dead-end landing page is the one thing a user cannot work out on their own, so it stays in full.
-        loginHint: `The page Google lands on won't load — that's expected, it points back inside the sandbox. Copy its whole address and paste it below.`,
     },
 };
 
@@ -125,15 +118,6 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; about: st
 // provider, and without it that question costs five clicks. `providerReady` (access.ts) is the shared rule every
 // surface that offers a provider reads; this card must not carry a second opinion about what "connected" means,
 // least of all one that would call a provider ready here and locked in the picker.
-// The pasted redirect URL for a routed login that can't self-complete (Google's — see completeTranslator).
-const redirectUrl = ref(``);
-const finishTranslator = async (): Promise<void> => {
-    if (redirectUrl.value.trim().length === 0) {
-        return;
-    }
-    await completeTranslator(redirectUrl.value);
-    redirectUrl.value = ``;
-};
 
 // Compact "142k" token count and a short usage summary line per account (from /system/usage).
 const shortTokens = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
@@ -523,109 +507,101 @@ const importMemory = async (): Promise<void> => {
                 </Row>
             </template>
 
-            <!-- The subscription connection (translator). ChatGPT/Codex and Gemini: the ONE connection, so it's
-                 the group's primary control. Grok: a second row beneath the native account, for running Grok
-                 UNDER the Claude Code harness. Codex/Grok mint a one-time code and the translator connects on
-                 its own; Google redirects instead, so that flow asks for the landing URL back. Either way the
-                 shared poll flips the row to "connected". -->
-            <Row v-if="routedProvider">
-                <template #title>
-                    <!-- Wraps rather than truncates: these titles are short and fixed, and a squeezed row that
-                         renders "Unde…" has hidden the only thing the row is for. -->
-                    <span class="flex min-w-0 flex-wrap items-center gap-x-2.5">
-                        <span class="flex w-[1.125rem] shrink-0 justify-center">
-                            <span class="h-1.5 w-1.5 rounded-full" :class="translatorAccounts[routedProvider] ? 'bg-success' : 'bg-content/25'" />
+            <!-- The subscription connection (translator). ChatGPT/Codex and Gemini: the ONE connection kind, so
+                 it's the group's primary control. Grok: rows beneath the native account, for running Grok UNDER
+                 the Claude Code harness. A provider can hold SEVERAL subscription accounts side by side — the
+                 translator balances turns across them, so a second account is more headroom — and each renders
+                 as its own row with its own Disconnect, mirroring the native list above. Codex/Grok mint a
+                 one-time code and the translator connects on its own; Google redirects instead, so that flow
+                 asks for the landing URL back. Either way the shared poll lands the new account's row. -->
+            <template v-if="routedProvider">
+                <Row v-for="account in translatorAccounts[routedProvider]" :key="account.name">
+                    <template #title>
+                        <!-- Wraps rather than truncates: the connection kind stays first (a Grok subscription row
+                             must never read as the native account above it), the sign-in identity beside it. -->
+                        <span class="flex min-w-0 flex-wrap items-center gap-x-2.5">
+                            <span class="flex w-[1.125rem] shrink-0 justify-center"><span class="h-1.5 w-1.5 rounded-full bg-success" /></span>
+                            <span>{{ ROUTED_ROW[routedProvider].title }}</span>
+                            <span class="text-2xs font-normal text-subtle">{{ account.label }}</span>
+                            <!-- The full mechanic lives here rather than on screen: it is a paragraph, and a
+                                 paragraph per row is what made this group unreadable. -->
+                            <InfoHint :label="`About ${ROUTED_ROW[routedProvider].title}`">
+                                <span class="block text-xs text-content">{{ ROUTED_ROW[routedProvider].about }}</span>
+                            </InfoHint>
                         </span>
-                        <span>{{ ROUTED_ROW[routedProvider].title }}</span>
-                        <span v-if="!translatorAccounts[routedProvider]" class="text-2xs font-normal text-subtle">not connected</span>
-                        <!-- The full mechanic lives here rather than on screen: it is a paragraph, and a
-                             paragraph per row is what made this group unreadable. -->
-                        <InfoHint :label="`About ${ROUTED_ROW[routedProvider].title}`">
-                            <span class="block text-xs text-content">{{ ROUTED_ROW[routedProvider].about }}</span>
-                        </InfoHint>
-                    </span>
-                </template>
-                <template #description
-                    ><span class="block pl-7">{{ ROUTED_ROW[routedProvider].hint }}</span></template
-                >
-                <template #control>
-                    <Button
-                        v-if="translatorAccounts[routedProvider]"
-                        label="Disconnect"
-                        size="small"
-                        severity="danger"
-                        :text="true"
-                        :loading="translatorBusy === routedProvider"
-                        @click="disconnectTranslator(routedProvider)"
-                    />
-                    <!-- Filled accent only where this row IS the group's one connection (Codex/Gemini). Under
-                         Grok it's the alternative to the native account right above it, and a filled accent
-                         there makes the lesser path the loudest thing on the page. -->
-                    <Button
-                        v-else-if="translatorConnectFlow?.provider !== routedProvider"
-                        label="Connect"
-                        size="small"
-                        :severity="routedProvider === `grok` ? `secondary` : undefined"
-                        :loading="translatorBusy === routedProvider"
-                        @click="connectTranslator(routedProvider)"
+                    </template>
+                    <template #description
+                        ><span class="block pl-7">{{ ROUTED_ROW[routedProvider].hint }}</span></template
                     >
-                        <template #icon><Icon name="link" /></template>
-                    </Button>
-                </template>
-                <template v-if="translatorConnectFlow && translatorConnectFlow.provider === routedProvider" #below>
-                    <div class="flex flex-col gap-2.5">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <Button
-                                as="a"
-                                :label="ROUTED_ROW[routedProvider].open"
-                                size="small"
-                                :href="translatorConnectFlow.url"
-                                target="_blank"
-                                rel="noopener"
-                            >
-                                <template #icon><Icon name="external-link" /></template>
-                            </Button>
-                            <span class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />Waiting for sign-in…</span>
-                            <Button
-                                class="ml-auto shrink-0"
-                                label="Cancel"
-                                size="small"
-                                severity="secondary"
-                                :text="true"
-                                @click="cancelTranslatorConnect"
-                            />
-                        </div>
-                        <p class="text-2xs text-subtle">{{ ROUTED_ROW[routedProvider].loginHint }}</p>
-                        <!-- A one-time code means the provider polls itself; no code means it redirects, and the
-                             landing URL carries the grant the sandbox never received. -->
-                        <div
-                            v-if="translatorConnectFlow.code"
-                            class="flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5"
+                    <template #control>
+                        <Button
+                            label="Disconnect"
+                            size="small"
+                            severity="danger"
+                            :text="true"
+                            :loading="translatorBusy === routedProvider"
+                            @click="disconnectTranslator(routedProvider, account.name)"
+                        />
+                    </template>
+                </Row>
+
+                <!-- No subscription yet: the row states what is missing and offers the one action that fixes it.
+                     With one connected, the same slot quiets down to "Add another account" — a different act
+                     from having none, so it borrows the native list's quiet plus-row shape. Either way the
+                     sign-in it starts unfolds below this row. -->
+                <Row
+                    v-if="translatorAccounts[routedProvider].length === 0"
+                    :key="`connect-${routedProvider}`"
+                >
+                    <template #title>
+                        <span class="flex min-w-0 flex-wrap items-center gap-x-2.5">
+                            <span class="flex w-[1.125rem] shrink-0 justify-center"><span class="h-1.5 w-1.5 rounded-full bg-content/25" /></span>
+                            <span>{{ ROUTED_ROW[routedProvider].title }}</span>
+                            <span class="text-2xs font-normal text-subtle">not connected</span>
+                            <InfoHint :label="`About ${ROUTED_ROW[routedProvider].title}`">
+                                <span class="block text-xs text-content">{{ ROUTED_ROW[routedProvider].about }}</span>
+                            </InfoHint>
+                        </span>
+                    </template>
+                    <template #description
+                        ><span class="block pl-7">{{ ROUTED_ROW[routedProvider].hint }}</span></template
+                    >
+                    <template #control>
+                        <!-- Filled accent only where this row IS the group's one connection (Codex/Gemini). Under
+                             Grok it's the alternative to the native account right above it, and a filled accent
+                             there makes the lesser path the loudest thing on the page. -->
+                        <Button
+                            v-if="translatorConnectFlow?.provider !== routedProvider"
+                            label="Connect"
+                            size="small"
+                            :severity="routedProvider === `grok` ? `secondary` : undefined"
+                            :loading="translatorBusy === routedProvider"
+                            @click="connectTranslator(routedProvider)"
                         >
-                            <span class="truncate font-mono text-base font-semibold tracking-[0.2em] text-content">{{
-                                translatorConnectFlow.code
-                            }}</span>
-                            <CopyButton :text="translatorConnectFlow.code" />
-                        </div>
-                        <div v-else class="flex gap-2">
-                            <input
-                                v-model="redirectUrl"
-                                type="text"
-                                :class="cmp.input(`min-w-0 flex-1 py-1.5`)"
-                                placeholder="Paste the address you landed on…"
-                                @keyup.enter="finishTranslator"
-                            />
-                            <Button
-                                label="Finish"
-                                size="small"
-                                :disabled="redirectUrl.trim().length === 0"
-                                :loading="translatorBusy === routedProvider"
-                                @click="finishTranslator"
-                            />
-                        </div>
-                    </div>
-                </template>
-            </Row>
+                            <template #icon><Icon name="link" /></template>
+                        </Button>
+                    </template>
+                    <template v-if="translatorConnectFlow && translatorConnectFlow.provider === routedProvider" #below>
+                        <TranslatorConnectFlow :provider="routedProvider" />
+                    </template>
+                </Row>
+                <Row
+                    v-else
+                    :key="`add-${routedProvider}`"
+                    :interactive="translatorConnectFlow?.provider !== routedProvider"
+                    @click="translatorConnectFlow?.provider !== routedProvider && connectTranslator(routedProvider)"
+                >
+                    <template #title>
+                        <span class="flex min-w-0 items-center gap-2.5 text-muted">
+                            <span class="flex w-[1.125rem] shrink-0 justify-center"><Icon name="plus" class="text-2xs" /></span>
+                            <span>Add another account</span>
+                        </span>
+                    </template>
+                    <template v-if="translatorConnectFlow && translatorConnectFlow.provider === routedProvider" #below>
+                        <TranslatorConnectFlow :provider="routedProvider" />
+                    </template>
+                </Row>
+            </template>
         </RowGroup>
 
         <!-- Why every control below is inert, whenever it is: a settings read that hasn't landed (or failed)

@@ -379,7 +379,10 @@ const fulfillDaemon = async (route: Route): Promise<void> => {
     if (path.includes("/file-diff")) return route.fulfill(json({ before: CHECKOUT_TS, after: CHECKOUT_TS }));
     if (path.endsWith("/accounts") && (path.includes("claude") || path.includes("grok"))) return route.fulfill(json(ACCOUNTS[provider()]));
     if (path.endsWith("/models")) return route.fulfill(json(MODELS[provider()]));
-    if (path === "/translator/accounts") return route.fulfill(json({ codex: true, grok: true }));
+    if (path === "/translator/accounts")
+        return route.fulfill(
+            json({ codex: [{ name: "codex-user.json", label: "user@example.com" }], grok: [{ name: "xai-user.json", label: "user@x.ai" }], gemini: [] }),
+        );
     if (path === "/workspace/tree") return route.fulfill(json(TREE));
     if (path === "/workspace/file") return route.fulfill(json({ content: CHECKOUT_TS }));
     if (path === "/panels") return route.fulfill(json({ panels: [] }));

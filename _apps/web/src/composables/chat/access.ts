@@ -31,10 +31,10 @@ const isAcp = (provider: AgentProvider): boolean => acpProviders.value.some((age
 // narrows it to the one harness the active conversation is actually set to.
 export const providerReady = (provider: AgentProvider): boolean => {
     if (provider === `codex` || provider === `gemini`) {
-        return translatorAccounts.value[provider];
+        return translatorAccounts.value[provider].length > 0;
     }
     if (provider === `grok`) {
-        return accountsOf(provider).length > 0 || translatorAccounts.value.grok;
+        return accountsOf(provider).length > 0 || translatorAccounts.value.grok.length > 0;
     }
     return accountsOf(provider).length > 0 || isAcp(provider);
 };

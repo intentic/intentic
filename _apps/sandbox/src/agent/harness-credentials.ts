@@ -146,7 +146,7 @@ const routedCatalog = async (services: Services, provider: "codex" | "grok" | "g
  * costs an error message rather than a wrong turn. */
 export const harnessReadyProviders = async (services: Services): Promise<Record<NativeProvider, boolean>> => {
     const translator = services.config.translator.url === "" ? undefined : await services.cliProxy.accounts();
-    const routed = (provider: "codex" | "grok" | "gemini"): boolean => translator?.[provider] === true;
+    const routed = (provider: "codex" | "grok" | "gemini"): boolean => (translator?.[provider].length ?? 0) > 0;
     const ready: Record<NativeProvider, boolean> = {
         // A stored account, else the container's own credential — the same two rungs the claude branch takes.
         claude:
@@ -177,7 +177,7 @@ export const resolveHarnessCredentials = async (
                 message: `This sandbox has no model translator, so a non-Claude model can't run under the Claude Code harness here. ${fallback}`,
             };
         }
-        if (!(await services.cliProxy.accounts())[input.agent]) {
+        if ((await services.cliProxy.accounts())[input.agent].length === 0) {
             return {
                 ok: false,
                 code: "subscription-required",

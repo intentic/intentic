@@ -295,7 +295,7 @@ export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>(
 // run", since those three authenticate through the translator rather than through a daemon-stored account.
 // Written by useChat (refreshTranslatorAccounts / resetChat); kept here beside providerAccounts so the access
 // rules can be derived from one place without importing useChat (a cycle).
-export const translatorAccounts = ref<TranslatorAccounts>({ codex: false, grok: false, gemini: false });
+export const translatorAccounts = ref<TranslatorAccounts>({ codex: [], grok: [], gemini: [] });
 
 // The account a fresh turn on a provider uses: the user's explicit pick when it's still connected, else the
 // provider's first connected account. The single source every account-reset site routes through.

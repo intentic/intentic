@@ -324,9 +324,19 @@ export const AgentLandSchema = z.object({ id: z.string().min(1), mode: LandModeS
 export const KeyedProviderSchema = z.enum(["codex", "grok", "gemini"]);
 export type KeyedProvider = z.infer<typeof KeyedProviderSchema>;
 
-// Which routed-provider subscriptions are connected in the translator (per provider). Drives the
-// "connected / connect subscription" state in Sandbox ▸ Agent.
-export const TranslatorAccountsSchema = z.object({ codex: z.boolean(), grok: z.boolean(), gemini: z.boolean() });
+// One connected subscription in the translator. `name` is CLIProxyAPI's auth-file name — the stable store key a
+// disconnect addresses — and `label` the sign-in identity it reported (the account email, else the file name).
+export const TranslatorAccountSchema = z.object({ name: z.string(), label: z.string() });
+export type TranslatorAccount = z.infer<typeof TranslatorAccountSchema>;
+// Which routed-provider subscriptions are connected in the translator, per provider — a LIST per provider, not
+// a flag: CLIProxyAPI holds any number of auth files per provider side by side and balances requests across
+// them, so connecting a second ChatGPT or Google account is more headroom, and each is disconnectable on its
+// own. Drives the account rows in Sandbox ▸ Agent.
+export const TranslatorAccountsSchema = z.object({
+    codex: z.array(TranslatorAccountSchema),
+    grok: z.array(TranslatorAccountSchema),
+    gemini: z.array(TranslatorAccountSchema),
+});
 export type TranslatorAccounts = z.infer<typeof TranslatorAccountsSchema>;
 
 // The side-channel body that un-parks a turn waiting on the user. Every interactive card — plan approval,

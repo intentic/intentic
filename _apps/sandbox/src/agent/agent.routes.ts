@@ -351,7 +351,7 @@ async function* runTurn(
         }
         // The subscription (via the translator) is the credential; the container OPENAI_API_KEY is the only
         // fallback (a bare dev run with no translator baked).
-        const translatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex;
+        const translatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
         if (!translatorReady && services.config.openaiApiKey === "") {
             yield {
                 kind: "error",
@@ -487,7 +487,7 @@ async function* runTurn(
         // CODEX_HOME (whose config.toml selects the translator subscription) plus the local bearer, and the
         // system prompt a short how-to note. Codex is reachable when the translator holds the ChatGPT
         // subscription, or a dev OPENAI_API_KEY is set; nothing ⇒ no env, no note — delegation isn't offered.
-        const codexTranslatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex;
+        const codexTranslatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
         const codexDelegable = codexTranslatorReady || services.config.openaiApiKey !== "";
         const codexHome = codexDelegable ? services.codexHome : undefined;
         // Resolve the xAI model the delegation note names from xAI's live catalog (default, else first), so the

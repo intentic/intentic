@@ -129,14 +129,10 @@ export const createSecretsRoutes = (services: Services) => {
             // One entry per connected account.
             const providerEntries: SecretInventoryEntry[] = [
                 ...claudeAccounts.map((a) => providerAccountEntry("claude", "Claude", a.id, a.label, `.intentic/claude/${a.id}.json`)),
-                // Codex and Gemini authenticate through the translator on a subscription — one credential each, in
-                // the cliproxy auth-dir, not per-account stores.
-                ...(translatorAccounts.codex
-                    ? [providerAccountEntry("codex", "ChatGPT", "subscription", "ChatGPT subscription", ".intentic/cliproxy")]
-                    : []),
-                ...(translatorAccounts.gemini
-                    ? [providerAccountEntry("gemini", "Gemini", "subscription", "Google account", ".intentic/cliproxy")]
-                    : []),
+                // Codex and Gemini authenticate through the translator on subscriptions — one auth file per
+                // connected account in the cliproxy auth-dir, its name doubling as the entry id.
+                ...translatorAccounts.codex.map((a) => providerAccountEntry("codex", "ChatGPT", a.name, a.label, ".intentic/cliproxy")),
+                ...translatorAccounts.gemini.map((a) => providerAccountEntry("gemini", "Gemini", a.name, a.label, ".intentic/cliproxy")),
                 ...(grokConnected ? [providerAccountEntry("grok", "Grok", "xai", "Grok", ".intentic/opencode")] : []),
             ];
             return { entries: [...repoEntries, ...capabilityEntries, ...providerEntries] };

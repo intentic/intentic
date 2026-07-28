@@ -447,8 +447,10 @@ const setManagedProvider = (target: AgentProvider): void => {
 // SandboxAgent so a device-login poll survives that tab unmounting.
 // The in-flight subscription login the Agent tab's routed row shows. `code` is the one-time device code for the
 // providers that mint one; an EMPTY code means the provider redirects instead, so the row asks the user to paste
-// the URL they landed on and `completeTranslator` finishes it against `state`.
-const translatorConnectFlow = ref<{ provider: KeyedProvider; url: string; code: string; state: string } | undefined>(undefined);
+// the URL they landed on and `completeTranslator` finishes it against `state`. `baseline` is how many accounts
+// the provider held when the login started — a provider can hold several, so "connected" is the count GROWING
+// past it, not the provider being truthy (which an "add another account" login already is from the start).
+const translatorConnectFlow = ref<{ provider: KeyedProvider; url: string; code: string; state: string; baseline: number } | undefined>(undefined);
 const translatorBusy = ref<KeyedProvider | undefined>(undefined);
 let translatorPollTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -473,10 +475,11 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
         return;
     }
     await refreshTranslatorAccounts();
-    if (translatorConnectFlow.value?.provider !== target) {
+    const flow = translatorConnectFlow.value;
+    if (flow?.provider !== target) {
         return;
     }
-    if (translatorAccounts.value[target]) {
+    if (translatorAccounts.value[target].length > flow.baseline) {
         translatorConnectFlow.value = undefined;
         error.value = null;
         return;
@@ -497,6 +500,7 @@ const connectTranslator = async (target: KeyedProvider): Promise<void> => {
     try {
         translatorConnectFlow.value = {
             provider: target,
+            baseline: translatorAccounts.value[target].length,
             ...(await sandboxJson<{ url: string; code: string; state: string }>(`/translator/${target}/connect`, { method: `POST` })),
         };
         translatorPollTimer = setTimeout(() => void pollTranslatorOnce(target, Date.now() + CODEX_POLL_DEADLINE_MS), 3_000);
@@ -532,10 +536,15 @@ const completeTranslator = async (redirectUrl: string): Promise<void> => {
     }
 };
 
-const disconnectTranslator = async (target: KeyedProvider): Promise<void> => {
+// Drop ONE of the provider's connected accounts, addressed by its translator auth-file name.
+const disconnectTranslator = async (target: KeyedProvider, name: string): Promise<void> => {
     translatorBusy.value = target;
     try {
-        await sandboxRequest(`/translator/${target}/disconnect`, { method: `POST` });
+        await sandboxRequest(`/translator/${target}/disconnect`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ provider: target, name }),
+        });
         if (translatorConnectFlow.value?.provider === target) {
             clearTimeout(translatorPollTimer);
             translatorConnectFlow.value = undefined;
@@ -567,10 +576,10 @@ const hasAccount = (target: AgentProvider): boolean => accountsOf(target).length
 // provider is its own credential store — installed means chat-ready, so it never gates the composer.
 const chatReady = (target: AgentProvider, loop: AgentHarness): boolean => {
     if (subscriptionOnly(target)) {
-        return translatorAccounts.value[target];
+        return translatorAccounts.value[target].length > 0;
     }
     if (target === `grok` && loop === `claude-code`) {
-        return translatorAccounts.value.grok;
+        return translatorAccounts.value.grok.length > 0;
     }
     return hasAccount(target) || acpProviders.value.some((agent) => agent.id === target);
 };
@@ -811,7 +820,7 @@ export const resetChat = (): void => {
     clearTimeout(translatorPollTimer);
     translatorConnectFlow.value = undefined;
     translatorBusy.value = undefined;
-    translatorAccounts.value = { codex: false, grok: false, gemini: false };
+    translatorAccounts.value = { codex: [], grok: [], gemini: [] };
     error.value = null;
     accountManageOpen.value = false;
 };
