@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { Capability } from "@intentic/sandbox-contract";
+import { browserOutputDir } from "./browser-artifacts.js";
 import { ensureXvfb } from "./display.js";
 import { hasSession, isLoginActive, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
@@ -132,7 +133,7 @@ export const browserServersOf = async (capabilities: readonly Capability[], root
         return {};
     }
     const servers: Record<string, McpServerConfig> = {
-        web: isolatedBrowserSpec(runtime.cli, runtime.executablePath, join(root, ".intentic", "browser", "output")),
+        web: isolatedBrowserSpec(runtime.cli, runtime.executablePath, browserOutputDir(root)),
     };
     const loggedIn = capabilities.filter(
         (capability) => capability.kind === "browser" && hasSession(root, capability.config.platform) && !isLoginActive(capability.config.platform),

@@ -24,6 +24,7 @@ import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, UsageWindow }
 import { relative, sep } from "node:path";
 import { z } from "zod";
 import { fromNamespace, type IsolationAnchor, nsenterArgv } from "../agents/isolation.js";
+import { browserArtifactHooks } from "../browser/browser-artifacts.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
@@ -97,6 +98,10 @@ export interface AgentRequest {
     // In-process SDK MCP servers — daemon-side tools whose handlers run in the daemon itself (e.g. the
     // Discord voice session tools). Merged into mcpServers alongside the remote `tools` above.
     readonly sdkServers?: Record<string, McpServerConfig>;
+    // Where the browser tools' artifacts belong — the same directory `--output-dir` names, threaded here
+    // because @playwright/mcp honours it only for the files IT names (browser/browser-artifacts.ts). Drives
+    // both the redirect hook and the sentence that tells the agent where to Read a screenshot back from.
+    readonly browserOutputDir?: string;
     // Built-in tool names to remove from the model's context this turn (SDK disallowedTools). Set by the
     // hashlineEdits toggle to disable native Edit/Write so file mutations route through the hashline MCP tools.
     readonly disallowedTools?: readonly string[];
@@ -675,11 +680,16 @@ const INTERACTIVE_GUIDANCE = [
 // The browser tools are deferred (see isolatedBrowserSpec — ~20 tools is too much to pin into every prompt),
 // and a model that does not know a browser exists never ToolSearches for one: it reaches for curl, gives up on
 // anything client-rendered, or installs its own. Naming the server is what makes the capability discoverable.
-const BROWSER_GUIDANCE =
+// The closing sentence names the directory the redirect hook enforces, so it is a fact rather than a
+// convention: the agent could not put a screenshot anywhere else if it tried. It used to promise the same
+// directory while the tool wrote model-named files into the agent's cwd, which cost sessions a failed Read
+// and a `find /` — and, when a session didn't check, left PNGs in the user's workspace (browser-artifacts.ts).
+const browserGuidance = (outputDir: string | undefined): string =>
     "You have a real browser. Load it with ToolSearch (`+browser`) to get `mcp__web__browser_navigate`, " +
     "`mcp__web__browser_take_screenshot` and the rest — use it to read pages that need JavaScript, to check a " +
     "docs site, and to LOOK at web UI you have changed rather than reasoning about it from the source alone. " +
-    "Screenshots land in .intentic/browser/output; read them back with the Read tool.";
+    `Screenshots land in ${outputDir ?? ".intentic/browser/output"} whatever you name them, never in the repo ` +
+    "you are working in; the result tells you the path — Read it back from there.";
 
 const CHECKLIST_GUIDANCE =
     "For any task worth more than a few steps, keep a checklist with the Task tools (load them with ToolSearch first: " +
@@ -769,7 +779,7 @@ const baseOptions = (
         append: [
             ...(request.unattended === true ? [] : [INTERACTIVE_GUIDANCE]),
             CHECKLIST_GUIDANCE,
-            BROWSER_GUIDANCE,
+            browserGuidance(request.browserOutputDir),
             ...(request.systemAppend !== undefined ? [request.systemAppend] : []),
         ].join("\n\n"),
     },
@@ -801,6 +811,10 @@ const baseOptions = (
     hooks: mergeHooks(
         tmuxEnabled ? bashTmuxHooks(request.filterBackend, Object.keys(request.cliEnv ?? {}), request.isolation) : {},
         installSteeringHooks(),
+        // Browser: a model-named screenshot resolves against the agent's cwd, not `--output-dir`, so the
+        // filename is rewritten into the tool-owned directory before the tool ever sees it. Named here rather
+        // than left to the prompt because a convention only holds for the agents that happen to read it.
+        request.browserOutputDir !== undefined ? browserArtifactHooks(request.browserOutputDir) : {},
         // The hook body runs in the DAEMON, outside the turn's namespace, so the file the agent just edited
         // has to be named the way the daemon can reach it — otherwise an isolated turn type-checks the main
         // tree's copy of the path and reports diagnostics for code it did not write.
