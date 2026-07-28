@@ -77,8 +77,21 @@ const {
     agentById,
 } = useAgents();
 const { active, openConversation } = useChat();
-const { dragged, dragging, draggedId, over, action, accepts, busyId, ghostStyle, begin, consumeSuppressedOpen, pendingResolve, confirmResolve, cancelResolve } =
-    useAgentDrag();
+const {
+    dragged,
+    dragging,
+    draggedId,
+    over,
+    action,
+    accepts,
+    busyId,
+    ghostStyle,
+    begin,
+    consumeSuppressedOpen,
+    pendingResolve,
+    confirmResolve,
+    cancelResolve,
+} = useAgentDrag();
 
 // The card behind the resolve confirmation — looked up live rather than snapshotted with the drop, so a
 // rename or a status change while the dialog is open is reflected in what it is asking about.
@@ -367,40 +380,46 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
              the shell's middle column, which the chat panel's drag handle squeezes to a few hundred pixels
              while the window stays wide. Given the choice between three shrunken controls on one line and the
              field dropping to its own second row, the row wins — a 90px search box is not a search box. The
-             field stays compact on a roomy board; its auto margin leaves New agent anchored to the right. -->
+             field stays compact on a roomy board, and it is the bar's centre rather than a left-hand
+             afterthought: the two sides flank it on equal `flex-1 basis-0` tracks, so the field sits in the
+             middle of the BAR and not merely in whatever space the left group happened to leave. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1">
-            <span class="shrink-0 text-sm font-semibold text-content">Agents</span>
-            <!-- Two different facts, two different pills: "needs you" is BLOCKED work (an approval, a question,
-                 a conflict, an error) and earns the warning colour; "unread" is only "you haven't looked yet"
-                 and stays informational — with its own way out, so silencing the board never means clicking
-                 through every card. -->
-            <span v-if="blocking > 0" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">
-                {{ blocking }} need{{ blocking === 1 ? "s" : "" }} you
-            </span>
-            <button
-                v-if="unread > 0"
-                type="button"
-                aria-label="Mark all agents read"
-                v-tooltip.bottom="'Mark all read'"
-                class="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link transition-colors hover:bg-primary-600/25"
-                @click="markAllSeen"
-            >
-                <Icon name="check" class="text-2xs" />{{ unread }} unread
-            </button>
+            <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
+                <span class="shrink-0 text-sm font-semibold text-content">Agents</span>
+                <!-- Two different facts, two different pills: "needs you" is BLOCKED work (an approval, a
+                     question, a conflict, an error) and earns the warning colour; "unread" is only "you haven't
+                     looked yet" and stays informational — with its own way out, so silencing the board never
+                     means clicking through every card. -->
+                <span v-if="blocking > 0" class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">
+                    {{ blocking }} need{{ blocking === 1 ? "s" : "" }} you
+                </span>
+                <button
+                    v-if="unread > 0"
+                    type="button"
+                    aria-label="Mark all agents read"
+                    v-tooltip.bottom="'Mark all read'"
+                    class="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link transition-colors hover:bg-primary-600/25"
+                    @click="markAllSeen"
+                >
+                    <Icon name="check" class="text-2xs" />{{ unread }} unread
+                </button>
+            </div>
             <FilterField
                 ref="filterField"
                 v-model="query"
                 :busy="searching"
                 label="Filter agents by your messages"
                 placeholder="Filter by your messages…"
-                class="mr-auto w-72 max-w-full shrink-0"
+                class="mx-auto w-72 max-w-full shrink-0"
             />
-            <!-- The tally, so an empty board under a query reads as "nothing matched" rather than as a board
-                 that broke. Only while filtering: the lane headers already carry the unfiltered counts. -->
-            <span v-if="filtering" class="shrink-0 text-2xs text-muted">{{ matchTally }}</span>
-            <button type="button" :class="cmp.buttonPrimary('shrink-0 gap-1 px-2.5 py-1 text-2xs')" @click="startAgent">
-                <Icon name="plus" class="text-2xs" />New agent
-            </button>
+            <div class="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2">
+                <!-- The tally, so an empty board under a query reads as "nothing matched" rather than as a board
+                     that broke. Only while filtering: the lane headers already carry the unfiltered counts. -->
+                <span v-if="filtering" class="shrink-0 text-2xs text-muted">{{ matchTally }}</span>
+                <button type="button" :class="cmp.buttonPrimary('shrink-0 gap-1 px-2.5 py-1 text-2xs')" @click="startAgent">
+                    <Icon name="plus" class="text-2xs" />New agent
+                </button>
+            </div>
         </div>
 
         <!-- Failures only. This strip costs a layout shift and a dismissal, which is the right price for
@@ -562,78 +581,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </section>
             </div>
 
-            <!-- WHAT THE QUERY FOUND OFF THE BOARD. The board hides by design — the Finished lane windows to a
-                 handful and archived agents leave the roster entirely — so a filter confined to the lanes would
-                 answer "no matches" for an agent sitting one click away, and the user only has to catch that
-                 once to stop believing the field. One row reports the count; expanding it puts the archive's
-                 hits on real cards (restore and all) and the never-carded conversations on history rows.
-                 Collapsed by default, and re-collapsed on every new query: the board is the answer, this is
-                 its footnote. -->
-            <div v-if="beyondVisible" class="border-t border-line px-3 pb-3 pt-2">
-                <button
-                    type="button"
-                    class="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-2xs text-muted transition-colors hover:text-content"
-                    :aria-expanded="showBeyond"
-                    @click="showBeyond = !showBeyond"
-                >
-                    <Icon name="search" class="shrink-0 text-2xs text-subtle" />
-                    <span class="min-w-0 flex-1 truncate text-left">{{ beyondLabel }}</span>
-                    <span class="shrink-0 font-medium text-link">{{ showBeyond ? "Hide" : "Show" }}</span>
-                    <Icon :name="showBeyond ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs" />
-                </button>
-
-                <div v-if="showBeyond" class="mt-2 flex flex-col gap-3">
-                    <section v-if="archivedMatches.length > 0" class="flex min-w-0 flex-col gap-2">
-                        <div class="flex items-center gap-2 px-1">
-                            <Icon name="box" class="shrink-0 text-2xs text-subtle" />
-                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In the archive</span>
-                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ archivedMatches.length }}</span>
-                        </div>
-                        <!-- Real cards, not a stripped-down list: an archived agent keeps its branch, its diff
-                             and its transcript, so the thing the user wants to do with a hit here — read it,
-                             restore it — is exactly what the card already offers. -->
-                        <div class="grid gap-2" :class="narrow ? '' : 'grid-cols-3 items-start'">
-                            <AgentCard
-                                v-for="agent in archivedMatches"
-                                :key="agent.id"
-                                :agent="agent"
-                                :now="now"
-                                :dense="narrow"
-                                :busy="busyIds.includes(agent.id)"
-                                :selected="!mobile && active.conversationId === agent.id"
-                                :match="snippetOf(agent)"
-                                :query="needle"
-                                @open="focusAgent(agent)"
-                                @review="reviewAgent(agent)"
-                                @restore="restore([agent.id])"
-                            />
-                        </div>
-                    </section>
-
-                    <section v-if="sessionMatches.length > 0" class="flex min-w-0 flex-col gap-1">
-                        <div class="flex items-center gap-2 px-1">
-                            <Icon name="history" class="shrink-0 text-2xs text-subtle" />
-                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In earlier chats</span>
-                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ sessionMatches.length }}</span>
-                        </div>
-                        <!-- Conversations no agent entry owns — a plain chat, or one whose entry is long gone.
-                             There is no card to draw for them, so they read as history rows and open as tabs,
-                             the same act the History menu performs. -->
-                        <button
-                            v-for="session in sessionMatches"
-                            :key="session.id"
-                            type="button"
-                            class="flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-overlay"
-                            @click="openSession(session.id)"
-                        >
-                            <span class="truncate text-xs text-content">{{ session.title }}</span>
-                            <span v-if="session.snippet !== undefined" class="line-clamp-2 text-2xs italic text-muted">{{ session.snippet }}</span>
-                            <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
-                        </button>
-                    </section>
-                </div>
-            </div>
-
             <!-- The filter's own empty state, which is NOT the empty board's: there are agents, just none of
                  them this one. Says what was searched, so a typo is visible without looking back up at the
                  field, and names the rule — the commonest reason for a miss is searching for something the
@@ -641,6 +588,83 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <p v-if="noMatches" class="px-4 pb-6 text-center text-2xs text-subtle">
                 No agent of yours mentions “{{ query.trim() }}”. This searches the messages you wrote — not the agents' replies.
             </p>
+        </div>
+
+        <!-- WHAT THE QUERY FOUND OFF THE BOARD. The board hides by design — the Finished lane windows to a
+             handful and archived agents leave the roster entirely — so a filter confined to the lanes would
+             answer "no matches" for an agent sitting one click away, and the user only has to catch that
+             once to stop believing the field. One row reports the count; expanding it puts the archive's
+             hits on real cards (restore and all) and the never-carded conversations on history rows.
+             Collapsed by default, and re-collapsed on every new query: the board is the answer, this is
+             its footnote.
+             It sits OUTSIDE the board's scroller, as the column's own last row: inside it, the lane grid is
+             `h-full` and pushes the row past the bottom of the view, so the one line that says a hit exists
+             off the board can only be reached by scrolling to look for something you don't know is there.
+             Expanded, it takes at most half the column and scrolls itself, so the board above it never
+             disappears. -->
+        <div v-if="beyondVisible" class="flex max-h-[50%] shrink-0 flex-col border-t border-line px-3 pb-3 pt-2">
+            <button
+                type="button"
+                class="flex w-full shrink-0 items-center gap-2 rounded-lg px-1 py-1 text-2xs text-muted transition-colors hover:text-content"
+                :aria-expanded="showBeyond"
+                @click="showBeyond = !showBeyond"
+            >
+                <Icon name="search" class="shrink-0 text-2xs text-subtle" />
+                <span class="min-w-0 flex-1 truncate text-left">{{ beyondLabel }}</span>
+                <span class="shrink-0 font-medium text-link">{{ showBeyond ? "Hide" : "Show" }}</span>
+                <Icon :name="showBeyond ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs" />
+            </button>
+
+            <div v-if="showBeyond" class="scrollbar-thin mt-2 flex min-h-0 flex-col gap-3 overflow-auto">
+                <section v-if="archivedMatches.length > 0" class="flex min-w-0 flex-col gap-2">
+                    <div class="flex items-center gap-2 px-1">
+                        <Icon name="box" class="shrink-0 text-2xs text-subtle" />
+                        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In the archive</span>
+                        <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ archivedMatches.length }}</span>
+                    </div>
+                    <!-- Real cards, not a stripped-down list: an archived agent keeps its branch, its diff
+                         and its transcript, so the thing the user wants to do with a hit here — read it,
+                         restore it — is exactly what the card already offers. -->
+                    <div class="grid gap-2" :class="narrow ? '' : 'grid-cols-3 items-start'">
+                        <AgentCard
+                            v-for="agent in archivedMatches"
+                            :key="agent.id"
+                            :agent="agent"
+                            :now="now"
+                            :dense="narrow"
+                            :busy="busyIds.includes(agent.id)"
+                            :selected="!mobile && active.conversationId === agent.id"
+                            :match="snippetOf(agent)"
+                            :query="needle"
+                            @open="focusAgent(agent)"
+                            @review="reviewAgent(agent)"
+                            @restore="restore([agent.id])"
+                        />
+                    </div>
+                </section>
+
+                <section v-if="sessionMatches.length > 0" class="flex min-w-0 flex-col gap-1">
+                    <div class="flex items-center gap-2 px-1">
+                        <Icon name="history" class="shrink-0 text-2xs text-subtle" />
+                        <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In earlier chats</span>
+                        <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ sessionMatches.length }}</span>
+                    </div>
+                    <!-- Conversations no agent entry owns — a plain chat, or one whose entry is long gone.
+                         There is no card to draw for them, so they read as history rows and open as tabs,
+                         the same act the History menu performs. -->
+                    <button
+                        v-for="session in sessionMatches"
+                        :key="session.id"
+                        type="button"
+                        class="flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-overlay"
+                        @click="openSession(session.id)"
+                    >
+                        <span class="truncate text-xs text-content">{{ session.title }}</span>
+                        <span v-if="session.snippet !== undefined" class="line-clamp-2 text-2xs italic text-muted">{{ session.snippet }}</span>
+                        <span class="text-2xs text-subtle">{{ relativeTime(session.updatedAt) }}</span>
+                    </button>
+                </section>
+            </div>
         </div>
 
         <!-- The sweep's receipt. It OVERLAYS the board rather than sitting in the column, so the cards it is
