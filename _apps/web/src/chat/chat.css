@@ -177,10 +177,15 @@
    wide, popped out, or on a big screen would otherwise run prose to 150+ characters a line, where the eye
    loses its place returning to the left edge. Capping the COLUMN rather than the paragraphs keeps one edge
    for everything in a turn — tool cards, bubbles, prose, code blocks, decision cards — so the ragged right
-   reads as a margin instead of as a block that failed to fill its box. */
+   reads as a margin instead of as a block that failed to fill its box.
+   The side inset is the column's own, not the scroller's: the composer shares that scroller and is
+   deliberately wider than this (ChatPanel's footer), which a padding on the scroller would make impossible.
+   Stated as the cap PLUS the inset, since border-box sizing would otherwise spend the inset out of the
+   measure and quietly set the transcript two characters narrower than the number above says. */
 .chat-turns {
     width: 100%;
-    max-width: 48rem;
+    max-width: calc(48rem + 2rem);
+    padding-inline: 1rem;
     margin-inline: auto;
 }
 /* A streamed assistant body is split across two .md-part wrappers (settled + still-writing). display:contents
@@ -347,6 +352,18 @@
 .qopt-picked {
     background: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
     border-color: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
+}
+/* The composer is stuck to the bottom of the transcript's own scroller (ChatPanel's footer), and most of the
+   box it occupies is transparent — the padding around the rounded composer, the gaps between it and whatever
+   banners are stacked above it. Once the user scrolls up, those pixels show the messages passing beneath, so
+   they must behave like them too: a click or a drag through them belongs to the transcript, not to a footer
+   that happens to be lying over it. The rows themselves take their events back, since they are the part of the
+   footer that is actually there. */
+.chat-footer {
+    pointer-events: none;
+}
+.chat-footer > * {
+    pointer-events: auto;
 }
 .composer-ghost {
     display: inline-flex;

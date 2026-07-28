@@ -49,7 +49,7 @@ let resetChat: typeof import("../composables/chat/useChat").resetChat;
 // duplicate id, so each test resets the conversation list instead of remounting. installUi rather than
 // startAgent.test.ts's stub Icon — the menu IS a PrimeVue overlay, so it needs the real plugin. vue-query goes
 // on too: the strip carries the agents filter, whose daemon tier is a useQuery.
-// `onClose` is the one line ChatPanel adds around the store call (it also re-pins the transcript scroller).
+// `onClose` stands in for ChatPanel, which hands the emitted set straight to the store's closeTabs.
 beforeAll(async () => {
     const ChatTabs = (await import(`./ChatTabs.vue`)).default;
     const { installUi } = await import(`@intentic-app/ui`);
