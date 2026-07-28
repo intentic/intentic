@@ -20,7 +20,7 @@ import {
     USAGE_LIMIT_ERROR_PREFIXES,
 } from "@anthropic-ai/claude-agent-sdk";
 import { spawn } from "node:child_process";
-import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, SystemPromptMode, UsageWindow } from "@intentic/sandbox-contract";
 import { relative, sep } from "node:path";
 import { z } from "zod";
 import { fromNamespace, type IsolationAnchor, nsenterArgv } from "../agents/isolation.js";
@@ -119,9 +119,11 @@ export interface AgentRequest {
     // Extra turn-scoped instructions appended to the claude_code preset system prompt (e.g. the CLI
     // delegation note when Codex/Grok accounts are connected — see agent/delegation.ts).
     readonly systemAppend?: string;
-    // The owner's own system prompt, REPLACING the claude_code preset for this turn (SandboxSettings
-    // .systemPrompt). Present ⇒ it is the entire system prompt and nothing else is appended, `systemAppend`
-    // included — see system-prompt.ts. Absent ⇒ the preset, which is the default.
+    // Which base this turn's system prompt is built on (SandboxSettings.systemPromptMode). Absent ⇒ "intentic",
+    // the product default, so a caller that constructs a request directly (the bench) gets what the app runs.
+    readonly systemPromptMode?: SystemPromptMode;
+    // The owner's own prompt text, used only when the mode is "custom" — it is then the entire system prompt
+    // and nothing else is appended, `systemAppend` included. See system-prompt.ts.
     readonly systemPrompt?: string;
     // Mid-turn steering: when present, the turn runs in the SDK's streaming-input mode and messages pushed
     // onto this queue (via /agent/steer) are injected between tool calls. Absent ⇒ single-message mode.
@@ -744,6 +746,7 @@ const baseOptions = (
     // The preset matters because the Agent SDK sends an EMPTY system prompt when this is omitted, which is the
     // main reason a bare SDK turn feels weaker at coding than the CLI/VSCode product.
     systemPrompt: sdkSystemPrompt({
+        mode: request.systemPromptMode ?? "intentic",
         custom: request.systemPrompt,
         append: request.systemAppend,
         unattended: request.unattended === true,

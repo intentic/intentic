@@ -1,5 +1,6 @@
 import { settingsContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
+import { INTENTIC_PROMPT } from "../agent/intentic-prompt.js";
 import { presetSystemPrompt } from "../agent/preset-prompt.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
@@ -22,8 +23,11 @@ export const createSettingsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         savings: i.savings.handler(async () => readCleanerSavings(services.config.historyRoot, (await services.sandboxSettings.get()).filterBackend)),
-        // The workspace root is only where the probe's CLI is spawned — it reads nothing from it (no tools, no
-        // setting sources). It has to be a directory that exists, which is the whole requirement.
-        defaultPrompt: i.defaultPrompt.handler(() => presetSystemPrompt(services.workspace.root)),
+        // Intentic's prompt is text this app ships, so it answers instantly and has no version of its own to
+        // report. Claude's has to be read out of the installed CLI: the workspace root is only where that probe
+        // is spawned — it reads nothing from it (no tools, no setting sources), it just has to exist.
+        builtinPrompt: i.builtinPrompt.handler(({ input }) =>
+            input.base === "intentic" ? { text: INTENTIC_PROMPT, version: "" } : presetSystemPrompt(services.workspace.root),
+        ),
     };
 };

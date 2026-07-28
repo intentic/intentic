@@ -7,26 +7,35 @@ import { InfoDialog, InfoTable } from "@intentic-app/ui";
  * off-vs-on table for iq, a lifecycle strip for archiving. Most are easier to show than to describe, which is
  * why the prose is thin.
  *
- * The system prompt gets the longest section, and it is the only one here whose section exists to TALK SOMEONE
- * OUT of the setting as often as into it. Replacing it is a real capability with a real cost, and the cost is
- * invisible at the moment of the edit: the chat's cards and panels are driven from the prompt, so a replacement
- * turns them off without an error anywhere. Hence the kept/lost columns, before anything about how to write one.
+ * The system prompt gets the longest section for a reason that isn't its complexity: its three options are
+ * NOT three peers. Two are maintained prompts you pick between in a click; the third replaces them, and the
+ * cost of that is invisible at the moment of the edit — the chat's cards and panels are driven from the prompt,
+ * so a replacement turns them off without an error anywhere. Hence the modes table first, then the kept/lost
+ * columns, and only then anything about writing one.
  *
- * Defaults quoted here come from SandboxSettingsSchema — off / preset / off / 3 days. */
+ * Defaults quoted here come from SandboxSettingsSchema — off / intentic / off / 3 days. */
 
 const AT_A_GLANCE = [
     [`Terse responses`, `How much the assistant writes back`, `Off`],
-    [`System prompt`, `Who the assistant is, before you say anything`, `Claude Code's`],
+    [`System prompt`, `Who the assistant is, before you say anything`, `Intentic's`],
     [`iq code search`, `How it hunts through your code`, `Off`],
     [`Archive finished agents`, `How long finished work stays on the board`, `3 days`],
 ];
 
 const TERSE_ASKS = [`Lead with the answer`, `No restating the question`, `No re-quoting files`, `No echoing tool output`];
 
-// What a replacement actually costs, as a plain inventory. Every row on the "lost" side is a thing the user
+// The three options, phrased as what each one IS rather than what it is called. The last column is the honest
+// one: two of these keep improving without you, and the third is yours to maintain from the day you pick it.
+const PROMPT_MODES = [
+    [`Intentic`, `Our prompt, tuned for this app. The default.`, `Improves with the app`],
+    [`Claude`, `Claude Code's own, read from your sandbox's CLI.`, `Improves with the sandbox`],
+    [`Custom`, `Yours, replacing both — and everything below.`, `Frozen the day you write it`],
+];
+
+// What a custom prompt actually costs, as a plain inventory. Every row on the "lost" side is a thing the user
 // would otherwise discover by noticing it had stopped happening, which is the worst way to learn it.
 const PROMPT_LOST = [
-    [`Claude Code's coding instructions`, `Its whole approach to reading, editing and verifying code`],
+    [`The built-in prompt`, `Its whole approach to reading, editing and verifying code`],
     [`The question and plan cards`, `It writes "A) … B) …" as text instead of a card you can click`],
     [`The checklist panel`, `Long tasks run with no visible plan to follow along with`],
     [`The browser tools`, `It stops knowing a real browser is available and reaches for curl`],
@@ -81,23 +90,25 @@ const IQ_COMPARISON = [
             it doesn't disturb the reuse that keeps a long conversation's later turns cheap.
         </p>
 
-        <!-- ② System prompt — leads with what a replacement costs, because that is the decision. How to write
-             one is the easy half and the user can read the default for that. -->
+        <!-- ② System prompt — leads with the three options as a table, because "Intentic / Claude / Custom"
+             on a segmented control tells you nothing about which to press. Then what Custom costs, which is the
+             only one of the three that is a decision rather than a preference. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">System prompt</h3>
         <p class="mt-1.5 text-2xs text-muted">
-            The instructions the assistant carries before you type anything — who it is, how it works, what it may assume. By default that is Claude
-            Code's own prompt, read live from the Claude Code inside your sandbox, so it improves whenever the sandbox updates. You can read it
-            yourself: <span class="font-medium text-content">View Claude's default</span> on the setting.
+            The instructions the assistant carries before you type anything — who it is, how it works, what it may assume. Three to choose from, and
+            you can read any of them in full before you pick: <span class="font-medium text-content">View this prompt</span> on the setting.
         </p>
+        <InfoTable class="mt-2" :headers="[`Option`, `What it is`, `Over time`]" :rows="PROMPT_MODES" />
         <p class="mt-2 text-2xs text-muted">
-            Writing your own <span class="font-medium text-content">replaces</span> it. Not adds to it — replaces it. That is real power (an agent
-            that is a release-notes writer, a support bot, a reviewer with your house rules) and it has a real cost, because this app talks to the
-            assistant through that same prompt.
+            Intentic and Claude are peers — a different prompt, everything else identical, one click apart. Writing your own is the different one: it
+            <span class="font-medium text-content">replaces</span> them. Not adds to them — replaces them. That is real power (an agent that is a
+            release-notes writer, a support bot, a reviewer with your house rules) and it has a real cost, because this app talks to the assistant
+            through that same prompt.
         </p>
         <div class="mt-2 grid gap-2 sm:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-warning/40">
                 <p class="border-b border-warning/40 bg-warning/10 px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-warning">
-                    What you give up
+                    What Custom gives up
                 </p>
                 <div class="flex flex-col gap-1.5 px-2.5 py-2">
                     <p v-for="[what, effect] in PROMPT_LOST" :key="what" class="text-2xs text-muted">
@@ -115,10 +126,10 @@ const IQ_COMPARISON = [
             </div>
         </div>
         <p class="mt-2 text-2xs text-subtle">
-            <span class="font-medium text-content">Edit a copy of it</span> is the gentler route: fork Claude's default and change the parts you care
-            about, keeping the rest. The trade is that a fork is a snapshot — it stops picking up improvements, which is why the dialog shows the
-            version it came from. <span class="font-medium text-content">Reset to default</span> empties the box; there is nothing to restore, because
-            the default was never a copy.
+            <span class="font-medium text-content">Edit a copy of it</span> is the gentler route into Custom: fork whichever prompt you are on and
+            change the parts you care about, keeping the rest. The trade is that a fork is a snapshot — it stops picking up improvements, which is why
+            the dialog shows the version it came from. Switching back to Intentic or Claude is one click and loses nothing: your text stays in the box
+            for the next time you pick Custom.
         </p>
         <p class="mt-1.5 text-2xs text-subtle">
             It applies to every model running on the Claude Code harness — including ChatGPT and Grok when you run them there — and to every chat in

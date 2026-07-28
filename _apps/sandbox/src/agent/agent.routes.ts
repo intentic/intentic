@@ -466,6 +466,7 @@ async function* runTurn(
             outputHoldout,
             filterBackend,
             terseOutput,
+            systemPromptMode,
             systemPrompt: customPrompt,
         } = await services.sandboxSettings.get();
         // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
@@ -534,6 +535,7 @@ async function* runTurn(
         // appended to it, and whether the delegation note has to travel in the user message instead
         // (system-prompt.ts owns all three, because they are one decision).
         const placement = turnPromptPlacement({
+            mode: systemPromptMode,
             systemPrompt: customPrompt,
             ...(note !== undefined ? { note } : {}),
             stableSystemPrompt,
@@ -578,8 +580,9 @@ async function* runTurn(
             ...(outputHoldout > 0 ? { outputHoldout } : {}),
             ...(filterBackend !== "native" ? { filterBackend } : {}),
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
-            // The owner's own system prompt (replacing the preset) or what to append to the preset — never
-            // both, which is what turnPromptPlacement decided above.
+            // Which base the prompt is built on, plus either the owner's own text (under "custom") or what to
+            // append to a built-in base — never both, which is what turnPromptPlacement decided above.
+            systemPromptMode,
             ...(placement.systemPrompt !== undefined ? { systemPrompt: placement.systemPrompt } : {}),
             ...(placement.systemAppend !== undefined ? { systemAppend: placement.systemAppend } : {}),
             // Mid-turn steering (the /agent/steer queue streamAgent registered) — Claude Code harness only.

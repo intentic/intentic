@@ -24,7 +24,8 @@ const DEFAULTS: SandboxSettings = {
     outputCleaners: "off",
     outputHoldout: 0,
     filterBackend: "native",
-    // Empty means the agent runs on Claude Code's own preset prompt rather than one the owner wrote.
+    // The default base is Intentic's own prompt; the text field is only read under "custom".
+    systemPromptMode: "intentic",
     systemPrompt: "",
     // Empty means Auto, not "none": the quick model is resolved from the connected accounts each time it is
     // read, so there is no id for a fresh sandbox to store.

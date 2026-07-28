@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { DefaultSystemPrompt } from "@intentic/sandbox-contract";
+import type { BuiltinPromptText } from "@intentic/sandbox-contract";
 
 /* CLAUDE CODE'S OWN SYSTEM PROMPT, READ OUT OF THE CLI THAT IS INSTALLED — not transcribed into this repo.
  *
@@ -22,7 +22,7 @@ import type { DefaultSystemPrompt } from "@intentic/sandbox-contract";
 
 // One capture per daemon process. The prompt only changes when the CLI does, and the CLI changes when the
 // image is rebuilt — which restarts the daemon. So there is no invalidation to get wrong.
-let cached: DefaultSystemPrompt | undefined;
+let cached: BuiltinPromptText | undefined;
 
 // The CLI opens the system array with a billing/telemetry line rather than prompt text. It is not part of what
 // the owner is replacing, so it is dropped from the text (its cc_version is a fallback for the CLI version,
@@ -75,7 +75,7 @@ const promptTextOf = (system: unknown): string | undefined => {
 // A capture that never sees a request would otherwise hang the settings page on a CLI that failed to start.
 const CAPTURE_TIMEOUT_MS = 60_000;
 
-export const presetSystemPrompt = async (cwd: string): Promise<DefaultSystemPrompt> => {
+export const presetSystemPrompt = async (cwd: string): Promise<BuiltinPromptText> => {
     if (cached !== undefined) {
         return cached;
     }

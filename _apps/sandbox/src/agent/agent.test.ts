@@ -216,30 +216,38 @@ test("a custom endpoint points the SDK at ANTHROPIC_BASE_URL and withholds the s
 
 // What the turn hands the SDK. The composition RULES are system-prompt.test.ts's; what matters here is that
 // the runner reaches for them at all, and that both shapes survive the trip into the options object.
-test("the preset rides by default, and the owner's own prompt replaces it outright", async () => {
+test("a request with no mode runs Intentic's prompt, and each mode reaches the SDK in its own shape", async () => {
     let captured: Options | undefined;
     const capture: QueryFn = async function* (args) {
         captured = args.options;
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    // The model has to be TOLD the widgets exist — otherwise it writes "A) … B) …" as prose.
+    // An absent mode is the PRODUCT default, not "whatever the SDK does": a caller that builds a request by hand
+    // (the bench) must get the same agent the app ships. And the model has to be TOLD the widgets exist —
+    // otherwise it writes "A) … B) …" as prose.
     await collect(request, capture);
-    const base = captured?.systemPrompt as { type: string; preset: string; append: string };
-    expect(base).toMatchObject({ type: "preset", preset: "claude_code" });
-    expect(base.append).toContain("AskUserQuestion");
-    expect(base.append).toContain("TaskCreate");
-    expect(base.append).toContain("mcp__web__browser_take_screenshot");
+    const intentic = captured?.systemPrompt as string;
+    expect(intentic).toContain("You are a Claude agent on Claude Agent SDK.");
+    expect(intentic).toContain("AskUserQuestion");
+    expect(intentic).toContain("TaskCreate");
+    expect(intentic).toContain("mcp__web__browser_take_screenshot");
 
     captured = undefined;
-    await collect({ ...request, systemAppend: "## Delegating\nUse codex exec." }, capture);
+    await collect({ ...request, systemPromptMode: "claude" }, capture);
+    const preset = captured?.systemPrompt as { type: string; preset: string; append: string };
+    expect(preset).toMatchObject({ type: "preset", preset: "claude_code" });
+    expect(preset.append).toContain("AskUserQuestion");
+
+    captured = undefined;
+    await collect({ ...request, systemPromptMode: "claude", systemAppend: "## Delegating\nUse codex exec." }, capture);
     const withAppend = captured?.systemPrompt as { append: string };
-    expect(withAppend.append).toBe(`${base.append}\n\n## Delegating\nUse codex exec.`);
+    expect(withAppend.append).toBe(`${preset.append}\n\n## Delegating\nUse codex exec.`);
 
     // A custom prompt is handed over as a bare STRING, which is how the SDK is told to drop the preset. Its
     // arrival must take the harness guidance with it — the owner replaced the prompt, not merely prefixed it.
     captured = undefined;
-    await collect({ ...request, systemPrompt: "You are a release-notes writer." }, capture);
+    await collect({ ...request, systemPromptMode: "custom", systemPrompt: "You are a release-notes writer." }, capture);
     expect(captured?.systemPrompt).toBe("You are a release-notes writer.");
 });
 

@@ -21,6 +21,7 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
     expect(SandboxSettingsSchema.parse(older)).toEqual({
         ...older,
         filterBackend: "native",
+        systemPromptMode: "intentic",
         systemPrompt: "",
         quickModel: "",
         agentRetentionDays: 3,
@@ -38,7 +39,8 @@ test("an empty object is the full default settings object", () => {
         outputCleaners: "off",
         outputHoldout: 0,
         filterBackend: "native",
-        // Empty means the agent runs on Claude Code's own preset prompt — the default, and what "reset" returns to.
+        // The default base is Intentic's own prompt; the text field is only read under "custom".
+        systemPromptMode: "intentic",
         systemPrompt: "",
         // Empty is not "no quick model" — it is Auto, resolved from the connected accounts on every read
         // (quick-model.ts). Storing a resolved id as the default would name a provider a fresh sandbox has no

@@ -547,6 +547,17 @@ export const SessionSummarySchema = z.object({
 export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySchema) });
 
 // ---- settings: per-sandbox agent settings (.intentic/settings.json) ----
+
+// Which prompt the agent is, before this turn composes anything on top. Two built-in bases and an escape
+// hatch: Intentic's own (the default), Claude Code's preset, or the owner's text. Declared out here rather
+// than inline in the settings object because both sides of the wire branch on it — the daemon to build the
+// turn, the browser to decide which base it can show you.
+export const SystemPromptModeSchema = z.enum(["intentic", "claude", "custom"]);
+export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
+// The two bases a user can READ and fork — "custom" is excluded because there is nothing to fetch: it is
+// whatever they have already typed into the settings field.
+export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"]) });
+
 // Small user-owned config the /settings routes edit and streamAgent reads — all opt-in booleans the owner
 // toggles in the UI (so each can be A/B benchmarked):
 //   stableSystemPrompt — keeps the system prompt byte-stable across turns (the delegation note rides the user
@@ -559,9 +570,9 @@ export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySch
 //                        guard + fewer output tokens); off ⇒ the native file tools.
 //   terseOutput       — appends a concise-response steer to the end of the system prompt (a stable suffix, so it
 //                        composes with stableSystemPrompt) to cut the model's OWN output tokens.
-//   systemPrompt      — the owner's own system prompt, REPLACING Claude Code's preset outright. "" ⇒ the preset
-//                        (the default). Non-empty ⇒ that text is the entire system prompt and nothing the daemon
-//                        would otherwise append rides with it — see the field's own note.
+//   systemPromptMode  — which base the agent's prompt is: "intentic" (default), "claude", or "custom".
+//   systemPrompt      — the owner's own prompt text, used only by "custom" mode, where it is the ENTIRE system
+//                        prompt and nothing the daemon would otherwise append rides with it — see its own note.
 //   iqSearch          — loads the image-baked iq Claude Code plugin (skill + SessionStart nudge) so the agent
 //                        prefers the iq CLI over grep/find/Glob; off ⇒ plugin not loaded, native search tools
 //                        only. Opt-in (default off); the browser Search box uses iq regardless.
@@ -589,19 +600,26 @@ export const SandboxSettingsSchema = z.object({
     skills: z.array(z.string()).default([]),
     hashlineEdits: z.boolean().default(false),
     terseOutput: z.boolean().default(false),
-    /* The agent's system prompt, written by the owner. EMPTY IS THE DEFAULT AND MEANS THE PRESET — Claude
-     * Code's own prompt, as shipped in the CLI this sandbox runs, not a copy of it stored here. That is what
-     * makes "reset" honest: clearing this field returns the agent to whatever the installed CLI's prompt is
-     * today, so it keeps improving with the image instead of freezing at the version someone once copied.
+    /* WHICH SYSTEM PROMPT THE AGENT RUNS ON — the base, before anything this turn composes.
      *
-     * Non-empty REPLACES it, and replaces it completely: the preset is gone and so is everything the daemon
-     * would otherwise append — the AskUserQuestion/plan guidance the chat's cards are driven by, the checklist
-     * guidance behind the todo panel, the browser-tool guidance, and the terse-output steer (its toggle goes
-     * inert). Those are the price of total control, and the UI states it at the moment of the edit rather than
-     * letting the widgets go quietly dark. Only the cross-provider delegation note survives, because it has a
-     * home outside the system prompt already (the user-message preamble stableSystemPrompt puts it in).
+     *   intentic — Intentic's own prompt, tuned for this harness (intentic-prompt.ts). The default.
+     *   claude   — Claude Code's preset, as shipped in the CLI this sandbox runs. Not a copy stored here, so
+     *              picking it tracks whatever the installed CLI's prompt is rather than freezing at a snapshot.
+     *   custom   — `systemPrompt` below, and nothing else at all.
      *
-     * Cap is roomy — the preset it stands in for is ~6.8k characters — but finite, because every turn pays it. */
+     * The first two are peers: both get the harness's own guidance appended (the AskUserQuestion/plan blocks
+     * the chat's cards need, the checklist guidance behind the todo panel, the browser-tool guidance), plus the
+     * delegation note and the terse steer. `custom` is the one that does not, by the owner's explicit choice —
+     * see the field below. */
+    systemPromptMode: SystemPromptModeSchema.default("intentic"),
+    /* The owner's own prompt, used only when `systemPromptMode` is "custom". Then it is the ENTIRE system
+     * prompt: both built-in bases are gone and so is everything the daemon would otherwise append — the widget
+     * guidance the chat's cards are driven by, and the terse-output steer (whose toggle goes inert). That is
+     * the price of total control, and the UI states it at the moment of the edit rather than letting the
+     * widgets go quietly dark. Only the cross-provider delegation note survives, because it has a home outside
+     * the system prompt already (the user-message preamble stableSystemPrompt puts it in).
+     *
+     * Cap is roomy — the bases it stands in for are ~6.8k characters — but finite, because every turn pays it. */
     systemPrompt: z.string().max(20000).default(""),
     iqSearch: z.boolean().default(false),
     outputCleaners: z.string().default("off"),
@@ -627,14 +645,15 @@ export const SandboxSettingsSchema = z.object({
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 
-// Claude Code's OWN system prompt, read out of the CLI this sandbox runs (preset-prompt.ts captures it rather
-// than storing a transcription). What the settings page shows behind "View Claude's default" and drops into the
-// editor behind "Edit a copy" — the thing a `systemPrompt` of "" resolves to.
+// One of the two built-in bases, as text: Intentic's own prompt, or Claude Code's preset read out of the CLI
+// this sandbox runs (preset-prompt.ts captures it rather than storing a transcription). What the settings page
+// shows behind "View" and drops into the editor behind "Edit a copy".
 //
-// `version` is the CLI build the text came from, so the UI can say WHICH default the user is looking at: a
-// custom prompt forked from an older build is a snapshot, and the version is the only honest way to tell.
-export const DefaultSystemPromptSchema = z.object({ text: z.string(), version: z.string() });
-export type DefaultSystemPrompt = z.infer<typeof DefaultSystemPromptSchema>;
+// `version` is the CLI build a captured preset came from, so the UI can say WHICH text the user is looking at:
+// a custom prompt forked from an older build is a snapshot, and the version is the only honest way to tell.
+// Empty for Intentic's prompt, which ships with the app and has no version of its own to report.
+export const BuiltinPromptTextSchema = z.object({ text: z.string(), version: z.string() });
+export type BuiltinPromptText = z.infer<typeof BuiltinPromptTextSchema>;
 
 // ---- output-cleaner savings report (rtk-`gain`-style) ----
 // Whichever cleaner is ACTUALLY compressing output owns the numbers, so the report is read from that backend's
