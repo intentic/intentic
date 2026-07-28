@@ -370,7 +370,7 @@ const setHoldoutPercent = (percent: number): void => {
     saveSandboxSettings.mutate({ ...current, outputHoldout: clamped / 100 });
 };
 
-// Cleaner backend: native (agent-output-filter) vs rtk (the rtk extension binary, rewritten at the hook).
+// Cleaner backend: native (agent-output-filter) vs rtk (the image-baked rtk binary, rewritten at the hook).
 const setFilterBackend = (backend: `native` | `rtk`): void => {
     const current = sandboxSettings.value;
     if (current === undefined) {
@@ -684,7 +684,7 @@ const importMemory = async (): Promise<void> => {
             <Row
                 icon="arrows-h"
                 title="Cleaner backend"
-                description="Which tool compresses shell output. rtk requires the rtk extension installed + rebuilt."
+                description="Which tool compresses shell output. Both ship with the sandbox — no install, no rebuild."
             >
                 <template #control>
                     <Segmented

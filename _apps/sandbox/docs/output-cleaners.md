@@ -68,5 +68,10 @@ to intentic's per-turn tool loop; revisit if benchmarks show model output domina
 in for head-to-head benchmarking. Because rtk / headroom **run** the command rather than filter its output, wiring
 one as a backend means either (a) a thin adapter script on PATH that shells to it as a stdin filter and set
 `INTENTIC_FILTER_CMD` to it, or (b) rewriting the command to `<tool> <cmd>` at the PreToolUse hook with
-`INTENTIC_RUN_FILTER=0`. Ship the tool + its env via an installable extension's environment overlay (the capability
-`fragment` pattern). `jfrog/boost` is proprietary — reference only, not bundlable.
+`INTENTIC_RUN_FILTER=0`. `jfrog/boost` is proprietary — reference only, not bundlable.
+
+**rtk is the one shipped alternate** — path (b), selected by the **`filterBackend`** setting (`"native"` |
+`"rtk"`). The binary is baked into the sandbox image (`_apps/sandbox/Dockerfile`, `RTK_VERSION`), not shipped as
+an installable extension fragment: `filterBackend` is a plain setting with no capability behind it, so nothing
+would prompt for the install + rebuild an extension-gated binary needs — flipping it would just make every Bash
+command fail with `rtk: command not found`. A backend switch must be usable the moment it is switched.

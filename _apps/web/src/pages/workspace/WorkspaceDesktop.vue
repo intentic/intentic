@@ -614,7 +614,7 @@ const endResize = (event: PointerEvent): void => {
                         <button
                             type="button"
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
-                            v-tooltip.bottom="rootHistoryTooltip"
+                            v-tooltip.right="rootHistoryTooltip"
                             aria-label="Open git history of the workspace root"
                             @click="openGraph('root')"
                         >
@@ -638,7 +638,7 @@ const endResize = (event: PointerEvent): void => {
                             type="button"
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content disabled:cursor-default disabled:opacity-40 disabled:hover:text-muted"
                             :disabled="filter.trim() !== '' || expanded.size === 0"
-                            v-tooltip.bottom="'Collapse all folders'"
+                            v-tooltip.right="'Collapse all folders'"
                             aria-label="Collapse all folders"
                             @click="collapseAll"
                         >

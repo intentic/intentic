@@ -525,7 +525,7 @@ export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySch
 //                        (recorded raw as `heldOut`), so the savings report compares a real cleaned-vs-raw
 //                        population instead of an estimate. 0 = no holdout (default).
 //   filterBackend     — which cleaner runs the compression: "native" (agent-output-filter, default) or "rtk"
-//                        (the rtk binary from its installed extension, rewritten at the PreToolUse hook) — an
+//                        (the image-baked rtk binary, rewritten at the PreToolUse hook) — an
 //                        A/B backend switch, so native and rtk can be benchmarked head-to-head.
 // The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "off" (cleaning off),
 // outputHoldout 0, filterBackend "native" — a fresh sandbox starts with cleaning and iq off until the owner enables them.

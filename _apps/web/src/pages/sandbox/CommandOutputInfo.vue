@@ -48,7 +48,7 @@ const BACKENDS = [
     [`Who compresses`, `The built-in cleaner`, `The rtk binary`],
     [`The switches above`, `Apply`, `Ignored`],
     [`Holdout`, `Applies`, `Ignored`],
-    [`Needs`, `Nothing — it ships with the sandbox`, `The rtk extension installed, then a rebuild`],
+    [`Needs`, `Nothing — it ships with the sandbox`, `Nothing — it ships with the sandbox`],
 ];
 </script>
 

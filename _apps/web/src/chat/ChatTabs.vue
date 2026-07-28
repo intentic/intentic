@@ -538,9 +538,11 @@ const openHistory = (event: Event): void => {
                                 <span class="flex w-full min-w-0 items-start gap-1.5">
                                     <ProviderLogo v-if="agent !== undefined" :provider="agent.provider" class="mt-px shrink-0 text-2xs text-muted" />
                                     <OriginMark :origin="originOf(c)" compact />
+                                    <!-- Sideways, not down: the rail is a stack of cards, so a tooltip under one
+                                         covers the next. Right of it is the transcript, which has room to spare. -->
                                     <span
                                         v-if="isArchived(c)"
-                                        v-tooltip.bottom="'Archived — off the agents board'"
+                                        v-tooltip.right="'Archived — off the agents board'"
                                         class="mt-px flex shrink-0 items-center"
                                     >
                                         <Icon name="box" class="text-2xs text-subtle" />
@@ -576,7 +578,7 @@ const openHistory = (event: Event): void => {
                                             :spin="agentStatusMeta(agent.status).spin"
                                             class="shrink-0 text-2xs"
                                             :class="agentStatusMeta(agent.status).class"
-                                            v-tooltip.bottom="agentStatusMeta(agent.status).label"
+                                            v-tooltip.right="agentStatusMeta(agent.status).label"
                                         />
                                         <span v-if="agent.model !== undefined" class="max-w-28 truncate">{{
                                             modelLabelFor(agent.provider, agent.model)

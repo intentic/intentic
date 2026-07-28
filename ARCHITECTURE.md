@@ -409,9 +409,8 @@ First-party extensions live in `_extensions/` and reach the product by one of **
   ones and served by `GET /extensions` as `builtin: true` — present in every sandbox, not removable, no
   capability entry.
 - **Git-installed** — the `extension` capability: an owner-only, full-sha-pinned clone into
-  `.intentic/extensions/<id>`, validated before swap. `rtk` is the in-repo example (an
-  environment-fragment-only extension that stays opt-in — a baked dir has no capability entry, and
-  fragments compose per entry, so baking it would be inert).
+  `.intentic/extensions/<id>`, validated before swap. Third-party extensions arrive this way; nothing
+  first-party takes this path today.
 
 Note the current split is a **UI veneer**: an extension is mostly where its
 Vue lives, while its backend (activity, automations, logs, panels…) still sits in the daemon core — moving

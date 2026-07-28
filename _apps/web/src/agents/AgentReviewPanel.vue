@@ -544,7 +544,7 @@ const confirmDiscard = (): void => {
                                 <span
                                     v-if="!file.change.landed"
                                     class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-                                    v-tooltip.top="'Not yet landed in your workspace'"
+                                    v-tooltip.right="'Not yet landed in your workspace'"
                                 ></span>
                                 <DiffStat :additions="file.change.additions" :deletions="file.change.deletions" />
                             </button>
@@ -557,7 +557,7 @@ const confirmDiscard = (): void => {
                                         : 'opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:opacity-100'
                                 "
                                 @click="toggleViewed(file)"
-                                v-tooltip.left="isViewed(file) ? 'Reviewed — click to unmark' : 'Mark as reviewed'"
+                                v-tooltip.right="isViewed(file) ? 'Reviewed — click to unmark' : 'Mark as reviewed'"
                                 :aria-label="`Mark ${file.label} as reviewed`"
                             >
                                 <Icon :name="isViewed(file) ? 'check-square' : 'check'" class="text-2xs" />

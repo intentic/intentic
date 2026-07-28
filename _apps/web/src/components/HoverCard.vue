@@ -11,8 +11,12 @@ import { computed, ref } from "vue";
  *
  * A native title= or PrimeVue's v-tooltip would not do: both clip long text to one terse line, which is the
  * exact failure being fixed. So this teleports to the overlay target (the pop-out body while the chat is popped
- * out, else <body>) to escape its trigger's overflow clipping, and flips above/below with the room in THAT
- * window.
+ * out, else <body>) to escape its trigger's overflow clipping, and places itself with the room in THAT window.
+ *
+ * It opens BESIDE its anchor, never over/under it. Every surface that raises this card is a narrow column of
+ * stacked rows — the chat tab rail down a pop-out window's left edge, the Changes panel's origin chips above
+ * its file list — so a card above or below the anchor lands on the very rows the user is reading past. Beside
+ * it, the card spills into the wide area next door (the transcript, the editor) and the column stays legible.
  *
  * Trigger side: ONE card per surface, driven by every anchor on it — mouseenter calls show(event, content),
  * mouseleave calls hide(). The card owns the placement, so a strip of forty tabs costs one node, not forty. */
@@ -42,12 +46,26 @@ const show = (event: MouseEvent, content: HoverCardContent): void => {
     // and clamp against that window, not the main realm's globalThis.
     const win = el.ownerDocument.defaultView ?? globalThis;
     const rect = el.getBoundingClientRect();
-    const left = Math.min(Math.max(GAP, rect.left), win.innerWidth - WIDTH - GAP);
-    // Prefer the side with more room, so a chip low in a sidebar flips above instead of running off-screen.
+    // Right first — every surface here is a column with the app's wide area on its right. Left is the mirror
+    // for an anchor in a panel docked to the window's right edge (the docked chat's tab strip).
+    const beside = rect.right + GAP + WIDTH <= win.innerWidth ? rect.right + GAP : rect.left - GAP - WIDTH >= 0 ? rect.left - GAP - WIDTH : undefined;
+    if (beside === undefined) {
+        // No room either side (a window narrower than the card plus its anchor): fall back to under/over the
+        // anchor, whichever has more room, so the card is at least on screen.
+        const left = Math.min(Math.max(GAP, rect.left), win.innerWidth - WIDTH - GAP);
+        placement.value =
+            rect.top >= win.innerHeight - rect.bottom
+                ? { content, left, bottom: win.innerHeight - rect.top + GAP }
+                : { content, left, top: rect.bottom + GAP };
+        return;
+    }
+    // Beside, the card's height is unknown until it renders, so it hangs from the anchor's top while the room
+    // below that edge is the larger, and rises from the anchor's bottom otherwise — no measurement needed, and
+    // an anchor at either end of a full-height rail still gets a card that fits.
     placement.value =
-        rect.top >= win.innerHeight - rect.bottom
-            ? { content, left, bottom: win.innerHeight - rect.top + GAP }
-            : { content, left, top: rect.bottom + GAP };
+        win.innerHeight - rect.top >= rect.bottom
+            ? { content, left: beside, top: Math.max(GAP, rect.top) }
+            : { content, left: beside, bottom: Math.max(GAP, win.innerHeight - rect.bottom) };
 };
 const hide = (): void => {
     placement.value = undefined;
