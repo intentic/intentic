@@ -149,13 +149,60 @@ export const transcriptOf = (messages: readonly ChatMessage[]): { role: "user" |
         return text.trim().length > 0 ? [{ role: message.role, text }] : [];
     });
 
+/* Messages whose ENTIRE content is "keep going". Such a message points at the previous prompt instead of
+ * carrying intent of its own — so opening a turn on it would pin "Continue" to the top of the panel while the
+ * question it defers to scrolls away. Matched against the whole message, deliberately: "continue, but skip
+ * the tests" carries a new instruction and must pin like any prompt. Trailing sentence punctuation is
+ * stripped ("Continue.", "ok!"), but never "?" — "continue?" is a question, not consent. */
+const ACKNOWLEDGMENTS = new Set([
+    `continue`,
+    `please continue`,
+    `keep going`,
+    `go`,
+    `go on`,
+    `go ahead`,
+    `go for it`,
+    `carry on`,
+    `proceed`,
+    `resume`,
+    `next`,
+    `do it`,
+    `do that`,
+    `yes`,
+    `yes please`,
+    `y`,
+    `yep`,
+    `yeah`,
+    `ok`,
+    `okay`,
+    `k`,
+    `sure`,
+    `sounds good`,
+    `lgtm`,
+    `ship it`,
+    `approved`,
+    `+1`,
+    `👍`,
+]);
+
+// An attachment makes any text substantive — "continue" plus a screenshot is new material, not a nudge.
+export const isAcknowledgment = (message: ChatMessage): boolean => {
+    if (message.role !== `user` || (message.attachments?.length ?? 0) > 0) {
+        return false;
+    }
+    return ACKNOWLEDGMENTS.has(message.text.trim().toLowerCase().replace(/[.!…]+$/u, ``).trim().replace(/\s+/gu, ` `));
+};
+
 // A conversation can open with frames that answer no prompt of this session — a restored history's assistant
 // text, a provider-switch notice — so the first group may have no user message to pin.
+// A bare acknowledgment does not open a turn either: it folds into the one it nudges, so the prompt that
+// actually defines the work keeps its pin through the continued answer (ChatMessageView renders the folded
+// ack as an ordinary, non-sticky bubble).
 export const turnsOf = (messages: readonly ChatMessage[]): ChatTurn[] => {
     const turns: ChatTurn[] = [];
     for (const message of messages) {
         const open = turns.at(-1);
-        if (message.role === `user` || open === undefined) {
+        if (open === undefined || (message.role === `user` && !isAcknowledgment(message))) {
             turns.push({ id: message.id, messages: [message] });
             continue;
         }
@@ -163,3 +210,8 @@ export const turnsOf = (messages: readonly ChatMessage[]): ChatTurn[] => {
     }
     return turns;
 };
+
+// The nudges turnsOf folded into a turn — every user message after the opener is one. Rendered by the
+// opener's bubble as its "↳ continue ×N" trailer, so a pinned prompt still admits it has been nudged since.
+export const acksOf = (turn: ChatTurn): readonly ChatMessage[] =>
+    turn.messages.filter((message, index) => index > 0 && message.role === `user`);

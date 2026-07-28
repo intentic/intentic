@@ -7,7 +7,7 @@ import { NATIVE_PROVIDERS, type NativeProvider, providerLabel } from "@intentic/
 import { useAgents } from "../composables/agents/useAgents";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
-import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
+import { acksOf, type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
 import { bindingWindow, formatUtilization, isStale, usageDetail, usageStatusFor } from "../composables/chat/usageStatus";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useChat } from "../composables/chat/useChat";
@@ -907,9 +907,17 @@ watch(keyboardInset, () => {
         >
             <div ref="content" class="chat-turns flex flex-1 flex-col gap-1 pt-4">
                 <template v-if="messages.length > 0">
-                    <!-- One section per turn, purely so each prompt's sticky range ends where its answer does. -->
+                    <!-- One section per turn, purely so each prompt's sticky range ends where its answer does.
+                         A bare "continue" folds into the turn it nudges (see turnsOf), so the question that
+                         defines the work stays pinned through the continued answer. -->
                     <section v-for="turn in turns" :key="turn.id" class="flex flex-col gap-1">
-                        <ChatMessageView v-for="message in turn.messages" :key="message.id" :message="message" :streaming="isStreaming(message)" />
+                        <ChatMessageView
+                            v-for="message in turn.messages"
+                            :key="message.id"
+                            :message="message"
+                            :streaming="isStreaming(message)"
+                            :acks="message.id === turn.id ? acksOf(turn) : undefined"
+                        />
                     </section>
                 </template>
                 <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">Start a conversation with {{ providerName }}.</p>
