@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import type { Config } from "../env.config.js";
-import { fileKimiStore, type KimiStore, newKimiAccount, resolveKimiKey, type StoredKimiAccount } from "./kimi-credentials.js";
+import { fileKimiStore, type KimiStore, newKimiAccount, renameKimiAccount, resolveKimiKey, type StoredKimiAccount } from "./kimi-credentials.js";
 
 // One in-memory account keyed by id, matching the file store's account-keyed surface.
 const memoryStore = (initial?: StoredKimiAccount): KimiStore => {
@@ -29,6 +29,14 @@ test("newKimiAccount trims the key and falls back to a default label", () => {
     expect(newKimiAccount("  sk-abc  ", "").apiKey).toBe("sk-abc");
     expect(newKimiAccount("sk-abc", "").label).toBe("Kimi");
     expect(newKimiAccount("sk-abc", "  Work  ").label).toBe("Work");
+});
+
+// A pasted key carries no identity, so renaming is the ONLY way two Kimi rows stop reading the same.
+test("renameKimiAccount renames, and a blank name restores the default", () => {
+    const account: StoredKimiAccount = { id: "a", label: "Kimi", apiKey: "sk-abc", connectedAt: 0 };
+    expect(renameKimiAccount(account, " Work ").label).toBe("Work");
+    expect(renameKimiAccount({ ...account, label: "Work" }, "").label).toBe("Kimi");
+    expect(renameKimiAccount(account, "Work").apiKey).toBe("sk-abc");
 });
 
 test("resolveKimiKey prefers a stored account over the container env fallback", async () => {

@@ -312,6 +312,14 @@ export const rememberedAccountFor = (provider: AgentProvider): string | undefine
     // An unseeded provider key (an ACP agent) has no daemon account store — its own credential store serves it.
     const accounts = providerAccounts.value[provider] ?? [];
     const picked = selectedAccountId.value[provider];
+    // Before the list has been READ, the persisted pick is the only thing that knows anything, and validating it
+    // against a list that is merely unloaded is how a remembered account was lost on every page load: the empty
+    // list contains no pick, so every conversation resolved to `undefined` — the daemon's first account — a beat
+    // before the real list arrived to agree with the user's choice. Once loaded, a pick the list doesn't contain
+    // is genuinely stale (disconnected while this window was away) and the first account serves instead.
+    if (!accountsLoaded.value) {
+        return picked;
+    }
     return accounts.some((account) => account.id === picked) ? picked : accounts[0]?.id;
 };
 

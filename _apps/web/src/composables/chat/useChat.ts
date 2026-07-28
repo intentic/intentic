@@ -40,6 +40,7 @@ import {
 import { providerReady } from "./access";
 import { type ChatAttachment, type ChatMessage, type PlanRequest } from "./transcript";
 import { approvalsFor } from "./catalog";
+import { readAccountPreference, writeAccountPreference } from "./accountPreference";
 import { readTabSnapshot, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";
@@ -165,15 +166,19 @@ const restoreTab = (tab: StoredTab): Conversation => {
     }
     if (tab.provider !== undefined) {
         conversation.provider.value = tab.provider;
-        conversation.account.value = rememberedAccountFor(tab.provider);
+        // An OPEN chat comes back on the account it was running on, not on whatever the remembered pick has since
+        // become — switching one tab's account is not an instruction about the others. Only a tab that carries no
+        // pin of its own (one persisted before this was stored) falls back to the provider's remembered one.
+        conversation.account.value = tab.account ?? rememberedAccountFor(tab.provider);
         conversation.model.value = rememberedModelFor(tab.provider);
     }
     if (tab.session !== undefined) {
-        // Account ids are daemon-minted and loaded fresh per sandbox, so a restored session re-derives its
-        // account from the provider's remembered pick; its harness moves with the tab.
+        // A session resumes only on the account that minted it, so it keeps its OWN pin rather than adopting the
+        // tab's: forging the match would resume another account's session, and faking a mismatch would retire a
+        // live one at the next send. Its harness moves with the tab.
         conversation.session.value = {
             ...tab.session,
-            account: rememberedAccountFor(tab.session.provider),
+            account: tab.session.account ?? rememberedAccountFor(tab.session.provider),
             harness: conversation.harness.value,
         };
     }
@@ -184,6 +189,11 @@ const restoreTab = (tab: StoredTab): Conversation => {
 // single fresh tab when neither exists — and focus the stored active tab.
 const restoreTabs = (): void => {
     scopedSandboxId = activeSandboxId.value;
+    // Read BEFORE the tabs are built, because building one resolves an account: a fresh conversation seeds from
+    // this pick (Conversation's constructor), and a restored one falls back to it. Scoped with the tabs — the
+    // ids name credentials in THIS sandbox's store, so the incoming sandbox's picks replace the outgoing one's
+    // rather than being cleared to nothing.
+    selectedAccountId.value = readAccountPreference(scopedSandboxId);
     const stored = readTabSnapshot(scopedSandboxId);
     if (stored === undefined) {
         const conversation = new Conversation();
@@ -209,8 +219,13 @@ watch(
                 isolated: conversation.isolated.value,
                 registered: conversation.registered.value,
                 provider: conversation.provider.value,
+                account: conversation.account.value,
                 harness: conversation.harness.value,
-                session: conversation.session.value && { id: conversation.session.value.id, provider: conversation.session.value.provider },
+                session: conversation.session.value && {
+                    id: conversation.session.value.id,
+                    provider: conversation.session.value.provider,
+                    account: conversation.session.value.account,
+                },
                 title: conversation.title.value ?? undefined,
                 draft: conversation.draft.value,
                 attachments: conversation.attachments.value
@@ -228,6 +243,16 @@ watch(
         }
     },
 );
+
+// Persist the account pick per provider — the seed a NEW conversation (and a fresh window) starts from. A watch
+// rather than a write inside selectAccount, because the pick also moves on its own: a connect makes the new
+// account current, a disconnect hands the selection to whatever is left, and a landing account list corrects a
+// pick that is no longer valid. All of those are the user's "last preference" just as much as a click is.
+watch(selectedAccountId, (picks) => {
+    if (scopedSandboxId !== undefined) {
+        writeAccountPreference(scopedSandboxId, picks);
+    }
+});
 
 // Load a provider's daemon-published slash commands into the shared record. Cheap (a cached in-memory read
 // daemon-side), so it rides the same reachable seam as the account/model catalogs.
@@ -667,6 +692,29 @@ const adoptStranded = (target: AgentProvider, added: OauthAccount): void => {
     }
 };
 
+/* adoptStranded's mirror image: conversations pinned to an account the provider's list no longer HAS, moved onto
+ * the live pick. Two ways to get there — the account was disconnected in this window, or it was disconnected
+ * while this window was away and the pin came back from the tab snapshot — and the same outcome either way: an
+ * invisible dead pin, every turn on that chat failing with "No Claude account connected", naming a fix the user
+ * has already done for an account that IS connected, because the dead id is the one thing the message can't
+ * mention. `live` is the provider's current list; the pick it belongs with must already be reconciled against it.
+ *
+ * Rebound, not selected: the user didn't switch, their choice went away — so the session moves across with the
+ * conversation and no "switched to…" divider is raised. Nothing to move to (the provider has no accounts left)
+ * leaves the pin alone: the composer's connect gate is what has something to say then, not the account axis. */
+const repointStranded = (target: AgentProvider, live: readonly OauthAccount[]): void => {
+    const next = selectedAccountId.value[target];
+    if (next === undefined) {
+        return;
+    }
+    for (const conversation of conversations.value) {
+        const pin = conversation.account.value;
+        if (conversation.provider.value === target && pin !== undefined && !live.some((entry) => entry.id === pin)) {
+            conversation.rebindAccount(next);
+        }
+    }
+};
+
 // Pull a provider's account list from its daemon and keep the selection valid (first account when the current
 // pick is gone). The single reader of the `/accounts` routes. THROWS when the read fails (sandboxJson): a
 // daemon that didn't answer has not told us the user has no accounts, and callers that treat the two the same
@@ -686,9 +734,13 @@ const refreshAccounts = async (target: AgentProvider): Promise<OauthAccount[]> =
         }
     }
     usageStatusByAccount.value = seeded;
-    if (!list.some((entry) => entry.id === selectedAccountId.value[target])) {
-        selectedAccountId.value = { ...selectedAccountId.value, [target]: list[0]?.id };
+    // The remembered pick, against the list that just landed — the only authority on whether it still exists.
+    const picked = selectedAccountId.value[target];
+    const live = list.some((entry) => entry.id === picked) ? picked : list[0]?.id;
+    if (live !== picked) {
+        selectedAccountId.value = { ...selectedAccountId.value, [target]: live };
     }
+    repointStranded(target, list);
     return list;
 };
 
@@ -816,13 +868,21 @@ export const resetChat = (): void => {
     for (const conversation of conversations.value) {
         conversation.abort();
     }
+    /* Dropped BEFORE the tabs are rebuilt, not with the rest of the sandbox-scoped state below: restoring a tab
+     * resolves its account against these, and the outgoing sandbox's list is not an answer about the incoming
+     * one — it would validate the new sandbox's remembered pick against credentials from the old, and hand every
+     * restored tab a foreign account id as the "first" one.
+     *
+     * Cleared rather than emptied-and-declared: the incoming sandbox's connections are unknown until ITS daemon
+     * answers, and every surface shows that as a wait rather than as "you have nothing connected". */
+    providerAccounts.value = perProvider<readonly OauthAccount[]>(() => []);
+    accountsLoaded.value = false;
+    // Rebuilds the tabs AND re-seeds the account pick from the incoming sandbox's own remembered one.
     restoreTabs();
     // The new sandbox's tabs get the same instant paint a reload does; the mirror is keyed by conversation, so
     // a switch reads that sandbox's transcripts, never the one just left.
     paintCachedTranscripts(conversations.value);
     sessions.value = [];
-    providerAccounts.value = perProvider<readonly OauthAccount[]>(() => []);
-    selectedAccountId.value = perProvider<string | undefined>(() => undefined);
     providerModels.value = perProvider<ModelOption[]>(() => []);
     providerCommands.value = perProvider<readonly AgentCommand[]>(() => []);
     providerDefaultModel.value = perProvider(() => ``);
@@ -833,9 +893,6 @@ export const resetChat = (): void => {
     translatorConnectFlow.value = undefined;
     accountBusy.value = undefined;
     translatorAccounts.value = { codex: [], grok: [], gemini: [] };
-    // Cleared with the lists it qualifies: the incoming sandbox's connections are unknown until ITS daemon
-    // answers, and every surface shows that as a wait rather than as "you have nothing connected".
-    accountsLoaded.value = false;
     error.value = null;
 };
 
@@ -1414,6 +1471,60 @@ const completeConnect = async (code: string): Promise<boolean> => {
     }
 };
 
+// Swap one account of a provider in place, leaving order and selection alone — the difference between a WRITE
+// to an existing account and a new one arriving (see addAccount, which moves it to the end and selects it).
+const replaceAccount = (target: AgentProvider, next: OauthAccount): void => {
+    providerAccounts.value = {
+        ...providerAccounts.value,
+        [target]: accountsOf(target).map((entry) => (entry.id === next.id ? next : entry)),
+    };
+};
+
+/* Rename one account of the managed provider. The credential is untouched — this writes the DISPLAY NAME, the
+ * one thing that lets a second connection of the same provider tell itself apart when the provider hands back
+ * no identity to derive one from (a pasted API key), or when the derived one isn't what the user calls it.
+ *
+ * Applied to the list BEFORE the round-trip and reconciled after: the name is the user's own keystrokes, so
+ * showing it back to them is not a guess, and a rename that repaints a tunnel-latency later reads as one that
+ * didn't take. The daemon's answer still wins (a blank means "back to the derived name", which only it knows),
+ * and a failure re-reads rather than leaving an optimistic name standing over a write that never landed.
+ *
+ * Deliberately does NOT take `accountBusy`: that ledger drives the row's Disconnect spinner and gates
+ * `startConnect`, and a rename is neither of those things. */
+const renameAccount = async (id: string, label: string): Promise<void> => {
+    const target = managedProvider.value;
+    const typed = label.trim();
+    const current = accountsOf(target).find((entry) => entry.id === id);
+    if (current === undefined) {
+        return;
+    }
+    if (typed !== ``) {
+        replaceAccount(target, { ...current, label: typed });
+    }
+    let response: Response;
+    try {
+        response = await sandboxRequest(`${providerBase(target)}/account/rename`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ id, label: typed }),
+        });
+    } catch (err) {
+        error.value = errorMessage(err, `Could not rename that account — is your sandbox online?`);
+        replaceAccount(target, current);
+        return;
+    }
+    if (!response.ok) {
+        // A 404 means the row is gone (disconnected from another device or another tab), so re-read rather than
+        // restore a name onto an account that no longer exists: the honest answer to a failed write is the
+        // current truth, not the state we came from.
+        error.value = response.status === 404 ? `That account is no longer connected.` : `Could not rename that account.`;
+        await refreshAccounts(target).catch(() => replaceAccount(target, current));
+        return;
+    }
+    replaceAccount(target, (await response.json()) as OauthAccount);
+    error.value = null;
+};
+
 // Disconnect one account of the managed provider by id; drop it from the list and fix the selection. Busy for
 // the round-trip, like every other account write — the row's own button says so.
 const disconnect = async (id: string): Promise<void> => {
@@ -1431,6 +1542,8 @@ const disconnect = async (id: string): Promise<void> => {
     if (selectedAccountId.value[target] === id) {
         selectedAccountId.value = { ...selectedAccountId.value, [target]: remaining[0]?.id };
     }
+    // The chats that were running on it move on too, rather than holding an id nothing can serve.
+    repointStranded(target, remaining);
 };
 
 export function useChat() {
@@ -1496,6 +1609,7 @@ export function useChat() {
         startConnect,
         completeConnect,
         cancelConnect,
+        renameAccount,
         disconnect,
         translatorAccounts,
         translatorConnectFlow,

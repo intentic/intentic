@@ -10,6 +10,10 @@
             "types": "./src/index.ts",
             "default": "./src/index.ts"
         },
+        "./markdown": {
+            "types": "./src/markdown/index.ts",
+            "default": "./src/markdown/index.ts"
+        },
         "./styles/*": "./src/styles/*"
     },
     "scripts": {
@@ -24,6 +28,8 @@
         "@shikijs/langs": "catalog:",
         "@shikijs/themes": "catalog:",
         "@vue-flow/core": "catalog:",
+        "dompurify": "catalog:",
+        "marked": "catalog:",
         "primevue": "catalog:",
         "shiki": "catalog:",
         "tailwind-merge": "catalog:",

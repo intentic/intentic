@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { InfoHint, Row } from "@intentic-app/ui";
+import { nextTick, ref, useTemplateRef } from "vue";
 
 /* ONE connection row. Every credential the Agent tab can hold renders through this — a native provider account,
  * a translator subscription, the "you have none yet" placeholder and the "add another" invitation alike — so
@@ -9,7 +10,10 @@ import { InfoHint, Row } from "@intentic-app/ui";
  * The anatomy, left to right, is fixed:
  *   · a status GLYPH in a fixed-width well (dot, or the plus of an add-row) — so every title starts on the
  *     same x, whatever the row is
- *   · the connection's NAME
+ *   · the connection's NAME, which is EDITABLE IN PLACE where the sandbox owns the credential (`renamable`).
+ *     A name is not a setting hidden behind a menu: the thing you want to change is right there on screen, so
+ *     you change it there. It is also the only answer for a connection whose provider hands back no identity to
+ *     derive a name from — without it, a second one is a second row saying nothing but the provider's name.
  *   · its STATE, in the same small type, in the same place, for every provider ("not connected", the signed-in
  *     identity, "signing in…")
  *   · an optional (i) for the paragraph of mechanics that would otherwise be printed on screen
@@ -20,7 +24,11 @@ import { InfoHint, Row } from "@intentic-app/ui";
  * `state` drives only the glyph and the tone — never the layout — which is what lets a row change state
  * (missing → signing-in → connected) without anything moving. */
 
-const { state, interactive = false } = defineProps<{
+const {
+    title,
+    state,
+    interactive = false,
+} = defineProps<{
     title: string;
     // `unknown` is the honest first frame: the daemon hasn't answered, so the dot must not claim either way.
     state: `connected` | `reauth` | `missing` | `unknown` | `add`;
@@ -34,7 +42,39 @@ const { state, interactive = false } = defineProps<{
     // The paragraph of mechanics, parked behind an (i) — printing one per row is what made this card a wall.
     about?: string;
     interactive?: boolean;
+    // Whether this connection's name is the user's to change — true only where the sandbox owns the credential.
+    renamable?: boolean;
 }>();
+
+const emit = defineEmits<{ rename: [label: string] }>();
+
+/* Renaming, in place. Committing on ENTER and on BLUR (rather than only on an explicit Save button) is what
+ * keeps this from being a form: you click the name, you type, you click away, it's named. Escape restores what
+ * was there — the one thing a click-away commit needs, so leaving the field can never be a mistake you can't
+ * take back. A value equal to the current title emits nothing, so a stray click through the name is free. */
+const editing = ref(false);
+const draft = ref(``);
+const input = useTemplateRef<HTMLInputElement>(`nameInput`);
+
+const startEditing = (): void => {
+    draft.value = title;
+    editing.value = true;
+    void nextTick(() => input.value?.select());
+};
+
+const commit = (): void => {
+    if (!editing.value) {
+        return;
+    }
+    editing.value = false;
+    if (draft.value.trim() !== title) {
+        emit(`rename`, draft.value.trim());
+    }
+};
+
+const cancel = (): void => {
+    editing.value = false;
+};
 
 const DOT_TONE: Record<string, string> = {
     connected: `bg-success`,
@@ -55,8 +95,41 @@ const DOT_TONE: Record<string, string> = {
                     <Icon v-if="state === `add`" name="plus" class="text-2xs" />
                     <span v-else class="h-1.5 w-1.5 rounded-full" :class="DOT_TONE[state]" />
                 </span>
-                <span class="min-w-0 truncate">{{ title }}</span>
-                <span v-if="note" class="flex items-center gap-1 text-2xs font-normal text-subtle">
+                <!-- The name, as a field you can type in the moment it is renamable. `w-44` rather than the
+                     row's full width: an input that spans the row reads as a search box, and the name it is
+                     replacing was never that long. -->
+                <input
+                    v-if="editing"
+                    ref="nameInput"
+                    v-model="draft"
+                    name="connectionName"
+                    class="w-44 min-w-0 rounded border border-info bg-canvas px-1.5 py-0.5 text-sm font-semibold text-content outline-none"
+                    :aria-label="`Rename ${title}`"
+                    @keydown.enter="commit"
+                    @keydown.esc="cancel"
+                    @blur="commit"
+                />
+                <!-- Not hover-only: a pencil that appears on hover is invisible on touch and undiscoverable
+                     anywhere, which is how this card ended up with no way to name an account at all. It sits at
+                     half strength beside the name and comes up to full on hover. The "Rename" hint rides the
+                     PENCIL, not the name — hovering an account's name should offer to finish reading it (the
+                     `.overflow` tooltip, which only appears when the name is actually cut off), not pop a label
+                     about editing over the row above every time the pointer crosses it. -->
+                <button
+                    v-else-if="renamable"
+                    type="button"
+                    class="group/name flex min-w-0 cursor-pointer items-center gap-1.5 text-left"
+                    @click="startEditing"
+                >
+                    <span class="min-w-0 truncate" v-tooltip.overflow="title">{{ title }}</span>
+                    <Icon
+                        name="pencil"
+                        class="shrink-0 text-2xs text-subtle opacity-50 transition-opacity group-hover/name:opacity-100"
+                        v-tooltip.top="`Rename`"
+                    />
+                </button>
+                <span v-else class="min-w-0 truncate" v-tooltip.overflow="title">{{ title }}</span>
+                <span v-if="note && !editing" class="flex items-center gap-1 text-2xs font-normal text-subtle">
                     <Icon v-if="noteBusy" name="spinner" spin />{{ note }}
                 </span>
                 <InfoHint v-if="about" :label="`About ${title}`">

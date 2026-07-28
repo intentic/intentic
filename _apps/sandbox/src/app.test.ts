@@ -1772,6 +1772,42 @@ test("Claude OAuth: accounts reflect the store, disconnect clears the named one"
     expect(accounts.has("b")).toBe(true);
 });
 
+// The account list is the one place a user can tell two connections of the same provider apart, so it has to be
+// able to name them: an identity the provider never reported (or one the user calls something else) leaves
+// renaming as the only answer.
+test("Claude OAuth: rename writes the label through, and 404s on an account that is gone", async () => {
+    const accounts = new Map<string, { id: string; label: string; connectedAt: number; accessToken: string; email?: string }>([
+        ["a", { id: "a", label: "Claude", connectedAt: 1, accessToken: "tok", email: "a@example.com" }],
+    ]);
+    const client = clientFor(
+        createApp(
+            services({
+                claudeStore: {
+                    read: async (id) => accounts.get(id),
+                    write: async (account) => {
+                        accounts.set(account.id, account);
+                    },
+                    clear: async (id) => {
+                        accounts.delete(id);
+                    },
+                    list: async () => [...accounts.values()].map(({ accessToken: _token, ...account }) => account),
+                },
+            }),
+        ),
+    );
+    expect(await client.claude.rename({ id: "a", label: " Work " })).toEqual({
+        id: "a",
+        label: "Work",
+        connectedAt: 1,
+        email: "a@example.com",
+    });
+    // The credential is untouched — a rename writes the display name and nothing else.
+    expect(accounts.get("a")?.accessToken).toBe("tok");
+    // Blank means "back to the derived name", not a nameless row.
+    expect((await client.claude.rename({ id: "a", label: "" })).label).toBe("a@example.com");
+    expect(await errorCode(client.claude.rename({ id: "gone", label: "Work" }))).toBe("NOT_FOUND");
+});
+
 test("agent.run rejects an empty prompt", async () => {
     const client = clientFor(createApp(services()));
     expect(await errorCode(client.agent.run({ prompt: "" }))).toBe("BAD_REQUEST");

@@ -100,6 +100,7 @@ const {
     pendingResolve,
     confirmResolve,
     cancelResolve,
+    resolveNow,
 } = useAgentDrag();
 
 // The card behind the resolve confirmation — looked up live rather than snapshotted with the drop, so a
@@ -629,6 +630,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :query="needle"
                             @open="focusAgent(agent)"
                             @review="reviewAgent(agent)"
+                            @resolve="resolveNow(agent.id)"
                             @archive="archive([agent.id])"
                             @restore="restore([agent.id])"
                             @grab="(event, card) => grabCard(event, agent, card)"

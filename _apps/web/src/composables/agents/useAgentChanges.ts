@@ -140,10 +140,16 @@ export function useAgentChanges(agentId: Ref<string>) {
 
     // Hand the conflict to the agent (agentActions.askAgentToResolve). The flag is set only once the turn is
     // away, so a send that fails leaves the buttons where they were rather than parking the panel on a
-    // "resolving" state nothing is working on.
+    // "resolving" state nothing is working on. A REFUSED ask is such a failure: this panel hides the button
+    // when the report says a rebase can't reach the conflict, but the report it hid it on can be a round trip
+    // stale — the ask re-reads it, and its answer is the authority, so it reports through actionError like any
+    // other declined mutation rather than being dropped on the floor.
     const askResolve = (): Promise<void> =>
         run(async () => {
-            await askAgentToResolve(agentId.value);
+            const ask = await askAgentToResolve(agentId.value);
+            if (!ask.sent) {
+                throw new Error(ask.why);
+            }
             askedByAgent.value = new Set(askedByAgent.value).add(agentId.value);
         }, `Couldn't ask the agent to resolve it.`);
 

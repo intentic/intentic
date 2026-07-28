@@ -168,6 +168,114 @@ const features = (size: { width: number; height: number }): string => {
 const adopters = new Map<string, (win: Window) => boolean>();
 window.__intentic = { adoptPopout: (name, win) => adopters.get(name)?.(win) === true };
 
+/* DISMISSAL, IN THE WINDOW THE USER ACTUALLY CLICKED IN.
+ *
+ * Every overlay in the app arms itself the same way while it is open: ONE listener on `document`, watching for
+ * the click that landed outside it (Escape is the same trick with a keydown). `document` in this realm is the
+ * MAIN window's — and a popped-out panel's overlays are open in ANOTHER document, where a click on empty space
+ * dispatches and dies without ever reaching that listener. So out there nothing dismissed: the model picker,
+ * the mode menu, the tab context menu and the past-chats panel all stayed up until something else closed them.
+ * One line inside PrimeVue, multiplied by every overlay type the panels use (Popover, ContextMenu, Select,
+ * Dialog…) and by the app's own.
+ *
+ * So the fix is at the registration rather than at the call sites — the same choice the tooltip directive makes
+ * by deriving its window from the anchor: a document-level interaction listener armed in this realm is armed on
+ * every document the app is currently rendering into, and disarmed from them together. Nothing has to know it
+ * is in a pop-out, and an overlay added later inherits this for free.
+ *
+ * Mirroring the LISTENER, not forwarding the event, is the whole point. Each overlay receives the real click,
+ * with its real target, so its own guards still decide the outcome — PrimeVue reads that target to tell "truly
+ * outside" from "the trigger I was just opened by" and from "my own content". A synthetic click re-dispatched
+ * into the main document would carry the main document as its target, and every popover would close on the very
+ * click that opened it. */
+
+// What an overlay dismisses on: a press, a click, a context menu, a key. Deliberately not every document event
+// — the rest (`visibilitychange`, `DOMContentLoaded`, …) describe the document that owns the listener rather
+// than where the user is pointing, and sharing those would report a pop-out's lifecycle as the app's.
+const SHARED_EVENTS = new Set([`pointerdown`, `pointerup`, `mousedown`, `mouseup`, `click`, `dblclick`, `contextmenu`, `keydown`, `keyup`]);
+
+interface SharedListener {
+    readonly type: string;
+    readonly listener: EventListenerOrEventListenerObject;
+    // Identifies the registration alongside type + listener, and the only option a removal is matched on.
+    readonly capture: boolean;
+    readonly options: boolean | AddEventListenerOptions | undefined;
+}
+
+const sharedListeners: SharedListener[] = [];
+const popoutDocuments = new Set<Document>();
+
+const captureOf = (options: boolean | AddEventListenerOptions | EventListenerOptions | undefined): boolean =>
+    typeof options === `boolean` ? options : options?.capture === true;
+
+const nativeAdd = document.addEventListener.bind(document);
+const nativeRemove = document.removeEventListener.bind(document);
+
+document.addEventListener = ((
+    type: string,
+    listener: EventListenerOrEventListenerObject | null,
+    options?: boolean | AddEventListenerOptions,
+): void => {
+    if (listener === null) {
+        return; // a null callback registers nothing, here or anywhere else
+    }
+    nativeAdd(type, listener, options);
+    // `once` is a single shot, and it belongs to whichever document fires first — there is no way to spend it
+    // out in the pop-out without risking spending it twice, so a once-listener stays where it was armed.
+    if (!SHARED_EVENTS.has(type) || (typeof options === `object` && options.once === true)) {
+        return;
+    }
+    const capture = captureOf(options);
+    // addEventListener is idempotent per (type, listener, capture), so this registry has to be too: a second
+    // arming the browser itself ignored must not leave a duplicate to replay into the next window that opens.
+    if (sharedListeners.some((entry) => entry.type === type && entry.listener === listener && entry.capture === capture)) {
+        return;
+    }
+    sharedListeners.push({ type, listener, capture, options });
+    for (const doc of popoutDocuments) {
+        doc.addEventListener(type, listener, options);
+    }
+}) as Document[`addEventListener`];
+
+document.removeEventListener = ((
+    type: string,
+    listener: EventListenerOrEventListenerObject | null,
+    options?: boolean | EventListenerOptions,
+): void => {
+    if (listener === null) {
+        return;
+    }
+    nativeRemove(type, listener, options);
+    const capture = captureOf(options);
+    const index = sharedListeners.findIndex((entry) => entry.type === type && entry.listener === listener && entry.capture === capture);
+    if (index === -1) {
+        return;
+    }
+    sharedListeners.splice(index, 1);
+    // Capture is the only option a removal is matched on, so the caller's own is enough to undo the arming.
+    for (const doc of popoutDocuments) {
+        doc.removeEventListener(type, listener, options);
+    }
+}) as Document[`removeEventListener`];
+
+// A pop-out document joins the set of documents the app renders into: everything armed so far is armed on it,
+// so an overlay that was ALREADY open when the panel popped out dismisses out there too.
+const shareListeners = (doc: Document): void => {
+    popoutDocuments.add(doc);
+    for (const entry of sharedListeners) {
+        doc.addEventListener(entry.type, entry.listener, entry.options);
+    }
+};
+
+// …and leaves it on dock. The window is usually closing, but not always the way it looks: a window this page
+// hands back keeps its document, and a page that adopts it next arms its own realm's listeners on it.
+const unshareListeners = (doc: Document): void => {
+    popoutDocuments.delete(doc);
+    for (const entry of sharedListeners) {
+        doc.removeEventListener(entry.type, entry.listener, entry.options);
+    }
+};
+
 export interface Popout {
     readonly poppedOut: Ref<boolean>;
     // A window from before this page's load is expected back (this load follows a reload that left one
@@ -257,6 +365,9 @@ export const createPopout = (name: string, title: string, size: () => { width: n
     const attach = (win: Window): void => {
         dressWindow(win, title);
         popoutWindow = win;
+        // After the dressing, never before: a bare document is written out with doc.write, which implies
+        // document.open() — and that strips every listener already standing on the document.
+        shareListeners(win.document);
         body.value = win.document.body; // set the target before activating the teleport
         restoring.value = false;
         poppedOut.value = true;
@@ -303,6 +414,7 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         if (win) {
             win.removeEventListener(`beforeunload`, dock);
             win.removeEventListener(`pagehide`, dock);
+            unshareListeners(win.document);
         }
         const holder = salvage();
         // Flip after the rescue so the Teleport's move lands on nodes that are already in this document; the

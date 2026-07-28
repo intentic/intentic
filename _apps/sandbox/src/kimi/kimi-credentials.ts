@@ -23,15 +23,26 @@ const StoredKimiAccountSchema = z.object({
 export type StoredKimiAccount = z.infer<typeof StoredKimiAccountSchema>;
 
 // The metadata view (no key) the account list surfaces — the same shape every provider's `/accounts` returns.
-const toAccount = (stored: StoredKimiAccount): OauthAccount => ({ id: stored.id, label: stored.label, connectedAt: stored.connectedAt });
+// No `email`/`organization`: a pasted key says nothing about whose it is, which is why renaming is the only way
+// a second Kimi row gets a name that distinguishes it (see renameKimiAccount).
+export const toAccount = (stored: StoredKimiAccount): OauthAccount => ({ id: stored.id, label: stored.label, connectedAt: stored.connectedAt });
+
+// The name a row carries: what the user typed, else the provider's name. Blank on rename means "back to the
+// default" rather than "leave this row nameless" — the same rule the Claude store uses, minus the derived
+// identity a key can't supply.
+const resolveLabel = (label: string): string => label.trim() || "Kimi";
 
 // Tag a freshly-pasted key with a new account identity for storage.
 export const newKimiAccount = (apiKey: string, label: string): StoredKimiAccount => ({
     id: randomUUID(),
-    label: label.trim() !== "" ? label.trim() : "Kimi",
+    label: resolveLabel(label),
     apiKey: apiKey.trim(),
     connectedAt: Date.now(),
 });
+
+// Rename a stored account. Returns the account to persist; the caller owns the write, because it also owns the
+// "does this account still exist?" answer.
+export const renameKimiAccount = (stored: StoredKimiAccount, label: string): StoredKimiAccount => ({ ...stored, label: resolveLabel(label) });
 
 // The credential store, injected so the daemon's tests need no filesystem. Keyed by account id — a sandbox can
 // hold several Kimi keys side by side.

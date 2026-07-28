@@ -72,13 +72,19 @@ export const buildAuthorizeUrl = (): AuthorizeChallenge => {
     return { authorizeUrl: url.toString(), verifier, state };
 };
 
-// The freshly-minted token set from an exchange/refresh — tokens plus an epoch-ms expiry (JSON-friendly),
-// before it is tagged with account identity.
+/* The freshly-minted token set from an exchange/refresh — tokens plus an epoch-ms expiry (JSON-friendly), and
+ * WHO the grant belongs to. Anthropic answers the token endpoint with the account's email and the organization
+ * it authorized, and that pair is the only thing that tells two connections of the same provider apart: without
+ * it a second sign-in lands as a second row called "Claude", and the account list stops answering the one
+ * question it exists to answer. Both are optional because they are the provider's to send, and a token set that
+ * arrives without them must still be a usable credential — the user names that account by hand instead. */
 const TokenSetSchema = z.object({
     accessToken: z.string(),
     refreshToken: z.string().optional(),
     expiresAt: z.number().optional(),
     scope: z.string().optional(),
+    email: z.string().optional(),
+    organization: z.string().optional(),
 });
 export type TokenSet = z.infer<typeof TokenSetSchema>;
 
@@ -100,20 +106,27 @@ const StoredAccountSchema = TokenSetSchema.extend({
 export type StoredAccount = z.infer<typeof StoredAccountSchema>;
 
 // The metadata view (no tokens) the account list surfaces. A revoked credential rides out as the same
-// needsReauth/detail pair Codex already uses, so the picker and the Setup row light up unchanged.
-const toAccount = (stored: StoredAccount): OauthAccount => ({
+// needsReauth/detail pair Codex already uses, so the picker and the Setup row light up unchanged. The identity
+// rides ALONGSIDE the label rather than inside it, so a renamed account ("Work") can still show whose it is.
+export const toAccount = (stored: StoredAccount): OauthAccount => ({
     id: stored.id,
     label: stored.label,
     connectedAt: stored.connectedAt,
+    ...(stored.email !== undefined ? { email: stored.email } : {}),
+    ...(stored.organization !== undefined ? { organization: stored.organization } : {}),
     ...(stored.scope !== undefined ? { scope: stored.scope } : {}),
     ...(stored.revokedAt !== undefined ? { needsReauth: true, detail: stored.revokedReason ?? "Signed out — reconnect to keep using it." } : {}),
 });
 
+// Anthropic's token endpoint answers with the identity the grant belongs to beside the tokens themselves.
+// Everything but the access token is optional here because it is the provider's to send — see readIdentity.
 interface TokenResponse {
     access_token: string;
     refresh_token?: string;
     expires_in?: number;
     scope?: string;
+    account?: { email_address?: string };
+    organization?: { name?: string };
 }
 
 // A non-2xx from the token endpoint, carrying enough to tell "the refresh token is dead" (invalid_grant, which
@@ -131,6 +144,15 @@ export class TokenRequestError extends Error {
     }
 }
 
+/* Who the grant belongs to, read defensively: these fields are undocumented (like the whole flow — see the
+ * constants above), so a shape change must cost the account its NAME, never its credential. Absent keys stay
+ * absent rather than becoming `undefined` values, because a refresh merges its result over the stored account:
+ * a present-but-empty key would erase an identity we already knew, and a missing one leaves it standing. */
+const readIdentity = (json: TokenResponse): Pick<TokenSet, "email" | "organization"> => ({
+    ...(typeof json.account?.email_address === "string" && json.account.email_address !== "" ? { email: json.account.email_address } : {}),
+    ...(typeof json.organization?.name === "string" && json.organization.name !== "" ? { organization: json.organization.name } : {}),
+});
+
 const requestTokens = async (body: Record<string, string>): Promise<TokenSet> => {
     const response = await fetch(TOKEN_URL, {
         method: "POST",
@@ -146,6 +168,9 @@ const requestTokens = async (body: Record<string, string>): Promise<TokenSet> =>
         ...(json.refresh_token !== undefined ? { refreshToken: json.refresh_token } : {}),
         ...(typeof json.expires_in === "number" ? { expiresAt: Date.now() + json.expires_in * 1000 } : {}),
         ...(json.scope !== undefined ? { scope: json.scope } : {}),
+        // Read on REFRESH as well as on exchange (same endpoint, same envelope), which is what lets an account
+        // connected before any of this existed learn who it is on its next rotation rather than staying anonymous.
+        ...readIdentity(json),
     };
 };
 
@@ -163,13 +188,24 @@ export const exchangeCode = (pastedCode: string, verifier: string, fallbackState
     });
 };
 
+/* The name a row carries, in one rule used by both connecting and renaming: what the user typed, else who the
+ * provider says this is, else the provider's own name. The middle term is the point — "Claude" is a true but
+ * useless answer to "which account is this?", and it was the ONLY answer a second connection could get. The
+ * blank case matters on rename too: clearing the field means "go back to the derived name", not "leave this row
+ * nameless". */
+const resolveLabel = (label: string, identity: Pick<TokenSet, "email">): string => label.trim() || identity.email || "Claude";
+
 // Tag a freshly-exchanged token set with a new account identity for storage.
 export const newAccount = (tokens: TokenSet, label: string): StoredAccount => ({
     id: randomUUID(),
-    label: label.trim() !== "" ? label.trim() : "Claude",
+    label: resolveLabel(label, tokens),
     connectedAt: Date.now(),
     ...tokens,
 });
+
+// Rename a stored account, blank meaning "back to the derived name". Returns the account to persist; the caller
+// owns the write, because it also owns the "does this account still exist?" answer.
+export const renameAccount = (stored: StoredAccount, label: string): StoredAccount => ({ ...stored, label: resolveLabel(label, stored) });
 
 export type RefreshFn = (refreshToken: string) => Promise<TokenSet>;
 

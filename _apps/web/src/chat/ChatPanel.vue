@@ -119,8 +119,10 @@ const modeMenu = ref<InstanceType<typeof Popover> | null>(null);
 
 // Auto-follow: the transcript stays at its newest content unless the user has scrolled up to read. The rule
 // and every geometry change it has to survive live in the composable; the panel only says when a NEW
-// transcript is on screen (the conversationId watch below) and when the user has just sent something (submit).
-const { pin } = useStickToBottom(scroller, content);
+// transcript is on screen (the conversationId watch below), when the user has just sent something (submit),
+// and — because the composable watches these boxes with an observer owned by the window they are in — when
+// they move to another one, which for this panel is the pop-out and back.
+const { pin } = useStickToBottom(scroller, content, poppedOut);
 
 const activeError = computed(() => active.value.error.value);
 

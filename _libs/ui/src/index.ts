@@ -9,6 +9,7 @@ export { default as Icon } from "./components/Icon.vue";
 export { default as InfoDialog } from "./components/InfoDialog.vue";
 export { default as InfoHint } from "./components/InfoHint.vue";
 export { default as InfoTable } from "./components/InfoTable.vue";
+export { default as Markdown } from "./components/Markdown.vue";
 export { default as Page } from "./components/Page.vue";
 export { default as PageHeader } from "./components/PageHeader.vue";
 export { default as Picker } from "./components/Picker.vue";
@@ -22,6 +23,8 @@ export { default as StatusBadge, type StatusVariant } from "./components/StatusB
 export { default as StepSection } from "./components/StepSection.vue";
 export { Theme } from "./styles/theme.js";
 export { installUi } from "./plugin.js";
+// The markdown ENGINE is not re-exported here — it ships as `@intentic-app/ui/markdown` so plain .ts modules
+// and unit tests can use it without dragging in this barrel's component graph. See markdown/index.ts.
 export { vTw } from "./composables/tw.js";
 export { useHighlighter } from "./composables/useHighlighter.js";
 export { formatBytes, formatTokens, timeAgo } from "./format.js";

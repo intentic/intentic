@@ -15,10 +15,11 @@
 
 /* Rendered markdown, then the conversation column that is its biggest consumer. Both are unlayered on
  * purpose (they must beat the `components` layer), and both load here rather than from a component's
- * <style> because neither is scoped to one component: prose.css styles v-html output shared by the chat
- * and the workspace preview, and chat.css holds the chat's type scale plus the class names its components
- * pass between each other. Order matters — chat.css tunes prose.css's tokens. */
-@import "./prose.css";
+ * <style> because neither is scoped to one component: prose.css styles v-html output shared by the chat,
+ * the workspace preview and every extension view rendering <Markdown>, and chat.css holds the chat's type
+ * scale plus the class names its components pass between each other. Order matters — chat.css tunes
+ * prose.css's tokens, so prose.css loads after the design system's own sheets rather than inside them. */
+@import "../../../_libs/ui/src/styles/shared/prose.css";
 @import "./chat/chat.css";
 
 /* Scan the @intentic-app/ui library's source for class names (it lives outside this app's tree,

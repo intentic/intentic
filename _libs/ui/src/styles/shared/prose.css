@@ -1,9 +1,14 @@
-/* Rendered markdown — the ONE stylesheet for renderMarkdown's output.
+/* Rendered markdown — the ONE stylesheet for renderMarkdown's output (markdown/render.ts).
  *
- * Both surfaces that show that output style it from here: the chat transcript (assistant turns, plan cards)
- * and the workspace file preview. They render identical markup from identical code, so anything that differs
- * between them is drift, not design — the two hand-maintained copies this replaces had diverged into a 12px
- * scale on one side and a 14px scale on the other, and both had lost their list markers the same way.
+ * Every surface that shows that output styles it from here: the chat transcript (assistant turns, plan
+ * cards), the workspace file preview, and any extension view rendering <Markdown>. They render identical
+ * markup from identical code, so anything that differs between them is drift, not design — the two
+ * hand-maintained copies this replaces had diverged into a 12px scale on one side and a 14px scale on the
+ * other, and both had lost their list markers the same way.
+ *
+ * It lives in the design system, beside the component it dresses, rather than in the app: <Markdown> is
+ * shipped to extension authors, and a component whose looks depend on a stylesheet one layer up is a
+ * component that renders unstyled the first time anyone reuses it.
  *
  * What a surface IS allowed to differ on is the tokens below. Set them on the element that carries `md-prose`
  * (see .chat-markdown in chat/chat.css) and every rule here re-resolves; everything is expressed in `em` or a
@@ -163,7 +168,7 @@
     overflow-wrap: break-word;
 }
 
-/* Fenced blocks are substituted as raw markup by markdownCode (they live inside v-html, so they can hold no
+/* Fenced blocks are substituted as raw markup by markdown/code.ts (they live inside v-html, so they can hold no
    component) and wear `ui-code`, so the design system's Shiki chrome already governs the box. Only the metrics
    are ours: code.css sizes <Code> for compact UI surfaces, which is a tier below what reading a snippet inside
    an answer wants, and its 1.33 leading is tight for anything longer than a couple of lines. */
@@ -192,11 +197,14 @@
 .md-prose a:hover {
     text-decoration: underline;
 }
-/* A file the prose named, linkified by markdownFileLinks — clicking opens it in the workspace. The dotted rule
-   is the affordance: a path reads as "opens here" before it is hovered, and stays distinguishable from an
-   outbound link, which is undecorated until hover. Written one level more specific than the rule above so it
-   wins the text-decoration regardless of stylesheet order. */
+/* A document the prose named, resolved to somewhere INSIDE the app: a workspace file (markdownFileLinks) or a
+   sibling memory note (the memory view's decorator). The dotted rule is the affordance — such a reference reads
+   as "opens here" before it is hovered, and stays distinguishable from an outbound link, which is undecorated
+   until hover. `cursor` is set explicitly because a decorator may drop the href, and an anchor without one is
+   not a pointer target. Written one level more specific than the rule above so it wins the text-decoration
+   regardless of stylesheet order. */
 .md-prose a.md-file-link {
+    cursor: pointer;
     text-decoration: underline dotted color-mix(in srgb, var(--color-link) 45%, transparent);
     text-underline-offset: 0.2em;
 }
@@ -228,7 +236,7 @@
     border-bottom: 0;
 }
 
-/* The header row markdownCode puts above a fenced block: its language and the copy button. Chrome for the
+/* The header row markdown/code.ts puts above a fenced block: its language and the copy button. Chrome for the
    block, so it sits at the smallest tier on the surface and never competes with the code itself. */
 .md-code {
     /* Fallback carried because this class sits on the block itself, not under a .md-prose selector — a

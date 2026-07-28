@@ -452,6 +452,14 @@ export type AccountUsage = z.infer<typeof AccountUsageSchema>;
 export const OauthAccountSchema = z.object({
     id: z.string(),
     label: z.string(),
+    // WHO this account signs in as, in the provider's own words — Anthropic returns the email and the
+    // organization alongside the tokens, so a connection can name itself instead of arriving as a second row
+    // called "Claude". Kept BESIDE `label` rather than folded into it: the label is the user's to rename, and a
+    // renamed account still has to be able to say whose it is. Absent when the provider tells us nothing (a
+    // pasted API key carries no identity) — which is exactly when renaming is the only answer, so every
+    // sandbox-owned account can be renamed.
+    email: z.string().optional(),
+    organization: z.string().optional(),
     scope: z.string().optional(),
     connectedAt: z.number(), // epoch ms
     // Set only when the account's stored credential can no longer be refreshed (revoked/expired refresh token)
@@ -468,6 +476,10 @@ export type OauthAccount = z.infer<typeof OauthAccountSchema>;
 export const OauthAccountListSchema = z.object({ accounts: z.array(OauthAccountSchema) });
 // Address one account of a provider (disconnect, and the turn's `account`).
 export const AccountIdSchema = z.object({ id: z.string().min(1) });
+// Rename one account of a provider whose credential the sandbox owns (Claude, Kimi). Blank ⇒ the daemon falls
+// back to the derived name, so clearing a label restores the sign-in identity rather than leaving a nameless
+// row. Grok is absent for the same reason it holds one account: OpenCode owns that credential, not this store.
+export const AccountRenameSchema = z.object({ id: z.string().min(1), label: z.string().max(80) });
 // The completing calls carry the user-chosen label (blank ⇒ the daemon derives one from the sign-in identity
 // or a provider default).
 export const OauthExchangeSchema = z.object({

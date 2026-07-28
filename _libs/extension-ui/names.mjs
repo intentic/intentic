@@ -14,6 +14,7 @@ export const extensionUiNames = [
     "Icon",
     "InfoHint",
     "InputText",
+    "Markdown",
     "Page",
     "PageHeader",
     "Popover",

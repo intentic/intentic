@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Segmented } from "@intentic-app/ui";
+import { copyCodeFromEvent } from "@intentic-app/ui/markdown";
 import { computed, ref, watch } from "vue";
-import { copyCodeFromEvent } from "../../../composables/markdownCode";
 import { renderMarkdown } from "../../../composables/renderMarkdown";
 import { openFileRefFromEvent } from "../../../composables/workspace/openFileRef";
 import type { LineJump } from "../workspaceTabs";

@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { useDevice } from "@intentic-app/ui";
+import { copyCodeFromEvent } from "@intentic-app/ui/markdown";
 import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
 import { clearQuestionDraft, readQuestionDraft, writeQuestionDraft } from "../composables/chat/questionDraft";
 import { type ChatMessage, isAcknowledgment, type PlanRequest } from "../composables/chat/transcript";
-import { copyCodeFromEvent } from "../composables/markdownCode";
 import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
 import { restoreSnapshot } from "../composables/workspace/useHistory";
 import { useChat } from "../composables/chat/useChat";
-import ChatImageThumb from "./ChatImageThumb.vue";
+import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolCard from "./ChatToolCard.vue";
 
@@ -385,6 +385,18 @@ const attachmentThumbs = computed(() =>
     })),
 );
 
+// Whether the attachments MAY sit beside the prompt instead of stacked above it. Not a width test — the @lg
+// container query in the template owns that half. These are the conditions about what is being laid out: a
+// bubble to sit beside (an attachment-only message has nothing to align against), and thumbnails only, since
+// a non-image attachment renders as a chip carrying its whole filename and a fixed column cannot absorb an
+// arbitrary width. Mixed sets stay stacked rather than splitting one row of attachments across two places.
+const attachmentsAside = computed(
+    () =>
+        props.message.text.length > 0 &&
+        attachmentThumbs.value.length > 0 &&
+        attachmentThumbs.value.every((attachment) => attachment.previewUrl !== undefined),
+);
+
 // Manual auto-grow, the composer's grow() pattern bound to this instance's textarea.
 const growEdit = (): void => {
     const el = editInput.value;
@@ -459,16 +471,10 @@ const onEditKeydown = (event: KeyboardEvent): void => {
         @click="onMarkdownClick"
     >
         <div v-if="message.role === 'user'" class="group flex max-w-[85%] flex-col items-end gap-1.5" :class="{ 'w-full': editing }">
-            <!-- The chip/thumbnail row stays visible in edit mode (read-only — the attachments ride the re-run). -->
-            <div v-if="attachmentThumbs.length" class="flex flex-wrap justify-end gap-1.5">
-                <template v-for="attachment in attachmentThumbs" :key="attachment.path">
-                    <ChatImageThumb v-if="attachment.previewUrl" :src="attachment.previewUrl" :alt="attachment.name" size="h-14 w-14" />
-                    <span v-else class="chat-surface flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-content/90">
-                        <Icon name="file" class="text-2xs text-subtle" />
-                        {{ attachment.name }}
-                    </span>
-                </template>
-            </div>
+            <!-- The attachments stay visible in edit mode (read-only — they ride the re-run) and stay stacked
+                 above the editor: a column beside it would come out of the width of a textarea that is
+                 already the narrowest thing in the panel. -->
+            <ChatAttachmentStrip v-if="editing && attachmentThumbs.length" :attachments="attachmentThumbs" class="flex-wrap justify-end" />
             <template v-if="editing">
                 <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
                 <textarea
@@ -493,7 +499,14 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     </button>
                 </div>
             </template>
-            <div v-else class="flex items-center gap-1">
+            <!-- Wrapping is what puts the attachments on their own line when they can't sit beside the
+                 bubble (see the strip below); align-items applies per flex line, so the action buttons stay
+                 centred on the bubble rather than on the pair. -->
+            <div
+                v-else
+                class="flex items-center gap-1"
+                :class="[attachmentThumbs.length && 'flex-wrap justify-end', attachmentsAside && '@lg:flex-nowrap']"
+            >
                 <!-- Restore the workspace to the checkpoint captured before this turn ran. Two-step: the first
                      click arms (red), the second restores; arming decays after 4s. -->
                 <button
@@ -524,6 +537,25 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 >
                     <Icon name="pencil" class="text-2xs" />
                 </button>
+                <!-- A row above the prompt while the panel is narrow (order-first + w-full takes the first
+                     flex line, which is where this used to live outright), a fixed column to its LEFT once
+                     there is width for both. A prompt is pinned for as long as its answer runs, so its height
+                     is charged against the room that answer is read in — the six-line clamp on
+                     .chat-prompt-text is that budget — and a 56px thumbnail row was 62px on top of it that
+                     nothing accounted for. Side by side the pair costs the TALLER of the two rather than
+                     their sum, on the one row of the transcript that is never off screen.
+                     @lg is the floor at which the bubble still keeps a readable measure once the column and
+                     the action gutter come out of 85% of the transcript width; at the docked default the
+                     same arrangement sets the prompt to about twenty characters a line, so it stays stacked
+                     and the vertical saving is simply not available there. The query is on the transcript
+                     column (ChatPanel's @container), so it answers to a dragged panel edge and to the
+                     pop-out window alike. -->
+                <ChatAttachmentStrip
+                    v-if="attachmentThumbs.length"
+                    :attachments="attachmentThumbs"
+                    class="order-first w-full flex-wrap justify-end"
+                    :class="attachmentsAside && '@lg:order-none @lg:mr-1 @lg:w-auto @lg:flex-col @lg:flex-nowrap @lg:self-start'"
+                />
                 <!-- Frame and scroller are two elements: the chip below must not scroll away with the text
                      when an open bubble runs past its cap (see .chat-prompt-bubble). -->
                 <div

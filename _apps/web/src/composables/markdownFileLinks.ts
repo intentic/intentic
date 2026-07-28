@@ -156,7 +156,7 @@ const linkifyText = (node: Text, dir: string | undefined): void => {
  * names files from the workspace root.
  *
  * Text inside an <a> is skipped — that anchor already owns its target — and so is text inside a <pre>, which at
- * this point is the empty placeholder markdownCode substitutes a real, separately-styled code block into later.
+ * this point is the empty placeholder markdown/code.ts substitutes a real, separately-styled code block into later.
  * Inline <code> IS scanned: `src/foo.ts` in backticks is the form agents reach for most. */
 export const linkifyFileRefs = (fragment: DocumentFragment, dir: string | undefined): void => {
     fragment.querySelectorAll(`a`).forEach((anchor) => linkifyAnchor(anchor, dir));

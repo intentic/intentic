@@ -4,7 +4,7 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { type AgentHarness, type AgentProvider, PROVIDERS } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady } from "../composables/chat/access";
-import { BADGE_META } from "../composables/chat/catalog";
+import { BADGE_META, relativeTime } from "../composables/chat/catalog";
 import { acpProviders, providerDisplayLabel, providerModelsState } from "../composables/chat/conversation";
 import { customEntryFor, filterEntries, type PickerEntry, pickerBlocks, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
 import { formatUtilization, isStale, usageDetail, usagePercent, usageStatusFor } from "../composables/chat/usageStatus";
@@ -212,17 +212,40 @@ const activeAccountId = computed(() => account.value ?? accounts.value[0]?.id);
 
 const footerVisible = computed(() => accounts.value.length > 1 || provider.value === `claude` || harnessChoosable.value || messages.value.length > 0);
 
-// The account rows, each decorated with how much of its TIGHTEST limit pool is spent — the whole point of the
-// account list being a list: with several connected, "which one has room left" is the actual question, and
-// answering it used to cost a turn to find out. Only Claude reports limits, and only for accounts that have run
-// a turn since their last reset, so an undecorated row means "unknown", never "empty". The row shows the one
-// number a switch decision turns on; the tooltip breaks it into pools.
+// Names shared by more than one connected account — the rows a name alone cannot tell apart.
+const ambiguousLabels = computed(() => {
+    const seen = new Map<string, number>();
+    for (const entry of accounts.value) {
+        seen.set(entry.label, (seen.get(entry.label) ?? 0) + 1);
+    }
+    return new Set([...seen].filter(([, count]) => count > 1).map(([label]) => label));
+});
+
+/* The account rows, each decorated with the two things a switch decision actually turns on.
+ *
+ * WHICH ONE THIS IS — the identity the provider reported (Claude returns the email + organization with the
+ * token), under the name, because the name is the user's to change and two of them can read the same. Failing
+ * that, and only when two rows DO read the same, the date it was connected: a weak difference, but picking
+ * between two lines that both say "Claude" is not a choice, it's a coin flip. Quiet otherwise — a single
+ * self-explaining account earns no second line.
+ *
+ * HOW MUCH IS LEFT — how much of its TIGHTEST limit pool is spent, which is the whole point of the account list
+ * being a list and used to cost a turn to find out. Only Claude reports limits, and only for accounts that have
+ * run a turn since their last reset, so an undecorated row means "unknown", never "empty". The row shows the one
+ * number; the tooltip breaks it into pools. */
 const accountRows = computed(() =>
     accounts.value.map((entry) => {
         const usage = usageStatusFor(entry.id);
         const percent = usagePercent(usage);
+        const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label);
         return {
             ...entry,
+            subtitle:
+                identity.length > 0
+                    ? identity.join(` · `)
+                    : ambiguousLabels.value.has(entry.label)
+                      ? `connected ${relativeTime(entry.connectedAt)}`
+                      : undefined,
             headroom: usage === undefined || percent === undefined ? undefined : formatUtilization(percent, isStale(usage)),
             usageDetail: usage !== undefined ? usageDetail(usage) : undefined,
             usageWarn: percent !== undefined && percent >= 75,
@@ -470,12 +493,17 @@ onMounted(() => {
                         v-for="a in accountRows"
                         :key="a.id"
                         type="button"
-                        class="qopt flex h-8 min-w-0 items-center gap-2 rounded-lg border px-2 text-xs max-md:h-11"
+                        class="qopt flex min-h-8 min-w-0 items-center gap-2 rounded-lg border px-2 py-1 text-xs max-md:min-h-11"
                         :class="{ 'qopt-on': activeAccountId === a.id }"
                         :disabled="streaming"
                         @click="selectAccount(a.id)"
                     >
-                        <span class="truncate text-content">{{ a.label }}</span>
+                        <!-- Name over identity, both truncating: the row grows by a line only for accounts that
+                             need one, so the common single-account case is the same 8-high row it always was. -->
+                        <span class="flex min-w-0 flex-col items-start leading-tight">
+                            <span class="max-w-full truncate text-content">{{ a.label }}</span>
+                            <span v-if="a.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ a.subtitle }}</span>
+                        </span>
                         <!-- How much of this account's tightest limit pool is spent, so the switch decision is
                              informed before it costs a turn. Absent ⇒ never measured (or every window it had
                              has since reset). -->

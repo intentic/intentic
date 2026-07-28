@@ -1,8 +1,8 @@
 import { type AccountUsage, claudeContract, type OauthAccount } from "@intentic/sandbox-contract";
-import { implement } from "@orpc/server";
+import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { buildAuthorizeUrl, exchangeCode, newAccount } from "./claude-credentials.js";
+import { buildAuthorizeUrl, exchangeCode, newAccount, renameAccount, toAccount } from "./claude-credentials.js";
 
 // An account plus its usage window, when one has been measured. Kept out of the map callback so the account
 // object is never mutated in place — the store hands back a fresh view per call, but it isn't ours to edit.
@@ -10,7 +10,8 @@ const withUsage = (account: OauthAccount, usage: AccountUsage | undefined): Oaut
 
 // Claude subscription OAuth — the sandbox owns the credential, the platform never sees it. `start` hands the
 // browser the authorize URL + PKCE material; `exchange` stores the tokens as a new account; `accounts` lists
-// them; `disconnect` clears the one named by id. The agent route reads the account the turn selected.
+// them; `rename` renames one; `disconnect` clears the one named by id. The agent route reads the account the
+// turn selected.
 export const createClaudeRoutes = (services: Services) => {
     const i = implement(claudeContract).$context<OrpcContext>();
     return {
@@ -18,12 +19,18 @@ export const createClaudeRoutes = (services: Services) => {
         exchange: i.exchange.handler(async ({ input }) => {
             const account = newAccount(await exchangeCode(input.code, input.verifier, input.state), input.label ?? "");
             await services.claudeStore.write(account);
-            return {
-                id: account.id,
-                label: account.label,
-                connectedAt: account.connectedAt,
-                ...(account.scope !== undefined ? { scope: account.scope } : {}),
-            };
+            return toAccount(account);
+        }),
+        // Rename the account named by id. A 404 rather than a silent no-op: renaming a row that another device
+        // just disconnected must tell the card its list is stale, not pretend the write landed.
+        rename: i.rename.handler(async ({ input }) => {
+            const stored = await services.claudeStore.read(input.id);
+            if (stored === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "That Claude account is no longer connected." });
+            }
+            const renamed = renameAccount(stored, input.label);
+            await services.claudeStore.write(renamed);
+            return toAccount(renamed);
         }),
         // Each account carries its last known usage window, so the picker can show what's left on each without
         // spending a turn on it. Absent for an account that hasn't run a Claude turn since its window last

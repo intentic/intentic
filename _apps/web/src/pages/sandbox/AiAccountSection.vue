@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { type AgentProvider, type KeyedProvider, providerLabel } from "@intentic/sandbox-contract";
+import { type AgentProvider, type KeyedProvider, type OauthAccount, providerLabel } from "@intentic/sandbox-contract";
 import { cmp, formatTokens, InfoHint, Row, RowGroup } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { providerReady } from "../../composables/chat/access";
+import { relativeTime } from "../../composables/chat/catalog";
 import { providerTabs } from "../../composables/chat/conversation";
 import { useChat } from "../../composables/chat/useChat";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
@@ -47,6 +48,7 @@ const {
     startConnect,
     cancelConnect,
     nativeConnectFlow,
+    renameAccount,
     disconnect,
     translatorAccounts,
     translatorConnectFlow,
@@ -100,6 +102,41 @@ const canConnectMore = computed(() => managedProvider.value !== `grok` || manage
 // provider they belong to, so browsing the switcher mid-sign-in hides the flow rather than moving it.
 const nativeFlowLive = computed(() => nativeConnectFlow.value?.provider === managedProvider.value);
 const routedFlowLive = computed(() => routedProvider.value !== undefined && translatorConnectFlow.value?.provider === routedProvider.value);
+
+/* NO TWO ROWS MAY READ THE SAME. A list whose every entry says "Claude" answers none of the questions the list
+ * exists for — which account is this, is it the one my last turn ran on, which one am I about to disconnect —
+ * and that is what these three pieces fix, in order of how much they actually tell you:
+ *
+ *   1. the identity the provider itself reports (Claude returns the email + organization with the token), shown
+ *      beside the name because the NAME is the user's to change and can be anything;
+ *   2. the name, renamable in place — the only answer for a credential that carries no identity (a pasted API
+ *      key), and the one the user reaches for when the derived name isn't what they call this account;
+ *   3. failing both, when two rows still read alike, when each was connected — a weak difference, but a real one,
+ *      and infinitely better than none.
+ *
+ * Grok is the exception to (2): OpenCode owns that credential and holds exactly one, so there is nothing to
+ * rename and nothing it could be confused with. */
+const renamable = computed(() => managedProvider.value !== `grok`);
+
+// Labels shared by more than one of this provider's accounts — the rows that cannot be told apart on name alone.
+const ambiguousLabels = computed(() => {
+    const seen = new Map<string, number>();
+    for (const account of managedAccounts.value) {
+        seen.set(account.label, (seen.get(account.label) ?? 0) + 1);
+    }
+    return new Set([...seen].filter(([, count]) => count > 1).map(([label]) => label));
+});
+
+// The line beside the name: who this account signs in as, or — when the provider told us nothing and the name
+// is shared with another row — when it was connected. Parts equal to the name are dropped: an account named by
+// its own email must not print that email twice.
+const identityNote = (account: OauthAccount): string | undefined => {
+    const identity = [account.email, account.organization].filter((part) => part !== undefined && part !== account.label);
+    if (identity.length > 0) {
+        return identity.join(` · `);
+    }
+    return ambiguousLabels.value.has(account.label) ? `connected ${relativeTime(account.connectedAt)}` : undefined;
+};
 
 // A short usage summary line per account (from /system/usage).
 const usageLine = (id: string): string | undefined => {
@@ -258,7 +295,10 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :title="account.label"
                     :state="account.needsReauth ? `reauth` : `connected`"
                     :tone="account.needsReauth ? `warning` : `default`"
+                    :note="identityNote(account)"
                     :description="account.needsReauth ? (account.detail ?? `Signed out — reconnect to keep using it.`) : usageLine(account.id)"
+                    :renamable="renamable"
+                    @rename="(label: string) => renameAccount(account.id, label)"
                 >
                     <template #control>
                         <Button

@@ -10,7 +10,9 @@ import {
     ensureFreshToken,
     fileClaudeStore,
     newAccount,
+    renameAccount,
     type StoredAccount,
+    toAccount,
     TokenRequestError,
     type TokenSet,
 } from "./claude-credentials.js";
@@ -61,6 +63,32 @@ test("newAccount mints an id and falls back to a default label", () => {
     expect(newAccount({ accessToken: "t" }, " work ").label).toBe("work");
 });
 
+// The whole reason a second account was indistinguishable from the first: unnamed, both rows said "Claude".
+test("newAccount names an unnamed account after the identity the sign-in reported", () => {
+    expect(newAccount({ accessToken: "t", email: "a@example.com" }, "").label).toBe("a@example.com");
+    // A name the user typed outranks the derived one — it is the more specific answer, and theirs.
+    expect(newAccount({ accessToken: "t", email: "a@example.com" }, "Work").label).toBe("Work");
+});
+
+test("renameAccount renames, and a blank name restores the derived one", () => {
+    const account = stored({ accessToken: "t", email: "a@example.com" });
+    expect(renameAccount(account, " Work ").label).toBe("Work");
+    expect(renameAccount(account, "").label).toBe("a@example.com");
+    // Nothing to derive from: the provider default, never a nameless row.
+    expect(renameAccount(stored({ accessToken: "t" }), "").label).toBe("Claude");
+});
+
+// The identity travels beside the label, not inside it: a renamed account must still be able to say whose it is.
+test("toAccount surfaces the identity alongside the user's own name", () => {
+    expect(toAccount({ ...stored({ accessToken: "t", email: "a@example.com", organization: "Acme" }), label: "Work" })).toEqual({
+        id: "a",
+        label: "Work",
+        connectedAt: 0,
+        email: "a@example.com",
+        organization: "Acme",
+    });
+});
+
 test("ensureFreshToken returns undefined when the account is not connected", async () => {
     expect(await ensureFreshToken(memoryStore(), "a")).toBeUndefined();
 });
@@ -97,6 +125,21 @@ test("ensureFreshToken keeps the old refresh token when the refresh response omi
     const store = memoryStore(stored({ accessToken: "stale", refreshToken: "keep", expiresAt: Date.now() - 1000 }));
     await ensureFreshToken(store, "a", async () => ({ accessToken: "fresh" }));
     expect(store.current()).toMatchObject({ accessToken: "fresh", refreshToken: "keep" });
+});
+
+// A refresh answers on the same endpoint with the same envelope, so an account stored before any of this
+// existed picks its identity up on the next rotation rather than staying anonymous forever.
+test("a refresh teaches an account who it is without touching the name it already has", async () => {
+    const store = memoryStore(stored({ accessToken: "stale", refreshToken: "r", expiresAt: Date.now() - 1000 }));
+    await ensureFreshToken(store, "a", async () => ({ accessToken: "fresh", email: "a@example.com", organization: "Acme" }));
+    expect(store.current()).toMatchObject({ label: "Claude", email: "a@example.com", organization: "Acme" });
+});
+
+// The mirror case: a response that says nothing about identity must not erase what we already knew.
+test("a refresh without identity leaves the stored one standing", async () => {
+    const store = memoryStore(stored({ accessToken: "stale", refreshToken: "r", email: "a@example.com", expiresAt: Date.now() - 1000 }));
+    await ensureFreshToken(store, "a", async () => ({ accessToken: "fresh" }));
+    expect(store.current()?.email).toBe("a@example.com");
 });
 
 test("ensureFreshToken returns the (expired) token unchanged when there is no refresh token", async () => {

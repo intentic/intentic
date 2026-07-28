@@ -95,8 +95,13 @@ const perform = async (id: string, chosen: DropAction): Promise<void> => {
             }
         } else if (chosen === `resolve`) {
             // The turn does the rest: it rebases, resolves, and the auto-land at completion moves the card.
-            // Its own frames are the progress report, so nothing is said here.
-            await askAgentToResolve(id);
+            // Its own frames are the progress report, so a send that WENT says nothing here. One that didn't
+            // has to: the board is armed off `status: "conflict"` alone, so it cannot know until the report is
+            // read that this particular conflict is the user's own to clear (see askAgentToResolve).
+            const ask = await askAgentToResolve(id);
+            if (!ask.sent) {
+                notice.value = ask.why;
+            }
         } else {
             await discardAgent(id);
             await invalidateAgentAction(id);
@@ -135,6 +140,21 @@ const confirmResolve = (): void => {
 const cancelResolve = (): void => {
     pendingResolve.value = undefined;
 };
+
+/* THE SAME ASK, FROM THE CARD'S OWN BUTTON — and deliberately the same runner, not a second one.
+ *
+ * A conflicted card's press and a conflicted card's drop are one action on one board, so they share `perform`:
+ * one busy flag (the card dims in place), one notice strip for a refusal, one refresh closing the gap on a
+ * quiet stream. A parallel implementation here would be free to drift on all three, and the first thing to
+ * drift would be the report of a failure — the half nobody exercises by hand.
+ *
+ * It does NOT go through pendingResolve's dialog, and that is the whole difference between the two. The dialog
+ * guards a GESTURE: a card grabbed to be read and released a few pixels into the wrong lane starts a turn the
+ * user never asked for, and nothing about a drag says what it is about to cost. A press on a button labelled
+ * with the action, under a tooltip that states the mechanics, IS the answer that dialog exists to collect —
+ * the same reasoning the review panel's own button already rests on. Asking twice for the same intent teaches
+ * people to click through dialogs. */
+const resolveNow = (id: string): Promise<void> => perform(id, `resolve`);
 
 const onMove = (event: PointerEvent): void => {
     pointer.value = { x: event.clientX, y: event.clientY };
@@ -216,5 +236,6 @@ export function useAgentDrag() {
         pendingResolve,
         confirmResolve,
         cancelResolve,
+        resolveNow,
     };
 }

@@ -6,7 +6,7 @@
 // on the latter — it strips every tag and keeps <script> CONTENT, which would make these tests worse than
 // useless. This is the only file that needs a document; the rest of the suite stays on `node`.
 import { describe, expect, it, test } from "vitest";
-import { escapeHtml } from "./markdownCode";
+import { escapeHtml } from "@intentic-app/ui/markdown";
 import { createStreamingMarkdown, markdownParseCount, renderMarkdown, settledEnd } from "./renderMarkdown";
 
 // The one invariant that keeps a streamed chat bubble alive: renderMarkdown must NEVER throw and must always

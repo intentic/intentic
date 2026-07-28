@@ -1821,6 +1821,12 @@ importers:
       '@vue-flow/core':
         specifier: 'catalog:'
         version: 1.48.2(vue@3.5.39(typescript@5.9.3))
+      dompurify:
+        specifier: 'catalog:'
+        version: 3.4.11
+      marked:
+        specifier: 'catalog:'
+        version: 18.0.5
       primevue:
         specifier: 'catalog:'
         version: 4.5.5(vue@3.5.39(typescript@5.9.3))
@@ -10684,6 +10690,8 @@ snapshots:
       '@shikijs/langs': 4.3.0
       '@shikijs/themes': 4.3.0
       '@vue-flow/core': 1.48.2(vue@3.5.39(typescript@5.9.3))
+      dompurify: 3.4.11
+      marked: 18.0.5
       primevue: 4.5.5(vue@3.5.39(typescript@5.9.3))
       shiki: 4.3.0
       tailwind-merge: 3.6.0

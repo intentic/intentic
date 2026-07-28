@@ -151,6 +151,61 @@ describe(`createPopout`, () => {
         expect(popout.poppedOut.value).toBe(false);
     });
 
+    /* The other half of "the panel is a view of the app, not a picture of it": it has to answer the pointer out
+     * there. Every overlay in the app arms one listener on `document` to catch the click that dismisses it, and
+     * `document` in this realm is the main window's — so these pin that a click in the pop-out reaches it. */
+    it(`hands a pop-out document the app's dismiss listeners, real event and all`, () => {
+        const popout = createPopout(`dismiss-panel`, `Panel`, size);
+        const targets: (EventTarget | null)[] = [];
+        const onClick = vi.fn((event: Event) => targets.push(event.target));
+        // Armed BEFORE the window opens — an overlay already open when the user pops the panel out. It gets the
+        // window on attach, or the first thing the user clicked out there would be the thing that never closes.
+        document.addEventListener(`click`, onClick);
+        const win = fakeWindow(`dismiss-panel`);
+        adopt(`dismiss-panel`, win);
+
+        const empty = win.document.createElement(`div`);
+        win.document.body.appendChild(empty);
+        empty.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+
+        // The REAL click, with the REAL target: PrimeVue reads it to tell "outside" from "the trigger that just
+        // opened me" and from "my own content". Re-dispatching a synthetic click into this document instead
+        // would name this document as the target — and close every popover on the click that opened it.
+        expect(onClick).toHaveBeenCalledTimes(1);
+        expect(targets).toEqual([empty]);
+
+        // Disarmed here is disarmed there: the overlay closed, so the listener must not outlive it out in the
+        // window and dismiss the NEXT one on its first click.
+        document.removeEventListener(`click`, onClick);
+        empty.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        expect(onClick).toHaveBeenCalledTimes(1);
+
+        // Docked, the window is no longer a window the app renders into, so nothing armed afterwards belongs out
+        // there. (A fresh node, because docking salvages the panel's own nodes INTO this document — see dock.)
+        popout.dock();
+        const leftover = win.document.createElement(`div`);
+        win.document.body.appendChild(leftover);
+        document.addEventListener(`click`, onClick);
+        leftover.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        expect(onClick).toHaveBeenCalledTimes(1);
+        document.removeEventListener(`click`, onClick);
+    });
+
+    it(`shares what the user points at, not what the document itself is doing`, () => {
+        createPopout(`scope-panel`, `Panel`, size);
+        const onVisibility = vi.fn();
+        // The shell watches this to know whether the APP is on screen (it pauses polling when it isn't). A
+        // pop-out's own visibility is not that answer, so this one stays on the document that asked.
+        document.addEventListener(`visibilitychange`, onVisibility);
+        const win = fakeWindow(`scope-panel`);
+        adopt(`scope-panel`, win);
+
+        win.document.dispatchEvent(new Event(`visibilitychange`));
+
+        expect(onVisibility).not.toHaveBeenCalled();
+        document.removeEventListener(`visibilitychange`, onVisibility);
+    });
+
     it(`forgets the window on dock, so a later reload stays docked`, () => {
         sessionStorage.setItem(`ui-popout-dock-panel`, `1`);
         const popout = createPopout(`dock-panel`, `Panel`, size);

@@ -123,6 +123,56 @@ describe(`reading a tab snapshot`, () => {
             queued: [{ text: `also the tests`, attachments: [] }],
         });
     });
+
+    // Which account a chat runs on is the user's pick, and per TAB: the tab's own and its session's are stored
+    // apart because a mid-chat switch is exactly the state where the two legitimately differ.
+    it(`restores the tab's account pin and the session's separately`, () => {
+        session.set(
+            KEY,
+            JSON.stringify({
+                active: `a`,
+                tabs: [
+                    {
+                        conversationId: `a`,
+                        draft: ``,
+                        provider: `claude`,
+                        account: `acct-work`,
+                        session: { id: `sess-1`, provider: `claude`, account: `acct-personal` },
+                        attachments: [],
+                        queued: [],
+                    },
+                ],
+            }),
+        );
+
+        const tab = readTabSnapshot(`sb1`)?.tabs[0];
+        expect(tab?.account).toBe(`acct-work`);
+        expect(tab?.session?.account).toBe(`acct-personal`);
+    });
+
+    it(`drops an account that isn't a usable id, leaving the restore to fall back`, () => {
+        session.set(
+            KEY,
+            JSON.stringify({
+                active: `a`,
+                tabs: [
+                    {
+                        conversationId: `a`,
+                        draft: ``,
+                        provider: `claude`,
+                        account: ``,
+                        session: { id: `sess-1`, provider: `claude`, account: 42 },
+                        attachments: [],
+                        queued: [],
+                    },
+                ],
+            }),
+        );
+
+        const tab = readTabSnapshot(`sb1`)?.tabs[0];
+        expect(tab).not.toHaveProperty(`account`);
+        expect(tab?.session).toEqual({ id: `sess-1`, provider: `claude` });
+    });
 });
 
 describe(`writing a tab snapshot`, () => {

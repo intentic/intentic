@@ -365,6 +365,29 @@
 .chat-footer > * {
     pointer-events: auto;
 }
+/* The one strip of that transparent box which must NOT show the transcript: the padding below the composer,
+   between its bottom edge and the scroller's, with the panel's status bar directly under it. Everywhere else
+   the transparency reads as depth — messages visibly pass beneath a floating box. Nothing passes through this
+   band: it is the end of the scroller, so what shows in it is a sliver of a message cut off top and bottom,
+   sitting in a slot of its own between the composer and the status row. It reads as a rendering fault rather
+   than as a layer, which is what it looked like in every screenshot of it. Painted with the panel's own surface
+   (--color-card, the scroller's background and the ground the status bar below sits on) the composer meets that
+   row on one continuous background, and the transcript ends where the composer's opaque box cuts it off.
+   Its height IS the footer's bottom padding (py-3 in ChatPanel) — the strip the composer's box does not cover.
+   The pseudo-element resolves against .chat-footer, which is positioned by being sticky. Behind that box
+   (z-index: -1) rather than over it: the composer's drop shadow falls into exactly this band, and an opaque
+   rectangle painted on top of it would cut the shadow off square at the box's edge. Negative only WITHIN the
+   footer's own stacking context (sticky + z-10), so the band still covers the transcript — it is the footer's
+   background, not a layer between the panel and the messages. */
+.chat-footer::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 0.75rem;
+    z-index: -1;
+    background: var(--color-card);
+    pointer-events: none;
+}
 .composer-ghost {
     display: inline-flex;
     align-items: center;

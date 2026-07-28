@@ -165,6 +165,109 @@ describe(`account usage hydration`, () => {
     });
 });
 
+/* Which account serves the turn is a deliberate choice — headroom left on one, a different organization on
+ * another — and it used to live in memory only: every refresh resolved it back to "the provider's first account"
+ * and silently undid the pick. It is remembered per sandbox now (account ids name credential files in ONE
+ * sandbox's store), while an already-open chat keeps the account it was actually running on. */
+describe(`the remembered account`, () => {
+    const TWO = (path: string): unknown[] =>
+        path.startsWith(`/claude`)
+            ? [
+                  { id: `first`, label: `Claude`, connectedAt: 1 },
+                  { id: `second`, label: `Claude`, connectedAt: 2 },
+              ]
+            : [];
+
+    // A page load, as the singleton sees one: it re-reads its own stores for the sandbox, then the daemon answers.
+    const reload = async (): Promise<void> => {
+        await nextTick(); // let the snapshot / preference watches land before the stores are re-read
+        resetChat();
+        await loadAccountStatus();
+    };
+
+    beforeEach(async () => {
+        storage.clear();
+        mockConnections({ accounts: TWO });
+        resetChat();
+        await loadAccountStatus();
+    });
+
+    it(`opens a new session on the account last picked, not on the provider's first`, async () => {
+        const chat = useChat();
+        chat.selectAccount(`second`);
+
+        await reload();
+        expect(chat.account.value).toBe(`second`);
+
+        // ...and so does the next new chat in that window, which is what "default" means.
+        chat.newChat();
+        expect(chat.account.value).toBe(`second`);
+    });
+
+    it(`holds the pick through the window where the daemon hasn't answered yet`, async () => {
+        const chat = useChat();
+        chat.selectAccount(`second`);
+        await nextTick();
+
+        // The moment a reload paints: the account list is unread, so the only thing that knows the pick is the
+        // store. Resolving it against the empty list is what used to flip the selection back to the first account
+        // a beat before the real list arrived — visibly, and for the turn a fast sender got in during it.
+        resetChat();
+        expect(chat.account.value).toBe(`second`);
+
+        await loadAccountStatus();
+        expect(chat.account.value).toBe(`second`);
+    });
+
+    it(`leaves an open chat on the account it was running on when another tab switches`, async () => {
+        const chat = useChat();
+        const first = chat.active.value.conversationId;
+        chat.selectAccount(`first`);
+        chat.draft.value = `keep this tab real`;
+
+        const other = chat.newChat();
+        chat.selectAccount(`second`);
+        other.draft.value = `and this one`;
+
+        await reload();
+        const restored = (id: string): string | undefined =>
+            chat.conversations.value.find((conversation) => conversation.conversationId === id)?.account.value;
+        expect(restored(first)).toBe(`first`);
+        expect(restored(other.conversationId)).toBe(`second`);
+    });
+
+    it(`moves a chat off an account that was disconnected while the window was away`, async () => {
+        const chat = useChat();
+        chat.selectAccount(`second`);
+
+        // Away, the user disconnects it elsewhere. The remembered pin would otherwise fail every turn with
+        // "No Claude account connected" — about an account that is connected, naming a fix already done.
+        await nextTick();
+        mockConnections({ accounts: (path) => (path.startsWith(`/claude`) ? [{ id: `first`, label: `Claude`, connectedAt: 1 }] : []) });
+        resetChat();
+        await loadAccountStatus();
+
+        expect(chat.account.value).toBe(`first`);
+    });
+
+    it(`keeps each sandbox's pick to itself — an account id names a credential in one sandbox's store`, async () => {
+        const chat = useChat();
+        chat.selectAccount(`second`);
+        await nextTick();
+
+        const { activeSandboxId } = useSandbox();
+        activeSandboxId.value = `sb2`;
+        resetChat();
+        await loadAccountStatus();
+        // sb2 has never been picked for: its own first account serves, not sb1's chosen id.
+        expect(chat.account.value).toBeUndefined();
+
+        activeSandboxId.value = `sb1`;
+        await reload();
+        expect(chat.account.value).toBe(`second`);
+    });
+});
+
 describe(`per-tab drafts`, () => {
     beforeEach(() => {
         storage.clear();

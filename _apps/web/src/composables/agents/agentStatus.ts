@@ -149,8 +149,14 @@ export const reviewAction = (agent: AgentStanding & { readonly diff?: { files: n
     if (agent.attention.permission) {
         return `Approve`;
     }
+    /* NAMES THE REPORT, not the fix — because on a conflicted card the fix is now a button of its own, sitting
+     * one line above this link (AgentCard). While this link WAS the only conflict affordance on the board it
+     * read "Resolve conflict", which was the closest a navigation could get to the verb the user wanted; two
+     * controls a few pixels apart both promising to resolve the conflict, only one of which does anything to
+     * it, is worse than either alone. So the action keeps the verb and the link says what it opens: the report
+     * — which paths refused, why, and whose move each one is. */
     if (agent.attention.conflict || agent.status === `conflict`) {
-        return `Resolve conflict`;
+        return `See what blocked it`;
     }
     if (agent.status === `error`) {
         return `View error`;

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ProgressRing, useDevice } from "@intentic-app/ui";
+import { cmp, ProgressRing, useDevice } from "@intentic-app/ui";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import ProviderLogo from "../chat/ProviderLogo.vue";
 import OriginMark from "../components/OriginMark.vue";
+import { dropActionFor } from "../composables/agents/laneDrop";
 import {
     activityIcon,
     agentStatusMeta,
@@ -46,7 +47,7 @@ const props = defineProps<{
     match?: string;
     query?: string;
 }>();
-const emit = defineEmits<{ open: []; review: []; archive: []; restore: []; grab: [event: PointerEvent, card: HTMLElement] }>();
+const emit = defineEmits<{ open: []; review: []; resolve: []; archive: []; restore: []; grab: [event: PointerEvent, card: HTMLElement] }>();
 
 const { mobile } = useDevice();
 const meta = computed(() => agentStatusMeta(props.agent.status));
@@ -63,6 +64,22 @@ const archivable = computed(() => canArchive(props.agent));
 // The drill-in label, or undefined for a draft (nothing to review — a click only focuses the docked chat).
 // Desktop only: on mobile the detail IS the chat, so a tap navigates and no separate affordance is needed.
 const review = computed(() => (mobile.value ? undefined : reviewAction(props.agent)));
+
+/* MAY THIS CARD HAND ITS CONFLICT BACK TO ITS AGENT? Asked of laneDrop rather than re-derived from
+ * status/attention here, because it is the identical question the drop already answers — "would this board ask
+ * the agent to resolve?" — and a second reading of it would be free to disagree with the drag on the same card.
+ * That also inherits the guards for nothing: a draft has no worktree, a running turn is offered Stop instead
+ * (the review panel disables its own button while streaming for the same reason), and an agent blocked on a
+ * question is answered rather than rebased.
+ *
+ * On mobile it is the ONLY way to trigger the resolve — the drag is mouse/pen only by design — and it stays
+ * live while the board is filtered, where the drag is deliberately withdrawn (AgentsView.grabCard): a press
+ * names its own target, so none of the reasons a filtered board refuses a drop apply to it.
+ *
+ * ARCHIVED CARDS ARE EXCLUDED. A follow-up message un-archives an agent (the daemon's registry.begin), so this
+ * button pressed in the archive would quietly put the card back on the board — a side effect nobody browsing a
+ * filing cabinet asked for. Restore first; the conflict will still be there. */
+const resolvable = computed(() => props.agent.archivedAt === undefined && dropActionFor(props.agent, `finished`) === `resolve`);
 const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
 const model = computed(() => (props.agent.model !== undefined ? modelLabelFor(props.agent.provider, props.agent.model) : undefined));
 const displayTitle = computed(() => props.agent.title ?? (props.agent.status === `draft` ? `New agent` : `Untitled agent`));
@@ -283,6 +300,30 @@ const grab = (event: PointerEvent): void => {
                 <Icon :name="activityIcon(agent.activity.tool)" class="shrink-0 text-2xs" />
                 <span class="truncate">{{ agent.activity.todo ?? [agent.activity.tool, agent.activity.target].filter(Boolean).join(" · ") }}</span>
             </p>
+
+            <!-- THE CONFLICTED CARD'S WAY OUT, ON THE CARD. A refused land is the one state on this board that
+                 is a decision point rather than a report, and the decision has an obvious first answer: the
+                 agent redoes the merge in its own worktree, where a wrong answer costs the user nothing. Until
+                 now that answer existed only as a drag to the Finished lane — mouse-and-pen only, gone while
+                 the board is filtered, and invisible until you tried it — or one route change away in the
+                 review panel, whose button this borrows its exact wording from. One vocabulary for one action.
+                 A real button rather than the hover-revealed link below: this is the press the card exists to
+                 collect, and an affordance that appears on hover is not one a touch device or a scanning eye
+                 ever finds. Its tooltip carries the mechanics the review panel states in prose beside its own
+                 copy of this button — which is what makes the press deliberate enough to skip the drop's
+                 confirmation dialog (see useAgentDrag.resolveNow). -->
+            <div v-if="resolvable" class="flex min-w-0">
+                <button
+                    type="button"
+                    :class="cmp.buttonPrimary('gap-0 whitespace-nowrap px-2 py-0.5 text-2xs')"
+                    v-tooltip.top="
+                        'Starts a turn: it rebases onto your workspace, resolves in its own worktree, and lands the result. Nothing is written to your workspace unless it succeeds — and you can stop the turn any time.'
+                    "
+                    @click.stop="emit('resolve')"
+                >
+                    <Icon name="sparkles" class="mr-1 text-2xs" />Have the agent resolve it
+                </button>
+            </div>
 
             <div class="flex min-w-0 items-center gap-2 text-2xs text-subtle" :class="dense ? 'min-w-32 flex-1' : ''">
                 <!-- The deliberate view-change: a contextual CTA that names its destination, so a plain card click

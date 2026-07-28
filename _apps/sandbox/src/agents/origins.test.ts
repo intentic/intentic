@@ -145,6 +145,49 @@ test("identify names an ARCHIVED agent — the roster the client mirrors no long
     });
 });
 
+test("a re-land after a rebase claims only the new delta, not the main-line commits the rebase pulled in", async () => {
+    const { work, worktrees, conversation } = await setup();
+    // c1 lands app.ts and the user reviews and commits it — the ordinary first half of a review.
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const first = await landAgent(worktrees, entryFor(conversation.repos));
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed app.ts");
+    const reviewed = await sh(work, "rev-parse", "HEAD");
+
+    // The agent keeps going: told the main tree moved on, it rebases onto it — so its branch now CONTAINS the
+    // user's commit — and lands a second, unrelated file.
+    await sh(conversation.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "rebase", reviewed);
+    await writeFile(join(conversation.cwd, "other.ts"), "c1 was here\n");
+    const second = await landAgent(worktrees, entryFor(first.repos));
+
+    // Only the new delta is this agent's. Measured from the frozen base it would ALSO claim app.ts, and the
+    // per-path expiry cannot save it: landedHead advanced PAST the commit of app.ts on this very land, so
+    // `landedHead..HEAD` is empty and the phantom claim would never retire. That is the chip that puts a stale
+    // session's title in the commit box and gets the same work committed twice.
+    const origins = createAgentOrigins({ agents: registryOf(entryFor(second.repos)), logger });
+    expect(await origins.forRepo("root", work)).toEqual({ "other.ts": ["c1"] });
+});
+
+test("a path the user committed BEFORE the land stays credited — only commits after it retire the claim", async () => {
+    const { work, worktrees, conversation } = await setup();
+    // Main moves while the agent works, on the very file the agent is editing. The worktree was branched
+    // before this commit, so the merge-base sits BEHIND it.
+    await writeFile(join(work, "app.ts"), edited(12));
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "user edits the last line");
+
+    // The agent lands a far-apart hunk of that same file, so its patch still applies over the user's commit.
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    const landed = await landAgent(worktrees, entryFor(conversation.repos));
+
+    // The agent's lines are sitting uncommitted in the tree RIGHT NOW, so it keeps the credit. This is why the
+    // expiry stays anchored at landedHead and is NOT folded into the merge-base for symmetry: from the
+    // merge-base, the user's EARLIER commit reads as "history has absorbed this path" and the agent's own
+    // uncommitted work gets handed to the user.
+    const origins = createAgentOrigins({ agents: registryOf(entryFor(landed.repos)), logger });
+    expect(await origins.forRepo("root", work)).toEqual({ "app.ts": ["c1"] });
+});
+
 test("the claim expires when the user commits — a file that goes dirty again is theirs, not the agent's", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));

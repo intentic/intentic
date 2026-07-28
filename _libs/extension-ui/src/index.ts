@@ -19,6 +19,7 @@ export {
     Icon,
     type IconName,
     InfoHint,
+    Markdown,
     Page,
     PageHeader,
     ProgressRing,

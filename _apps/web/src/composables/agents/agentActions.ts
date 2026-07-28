@@ -6,7 +6,7 @@ import { queryClient } from "../queryPersistence";
 import { router } from "../../router";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
-import { resolvePrompt } from "./conflictResolution";
+import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
 import { useAgents } from "./useAgents";
 
 /* The fleet's mutations, addressed by agent id — the true source for both surfaces that invoke them: the
@@ -70,7 +70,15 @@ export const landAgent = (id: string, mode: LandMode = `check`): Promise<LandRes
  * a description of a CURRENT refusal, and the two callers know it to different degrees of freshness (the
  * board holds none at all). One cheap GET makes both of them right, and makes the daemon the only thing that
  * ever decides what the agent is told to fix. */
-export const askAgentToResolve = async (id: string): Promise<void> => {
+
+/* Whether the turn actually went, and — when it didn't — the one sentence to say so. Two of the three answers
+ * here are refusals, and both of them used to be silent `return`s: the caller got a resolved promise and drew
+ * a card that was on its way to being fixed by nobody. The wording lives with the decision rather than at each
+ * call site, so the board's notice strip and the review panel's error line can't come to explain the same
+ * refusal two different ways. */
+export type ResolveAsk = { readonly sent: true } | { readonly sent: false; readonly why: string };
+
+export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
     const { agentById, open } = useAgents();
     const agent = agentById(id);
     if (agent !== undefined) {
@@ -80,15 +88,39 @@ export const askAgentToResolve = async (id: string): Promise<void> => {
     // A registered agent always has a tab by now (open() just made one); a card the roster has never heard of
     // has no conversation to send to, and inventing one would start a turn on the wrong agent.
     if (conversation === undefined) {
-        return;
+        return { sent: false, why: `That agent has no conversation left to send to.` };
     }
     const { conflicts } = await sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(id)}/diff`);
+    /* NOTHING FOR THE AGENT TO DO IS A REFUSAL, NOT A SEND — and the only guard that can be trusted, because it
+     * is the one made against the report the daemon holds RIGHT NOW.
+     *
+     * The review panel arrives here having already read the report and hidden its button when `mine` is empty
+     * (AgentConflictReport). The board cannot: the roster carries `status: "conflict"` and no blockers, so a
+     * card is armed on the fact of a refusal without knowing whose refusal it is. Both surfaces therefore ask
+     * the same question in the same place, once the report is in hand.
+     *
+     * Left ungated, a conflict held ENTIRELY by the user's own uncommitted edits sent the agent a prompt whose
+     * "What blocked the land:" section was empty — a turn spent telling it to rebase away nothing, ending in a
+     * land that refuses identically. The user's own half is the one thing a rebase provably cannot reach
+     * (conflictResolution.ts), so it is named here instead, in the terms of the fix that does work. */
+    const blockers = blockersOf(conflicts);
+    if (agentBlockers(blockers).length === 0) {
+        const yours = userBlockers(blockers).length;
+        return {
+            sent: false,
+            why:
+                yours > 0
+                    ? `A rebase can't reach this: ${yours === 1 ? `the blocked file is` : `all ${yours} blocked files are`} held by your own uncommitted edits. Commit or stash them, then land again.`
+                    : `Nothing left for the agent to rebase — open it to see what the land reported.`,
+        };
+    }
     // Dispatched, not awaited — `enqueue` runs the queue, and drainQueue awaits `send`, which does not settle
     // until the TURN does. Awaiting it here would hold the caller's busy flag across a multi-minute rebase and
     // set the panel's "resolving" state only once there was nothing left to resolve. `void` is what every
     // other send in this app does (ChatPanel): the turn reports itself in the transcript, which is where its
     // failures belong too — this function's own promise is about getting the message away.
     void conversation.enqueue(resolvePrompt(conflicts));
+    return { sent: true };
 };
 
 // Discard: drop the worktrees, the agent/<id> branches, and the registry entry. Irreversible.

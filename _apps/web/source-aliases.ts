@@ -25,6 +25,10 @@ const extensionAliases = Object.fromEntries(
 );
 
 export const sourceAliases = (): Record<string, string> => ({
+    // Listed before the barrel: a string alias also matches `<key>/…`, so the more specific subpath has to win
+    // the lookup. It exists so plain .ts (and its unit tests) can reach the markdown engine without loading
+    // the design system's component graph — see _libs/ui/src/markdown/index.ts.
+    "@intentic-app/ui/markdown": here("../../_libs/ui/src/markdown/index.ts"),
     "@intentic-app/ui": here("../../_libs/ui/src/index.ts"),
     "@intentic-app/api-contract": here("../../_libs/api-contract/src/index.ts"),
     "@intentic/sandbox-contract": here("../../_libs/sandbox-contract/src/index.ts"),

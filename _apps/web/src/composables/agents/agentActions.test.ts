@@ -1,4 +1,21 @@
+import type { LandConflict } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
+
+// The chat tabs agentActions sends through, swappable per test. Hoisted because the module factory below is.
+const chat = vi.hoisted(() => ({
+    conversations: { value: [] as { conversationId: string; isolated: { value: boolean }; enqueue: (prompt: string) => void }[] },
+    // Every prompt that reached a conversation — the assertion for "a turn was actually spent".
+    enqueued: [] as string[],
+}));
+// A registered tab: `isolated: false` keeps the fleet's draft join from carding it (see useAgents.fleet), which
+// is what this suite wants — the roster is empty here, so askAgentToResolve finds no agent to open and goes
+// straight to the part under test.
+const tab = (id: string) => ({
+    conversationId: id,
+    isolated: { value: false },
+    registered: { value: true },
+    enqueue: (prompt: string) => chat.enqueued.push(prompt),
+});
 
 // sandboxClient is the one thing left REAL here — the bug under test lived in the gap between agentActions and
 // the request that actually goes out, so a mock at that seam would assert the very thing that was wrong. What is
@@ -8,8 +25,11 @@ import { afterEach, expect, it, vi } from "vitest";
 // both consumers — sandboxClient reads `daemonUrl`/`active`, agentActions reads `sandboxKey`.
 vi.mock("@intentic-app/ui", () => ({ useDevice: () => ({ mobile: { value: false } }) }));
 vi.mock("../chat/useChat", () => ({
-    useChat: () => ({ conversations: { value: [] }, newChat: () => ({ conversationId: `c1` }) }),
+    // `active` is read by a module-scope watcher in useAgents (the "seen while you watch it" rule), which
+    // evaluates the moment that module loads.
+    useChat: () => ({ conversations: chat.conversations, active: { value: { conversationId: undefined } }, newChat: () => ({ conversationId: `c1` }) }),
     focusComposer: () => {},
+    openAgentConversation: () => {},
 }));
 vi.mock("../queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined } }));
 vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
@@ -19,19 +39,24 @@ vi.mock("../sandbox/useSandbox", () => ({
 }));
 vi.mock("../sandbox/sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => `session-token` }) }));
 
-const { landAgent } = await import("./agentActions");
+const { askAgentToResolve, landAgent } = await import("./agentActions");
 
 // Every request fetch was handed, as the Request the daemon would have received.
 const sent: Request[] = [];
-const stubFetch = (): void => {
+const stubFetch = (body: unknown = { landed: true }): void => {
     vi.stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
         sent.push(new Request(url, init));
-        return Promise.resolve(Response.json({ landed: true }));
+        return Promise.resolve(Response.json(body));
     });
 };
 
+// GET /agents/{id}/diff as the daemon would answer it for a refused land.
+const stubConflicts = (conflicts: readonly LandConflict[]): void => stubFetch({ repos: [], conflicts });
+
 afterEach(() => {
     sent.length = 0;
+    chat.conversations.value = [];
+    chat.enqueued.length = 0;
     vi.unstubAllGlobals();
 });
 
@@ -58,4 +83,52 @@ it("carries an explicit mode, so the conflict report's Merge is a different requ
     await landAgent(`a1`, `merge`);
     expect(sent[0]?.headers.get(`content-type`)).toBe(`application/json`);
     expect(await sent[0]?.json()).toEqual({ mode: `merge` });
+});
+
+/* WHO THE ASK IS FOR, decided against the report and not against the card. The board arms its "Have the agent
+ * resolve it" button on `status: "conflict"` alone — the roster carries no blockers — so the surface offering
+ * the ask is structurally unable to know whether a rebase could reach the conflict. Only this function, holding
+ * the freshly-read report, can; every caller (the card's button, the drag-to-Finished drop, the review panel's
+ * own button) therefore has to be able to be told no. */
+it("refuses the ask when every blocked path is the user's own uncommitted work — a rebase cannot reach it", async () => {
+    chat.conversations.value = [tab(`a1`)];
+    stubConflicts([{ repo: `root`, clean: 4, paths: [{ path: `src/app.ts`, reason: `workspace` }] }]);
+    const ask = await askAgentToResolve(`a1`);
+    // The failure this prevents: a turn spent on a prompt whose "What blocked the land:" section is empty,
+    // ending in a land that refuses identically — the agent cannot see the user's checkout, let alone stage it.
+    expect(chat.enqueued).toEqual([]);
+    expect(ask).toEqual({ sent: false, why: expect.stringContaining(`Commit or stash them`) });
+});
+
+// The repo-unavailable refusal (empty `paths`, `clean: 0`) reads as a conflict on the card and names nothing a
+// rebase could act on, so it is the same refusal wearing different copy — never a silently successful send.
+it("refuses the ask when the report names no blocked path at all", async () => {
+    chat.conversations.value = [tab(`a1`)];
+    stubConflicts([{ repo: `root`, clean: 0, paths: [] }]);
+    expect(await askAgentToResolve(`a1`)).toEqual({ sent: false, why: expect.stringContaining(`Nothing left for the agent to rebase`) });
+    expect(chat.enqueued).toEqual([]);
+});
+
+it("sends the composed prompt when the agent's own rebase could reach it, and fences off the user's half", async () => {
+    chat.conversations.value = [tab(`a1`)];
+    stubConflicts([
+        { repo: `root`, clean: 2, paths: [{ path: `src/app.ts`, reason: `diverged` }, { path: `logo.png`, reason: `binary` }] },
+        { repo: `docs`, clean: 0, paths: [{ path: `README.md`, reason: `workspace` }] },
+    ]);
+    expect(await askAgentToResolve(`a1`)).toEqual({ sent: true });
+    // One turn, carrying the agent's half as work and the user's half as hands-off — the split resolvePrompt
+    // exists to draw, asserted here because this is the call that decides a turn is worth spending at all.
+    expect(chat.enqueued).toHaveLength(1);
+    expect(chat.enqueued[0]).toContain(`src/app.ts`);
+    expect(chat.enqueued[0]).toContain(`logo.png`);
+    expect(chat.enqueued[0]).toContain(`Leave these alone`);
+});
+
+// A card whose conversation is gone (discarded, purged) has nothing to send to, and inventing one would start a
+// turn on the wrong agent. It reports rather than resolving quietly, like every other refusal here.
+it("refuses the ask when the agent has no conversation left", async () => {
+    stubConflicts([{ repo: `root`, clean: 0, paths: [{ path: `src/app.ts`, reason: `diverged` }] }]);
+    expect(await askAgentToResolve(`a1`)).toEqual({ sent: false, why: expect.stringContaining(`no conversation`) });
+    // Refused before the report is even read — there is no one to tell.
+    expect(sent).toEqual([]);
 });
