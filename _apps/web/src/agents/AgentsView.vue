@@ -91,8 +91,8 @@ const resolveTarget = computed(() => (pendingResolve.value === undefined ? undef
  *
  * The field is always on the header rather than hiding behind a glyph, so nobody has to learn that the board
  * can be searched at all. The cost is a header that WRAPS on a squeezed board — which is exactly what the
- * chat panel's drag handle produces (see NARROW_BOARD_PX below), so the bar is a .view-header-wrap and the
- * field grows into whatever room is left, the pills and New agent keeping theirs. */
+ * chat panel's drag handle produces (see NARROW_BOARD_PX below), so the bar is a .view-header-wrap. The field
+ * keeps a useful, capped width on a roomy board and wraps rather than being crushed when the board narrows. */
 const { query, needle, active: filtering, matches, snippetOf, archivedMatches, sessionMatches, searching } = useAgentFilter();
 const filterField = ref<InstanceType<typeof FilterField> | undefined>(undefined);
 
@@ -366,8 +366,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
         <!-- The bar WRAPS rather than shaving its contents: the filter field is permanent, and /agents lives in
              the shell's middle column, which the chat panel's drag handle squeezes to a few hundred pixels
              while the window stays wide. Given the choice between three shrunken controls on one line and the
-             field dropping to a full-width second row, the row wins — a 90px search box is not a search box.
-             The field is the only thing that grows; the pills and New agent keep their size. -->
+             field dropping to its own second row, the row wins — a 90px search box is not a search box. The
+             field stays compact on a roomy board; its auto margin leaves New agent anchored to the right. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1">
             <span class="shrink-0 text-sm font-semibold text-content">Agents</span>
             <!-- Two different facts, two different pills: "needs you" is BLOCKED work (an approval, a question,
@@ -393,7 +393,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 :busy="searching"
                 label="Filter agents by your messages"
                 placeholder="Filter by your messages…"
-                class="min-w-32 flex-1 basis-40"
+                class="mr-auto w-72 max-w-full shrink-0"
             />
             <!-- The tally, so an empty board under a query reads as "nothing matched" rather than as a board
                  that broke. Only while filtering: the lane headers already carry the unfiltered counts. -->

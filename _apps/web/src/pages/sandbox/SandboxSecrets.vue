@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
-import { cmp, Page, PageHeader, RowGroup, Segmented, StatusBadge } from "@intentic-app/ui";
+import { cmp, RowGroup, Segmented, StatusBadge } from "@intentic-app/ui";
 import Button from "primevue/button";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-import SecretEntryRow from "../components/SecretEntryRow.vue";
-import SecretField from "../components/SecretField.vue";
-import { readIntenticLines } from "../composables/intenticStream";
-import { sandboxRequest } from "../composables/sandbox/sandboxClient";
-import { errorMessage } from "../composables/useAsyncAction";
-import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { useSecretInventory } from "../composables/secrets/useSecrets";
+import SecretEntryRow from "../../components/SecretEntryRow.vue";
+import SecretField from "../../components/SecretField.vue";
+import { useCapabilities } from "../../composables/extensions/useCapabilities";
+import { readIntenticLines } from "../../composables/intenticStream";
+import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
+import { useSecretInventory } from "../../composables/secrets/useSecrets";
+import { errorMessage } from "../../composables/useAsyncAction";
 
 /* The one place every secret is visible: what the intent requires (and which resources use it), what's set,
  * what intentic generated, which capability credentials are connected, and whether the CI copy is current.
@@ -19,7 +19,7 @@ import { useSecretInventory } from "../composables/secrets/useSecrets";
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-const { inventory, inventoryPending, refreshInventory } = useSecretInventory();
+const { inventory, inventoryPending, missingRequiredCount, refreshInventory } = useSecretInventory();
 const { capabilities } = useCapabilities();
 const router = useRouter();
 
@@ -33,14 +33,13 @@ const yours = computed(() => inventory.value.filter((entry) => entry.kind === `e
 const generated = computed(() => inventory.value.filter((entry) => entry.kind === `generated`));
 const capabilityEntries = computed(() => inventory.value.filter((entry) => entry.kind === `capability`));
 const providers = computed(() => inventory.value.filter((entry) => entry.kind === `provider`));
-const missingCount = computed(() => inventory.value.filter((entry) => entry.status === `missing` && entry.kind === `env`).length);
 
 // Filter + scope keep the view readable as the secret count grows.
 const filter = ref(``);
 const scope = ref<`all` | `missing`>(`all`);
 const scopeOptions = computed(() => [
     { label: `All`, value: `all` as const },
-    { label: `Missing`, value: `missing` as const, badge: missingCount.value },
+    { label: `Missing`, value: `missing` as const, badge: missingRequiredCount.value },
 ]);
 const q = computed(() => filter.value.trim().toLowerCase());
 const filtering = computed(() => q.value !== `` || scope.value !== `all`);
@@ -110,15 +109,10 @@ const pushToCi = async (): Promise<void> => {
 </script>
 
 <template>
-    <Page width="wide">
-        <PageHeader
-            title="Secrets"
-            description="Everything lives inside your sandbox — the platform never sees a value. Your intent declares which secrets it needs; intentic generates the rest."
-        />
-
-        <div v-if="missingCount > 0" :class="cmp.alertWarning('mb-4')">
-            {{ missingCount }} required secret{{ missingCount === 1 ? ` is` : `s are` }} not set yet — deploys fail until every required value is in
-            place.
+    <div>
+        <div v-if="missingRequiredCount > 0" :class="cmp.alertWarning('mb-4')">
+            {{ missingRequiredCount }} required secret{{ missingRequiredCount === 1 ? ` is` : `s are` }} not set yet — deploys fail until every
+            required value is in place.
         </div>
         <div v-if="pushError" :class="cmp.alertDanger('mb-4')">{{ pushError }}</div>
 
@@ -260,5 +254,5 @@ const pushToCi = async (): Promise<void> => {
                 </RowGroup>
             </div>
         </template>
-    </Page>
+    </div>
 </template>

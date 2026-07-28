@@ -1,4 +1,5 @@
 import { oc } from "@orpc/contract";
+import { AgentTranscriptSchema } from "../events.js";
 import {
     AgentArchiveSchema,
     AgentChangesSchema,
@@ -41,6 +42,7 @@ export const agentsContract = {
     // never-carded conversations that are neither are `sessions.list`'s query, which matches by the same rule.
     search: oc.route({ method: "GET", path: "/agents/search" }).input(AgentSearchQuerySchema).output(AgentSearchResultSchema),
     get: oc.route({ method: "GET", path: "/agents/{id}" }).input(AgentIdSchema).output(AgentSummarySchema),
+    transcript: oc.route({ method: "GET", path: "/agents/{id}/transcript" }).input(AgentIdSchema).output(AgentTranscriptSchema),
     rename: oc.route({ method: "POST", path: "/agents/{id}/rename" }).input(AgentRenameSchema).output(AgentSummarySchema),
     seen: oc.route({ method: "POST", path: "/agents/{id}/seen" }).input(AgentIdSchema).output(AgentSummarySchema),
     seenAll: oc.route({ method: "POST", path: "/agents/seen" }).output(AgentsListSchema),

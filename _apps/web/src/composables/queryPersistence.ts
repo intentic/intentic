@@ -2,6 +2,7 @@ import type { PersistedClient } from "@tanstack/query-persist-client-core";
 import { persistQueryClient } from "@tanstack/query-persist-client-core";
 import { defaultShouldDehydrateQuery, QueryClient } from "@tanstack/vue-query";
 import { del, get, set } from "idb-keyval";
+import { throttleTrailing } from "./throttleTrailing";
 
 /* Persists the vue-query cache to IndexedDB so a reload paints the last-known workspace (tree, history,
  * panels, capabilities, environment) instantly instead of blocking on the daemon tunnel. Freshness is
@@ -19,6 +20,20 @@ export const queryClient = new QueryClient();
 
 let uninstall: (() => void) | undefined;
 
+// The cache fires an event per query settle, and each persist call structured-clones + writes the ENTIRE
+// dehydrated cache — with a busy workspace's Changes payload in it, an unthrottled persist meant a multi-MB
+// IndexedDB write for every refetch in a refetch-per-second storm. Latest-wins through one throttle window:
+// the first event writes immediately (a lone update persists instantly), the storm collapses to one write per
+// window. A write the window drops on tab close loses nothing that matters — the cache is a stale-while-
+// revalidate paint, refetched the moment the next session connects.
+const PERSIST_WINDOW_MS = 2000;
+let latestClient: PersistedClient | undefined;
+const flushPersist = throttleTrailing(() => {
+    if (latestClient !== undefined) {
+        void set(IDB_KEY, latestClient);
+    }
+}, PERSIST_WINDOW_MS);
+
 // Called from requireAuth AFTER the user resolves and BEFORE any route mounts, so hydration never races a
 // fetch. buster = user id: a different account on the same browser busts the previous user's cache.
 export const restorePersistedQueries = async (userId: string): Promise<void> => {
@@ -28,9 +43,10 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
     const [unsubscribe, restored] = persistQueryClient({
         queryClient,
         persister: {
-            // ponytail: writes the whole dehydrated cache on every cache event, unthrottled — writes are
-            // async and small; wrap persistClient in a trailing throttle if profiling ever shows jank.
-            persistClient: (client: PersistedClient) => set(IDB_KEY, client),
+            persistClient: (client: PersistedClient) => {
+                latestClient = client;
+                flushPersist();
+            },
             restoreClient: () => get<PersistedClient>(IDB_KEY),
             removeClient: () => del(IDB_KEY),
         },

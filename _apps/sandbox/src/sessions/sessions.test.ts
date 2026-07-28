@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
-import { listWorkspaceSessions, readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
+import { withRuntimeHistory } from "../agent/runtime-history.js";
+import { conversationSessionId, listWorkspaceSessions, readConversationSession, readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
 
 // Fake the SDK store the sessions module reads through. `listSessions` is newest-first; `getSessionMessages`
 // returns Anthropic-shaped turns (content is a string here for brevity).
@@ -204,4 +205,67 @@ test("a history-list title falling back to firstPrompt names the chat, not the i
     listSessions.mockResolvedValue([{ sessionId: "s0", firstPrompt: first, lastModified: 1 }]);
     const sessions = await listWorkspaceSessions("/work");
     expect(sessions[0]?.title).toBe("fix the config");
+});
+
+test("a replacement runtime session keeps the conversation's original user title", async () => {
+    listSessions.mockResolvedValue([
+        {
+            sessionId: "replacement",
+            firstPrompt: withRuntimeHistory("Continue.", [
+                { role: "user", text: "Investigate the blank chat." },
+                { role: "assistant", text: "I will trace hydration." },
+            ]),
+            lastModified: 1,
+        },
+    ]);
+    expect((await listWorkspaceSessions("/work"))[0]?.title).toBe("Investigate the blank chat.");
+});
+
+test("resolves the newest SDK session scoped exactly to one conversation worktree", async () => {
+    listSessions.mockResolvedValue([{ sessionId: "replacement", lastModified: 2 }]);
+
+    expect(await conversationSessionId("/history/worktrees/conversation-1")).toBe("replacement");
+    expect(listSessions).toHaveBeenCalledWith({ dir: "/history/worktrees/conversation-1", includeWorktrees: false, limit: 1 });
+});
+
+test("returns no conversation transcript before that worktree has an SDK session", async () => {
+    listSessions.mockResolvedValue([]);
+    expect(await readConversationSession("/history/worktrees/new-agent")).toBeUndefined();
+});
+
+test("runtime-handoff search indexes prior user prompts but not assistant prose or protocol", async () => {
+    listSessions.mockResolvedValue([{ sessionId: "handoff-search", customTitle: "chat", lastModified: 1 }]);
+    getSessionMessages.mockResolvedValue([
+        {
+            type: "user",
+            message: {
+                content: withRuntimeHistory("Continue.", [
+                    { role: "user", text: "Investigate the blank chat." },
+                    { role: "assistant", text: "I will inspect replayStoredSession." },
+                ]),
+            },
+        },
+    ]);
+
+    expect((await searchWorkspaceSessions("/work", "blank chat")).map((session) => session.id)).toEqual(["handoff-search"]);
+    expect(await searchWorkspaceSessions("/work", "replayStoredSession")).toEqual([]);
+    expect(await searchWorkspaceSessions("/work", "another AI runtime")).toEqual([]);
+});
+
+test("restores runtime-handoff history as ordinary bubbles", async () => {
+    const history = [
+        { role: "user" as const, text: "Investigate the blank chat." },
+        { role: "assistant" as const, text: "I will trace hydration." },
+        { role: "user" as const, text: "What model are you?" },
+    ];
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: withRuntimeHistory("Continue.", history) } },
+        { type: "assistant", message: { content: [{ type: "text", text: "Continuing now." }] } },
+    ]);
+
+    expect(await readWorkspaceSession("/history/worktrees/conversation-1", "replacement")).toEqual([
+        ...history,
+        { role: "user", text: "Continue." },
+        { role: "assistant", text: "Continuing now." },
+    ]);
 });

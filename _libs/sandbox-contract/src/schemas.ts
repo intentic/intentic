@@ -751,6 +751,11 @@ export const RepoChangesSchema = z.object({
     // additions/deletions describe the diff it is listed under, never a conflation of the two.
     staged: z.array(GitChangeSchema),
     unstaged: z.array(GitChangeSchema),
+    // How many changes were CUT from the two sides above (conflicts are never cut). A cloned monorepo or a
+    // mass delete carries six-figure change lists — a payload no panel can render and no browser should hold —
+    // so past the daemon's per-repo budget the lists arrive truncated and this carries the dropped count, which
+    // the panel adds to its badges and states under the group. Absent ⇒ the lists are complete.
+    truncated: z.number().optional(),
     // Where this repo stands against its remote; `ahead`/`behind` are 0 with no remote or no upstream.
     remote: GitRemoteStateSchema.optional(),
     // WHICH AGENT PUT IT THERE: repo-relative path → the agent ids that landed it, newest land first. Keyed by

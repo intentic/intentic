@@ -63,9 +63,41 @@
    leading-relaxed px-3 py-2`, so its line box is 1.625 × --text-xs and its padding is 1rem. A literal height
    silently becomes five-and-a-bit lines the next time that token moves. */
 .chat-prompt-text {
-    position: relative; /* anchors the clamp fade below; offset-free, so it costs nothing in the open state */
     max-height: calc(6 * 1.625 * var(--text-xs) + 1rem);
     overflow: hidden;
+}
+/* The box the clamp fade and the open/close chip are positioned against — the bubble's frame, NOT its
+   scroller. The distinction is the whole point of the split: past the cap .chat-prompt-text scrolls, and
+   anything anchored inside a scroller scrolls away with the text. The frame never moves, so the chip stays
+   on the bubble's bottom-right in both states without a sticky-in-a-scroller trick. */
+.chat-prompt-bubble {
+    position: relative;
+}
+/* The open/close control rides ON the bubble, over the 1.75rem of gradient the clamp already spends saying
+   "there is more of this" — the two say the same thing, so they share the same pixels. Below the bubble it
+   was a row of its own: ~24px of chrome under a 133px recall budget, on the one row of the transcript that
+   is always on screen. Icon-only for the same reason (the fade is the label), and it keeps the fade's own
+   end colour so it stays legible where an open bubble scrolls text underneath it. */
+.chat-prompt-toggle {
+    position: absolute;
+    right: 0.375rem;
+    bottom: 0.25rem;
+    border-radius: var(--radius-md);
+    padding: 0.125rem 0.25rem;
+    color: var(--color-subtle);
+    background: color-mix(in srgb, var(--color-overlay) 55%, var(--color-card));
+    /* An open bubble scrolls its text under the chip, so it needs an edge of its own to read as a control
+       floating over the text rather than as a smudge in it. */
+    border: 1px solid var(--color-line);
+    transition: color 120ms ease;
+}
+.chat-prompt-toggle:hover {
+    color: var(--color-content);
+}
+/* Clear of the scrollbar an open bubble grows past its cap — the chip is on the frame, so it would otherwise
+   sit on top of the thumb. */
+.chat-prompt-open .chat-prompt-toggle {
+    right: 0.75rem;
 }
 /* The "there is more of this" fade, applied only to a prompt the clamp actually cut (ChatMessageView measures
    it). An overlay INSIDE the bubble rather than a mask on it: a mask erases the ELEMENT — rounded border and

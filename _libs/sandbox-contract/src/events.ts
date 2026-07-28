@@ -146,6 +146,7 @@ export const RestoredMessageSchema = z.object({
 export type RestoredMessage = z.infer<typeof RestoredMessageSchema>;
 
 export const SessionTranscriptSchema = z.object({ messages: z.array(RestoredMessageSchema) });
+export const AgentTranscriptSchema = SessionTranscriptSchema.extend({ sessionId: z.string().optional() });
 
 // One frame from an agent turn, relayed to the UI. `kind`-discriminated. The daemon normalizes the SDK's
 // ~40 SDKMessage types down to this union: high-value block types get a dedicated frame

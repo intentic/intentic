@@ -58,10 +58,10 @@ const sessionSpec = (config: SyncConfig & { readonly localDir: string }): SyncSe
 // is two-way-safe, but relying on the default lets a version bump or a user's global mutagen config silently
 // switch it to a clobbering mode; pinning keeps conflicts flagged, never overwritten.
 //
-// No --ignore-vcs: a nested repo's .git is meant to travel (it is what makes a synced project a REPO inside the
-// sandbox rather than loose files under the root scope), and the one .git that must NOT is the workspace root's
-// pointer file — which --ignore-vcs misses anyway, since its patterns match directories. IGNORES carries the
-// anchored `/.git` that actually covers it; see the comment there.
+// No --ignore-vcs: its pattern set covers .git DIRECTORIES only, and the shapes that actually appear here —
+// the pointer FILES the daemon leaves at /work/.git and inside every relocated repo — slip straight through
+// it. IGNORES carries the bare `.git` that covers every shape at every level; see the comment there. Git
+// state travels by git's own protocol instead (git-bridge.ts).
 export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): string[] => [
     "sync",
     "create",
@@ -127,7 +127,7 @@ export const ensureSyncSession = (mutagen: string, config: SyncConfig, log: Log)
     }
     if (live !== undefined) {
         log(
-            "the running sync session was created by an older agent — recreating it so this version's rules apply (a project's .git travels with it; /work's own pointer file doesn't).",
+            "the running sync session was created by an older agent — recreating it so this version's rules apply (no .git file-syncs anymore; commits arrive via the git bridge instead).",
         );
         spawnSync(mutagen, ["sync", "terminate", spec.name], { stdio: "ignore" });
     }

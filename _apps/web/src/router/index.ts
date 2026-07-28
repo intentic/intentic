@@ -92,7 +92,6 @@ const routes: RouteRecordRaw[] = [
                 component: () => import(`../pages/workspace/Workspace.vue`),
             },
             { path: `drafts`, name: `drafts`, meta: { title: `Drafts` }, component: () => import(`../pages/Drafts.vue`) },
-            { path: `secrets`, name: `secrets`, meta: { title: `Secrets` }, component: () => import(`../pages/Secrets.vue`) },
             { path: `ext/:ext/:key?`, name: `extension`, component: () => import(`../pages/ExtensionHost.vue`) },
             { path: `settings/:tab?`, name: `settings`, meta: { title: `Settings` }, component: () => import(`../pages/SettingsHub.vue`) },
         ],
@@ -127,7 +126,8 @@ export const router = createRouter({
  * GENUINELY gone (a broken deploy): one reload per destination, then the old silent abort; cleared by any
  * navigation that lands, so the next redeploy gets its one reload again. */
 const CHUNK_RELOADED_KEY = `intentic.chunkReloaded`;
-const STALE_CHUNK_MESSAGE = /error loading dynamically imported module|failed to fetch dynamically imported module|importing a module script failed|unable to preload css/i;
+const STALE_CHUNK_MESSAGE =
+    /error loading dynamically imported module|failed to fetch dynamically imported module|importing a module script failed|unable to preload css/i;
 router.onError((error, to) => {
     if (!STALE_CHUNK_MESSAGE.test(String(error))) {
         return;

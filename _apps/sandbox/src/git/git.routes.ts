@@ -1,6 +1,6 @@
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { gitContract, type GitChanges, type RepoChanges } from "@intentic/sandbox-contract";
+import { gitContract, type GitChange, type GitChanges, type RepoChanges } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
@@ -15,6 +15,31 @@ import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
 // How long one Changes scan's result stands in for the next caller's. Long enough to swallow the browser's
 // per-batch refetch storm, short enough that a save still shows up in the panel as it happens.
 const COALESCE_MS = 500;
+
+// The most changes ONE repo ships per scan. A cloned monorepo or a mass delete reports six-figure lists, and
+// every one of those rows would be zod-validated on this event loop, serialized to every connected browser up
+// to once a second, and rendered as real DOM — which is how a big clone used to take the whole UI down. The
+// panel is a review surface, not a pager: past the budget the remainder is a COUNT (`truncated`), and whole-repo
+// actions (commit all, discard repo) still cover it because they never enumerate paths. Conflicts are exempt —
+// they block every commit in the repo, so all of them must reach the user, and staged outranks unstaged for
+// what's left because it is what a commit is about to record.
+export const MAX_REPO_CHANGES = 500;
+
+// Apply the budget across the two cuttable sides; `truncated` is what fell off (0 ⇒ shipped whole).
+export const capRepoChanges = (
+    conflicted: GitChange[],
+    staged: GitChange[],
+    unstaged: GitChange[],
+): { conflicted: GitChange[]; staged: GitChange[]; unstaged: GitChange[]; truncated: number } => {
+    const stagedBudget = Math.max(0, MAX_REPO_CHANGES - conflicted.length);
+    const unstagedBudget = Math.max(0, stagedBudget - staged.length);
+    return {
+        conflicted,
+        staged: staged.length > stagedBudget ? staged.slice(0, stagedBudget) : staged,
+        unstaged: unstaged.length > unstagedBudget ? unstaged.slice(0, unstagedBudget) : unstaged,
+        truncated: Math.max(0, staged.length - stagedBudget) + Math.max(0, unstaged.length - unstagedBudget),
+    };
+};
 
 const exists = async (path: string): Promise<boolean> => {
     try {
@@ -146,11 +171,13 @@ export const createGitRoutes = (services: Services) => {
                     // took the sync affordance with it.
                     const publishable = branch !== undefined && remote.remote !== undefined && remote.upstream === undefined;
                     if (conflicted.length > 0 || staged.length > 0 || unstaged.length > 0 || remote.ahead > 0 || remote.behind > 0 || publishable) {
-                        // Narrowed to the paths this scan actually reports: an agent's landed delta outlives the
+                        const capped = capRepoChanges(conflicted, staged, unstaged);
+                        // Narrowed to the paths this scan actually reports (the capped lists — attribution
+                        // decorates rows, and a cut row isn't one): an agent's landed delta outlives the
                         // review (the paths stay in `base..landedTip` until the branch goes), so shipping it
                         // whole would attribute files that are no longer changed at all.
                         const dirty = new Set(
-                            [...conflicted, ...staged, ...unstaged].flatMap((change) =>
+                            [...capped.conflicted, ...capped.staged, ...capped.unstaged].flatMap((change) =>
                                 change.from === undefined ? [change.path] : [change.path, change.from],
                             ),
                         );
@@ -158,9 +185,10 @@ export const createGitRoutes = (services: Services) => {
                         return {
                             repo: candidate.repo,
                             ...(branch !== undefined ? { branch } : {}),
-                            conflicted,
-                            staged,
-                            unstaged,
+                            conflicted: capped.conflicted,
+                            staged: capped.staged,
+                            unstaged: capped.unstaged,
+                            ...(capped.truncated > 0 ? { truncated: capped.truncated } : {}),
                             remote,
                             ...(Object.keys(origins).length > 0 ? { origins } : {}),
                         };

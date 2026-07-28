@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -264,4 +264,67 @@ test("integration: a nested repo scopes under its slash id and restores after de
     await rm(nested, { recursive: true, force: true });
     expect(await history.restore(first ?? "")).toBe(true);
     expect(await readFile(join(nested, "readme.md"), "utf8")).toBe("v1\n");
+});
+
+// The heal-vs-reap boundary, over REAL git dirs parked the daemon's way (--separate-git-dir, pointer file in
+// the worktree). Healing is for accidents; a deletion must reap the parked git dir to /history/trash instead of
+// resurrecting the repo as phantom deletions forever.
+test("integration: heal rewrites an accidentally deleted pointer; deletions reap the parked git dir", async () => {
+    const base = await tempBase();
+    const work = join(base, "work");
+    const historyRoot = join(base, "history");
+    const sh = async (cwd: string, ...args: string[]) => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
+    await mkdir(join(historyRoot, "gits"), { recursive: true });
+    const makeRepo = async (name: string): Promise<string> => {
+        const dir = join(work, name);
+        await mkdir(dir, { recursive: true });
+        await writeFile(join(dir, "readme.md"), "v1\n");
+        await sh(dir, "init", "-q", "--separate-git-dir", repoGitDir(historyRoot, name));
+        await sh(dir, "add", "-A");
+        await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init");
+        return dir;
+    };
+    const keep = await makeRepo("keep");
+    const gone = await makeRepo("gone");
+    const emptied = await makeRepo("emptied");
+    const lingering = await makeRepo("lingering");
+    const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger });
+
+    // keep: only the pointer went missing, the tracked file is still on disk — an accident, healed.
+    await rm(join(keep, ".git"));
+    // gone: the whole worktree went — reaped outright.
+    await rm(gone, { recursive: true, force: true });
+    // emptied: tracked files AND pointer deleted; only a sync-ignored remnant keeps the dir alive — reaped.
+    await rm(join(emptied, "readme.md"));
+    await rm(join(emptied, ".git"));
+    await mkdir(join(emptied, "node_modules"), { recursive: true });
+    // lingering: tracked files deleted but the pointer survived (sync can't remove ignored paths) — held for a
+    // grace cycle first, then reaped with the pointer.
+    await rm(join(lingering, "readme.md"));
+    await mkdir(join(lingering, "node_modules"), { recursive: true });
+
+    await history.snapshot("interval");
+    expect(await readFile(join(keep, ".git"), "utf8")).toContain(repoGitDir(historyRoot, "keep"));
+    expect(existsSync(repoGitDir(historyRoot, "keep"))).toBe(true);
+    expect(existsSync(repoGitDir(historyRoot, "gone"))).toBe(false);
+    expect(existsSync(repoGitDir(historyRoot, "emptied"))).toBe(false);
+    // Still within the grace window: nothing reaped yet, and crucially the pointer was NOT healed away.
+    expect(existsSync(repoGitDir(historyRoot, "lingering"))).toBe(true);
+
+    // The grace window elapses (Date only — git still runs for real) and the next cycle reaps.
+    const realNow = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(realNow + 120_000);
+    try {
+        await history.snapshot("interval");
+    } finally {
+        vi.restoreAllMocks();
+    }
+    expect(existsSync(repoGitDir(historyRoot, "lingering"))).toBe(false);
+    expect(existsSync(join(lingering, ".git"))).toBe(false);
+
+    // Every reaped git dir is parked under trash, recoverable — never erased.
+    const trash = await readdir(join(historyRoot, "trash"));
+    expect(trash.some((entry) => entry.startsWith("gone-"))).toBe(true);
+    expect(trash.some((entry) => entry.startsWith("emptied-"))).toBe(true);
+    expect(trash.some((entry) => entry.startsWith("lingering-"))).toBe(true);
 });

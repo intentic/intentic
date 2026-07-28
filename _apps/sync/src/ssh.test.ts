@@ -60,12 +60,12 @@ describe("mutagenCreateArgs", () => {
         expect(args.indexOf("/home/u/proj")).toBeLessThan(args.indexOf("intentic-sync-x:/work"));
     });
 
-    // --ignore-vcs would re-block a nested repo's .git — the thing that makes a synced project a REPO in the
-    // sandbox — while still missing the root pointer FILE its directory-only patterns can't match.
-    it("does not pass --ignore-vcs, and anchors the root .git ignore so only /work's own pointer file is excluded", () => {
+    // --ignore-vcs covers .git DIRECTORIES only and misses the daemon's pointer FILES; the bare `.git` pattern
+    // covers every shape at every level — no git state file-syncs (the bridge carries it by git protocol).
+    it("does not pass --ignore-vcs, and ignores .git at every level so no git state ever file-syncs", () => {
         expect(args).not.toContain("--ignore-vcs");
-        expect(IGNORES).toContain("/.git");
-        expect(IGNORES).not.toContain(".git");
+        expect(IGNORES).toContain(".git");
+        expect(IGNORES).not.toContain("/.git");
     });
 
     // A drifted session is recreated, and a recreate must not quietly resume a sync the user paused.
@@ -96,7 +96,7 @@ describe("sessionMatchesSpec", () => {
 
     it("rejects an ignore set that gained, lost, or reordered a pattern", () => {
         expect(sessionMatchesSpec(live({ paths: [...IGNORES, ".pnpm-store"] }), spec)).toBe(false);
-        expect(sessionMatchesSpec(live({ paths: IGNORES.filter((pattern) => pattern !== "/.git") }), spec)).toBe(false);
+        expect(sessionMatchesSpec(live({ paths: IGNORES.filter((pattern) => pattern !== ".git") }), spec)).toBe(false);
         expect(sessionMatchesSpec(live({ paths: IGNORES.toReversed() }), spec)).toBe(false);
     });
 

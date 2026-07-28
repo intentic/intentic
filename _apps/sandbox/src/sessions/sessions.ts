@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
 import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
+import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import { stripTurnPreamble } from "../agent/turn-preamble.js";
 import { matchPrompts, readSessionPrompts } from "./prompt-index.js";
@@ -46,7 +47,9 @@ const promptTitle = (firstPrompt: string | undefined): string | undefined => {
         return undefined;
     }
     const { text, attachments } = stripAttachmentNote(stripTurnPreamble(firstPrompt));
-    return text.length > 0 ? text : attachments.map((path) => basename(path)).join(", ") || undefined;
+    const runtime = parseRuntimeHistory(text);
+    const title = runtime?.history.find((message) => message.role === "user")?.text ?? runtime?.prompt ?? text;
+    return title.length > 0 ? title : attachments.map((path) => basename(path)).join(", ") || undefined;
 };
 
 export const listWorkspaceSessions = async (dir: string): Promise<SessionSummary[]> => {
@@ -158,7 +161,13 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
             if (text.length > 0) {
                 const stripped = stripAttachmentNote(stripTurnPreamble(text));
                 const attachments = stripped.attachments.map((path) => (path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path));
-                if (stripped.text.length > 0 || attachments.length > 0) {
+                const runtime = parseRuntimeHistory(stripped.text);
+                if (runtime !== undefined) {
+                    out.push(...runtime.history);
+                    if (runtime.prompt.length > 0 || attachments.length > 0) {
+                        out.push({ role: "user", text: runtime.prompt, ...(attachments.length > 0 ? { attachments } : {}) });
+                    }
+                } else if (stripped.text.length > 0 || attachments.length > 0) {
                     out.push({ role: "user", text: stripped.text, ...(attachments.length > 0 ? { attachments } : {}) });
                 }
             }
@@ -205,4 +214,18 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
         }
     }
     return out;
+};
+
+// A fleet conversation is durable across provider/runtime switches; a runtime session id is not. Its dedicated
+// worktree directory is the stable SDK project key, so the newest session scoped EXACTLY to that directory is
+// the transcript the card means. `includeWorktrees: false` prevents a sibling agent's newer session winning.
+export const conversationSessionId = async (dir: string): Promise<string | undefined> =>
+    (await listSessions({ dir, includeWorktrees: false, limit: 1 }))[0]?.sessionId;
+
+export const readConversationSession = async (dir: string): Promise<{ sessionId: string; messages: RestoredMessage[] } | undefined> => {
+    const sessionId = await conversationSessionId(dir);
+    if (sessionId === undefined) {
+        return undefined;
+    }
+    return { sessionId, messages: await readWorkspaceSession(dir, sessionId) };
 };

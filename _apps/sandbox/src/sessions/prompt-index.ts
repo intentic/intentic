@@ -1,5 +1,6 @@
 import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
+import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { stripTurnPreamble } from "../agent/turn-preamble.js";
 
 /* What the USER said, per session — the one thing the fleet filter matches on.
@@ -36,21 +37,28 @@ const stored = new Map<string, string[]>();
 const routed = new Map<string, string[]>();
 const ROUTED_PER_SESSION = 200;
 
-// One stored prompt as the user typed it: without the turn preamble the daemon prepends and without the
-// trailing attachment note it appends. Both are protocol stored verbatim in the transcript, and matching them
-// would let "dependencies" or "attached" hit every agent that ever ran with a setup notice. Idempotent, so
-// the routed side can run it over a prompt the injections have not been applied to yet.
-const cleanPrompt = (text: string): string => stripAttachmentNote(stripTurnPreamble(text)).text.trim();
+// Stored prompts without daemon protocol. A runtime handoff carries earlier roles inside one SDK user message;
+// unfold its USER half so the replacement session stays searchable by everything the person asked before the
+// switch, while assistant prose and the handoff labels remain excluded.
+const cleanPrompts = (text: string): string[] => {
+    const stripped = stripAttachmentNote(stripTurnPreamble(text)).text;
+    const runtime = parseRuntimeHistory(stripped);
+    const prompts =
+        runtime === undefined
+            ? [stripped]
+            : [...runtime.history.filter((message) => message.role === "user").map((message) => message.text), runtime.prompt];
+    return prompts.map((prompt) => prompt.trim()).filter((prompt) => prompt.length > 0);
+};
 
 // A prompt the daemon is routing to a session right now — a turn's own prompt, or a message steered into a
 // running one. Searchable from this moment, whether or not the transcript has been flushed.
 export const recordPrompt = (sessionId: string, prompt: string): void => {
-    const cleaned = cleanPrompt(prompt);
+    const cleaned = cleanPrompts(prompt);
     if (cleaned.length === 0) {
         return;
     }
     const held = routed.get(sessionId) ?? [];
-    held.push(cleaned);
+    held.push(...cleaned);
     routed.set(sessionId, held.slice(-ROUTED_PER_SESSION));
 };
 
@@ -75,10 +83,7 @@ const promptsOf = (messages: readonly { type: string; message?: unknown }[]): st
                       .filter((block) => block.type === "text" && typeof block.text === "string")
                       .map((block) => block.text)
                       .join("");
-        const cleaned = cleanPrompt(text);
-        if (cleaned.length > 0) {
-            out.push(cleaned);
-        }
+        out.push(...cleanPrompts(text));
     }
     return out;
 };

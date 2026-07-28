@@ -5,10 +5,11 @@ import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import Popover from "primevue/popover";
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useAuth } from "../composables/useAuth";
+import { useMissingSecretCount } from "../composables/secrets/useSecrets";
 import { useSandbox } from "../composables/sandbox/useSandbox";
+import { useAuth } from "../composables/useAuth";
 import { bashCommand } from "../environments/scriptCommand";
 
 /* Rail control to switch between the user's sandboxes (owned + shared) or add another. The active sandbox drives
@@ -21,6 +22,13 @@ const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
 const { entitlements, upgradeOpen } = useAuth();
+const { missingRequiredCount } = useMissingSecretCount();
+const switcherLabel = computed(() => {
+    const name = sandbox.active.value?.name ?? `Sandboxes`;
+    return missingRequiredCount.value === 0
+        ? name
+        : `${name} — ${missingRequiredCount.value} required secret${missingRequiredCount.value === 1 ? `` : `s`} missing`;
+});
 
 const panel = ref<InstanceType<typeof Popover> | null>(null);
 
@@ -99,25 +107,39 @@ const confirmRemove = async (): Promise<void> => {
 </script>
 
 <template>
-    <!-- The rail's top control: a live chip for the active sandbox (initial + online status), click to switch. -->
-    <button
-        type="button"
-        class="sandbox-switcher relative flex items-center justify-center overflow-hidden rounded-lg border border-line transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
-        :class="route.path.startsWith('/sandbox') ? 'bg-primary-600/15 text-link' : 'bg-card text-muted'"
-        aria-label="Switch sandbox"
-        v-tooltip.right="sandbox.active.value?.name ?? 'Sandboxes'"
-        @click="panel?.toggle($event)"
-    >
-        <img v-if="sandbox.active.value?.image" :src="sandbox.active.value.image" alt="" class="h-full w-full object-cover" />
-        <span v-else-if="sandbox.active.value?.name" class="text-base font-semibold uppercase text-content">{{
-            sandbox.active.value.name.charAt(0)
-        }}</span>
-        <Icon name="server" v-else class="text-lg" />
+    <!-- The rail's top control: a live chip for the active sandbox (initial + online status), click to switch.
+         The corner overlays are siblings of the button, not children: the button clips (overflow-hidden is what
+         crops a custom image to the tile's rounded square), so an overlay inside it loses whatever hangs past
+         the edge — and both of these are meant to hang past it. The wrapper carries the positioning context;
+         pointer-events-none keeps them from stealing the click that opens the switcher. -->
+    <span class="relative flex">
+        <button
+            type="button"
+            class="sandbox-switcher flex items-center justify-center overflow-hidden rounded-lg border border-line transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
+            :class="route.path.startsWith('/sandbox') ? 'bg-primary-600/15 text-link' : 'bg-card text-muted'"
+            :aria-label="`Switch sandbox: ${switcherLabel}`"
+            v-tooltip.right="switcherLabel"
+            @click="panel?.toggle($event)"
+        >
+            <img v-if="sandbox.active.value?.image" :src="sandbox.active.value.image" alt="" class="h-full w-full object-cover" />
+            <span v-else-if="sandbox.active.value?.name" class="text-base font-semibold uppercase text-content">{{
+                sandbox.active.value.name.charAt(0)
+            }}</span>
+            <Icon name="server" v-else class="text-lg" />
+        </button>
+        <!-- Required secrets the sandbox is missing. aria-hidden because the button's own label already says it
+             in words — a bare number read out of context tells a screen reader nothing. -->
         <span
-            class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card"
+            v-if="missingRequiredCount > 0"
+            class="pointer-events-none absolute -right-1 -top-1 min-w-4 rounded-full bg-warning/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-warning"
+            aria-hidden="true"
+            >{{ missingRequiredCount > 99 ? `99+` : missingRequiredCount }}</span
+        >
+        <span
+            class="pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card"
             :class="sandbox.reachable.value ? 'bg-success' : 'bg-subtle'"
         ></span>
-    </button>
+    </span>
 
     <Popover ref="panel" append-to="body">
         <div class="flex w-64 flex-col gap-0.5 p-1">

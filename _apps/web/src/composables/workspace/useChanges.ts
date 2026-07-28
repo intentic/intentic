@@ -266,7 +266,16 @@ export function useChanges() {
     // against the fleet roster alone: that roster is the live board and drops archived agents, while a landing
     // outlives the card — see OriginAgentSchema in the contract for why the identity rides the review instead.
     const originAgents = computed<Readonly<Record<string, OriginAgent>>>(() => query.data.value?.originAgents ?? {});
-    const count = computed(() => repos.value.reduce((total, repo) => total + repo.staged.length + repo.unstaged.length, 0));
+    // Every reviewable row, including conflicts (they block commits — the badge undercounting exactly the state
+    // that needs attention was a bug) and the rows the daemon truncated past its per-repo budget: the badge
+    // reports how much work EXISTS, not how much of it got shipped.
+    const count = computed(
+        () =>
+            repos.value.reduce(
+                (total, repo) => total + repo.conflicted.length + repo.staged.length + repo.unstaged.length + (repo.truncated ?? 0),
+                0,
+            ),
+    );
     const hasChanges = computed(() => count.value > 0);
     // How much a plain Commit would record, across every repo — what the commit box reads out, and what decides
     // whether the button is "Commit" or "Commit all". Ahead/behind stay off this summary: sync is a per-repo act

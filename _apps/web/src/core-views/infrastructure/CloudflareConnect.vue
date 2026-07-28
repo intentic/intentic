@@ -71,7 +71,7 @@ const connect = async (): Promise<void> => {
         <template v-if="tokenAlreadySet">
             <p class="text-sm text-muted">Your sandbox already has a Cloudflare token. Enable it so this service can be reached on your domain.</p>
             <div class="flex items-center justify-between gap-3">
-                <RouterLink to="/secrets" class="text-xs text-link hover:underline">Replace the token on the Secrets page</RouterLink>
+                <RouterLink to="/sandbox/secrets" class="text-xs text-link hover:underline">Replace the token in Sandbox Secrets</RouterLink>
                 <Button label="Enable Cloudflare" :loading="submitting" @click="connect">
                     <template #icon><Icon name="check" /></template>
                 </Button>
@@ -118,7 +118,13 @@ const connect = async (): Promise<void> => {
             <div v-else-if="zonesError" :class="cmp.alertDanger('text-2xs')">{{ zonesError }}</div>
             <label v-else-if="zones.length > 1" class="ui-field">
                 <span class="ui-field-label">Cloudflare zone</span>
-                <Picker v-model="selectedZone" :options="zoneOptions" placeholder="Pick the domain to use" class="w-full" aria-label="Cloudflare zone" />
+                <Picker
+                    v-model="selectedZone"
+                    :options="zoneOptions"
+                    placeholder="Pick the domain to use"
+                    class="w-full"
+                    aria-label="Cloudflare zone"
+                />
                 <span class="text-xs text-muted">This token can reach several domains — choose which one to use.</span>
             </label>
             <p v-else-if="selectedZone" class="text-xs text-success">

@@ -81,17 +81,30 @@ emit() {
 # src/system/system.routes.ts) — so a finished agent's session would never dim, and the panel's "clear
 # finished terminals" sweep could never take it. Both creation forms take the same flags; nothing needs the
 # shell window, since agent/job sessions are attach-only (src/terminal/terminal.ts).
-create=(new-window -t "=$session:")
-tmux has-session -t "=$session" 2>/dev/null || create=(new-session -d -s "$session")
-pane="$(tmux "${create[@]}" -P -F '#{pane_id}' -n "$name" -c "$PWD" ${envflags[@]+"${envflags[@]}"} "bash $d/runner")" || fallback
+window=(-P -F '#{pane_id}' -n "$name" -c "$PWD" ${envflags[@]+"${envflags[@]}"} "bash $d/runner")
+attach() { tmux new-window -t "=$session:" "${window[@]}"; }
+create() { tmux new-session -d -s "$session" "${window[@]}"; }
+# Which form is right depends on whether the session exists RIGHT NOW — and concurrent commands flip that under
+# us in BOTH directions: two first commands race to create it, and the prune below destroys a session whose
+# windows are all dead just as another command is about to add one to it. So both forms are always tried,
+# starting with the one has-session makes likely. Only the FIRST attempt's stderr is dropped — that is the
+# expected racy miss ("duplicate session" / "can't find session"); the retry's failure is the real one and must
+# reach the caller, and only then does fail-open drop the command out of tmux entirely.
+if tmux has-session -t "=$session" 2>/dev/null; then
+    pane="$(attach 2>/dev/null)" || pane="$(create)" || fallback
+else
+    pane="$(create 2>/dev/null)" || pane="$(attach)" || fallback
+fi
 [ -n "${INTENTIC_TERMINAL_LOGS_DIR:-}" ] && logfile="$INTENTIC_TERMINAL_LOGS_DIR/$session-$pane.log"
 
 # Prune windows of finished commands, so the last output stays readable until the next command but dead
 # windows don't accumulate. AFTER this command's window exists, never before: with no bootstrap shell holding
 # the session open, a session whose windows are ALL dead (every command finished) would be destroyed by its
 # own prune, and the creation above would then have no session to add a window to.
+# Concurrent commands can both observe the same dead window; the first kill wins and the second target is gone.
+# That cleanup race is expected, so keep tmux's "can't find window" diagnostic out of an unrelated tool result.
 tmux list-panes -s -t "=$session" -F '#{pane_dead} #{window_id}' 2>/dev/null \
-    | awk '$1==1{print $2}' | xargs -rn1 tmux kill-window -t
+    | awk '$1==1{print $2}' | xargs -rn1 tmux kill-window -t 2>/dev/null
 
 # A SIGTERM (the SDK's Bash timeout, or the daemon runner's abort/watchdog) takes the pane down with the
 # wrapper so timeout semantics match the plain Bash tool, and still returns whatever the command printed

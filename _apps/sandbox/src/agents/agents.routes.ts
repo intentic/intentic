@@ -1,4 +1,4 @@
-import { agentsContract, type AgentChange, type AgentRepoChanges, type GitChange } from "@intentic/sandbox-contract";
+import { agentsContract, type AgentChange, type AgentRepoChanges, type GitChange, runsClaudeCode } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
@@ -28,6 +28,10 @@ export const createAgentsRoutes = (services: Services) => {
             throw new ORPCError("CONFLICT", { message: "the agent's turn is running — wait for it to finish" });
         }
     };
+    const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "provider" | "harness">): Promise<string | undefined> =>
+        runsClaudeCode(agent.provider, agent.harness)
+            ? services.sessions.sessionIdForConversation(services.agentWorktrees.conversationDir(agent.id))
+            : Promise.resolve(undefined);
     return {
         // Every roster read carries the revision it was taken at, so the browser can tell this answer apart from
         // the /events snapshots racing it — see AgentsListSchema.
@@ -52,10 +56,14 @@ export const createAgentsRoutes = (services: Services) => {
                     if (agent.title?.toLowerCase().includes(needle) === true) {
                         return { id: agent.id };
                     }
-                    if (agent.sessionId === undefined) {
+                    const sessionId = await sdkSessionIdOf(agent);
+                    if (sessionId === undefined) {
                         return undefined;
                     }
-                    const snippet = matchPrompts(await services.sessions.prompts(services.workspace.root, agent.sessionId), needle);
+                    const snippet = matchPrompts(
+                        await services.sessions.prompts(services.agentWorktrees.conversationDir(agent.id), sessionId),
+                        needle,
+                    );
                     return snippet === undefined ? undefined : { id: agent.id, snippet };
                 }),
             );
@@ -67,6 +75,13 @@ export const createAgentsRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
             }
             return summary;
+        }),
+        transcript: i.transcript.handler(async ({ input }) => {
+            const agent = entryOf(input.id);
+            if (!runsClaudeCode(agent.provider, agent.harness)) {
+                return { messages: [] };
+            }
+            return (await services.sessions.readConversation(services.agentWorktrees.conversationDir(input.id))) ?? { messages: [] };
         }),
         // Legal mid-turn (no notRunning): a title touches no worktree state, and the registry re-reads the
         // entry at begin/finish, so the rename survives a running turn.
