@@ -18,12 +18,13 @@ const LIMIT = 100;
 const SERVER_DEBOUNCE_MS = 50;
 
 export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
-    const { tree, truncated: treeTruncated, error: treeError, isLoading } = useWorkspaceTree();
+    const { tree, rootHidden, error: treeError, isLoading } = useWorkspaceTree();
     const { includeIgnored } = useLayout();
 
     // Every non-ignored file path in the eager tree (ignored entries are listed grayed but excluded here,
-    // matching the daemon's filtered sweep), plus whether ANY dir's child list was cut by the entry cap — the
-    // response-level flag only covers the root's own entries, so a deep cut would otherwise read as complete.
+    // matching the daemon's filtered sweep), plus whether the tree is INCOMPLETE anywhere — i.e. holds a dir the
+    // breadth-first walk never listed (no `children`; it lazy-loads on expand). The client can't answer from the
+    // tree alone then, so the query falls back to the daemon's sweep.
     const clientTree = computed<{ paths: readonly string[]; cut: boolean }>(() => {
         const paths: string[] = [];
         let cut = false;
@@ -32,12 +33,11 @@ export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
                 if (node.ignored === true) {
                     continue;
                 }
-                if (node.truncated === true) {
-                    cut = true;
-                }
                 if (node.type === `file`) {
                     paths.push(node.path);
-                } else if (node.children !== undefined) {
+                } else if (node.children === undefined) {
+                    cut = true;
+                } else {
                     walk(node.children);
                 }
             }
@@ -46,7 +46,7 @@ export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
         return { paths, cut };
     });
 
-    const serverMode = computed(() => includeIgnored.value || treeTruncated.value || clientTree.value.cut);
+    const serverMode = computed(() => includeIgnored.value || rootHidden.value > 0 || clientTree.value.cut);
     const mode = ref<WorkspaceSearchMode>(`files`);
     const serverActive = computed(() => active.value && serverMode.value);
     const server = useWorkspaceSearch(query, serverActive, mode, SERVER_DEBOUNCE_MS);

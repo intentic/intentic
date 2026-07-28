@@ -1,6 +1,6 @@
 import type { WorkspaceChildrenResponse, WorkspaceFileResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic-app/api-contract";
 import { useQueryClient } from "@tanstack/vue-query";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { sandboxBlob, sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
@@ -13,12 +13,13 @@ import { resetUploadQueue } from "./useUploadQueue";
 // Drag-drop uploads are NOT routed here; they go through useUploadQueue so a slow upload never blocks this line.
 const { busy, error: actionError, run } = useAsyncAction();
 
-// Lazily-loaded children of ignored dirs (node_modules, .git, …) the tree walk didn't descend into, keyed by the
-// dir's root-relative path. Kept OUTSIDE the tree query so a tree refetch (the file watcher fires on any change)
-// doesn't collapse an expanded ignored dir. `lazyTruncated` marks dirs whose child list hit the entry cap;
-// `lazyLoading` drives the per-row spinner.
+// Lazily-loaded children of the dirs the tree walk listed but didn't descend into — ignored ones (node_modules,
+// .git, …) and any that sat below the walk's breadth-first entry budget — keyed by the dir's root-relative path.
+// Kept OUTSIDE the tree query so a tree refetch (the file watcher fires on any change) doesn't collapse an
+// expanded lazy dir. `lazyHidden` counts entries the cap cut from a lazy listing; `lazyLoading` drives the
+// per-row spinner.
 const lazyChildren = ref<Map<string, readonly WorkspaceTreeEntry[]>>(new Map());
-const lazyTruncated = ref<Set<string>>(new Set());
+const lazyHidden = ref<Map<string, number>>(new Map());
 const lazyLoading = ref<Set<string>>(new Set());
 
 // Expanded directory paths (also the nest parents that fold sibling files, keyed by path). Module-level, next to
@@ -38,7 +39,7 @@ export const resetWorkspaceTreeState = (): void => {
     busy.value = false;
     actionError.value = undefined;
     lazyChildren.value = new Map();
-    lazyTruncated.value = new Set();
+    lazyHidden.value = new Map();
     lazyLoading.value = new Set();
     expanded.value = new Set();
     resetUploadQueue();
@@ -161,8 +162,9 @@ export function useWorkspaceTree() {
 
     const tree = computed<readonly WorkspaceTreeEntry[]>(() => query.data.value?.tree ?? []);
     const root = computed(() => query.data.value?.root ?? ``);
-    const truncated = computed(() => query.data.value?.truncated ?? false);
-    // The path → entry map spans the eager tree AND every lazily-loaded ignored subtree, so the viewer can resolve
+    // How many of the ROOT's own entries the daemon's entry budget cut (0 = the root listing is complete).
+    const rootHidden = computed(() => query.data.value?.hidden ?? 0);
+    // The path → entry map spans the eager tree AND every lazily-loaded subtree, so the viewer can resolve
     // a lazily-shown file's size/type by path.
     const entriesByPath = computed(() => {
         const map = buildMap(tree.value);
@@ -177,18 +179,24 @@ export function useWorkspaceTree() {
     // The tree entry for a root-relative path (size/type), or undefined when not in the loaded tree.
     const entry = (path: string | undefined): WorkspaceTreeEntry | undefined => (path === undefined ? undefined : entriesByPath.value.get(path));
 
-    // Lazy-load an ignored dir's children on first expand (no-op once loaded or already in flight). Errors surface
-    // on the shared actionError line, like the file mutations above.
+    // Lazy-load the children of a dir the walk left unlisted — ignored, or below the entry budget — on first
+    // expand (no-op once loaded or already in flight). Errors surface on the shared actionError line, like the
+    // file mutations above.
     const loadChildren = async (path: string): Promise<void> => {
         if (lazyChildren.value.has(path) || lazyLoading.value.has(path)) {
             return;
         }
+        await fetchChildren(path);
+    };
+    const fetchChildren = async (path: string): Promise<void> => {
         lazyLoading.value.add(path);
         try {
             const body = await sandboxJson<WorkspaceChildrenResponse>(`/workspace/children?path=${encodeURIComponent(path)}`);
             lazyChildren.value.set(path, body.entries);
-            if (body.truncated) {
-                lazyTruncated.value.add(path);
+            if (body.hidden > 0) {
+                lazyHidden.value.set(path, body.hidden);
+            } else {
+                lazyHidden.value.delete(path);
             }
         } catch (loadError) {
             actionError.value = errorMessage(loadError, `Failed to load ${path}.`);
@@ -197,10 +205,26 @@ export function useWorkspaceTree() {
         }
     };
 
+    // A lazily-loaded subtree lives outside the tree query, so a tree refresh (a user mutation, or the daemon's
+    // file-watch push) would leave it frozen at whatever it held when it was expanded — a file created inside an
+    // open deep folder would simply never appear. Re-fetch every loaded lazy dir whenever the tree data lands, so
+    // the eager and lazy halves of the explorer are always the same age. In-flight paths are skipped, and this
+    // never re-enters: /workspace/children doesn't touch the tree query.
+    watch(
+        () => query.dataUpdatedAt.value,
+        () => {
+            for (const path of [...lazyChildren.value.keys()]) {
+                if (!lazyLoading.value.has(path)) {
+                    void fetchChildren(path);
+                }
+            }
+        },
+    );
+
     return {
         tree,
         root,
-        truncated,
+        rootHidden,
         entriesByPath,
         entry,
         error,
@@ -212,7 +236,7 @@ export function useWorkspaceTree() {
         expanded,
         collapseAll,
         lazyChildren,
-        lazyTruncated,
+        lazyHidden,
         lazyLoading,
         saveText,
         createDir,

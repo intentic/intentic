@@ -903,11 +903,11 @@ export const WorkspaceTreeEntrySchema = z.object({
     path: z.string(),
     type: z.enum(["file", "dir"]),
     size: z.number().optional(),
-    // Set on a dir whose child list was cut short by the entry cap — some of its items aren't in `children`.
-    truncated: z.boolean().optional(),
     // Ignored-by-tooling (node_modules, .git, .gitignore'd paths, browser profiles): the client grays the row.
-    // An ignored DIR is listed without `children` — the client lazy-loads it via /workspace/children on expand.
     ignored: z.boolean().optional(),
+    // A DIR without `children` was listed but not descended into — because it's ignored, or because the walk's
+    // breadth-first budget stopped above it. Either way the client lazy-loads it via /workspace/children on
+    // expand, so "not loaded yet" and "empty directory" (`children: []`) stay distinguishable.
     get children() {
         return z.array(WorkspaceTreeEntrySchema).optional();
     },
@@ -916,17 +916,17 @@ export type WorkspaceTreeEntry = z.infer<typeof WorkspaceTreeEntrySchema>;
 export const WorkspaceTreeSchema = z.object({
     root: z.string(),
     tree: z.array(WorkspaceTreeEntrySchema),
-    // True when the root's own entries were cut by the entry cap (per-dir cuts are flagged on each dir entry).
-    truncated: z.boolean(),
+    // How many of the ROOT's own entries the budget cut (0 = complete); per-dir cuts are counted on each dir entry.
+    hidden: z.number(),
 });
 export type WorkspaceTree = z.infer<typeof WorkspaceTreeSchema>;
-// Lazy-load one directory's children — for an ignored dir the tree walk didn't descend into. Every returned entry
-// is itself `ignored` (it lives under an ignored subtree); child dirs again carry no `children`, so they lazy-load
-// on their own expand. `truncated` ⇒ the dir's child list was cut by the entry cap.
+// Lazy-load one directory's children — for a dir the tree walk listed but didn't descend into. Child dirs again
+// carry no `children`, so they lazy-load on their own expand. `hidden` = how many entries the cap cut (0 = all
+// listed).
 export const WorkspaceChildrenQuerySchema = z.object({ path: z.string().min(1) });
 export const WorkspaceChildrenSchema = z.object({
     entries: z.array(WorkspaceTreeEntrySchema),
-    truncated: z.boolean(),
+    hidden: z.number(),
 });
 export type WorkspaceChildren = z.infer<typeof WorkspaceChildrenSchema>;
 export const WorkspaceFileQuerySchema = z.object({ path: z.string().min(1) });

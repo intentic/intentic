@@ -50,7 +50,7 @@ import { closeTabs } from "./workspaceTabs";
  * toggled from the rail — this view owns no control for it. */
 
 const layout = useLayout();
-const { tree, truncated, error, isLoading, refetch, entry, expanded, collapseAll, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
+const { tree, rootHidden, error, isLoading, refetch, entry, expanded, collapseAll, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
 const { files: uploadFiles, scanning: uploadScanning, skippedNotice: uploadSkipped, enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
@@ -660,7 +660,7 @@ const endResize = (event: PointerEvent): void => {
                     <WorkspaceTree
                         v-else
                         :tree="tree"
-                        :root-truncated="truncated"
+                        :root-hidden="rootHidden"
                         :filter="filter"
                         :selected-path="openPath"
                         :manageable-dirs="manageableDirs"

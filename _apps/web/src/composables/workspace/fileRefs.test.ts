@@ -11,7 +11,7 @@ vi.mock("../queryPersistence", () => ({
 const { FILE_REF, parseRef, resolveInTree, toWorkspacePath } = await import("./fileRefs");
 
 // A tree response holding exactly these files, nested the way the daemon returns them.
-const treeOf = (root: string, ...files: string[]): { root: string; tree: unknown[]; truncated: boolean } => {
+const treeOf = (root: string, ...files: string[]): { root: string; tree: unknown[]; hidden: number } => {
     const tree: unknown[] = [];
     for (const file of files) {
         const segments = file.split(`/`);
@@ -34,7 +34,7 @@ const treeOf = (root: string, ...files: string[]): { root: string; tree: unknown
             level = dir.children;
         });
     }
-    return { root, tree, truncated: false };
+    return { root, tree, hidden: 0 };
 };
 
 beforeEach(() => {

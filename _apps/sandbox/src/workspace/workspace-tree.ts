@@ -14,97 +14,155 @@ import { resolveWithin } from "./workspace-files.js";
 
 const MAX_ENTRIES = 5000;
 
-// Walk the real working tree under `root`, bounded by a total-entry cap so a pathological tree can't blow up the
-// response. Depth is unbounded — payload size is bounded by node count, not depth, and symlinks are skipped (not
-// followed, not listed) so the walk can't loop or escape the workspace. Directories sort before files,
-// alphabetically within each. Nothing is dropped: ignored entries carry `ignored: true`, and ignored dirs are
-// listed but NOT descended (their children lazy-load via listWorkspaceChildren). When the cap cuts a directory's
-// child list short, that dir entry carries `truncated: true`; the returned top-level flag means the root's own
-// entries were cut (no parent dir to flag).
+// Walk the real working tree under `root`, bounded by a total-entry budget so a pathological tree can't blow up
+// the response. The walk is LEVEL-ORDER (breadth-first), which is what makes the budget honest: a single deep
+// branch can no longer eat it and leave the user's top-level folders missing. Shallow levels — the ones the
+// collapsed explorer actually shows — always complete; the budget runs out at depth, and a directory the walk
+// never reached is returned WITHOUT `children`, exactly like an ignored dir, so the client lazy-loads it via
+// listWorkspaceChildren on expand — and a dir that doesn't fit what's left of the budget is deferred whole
+// rather than half-listed, so every listing the client receives is COMPLETE. That leaves exactly one way for
+// entries to go missing — a single directory holding more than the entire cap — and the response reports that
+// as a count (`hidden`), so the UI can name the number instead of vaguely hinting at one.
+// Depth is unbounded, symlinks are skipped (not followed, not listed), dirs sort before files alphabetically.
 export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: number }): Promise<WorkspaceTree> => {
     const base = resolve(root);
-    const maxEntries = options?.maxEntries ?? MAX_ENTRIES;
-    let count = 0;
+    let budget = options?.maxEntries ?? MAX_ENTRIES;
 
-    const walk = async (dir: string, scope: IgnoreScope): Promise<{ children: WorkspaceTreeEntry[]; cut: boolean }> => {
-        // Pick up this directory's own .gitignore before testing its entries.
-        const here = await scope.descend(dir, toRelPath(base, dir));
-        const dirents = await readdir(dir, { withFileTypes: true }).catch(() => undefined);
-        if (dirents === undefined) {
-            return { children: [], cut: false };
-        }
-        dirents.sort((a, b) => (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1));
-
-        const entries: WorkspaceTreeEntry[] = [];
-        let cut = false;
-        for (const dirent of dirents) {
-            if (count >= maxEntries) {
-                cut = true;
-                break;
-            }
-            if (dirent.isSymbolicLink()) {
-                continue;
-            }
-            const isDir = dirent.isDirectory();
-            const abs = join(dir, dirent.name);
-            const path = toRelPath(base, abs);
-            const ignored = here.isIgnored(dirent.name, path, isDir);
-            count++;
-            if (isDir) {
-                // Ignored dirs are listed but not descended — the client lazy-loads their children on expand.
-                if (ignored) {
-                    entries.push({ name: dirent.name, path, type: "dir", ignored: true });
-                    continue;
-                }
-                const sub = await walk(abs, here);
-                entries.push({ name: dirent.name, path, type: "dir", children: sub.children, ...(sub.cut ? { truncated: true } : {}) });
-                continue;
-            }
-            let size: number | undefined;
-            try {
-                size = (await stat(abs)).size;
-            } catch {
-                size = undefined;
-            }
-            entries.push({ name: dirent.name, path, type: "file", ...(size !== undefined ? { size } : {}), ...(ignored ? { ignored: true } : {}) });
-        }
-        return { children: entries, cut };
+    // Built mutably (`children` is filled in when the level below is listed), returned as the readonly shape.
+    type Draft = {
+        name: string;
+        path: string;
+        type: "file" | "dir";
+        size?: number;
+        ignored?: boolean;
+        children?: Draft[];
+    };
+    // One directory still to list. `parentScope` is the ignore state of the dir CONTAINING it; `owner` is the
+    // entry whose `children` this listing fills (absent for the root itself).
+    type Job = {
+        abs: string;
+        rel: string;
+        parentScope: IgnoreScope;
+        owner?: Draft;
     };
 
-    const { children, cut } = await walk(base, createIgnoreScope());
-    return { root: base, tree: children, truncated: cut };
+    const tree: Draft[] = [];
+    let rootHidden = 0;
+    let level: Job[] = [{ abs: base, rel: "", parentScope: createIgnoreScope() }];
+
+    while (level.length > 0 && budget > 0) {
+        const next: Job[] = [];
+        for (const job of level) {
+            if (budget <= 0) {
+                break;
+            }
+            // Pick up this directory's own .gitignore before testing its entries.
+            const scope = await job.parentScope.descend(job.abs, job.rel);
+            const dirents = await readdir(job.abs, { withFileTypes: true }).catch(() => undefined);
+            if (dirents === undefined) {
+                if (job.owner !== undefined) {
+                    job.owner.children = [];
+                }
+                continue;
+            }
+            const listable = dirents.filter((dirent) => !dirent.isSymbolicLink());
+            listable.sort((a, b) => (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1));
+            // A dir that doesn't fit what's left is left UNLISTED rather than half-listed: every listing the
+            // client gets is then complete, and this one arrives whole on expand. (The root has no such out —
+            // it has nowhere to lazy-load from — so it lists what fits and reports the rest as `hidden`.)
+            if (job.owner !== undefined && listable.length > budget) {
+                continue;
+            }
+
+            const children: Draft[] = [];
+            for (const dirent of listable) {
+                if (budget <= 0) {
+                    break;
+                }
+                budget--;
+                const isDir = dirent.isDirectory();
+                const abs = join(job.abs, dirent.name);
+                const path = toRelPath(base, abs);
+                const ignored = scope.isIgnored(dirent.name, path, isDir);
+                if (isDir) {
+                    const entry: Draft = { name: dirent.name, path, type: "dir", ...(ignored ? { ignored: true } : {}) };
+                    children.push(entry);
+                    // Ignored dirs are never descended; the rest queue for the next level and stay unlisted
+                    // (no `children`) if the budget runs out first — either way the client lazy-loads them.
+                    if (!ignored) {
+                        next.push({ abs, rel: path, parentScope: scope, owner: entry });
+                    }
+                    continue;
+                }
+                let size: number | undefined;
+                try {
+                    size = (await stat(abs)).size;
+                } catch {
+                    size = undefined;
+                }
+                children.push({
+                    name: dirent.name,
+                    path,
+                    type: "file",
+                    ...(size !== undefined ? { size } : {}),
+                    ...(ignored ? { ignored: true } : {}),
+                });
+            }
+            if (job.owner === undefined) {
+                tree.push(...children);
+                rootHidden = listable.length - children.length;
+                continue;
+            }
+            job.owner.children = children;
+        }
+        level = next;
+    }
+
+    return { root: base, tree, hidden: rootHidden };
 };
 
-// Lazy-load one directory's children — an ignored dir the walk above listed but didn't descend into. Everything
-// here lives under an ignored subtree, so every entry is `ignored: true` and child DIRS again carry no `children`
-// (they lazy-load on their own expand). Bounded by the same entry cap → `truncated`. Symlinks skipped, dirs first.
-// `relPath` is contained via resolveWithin — a path climbing out of /work yields no children.
-export const listWorkspaceChildren = async (root: string, relPath: string): Promise<WorkspaceChildren> => {
+// Lazy-load one directory's children — a dir the tree walk listed but didn't descend into (ignored, or beyond
+// the walk's entry budget). Child DIRS again carry no `children` (they lazy-load on their own expand). Ignore
+// state is rebuilt by descending from the root so a lazily-listed dir agrees with the eager walk: entries under
+// an ignored subtree stay ignored, entries under a normal one are graded by the real .gitignore layers.
+// Bounded by the same entry cap → `hidden`. Symlinks skipped, dirs first. `relPath` is contained via
+// resolveWithin — a path climbing out of /work yields no children.
+export const listWorkspaceChildren = async (root: string, relPath: string, options?: { maxEntries?: number }): Promise<WorkspaceChildren> => {
     const base = resolve(root);
     const dir = resolveWithin(base, relPath);
     if (dir === undefined) {
-        return { entries: [], truncated: false };
+        return { entries: [], hidden: 0 };
     }
     const dirents = await readdir(dir, { withFileTypes: true }).catch(() => undefined);
     if (dirents === undefined) {
-        return { entries: [], truncated: false };
+        return { entries: [], hidden: 0 };
     }
-    dirents.sort((a, b) => (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1));
+
+    // Replay the ancestor chain: each descend() layers that directory's .gitignore, and an ancestor that is
+    // itself ignored makes the whole branch ignored no matter what the local rules say.
+    let scope = createIgnoreScope();
+    let branchIgnored = false;
+    let walked = base;
+    let rel = "";
+    for (const segment of relPath.split("/").filter((part) => part !== "" && part !== ".")) {
+        scope = await scope.descend(walked, rel);
+        walked = join(walked, segment);
+        rel = rel === "" ? segment : `${rel}/${segment}`;
+        branchIgnored = branchIgnored || scope.isIgnored(segment, rel, true);
+    }
+    scope = await scope.descend(walked, rel);
+
+    const listable = dirents.filter((dirent) => !dirent.isSymbolicLink());
+    listable.sort((a, b) => (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1));
 
     const entries: WorkspaceTreeEntry[] = [];
-    let truncated = false;
-    for (const dirent of dirents) {
-        if (entries.length >= MAX_ENTRIES) {
-            truncated = true;
-            break;
-        }
-        if (dirent.isSymbolicLink()) {
-            continue;
-        }
+    for (const dirent of listable.slice(0, options?.maxEntries ?? MAX_ENTRIES)) {
+        const isDir = dirent.isDirectory();
         const abs = join(dir, dirent.name);
         const path = toRelPath(base, abs);
-        if (dirent.isDirectory()) {
-            entries.push({ name: dirent.name, path, type: "dir", ignored: true });
+        const ignored = branchIgnored || scope.isIgnored(dirent.name, path, isDir);
+        if (isDir) {
+            entries.push({ name: dirent.name, path, type: "dir", ...(ignored ? { ignored: true } : {}) });
             continue;
         }
         let size: number | undefined;
@@ -113,7 +171,7 @@ export const listWorkspaceChildren = async (root: string, relPath: string): Prom
         } catch {
             size = undefined;
         }
-        entries.push({ name: dirent.name, path, type: "file", ignored: true, ...(size !== undefined ? { size } : {}) });
+        entries.push({ name: dirent.name, path, type: "file", ...(size !== undefined ? { size } : {}), ...(ignored ? { ignored: true } : {}) });
     }
-    return { entries, truncated };
+    return { entries, hidden: listable.length - entries.length };
 };

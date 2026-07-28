@@ -25,10 +25,11 @@ interface Row {
     // chevron and expands/collapses like a dir, while clicking the row still opens the file itself.
     readonly nest?: boolean;
 }
-// A non-interactive "… more items not shown" marker rendered under a dir whose children were cut by the server's
-// entry cap (or at the root). Kept out of the selection/keyboard axis — it's a hint, not a row you can act on.
+// A non-interactive "N more items" marker, rendered ONLY under a dir the daemon actually cut (or at the root),
+// and only ever with the real count it reported — a directory that merely hasn't been loaded yet lazy-loads on
+// expand instead of claiming things are missing. Kept out of the selection/keyboard axis: it's a fact, not a row.
 interface MoreRow {
-    readonly more: true;
+    readonly more: number;
     readonly depth: number;
     readonly key: string;
 }
@@ -41,14 +42,15 @@ interface MoreRow {
 
 const {
     tree,
-    rootTruncated = false,
+    rootHidden = 0,
     filter = ``,
     selectedPath,
     manageableDirs = new Set<string>(),
     repoDirs = new Set<string>(),
 } = defineProps<{
     tree: readonly WorkspaceTreeEntry[];
-    rootTruncated?: boolean;
+    // How many of the root's own entries the daemon's entry budget cut (0 = the root listing is complete).
+    rootHidden?: number;
     filter?: string;
     selectedPath?: string | null;
     // Directory paths that have a management surface (a directory-surface extension serves the repo). Activating
@@ -74,7 +76,7 @@ const {
     expanded,
     collapseAll,
     lazyChildren,
-    lazyTruncated,
+    lazyHidden,
     lazyLoading,
 } = useWorkspaceTree();
 const layout = useLayout();
@@ -121,13 +123,14 @@ const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, 
 const joinPath = (dir: string, name: string): string => (dir === `` ? name : `${dir}/${name}`);
 const canMoveInto = (source: string, dir: string): boolean => !(dir === source || dir === parentDir(source) || dir.startsWith(`${source}/`));
 
-// Children to render under a dir: an ignored dir's are lazy-loaded (keyed by path, fetched on expand), a normal
-// dir's are the inline `children` from the eager walk.
-const childrenOf = (entry: WorkspaceTreeEntry): readonly WorkspaceTreeEntry[] =>
-    entry.ignored ? (lazyChildren.value.get(entry.path) ?? []) : (entry.children ?? []);
+// Children to render under a dir: the inline `children` from the eager walk when it descended there, otherwise
+// the lazily-fetched ones (keyed by path). A dir with NO `children` was never listed — ignored, or below the
+// walk's breadth-first budget — so it fetches on expand; `children: []` is a genuinely empty dir.
+const isUnlisted = (entry: WorkspaceTreeEntry): boolean => entry.type === `dir` && entry.children === undefined;
+const childrenOf = (entry: WorkspaceTreeEntry): readonly WorkspaceTreeEntry[] => entry.children ?? lazyChildren.value.get(entry.path) ?? [];
 
 // Flatten the tree to a path → entry map so keyboard ops can read a row's type in O(1). Spans lazily-loaded
-// ignored subtrees too (via childrenOf), so a lazily-shown row is selectable/actionable like any other.
+// subtrees too (via childrenOf), so a lazily-shown row is selectable/actionable like any other.
 const byPath = computed(() => {
     const map = new Map<string, WorkspaceTreeEntry>();
     const walk = (nodes: readonly WorkspaceTreeEntry[]): void => {
@@ -151,8 +154,9 @@ const targetDir = (path: string | null): string => {
     return byPath.value.get(path)?.type === `dir` ? path : parentDir(path);
 };
 
-// Flattened, ordered list of the rows to render (single-pass filter/expand). "… more" markers are injected
-// under a cut dir (and at the root) only when NOT filtering — a filter can't reveal server-hidden items anyway.
+// Flattened, ordered list of the rows to render (single-pass filter/expand). A "N more items" marker is injected
+// under a dir the daemon reported a nonzero cut for (and at the root), only when NOT filtering — a filter can't
+// reveal server-hidden items anyway. A dir that is merely unlisted gets no marker: expanding it loads it.
 const visibleRows = computed<(Row | MoreRow)[]>(() => {
     const needle = filter.trim().toLowerCase();
     const open = expanded.value;
@@ -169,8 +173,9 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
                     out.push({ entry, depth, isExpanded });
                     if (isExpanded) {
                         out.push(...walk(childrenOf(entry), depth + 1));
-                        if (entry.truncated || lazyTruncated.value.has(entry.path)) {
-                            out.push({ more: true, depth: depth + 1, key: `${entry.path}#more` });
+                        const cut = lazyHidden.value.get(entry.path) ?? 0;
+                        if (cut > 0) {
+                            out.push({ more: cut, depth: depth + 1, key: `${entry.path}#more` });
                         }
                     }
                 } else {
@@ -195,8 +200,8 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
     };
 
     const rows = walk(tree, 0);
-    if (rootTruncated && needle === ``) {
-        rows.push({ more: true, depth: 0, key: `#root-more` });
+    if (rootHidden > 0 && needle === ``) {
+        rows.push({ more: rootHidden, depth: 0, key: `#root-more` });
     }
     return rows;
 });
@@ -227,8 +232,9 @@ const toggleExpand = (path: string): void => {
         next.delete(path);
     } else {
         next.add(path);
-        // Expanding an ignored dir (node_modules, .git, …) fetches its children on demand — the walk didn't descend.
-        if (byPath.value.get(path)?.ignored) {
+        // Expanding a dir the walk never listed (ignored, or below its entry budget) fetches its children now.
+        const entry = byPath.value.get(path);
+        if (entry !== undefined && isUnlisted(entry)) {
             void loadChildren(path);
         }
     }
@@ -705,9 +711,12 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                 v-if="'more' in row"
                 class="flex items-center gap-1.5 py-1 pr-2 text-2xs italic text-subtle select-none"
                 :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
+                :title="`This folder holds more entries than the explorer lists at once. Use search (Ctrl+P) to reach the remaining ${row.more}.`"
             >
                 <span class="w-[0.7rem] shrink-0"></span>
-                <span class="min-w-0 flex-1 truncate">… more items not shown</span>
+                <span class="min-w-0 flex-1 truncate"
+                    >{{ row.more.toLocaleString() }} more {{ row.more === 1 ? "item" : "items" }} — search to reach them</span
+                >
             </div>
             <template v-else>
                 <button
@@ -760,7 +769,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     <span v-else class="min-w-0 flex-1 truncate" :class="row.entry.ignored ? 'text-subtle' : 'text-content/90'">{{
                         row.entry.name
                     }}</span>
-                    <!-- An ignored dir fetching its children lazily on expand. -->
+                    <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
                     <Icon
                         v-if="row.entry.type === 'dir' && lazyLoading.has(row.entry.path)"
                         name="spinner"

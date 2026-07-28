@@ -288,7 +288,7 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     // No agent has landed anything into these fake repos, so every changed file is the user's.
     agentOrigins: { forRepo: async () => ({}) },
     files: fakeFiles(),
-    workspaceTree: async () => ({ root: "/work", tree: [], truncated: false }),
+    workspaceTree: async () => ({ root: "/work", tree: [], hidden: 0 }),
     // Inert resident search — no index, no rg. The search route test overrides `run` with a canned outcome.
     iq: {
         run: async () => ({
@@ -2234,7 +2234,7 @@ test("git.fileDiff routes each side to its own diff and BAD_REQUESTs a path esca
 });
 
 test("workspace.tree returns the full working tree from the walker", async () => {
-    const tree = { root: "/work", tree: [{ name: "app", path: "app", type: "dir" as const, children: [] }], truncated: false };
+    const tree = { root: "/work", tree: [{ name: "app", path: "app", type: "dir" as const, children: [] }], hidden: 0 };
     const client = clientFor(createApp(services({ workspaceTree: async () => tree })));
     expect(await client.workspace.tree()).toEqual(tree);
 });

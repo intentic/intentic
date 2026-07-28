@@ -39,7 +39,7 @@ const layout = useLayout();
 const changes = useChanges();
 const {
     tree,
-    truncated,
+    rootHidden,
     entriesByPath,
     entry,
     error,
@@ -53,7 +53,7 @@ const {
     actionError,
     loadChildren,
     lazyChildren,
-    lazyTruncated,
+    lazyHidden,
     lazyLoading,
 } = useWorkspaceTree();
 const { files: uploadFiles, scanning: uploadScanning, skippedNotice: uploadSkipped, enqueue } = useUploadQueue();
@@ -126,8 +126,8 @@ const clearFilter = (): void => {
     searchScope.value = `name`;
 };
 
-// Entering an ignored dir (node_modules, .git, …) — or any path not in the eager tree (deep inside a lazy
-// subtree) — fetches its children on demand; the listing repaints when they arrive.
+// Entering a dir the walk left unlisted (ignored, or below its entry budget) — or any path not in the eager
+// tree at all (deep inside a lazy subtree) — fetches its children on demand; the listing repaints on arrival.
 watch(
     dir,
     (path) => {
@@ -135,22 +135,21 @@ watch(
             return;
         }
         const node = entriesByPath.value.get(path);
-        if (node === undefined || node.ignored) {
+        if (node === undefined || node.children === undefined) {
             void loadChildren(path);
         }
     },
     { immediate: true },
 );
 const listing = computed<readonly WorkspaceTreeEntry[]>(() => {
-    // A normal dir carries its children inline; an ignored/lazy dir's arrive via loadChildren (keyed by path).
-    const children = dir.value === `` ? tree.value : (lazyChildren.value.get(dir.value) ?? entriesByPath.value.get(dir.value)?.children ?? []);
+    // A walked dir carries its children inline; an unlisted one's arrive via loadChildren (keyed by path).
+    const children = dir.value === `` ? tree.value : (entriesByPath.value.get(dir.value)?.children ?? lazyChildren.value.get(dir.value) ?? []);
     const query = filter.value.trim().toLowerCase();
     return query === `` ? children : children.filter((node) => node.name.toLowerCase().includes(query));
 });
 const dirLoading = computed(() => dir.value !== `` && lazyLoading.value.has(dir.value));
-const dirTruncated = computed(() =>
-    dir.value === `` ? truncated.value : lazyTruncated.value.has(dir.value) || (entriesByPath.value.get(dir.value)?.truncated ?? false),
-);
+// How many entries the daemon's cap cut from the open dir's listing — 0 (the common case) shows nothing.
+const dirHidden = computed(() => (dir.value === `` ? rootHidden.value : (lazyHidden.value.get(dir.value) ?? 0)));
 
 // --- Long-press row actions (the ContextMenu equivalents) --------------------------------------
 const sheetEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
@@ -344,8 +343,9 @@ const onPick = (event: Event): void => {
                             <p v-else-if="listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">
                                 {{ filter ? "No matching entries." : "This directory is empty." }}
                             </p>
-                            <p v-if="dirTruncated" class="px-4 py-2 text-center text-2xs text-subtle">
-                                Listing truncated — not all entries are shown.
+                            <p v-if="dirHidden > 0" class="px-4 py-2 text-center text-2xs text-subtle">
+                                {{ dirHidden.toLocaleString() }} more {{ dirHidden === 1 ? "entry" : "entries" }} in this folder — search to reach
+                                them.
                             </p>
                         </template>
                     </div>

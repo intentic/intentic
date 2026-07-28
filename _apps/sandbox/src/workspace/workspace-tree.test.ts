@@ -27,7 +27,7 @@ test("walkWorkspaceTree lists everything, graying ignored dirs (node_modules, .g
     const result = await walkWorkspaceTree(root);
     const all = paths(result.tree);
 
-    expect(result.truncated).toBe(false);
+    expect(result.hidden).toBe(0);
     // Tracked + untracked source shows as normal entries.
     expect(all).toContain("app/src/index.ts");
     expect(all).toContain("app/untracked.tmp");
@@ -114,8 +114,8 @@ test("listWorkspaceChildren lazily lists one level under an ignored dir, all gra
     await writeFile(join(root, "node_modules", "dep", "index.js"), "x");
     await writeFile(join(root, "node_modules", "top.js"), "y");
 
-    const { entries, truncated } = await listWorkspaceChildren(root, "node_modules");
-    expect(truncated).toBe(false);
+    const { entries, hidden } = await listWorkspaceChildren(root, "node_modules");
+    expect(hidden).toBe(0);
     const byName = new Map(entries.map((entry) => [entry.name, entry]));
     // One level only: `dep` (dir) and `top.js` (file), both grayed; dep's own children are NOT included.
     expect(byName.get("dep")?.type).toBe("dir");
@@ -128,28 +128,98 @@ test("listWorkspaceChildren lazily lists one level under an ignored dir, all gra
     expect((await listWorkspaceChildren(root, "../etc")).entries).toEqual([]);
 });
 
-test("walkWorkspaceTree flags truncated when the root's own entries are cut", async () => {
+test("listWorkspaceChildren counts what its own cap cut — the only listing that can be incomplete", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-children-cap-"));
+    await mkdir(join(root, "huge"), { recursive: true });
+    for (let i = 0; i < 5; i++) {
+        await writeFile(join(root, "huge", `file-${i}.txt`), "x");
+    }
+    const { entries, hidden } = await listWorkspaceChildren(root, "huge", { maxEntries: 2 });
+    expect(entries.length).toBe(2);
+    expect(hidden).toBe(3);
+});
+
+test("walkWorkspaceTree counts exactly how many of the ROOT's own entries the budget cut (the one unavoidable cut)", async () => {
     const root = await mkdtemp(join(tmpdir(), "ws-tree-cap-"));
     for (let i = 0; i < 5; i++) {
         await writeFile(join(root, `file-${i}.txt`), "x");
     }
     const result = await walkWorkspaceTree(root, { maxEntries: 2 });
-    expect(result.truncated).toBe(true);
+    expect(result.hidden).toBe(3);
     expect(paths(result.tree).length).toBe(2);
 });
 
-test("walkWorkspaceTree flags the specific dir whose children were cut, not the root", async () => {
+test("walkWorkspaceTree defers a dir that doesn't fit the remaining budget whole, rather than half-listing it", async () => {
     const root = await mkdtemp(join(tmpdir(), "ws-tree-dircap-"));
     await mkdir(join(root, "a"), { recursive: true });
     for (let i = 0; i < 5; i++) {
         await writeFile(join(root, "a", `file-${i}.txt`), "x");
     }
-    // count "a" (1), then two of its files (2,3) → the cut lands inside "a", the root loop finishes normally.
+    // The root level (just "a") lists first, leaving 2 of the budget — not enough for "a"'s own 5 files.
     const result = await walkWorkspaceTree(root, { maxEntries: 3 });
-    expect(result.truncated).toBe(false);
+    expect(result.hidden).toBe(0);
     const dirA = result.tree.find((e) => e.name === "a");
-    expect(dirA?.truncated).toBe(true);
-    expect(dirA?.children?.length).toBe(2);
+    // Unlisted, so expanding it lazy-loads all 5 — no partial listing, no "some items are missing" claim.
+    expect(dirA?.children).toBeUndefined();
+    expect((await listWorkspaceChildren(root, "a")).entries.length).toBe(5);
+});
+
+test("walkWorkspaceTree spends its budget breadth-first: shallow siblings survive a huge deep branch", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-tree-breadth-"));
+    await mkdir(join(root, "aaa", "deep"), { recursive: true });
+    await mkdir(join(root, "zzz"), { recursive: true });
+    for (let i = 0; i < 20; i++) {
+        await writeFile(join(root, "aaa", `file-${i}.txt`), "x");
+    }
+    await writeFile(join(root, "zzz", "kept.txt"), "x");
+
+    // Depth-first, "aaa" would eat the whole budget and "zzz" would never be listed at all.
+    const result = await walkWorkspaceTree(root, { maxEntries: 6 });
+    expect(result.hidden).toBe(0);
+    expect(result.tree.map((entry) => entry.name)).toEqual(["aaa", "zzz"]);
+    // "aaa" doesn't fit what's left, so it defers whole; the budget goes to its sibling instead of vanishing.
+    expect(result.tree.find((entry) => entry.name === "aaa")?.children).toBeUndefined();
+    expect(result.tree.find((entry) => entry.name === "zzz")?.children?.map((entry) => entry.name)).toEqual(["kept.txt"]);
+});
+
+test("walkWorkspaceTree leaves a dir it never reached UNLISTED (no children) instead of claiming items are hidden", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-tree-unlisted-"));
+    await mkdir(join(root, "a", "inner"), { recursive: true });
+    await mkdir(join(root, "b"), { recursive: true });
+    await writeFile(join(root, "b", "kept.txt"), "x");
+
+    // Budget: "a" + "b" (level 1), then "a/inner" (level 2) — "b" is queued but never listed.
+    const result = await walkWorkspaceTree(root, { maxEntries: 3 });
+    const dirA = result.tree.find((entry) => entry.name === "a");
+    const dirB = result.tree.find((entry) => entry.name === "b");
+    expect(dirA?.children?.map((entry) => entry.name)).toEqual(["inner"]);
+    expect(dirA?.hidden).toBeUndefined();
+    // Unlisted, NOT truncated: no phantom "more items" claim — the client lazy-loads it on expand.
+    expect(dirB?.children).toBeUndefined();
+    expect(dirB?.hidden).toBeUndefined();
+    expect((await listWorkspaceChildren(root, "b")).entries.map((entry) => entry.name)).toEqual(["kept.txt"]);
+});
+
+test("listWorkspaceChildren grades ignore state for a NON-ignored dir the budget never reached", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-children-normal-"));
+    await mkdir(join(root, "repo", "src"), { recursive: true });
+    await mkdir(join(root, "repo", "out"), { recursive: true });
+    await mkdir(join(root, "repo", "node_modules"), { recursive: true });
+    await writeFile(join(root, "repo", ".gitignore"), "out/\n");
+    await writeFile(join(root, "repo", "app.ts"), "ok");
+    await writeFile(join(root, "repo", "out", "bundle.js"), "gen");
+
+    const { entries, hidden } = await listWorkspaceChildren(root, "repo");
+    expect(hidden).toBe(0);
+    const byName = new Map(entries.map((entry) => [entry.name, entry]));
+    // A lazily-listed normal dir is NOT blanket-grayed — only what the ignore rules actually cover.
+    expect(byName.get("src")?.ignored).toBeUndefined();
+    expect(byName.get("app.ts")?.ignored).toBeUndefined();
+    expect(byName.get("out")?.ignored).toBe(true);
+    expect(byName.get("node_modules")?.ignored).toBe(true);
+    // …while everything under an ignored ancestor stays grayed.
+    const nested = await listWorkspaceChildren(root, "repo/out");
+    expect(nested.entries.every((entry) => entry.ignored === true)).toBe(true);
 });
 
 test("walkWorkspaceTree walks arbitrarily deep (no depth cap)", async () => {
@@ -158,6 +228,6 @@ test("walkWorkspaceTree walks arbitrarily deep (no depth cap)", async () => {
     await mkdir(join(root, ...segments), { recursive: true });
     await writeFile(join(root, ...segments, "deep.txt"), "x");
     const result = await walkWorkspaceTree(root);
-    expect(result.truncated).toBe(false);
+    expect(result.hidden).toBe(0);
     expect(paths(result.tree)).toContain(`${segments.join("/")}/deep.txt`);
 });

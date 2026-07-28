@@ -169,23 +169,22 @@ export interface WorkspaceTreeEntry {
     readonly path: string;
     readonly type: "file" | "dir";
     readonly size?: number;
-    // Set on a dir whose child list was cut short by the entry cap — some of its items aren't in `children`.
-    readonly truncated?: boolean;
-    // Ignored-by-tooling (node_modules, .git, .gitignore'd, browser profiles): the row is grayed. An ignored DIR
-    // carries no `children` — the client lazy-loads it via /workspace/children on expand.
+    // Ignored-by-tooling (node_modules, .git, .gitignore'd, browser profiles): the row is grayed.
     readonly ignored?: boolean;
+    // Absent on a DIR that was listed but not descended into (ignored, or below the walk's breadth-first
+    // budget) — the client lazy-loads it on expand. An empty dir has `children: []`, not `undefined`.
     readonly children?: readonly WorkspaceTreeEntry[];
 }
 export interface WorkspaceTreeResponse {
     readonly root: string;
     readonly tree: readonly WorkspaceTreeEntry[];
-    // True when the root's own entries were cut by the entry cap (per-dir cuts are flagged on each dir entry).
-    readonly truncated: boolean;
+    // How many of the ROOT's own entries the budget cut (0 = complete); per-dir cuts are counted on each entry.
+    readonly hidden: number;
 }
-// Children of one ignored dir, fetched lazily on expand (GET /workspace/children).
+// Children of one not-yet-descended dir, fetched lazily on expand (GET /workspace/children).
 export interface WorkspaceChildrenResponse {
     readonly entries: readonly WorkspaceTreeEntry[];
-    readonly truncated: boolean;
+    readonly hidden: number;
 }
 export interface WorkspaceFileResponse {
     readonly path: string;
