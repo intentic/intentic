@@ -75,3 +75,8 @@ one as a backend means either (a) a thin adapter script on PATH that shells to i
 an installable extension fragment: `filterBackend` is a plain setting with no capability behind it, so nothing
 would prompt for the install + rebuild an extension-gated binary needs — flipping it would just make every Bash
 command fail with `rtk: command not found`. A backend switch must be usable the moment it is switched.
+
+The hook only prefixes commands rtk can exec: rtk filters known subcommands (git, pnpm, tsc, …) and execs
+unknown binaries unfiltered, but a shell-only first word — a builtin (`cd`), keyword (`for`), `VAR=` assignment
+or compound syntax — cannot be exec'd, so prefixing it would kill the whole line with exit 127. Those commands
+run bare and emit raw output under this backend, which is also rtk's own behaviour for anything it can't handle.

@@ -48,10 +48,27 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
         .map((key) => `-e ${key} `)
         .join("");
 
-// When filterBackend is "rtk", the command is prefixed with `rtk ` before it's wrapped (rtk's own Claude Code
-// hook convention: it recognizes and compresses the leading command, and passes through what it doesn't). The
-// native output filter is turned off for this backend (cleanerEnv sets INTENTIC_RUN_FILTER=0), so rtk owns the
-// compression and tmux-run just tees rtk's already-compact output. "native"/undefined keeps today's path.
+// rtk EXECS its first argument: a known subcommand (git, pnpm, tsc, …) gets its filter, an unknown binary is
+// exec'd unfiltered — but a shell-only first word (builtin, keyword, VAR= assignment, compound syntax) cannot
+// be exec'd at all, so `rtk cd …` dies with exit 127 and, in a `cd x && git status` chain, kills the whole
+// line. The gate below therefore skips the prefix for any command bash must interpret itself; those run raw
+// (the native filter is off for this backend), which is rtk's own behaviour for anything it can't handle.
+const RTK_SHELL_ONLY = new Set([
+    "cd", "pushd", "popd", "dirs", "export", "source", ".", "set", "unset", "alias", "unalias", "eval", "exec",
+    "exit", "return", "shift", "trap", "wait", "read", "readonly", "local", "declare", "typeset", "let",
+    "ulimit", "umask", "builtin", "command", "if", "then", "else", "elif", "fi", "for", "while", "until", "do",
+    "done", "case", "esac", "function", "select", "time", "coproc",
+]);
+const rtkPrefixable = (command: string): boolean => {
+    const first = command.trimStart().split(/\s/, 1)[0] ?? "";
+    // A leading assignment, redirect, subshell, group, negation or [[ is bash syntax, not an executable.
+    return first !== "" && !first.includes("=") && !/^[<>({}![]/.test(first) && !RTK_SHELL_ONLY.has(first);
+};
+
+// When filterBackend is "rtk", a prefixable command is rewritten to `rtk <cmd>` before it's wrapped, so rtk
+// runs it and compresses the output. The native output filter is turned off for this backend (cleanerEnv sets
+// INTENTIC_RUN_FILTER=0), so rtk owns the compression and tmux-run just tees rtk's already-compact output.
+// "native"/undefined keeps today's path.
 export const bashTmuxHooks = (
     filterBackend?: "native" | "rtk",
     envKeys: readonly string[] = [],
@@ -80,7 +97,7 @@ export const bashTmuxHooks = (
                         if (session === undefined) {
                             return {};
                         }
-                        const wrapped = filterBackend === "rtk" ? `rtk ${tool.command}` : tool.command;
+                        const wrapped = filterBackend === "rtk" && rtkPrefixable(tool.command) ? `rtk ${tool.command}` : tool.command;
                         // The namespace hop goes OUTSIDE the rtk prefix and inside the tmux wrapper: rtk is
                         // the agent's own command line and belongs in the namespace with it, while tmux-run
                         // itself must stay out here where the server and the pane logs are.

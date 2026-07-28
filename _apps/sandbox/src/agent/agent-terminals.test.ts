@@ -83,6 +83,18 @@ test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrappe
     );
 });
 
+test("the rtk backend prefixes commands rtk can exec — including chains whose first segment it filters", async () => {
+    expect(await rewritten({ command: "git status" }, bashTmuxHooks("rtk"))).toContain("'rtk git status'");
+    expect(await rewritten({ command: "git add . && git push" }, bashTmuxHooks("rtk"))).toContain("'rtk git add . && git push'");
+});
+
+test("the rtk backend leaves shell-interpreted commands bare — rtk execs its argument, so a builtin, keyword or assignment first word would die with exit 127", async () => {
+    for (const command of ["cd /tmp && git status", "export FOO=1", "for f in *; do echo $f; done", "FOO=1 pnpm test", "(cd /tmp && ls)", "! grep -q x file"]) {
+        expect(await rewritten({ command }, bashTmuxHooks("rtk"))).toContain(`'${command.replaceAll("'", `'\\''`)}'`);
+        expect(await rewritten({ command }, bashTmuxHooks("rtk"))).not.toContain("rtk");
+    }
+});
+
 test("the rtk backend's prefix rides inside the namespace with the command it wraps", async () => {
     const anchor = { pid: 9, cwd: "/work", plan: { worktree: "/wt", root: "/work", modules: [] }, dispose: () => {} };
     const command = await rewritten({ command: "ls" }, bashTmuxHooks("rtk", [], anchor));
