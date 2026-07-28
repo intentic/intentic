@@ -22,8 +22,10 @@ import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
  * active group's sessions render side by side in the pane. The strip is a VSCode-style list: Shift/Ctrl+click
  * multi-selects pills, right-click opens the action menu (split / join / unsplit / kill, and per-terminal
  * rename / color / icon overrides from terminalMeta). Right-click on the bar's empty space opens the same menu
- * on its strip-wide rows alone — kill all, sweep the finished, and pop the panel out into a floating window
- * (Document PiP, like the chat strip); the shell owns the teleport.
+ * on its strip-wide rows alone — kill all, sweep the finished, and pop the panel out into its own real
+ * window (like the chat strip); the shell owns the teleport. In that window the bar stands up along the LEFT
+ * edge — a floating terminal is a tall window, so pills belong on the axis that has room, the way VSCode
+ * moves its own terminal list to the side once the panel is wide.
  * Every tab gets the hover-×; a finished tab (dimmed, running:false) also sweeps out in bulk via the toolbar's
  * eraser / the menu's "Clear N finished terminals". Restart is shell-only (a dev-server tab is re-run via
  * Start, or ↑ at its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves — they live in
@@ -54,7 +56,9 @@ const { order, groups, activeName, switchTab, joinTabs, unsplit, newTab, closeTa
 // tab, which gets refresh instead.
 const activeShell = computed(() => order.value.find((tab) => tab.name === activeName.value)?.kind === `shell`);
 const popout = useTerminalPopout();
-// Teleporting the panel to/from the pip window moves the container wholesale without any Vue re-mount —
+// The bar turns into a left rail while the panel floats in its own window (see the component comment).
+const vertical = computed(() => popout.poppedOut.value);
+// Teleporting the panel to/from the pop-out window moves the container wholesale without any Vue re-mount —
 // remount the active group after the flush so every cell refits (and the PTYs resync) at the new window's size.
 watch(
     popout.poppedOut,
@@ -294,13 +298,11 @@ const stripItems = computed<MenuItem[]>(() => {
     if (killTabs !== undefined && dead.value.size > 0) {
         items.push({ label: clearFinishedLabel.value, shortcut: commandShortcut(`terminal.clearFinished`), command: clearFinished });
     }
-    if (popout.supported) {
-        items.push(...(items.length > 0 ? [{ separator: true }] : []), {
-            label: popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`,
-            shortcut: commandShortcut(`terminal.togglePopout`),
-            command: popout.toggle,
-        });
-    }
+    items.push(...(items.length > 0 ? [{ separator: true }] : []), {
+        label: popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`,
+        shortcut: commandShortcut(`terminal.togglePopout`),
+        command: popout.toggle,
+    });
     return items;
 });
 
@@ -595,12 +597,9 @@ const registerPanelCommands = (): void => {
 // Right-click on the bar's EMPTY space (not a pill, not a button) OPENS THE MENU on its strip-wide rows — kill
 // all, sweep the finished, pop the panel out. It used to pop out on the spot, which turned a right-click that
 // merely missed a pill into a whole floating window; the pop-out is a row in the menu now, exactly as on the
-// chat strip. Nothing strip-wide to offer (no kills, no sweep, no pip support) leaves the browser's own menu.
+// chat strip.
 const onBarContextMenu = (event: MouseEvent): void => {
     if (event.target instanceof Element && event.target.closest(`button, .tterm`) !== null) {
-        return;
-    }
-    if (stripItems.value.length === 0) {
         return;
     }
     event.preventDefault();
@@ -747,8 +746,11 @@ const endResize = (event: PointerEvent): void => {
 <template>
     <div
         ref="root"
-        class="term relative flex min-h-0 shrink-0 flex-col border-t border-line"
-        :class="{ 'is-resizing': resizing, 'flex-1': resizable && maximized && !collapsed, 'h-full': !resizable }"
+        class="term relative flex min-h-0 shrink-0 border-t border-line"
+        :class="[
+            vertical ? 'flex-row' : 'flex-col',
+            { 'is-resizing': resizing, 'flex-1': resizable && maximized && !collapsed, 'h-full': !resizable },
+        ]"
         :style="!resizable || maximized || collapsed ? undefined : { height: `${height}px` }"
     >
         <div
@@ -760,7 +762,13 @@ const endResize = (event: PointerEvent): void => {
             @dblclick="setHeight(DEFAULT_HEIGHT)"
             title="Drag to resize · double-click to reset"
         ></div>
-        <div class="flex shrink-0 items-center gap-1 border-b border-line bg-card px-2 py-0.5" @contextmenu="onBarContextMenu">
+        <!-- The bar: across the top when docked, down the left edge in the pop-out window (`vertical`). Same
+             pills, same toolbar, same right-click menu — only the axis differs. -->
+        <div
+            class="flex shrink-0 gap-1 border-line bg-card"
+            :class="vertical ? 'w-40 flex-col items-stretch border-r px-1 py-1.5' : 'items-center border-b px-2 py-0.5'"
+            @contextmenu="onBarContextMenu"
+        >
             <!-- One pill per split GROUP, one segment per tmux session, styled like the editor's FileTabs: glyph
                  (kind icon or the user's override, tinted by their color), label (or index), and — when the
                  source manages sessions — a small × that appears on hover. Click switches (and focuses the
@@ -777,19 +785,23 @@ const endResize = (event: PointerEvent): void => {
                  row (gap-y-1 vs gap-x-0.5): stacked pill backgrounds need the separation to read as two rows. -->
             <div
                 v-if="!effectiveCollapsed"
-                class="scrollbar-thin flex max-h-13 min-w-0 flex-1 flex-wrap items-center gap-x-0.5 gap-y-1 overflow-x-hidden overflow-y-auto"
+                class="scrollbar-thin flex min-w-0 flex-1 gap-x-0.5 gap-y-1 overflow-x-hidden overflow-y-auto"
+                :class="vertical ? 'min-h-0 flex-col items-stretch' : 'max-h-13 flex-wrap items-center'"
             >
                 <div
                     v-for="(group, gi) in groups"
                     :key="groupKey(group)"
                     class="tterm group flex h-6 shrink-0 cursor-pointer select-none items-center rounded-md"
-                    :class="{ 'tterm-on': gi === activeGroupIndex, 'tterm-selected': isSelected(group) }"
+                    :class="[vertical ? 'w-full min-w-0' : '', { 'tterm-on': gi === activeGroupIndex, 'tterm-selected': isSelected(group) }]"
                 >
                     <template v-for="(name, si) in group" :key="name">
                         <span v-if="si > 0" class="h-3.5 w-px shrink-0 bg-line"></span>
                         <div
                             class="flex h-full items-center gap-1.5 pl-2 pr-1.5 text-2xs"
-                            :class="{ 'opacity-60': tabByName.get(name)?.running === false, 'tterm-doomed': sweepPreview && dead.has(name) }"
+                            :class="[
+                                vertical ? 'min-w-0 flex-1' : '',
+                                { 'opacity-60': tabByName.get(name)?.running === false, 'tterm-doomed': sweepPreview && dead.has(name) },
+                            ]"
                             v-tooltip.top="renamingName === name ? undefined : segmentTooltip(name)"
                             @click="onSegmentClick($event, gi, name)"
                             @dblclick.prevent.stop="beginRename(name)"
@@ -825,7 +837,7 @@ const endResize = (event: PointerEvent): void => {
                                 @blur="commitRename"
                                 @vue:mounted="focusRename"
                             />
-                            <span v-else>{{ segmentLabel(name) }}</span>
+                            <span v-else :class="vertical ? 'min-w-0 flex-1 truncate text-left' : undefined">{{ segmentLabel(name) }}</span>
                             <span
                                 v-if="closeTab !== undefined && renamingName !== name"
                                 class="relative flex h-3 w-3 shrink-0 items-center justify-center"
@@ -843,7 +855,8 @@ const endResize = (event: PointerEvent): void => {
                 <button
                     v-if="newTab !== undefined"
                     type="button"
-                    class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    class="flex h-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    :class="vertical ? 'w-full' : 'w-6'"
                     @click="newTab()"
                     v-tooltip.top="withShortcut('New terminal', 'terminal.new')"
                     aria-label="New terminal"
@@ -853,85 +866,91 @@ const endResize = (event: PointerEvent): void => {
             </div>
             <!-- The strip is what holds the toolbar against the right edge; collapsed, there is no strip. -->
             <span v-else class="flex-1"></span>
-            <!-- The sweep: only rendered while finished tabs exist, and hovering it previews the exact set it
-                 would kill (see .tterm-doomed) instead of asking for a confirmation. -->
-            <button
-                v-if="dead.size > 0 && killTabs !== undefined"
-                type="button"
-                class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-danger"
-                @click="clearFinished()"
-                @pointerenter="sweepPreview = true"
-                @pointerleave="sweepPreview = false"
-                v-tooltip.top="withShortcut(clearFinishedLabel, 'terminal.clearFinished')"
-                :aria-label="clearFinishedLabel"
-            >
-                <Icon name="eraser" class="text-xs" />
-            </button>
-            <BackgroundProcesses />
-            <button
-                v-if="restart !== undefined && activeShell"
-                type="button"
-                class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                @click="restart()"
-                v-tooltip.top="'Restart shell'"
-                aria-label="Restart shell"
-            >
-                <Icon name="refresh" class="text-xs" />
-            </button>
-            <button
-                v-else
-                type="button"
-                class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                @click="void tabs.refresh()"
-                v-tooltip.top="'Refresh sessions'"
-                aria-label="Refresh sessions"
-            >
-                <Icon name="refresh" class="text-xs" />
-            </button>
-            <button
-                v-if="resizable"
-                type="button"
-                class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                @click="maximized = !maximized"
-                v-tooltip.top="maximized ? 'Restore panel size' : 'Maximize panel'"
-                aria-label="Toggle maximize"
-            >
-                <Icon class="text-xs" :name="maximized ? 'window-minimize' : 'window-maximize'" />
-            </button>
-            <button
-                v-if="resizable"
-                type="button"
-                class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                @click="setCollapsed(!collapsed)"
-                v-tooltip.top="collapsed ? 'Expand terminal' : 'Collapse terminal'"
-                :aria-label="collapsed ? 'Expand terminal' : 'Collapse terminal'"
-            >
-                <Icon class="text-xs" :name="collapsed ? 'chevron-up' : 'chevron-down'" />
-            </button>
-            <button
-                type="button"
-                class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                @click="emit(`close`)"
-                v-tooltip.top="withShortcut('Close terminal', 'terminal.toggle')"
-                aria-label="Close terminal"
-            >
-                <Icon name="times" class="text-xs" />
-            </button>
+            <!-- The toolbar: trailing the pills across the top, wrapped under them in the rail. -->
+            <div class="flex shrink-0 items-center gap-1" :class="vertical ? 'flex-wrap justify-center border-t border-line pt-1.5' : undefined">
+                <!-- The sweep: only rendered while finished tabs exist, and hovering it previews the exact set it
+                     would kill (see .tterm-doomed) instead of asking for a confirmation. -->
+                <button
+                    v-if="dead.size > 0 && killTabs !== undefined"
+                    type="button"
+                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-danger"
+                    @click="clearFinished()"
+                    @pointerenter="sweepPreview = true"
+                    @pointerleave="sweepPreview = false"
+                    v-tooltip.top="withShortcut(clearFinishedLabel, 'terminal.clearFinished')"
+                    :aria-label="clearFinishedLabel"
+                >
+                    <Icon name="eraser" class="text-xs" />
+                </button>
+                <BackgroundProcesses />
+                <button
+                    v-if="restart !== undefined && activeShell"
+                    type="button"
+                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    @click="restart()"
+                    v-tooltip.top="'Restart shell'"
+                    aria-label="Restart shell"
+                >
+                    <Icon name="refresh" class="text-xs" />
+                </button>
+                <button
+                    v-else
+                    type="button"
+                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    @click="void tabs.refresh()"
+                    v-tooltip.top="'Refresh sessions'"
+                    aria-label="Refresh sessions"
+                >
+                    <Icon name="refresh" class="text-xs" />
+                </button>
+                <button
+                    v-if="resizable"
+                    type="button"
+                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    @click="maximized = !maximized"
+                    v-tooltip.top="maximized ? 'Restore panel size' : 'Maximize panel'"
+                    aria-label="Toggle maximize"
+                >
+                    <Icon class="text-xs" :name="maximized ? 'window-minimize' : 'window-maximize'" />
+                </button>
+                <button
+                    v-if="resizable"
+                    type="button"
+                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    @click="setCollapsed(!collapsed)"
+                    v-tooltip.top="collapsed ? 'Expand terminal' : 'Collapse terminal'"
+                    :aria-label="collapsed ? 'Expand terminal' : 'Collapse terminal'"
+                >
+                    <Icon class="text-xs" :name="collapsed ? 'chevron-up' : 'chevron-down'" />
+                </button>
+                <button
+                    type="button"
+                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    @click="emit(`close`)"
+                    v-tooltip.top="withShortcut('Close terminal', 'terminal.toggle')"
+                    aria-label="Close terminal"
+                >
+                    <Icon name="times" class="text-xs" />
+                </button>
+            </div>
         </div>
-        <!-- xterm sizes to this container; the session's fit observer keeps each cell filling its share of the
-             pane (useTerminal's mount builds one .term-cell per split). v-show (not v-if) keeps xterm open()'d
-             and the shell alive while collapsed — it refits when shown again. -->
-        <div v-show="!effectiveCollapsed" ref="container" class="term-body flex min-h-0 flex-1 bg-terminal p-2"></div>
-        <!-- Touch extra-keys row (coarse pointers only). pointerdown.prevent keeps the terminal focused so the
-             soft keyboard stays up while the key is injected. -->
-        <div
-            v-if="coarse && !effectiveCollapsed"
-            class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5"
-        >
-            <button type="button" class="termkey" :class="{ 'termkey-on': ctrlArmed }" @pointerdown.prevent="ctrlArmed = !ctrlArmed">Ctrl</button>
-            <button v-for="key in EXTRA_KEYS" :key="key.label" type="button" class="termkey" @pointerdown.prevent="pressKey(key.data)">
-                {{ key.label }}
-            </button>
+        <!-- The panes and the touch keys under them: always a column, whichever side the bar is on. -->
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+            <!-- xterm sizes to this container; the session's fit observer keeps each cell filling its share of
+                 the pane (useTerminal's mount builds one .term-cell per split). v-show (not v-if) keeps xterm
+                 open()'d and the shell alive while collapsed — it refits when shown again. -->
+            <div v-show="!effectiveCollapsed" ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2"></div>
+            <!-- Touch extra-keys row (coarse pointers only). pointerdown.prevent keeps the terminal focused so
+                 the soft keyboard stays up while the key is injected. -->
+            <div
+                v-if="coarse && !effectiveCollapsed"
+                class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5"
+            >
+                <button type="button" class="termkey" :class="{ 'termkey-on': ctrlArmed }" @pointerdown.prevent="ctrlArmed = !ctrlArmed">Ctrl</button>
+                <button v-for="key in EXTRA_KEYS" :key="key.label" type="button" class="termkey" @pointerdown.prevent="pressKey(key.data)">
+                    {{ key.label }}
+                </button>
+            </div>
         </div>
 
         <!-- Right-click pill menu: split/join/unsplit/kill + the per-terminal cosmetic overrides. Rendered into

@@ -21,6 +21,14 @@ const DEFAULT_SIDEBAR_WIDTH = 256;
 const MIN_SIDEBAR_WIDTH = 180;
 const MAX_SIDEBAR_WIDTH = 600;
 
+// The agent review panel's file list — the left column in /agents/:id. Its own width, not the workspace
+// explorer's: the two columns are never on screen together, and a review list wants room for long paths that
+// the file tree (already indented into folders) does not.
+const REVIEW_LIST_WIDTH_KEY = `ui-agent-review-list-width`;
+const DEFAULT_REVIEW_LIST_WIDTH = 288;
+const MIN_REVIEW_LIST_WIDTH = 180;
+const MAX_REVIEW_LIST_WIDTH = 800;
+
 // The global terminal — the panel the shell mounts below every view. Only the OPEN state lives here (the rail's
 // terminal button + Ctrl+` toggle it); height/collapse belong to the shared TerminalPanel, persisted per surface.
 const TERMINAL_OPEN_KEY = `ui-workspace-terminal-open`;
@@ -52,6 +60,8 @@ const clampWidth = (px: number): number => {
 
 const clampSidebarWidth = (px: number): number => Math.round(Math.max(MIN_SIDEBAR_WIDTH, Math.min(px, MAX_SIDEBAR_WIDTH)));
 
+const clampReviewListWidth = (px: number): number => Math.round(Math.max(MIN_REVIEW_LIST_WIDTH, Math.min(px, MAX_REVIEW_LIST_WIDTH)));
+
 // Shared localStorage readers — Storage may be unavailable (private mode); helpers catch and fall back.
 const readBool = (key: string): boolean => {
     try {
@@ -70,30 +80,19 @@ const readEnum = <T extends string>(key: string, valid: readonly T[], fallback: 
     }
 };
 
-const readWidth = (): number => {
+// A stored px width, clamped by the column's own bounds — a stale value from a wider screen (or a bounds change
+// in a later build) must never restore a column the viewport can't hold.
+const readWidth = (key: string, clamp: (px: number) => number, fallback: number): number => {
     try {
-        const stored = localStorage.getItem(WIDTH_KEY);
+        const stored = localStorage.getItem(key);
         const parsed = stored === null ? Number.NaN : Number.parseInt(stored, 10);
         if (Number.isFinite(parsed)) {
-            return clampWidth(parsed);
+            return clamp(parsed);
         }
     } catch {
         // ignore
     }
-    return DEFAULT_CHAT_WIDTH;
-};
-
-const readSidebarWidth = (): number => {
-    try {
-        const stored = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-        const parsed = stored === null ? Number.NaN : Number.parseInt(stored, 10);
-        if (Number.isFinite(parsed)) {
-            return clampSidebarWidth(parsed);
-        }
-    } catch {
-        // ignore
-    }
-    return DEFAULT_SIDEBAR_WIDTH;
+    return fallback;
 };
 
 const write = (key: string, value: string): void => {
@@ -105,8 +104,9 @@ const write = (key: string, value: string): void => {
 };
 
 const position = ref<ChatPosition>(readEnum(STORAGE_KEY, [`left`, `right`] as const, `left`));
-const chatWidth = ref<number>(readWidth());
-const sidebarWidth = ref<number>(readSidebarWidth());
+const chatWidth = ref<number>(readWidth(WIDTH_KEY, clampWidth, DEFAULT_CHAT_WIDTH));
+const sidebarWidth = ref<number>(readWidth(SIDEBAR_WIDTH_KEY, clampSidebarWidth, DEFAULT_SIDEBAR_WIDTH));
+const reviewListWidth = ref<number>(readWidth(REVIEW_LIST_WIDTH_KEY, clampReviewListWidth, DEFAULT_REVIEW_LIST_WIDTH));
 const sidebarCollapsed = ref<boolean>(readBool(SIDEBAR_COLLAPSED_KEY));
 const terminalOpen = ref<boolean>(readBool(TERMINAL_OPEN_KEY));
 const sidebarPanel = ref<SidebarPanel>(readEnum(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`));
@@ -140,6 +140,16 @@ const setSidebarWidth = (px: number): void => {
 
 const resetSidebarWidth = (): void => {
     setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+};
+
+const setReviewListWidth = (px: number): void => {
+    const width = clampReviewListWidth(px);
+    reviewListWidth.value = width;
+    write(REVIEW_LIST_WIDTH_KEY, String(width));
+};
+
+const resetReviewListWidth = (): void => {
+    setReviewListWidth(DEFAULT_REVIEW_LIST_WIDTH);
 };
 
 const setSidebarCollapsed = (collapsed: boolean): void => {
@@ -186,6 +196,7 @@ export function useLayout() {
         position,
         chatWidth,
         sidebarWidth,
+        reviewListWidth,
         sidebarCollapsed,
         terminalOpen,
         sidebarPanel,
@@ -197,6 +208,8 @@ export function useLayout() {
         resetChatWidth,
         setSidebarWidth,
         resetSidebarWidth,
+        setReviewListWidth,
+        resetReviewListWidth,
         setSidebarCollapsed,
         toggleSidebar,
         setTerminalOpen,

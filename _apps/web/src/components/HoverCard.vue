@@ -10,7 +10,7 @@ import { computed, ref } from "vue";
  * where the transcript is in hand.
  *
  * A native title= or PrimeVue's v-tooltip would not do: both clip long text to one terse line, which is the
- * exact failure being fixed. So this teleports to the overlay target (the pip body while the chat is popped
+ * exact failure being fixed. So this teleports to the overlay target (the pop-out body while the chat is popped
  * out, else <body>) to escape its trigger's overflow clipping, and flips above/below with the room in THAT
  * window.
  *
@@ -18,7 +18,7 @@ import { computed, ref } from "vue";
  * mouseleave calls hide(). The card owns the placement, so a strip of forty tabs costs one node, not forty. */
 
 const { to = `body` } = defineProps<{
-    // Where the card mounts, escaping the trigger's clipping — the pip body while popped out, else <body>.
+    // Where the card mounts, escaping the trigger's clipping — the pop-out body while popped out, else <body>.
     to?: HTMLElement | "body";
 }>();
 
@@ -38,7 +38,7 @@ const placement = ref<{ content: HoverCardContent; left: number; top?: number; b
 const show = (event: MouseEvent, content: HoverCardContent): void => {
     if ((content.title ?? ``).trim() === `` && (content.body ?? ``).trim() === ``) return; // nothing to reveal
     const el = event.currentTarget as HTMLElement;
-    // The anchor may live in the pip window, whose viewport (and fixed-position origin) is its own — measure
+    // The anchor may live in the pop-out window, whose viewport (and fixed-position origin) is its own — measure
     // and clamp against that window, not the main realm's globalThis.
     const win = el.ownerDocument.defaultView ?? globalThis;
     const rect = el.getBoundingClientRect();

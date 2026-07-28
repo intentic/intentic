@@ -14,11 +14,15 @@ import {
     type SDKMessage,
     type SDKUserMessage,
     type SlashCommand,
+    type SpawnedProcess,
+    type SpawnOptions,
     tool,
 } from "@anthropic-ai/claude-agent-sdk";
+import { spawn } from "node:child_process";
 import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
 import { relative, sep } from "node:path";
 import { z } from "zod";
+import { fromNamespace, type IsolationAnchor, nsenterArgv } from "../agents/isolation.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
@@ -36,8 +40,14 @@ export interface AgentRequest {
     // local_image inputs). The Claude path folds these into the prompt in streamAgent instead — its Read
     // tool handles images/PDFs from disk natively.
     readonly attachments?: readonly string[];
-    // The working dir the agent edits — the workspace root, so it can touch all three repos.
+    // The working dir the agent edits — the workspace root, so it can touch all three repos. Under `isolation`
+    // this is the root as seen INSIDE the namespace, where it resolves to the conversation's worktree.
     readonly cwd: string;
+    // Run this turn in its own mount namespace, with the conversation's worktree bind-mounted over the
+    // workspace root — so an isolated agent's /work IS its worktree and every absolute path it inherits stays
+    // inside its own space (agents/isolation.ts). Absent ⇒ a main-tree turn, or a container that cannot build
+    // a namespace; either way the process runs unwrapped in `cwd` exactly as before.
+    readonly isolation?: IsolationAnchor;
     // Resume a prior turn's session for multi-message conversations.
     readonly sessionId?: string;
     readonly signal: AbortSignal;
@@ -698,6 +708,26 @@ const disallowedToolsOf = (request: AgentRequest): string[] => [
  * Declared here because `@anthropic-ai/claude-agent-sdk@0.3.220` implements the option in sdk.mjs (it is
  * destructured alongside `canUseTool` and gates `hasBidirectionalNeeds`) but omits it from sdk.d.ts. Returning
  * the SAME token the CLI already holds is how we say "no refresh available"; it detects that and stops. */
+/* The SDK's spawn seam, used for what it was built for — running the CLI somewhere other than plainly here.
+ * The command and args are handed straight through; only the namespace they land in changes, because
+ * `nsenter` execs the CLI into the turn's anchor (isolation.ts) rather than supervising it. So the SDK still
+ * owns a direct child: its stdio pipes, its exit code, and the SIGTERM it sends on abort all reach the real
+ * CLI.
+ *
+ * `cwd` comes from the anchor, not from `options`: it is the workspace root as the namespace sees it, which
+ * inside IS the worktree. A failure here is a failed turn rather than a silent fall back to the shared tree —
+ * an agent that quietly gets the main checkout is the exact bug this whole path exists to prevent. */
+const namespacedSpawn =
+    (anchor: IsolationAnchor) =>
+    (options: SpawnOptions): SpawnedProcess => {
+        const { command, args } = nsenterArgv(anchor.pid, anchor.cwd, options.command, options.args);
+        return spawn(command, args, {
+            env: options.env,
+            ...(options.signal !== undefined ? { signal: options.signal } : {}),
+            stdio: ["pipe", "pipe", "pipe"],
+        });
+    };
+
 export type OauthRecoveryOptions = Options & {
     getOAuthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
 };
@@ -756,10 +786,16 @@ const baseOptions = (
     // is pointed at the owner-approved overlay. Diagnostics: every native Edit/Write is type-checked by the
     // resident lsp service and compile errors ride back as additionalContext.
     hooks: mergeHooks(
-        tmuxEnabled ? bashTmuxHooks(request.filterBackend, Object.keys(request.cliEnv ?? {})) : {},
+        tmuxEnabled ? bashTmuxHooks(request.filterBackend, Object.keys(request.cliEnv ?? {}), request.isolation) : {},
         installSteeringHooks(),
-        editDiagnosticsHooks(request.cwd),
+        // The hook body runs in the DAEMON, outside the turn's namespace, so the file the agent just edited
+        // has to be named the way the daemon can reach it — otherwise an isolated turn type-checks the main
+        // tree's copy of the path and reports diagnostics for code it did not write.
+        editDiagnosticsHooks(fromNamespace(request.cwd, request.isolation?.plan), request.isolation?.plan),
     ),
+    // Enter the namespace by wrapping the CLI's own spawn: the agent process (and everything it forks) is born
+    // inside it, so there is no window in which the turn can see the shared tree.
+    ...(request.isolation !== undefined ? { spawnClaudeCodeProcess: namespacedSpawn(request.isolation) } : {}),
     ...(request.model !== undefined ? { model: request.model } : {}),
     ...(request.sessionId !== undefined ? { resume: request.sessionId } : {}),
     ...(request.plugins !== undefined ? { plugins: request.plugins.map((path) => ({ type: "local" as const, path })) } : {}),

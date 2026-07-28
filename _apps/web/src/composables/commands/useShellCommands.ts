@@ -58,13 +58,8 @@ export function useShellCommands(): void {
             // VSCode's New Terminal chord, matched by physical key (the Backquote row) so the Shift glyph "~"
             // or a dead-key layout can't break it.
             { command: `terminal.new`, title: `New Terminal`, icon: `code`, keybinding: `Ctrl+Shift+\``, handler: () => terminal.spawnShell() },
-        ];
-        // Pop-out rides the Document Picture-in-Picture API — only offer the commands where the gesture is offered.
-        if (chat.supported) {
-            entries.push({ command: `chat.togglePopout`, title: `Toggle Chat Pop-Out`, icon: `window-maximize`, handler: () => chat.toggle() });
-        }
-        if (terminalPopout.supported) {
-            entries.push({
+            { command: `chat.togglePopout`, title: `Toggle Chat Pop-Out`, icon: `window-maximize`, handler: () => chat.toggle() },
+            {
                 command: `terminal.togglePopout`,
                 title: `Toggle Terminal Pop-Out`,
                 icon: `window-maximize`,
@@ -73,8 +68,8 @@ export function useShellCommands(): void {
                     terminal.setOpen(true);
                     terminalPopout.toggle();
                 },
-            });
-        }
+            },
+        ];
         disposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
     });
 

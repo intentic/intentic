@@ -8,6 +8,7 @@ import DiffStat from "../components/DiffStat.vue";
 import { type AgentReviewFile, useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
+import { useLayout } from "../composables/useLayout";
 import { diffRawUrls } from "../composables/workspace/diffRaw";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
 import BinaryDiffView from "../pages/workspace/viewers/BinaryDiffView.vue";
@@ -40,6 +41,7 @@ const props = defineProps<{ agentId: string }>();
 const router = useRouter();
 const { mobile } = useDevice();
 const { explorerStyle } = useExplorerStyle();
+const shell = useLayout();
 const changes = useAgentChanges(toRef(props, `agentId`));
 const { openDiff } = useWorkspaceTabs();
 
@@ -321,6 +323,39 @@ const conflictGroups = computed(() =>
 const mergeable = computed(() => blockedCount.value > 0 && conflictPaths.value.every((conflict) => conflict.reason !== `workspace`));
 const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
 
+// --- the list's width ----------------------------------------------------------------------------------
+// The file list is a column of PATHS, and how much of one you need is the reviewer's call, not a constant:
+// a flat repo reads fine at the default, a deep monorepo truncates every row at it. Same gesture and same
+// persistence as the workspace explorer's edge — drag to size, double-click to reset, remembered after.
+// Pointer capture rather than window listeners, so a drag that outruns the 6px strip still tracks.
+const listEl = ref<HTMLElement>();
+const resizing = ref(false);
+let listLeft = 0;
+
+const startResize = (event: PointerEvent): void => {
+    event.preventDefault();
+    listLeft = listEl.value?.getBoundingClientRect().left ?? 0;
+    resizing.value = true;
+    (event.target as HTMLElement).setPointerCapture(event.pointerId);
+};
+
+const onResize = (event: PointerEvent): void => {
+    if (resizing.value) {
+        shell.setReviewListWidth(event.clientX - listLeft);
+    }
+};
+
+const endResize = (event: PointerEvent): void => {
+    if (!resizing.value) {
+        return;
+    }
+    resizing.value = false;
+    const target = event.target as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) {
+        target.releasePointerCapture(event.pointerId);
+    }
+};
+
 // Destructive and unrecoverable (the branch and worktree go), so it asks in the same modal every other
 // irreversible git action in this app uses — not the inline warning strip that used to shove the list down.
 const pendingDiscard = ref(false);
@@ -496,11 +531,13 @@ const confirmDiscard = (): void => {
 
         <!-- List | diff. On a phone the two are the same real estate: the list IS the view until a file is
              picked, and the diff takes the screen with a back arrow — no route change either way. -->
-        <div v-else class="flex min-h-0 flex-1">
+        <div v-else class="flex min-h-0 flex-1" :class="resizing ? 'select-none' : ''">
             <aside
                 v-if="!mobile || selected === undefined"
+                ref="listEl"
                 class="scrollbar-thin flex min-h-0 min-w-0 flex-col overflow-auto"
-                :class="mobile ? 'flex-1' : 'w-72 shrink-0 border-r border-line'"
+                :class="mobile ? 'flex-1' : 'shrink-0 border-r border-line'"
+                :style="mobile ? undefined : { width: `${shell.reviewListWidth.value}px` }"
             >
                 <div v-for="group in groups" :key="group.repo">
                     <!-- Sticky, because the repo a path belongs to is the one thing scrolling takes away. -->
@@ -575,6 +612,21 @@ const confirmDiscard = (): void => {
                     </template>
                 </div>
             </aside>
+
+            <!-- The seam between list and diff. Sits in flow with negative margins, so it straddles the border
+                 without an overlay: the list scrolls, and an absolutely-positioned handle inside it would
+                 scroll away with the rows. -->
+            <div
+                v-if="!mobile"
+                class="review-resize"
+                :class="resizing ? 'is-resizing' : ''"
+                @pointerdown="startResize"
+                @pointermove="onResize"
+                @pointerup="endResize"
+                @pointercancel="endResize"
+                @dblclick="shell.resetReviewListWidth()"
+                title="Drag to resize · double-click to reset"
+            ></div>
 
             <section v-if="!mobile || selected !== undefined" class="flex min-h-0 min-w-0 flex-1 flex-col">
                 <template v-if="selected !== undefined">
@@ -694,3 +746,21 @@ const confirmDiscard = (): void => {
         </Dialog>
     </div>
 </template>
+
+<style scoped>
+/* Drag-to-resize seam on the file list's right edge (pointer-capture, no global listeners — mirrors the
+   workspace explorer's .ws-resize). Above the sticky repo headers so a drag started over one still grabs it. */
+.review-resize {
+    position: relative;
+    z-index: 20;
+    flex: 0 0 6px;
+    margin: 0 -3px;
+    cursor: col-resize;
+    touch-action: none;
+    transition: background-color 0.15s;
+}
+.review-resize:hover,
+.review-resize.is-resizing {
+    background: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
+}
+</style>

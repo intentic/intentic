@@ -31,11 +31,11 @@ export function useKeybindings(): void {
     onMounted(() => window.addEventListener(`keydown`, onKey));
 
     // A popped-out panel's keystrokes dispatch in ITS window, never this one — mirror the listener onto each
-    // pip window while it exists, so shortcuts keep working inside the floating chat/terminal. The pip document
-    // dies with its window, so only a still-open body needs explicit removal on unmount.
+    // pop-out window while it exists, so shortcuts keep working inside the floating chat/terminal. That
+    // document dies with its window, so only a still-open body needs explicit removal on unmount.
     const popouts = [useChatPopout(), useTerminalPopout()];
     for (const popout of popouts) {
-        watch(popout.pipBody, (body, previous) => {
+        watch(popout.body, (body, previous) => {
             previous?.ownerDocument.defaultView?.removeEventListener(`keydown`, onKey);
             body?.ownerDocument.defaultView?.addEventListener(`keydown`, onKey);
         });
@@ -44,7 +44,7 @@ export function useKeybindings(): void {
     onUnmounted(() => {
         window.removeEventListener(`keydown`, onKey);
         for (const popout of popouts) {
-            popout.pipBody.value?.ownerDocument.defaultView?.removeEventListener(`keydown`, onKey);
+            popout.body.value?.ownerDocument.defaultView?.removeEventListener(`keydown`, onKey);
         }
     });
 }

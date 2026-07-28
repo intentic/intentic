@@ -19,6 +19,7 @@ import { writeCodexConfig } from "./codex/codex-config.js";
 import { createServices } from "./composition.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
+import { ensureRepoGitDirs } from "./git/repo-git-dirs.js";
 import { commitRootBaseline, ensureRootRepo } from "./git/root-repo.js";
 import { reconcileSkills } from "./settings/skills.js";
 import { composeEnvironment } from "./environment/environment.js";
@@ -101,6 +102,12 @@ const main = async (): Promise<void> => {
         logger.warn({ err: error }, "root workspace repo not ensured — the Changes review will degrade");
         return false;
     });
+
+    // No repo keeps its git dir under /work: a worktree's gitdir pointer has to resolve identically inside an
+    // isolated turn's namespace, where /work IS that worktree (agents/isolation.ts). Every daemon-created repo
+    // is already shaped this way; this converges the ones that arrived by other roads. After ensureRootRepo,
+    // whose excludes it does not disturb, and before the registry loads the worktrees it repairs.
+    await ensureRepoGitDirs(services.workspace, config.historyRoot, logger);
 
     // The fleet registry: load persisted conversations, drop entries whose worktree vanished, sweep orphaned
     // worktree dirs + stale admin entries (`git worktree prune`). Awaited (cheap, and the /agents routes assume

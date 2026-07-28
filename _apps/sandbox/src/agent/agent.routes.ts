@@ -23,6 +23,7 @@ import { createHashlineServer } from "../hashline/hashline-tools.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { setupNoticeFor, workspaceSetup } from "../workspace/workspace-setup.js";
+import { startAnchor } from "../agents/isolation.js";
 import { landAgent } from "../agents/land.js";
 import type { AgentRequest } from "./agent.js";
 import { withAttachmentNote } from "./attachment-note.js";
@@ -266,7 +267,30 @@ async function* runTurn(
         yield { kind: "done" };
         return;
     }
-    const effectiveCwd = conversation?.cwd ?? services.workspace.root;
+    /* WHERE THIS TURN LIVES — two answers, and conflating them is a whole class of bug.
+     *
+     * `localCwd` is the tree as the DAEMON reaches it: the conversation's worktree, or /work for a main-tree
+     * turn. Everything the daemon itself runs against the files (the dependency-readiness probe, the hashline
+     * edit server) uses this, because the daemon is not in the turn's namespace.
+     *
+     * `effectiveCwd` is the workspace root as the AGENT sees it. Isolated, that is /work — which inside the
+     * namespace resolves to `localCwd` — so the agent's own space is at the path every absolute path it
+     * inherits already names, and nothing has to be remembered or forbidden. */
+    const localCwd = conversation?.cwd ?? services.workspace.root;
+    /* Built before anything else needs it, and torn down in this turn's finally. Undefined for a main-tree
+     * turn, and for a container with no mount capability — then the agent runs unwrapped in `localCwd`,
+     * exactly as it did before, and only loses the guarantee.
+     *
+     * Gated on the harness that actually ENTERS the namespace. The Claude Code loop does, through the SDK's
+     * spawn seam; a native Codex turn drives an in-process SDK with no such seam, and an ACP turn talks to a
+     * pooled connection that outlives this turn. Building an anchor for those would be worse than skipping it:
+     * `effectiveCwd` below would hand them /work — the SHARED tree — while they sit outside the namespace that
+     * makes /work mean the worktree. They keep pointing straight at their worktree instead, as they do today. */
+    const isolation =
+        conversation === undefined || !runsClaudeCode(input.agent ?? "claude", input.harness ?? "native")
+            ? undefined
+            : await services.turnIsolation.planFor(localCwd).then(async (plan) => (plan === undefined ? undefined : startAnchor(plan)));
+    const effectiveCwd = isolation?.cwd ?? localCwd;
     // Kick the repo sync off now so its network git-fetch overlaps the token refresh, browser-server setup,
     // and config reads below instead of running strictly after them. Throttled to 60s, so it's a no-op on most
     // turns; awaited just before the snapshot, which must see the pulled files (the attribution fence below).
@@ -285,6 +309,7 @@ async function* runTurn(
     const base: AgentRequest = {
         prompt: input.history !== undefined && input.history.length > 0 ? withHistory(promptWithEditor, input.history) : promptWithEditor,
         cwd: effectiveCwd,
+        ...(isolation !== undefined ? { isolation } : {}),
         signal: signal ?? new AbortController().signal,
         ...(Object.keys(cliEnv).length > 0 ? { cliEnv } : {}),
         ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
@@ -449,7 +474,7 @@ async function* runTurn(
         const sdkServers = {
             ...browserServers,
             // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
-            ...(hashlineEdits ? { hashline: createHashlineServer(effectiveCwd) } : {}),
+            ...(hashlineEdits ? { hashline: createHashlineServer(localCwd) } : {}),
         };
         // Cross-provider delegation via the shell: when Codex is reachable, the agent's Bash gets the shared
         // CODEX_HOME (whose config.toml selects the translator subscription) plus the local bearer, and the
@@ -492,7 +517,7 @@ async function* runTurn(
         // script exiting `vue-tsc: not found`, an `npx` reaching the registry for a binary that was never a package
         // name, and a post-edit type-check whose every error is false. Rides the USER message, never systemAppend:
         // it changes the moment an install finishes, and the system prefix is kept byte-stable for the prompt cache.
-        const setupNotice = setupNoticeFor(await workspaceSetup(effectiveCwd, services.processes));
+        const setupNotice = setupNoticeFor(await workspaceSetup(localCwd, services.processes));
         // withTurnPreamble so session restore can strip these notes back out of the stored message — they are
         // protocol, not something the user said (turn-preamble.ts).
         const prompt = withTurnPreamble(
@@ -634,6 +659,10 @@ async function* runTurn(
             yield event;
         }
     } finally {
+        // Drop the namespace anchor. Not a kill of the namespace itself: a pane the agent left running (a dev
+        // server it started) is still in there and keeps it alive until it exits, which is exactly the
+        // behaviour a user watching that terminal expects.
+        isolation?.dispose();
         record({ type: "turn.completed", ...(usageExtra !== undefined ? { extra: usageExtra } : {}) });
         // The spend ledger — the durable, never-pruned record the cost dashboard reads. Only turns the provider
         // actually billed land here: no usage frame means no spend to attribute, and a zero row would inflate

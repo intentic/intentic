@@ -134,12 +134,16 @@ test("apply ensures the network, then runs the sandbox unprivileged with interna
     expect(ssh.commands.some((c) => c.includes("docker network") && c.includes("intentic-workspace"))).toBe(true);
     const run = ssh.commands.find((c) => c.includes("docker run")) ?? "";
     // Unprivileged by default — the HOST's docker socket is never mounted, no root override, and no
-    // privileges/devices/caps without an overlay carrying runtime directives.
+    // privileges or devices without an overlay carrying runtime directives.
     expect(run).not.toContain("--privileged");
     expect(run).not.toContain("--user root");
     expect(run).not.toContain("/var/run/docker.sock");
     expect(run).not.toContain("--device=");
-    expect(run).not.toContain("--cap-add=");
+    // The ONE capability the base run carries: SYS_ADMIN, so the daemon can give each isolated agent turn its
+    // own mount namespace over the container's OWN filesystem (the sandbox's agents/isolation.ts). Scoped to
+    // this container; still no host reach. Every other capability stays overlay-gated.
+    expect(run).toContain("--cap-add=SYS_ADMIN");
+    expect(run).not.toContain("--cap-add=NET_ADMIN");
     // Both ports bind the host's internal ip (the tunnel reaches them; the public interface does not).
     expect(run).toContain("-p 10.0.0.5:5173:5173");
     expect(run).toContain("-p 10.0.0.5:8787:8787");

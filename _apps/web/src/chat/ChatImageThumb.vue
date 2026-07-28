@@ -4,7 +4,7 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 
 /* A compact image-attachment thumbnail that reveals a large floating preview on hover — shared by the
  * composer's staged chips and the sent user bubble so both read the same. The preview teleports to the overlay
- * target (the pip body while the chat is popped out, else <body>) so it escapes the chat scroller's
+ * target (the pop-out body while the chat is popped out, else <body>) so it escapes the chat scroller's
  * overflow-auto clipping. It hangs off the thumb's nearest corner — sideways into the roomier side (the left, for
  * the right-docked chat, so the transcript stays visible) and flush with the thumb's nearer horizontal edge — then
  * grows as large as that quadrant allows. */
@@ -25,7 +25,7 @@ const MIN_HEIGHT = 160; // px — floor for the same reason, vertically.
 
 const show = (event: MouseEvent): void => {
     const el = event.currentTarget as HTMLElement;
-    // The thumb may live in the pip window, whose viewport (and fixed-position origin) is its own — measure and
+    // The thumb may live in the pop-out window, whose viewport (and fixed-position origin) is its own — measure and
     // clamp against that window, not the main realm's globalThis.
     const win = el.ownerDocument.defaultView ?? globalThis;
     const rect = el.getBoundingClientRect();

@@ -8,11 +8,13 @@ import Popover from "primevue/popover";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { createTitleEdit } from "../composables/agents/titleEdit";
-import { useAgents } from "../composables/agents/useAgents";
+import { type FleetAgent, type FleetLane, laneOf, useAgents } from "../composables/agents/useAgents";
 import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
+import ProviderLogo from "./ProviderLogo.vue";
+import { activityIcon, agentStatusMeta, attentionReason, formatCost, formatElapsed } from "../composables/agents/agentStatus";
 import { relativeTime, statusTabClass } from "../composables/chat/catalog";
-import type { Conversation } from "../composables/chat/conversation";
+import { type Conversation, modelLabelFor } from "../composables/chat/conversation";
 import { useChat } from "../composables/chat/useChat";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { inTabSurface } from "../composables/commands/tabSurface";
@@ -33,8 +35,115 @@ const emit = defineEmits<{
 }>();
 
 const { conversations, activeId, sessions, loadSessions } = useChat();
-const { agentById } = useAgents();
-const { supported: popoutSupported, poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
+const { agentById, fleet } = useAgents();
+const { poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
+
+/* Undocked, the strip stands up the window's LEFT EDGE as a resizable rail of CARDS instead of wrapping pill
+ * tabs across the top. A pop-out window is as wide as the user drags it, so a top strip spends the one axis
+ * the chat is short of (height) on a row that has width to burn — while a rail has room to be a slice of the
+ * fleet board: the same Attention | Active | Finished lanes, each open tab a compact card wearing the crucial
+ * facts (provider mark, a two-line title, the attention chip, cost / diff / elapsed, the live activity line).
+ * Docked, the chat column is ~22rem: a card rail there would halve the transcript, so the flat strip stays. */
+const vertical = computed(() => poppedOut.value);
+
+// --- Undocked rail: the board's lanes in miniature ----------------------------------------------
+// laneOf is the board's own projection, so a tab can never sit in a different lane here than its card does on
+// /agents. A conversation the fleet has never carded (a plain non-isolated chat, or the roster briefly down)
+// still needs a shelf: streaming or empty reads as Active, anything else as Finished.
+interface RailEntry {
+    readonly conversation: Conversation;
+    readonly agent: FleetAgent | undefined;
+}
+const fleetById = computed(() => new Map(fleet.value.map((agent) => [agent.id, agent])));
+const lastActive = (entry: RailEntry): number => entry.agent?.updatedAt ?? 0;
+const railLanes = computed<Record<FleetLane, RailEntry[]>>(() => {
+    const grouped: Record<FleetLane, RailEntry[]> = { attention: [], active: [], finished: [] };
+    for (const conversation of conversations.value) {
+        const agent = fleetById.value.get(conversation.conversationId);
+        const lane: FleetLane =
+            agent !== undefined ? laneOf(agent) : conversation.streaming.value || conversation.messages.value.length === 0 ? `active` : `finished`;
+        grouped[lane].push({ conversation, agent });
+    }
+    // The board's own orderings (useAgents.lanes): fresh drafts lead Active, then turn start — fixed for the
+    // turn's life, so a running card holds its slot; the other two lanes read newest-first.
+    grouped.active.sort(
+        (a, b) =>
+            Number(b.agent?.status === `draft`) - Number(a.agent?.status === `draft`) ||
+            (a.agent?.startedAt ?? lastActive(a)) - (b.agent?.startedAt ?? lastActive(b)),
+    );
+    grouped.attention.sort((a, b) => lastActive(b) - lastActive(a));
+    grouped.finished.sort((a, b) => lastActive(b) - lastActive(a));
+    return grouped;
+});
+const RAIL_LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
+    { key: `attention`, label: `Attention`, dot: `bg-warning` },
+    { key: `active`, label: `Active`, dot: `bg-success` },
+    { key: `finished`, label: `Finished`, dot: `bg-line-strong` },
+];
+
+// One second ticks every running card's elapsed readout together (the board's `now` pattern) — armed only
+// while the rail is up, so the docked strip pays for no timer it doesn't render.
+const now = ref(Date.now());
+let ticker: ReturnType<typeof setInterval> | undefined;
+watch(
+    vertical,
+    (on) => {
+        clearInterval(ticker);
+        ticker = on
+            ? setInterval(() => {
+                  now.value = Date.now();
+              }, 1000)
+            : undefined;
+    },
+    { immediate: true },
+);
+onBeforeUnmount(() => clearInterval(ticker));
+
+// --- Rail width ---------------------------------------------------------------------------------
+// The rail resizes off its right edge (pointer capture, double-click resets) and persists like the panel
+// widths in useLayout — but locally, because it exists only in the pop-out window.
+const RAIL_WIDTH_KEY = `ui-chat-rail-width`;
+const DEFAULT_RAIL_WIDTH = 240;
+const clampRailWidth = (px: number): number => Math.round(Math.max(176, Math.min(px, 480)));
+const readRailWidth = (): number => {
+    try {
+        const parsed = Number.parseInt(localStorage.getItem(RAIL_WIDTH_KEY) ?? ``, 10);
+        return Number.isFinite(parsed) ? clampRailWidth(parsed) : DEFAULT_RAIL_WIDTH;
+    } catch {
+        return DEFAULT_RAIL_WIDTH;
+    }
+};
+const railWidth = ref(readRailWidth());
+const setRailWidth = (px: number): void => {
+    railWidth.value = clampRailWidth(px);
+    try {
+        localStorage.setItem(RAIL_WIDTH_KEY, String(railWidth.value));
+    } catch {
+        // Storage may be unavailable (private mode); the in-memory ref still holds.
+    }
+};
+const railResizing = ref(false);
+const startRailResize = (event: PointerEvent): void => {
+    event.preventDefault();
+    railResizing.value = true;
+    (event.target as HTMLElement).setPointerCapture(event.pointerId);
+};
+// The rail is flush with the pop-out window's left edge, so its width IS the pointer's x in that window.
+const onRailResize = (event: PointerEvent): void => {
+    if (railResizing.value) {
+        setRailWidth(event.clientX);
+    }
+};
+const endRailResize = (event: PointerEvent): void => {
+    if (!railResizing.value) {
+        return;
+    }
+    railResizing.value = false;
+    const target = event.target as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) {
+        target.releasePointerCapture(event.pointerId);
+    }
+};
 
 // What a tab calls a conversation: its derived title, else the noun for where it
 // works — an untitled isolated conversation IS a draft agent card on the fleet board.
@@ -129,22 +238,16 @@ const allTabs = (): ReadonlySet<string> => new Set(conversations.value.map((c) =
 const tabMenu = ref<{ show: (event: Event) => void } | undefined>();
 const menuTabId = ref<string>();
 
-// The rows that name no particular tab: they tail a tab's menu and they ARE the empty-space one. The pop-out
-// drops off Chromium, where there is no pip window to move the chat into.
-const stripItems = computed<MenuItem[]>(() => {
-    const items: MenuItem[] = [{ label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) }];
-    if (popoutSupported) {
-        items.push(
-            { separator: true },
-            {
-                label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
-                shortcut: commandShortcut(`chat.togglePopout`),
-                command: togglePopout,
-            },
-        );
-    }
-    return items;
-});
+// The rows that name no particular tab: they tail a tab's menu and they ARE the empty-space one.
+const stripItems = computed<MenuItem[]>(() => [
+    { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
+    { separator: true },
+    {
+        label: poppedOut.value ? `Dock chat back` : `Move chat into new window`,
+        shortcut: commandShortcut(`chat.togglePopout`),
+        command: togglePopout,
+    },
+]);
 
 const tabMenuItems = computed<MenuItem[]>(() => {
     const id = menuTabId.value;
@@ -303,7 +406,26 @@ const openHistory = (event: Event): void => {
 </script>
 
 <template>
-    <header class="view-header view-header-wrap flex items-center gap-1 border-b border-line px-1.5">
+    <!-- Docked: a header across the top of the chat column. Undocked: a resizable rail of lane-grouped cards
+         down the window's left edge, with the ✚ / history pair under the list instead of beside it. -->
+    <component
+        :is="vertical ? 'aside' : 'header'"
+        class="flex gap-1 border-line"
+        :class="[
+            vertical ? 'relative h-full shrink-0 flex-col items-stretch border-r p-1.5' : 'view-header view-header-wrap items-center border-b px-1.5',
+            { 'rail-resizing': railResizing },
+        ]"
+        :style="vertical ? { width: `${railWidth}px` } : undefined"
+    >
+        <div
+            v-if="vertical"
+            class="rail-resize"
+            @pointerdown="startRailResize"
+            @pointermove="onRailResize"
+            @pointerup="endRailResize"
+            @dblclick="setRailWidth(DEFAULT_RAIL_WIDTH)"
+            title="Drag to resize · double-click to reset"
+        ></div>
         <!-- Tabs fill one row, then wrap to a second; only past two rows does the strip scroll vertically. It
              never scrolls sideways, so no tab hides off the right edge. One row still measures exactly a
              .view-header (a 26px tab row plus its py-1 is under the 2.25rem floor), so the shell-wide header
@@ -316,70 +438,193 @@ const openHistory = (event: Event): void => {
              two rows plus the gap come to 60px, just inside max-h-16, and a third (90px) is well outside.
              All three numbers move together with --text-2xs; retune them together, never one alone.
              The ✚ and history buttons sit outside the strip, so they never move; their h-7 rides inside the
-             floor with no header padding. -->
+             floor with no header padding.
+             None of that applies down the side: the rail owns the window's full height, so the lanes and their
+             cards simply stack, and the list scrolls only when it outgrows the window. -->
         <div
             ref="strip"
-            class="scrollbar-thin flex max-h-16 min-w-0 flex-1 flex-wrap items-center gap-1 overflow-x-hidden overflow-y-auto py-0.5"
+            class="scrollbar-thin flex min-w-0 flex-1 gap-1 overflow-x-hidden overflow-y-auto"
+            :class="vertical ? 'min-h-0 flex-col items-stretch' : 'max-h-16 flex-wrap items-center py-0.5'"
             @contextmenu="onStripContextMenu"
         >
-            <template v-for="c in conversations" :key="c.conversationId">
-                <!-- Renaming REPLACES the tab rather than nesting a field inside it: an input in a button is
-                     neither valid markup nor a usable caret. Enter commits, Esc cancels, blur commits, an empty
-                     or unchanged name silently cancels — the WorkspaceTree convention, via createTitleEdit. -->
-                <input
-                    v-if="edit.editing && renamingId === c.conversationId"
-                    v-model="edit.draft"
-                    type="text"
-                    maxlength="80"
-                    aria-label="Chat title"
-                    :placeholder="c.isolated.value ? 'New agent' : 'New chat'"
-                    class="w-40 shrink-0 select-text rounded-md bg-overlay px-2 py-1 text-2xs text-content outline-none ring-1 ring-primary-500/50 placeholder:text-subtle"
-                    @keydown.enter.stop.prevent="edit.commit()"
-                    @keydown.esc.stop.prevent="edit.cancel()"
-                    @blur="edit.blurCommit()"
-                    @vue:mounted="edit.focusInput"
-                />
-                <button
-                    v-else
-                    type="button"
-                    :data-chat-tab="c.conversationId"
-                    class="chat-tab group flex min-w-20 max-w-40 shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-2xs"
-                    :class="{ 'chat-tab-on': activeId === c.conversationId }"
-                    @click="emit('select', c.conversationId)"
-                    @dblclick.prevent.stop="beginRename(c.conversationId)"
-                    @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"
-                    @mouseenter="showPreview($event, c)"
-                    @mouseleave="hidePreview"
-                >
-                    <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
-                    <OriginMark :origin="originOf(c)" compact />
-                    <!-- Archived: the agent is off the board, but its conversation is still right here. -->
-                    <span v-if="isArchived(c)" v-tooltip.bottom="'Archived — off the agents board'" class="flex shrink-0 items-center">
-                        <Icon name="box" class="text-2xs text-subtle" />
-                    </span>
-                    <!-- One noun with the fleet: an untitled isolated conversation IS a draft agent card there. -->
-                    <span class="min-w-0 flex-1 truncate text-left" :class="statusTabClass(c.status.value)">{{ tabLabel(c) }}</span>
-                    <!-- Members with this same conversation active right now. -->
-                    <PresenceAvatars v-if="c.session.value !== undefined" :viewers="viewersOfSession(c.session.value.id)" label="in this chat" />
-                    <Icon
-                        name="times"
-                        v-if="conversations.length > 1"
-                        @click="closeTab($event, c.conversationId)"
-                        class="-mr-1 shrink-0 text-2xs opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
+            <template v-if="!vertical">
+                <template v-for="c in conversations" :key="c.conversationId">
+                    <!-- Renaming REPLACES the tab rather than nesting a field inside it: an input in a button is
+                         neither valid markup nor a usable caret. Enter commits, Esc cancels, blur commits, an empty
+                         or unchanged name silently cancels — the WorkspaceTree convention, via createTitleEdit. -->
+                    <input
+                        v-if="edit.editing && renamingId === c.conversationId"
+                        v-model="edit.draft"
+                        type="text"
+                        maxlength="80"
+                        aria-label="Chat title"
+                        :placeholder="c.isolated.value ? 'New agent' : 'New chat'"
+                        class="w-40 shrink-0 select-text rounded-md bg-overlay px-2 py-1 text-2xs text-content outline-none ring-1 ring-primary-500/50 placeholder:text-subtle"
+                        @keydown.enter.stop.prevent="edit.commit()"
+                        @keydown.esc.stop.prevent="edit.cancel()"
+                        @blur="edit.blurCommit()"
+                        @vue:mounted="edit.focusInput"
                     />
-                </button>
+                    <button
+                        v-else
+                        type="button"
+                        :data-chat-tab="c.conversationId"
+                        class="chat-tab group flex min-w-20 max-w-40 shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-2xs"
+                        :class="{ 'chat-tab-on': activeId === c.conversationId }"
+                        @click="emit('select', c.conversationId)"
+                        @dblclick.prevent.stop="beginRename(c.conversationId)"
+                        @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"
+                        @mouseenter="showPreview($event, c)"
+                        @mouseleave="hidePreview"
+                    >
+                        <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
+                        <OriginMark :origin="originOf(c)" compact />
+                        <!-- Archived: the agent is off the board, but its conversation is still right here. -->
+                        <span v-if="isArchived(c)" v-tooltip.bottom="'Archived — off the agents board'" class="flex shrink-0 items-center">
+                            <Icon name="box" class="text-2xs text-subtle" />
+                        </span>
+                        <!-- One noun with the fleet: an untitled isolated conversation IS a draft agent card there. -->
+                        <span class="min-w-0 flex-1 truncate text-left" :class="statusTabClass(c.status.value)">{{ tabLabel(c) }}</span>
+                        <!-- Members with this same conversation active right now. -->
+                        <PresenceAvatars v-if="c.session.value !== undefined" :viewers="viewersOfSession(c.session.value.id)" label="in this chat" />
+                        <Icon
+                            name="times"
+                            v-if="conversations.length > 1"
+                            @click="closeTab($event, c.conversationId)"
+                            class="-mr-1 shrink-0 text-2xs opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
+                        />
+                    </button>
+                </template>
+            </template>
+
+            <!-- The rail: the fleet board's three lanes over the OPEN tabs, empty lanes hidden. Each card is
+                 the tab it always was (click selects, double-click renames, right-click menus, × closes) —
+                 wearing the crucial slice of its /agents card: provider mark, two lines of title, the
+                 attention chip or status glyph, cost / diff / elapsed, and the live activity line. -->
+            <template v-else>
+                <template v-for="railLane in RAIL_LANES" :key="railLane.key">
+                    <template v-if="railLanes[railLane.key].length > 0">
+                        <div class="mt-1.5 flex items-center gap-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-subtle first:mt-0">
+                            <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="railLane.dot"></span>
+                            <span>{{ railLane.label }}</span>
+                            <span class="font-normal">{{ railLanes[railLane.key].length }}</span>
+                        </div>
+                        <template v-for="{ conversation: c, agent } in railLanes[railLane.key]" :key="c.conversationId">
+                            <input
+                                v-if="edit.editing && renamingId === c.conversationId"
+                                v-model="edit.draft"
+                                type="text"
+                                maxlength="80"
+                                aria-label="Chat title"
+                                :placeholder="c.isolated.value ? 'New agent' : 'New chat'"
+                                class="w-full shrink-0 select-text rounded-md bg-overlay px-2 py-1 text-2xs text-content outline-none ring-1 ring-primary-500/50 placeholder:text-subtle"
+                                @keydown.enter.stop.prevent="edit.commit()"
+                                @keydown.esc.stop.prevent="edit.cancel()"
+                                @blur="edit.blurCommit()"
+                                @vue:mounted="edit.focusInput"
+                            />
+                            <button
+                                v-else
+                                type="button"
+                                :data-chat-tab="c.conversationId"
+                                class="chat-tab group flex w-full min-w-0 shrink-0 flex-col gap-1 rounded-md px-2 py-1.5 text-left text-2xs"
+                                :class="{ 'chat-tab-on': activeId === c.conversationId, 'ring-1 ring-warning/40': railLane.key === 'attention' }"
+                                @click="emit('select', c.conversationId)"
+                                @dblclick.prevent.stop="beginRename(c.conversationId)"
+                                @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"
+                                @mouseenter="showPreview($event, c)"
+                                @mouseleave="hidePreview"
+                            >
+                                <span class="flex w-full min-w-0 items-start gap-1.5">
+                                    <ProviderLogo v-if="agent !== undefined" :provider="agent.provider" class="mt-px shrink-0 text-2xs text-muted" />
+                                    <OriginMark :origin="originOf(c)" compact />
+                                    <span
+                                        v-if="isArchived(c)"
+                                        v-tooltip.bottom="'Archived — off the agents board'"
+                                        class="mt-px flex shrink-0 items-center"
+                                    >
+                                        <Icon name="box" class="text-2xs text-subtle" />
+                                    </span>
+                                    <!-- Two lines before the clamp — a card has the width for most titles whole. -->
+                                    <span class="line-clamp-2 min-w-0 flex-1 leading-4" :class="statusTabClass(c.status.value)">{{
+                                        tabLabel(c)
+                                    }}</span>
+                                    <PresenceAvatars
+                                        v-if="c.session.value !== undefined"
+                                        :viewers="viewersOfSession(c.session.value.id)"
+                                        label="in this chat"
+                                    />
+                                    <Icon
+                                        name="times"
+                                        v-if="conversations.length > 1"
+                                        @click="closeTab($event, c.conversationId)"
+                                        class="-mr-1 mt-px shrink-0 text-2xs opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
+                                    />
+                                </span>
+                                <template v-if="agent !== undefined">
+                                    <!-- The crucial numbers, one wrapping line: model, cost, diff, and — right-
+                                         aligned — the running elapsed (ticking) or the last-activity age. -->
+                                    <span class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
+                                        <span
+                                            v-if="attentionReason(agent) !== undefined"
+                                            class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
+                                            >{{ attentionReason(agent) }}</span
+                                        >
+                                        <Icon
+                                            v-else
+                                            :name="agentStatusMeta(agent.status).icon"
+                                            :spin="agentStatusMeta(agent.status).spin"
+                                            class="shrink-0 text-2xs"
+                                            :class="agentStatusMeta(agent.status).class"
+                                            v-tooltip.bottom="agentStatusMeta(agent.status).label"
+                                        />
+                                        <span v-if="agent.model !== undefined" class="max-w-28 truncate">{{
+                                            modelLabelFor(agent.provider, agent.model)
+                                        }}</span>
+                                        <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
+                                        <span
+                                            v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)"
+                                            class="font-mono"
+                                        >
+                                            <span class="text-success">+{{ agent.diff.insertions }}</span>
+                                            <span class="text-danger"> −{{ agent.diff.deletions }}</span>
+                                        </span>
+                                        <span v-if="agent.status === 'running' && agent.startedAt !== undefined" class="ml-auto shrink-0 text-link">{{
+                                            formatElapsed(agent.startedAt, now)
+                                        }}</span>
+                                        <span v-else-if="agent.updatedAt > 0" class="ml-auto shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
+                                    </span>
+                                    <!-- What it is doing RIGHT NOW — the board card's live line, one truncated row. -->
+                                    <span
+                                        v-if="agent.status === 'running' && agent.activity !== undefined"
+                                        class="flex w-full min-w-0 items-center gap-1 text-2xs text-link"
+                                    >
+                                        <Icon :name="activityIcon(agent.activity.tool)" class="shrink-0 text-2xs" />
+                                        <span class="min-w-0 flex-1 truncate">{{
+                                            agent.activity.todo ?? [agent.activity.tool, agent.activity.target].filter(Boolean).join(" · ")
+                                        }}</span>
+                                    </span>
+                                </template>
+                            </button>
+                        </template>
+                    </template>
+                </template>
             </template>
         </div>
         <!-- A failed rename already reverted the title; this says why. Cleared by the next rename. -->
         <span v-if="edit.error !== undefined" class="min-w-0 shrink truncate text-2xs text-danger" v-tooltip.bottom="edit.error">{{
             edit.error
         }}</span>
-        <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent" v-tooltip.bottom="'New agent'" aria-label="New agent">
-            <Icon name="plus" class="text-sm" />
-        </button>
-        <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="openHistory" v-tooltip.bottom="'History'" aria-label="Chat history">
-            <Icon name="history" class="text-sm" />
-        </button>
+        <!-- Beside the strip across the top, under it down the side — either way the pair stays together and
+             never scrolls with the tabs. -->
+        <div class="flex shrink-0 items-center gap-1" :class="{ 'border-t border-line pt-1': vertical }">
+            <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent" v-tooltip.bottom="'New agent'" aria-label="New agent">
+                <Icon name="plus" class="text-sm" />
+            </button>
+            <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="openHistory" v-tooltip.bottom="'History'" aria-label="Chat history">
+                <Icon name="history" class="text-sm" />
+            </button>
+        </div>
         <Popover ref="history" :append-to="overlayTarget" @show="searchInput?.focus()">
             <div class="flex w-72 flex-col">
                 <div class="relative p-1">
@@ -431,9 +676,9 @@ const openHistory = (event: Event): void => {
                 </div>
             </div>
         </Popover>
-    </header>
+    </component>
     <!-- Full title (+ first message) on tab hover. Mounted at the overlay target so it clears the strip's
-         overflow-auto clipping, and into the pip window while the chat floats there. -->
+         overflow-auto clipping, and into the pop-out window while the chat floats there. -->
     <HoverCard ref="hoverCard" :to="overlayTarget" />
 
     <!-- Right-click menu, for a tab and for the strip's empty space alike. Rendered into the pop-out window while
@@ -466,5 +711,24 @@ const openHistory = (event: Event): void => {
             </a>
         </template>
     </ContextMenu>
-
 </template>
+
+<style scoped>
+/* Drag-to-resize handle on the rail's right edge (pointer-capture, mirrors the panel's .resize-handle). */
+.rail-resize {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 20;
+    touch-action: none;
+    transition: background-color 0.15s;
+}
+.rail-resize:hover,
+.rail-resizing .rail-resize {
+    background: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
+}
+.rail-resizing {
+    user-select: none;
+}
+</style>

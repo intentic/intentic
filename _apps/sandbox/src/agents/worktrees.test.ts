@@ -16,6 +16,10 @@ const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 
+// No mount namespace here: these suites assert the SYMLINK mirroring, which is what a container without
+// CAP_SYS_ADMIN (and every test runner) actually gets. The bind-mount branch is isolation.test.ts's.
+const noIsolation = { available: async () => false, planFor: async () => undefined };
+
 const tempDirs: string[] = [];
 afterEach(async () => {
     for (const dir of tempDirs.splice(0)) {
@@ -44,7 +48,7 @@ const setup = async (): Promise<{ work: string; historyRoot: string; worktrees: 
     await writeFile(join(work, "CLAUDE.md"), "workspace notes\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "baseline");
-    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), logger });
+    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), isolation: noIsolation, logger });
     return { work, historyRoot, worktrees };
 };
 

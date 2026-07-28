@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { type IsolationAnchor, nsenterPrefix } from "../agents/isolation.js";
 import { shellQuote, TMUX_RUN_BIN } from "../terminal/terminal-run.js";
 import { AGENT_SESSION_PREFIX } from "../terminal/terminal-session.js";
 
@@ -54,6 +55,12 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
 export const bashTmuxHooks = (
     filterBackend?: "native" | "rtk",
     envKeys: readonly string[] = [],
+    // An isolated turn's Bash must run in the SAME namespace as its Edit/Write, or the two tools disagree
+    // about what /work is — the agent edits its worktree and `sed -i` on the same path rewrites the shared
+    // tree. A pane is forked by the tmux SERVER, which lives in the daemon's namespace, so the pane's own
+    // command line is the only place that can join: nsenter wraps the command INSIDE the window, leaving the
+    // server, its socket, and the terminals panel's list/attach exactly as they are.
+    isolation?: IsolationAnchor,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const envFlags = envKeyFlags(envKeys);
     return {
@@ -73,7 +80,11 @@ export const bashTmuxHooks = (
                         if (session === undefined) {
                             return {};
                         }
-                        const inner = filterBackend === "rtk" ? `rtk ${tool.command}` : tool.command;
+                        const wrapped = filterBackend === "rtk" ? `rtk ${tool.command}` : tool.command;
+                        // The namespace hop goes OUTSIDE the rtk prefix and inside the tmux wrapper: rtk is
+                        // the agent's own command line and belongs in the namespace with it, while tmux-run
+                        // itself must stay out here where the server and the pane logs are.
+                        const inner = isolation !== undefined ? `${nsenterPrefix(isolation.pid, isolation.cwd)}bash -c ${shellQuote(wrapped)}` : wrapped;
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",
