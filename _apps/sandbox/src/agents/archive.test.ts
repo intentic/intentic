@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAgentsRegistry, type AgentTurnIdentity } from "./agents-registry.js";
 import type { AgentsStore, PersistedAgent } from "./agents-store.js";
-import { archivable, archivableByAge, archiveAgents, sweepAgedAgents } from "./archive.js";
+import { archivable, archivableByAge, archiveAgents, purgeArchived, sweepAgedAgents } from "./archive.js";
 import { createLogger } from "../logger.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
@@ -36,10 +36,15 @@ const entry = (overrides: Partial<PersistedAgent> = {}): PersistedAgent => ({
     ...overrides,
 });
 
-// Only `retire` is exercised here; the rest of the interface is unreachable from the archive path.
-const stubWorktrees = (retire = vi.fn(async () => undefined)): { worktrees: AgentWorktrees; retire: typeof retire } => ({
-    worktrees: { retire } as unknown as AgentWorktrees,
+// Only `retire` (archive) and `remove` (purge) are exercised here; the rest of the interface is unreachable
+// from these paths.
+const stubWorktrees = (
+    retire = vi.fn(async () => undefined),
+    remove = vi.fn(async () => undefined),
+): { worktrees: AgentWorktrees; retire: typeof retire; remove: typeof remove } => ({
+    worktrees: { retire, remove } as unknown as AgentWorktrees,
     retire,
+    remove,
 });
 
 describe("archivable", () => {
@@ -111,6 +116,67 @@ describe("archiveAgents", () => {
         const { worktrees, retire } = stubWorktrees();
         expect(await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["ghost"], 9_000)).toEqual([]);
         expect(retire).not.toHaveBeenCalled();
+    });
+});
+
+describe("purgeArchived", () => {
+    it("deletes the archive and leaves the board alone", async () => {
+        const agents = createAgentsRegistry(memoryStore());
+        await agents.init();
+        await agents.begin(turn({ conversationId: "filed" }), 1_000);
+        await agents.finish("filed", 2_000);
+        await agents.begin(turn({ conversationId: "onboard" }), 1_000);
+        await agents.finish("onboard", 2_000);
+        const { worktrees, remove } = stubWorktrees();
+        await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["filed"], 9_000);
+        const repos = agents.entry("filed")?.repos;
+
+        const removed = await purgeArchived({ agents, agentWorktrees: worktrees, logger });
+
+        expect(removed).toEqual(["filed"]);
+        // The worktree remnants AND the branch go — that is what makes this the destructive one, and it is the
+        // entry's recorded composition that says which repos to tear down in.
+        expect(remove).toHaveBeenCalledWith("filed", repos);
+        expect(agents.get("filed")).toBeUndefined();
+        expect(agents.listArchived()).toEqual([]);
+        expect(agents.list().map((agent) => agent.id)).toEqual(["onboard"]);
+    });
+
+    it("keeps the agents whose teardown failed, and deletes the rest", async () => {
+        const agents = createAgentsRegistry(memoryStore());
+        await agents.init();
+        for (const id of ["a", "b"]) {
+            await agents.begin(turn({ conversationId: id }), 1_000);
+            await agents.finish(id, 2_000);
+        }
+        const remove = vi.fn(async (id: string) => {
+            if (id === "a") {
+                throw new Error("repo locked");
+            }
+        });
+        const { worktrees } = stubWorktrees(undefined, remove as never);
+        await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["a", "b"], 9_000);
+
+        const removed = await purgeArchived({ agents, agentWorktrees: worktrees, logger });
+
+        // Better a row left in the archive than an entry the registry forgot while the disk kept its branch.
+        expect(removed).toEqual(["b"]);
+        expect(agents.listArchived().map((agent) => agent.id)).toEqual(["a"]);
+    });
+
+    it("leaves an agent that a new turn took back out of the archive", async () => {
+        const agents = createAgentsRegistry(memoryStore());
+        await agents.init();
+        await agents.begin(turn({ conversationId: "filed" }), 1_000);
+        await agents.finish("filed", 2_000);
+        const { worktrees, remove } = stubWorktrees();
+        await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["filed"], 9_000);
+        // Messaging an archived agent is how you resume it: begin() clears the marker, so the card is back on
+        // the board and out of this purge's scope even though the user pressed Delete while looking at it.
+        await agents.begin(turn({ conversationId: "filed" }), 10_000);
+
+        expect(await purgeArchived({ agents, agentWorktrees: worktrees, logger })).toEqual([]);
+        expect(remove).not.toHaveBeenCalled();
     });
 });
 

@@ -495,7 +495,7 @@ describe("agents registry", () => {
         const second = createAgentsRegistry(store);
         await second.init();
         expect(second.get("c1")?.status).toBe("idle");
-        await second.remove("c1");
+        await second.remove(["c1"]);
         expect(second.get("c1")).toBeUndefined();
         expect(store.saved()).toEqual([]);
     });

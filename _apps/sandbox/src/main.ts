@@ -117,6 +117,7 @@ const main = async (): Promise<void> => {
     await services.agents
         .init()
         .then(async () => {
+            const vanished: string[] = [];
             for (const id of services.agents.ids()) {
                 // An ARCHIVED entry is *supposed* to have no worktree — that is what archiving reclaimed. It is
                 // held by its branch instead, so it must never look like the vanished-worktree case below.
@@ -124,8 +125,12 @@ const main = async (): Promise<void> => {
                     continue;
                 }
                 if (!(await services.agentWorktrees.exists(id))) {
-                    await services.agents.remove(id);
+                    vanished.push(id);
                 }
+            }
+            // One write for the whole sweep: a boot that drops a dozen dead entries owes the disk one persist.
+            if (vanished.length > 0) {
+                await services.agents.remove(vanished);
             }
             await services.agentWorktrees.prune(services.agents.ids());
         })

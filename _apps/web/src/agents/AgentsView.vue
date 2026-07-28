@@ -44,6 +44,13 @@ import AgentCard from "./AgentCard.vue";
  * Archiving is lossless (branch, transcript and counters all stay — see the daemon's agents/archive.ts), so
  * none of it asks for confirmation. Discard, which is not, keeps its drag gesture and its dialog.
  *
+ * THE ARCHIVE HAS AN EXIT OF ITS OWN — "Delete all", in the same header slot "Clear" occupies on the live lane,
+ * because that slot is already read as this column's bulk exit. It is the board's only irreversible action, so
+ * it inverts the archive's whole grammar: it confirms first, it reports even for one agent, and its receipt
+ * carries no Undo (see purgeArchived in useAgents). Deliberately bulk-only — a per-card delete would put a
+ * destructive button a pixel from Restore on the same hover row, and a single agent that must go for good
+ * already has Discard on its review panel, where the diff it is about to lose is on screen beside it.
+ *
  * WHAT AN ARCHIVE SAYS is graded to what it did (useAgents' receipt/notice split). Archiving one card says
  * nothing: the card is animated out of its lane and the header's archive counter lights up, and a strip
  * narrating that — while shoving the whole board down a line, and waiting to be dismissed — is a toll charged
@@ -66,6 +73,7 @@ const {
     loadArchived,
     archive,
     restore,
+    purgeArchived,
     undoArchive,
     undoable,
     archivedFlash,
@@ -170,8 +178,50 @@ const openSession = (id: string): void => {
     void openConversation(id);
 };
 
+// What the board says to a screen reader, since neither of its two visual reports — the archive counter's
+// pulse, the receipt pill — is anything one can convey. Every archive lands here (see the archivedFlash watch
+// below), and so does every deletion, so there is exactly one thing doing the announcing.
+const announcement = ref(``);
+
+/* --- Emptying the archive -------------------------------------------------------------------------------
+ * The board's one irreversible act, so it is the one that stops and asks. It sits in the archive header's
+ * trailing slot — where the Finished lane puts "Clear" — because that slot is already read as "this column's
+ * bulk exit": Finished's exit is the archive, and the archive's is deletion. Same position, opposite weight,
+ * which is what the danger styling and the dialog are for.
+ *
+ * Only "delete everything", never per card. The archive is the pile the user has already decided is over, so
+ * cleaning it up is ONE intent with one confirmation — and a per-card delete would be a destructive button
+ * sitting a pixel from Restore on a hover row, which is the one place it must not be. A single agent that has
+ * to go for good still goes through its review panel's Discard, where the diff it is about to lose is on
+ * screen next to the button.
+ *
+ * The dialog names the branch count and says what survives, because the archive's whole promise up to this
+ * point has been "nothing is lost" — the press that revokes it has to say so in those terms. */
+const pendingPurge = ref(false);
+const purging = ref(false);
+// Whether THIS visit emptied the archive, which is the difference between two identical-looking empty lists:
+// "nothing has been archived yet" is a promise about what will land here, and it reads as a lie to someone who
+// just deleted twelve agents. Reset when the archive is left, so the wording is about what the user did while
+// they were looking at it.
+const purged = ref(false);
+const confirmPurge = async (): Promise<void> => {
+    pendingPurge.value = false;
+    purging.value = true;
+    const aimedAt = archived.value.length;
+    try {
+        await purgeArchived();
+        purged.value = true;
+        // The receipt this raises is visual only, like the sweep's — and this is the one report on the board
+        // that cannot be re-derived from anything left on screen, because what it is about is gone.
+        announcement.value = `${aimedAt - archived.value.length} archived agents deleted`;
+    } finally {
+        purging.value = false;
+    }
+};
+
 const toggleArchive = (): void => {
     archiveOpen.value = !archiveOpen.value;
+    purged.value = false;
     if (archiveOpen.value) {
         void loadArchived();
     }
@@ -206,10 +256,6 @@ watch(archivedFlash, () => {
     pulseTimer = setTimeout(() => (pulsing.value = false), PULSE_MS);
 });
 
-// A lit-up counter is nothing a screen reader can convey, so the quiet archive would be silent FULL STOP for
-// one. Every archive is announced here instead — including the sweeps, so the pill can stay a purely visual
-// affordance and there is exactly one thing doing the announcing.
-const announcement = ref(``);
 watch(archivedFlash, () => {
     announcement.value = `${undoable.value.length} agent${undoable.value.length === 1 ? `` : `s`} archived`;
 });
@@ -537,9 +583,30 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 Clear
                             </button>
                         </template>
+                        <!-- The archive's own bulk exit, in the slot "Clear" occupies on the live lane — the
+                             same position for the same kind of act, and the opposite weight. Danger only on
+                             hover, so a column of retired agents doesn't read as a hazard while you browse it;
+                             the dialog is what actually guards it. Gone while filtering, exactly as Clear is:
+                             this deletes the WHOLE archive, and offering it above a list reading "1 of 12" is
+                             offering a bulk action whose scope is not the one on screen. -->
+                        <button
+                            v-if="lane.key === 'finished' && archiveOpen && archived.length > 0 && !filtering"
+                            type="button"
+                            :aria-label="`Delete all ${archived.length} archived agents permanently`"
+                            :disabled="purging"
+                            v-tooltip.bottom="`Delete all ${archived.length} permanently — branches and all. This can't be undone.`"
+                            class="inline-flex shrink-0 items-center gap-1 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-40"
+                            @click="pendingPurge = true"
+                        >
+                            <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />Delete all
+                        </button>
                     </header>
                     <p v-if="lane.key === 'finished' && archiveOpen && archived.length === 0" class="px-3 pb-3 text-2xs text-subtle">
-                        Nothing archived yet. Finished agents land here on their own after a few quiet days.
+                        {{
+                            purged
+                                ? "Archive emptied. Finished agents will collect here again on their own after a few quiet days."
+                                : "Nothing archived yet. Finished agents land here on their own after a few quiet days."
+                        }}
                     </p>
                     <!-- An emptied lane keeps its header and says so on one line. It does NOT disappear: three
                          columns collapsing to one as the query lands makes the whole board jump under the
@@ -730,6 +797,36 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <template #footer>
                 <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="cancelResolve">Cancel</button>
                 <button type="button" :class="cmp.buttonPrimary('rounded px-3 py-1')" @click="confirmResolve">Ask the agent</button>
+            </template>
+        </Dialog>
+
+        <!-- The one dialog on this board that guards something unrecoverable. It says what GOES in the terms the
+             archive has been promising all along ("nothing is lost" — this is the press that revokes it) and
+             what STAYS, because the commonest fear here is about work already landed in the workspace, which is
+             the one thing deletion cannot touch. The destructive button names the count rather than saying
+             "Delete": the number is the whole difference between clearing three throwaways and twelve agents. -->
+        <Dialog
+            :visible="pendingPurge"
+            :modal="true"
+            :draggable="false"
+            :dismissable-mask="true"
+            :style="{ width: '26rem' }"
+            header="Delete every archived agent?"
+            @update:visible="pendingPurge = false"
+        >
+            <p class="text-xs text-content">
+                {{ archived.length }} archived agent{{ archived.length === 1 ? "" : "s" }} will be deleted for good — each one's branch, its
+                conversation and its history. This cannot be undone.
+            </p>
+            <p class="mt-2 text-xs text-muted">
+                Work they already landed stays in your workspace. Only what never left their branches is lost. Agents still on the board are
+                untouched.
+            </p>
+            <template #footer>
+                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="pendingPurge = false">Cancel</button>
+                <button type="button" :class="cmp.buttonDanger('rounded px-3 py-1')" @click="confirmPurge">
+                    Delete {{ archived.length }} agent{{ archived.length === 1 ? "" : "s" }}
+                </button>
             </template>
         </Dialog>
 

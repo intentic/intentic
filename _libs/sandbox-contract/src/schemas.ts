@@ -248,6 +248,12 @@ export const AgentIdsSchema = z.object({ ids: z.array(z.string().min(1)).min(1).
 // browser holds its optimistic add/remove of exactly these ids until it sees a roster at or past `rev`.
 export const AgentsMovedSchema = z.object({ moved: z.array(AgentSummarySchema), rev: z.number() });
 export type AgentsMoved = z.infer<typeof AgentsMovedSchema>;
+// What a purge actually deleted. Ids, not summaries: these agents no longer exist anywhere — there is nothing
+// left to show and nothing to put back, so the only thing the caller can do with the answer is drop those rows
+// and count them. No revision either: archived agents are already off the broadcast roster (see `list`), so a
+// purge changes nothing the board's pending-move machinery has to hold a card against.
+export const AgentsRemovedSchema = z.object({ removed: z.array(z.string()) });
+export type AgentsRemoved = z.infer<typeof AgentsRemovedSchema>;
 /* Search the fleet by what the USER wrote — the board's filter (and the popped-out rail's).
  *
  * Deliberately the user's own prompts and nothing else. An agent's replies and its tool output mention

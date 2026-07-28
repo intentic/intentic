@@ -552,6 +552,39 @@ const restore = async (ids: readonly string[]): Promise<void> => {
     }
 };
 
+/* Empty the archive — the fleet's ONE irreversible action, and the reason the archive is a filing cabinet
+ * rather than a one-way door: every other exit on this board keeps the branch, so without this the only way to
+ * ever get rid of an agent was to discard it card by card before it was archived.
+ *
+ * Everything about it is the inverse of `archive`'s grammar, and deliberately so:
+ *   · it CONFIRMS first (the view's dialog) — there is no undo to fall back on
+ *   · it always reports, even for one agent, and the receipt carries NO Undo. The missing button is the honest
+ *     signal that this press was not like the archiving that precedes it
+ *   · `undoable` is cleared of what went: an undo that names a deleted agent would fail on the round trip, and
+ *     Mod+Z promising work back that no longer exists is worse than not offering it
+ * The daemon answers with what it actually deleted, so an agent whose teardown failed stays in the list and is
+ * counted out of the report rather than vanishing from a board that never removed it. */
+const purgeArchived = async (): Promise<void> => {
+    const aimedAt = archived.value.length;
+    const release = claimBusy(archived.value.map((agent) => agent.id));
+    try {
+        const { removed } = await sandboxJson<{ removed: string[] }>(`/agents/purge`, { method: `POST` });
+        const gone = new Set(removed);
+        archived.value = archived.value.filter((agent) => !gone.has(agent.id));
+        undoable.value = undoable.value.filter((id) => !gone.has(id));
+        // A tab reading a deleted agent has nothing left to read: its branch, its worktree and its conversation
+        // are gone. Same rule as archiving, which closes them for the far gentler reason.
+        useChat().closeTabs(gone);
+        notice.value =
+            removed.length < aimedAt ? `Deleted ${removed.length} of ${aimedAt} archived agents — the rest are still in use and stayed.` : undefined;
+        receipt.value = { message: `${removed.length} archived agent${removed.length === 1 ? `` : `s`} deleted` };
+    } catch (error) {
+        notice.value = errorMessage(error, `Couldn't delete the archive.`);
+    } finally {
+        release();
+    }
+};
+
 // The ONE undo, so the two affordances offering it — a sweep's receipt and Mod+Z — can never come to mean
 // different things. A no-op with nothing to put back, which is also what lets the keybinding stay out of the
 // way of everything else Mod+Z means (see AgentsView's `when` gate).
@@ -648,6 +681,7 @@ export function useAgents() {
         loadArchived,
         archive,
         restore,
+        purgeArchived,
         undoArchive,
         undoable,
         archivedFlash,

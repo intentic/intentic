@@ -7,7 +7,7 @@ import type { OrpcContext } from "../context.js";
 import { matchPrompts } from "../sessions/prompt-index.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import type { PersistedAgent } from "./agents-store.js";
-import { archivable, archiveAgents } from "./archive.js";
+import { archivable, archiveAgents, purgeArchived } from "./archive.js";
 import { landAgent } from "./land.js";
 
 // The fleet routes: list/get the registry, review a conversation worktree's delta vs its recorded bases
@@ -217,7 +217,7 @@ export const createAgentsRoutes = (services: Services) => {
             const entry = entryOf(input.id);
             notRunning(input.id);
             await services.agentWorktrees.remove(entry.id, entry.repos);
-            await services.agents.remove(entry.id);
+            await services.agents.remove([entry.id]);
             return { ok: true } as const;
         }),
         // Named ids archive whatever the user pointed at (a card, or a bulk undo's inverse); no ids means
@@ -260,5 +260,9 @@ export const createAgentsRoutes = (services: Services) => {
                 rev: services.agents.revision(),
             };
         }),
+        // The archive's own exit, and the destructive one: everything filed away is deleted outright, branches
+        // included. Answers with the ids that actually went — a teardown that fails on one agent leaves that one
+        // in the archive rather than failing the press (see purgeArchived).
+        purge: i.purge.handler(async () => ({ removed: await purgeArchived(services) })),
     };
 };

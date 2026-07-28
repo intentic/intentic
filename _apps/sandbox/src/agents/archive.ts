@@ -43,11 +43,24 @@ export interface AgentArchiveDeps {
     readonly logger: Logger;
 }
 
-// How many agents retire at once. Each one spawns a handful of short-lived git processes per repo, so this is
-// a throttle on process pressure, not on the lock: "Clear" on a full lane must not fork a hundred `git status`
-// at once, and past a small number the per-repo worktree-admin lock (worktrees.retire pass 2) is the real
-// ceiling anyway.
-const RETIRE_CONCURRENCY = 4;
+// How many agents are torn down at once — by the archive's retire, and by the purge's outright removal. Each
+// one spawns a handful of short-lived git processes per repo, so this is a throttle on process pressure, not
+// on the lock: "Clear" on a full lane must not fork a hundred `git status` at once, and past a small number
+// the per-repo worktree-admin lock (worktrees.retire pass 2 / worktrees.remove) is the real ceiling anyway.
+const TEARDOWN_CONCURRENCY = 4;
+
+// Run `worker` over [0, count) with at most TEARDOWN_CONCURRENCY in flight, off a shared cursor rather than
+// fixed chunks: a slow agent (a big checkout) holds up only its own worker.
+const pooled = async (count: number, worker: (index: number) => Promise<void>): Promise<void> => {
+    let cursor = 0;
+    await Promise.all(
+        Array.from({ length: Math.min(TEARDOWN_CONCURRENCY, count) }, async () => {
+            for (let index = cursor++; index < count; index = cursor++) {
+                await worker(index);
+            }
+        }),
+    );
+};
 
 // Retire the checkouts, then stamp the marker — in that order, so a failure mid-way leaves an agent that is
 // still ON the board with its worktree intact rather than one the board has forgotten but the disk has not.
@@ -74,20 +87,51 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
             deps.logger.warn({ err: error, id }, "agents: archive skipped — worktree retire failed");
         }
     };
-    // A shared cursor rather than fixed chunks: a slow agent (a big checkout) holds up only its own worker.
-    let cursor = 0;
-    await Promise.all(
-        Array.from({ length: Math.min(RETIRE_CONCURRENCY, pending.length) }, async () => {
-            for (let index = cursor++; index < pending.length; index = cursor++) {
-                await retire(index);
-            }
-        }),
-    );
+    await pooled(pending.length, retire);
     const archived = done.filter((id) => id !== undefined);
     if (archived.length > 0) {
         await deps.agents.setArchived(archived, now);
     }
     return archived;
+};
+
+/* EMPTY THE ARCHIVE — `discard` applied to everything already filed away, and the fleet's only irreversible
+ * bulk action. Where archiving reclaims the checkout and keeps the branch, this drops the branch too (and the
+ * conversation dir with it, see worktrees.remove), so the work an agent never landed goes with it.
+ *
+ * Scoped to the ARCHIVE and nothing else: the archive is the pile of agents the user has already decided are
+ * over, which is what makes one confirmation for the whole pile honest. A running agent cannot be in it (a turn
+ * un-archives its own agent — registry.begin), but the guard stays because the cost of being wrong here is a
+ * live turn's worktree pulled out from under it.
+ *
+ * An agent whose teardown throws takes only itself out of the batch, exactly as in archiveAgents: the rest are
+ * deleted and the caller is told what actually went, so a repo that is momentarily locked leaves one row in the
+ * archive rather than failing the press. The registry write is ONE persist and one broadcast at the end. */
+export const purgeArchived = async (deps: AgentArchiveDeps): Promise<string[]> => {
+    const targets = deps.agents
+        .ids()
+        .map((id) => deps.agents.entry(id))
+        .filter((entry) => entry !== undefined)
+        .filter((entry) => entry.archivedAt !== undefined && !deps.agents.running(entry.id));
+    const done: (string | undefined)[] = Array.from({ length: targets.length });
+    await pooled(targets.length, async (index) => {
+        const entry = targets[index];
+        if (entry === undefined) {
+            return;
+        }
+        try {
+            await deps.agentWorktrees.remove(entry.id, entry.repos);
+            done[index] = entry.id;
+        } catch (error) {
+            deps.logger.warn({ err: error, id: entry.id }, "agents: purge skipped — worktree removal failed");
+        }
+    });
+    const removed = done.filter((id) => id !== undefined);
+    if (removed.length > 0) {
+        await deps.agents.remove(removed);
+        deps.logger.info({ count: removed.length }, "agents: purged archived agents");
+    }
+    return removed;
 };
 
 // The unattended pass: archive every agent that has sat finished longer than the retention window. Runs at

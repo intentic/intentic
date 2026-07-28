@@ -126,7 +126,10 @@ export interface AgentsRegistry {
     // — the registry owns the marker, agents/archive.ts owns the git side and the order between them.
     readonly setArchived: (ids: readonly string[], now: number) => Promise<void>;
     readonly clearArchived: (ids: readonly string[]) => Promise<void>;
-    readonly remove: (id: string) => Promise<void>;
+    // Forget agents outright — `discard`, the archive's purge, and the boot sweep's vanished worktrees. Takes a
+    // SET because every caller but discard has one, and a per-id call would spend a persist and a roster
+    // broadcast on each agent of a batch.
+    readonly remove: (ids: readonly string[]) => Promise<void>;
     // Immediate snapshot on subscribe, so a fresh /events connection paints the fleet without waiting. The
     // listener also receives the revision the snapshot was taken at (see `revision`).
     readonly subscribe: (listener: (agents: AgentSummary[], rev: number) => void) => () => void;
@@ -534,9 +537,12 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             await persist();
             broadcast();
         },
-        remove: async (id) => {
-            entries = entries.filter((entry) => entry.id !== id);
-            runtime.delete(id);
+        remove: async (ids) => {
+            const targets = new Set(ids);
+            entries = entries.filter((entry) => !targets.has(entry.id));
+            for (const id of targets) {
+                runtime.delete(id);
+            }
             await persist();
             broadcast();
         },

@@ -12,6 +12,7 @@ import {
     AgentSearchResultSchema,
     AgentsListSchema,
     AgentsMovedSchema,
+    AgentsRemovedSchema,
     AgentSummarySchema,
     FileDiffSchema,
     LandResultSchema,
@@ -33,6 +34,13 @@ import {
 // per repo per agent) and keeps the branch, the entry, and the transcript. `list` then stops carrying it and
 // `archived` does; `unarchive` puts it back, and either way the next turn re-attaches a worktree from the
 // surviving branch. Archiving a running agent is CONFLICT, same as land/discard.
+//
+// PURGE empties the archive, and it is `discard` applied to every agent already in there: worktree remnants,
+// branches and entries all go. Deliberately the whole archive and not a list of ids — the archive is the pile
+// of agents the user has already decided are over, so "clean it up" is one act with one confirmation, and a
+// per-id purge would be `discard`, which already exists. Never touches a running agent (a turn un-archives its
+// own agent, so there should be none) and answers with what it actually deleted: a teardown that fails on one
+// agent's repo leaves that one behind rather than taking the batch down with it.
 export const agentsContract = {
     list: oc.route({ method: "GET", path: "/agents" }).output(AgentsListSchema),
     archived: oc.route({ method: "GET", path: "/agents/archived" }).output(AgentsListSchema),
@@ -52,4 +60,5 @@ export const agentsContract = {
     discard: oc.route({ method: "POST", path: "/agents/{id}/discard" }).input(AgentIdSchema).output(OkSchema),
     archive: oc.route({ method: "POST", path: "/agents/archive" }).input(AgentArchiveSchema).output(AgentsMovedSchema),
     unarchive: oc.route({ method: "POST", path: "/agents/unarchive" }).input(AgentIdsSchema).output(AgentsMovedSchema),
+    purge: oc.route({ method: "POST", path: "/agents/purge" }).output(AgentsRemovedSchema),
 };

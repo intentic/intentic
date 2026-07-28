@@ -1096,7 +1096,9 @@ export class Conversation {
             this.interrupted = false;
             this.error.value = null;
             this.turnStartedAt.value = head.startedAt;
-            const userMessageId = this.append({ role: `user`, text: head.prompt });
+            // The restored copy of THIS run, when the transcript already carries one, is adopted rather than
+            // appended alongside — see adoptRunningTurn.
+            const userMessageId = this.adoptRunningTurn(head.prompt) ?? this.append({ role: `user`, text: head.prompt });
             this.openBubble();
             return { userMessageId, provider: this.provider.value, account: this.account.value, harness: this.harness.value };
         };
@@ -1529,6 +1531,42 @@ export class Conversation {
     private openBubble(): void {
         const id = this.append({ role: `assistant`, text: ``, thinking: `` });
         this.state.value = { ...this.state.value, bubbleId: id };
+    }
+
+    /* THE TURN THAT IS BOTH RESTORED AND LIVE. The daemon's session store holds a turn from the moment it
+     * starts — the SDK writes the user message before the first token — so a hydrate that lands mid-turn
+     * restores that turn and then attaches to the very same run, and reattach's synthesized bubble renders it a
+     * SECOND time. On a fleet agent, whose whole chat is often one long turn, that reads as the entire
+     * conversation duplicated; reopening the tab again while the turn still runs adds another copy, because the
+     * duplicate is what gets mirrored to the cache in between.
+     *
+     * The live stream is the authoritative copy — it carries the tool cards, the cards awaiting an answer, and
+     * the tail still being written — so the restored head of the same run is ADOPTED: its bubble stays (with the
+     * attachment chips and checkpoint the replay has no way to rebuild) and becomes the turn's user message,
+     * while everything the store had recorded under it comes off, to be re-rendered by the frames replayed from
+     * seq 0. Returns the adopted bubble's id, or undefined when the transcript's tail is not this run.
+     *
+     * Matched on the LAST user message only, and only by whole text: the stored prompt keeps an editor-context
+     * note the daemon appended after it (the run's own prompt is the bare text), which is why a `${prompt}\n\n`
+     * prefix counts — but a bare prefix does not, or a live "Continue" would swallow a restored "Continue with
+     * the tests" sitting above it. */
+    private adoptRunningTurn(prompt: string): number | undefined {
+        const wanted = prompt.trim();
+        if (wanted.length === 0) {
+            return undefined;
+        }
+        const messages = this.state.value.messages;
+        const index = messages.findLastIndex((message) => message.role === `user`);
+        const candidate = index === -1 ? undefined : messages[index];
+        if (candidate === undefined) {
+            return undefined;
+        }
+        const restored = candidate.text.trim();
+        if (restored !== wanted && !restored.startsWith(`${wanted}\n\n`)) {
+            return undefined;
+        }
+        this.state.value = { ...this.state.value, messages: messages.slice(0, index + 1), bubbleId: null };
+        return candidate.id;
     }
 
     private append(message: Omit<ChatMessage, "id">): number {
