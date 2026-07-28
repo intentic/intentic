@@ -35,11 +35,19 @@ test("titles a pasted stack trace after the sentence the user wrote around it", 
 test("skips a greeting line and takes the ask from the line below it", () => {
     // A line that unwinds to nothing was throat-clearing; the ask is further down. The naive rule stopped at
     // the greeting and named every such conversation `Hey, quick one —`.
-    expect(deriveTitle("Hey, quick one —\n\nWhy does the tab title truncate mid-word?")).toBe("Why does the tab title truncate…");
+    expect(deriveTitle("Hey, quick one —\n\nWhy does the tab title truncate mid-word?")).toBe("Why does the tab title truncate mid-word?");
+});
+
+test("keeps an ask that fits the registry's 80-character budget instead of cutting at 40", () => {
+    // The old 40-character clamp cut this to `In intentic-app/web when conflict…` on a fleet card that had
+    // room for twice that. The stored title matches what the registry and the rename input accept.
+    const prompt = "In intentic-app/web when conflicts happen during rebase show a resolution banner";
+
+    expect(deriveTitle(prompt)).toBe(prompt);
 });
 
 test("cuts on a word boundary instead of mid-syllable", () => {
-    const prompt = "Why does the tab title truncate mid-word?";
+    const prompt = "Why does the tab title truncate mid-word even though the strip clearly still has unused horizontal room?";
     const title = deriveTitle(prompt);
     const kept = title.slice(0, -1);
 

@@ -16,9 +16,11 @@
  * registry.ts). One rule, because two would let the same prompt open under two different names depending on
  * where it entered. Nothing here calls a model: the title has to exist before the first frame comes back. */
 
-// The header-sized budget. Every surface truncates in CSS anyway, so this is about how much SIGNAL a glance
-// gets, not about fitting a box — past roughly this length a tab strip shows the same prefix for every tab.
-const MAX_LENGTH = 40;
+// The registry's title budget (agents-registry MAX_TITLE_LENGTH, the rename input's maxlength) — the widest
+// any surface stores. Every surface truncates in CSS to its own width, so the clamp here is a storage cap,
+// not a display rule: cutting shorter than the widest surface (a full-width fleet card) would throw away
+// signal that surface has room to show, and no narrow surface is hurt because its CSS cuts first anyway.
+const MAX_LENGTH = 80;
 // Below this a sentence-shaped cut is more likely an abbreviation (`e.g.`, `i.e.`) than a sentence, so the
 // length clamp takes over.
 const MIN_SENTENCE = 12;
