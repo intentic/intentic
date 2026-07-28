@@ -35,7 +35,7 @@ const fakeEmbedder: Embedder = {
 
 beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), "iq-sem-"));
-    db = openIndex(dir);
+    db = openIndex(dir, "write");
     db.run("INSERT INTO files (path, mtime_ms, size, hash) VALUES ('a/widget.ts', 0, 1, 'h1')");
     db.run("INSERT INTO files (path, mtime_ms, size, hash) VALUES ('b/other.ts', 0, 1, 'h2')");
     db.run(

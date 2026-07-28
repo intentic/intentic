@@ -2,7 +2,17 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { MODEL_ID } from "../embed/embedder.js";
 import type { IndexDb } from "../store/db.js";
-import { bumpGeneration, deleteFile, generationOf, getMeta, listFiles, replaceFile, setMeta, touchFile } from "../store/index-store.js";
+import {
+    bumpGeneration,
+    deleteFile,
+    generationOf,
+    getMeta,
+    listFiles,
+    replaceFile,
+    setMeta,
+    type StoredFile,
+    touchFile,
+} from "../store/index-store.js";
 import type { ChunkRow, FileEntry, SymbolRow } from "../types.js";
 import { langOf } from "../workspace/scan.js";
 
@@ -39,6 +49,34 @@ export const syncModel = (db: IndexDb, modelDir: string | undefined): void => {
         db.run("UPDATE chunks SET embedding = NULL");
         setMeta(db, "model_id", MODEL_ID);
     }
+};
+
+// The cheap "already indexed" test — mtime+size, no read. One definition, two callers: revalidate partitions on
+// it, and indexLag answers freshness with it. They must not drift, or a read-only engine would report an index
+// fresh that the writer would still rewrite.
+const indexed = (entry: FileEntry, previous: StoredFile | undefined): boolean =>
+    previous !== undefined && Math.round(entry.mtimeMs) === previous.mtimeMs && entry.size === previous.size;
+
+// How many files the index does not match — new, changed, or gone. The freshness signal for an engine that does
+// NOT own writing the index (see indexer-lock.ts): it cannot ask the writer how far behind it is, but it can
+// compare the sweep it just did against the rows that are there, which is the same comparison the writer's next
+// pass will make. Pure reads, so a read-only handle answers it.
+export const indexLag = (db: IndexDb, entries: readonly FileEntry[]): number => {
+    const stored = listFiles(db);
+    const seen = new Set<string>();
+    let lag = 0;
+    for (const entry of entries) {
+        seen.add(entry.path);
+        if (!indexed(entry, stored.get(entry.path))) {
+            lag += 1;
+        }
+    }
+    for (const path of stored.keys()) {
+        if (!seen.has(path)) {
+            lag += 1;
+        }
+    }
+    return lag;
 };
 
 // Bring the index in line with the sweep: mtime+size diff, content-hash confirmation for touched files, and a
@@ -94,7 +132,7 @@ export const revalidate = async (db: IndexDb, entries: readonly FileEntry[], par
     for (const entry of entries) {
         seen.add(entry.path);
         const previous = stored.get(entry.path);
-        if (!reparseAll && previous !== undefined && Math.round(entry.mtimeMs) === previous.mtimeMs && entry.size === previous.size) {
+        if (!reparseAll && indexed(entry, previous)) {
             continue;
         }
         toRead.push({ entry, previous, read: undefined });

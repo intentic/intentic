@@ -60,7 +60,7 @@ export const runOneShot = async (params: {
         env: {
             ...process.env,
             ...harnessEnv({
-                ...(endpoint !== undefined ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken } : {}),
+                ...(endpoint !== undefined ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken, model: endpoint.model } : {}),
                 ...(oauthToken !== undefined ? { oauthToken } : {}),
             }),
         },

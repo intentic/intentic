@@ -75,29 +75,49 @@ export interface IndexDb {
     close(): void;
 }
 
-const open = (dir: string): IndexDb => {
+// How this handle intends to use the index. "read" is a genuinely read-only SQLite connection — not a promise
+// to behave — so a caller that is not the index's writer (see indexer-lock.ts) cannot contend for the write
+// lock even by accident, and a stray write is a loud error here rather than a lost race in production.
+export type IndexMode = "write" | "read";
+
+const wrap = (db: DatabaseSync): IndexDb => ({
+    all: (sql, ...params) => db.prepare(sql).all(...params) as Row[],
+    get: (sql, ...params) => db.prepare(sql).get(...params) as Row | undefined,
+    run: (sql, ...params) => {
+        db.prepare(sql).run(...params);
+    },
+    transaction: (fn) => {
+        db.exec("BEGIN");
+        try {
+            fn();
+            db.exec("COMMIT");
+        } catch (error) {
+            db.exec("ROLLBACK");
+            throw error;
+        }
+    },
+    close: () => db.close(),
+});
+
+const open = (dir: string, mode: IndexMode): IndexDb => {
+    if (mode === "read") {
+        const readOnly = new DatabaseSync(join(dir, "index.db"), { readOnly: true });
+        // The reader still needs a timeout: WAL keeps it out of the writer's way, but a checkpoint takes the
+        // file itself for a moment and a reader that arrives inside that moment must wait, not fail.
+        readOnly.exec("PRAGMA busy_timeout = 5000;");
+        // No DDL and no schema check: creating the schema is the writer's job, and a reader that reached this
+        // point was told by the lock that a live writer owns the file — which means the schema is that writer's.
+        return wrap(readOnly);
+    }
     mkdirSync(join(dir, "spool"), { recursive: true });
     const db = new DatabaseSync(join(dir, "index.db"));
-    db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
+    // busy_timeout FIRST, alone: everything after it wants the write lock (journal_mode rewrites the header, the
+    // DDL takes a schema lock), and until the timeout is set the default is zero — so an index another process
+    // is mid-write on failed the OPEN instantly, before any of the contention handling below could apply.
+    db.exec("PRAGMA busy_timeout = 5000;");
+    db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;");
     db.exec(DDL);
-    const wrapped: IndexDb = {
-        all: (sql, ...params) => db.prepare(sql).all(...params) as Row[],
-        get: (sql, ...params) => db.prepare(sql).get(...params) as Row | undefined,
-        run: (sql, ...params) => {
-            db.prepare(sql).run(...params);
-        },
-        transaction: (fn) => {
-            db.exec("BEGIN");
-            try {
-                fn();
-                db.exec("COMMIT");
-            } catch (error) {
-                db.exec("ROLLBACK");
-                throw error;
-            }
-        },
-        close: () => db.close(),
-    };
+    const wrapped = wrap(db);
     const version = wrapped.get("SELECT value FROM meta WHERE key = 'schema_version'")?.["value"];
     if (version === undefined) {
         wrapped.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", SCHEMA_VERSION);
@@ -110,17 +130,24 @@ const open = (dir: string): IndexDb => {
     return wrapped;
 };
 
+// Whether a failure is another writer holding the lock rather than a broken index. The distinction decides
+// whether an opener may DELETE the index dir, so it lives here, next to the open that raises it.
+export const isIndexBusy = (error: unknown): boolean =>
+    error instanceof Error && /database is locked|database is busy|SQLITE_BUSY/i.test(error.message);
+
 // Open the index at `<dir>/index.db`, treating corruption or schema drift as cache loss: delete the whole index
 // dir and start fresh. A held write lock is contention from a concurrent opener (another iq process mid-write),
-// NOT corruption — dropping the dir there would nuke an index that process is building, so it propagates.
-export const openIndex = (dir: string): IndexDb => {
+// NOT corruption — dropping the dir there would nuke an index that process is building, so it propagates. A
+// "read" open never recreates anything: the writer owns that, and rebuilding under it is precisely the collision
+// the mode exists to avoid.
+export const openIndex = (dir: string, mode: IndexMode): IndexDb => {
     try {
-        return open(dir);
+        return open(dir, mode);
     } catch (error) {
-        if (error instanceof Error && /database is locked|database is busy/i.test(error.message)) {
+        if (mode === "read" || isIndexBusy(error)) {
             throw error;
         }
         rmSync(dir, { recursive: true, force: true });
-        return open(dir);
+        return open(dir, mode);
     }
 };

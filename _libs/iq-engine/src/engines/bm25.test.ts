@@ -21,7 +21,7 @@ const insertChunk = (fileId: number, line: number, text: string): void => {
 
 beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), "iq-bm25-"));
-    db = openIndex(dir);
+    db = openIndex(dir, "write");
     db.run("INSERT INTO files (path, mtime_ms, size, hash) VALUES ('a/ignore-model.ts', 0, 1, 'h1')");
     db.run("INSERT INTO files (path, mtime_ms, size, hash) VALUES ('b/common.ts', 0, 1, 'h2')");
     // "enforced" is rare (1 chunk), "the"/"model" common — BM25 must rank the rare-term chunk first.

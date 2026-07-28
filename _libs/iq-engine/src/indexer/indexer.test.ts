@@ -16,7 +16,7 @@ let db: IndexDb;
 beforeAll(async () => {
     ({ root, cleanup } = await makeFixtureWorkspace());
     indexDir = await mkdtemp(join(tmpdir(), "iq-index-"));
-    db = openIndex(indexDir);
+    db = openIndex(indexDir, "write");
 });
 afterAll(async () => {
     db.close();

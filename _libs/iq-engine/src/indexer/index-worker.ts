@@ -65,7 +65,7 @@ const post = (event: IndexWorkerEvent): void => {
 
 // The daemon opened (and, on schema drift, dropped and recreated) this index before spawning us, so by the time
 // this runs the directory is settled — only one thread is ever in a position to delete it.
-const db = openIndex(indexDir);
+const db = openIndex(indexDir, "write");
 syncModel(db, modelDir);
 
 let embedderPromise: Promise<Embedder | undefined> | undefined;

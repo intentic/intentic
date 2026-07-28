@@ -47,20 +47,53 @@ export interface HarnessCredentials {
     readonly account?: string;
 }
 
+/* ONE ENDPOINT, ONE MODEL — the rule that makes everything a harness turn can spawn reachable.
+ *
+ * The harness resolves model names in more places than the turn's own `--model`: a subagent definition asks for
+ * "sonnet", the Agent tool takes a per-call model override, background summarization and title generation reach
+ * for the cheap tier. Each of those resolves through Claude Code's own alias table, which answers with an
+ * Anthropic model id — and on a routed turn the endpoint those ids are sent to is the sandbox's translator,
+ * which serves the user's ChatGPT/xAI/Google subscription and has never heard of `claude-opus-5`. It answers
+ * 502 "unknown provider for model", which is how a Sol session's every Explore subagent died while the main
+ * loop worked fine: the turn's own model came from `--model`, the subagent's came from the alias table.
+ *
+ * A custom endpoint serves exactly ONE model (harness-credentials resolves it against that provider's live
+ * catalog), so every alias must resolve to that one. Setting the tier defaults is the harness's own supported
+ * way to say that, and it covers the resolvers we do not call ourselves — including the ones inside the CLI.
+ * CLAUDE_CODE_SUBAGENT_MODEL pins the Task tool's default on top, so a subagent spawned with no model named
+ * lands on the routed model rather than on whatever the CLI's built-in default for that agent type is. */
+const routedModelEnv = (model: string): Record<string, string> => ({
+    ANTHROPIC_DEFAULT_OPUS_MODEL: model,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: model,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+    // The pre-tier name for the same slot, still read by parts of the CLI that predate the trio above.
+    ANTHROPIC_SMALL_FAST_MODEL: model,
+    CLAUDE_CODE_SUBAGENT_MODEL: model,
+});
+
 /* The credential ENV a Claude Code harness process runs with, and the single place the withholding rule lives:
  * a custom endpoint gets its own bearer and the Anthropic subscription OAuth is DROPPED, so a subscription
  * token can never leave for a foreign endpoint. Read by the chat turn's options (agent.ts) and by the
  * quick-model one-shot, because a rule about where a credential may travel is the last one that should exist
  * twice. `IS_SANDBOX` rides along for the same reason both need it: Claude Code refuses to run under root
- * unless the environment is marked already-sandboxed, which this container is. */
+ * unless the environment is marked already-sandboxed, which this container is.
+ *
+ * `model` is the turn's resolved id. It only takes effect alongside a custom endpoint — a native Claude turn must
+ * keep the real alias table, where "sonnet" and "opus" are different models and a subagent asking for the cheap
+ * tier should get it. */
 export const harnessEnv = (credentials: {
     readonly baseUrl?: string;
     readonly authToken?: string;
     readonly oauthToken?: string;
+    readonly model?: string;
 }): Record<string, string> => ({
     IS_SANDBOX: "1",
     ...(credentials.baseUrl !== undefined
-        ? { ANTHROPIC_BASE_URL: credentials.baseUrl, ...(credentials.authToken !== undefined ? { ANTHROPIC_AUTH_TOKEN: credentials.authToken } : {}) }
+        ? {
+              ANTHROPIC_BASE_URL: credentials.baseUrl,
+              ...(credentials.authToken !== undefined ? { ANTHROPIC_AUTH_TOKEN: credentials.authToken } : {}),
+              ...(credentials.model !== undefined ? routedModelEnv(credentials.model) : {}),
+          }
         : credentials.oauthToken !== undefined
           ? { CLAUDE_CODE_OAUTH_TOKEN: credentials.oauthToken }
           : {}),

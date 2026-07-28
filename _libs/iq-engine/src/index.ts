@@ -7,10 +7,11 @@ import { loadReranker, type Reranker } from "./embed/reranker.js";
 import { type CodebaseHealth, codebaseHealth, type HealthRequest } from "./engines/health.js";
 import { embedPending } from "./engines/semantic.js";
 import type { IndexWorkerData, IndexWorkerEvent, IndexWorkerRequest } from "./indexer/index-worker.js";
-import { revalidate, syncModel } from "./indexer/indexer.js";
+import { indexLag, revalidate, syncModel } from "./indexer/indexer.js";
 import { parseEntry } from "./indexer/parse-entry.js";
-import { openIndex } from "./store/db.js";
-import { readIndexStatus } from "./store/index-store.js";
+import { type IndexDb, isIndexBusy, openIndex } from "./store/db.js";
+import { generationOf, readIndexStatus } from "./store/index-store.js";
+import { claimIndexer, indexerAlive, releaseIndexer } from "./store/indexer-lock.js";
 import type { FileEntry, IndexStatus, QueryOutcome, QueryRequest } from "./types.js";
 import { type Feature, FEATURES } from "./features.js";
 import { dispatch } from "./verbs/dispatch.js";
@@ -83,6 +84,18 @@ export interface ResidentEngine {
     close(): Promise<void>;
 }
 
+// What a query can honestly say about the index it just searched. Having revalidated it ourselves, "fresh" is a
+// fact; having only read it, the answer is the file-level diff — which is also a better answer than the
+// unconditional "fresh" this reported back when writing was the only path through here.
+const freshnessOf = (db: IndexDb, entries: FileEntry[], sweepStart: number, wrote: boolean): WorkspaceSearchFreshness => {
+    const ageMs = Date.now() - sweepStart;
+    if (wrote) {
+        return { state: "fresh", ageMs };
+    }
+    const lag = indexLag(db, entries);
+    return lag === 0 ? { state: "fresh", ageMs } : { state: "stale", ageMs, progress: 1 - lag / Math.max(entries.length, 1) };
+};
+
 export const createEngine = (options: EngineOptions): Engine => {
     const indexDir = options.indexDir ?? join(options.root, IQ_DIR);
     let embedderPromise: Promise<Embedder | undefined> | undefined;
@@ -90,23 +103,56 @@ export const createEngine = (options: EngineOptions): Engine => {
     let rerankerPromise: Promise<Reranker | undefined> | undefined;
     const getReranker = (): Promise<Reranker | undefined> => (rerankerPromise ??= loadReranker(options.modelDir));
 
-    const revalidated = async (): Promise<{
+    /* THE INDEX THIS QUERY WILL SEARCH, and whether this process is allowed to bring it up to date.
+     *
+     * A one-shot engine indexes inline: it sweeps, revalidates, and then queries what it just wrote. That is the
+     * right shape when it is the only thing here — and the wrong one in a sandbox, where the daemon's resident
+     * engine already keeps the index in step with disk on a worker thread. Two writers on one SQLite file is
+     * SQLITE_BUSY for whoever loses, which turned every `iq` call in a sandbox into an exit-2 "database is
+     * locked" while the daemon was mid-sweep, doing the very work this pass would have repeated.
+     *
+     * So writing is conditional on owning the index, and querying never is. The sweep still happens either way:
+     * it is a read-only walk, it is what path/rg results are filtered against, and it is what makes the lag
+     * measurement below possible.
+     *
+     * The busy fallback is the same rule applied to the case the lock cannot cover — two CLI processes (parallel
+     * agents, a shell loop) racing with no daemon to arbitrate. The loser stops trying to write and searches
+     * what is there, because a search tool that fails while another process improves its index is worse than a
+     * search tool that answers from a slightly older index and says so. */
+    const opened = async (): Promise<{
         db: ReturnType<typeof openIndex>;
         generation: number;
         sweepStart: number;
         entries: Awaited<ReturnType<typeof sweep>>;
+        indexed: boolean;
     }> => {
         const sweepStart = Date.now();
         const entries = await sweep(options.root, false);
-        const db = openIndex(indexDir);
-        const { generation } = await revalidate(db, entries, parseEntry);
-        syncModel(db, options.modelDir);
-        return { db, generation, sweepStart, entries };
+        if (indexerAlive(indexDir)) {
+            const db = openIndex(indexDir, "read");
+            return { db, generation: generationOf(db), sweepStart, entries, indexed: false };
+        }
+        let db: ReturnType<typeof openIndex> | undefined;
+        try {
+            db = openIndex(indexDir, "write");
+            const { generation } = await revalidate(db, entries, parseEntry);
+            syncModel(db, options.modelDir);
+            return { db, generation, sweepStart, entries, indexed: true };
+        } catch (error) {
+            if (!isIndexBusy(error)) {
+                throw error;
+            }
+            // Whatever the write pass managed to apply stays (the index is a cache of independent file rows);
+            // this handle is dropped for a read-only one, which cannot be refused for the same reason again.
+            db?.close();
+            const reader = openIndex(indexDir, "read");
+            return { db: reader, generation: generationOf(reader), sweepStart, entries, indexed: false };
+        }
     };
 
     return {
         async run(request) {
-            const { db, generation, sweepStart, entries } = await revalidated();
+            const { db, generation, sweepStart, entries, indexed } = await opened();
             try {
                 return await dispatch(
                     {
@@ -114,12 +160,14 @@ export const createEngine = (options: EngineOptions): Engine => {
                         indexDir,
                         db,
                         generation,
-                        freshness: { state: "fresh", ageMs: Date.now() - sweepStart },
+                        freshness: freshnessOf(db, entries, sweepStart, indexed),
                         getEmbedder,
                         getReranker,
                         // Nothing indexes in the background here — the process exists for this one query — so
                         // `ask` filling embeddings inline is the only thing that ever advances semantic coverage.
-                        topUpEmbeddings: true,
+                        // Unless someone else owns the index: topping up WRITES vectors, so a query that did not
+                        // earn the write lock leaves the backlog to the process that did.
+                        topUpEmbeddings: indexed,
                         features: options.features ?? new Set(FEATURES),
                         ...(options.rgPath !== undefined ? { rgPath: options.rgPath } : {}),
                     },
@@ -131,7 +179,7 @@ export const createEngine = (options: EngineOptions): Engine => {
             }
         },
         async indexStatus() {
-            const { db, generation } = await revalidated();
+            const { db, generation } = await opened();
             try {
                 return readIndexStatus(db, generation);
             } finally {
@@ -139,9 +187,15 @@ export const createEngine = (options: EngineOptions): Engine => {
             }
         },
         async indexRebuild(onProgress) {
+            // Dropping the dir out from under a live indexer is the one operation that cannot degrade politely:
+            // it would leave that process writing into unlinked files, and the workspace with no index at all.
+            // Whoever owns the index rebuilds it — say so instead of doing the damage.
+            if (indexerAlive(indexDir)) {
+                throw new Error("another process owns this index (the sandbox daemon keeps it current) — it cannot be rebuilt from here");
+            }
             this.indexDrop();
             onProgress?.("rebuilding index from scratch");
-            const { db, generation, entries } = await revalidated();
+            const { db, generation, entries } = await opened();
             try {
                 onProgress?.(`indexed ${entries.length} files`);
                 const embedder = await getEmbedder();
@@ -171,10 +225,14 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
     const indexDir = options.indexDir ?? join(options.root, IQ_DIR);
     // Opened here, BEFORE the worker exists, because openIndex is the one operation that can delete and recreate
     // the index dir (schema drift, corruption) — two threads racing to do that would have one of them building
-    // into a directory the other just unlinked. After this line the handle is READ-ONLY by convention: every
-    // write to the index belongs to the worker, and WAL is what lets these queries run straight through its
-    // writes instead of queueing behind them.
-    const db = openIndex(indexDir);
+    // into a directory the other just unlinked. The write mode is for exactly that: the schema and the drop-and-
+    // recreate belong to this open, and from here on the handle only reads (every write to the index belongs to
+    // the worker, and WAL is what lets these queries run straight through them).
+    const db = openIndex(indexDir, "write");
+    // This process now owns writing this index — claimed AFTER the open that may have recreated the dir, so the
+    // pid file cannot be one of the things that open deletes. One-shot engines (the `iq` CLI) read this and
+    // query read-only instead of racing the worker below for the write lock.
+    claimIndexer(indexDir);
     let embedderPromise: Promise<Embedder | undefined> | undefined;
     // Query-side inference only — one sentence per `ask`/`q`. The backlog's embedder lives in the worker, so the
     // model is resident on both threads; that is the deliberate trade, ~30 MB against a query that would
@@ -305,6 +363,9 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
             // there is nothing to drain, and waiting out an embedding batch would hold up the daemon's shutdown.
             await worker.terminate();
             db.close();
+            // Ownership ends with the writer, so the next one-shot engine indexes inline again. A process killed
+            // without reaching this is covered too — the pid it left behind resolves to nothing.
+            releaseIndexer(indexDir);
         },
     };
 

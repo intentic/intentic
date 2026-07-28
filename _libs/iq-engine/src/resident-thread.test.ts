@@ -51,7 +51,7 @@ test("the index builds while the host thread is blocked solid", () => {
 
     // A second handle on the index the worker is writing — WAL is what makes that a plain read rather than a
     // wait, and it is the same arrangement the engine itself runs on (host reads, worker writes).
-    const db = openIndex(join(root, ".intentic/iq"));
+    const db = openIndex(join(root, ".intentic/iq"), "write");
     const indexed = Number(db.get("SELECT COUNT(*) AS n FROM files")?.["n"] ?? 0);
     db.close();
     expect(indexed).toBeGreaterThan(0);
