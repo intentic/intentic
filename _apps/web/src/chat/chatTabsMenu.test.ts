@@ -77,6 +77,15 @@ const flush = async (): Promise<void> => {
     await nextTick();
 };
 
+// Tabs here exist to be closed by the MENU, so each gets composer text before the first flush — an untouched
+// New agent tab closes itself when focus leaves it (useChat's abandoned-draft sweep), and these fixtures
+// change focus with every newChat.
+const pin = (): void => {
+    for (const conversation of useChat().conversations.value) {
+        conversation.draft.value = `pinned`;
+    }
+};
+
 const tabs = (): HTMLElement[] => [...strip.querySelectorAll<HTMLElement>(`[data-chat-tab]`)];
 // The menu teleports out of the strip, so it is read off the document rather than the strip's own subtree.
 const menuRows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(`.p-contextmenu-item`)];
@@ -106,6 +115,7 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
     const chat = useChat();
     const ids = [chat.active.value.conversationId, chat.newChat().conversationId, chat.newChat().conversationId, chat.newChat().conversationId];
     chat.setActive(ids[3]!); // the LAST tab is active — every close below is aimed elsewhere
+    pin();
     await nextTick();
     expect(tabs()).toHaveLength(4);
 
@@ -128,6 +138,7 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
 it(`teaches the shortcut a close command is bound to, and disables the rows with nothing left to take`, async () => {
     const chat = useChat();
     chat.newChat();
+    pin();
     await nextTick();
 
     // The last tab: nothing to its right, but there is still an "other" to close.
@@ -148,6 +159,7 @@ it(`teaches the shortcut a close command is bound to, and disables the rows with
 it(`offers the tab-less rows from the empty strip's menu instead of popping out on the right-click itself`, async () => {
     const chat = useChat();
     const ids = [chat.active.value.conversationId, chat.newChat().conversationId];
+    pin();
     await nextTick();
 
     // The gesture used to toggle the pop-out on the spot, which tore the panel into its own window on a
@@ -171,6 +183,7 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
 it(`mass closes past a running agent with no confirm — closing detaches from the turn, it doesn't stop it`, async () => {
     const chat = useChat();
     const ids = [chat.active.value.conversationId, chat.newChat().conversationId];
+    pin();
     // The second tab is mid-turn. Its run is detached daemon-side, so closing the tab leaves the agent working
     // and the chat reopenable from History mid-turn — there is nothing to warn about.
     chat.conversations.value[1]!.streaming.value = true;

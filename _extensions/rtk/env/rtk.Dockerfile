@@ -5,11 +5,11 @@
 #
 # Pin RTK_VERSION to a release you trust and confirm the tarball asset name against
 # https://github.com/rtk-ai/rtk/releases before enabling this extension.
-ENV RTK_VERSION=0.43.0
+ENV RTK_VERSION=0.44.0
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
-      x86_64) target="x86_64-unknown-linux-gnu" ;; \
+      x86_64) target="x86_64-unknown-linux-musl" ;; \
       aarch64) target="aarch64-unknown-linux-gnu" ;; \
       *) echo "rtk: unsupported arch $arch" >&2; exit 1 ;; \
     esac; \

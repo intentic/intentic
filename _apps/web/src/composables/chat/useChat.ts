@@ -820,6 +820,38 @@ const closeTabs = (ids: ReadonlySet<string>): void => {
     setConversations(next, activeId.value);
 };
 
+/* An untouched "New agent" tab disappears the moment focus leaves it. The tab and the fleet board's draft
+ * card are one conversation under two skins, so an abandoned empty draft doesn't just crowd the strip — it
+ * squats in the board's Active lane looking like work in flight. Anything at all in it makes it real and it
+ * stays: composer text (whitespace alone isn't text — send() refuses it too), an attachment staged or still
+ * uploading, a queued message, a transcript, a session, a running turn, a rename, an unread error, or a
+ * fleet registration. */
+const untouchedDraft = (conversation: Conversation): boolean =>
+    conversation.isolated.value &&
+    !conversation.registered.value &&
+    !conversation.streaming.value &&
+    conversation.messages.value.length === 0 &&
+    conversation.draft.value.trim() === `` &&
+    conversation.attachments.value.length === 0 &&
+    conversation.queued.value.length === 0 &&
+    conversation.session.value === undefined &&
+    conversation.title.value === null &&
+    conversation.error.value === null;
+
+watch(activeId, (next, previous) => {
+    // A pre-flush watch can fire with the two equal (focus bounced away and back inside one tick), and the
+    // leaver must never be the tab the user is looking at.
+    if (next === previous) {
+        return;
+    }
+    // Re-looked-up in the live list, so a focus move caused by rewriting the list itself (a close, a sandbox
+    // switch) finds no leaver and sweeps nothing.
+    const left = conversations.value.find((conversation) => conversation.conversationId === previous);
+    if (left !== undefined && untouchedDraft(left)) {
+        closeTabs(new Set([left.conversationId]));
+    }
+});
+
 // --- Active-conversation actions (forwarded) --------------------------------------------------
 // The composer's one send path, whatever the conversation is doing: an idle chat starts a turn, a running one
 // takes the message mid-turn (or holds it until it settles). See Conversation.enqueue.
@@ -985,18 +1017,25 @@ export const openAgentConversation = (agent: {
     provider: AgentProvider;
     harness: AgentHarness;
     account?: string;
+    // Whether the fleet actually knows this agent — true unless the caller knows better. The board's
+    // client-only DRAFT card is the one that does: its conversation must stay a draft (carded, and taken by
+    // the focus-leave sweep when abandoned) until a first turn registers it.
+    registered?: boolean;
 }): Conversation => {
+    const registered = agent.registered ?? true;
     const existing = conversations.value.find((conversation) => conversation.conversationId === agent.id);
     if (existing !== undefined) {
         setActive(existing.conversationId);
         // The fleet handed us this id, so the tab is a view of a real agent whatever the live roster says right
         // now — which is how an ARCHIVED agent opened from the archive view stopped painting a phantom "New
         // agent" card back onto the Active lane it had just left.
-        existing.registered.value = true;
+        if (registered) {
+            existing.registered.value = true;
+        }
         return existing;
     }
     const conversation = new Conversation(agent.id);
-    conversation.registered.value = true;
+    conversation.registered.value = registered;
     conversation.provider.value = agent.provider;
     conversation.harness.value = agent.harness;
     conversation.account.value = agent.account ?? rememberedAccountFor(agent.provider);
@@ -1026,10 +1065,14 @@ const openConversation = async (id: string): Promise<void> => {
         return;
     }
     const conversation = new Conversation();
+    // Titled from the history row BEFORE the transcript round-trip: a nameless empty tab awaiting its fetch
+    // is indistinguishable from an untouched draft, and the focus-leave sweep would close it mid-load.
+    const title = sessions.value.find((session) => session.id === id)?.title ?? null;
+    conversation.title.value = title;
     setConversations([...conversations.value, conversation], conversation.conversationId);
     const restored = await fetchTranscript(conversation, id);
     if (restored !== undefined) {
-        conversation.loadTranscript(restored, id, sessions.value.find((session) => session.id === id)?.title ?? null);
+        conversation.loadTranscript(restored, id, title);
     }
 };
 

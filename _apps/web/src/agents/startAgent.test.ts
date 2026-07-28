@@ -75,7 +75,10 @@ it(`opens, focuses and hands the composer a tab from the fleet board and from th
     const board = mount(AgentsView);
     await nextTick();
 
-    const { conversations, activeId, composerFocus } = useChat();
+    const { conversations, activeId, composerFocus, draft } = useChat();
+    // The tab a press moves focus OFF has to hold something, or the abandoned-draft sweep (an untouched New
+    // agent tab closes itself when focus leaves it) folds each press into a replacement instead of an addition.
+    draft.value = `work in progress`;
     const before = tabs(strip).length;
     const focusRequests = composerFocus.value;
 
@@ -88,6 +91,7 @@ it(`opens, focuses and hands the composer a tab from the fleet board and from th
     expect(composerFocus.value).toBe(focusRequests + 1);
 
     // The strip's "+" — the same action, so the same three effects.
+    draft.value = `typed into the first new agent`;
     newAgentButton(strip).click();
     await nextTick();
     expect(tabs(strip)).toHaveLength(before + 2);

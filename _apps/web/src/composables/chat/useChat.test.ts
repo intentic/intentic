@@ -240,6 +240,7 @@ describe(`tab snapshots across windows and sandboxes`, () => {
     it(`keeps a tab this window closed closed, whatever another window writes afterwards`, async () => {
         const chat = useChat();
         const kept = chat.active.value.conversationId;
+        chat.draft.value = `keep me`; // content — the focus-leave sweep must not take the tab `closed` steals focus from
         const closed = chat.newChat().conversationId;
         await nextTick();
 
@@ -373,6 +374,71 @@ describe(`closing tabs`, () => {
 
         expect(chat.activeId.value).toBe(ids[2]);
         expect(chat.active.value.conversationId).toBe(ids[2]);
+    });
+});
+
+/* The strip must not hoard what the user walked away from: an untouched "New agent" tab (no text, no
+ * attachment, nothing queued, no turn, no name) closes itself the moment focus moves to another tab. It is
+ * also the fleet board's draft card, so an abandoned press otherwise squats in the Active lane looking like
+ * work in flight. Anything at all in the tab makes it real and it stays. */
+describe(`abandoned draft sweep`, () => {
+    // The sweep watches activeId, and a real focus change is its own tick — flush after the reset and after
+    // each move so the watcher sees the same sequence a user produces, not one batched endpoint pair.
+    beforeEach(async () => {
+        storage.clear();
+        resetChat();
+        await nextTick();
+    });
+
+    it(`closes an untouched New agent tab when focus leaves it — whitespace alone isn't text`, async () => {
+        const chat = useChat();
+        const first = chat.active.value.conversationId;
+        chat.draft.value = `real work`;
+        const abandoned = chat.newChat();
+        abandoned.draft.value = `   `;
+        await nextTick();
+
+        chat.setActive(first);
+        await nextTick();
+
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first]);
+        expect(chat.activeId.value).toBe(first);
+    });
+
+    it(`keeps the tab once anything is in it — a half-typed draft is not abandoned`, async () => {
+        const chat = useChat();
+        const first = chat.active.value.conversationId;
+        chat.draft.value = `real work`;
+        const kept = chat.newChat();
+        kept.draft.value = `half a thought`;
+        await nextTick();
+
+        chat.setActive(first);
+        await nextTick();
+
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first, kept.conversationId]);
+    });
+
+    it(`never stacks two untouched drafts — a second "New agent" press replaces the first`, async () => {
+        const chat = useChat();
+        const second = chat.newChat().conversationId;
+        await nextTick();
+
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([second]);
+    });
+
+    it(`leaves a draft the fleet has registered alone — that tab is a real agent now`, async () => {
+        const chat = useChat();
+        const first = chat.active.value.conversationId;
+        chat.draft.value = `real work`;
+        const registered = chat.newChat();
+        registered.registered.value = true;
+        await nextTick();
+
+        chat.setActive(first);
+        await nextTick();
+
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first, registered.conversationId]);
     });
 });
 

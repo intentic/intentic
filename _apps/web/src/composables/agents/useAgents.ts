@@ -605,11 +605,14 @@ const rename = async (id: string, title: string): Promise<void> => {
 
 // Open (or focus) an agent's conversation tab and mark it seen. Takes just the identity fields so registry
 // cards and client-only draft cards both route through it.
-const open = (agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId" | "title" | "account">): void => {
+const open = (agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId" | "title" | "account" | "status">): void => {
     openAgentConversation({
         id: agent.id,
         provider: agent.provider,
         harness: agent.harness,
+        // A draft card is client-only — the fleet has NOT registered its conversation, and claiming so here
+        // would erase the card under the click and pin the empty tab open past the focus-leave sweep.
+        registered: agent.status !== `draft`,
         ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
         ...(agent.title !== undefined ? { title: agent.title } : {}),
         ...(agent.account !== undefined ? { account: agent.account } : {}),
