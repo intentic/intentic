@@ -8,7 +8,7 @@ import { useSecrets } from "../composables/secrets/useSecrets";
 import { useAsyncAction } from "../composables/useAsyncAction";
 
 /* The one way a secret value enters the app: a masked input with an eye toggle that writes KEY=value straight
- * to the sandbox daemon's .env (never the platform), plus the shared provenance line. Used by the Secrets page
+ * to the sandbox daemon's .env (never the platform), plus the shared provenance line. Used by the Sandbox Secrets tab
  * and every credential form (Cloudflare/GitHub/GitLab/Stripe), so the wording and behavior stay identical.
  * `collect` mode skips the write and only emits the value — for flows that need the raw value first (e.g.
  * Cloudflare zone discovery) and write it themselves. */

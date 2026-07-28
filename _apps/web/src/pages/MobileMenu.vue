@@ -6,6 +6,7 @@ import { useAuth } from "../composables/useAuth";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { detectActivations, extensionPath } from "../core-views/registry";
 import { usePanels } from "../composables/extensions/usePanels";
+import { useMissingSecretCount } from "../composables/secrets/useSecrets";
 import { presenceActivity, presenceHue, presenceInitials, presenceOthers } from "../composables/usePresence";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
@@ -17,6 +18,7 @@ interface AreaRow {
     readonly to: string;
     readonly label: string;
     readonly icon?: IconName;
+    readonly attention?: number;
 }
 
 const router = useRouter();
@@ -24,6 +26,7 @@ const sandbox = useSandbox();
 const { user, plan, entitlements, upgradeOpen, signOut } = useAuth();
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
+const { missingRequiredCount } = useMissingSecretCount();
 
 onMounted(() => {
     if (sandbox.sandboxes.value.length === 0) {
@@ -34,7 +37,6 @@ onMounted(() => {
 // The rail's extension tiles, same detection as ShellDesktop — Workspace/Drafts/Chat live on the tab bar, so
 // the menu lists only the remaining areas.
 const areas = computed<readonly AreaRow[]>(() => [
-    { to: `/secrets`, label: `Secrets`, icon: `key` },
     // Automations is now a rail extension — it flows through detectActivations below like every other rail tile.
     ...detectActivations(panels.value, capabilities.value)
         .filter(({ extension }) => extension.surface === `rail`)
@@ -47,7 +49,7 @@ const areas = computed<readonly AreaRow[]>(() => [
         }),
     { to: `/capabilities`, label: `Add a capability`, icon: `plus` },
     { to: `/terminal`, label: `Terminal`, icon: `code` },
-    { to: `/sandbox`, label: `Sandbox`, icon: `box` },
+    { to: `/sandbox`, label: `Sandbox`, icon: `box`, attention: missingRequiredCount.value },
     { to: `/settings`, label: `Settings`, icon: `cog` },
 ]);
 
@@ -146,6 +148,11 @@ const logout = async (): Promise<void> => {
                     <span v-else class="text-xs font-semibold text-muted">{{ area.label.slice(0, 2).toUpperCase() }}</span>
                 </span>
                 <span class="min-w-0 flex-1 truncate">{{ area.label }}</span>
+                <span
+                    v-if="area.attention !== undefined && area.attention > 0"
+                    class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning"
+                    >{{ area.attention }} missing</span
+                >
                 <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
             </RouterLink>
         </section>

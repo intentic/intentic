@@ -49,7 +49,7 @@ export function useShellCommands(): void {
             },
             { command: `view.workspace`, title: `Go to Workspace`, icon: `folder`, handler: () => router.push(`/workspace`) },
             { command: `view.agents`, title: `Go to Agents`, icon: `comments`, handler: () => router.push(`/agents`) },
-            { command: `view.secrets`, title: `Go to Secrets`, icon: `key`, handler: () => router.push(`/secrets`) },
+            { command: `view.secrets`, title: `Go to Sandbox Secrets`, icon: `key`, handler: () => router.push(`/sandbox/secrets`) },
             { command: `view.capabilities`, title: `Add a Capability`, icon: `plus`, handler: () => router.push(`/capabilities`) },
             { command: `view.keybindings`, title: `Keyboard Shortcuts`, icon: `sliders-h`, handler: () => router.push(`/settings/keybindings`) },
             { command: `terminal.toggle`, title: `Toggle Terminal Panel`, icon: `code`, keybinding: `Ctrl+\``, handler: () => terminal.toggle() },

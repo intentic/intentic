@@ -75,7 +75,7 @@ const hasChanges = computed(() => sections.value.length > 0);
             </div>
             <p class="text-xs text-muted">
                 Your intent declares secrets that aren't in your sandbox yet. Manage them any time on the
-                <RouterLink to="/secrets" class="text-link hover:underline">Secrets page</RouterLink>.
+                <RouterLink to="/sandbox/secrets" class="text-link hover:underline">Sandbox Secrets</RouterLink>.
             </p>
             <div v-for="key in missingSecrets" :key="key" class="flex flex-col gap-1">
                 <span class="font-mono text-xs text-content">{{ key }}</span>

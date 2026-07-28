@@ -28,7 +28,7 @@ export const browseMarketplace = async (url: string, token?: string): Promise<Ma
         }),
     );
 
-// Replace just a capability's secret (the /secrets page's pencil on a capability row). Mutation only — no
+// Replace just a capability's secret (the Sandbox Secrets tab's pencil on a capability row). Mutation only — no
 // useQuery bundled, so a SecretField mount never refires /capabilities (the observer-refetch problem the
 // useSecrets doc comment describes). A secret edit can't recompose the environment, so only the capability
 // list + secret inventory refresh.

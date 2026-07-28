@@ -9,6 +9,7 @@ import SandboxAgent from "./sandbox/SandboxAgent.vue";
 import SandboxEnvironment from "./sandbox/SandboxEnvironment.vue";
 import SandboxExtensions from "./sandbox/SandboxExtensions.vue";
 import SandboxOverview from "./sandbox/SandboxOverview.vue";
+import SandboxSecrets from "./sandbox/SandboxSecrets.vue";
 import SandboxStatus from "./sandbox/SandboxStatus.vue";
 import SandboxSync from "./sandbox/SandboxSync.vue";
 import SandboxUsage from "./sandbox/SandboxUsage.vue";
@@ -19,7 +20,7 @@ import SandboxUsage from "./sandbox/SandboxUsage.vue";
  * correctly drives each tab's side-effecting lifecycles (desktop-sync start/stop, the agent's account surface);
  * the underlying composables are module singletons / vue-query caches, so remounting a tab is cheap. */
 
-const TABS = [`overview`, `status`, `usage`, `environment`, `access`, `agent`, `extensions`, `sync`] as const;
+const TABS = [`overview`, `status`, `usage`, `secrets`, `environment`, `access`, `agent`, `extensions`, `sync`] as const;
 type Tab = (typeof TABS)[number];
 const DEFAULT: Tab = `overview`;
 
@@ -37,6 +38,7 @@ const options = computed(() => [
     { label: `Overview`, value: `overview` as Tab },
     { label: `Status`, value: `status` as Tab, badge: runningCount.value },
     { label: `Usage`, value: `usage` as Tab },
+    { label: `Secrets`, value: `secrets` as Tab },
     { label: `Environment`, value: `environment` as Tab },
     { label: `Access`, value: `access` as Tab },
     { label: `Agent`, value: `agent` as Tab },
@@ -61,6 +63,9 @@ watch(
 </script>
 
 <template>
+    <!-- One width for every tab: the hub's header, description and tab strip are shared chrome, so a per-tab
+         width would visibly reflow all of it on each switch. Secrets was `wide` as a standalone page; its rows
+         are one line each by design, so they read fine at the hub's content width. -->
     <Page>
         <PageHeader
             :title="sandbox.active.value?.name ?? `Sandbox`"
@@ -74,6 +79,7 @@ watch(
         <SandboxOverview v-if="activeTab === `overview`" />
         <SandboxStatus v-else-if="activeTab === `status`" />
         <SandboxUsage v-else-if="activeTab === `usage`" />
+        <SandboxSecrets v-else-if="activeTab === `secrets`" />
         <SandboxEnvironment v-else-if="activeTab === `environment`" />
         <SandboxAccess v-else-if="activeTab === `access`" />
         <SandboxAgent v-else-if="activeTab === `agent`" />

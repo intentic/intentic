@@ -6,7 +6,7 @@ import { reveal, useSecrets } from "../composables/secrets/useSecrets";
 import { errorMessage } from "../composables/useAsyncAction";
 import SecretField from "./SecretField.vue";
 
-/* One inventory row on the Secrets page, collapsed to a single line: a status dot, the key, and the
+/* One inventory row on the Sandbox Secrets tab, collapsed to a single line: a status dot, the key, and the
  * action cluster (reveal / copy / set-update / remove). Everything secondary — the provenance line,
  * the revealed value, and the in-place editor — lives in a disclosure panel that opens below the row,
  * so the resting height is one line no matter how many secrets there are. Reveal-on-click is the only

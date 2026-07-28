@@ -7,7 +7,8 @@ set -u
 W="$(dirname "$0")/tmux-run"
 command -v tmux >/dev/null || { echo "SKIP: tmux not installed"; exit 0; }
 S=selftest
-trap 'tmux kill-session -t "$S" 2>/dev/null' EXIT
+R=selftest-race
+trap 'tmux kill-session -t "$S" 2>/dev/null; tmux kill-session -t "$R" 2>/dev/null' EXIT
 
 # Fast command, many times: never empty, always exit 0.
 for i in $(seq 1 20); do
@@ -15,6 +16,27 @@ for i in $(seq 1 20); do
     [ -n "$out" ] || { echo "FAIL: empty output on fast run $i"; exit 1; }
     [ "$rc" = 0 ] || { echo "FAIL: exit $rc (want 0) on fast run $i"; exit 1; }
 done
+
+# Concurrent commands race on creating the session, on pruning the same dead predecessor, and on the session
+# being destroyed by that prune between another command's has-session check and its new-window. No expected
+# race may leak tmux's "duplicate session" / "can't find session" / "can't find window" diagnostics into the
+# tool result, and every command must still report its own exit code.
+D="$(mktemp -d)"
+race() {
+    for i in $(seq 1 20); do
+        { INTENTIC_RUN_FILTER=0 bash "$W" "$R" 'true' run >"$D/$1-$i.out" 2>"$D/$1-$i.err"; echo $? >"$D/$1-$i.rc"; } &
+    done
+    wait
+}
+# Round one starts from no session at all (the new-session race); round two runs against a session whose
+# windows are now ALL dead, so a prune can destroy it out from under a command that just saw it exist.
+race a
+race b
+errors="$(grep -h . "$D"/*.err 2>/dev/null)"
+codes="$(grep -hv '^0$' "$D"/*.rc 2>/dev/null)"
+rm -rf "$D"
+[ -z "$errors" ] || { echo "FAIL: concurrent runner leaked tmux diagnostics: $errors"; exit 1; }
+[ -z "$codes" ] || { echo "FAIL: concurrent runner lost an exit code: $codes"; exit 1; }
 
 # Exit code fidelity through the tee pipeline.
 bash "$W" "$S" 'exit 7' run >/dev/null; [ $? = 7 ] || { echo "FAIL: exit-code not preserved"; exit 1; }
@@ -59,7 +81,7 @@ tmux list-panes -s -t "=$S" -F '#{pane_dead}' | grep -q 0 || { echo "FAIL: long-
 # With the output filter on PATH: failures pass through verbatim; command-matched noise is stripped on
 # success with the footer naming the elision.
 command -v node >/dev/null || { echo "SKIP filter cases: node not installed"; echo "PASS: tmux-run self-check"; exit 0; }
-F="$(mktemp -d)"; trap 'tmux kill-session -t "$S" 2>/dev/null; rm -rf "$F"' EXIT
+F="$(mktemp -d)"; trap 'tmux kill-session -t "$S" 2>/dev/null; tmux kill-session -t "$R" 2>/dev/null; rm -rf "$F"' EXIT
 printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$(cd "$(dirname "$0")" && pwd)/agent-output-filter.mjs" > "$F/agent-output-filter"
 chmod +x "$F/agent-output-filter"
 out="$(PATH="$F:$PATH" bash "$W" "$S" 'echo hi; exit 3' run)"; rc=$?

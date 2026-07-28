@@ -7,6 +7,7 @@ import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { fileToSquareDataUrl } from "../../composables/imageDataUrl";
 import { useRunning } from "../../composables/sandbox/useRunning";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
+import { useMissingSecretCount } from "../../composables/secrets/useSecrets";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { errorMessage } from "../../composables/useAsyncAction";
 import { presenceOthers } from "../../composables/usePresence";
@@ -23,6 +24,7 @@ const { info, installed, latest, updateAvailable } = useSandboxVersion();
 const { claudeConnected } = useChat();
 const { capabilities } = useCapabilities();
 const { runningCount } = useRunning();
+const { countPending, missingRequiredCount } = useMissingSecretCount();
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
@@ -259,6 +261,22 @@ const save = async (): Promise<void> => {
                             size="xs"
                             dot
                         />
+                    </template>
+                </Row>
+            </RouterLink>
+
+            <RouterLink to="/sandbox/secrets" class="block">
+                <Row icon="key" title="Secrets" description="Credentials and generated values stored inside this sandbox." interactive chevron>
+                    <template #control>
+                        <StatusBadge v-if="countPending" variant="neutral" label="Checking" size="xs" />
+                        <StatusBadge
+                            v-else-if="missingRequiredCount > 0"
+                            variant="warning"
+                            :label="`${missingRequiredCount} missing`"
+                            size="xs"
+                            dot
+                        />
+                        <StatusBadge v-else variant="success" label="Ready" size="xs" dot />
                     </template>
                 </Row>
             </RouterLink>
