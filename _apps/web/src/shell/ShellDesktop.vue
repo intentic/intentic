@@ -51,7 +51,7 @@ const changes = useChanges();
 const { attention: agentAttention } = useAgents();
 const layout = useLayout();
 const { iconRailSize } = useIconRailSize();
-const { poppedOut, body: chatPopoutBody, dock } = useChatPopout();
+const { poppedOut, restoring: chatRestoring, body: chatPopoutBody, dock } = useChatPopout();
 const route = useRoute();
 
 // The connected tunnels behind the rail's VPN indicator. Shown only when non-empty: a VPN badge that is always
@@ -76,9 +76,8 @@ const isNavActive = (to: string): boolean => route.path === to || route.path.sta
 const fixedTiles: readonly AreaTile[] = [
     { to: `/agents`, label: `Agents`, icon: `comments` },
     { to: `/workspace`, label: `Workspace`, icon: `folder` },
-    { to: `/secrets`, label: `Secrets`, icon: `key` },
 ];
-// Slotted in before Secrets only when the agent has proposed a draft (or left an unreadable draft file) — an
+// Slotted in between Agents and Workspace only when the agent has proposed a draft (or left an unreadable draft file) — an
 // empty queue keeps the rail uncluttered, mirroring the extension tiles that appear on content. Drafts stays a
 // core shell surface (the mobile bottom-bar "Review" tab depends on it too), so its tile is not an extension.
 const draftsTile: AreaTile = { to: `/drafts`, label: `Drafts`, icon: `send` };
@@ -116,12 +115,14 @@ const initials = (name: string): string => {
 };
 
 // Collapse the chat column to nothing while the panel is popped out (it's teleported into its own window), so
-// the workspace reclaims the full width. The rail variables flow into its child controls too, keeping every tile
-// on one density without threading a presentation-only prop through the switcher and account components.
+// the workspace reclaims the full width — and equally while a window from before a page reload is still on its
+// way back, so a refresh doesn't flash the column open for a few frames. The rail variables flow into its child
+// controls too, keeping every tile on one density without threading a presentation-only prop through the
+// switcher and account components.
 const gridStyle = computed(() => {
     const compact = iconRailSize.value === `compact`;
     return {
-        "--chat-width": poppedOut.value ? `0px` : `${layout.chatWidth.value}px`,
+        "--chat-width": poppedOut.value || chatRestoring.value ? `0px` : `${layout.chatWidth.value}px`,
         "--icon-rail-width": compact ? `3.5rem` : `4rem`,
         "--icon-rail-tile-size": compact ? `2.5rem` : `2.75rem`,
         "--icon-rail-account-size": compact ? `2rem` : `2.25rem`,
@@ -146,7 +147,7 @@ const terminalLabel = computed(() => {
 });
 // Like the chat, the whole panel can float in its own window (right-click its tab strip) — teleported there,
 // docked back on window close.
-const { poppedOut: terminalPoppedOut, body: terminalPopoutBody, dock: dockTerminal } = useTerminalPopout();
+const { poppedOut: terminalPoppedOut, restoring: terminalRestoring, body: terminalPopoutBody, dock: dockTerminal } = useTerminalPopout();
 // Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pop-out window.
 watch(terminal.open, (open) => {
     if (!open) {
@@ -268,9 +269,11 @@ onUnmounted(() => {
         </nav>
 
         <!-- Docked in the grid's chat column, or teleported into the pop-out window — same live DOM either way,
-             so the useChat singleton and the streaming turn are untouched by the move. -->
+             so the useChat singleton and the streaming turn are untouched by the move. Held back entirely while
+             a pop-out window from before a reload is still coming back, so the panel mounts once, out there,
+             instead of building itself in the collapsed column first. -->
         <Teleport :to="chatPopoutBody" :disabled="!poppedOut">
-            <ChatPanel class="border-l border-line" style="grid-area: chat" />
+            <ChatPanel v-if="!chatRestoring" class="border-l border-line" style="grid-area: chat" />
         </Teleport>
 
         <main class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
@@ -284,7 +287,7 @@ onUnmounted(() => {
                      panel fills the floating window, hence resizable off there). -->
                 <Teleport :to="terminalPopoutBody" :disabled="!terminalPoppedOut">
                     <TerminalPanel
-                        v-if="terminal.open.value"
+                        v-if="terminal.open.value && !terminalRestoring"
                         :source="globalTerminalSource"
                         storage-key="sandbox"
                         :initial="terminal.requested.value"
