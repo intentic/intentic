@@ -3,36 +3,41 @@ import { InfoDialog, InfoTable } from "@intentic-app/ui";
 
 /* The (i) beside the Agent tab's "Assistant" group. These settings share nothing but a heading, so the dialog
  * opens with a what-changes/default table (the only thing that IS common) and then treats each one separately,
- * led by a visual: a real before/after reply for terse, a where-does-it-go table for custom instructions, an
+ * led by a visual: a real before/after reply for terse, a kept-vs-lost split for the system prompt, an
  * off-vs-on table for iq, a lifecycle strip for archiving. Most are easier to show than to describe, which is
  * why the prose is thin.
  *
- * Custom instructions gets the longest section for a reason that isn't its complexity: the sandbox has TWO
- * places to write standing orders (this and CLAUDE.md) and the wrong choice is silent — instructions in the
- * wrong file still work, they just leak to teammates or fail to reach ChatGPT. So the section leads with the
- * split rather than with the feature.
+ * The system prompt gets the longest section, and it is the only one here whose section exists to TALK SOMEONE
+ * OUT of the setting as often as into it. Replacing it is a real capability with a real cost, and the cost is
+ * invisible at the moment of the edit: the chat's cards and panels are driven from the prompt, so a replacement
+ * turns them off without an error anywhere. Hence the kept/lost columns, before anything about how to write one.
  *
- * Defaults quoted here come from SandboxSettingsSchema — off / empty / off / 3 days. */
+ * Defaults quoted here come from SandboxSettingsSchema — off / preset / off / 3 days. */
 
 const AT_A_GLANCE = [
     [`Terse responses`, `How much the assistant writes back`, `Off`],
-    [`Custom instructions`, `Standing orders it carries into every turn`, `Empty`],
+    [`System prompt`, `Who the assistant is, before you say anything`, `Claude Code's`],
     [`iq code search`, `How it hunts through your code`, `Off`],
     [`Archive finished agents`, `How long finished work stays on the board`, `3 days`],
 ];
 
 const TERSE_ASKS = [`Lead with the answer`, `No restating the question`, `No re-quoting files`, `No echoing tool output`];
 
-// The choice the section exists to make. Rows are phrased as the QUESTION a user actually has, not as a
-// feature comparison — nobody wonders "which one is version-controlled", they wonder "where do I put this".
-const INSTRUCTIONS_VS_MEMORY = [
-    [`What it's for`, `How the agent works with you`, `What the code is and how to build it`],
-    [`Who else gets it`, `Nobody — it stays in this sandbox`, `Your teammates, via the repo`],
-    [`Which assistants read it`, `Claude, and any model on the Claude Code harness`, `Claude here, ChatGPT via AGENTS.md`],
-    [`Where it lands`, `The system prompt — the strongest position there is`, `A file the agent reads in`],
+// What a replacement actually costs, as a plain inventory. Every row on the "lost" side is a thing the user
+// would otherwise discover by noticing it had stopped happening, which is the worst way to learn it.
+const PROMPT_LOST = [
+    [`Claude Code's coding instructions`, `Its whole approach to reading, editing and verifying code`],
+    [`The question and plan cards`, `It writes "A) … B) …" as text instead of a card you can click`],
+    [`The checklist panel`, `Long tasks run with no visible plan to follow along with`],
+    [`The browser tools`, `It stops knowing a real browser is available and reaches for curl`],
+    [`Terse responses`, `The toggle stays on screen but no longer does anything`],
 ];
 
-const INSTRUCTIONS_EXAMPLES = [`Answer in Polish`, `Never run migrations without asking`, `Call me by my first name`, `Prefer pnpm over npm`];
+const PROMPT_KEPT = [
+    [`Every tool`, `Nothing is removed — only what the model has been TOLD changes`],
+    [`CLAUDE.md and your skills`, `Still loaded from the workspace exactly as before`],
+    [`Cross-provider delegation`, `Moves into the first message instead of the prompt`],
+];
 
 const IQ_COMPARISON = [
     [`A typical hunt`, `Several calls, then whole files read to find one function`, `One call`],
@@ -76,27 +81,49 @@ const IQ_COMPARISON = [
             it doesn't disturb the reuse that keeps a long conversation's later turns cheap.
         </p>
 
-        <!-- ② Custom instructions — the same mechanism as terse, with the text left to you. Leads with the
-             CLAUDE.md split because that's the decision, not the typing. -->
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Custom instructions</h3>
+        <!-- ② System prompt — leads with what a replacement costs, because that is the decision. How to write
+             one is the easy half and the user can read the default for that. -->
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">System prompt</h3>
         <p class="mt-1.5 text-2xs text-muted">
-            Terse responses is one instruction we wrote for you. This is the same slot, left blank — whatever you put in it is carried into every turn
-            in this sandbox, at the very end of the assistant's standing instructions.
+            The instructions the assistant carries before you type anything — who it is, how it works, what it may assume. By default that is Claude
+            Code's own prompt, read live from the Claude Code inside your sandbox, so it improves whenever the sandbox updates. You can read it
+            yourself: <span class="font-medium text-content">View Claude's default</span> on the setting.
         </p>
-        <div class="mt-2 flex flex-wrap gap-1.5">
-            <span
-                v-for="example in INSTRUCTIONS_EXAMPLES"
-                :key="example"
-                class="rounded-md border border-line bg-canvas px-2 py-0.5 text-2xs text-muted"
-                >{{ example }}</span
-            >
+        <p class="mt-2 text-2xs text-muted">
+            Writing your own <span class="font-medium text-content">replaces</span> it. Not adds to it — replaces it. That is real power (an agent
+            that is a release-notes writer, a support bot, a reviewer with your house rules) and it has a real cost, because this app talks to the
+            assistant through that same prompt.
+        </p>
+        <div class="mt-2 grid gap-2 sm:grid-cols-2">
+            <div class="overflow-hidden rounded-lg border border-warning/40">
+                <p class="border-b border-warning/40 bg-warning/10 px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-warning">
+                    What you give up
+                </p>
+                <div class="flex flex-col gap-1.5 px-2.5 py-2">
+                    <p v-for="[what, effect] in PROMPT_LOST" :key="what" class="text-2xs text-muted">
+                        <span class="font-medium text-content">{{ what }}</span> — {{ effect }}
+                    </p>
+                </div>
+            </div>
+            <div class="overflow-hidden rounded-lg border border-line">
+                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">What stays</p>
+                <div class="flex flex-col gap-1.5 px-2.5 py-2">
+                    <p v-for="[what, effect] in PROMPT_KEPT" :key="what" class="text-2xs text-muted">
+                        <span class="font-medium text-content">{{ what }}</span> — {{ effect }}
+                    </p>
+                </div>
+            </div>
         </div>
-        <p class="mt-3 text-2xs font-medium text-content">This or CLAUDE.md?</p>
-        <InfoTable class="mt-1.5" :headers="[``, `Custom instructions`, `CLAUDE.md`]" :rows="INSTRUCTIONS_VS_MEMORY" />
+        <p class="mt-2 text-2xs text-subtle">
+            <span class="font-medium text-content">Edit a copy of it</span> is the gentler route: fork Claude's default and change the parts you care
+            about, keeping the rest. The trade is that a fork is a snapshot — it stops picking up improvements, which is why the dialog shows the
+            version it came from. <span class="font-medium text-content">Reset to default</span> empties the box; there is nothing to restore, because
+            the default was never a copy.
+        </p>
         <p class="mt-1.5 text-2xs text-subtle">
-            Two things worth knowing. It reaches every model running on the Claude Code harness — including ChatGPT and Grok when you run them there —
-            but a chat on a provider's own runtime doesn't see it. And a chat opened by someone outside your sandbox (a web-chat visitor, a Discord
-            mention) is deliberately left out: those replies are steered by the automation that opened them, not by how you like being spoken to.
+            It applies to every model running on the Claude Code harness — including ChatGPT and Grok when you run them there — and to every chat in
+            this sandbox, automated wake-ups and web-chat visitors included. A chat on a provider's own runtime uses that provider's prompt instead.
+            Ordinary preferences ("answer in Polish") do not need this: put them in CLAUDE.md, which is read alongside whichever prompt is in force.
         </p>
         <p class="mt-1.5 text-2xs text-subtle">
             Editing it costs one turn's worth of the reuse that keeps long conversations cheap, then settles back. Write it and leave it — it isn't a

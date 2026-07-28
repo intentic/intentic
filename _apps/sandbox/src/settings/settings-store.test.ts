@@ -24,8 +24,8 @@ const DEFAULTS: SandboxSettings = {
     outputCleaners: "off",
     outputHoldout: 0,
     filterBackend: "native",
-    // Empty means the owner has written no standing instructions, so nothing is appended to the system prompt.
-    systemAppend: "",
+    // Empty means the agent runs on Claude Code's own preset prompt rather than one the owner wrote.
+    systemPrompt: "",
     // Empty means Auto, not "none": the quick model is resolved from the connected accounts each time it is
     // read, so there is no id for a fresh sandbox to store.
     quickModel: "",

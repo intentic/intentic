@@ -40,7 +40,7 @@ import { summarizeAgentTitle } from "./title-summary.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
 import { delegationNote } from "./delegation.js";
-import { systemAppendOf } from "./system-append.js";
+import { turnPromptPlacement } from "./system-prompt.js";
 import { withTurnPreamble } from "./turn-preamble.js";
 
 // Fold the opt-in editor context (the composer chip, off by default) into the prompt: the file the user is
@@ -466,7 +466,7 @@ async function* runTurn(
             outputHoldout,
             filterBackend,
             terseOutput,
-            systemAppend: customInstructions,
+            systemPrompt: customPrompt,
         } = await services.sandboxSettings.get();
         // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
         // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle
@@ -530,21 +530,21 @@ async function* runTurn(
         // name, and a post-edit type-check whose every error is false. Rides the USER message, never systemAppend:
         // it changes the moment an install finishes, and the system prefix is kept byte-stable for the prompt cache.
         const setupNotice = setupNoticeFor(await workspaceSetup(localCwd, services.processes));
+        // Where this turn's instructions go — the owner's own system prompt (or the preset), what may be
+        // appended to it, and whether the delegation note has to travel in the user message instead
+        // (system-prompt.ts owns all three, because they are one decision).
+        const placement = turnPromptPlacement({
+            systemPrompt: customPrompt,
+            ...(note !== undefined ? { note } : {}),
+            stableSystemPrompt,
+            terseOutput,
+        });
         // withTurnPreamble so session restore can strip these notes back out of the stored message — they are
         // protocol, not something the user said (turn-preamble.ts).
         const prompt = withTurnPreamble(
-            [...(stableSystemPrompt && note !== undefined ? [note] : []), ...(setupNotice !== undefined ? [setupNotice] : [])],
+            [...(placement.userNote !== undefined ? [placement.userNote] : []), ...(setupNotice !== undefined ? [setupNotice] : [])],
             promptWithAttachments,
         );
-        // The system-prompt suffix for this turn (system-append.ts owns the pieces and their order). The
-        // delegation note is handed over only when stableSystemPrompt hasn't already moved it into the user
-        // message, and `origin` marks a turn that is answering someone outside the sandbox.
-        const systemAppend = systemAppendOf({
-            ...(note !== undefined && !stableSystemPrompt ? { note } : {}),
-            terseOutput,
-            customInstructions,
-            external: input.origin !== undefined,
-        });
         run = services.agent;
         request = {
             ...base,
@@ -578,8 +578,10 @@ async function* runTurn(
             ...(outputHoldout > 0 ? { outputHoldout } : {}),
             ...(filterBackend !== "native" ? { filterBackend } : {}),
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
-            // Delegation note (when stableSystemPrompt left it here) + terseOutput steer, composed above.
-            ...(systemAppend !== undefined ? { systemAppend } : {}),
+            // The owner's own system prompt (replacing the preset) or what to append to the preset — never
+            // both, which is what turnPromptPlacement decided above.
+            ...(placement.systemPrompt !== undefined ? { systemPrompt: placement.systemPrompt } : {}),
+            ...(placement.systemAppend !== undefined ? { systemAppend: placement.systemAppend } : {}),
             // Mid-turn steering (the /agent/steer queue streamAgent registered) — Claude Code harness only.
             ...(steering !== undefined ? { steering } : {}),
         };

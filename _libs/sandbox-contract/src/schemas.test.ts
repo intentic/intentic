@@ -21,7 +21,7 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
     expect(SandboxSettingsSchema.parse(older)).toEqual({
         ...older,
         filterBackend: "native",
-        systemAppend: "",
+        systemPrompt: "",
         quickModel: "",
         agentRetentionDays: 3,
         autoResumeOnLimit: false,
@@ -38,8 +38,8 @@ test("an empty object is the full default settings object", () => {
         outputCleaners: "off",
         outputHoldout: 0,
         filterBackend: "native",
-        // No standing instructions of the owner's own — nothing is appended to the preset system prompt.
-        systemAppend: "",
+        // Empty means the agent runs on Claude Code's own preset prompt — the default, and what "reset" returns to.
+        systemPrompt: "",
         // Empty is not "no quick model" — it is Auto, resolved from the connected accounts on every read
         // (quick-model.ts). Storing a resolved id as the default would name a provider a fresh sandbox has no
         // credential for, and would go stale the moment one is connected.
@@ -54,6 +54,6 @@ test("an empty object is the full default settings object", () => {
 test("a key of the wrong type is still a parse failure — tolerance is for absence, not for garbage", () => {
     expect(SandboxSettingsSchema.safeParse({ iqSearch: "yes" }).success).toBe(false);
     expect(SandboxSettingsSchema.safeParse({ outputHoldout: 4 }).success).toBe(false);
-    // The instructions cap is a real bound, not advice: the text is a system-prompt suffix every turn pays for.
-    expect(SandboxSettingsSchema.safeParse({ systemAppend: "x".repeat(8001) }).success).toBe(false);
+    // The prompt cap is a real bound, not advice: the text IS the system prompt, and every turn pays for it.
+    expect(SandboxSettingsSchema.safeParse({ systemPrompt: "x".repeat(20001) }).success).toBe(false);
 });

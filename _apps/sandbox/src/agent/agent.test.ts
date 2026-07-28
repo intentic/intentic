@@ -214,34 +214,33 @@ test("a custom endpoint points the SDK at ANTHROPIC_BASE_URL and withholds the s
     expect(captured?.model).toBe("gpt-5-codex");
 });
 
-test("the interactive guidance always rides the preset system prompt, with systemAppend after it", async () => {
+// What the turn hands the SDK. The composition RULES are system-prompt.test.ts's; what matters here is that
+// the runner reaches for them at all, and that both shapes survive the trip into the options object.
+test("the preset rides by default, and the owner's own prompt replaces it outright", async () => {
     let captured: Options | undefined;
     const capture: QueryFn = async function* (args) {
         captured = args.options;
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    // The model has to be TOLD the widgets exist, in every mode — otherwise it writes "A) … B) …" as prose.
+    // The model has to be TOLD the widgets exist — otherwise it writes "A) … B) …" as prose.
     await collect(request, capture);
     const base = captured?.systemPrompt as { type: string; preset: string; append: string };
     expect(base).toMatchObject({ type: "preset", preset: "claude_code" });
     expect(base.append).toContain("AskUserQuestion");
-    expect(base.append).toContain("EnterPlanMode");
     expect(base.append).toContain("TaskCreate");
     expect(base.append).toContain("mcp__web__browser_take_screenshot");
-
-    // An unattended turn loses the widgets it has no operator for, but KEEPS the checklist: it is the longest
-    // kind of turn and the only window the operator has into where it has got to.
-    captured = undefined;
-    await collect({ ...request, unattended: true }, capture);
-    const unattended = captured?.systemPrompt as { append: string };
-    expect(unattended.append).not.toContain("AskUserQuestion");
-    expect(unattended.append).toContain("TaskCreate");
 
     captured = undefined;
     await collect({ ...request, systemAppend: "## Delegating\nUse codex exec." }, capture);
     const withAppend = captured?.systemPrompt as { append: string };
     expect(withAppend.append).toBe(`${base.append}\n\n## Delegating\nUse codex exec.`);
+
+    // A custom prompt is handed over as a bare STRING, which is how the SDK is told to drop the preset. Its
+    // arrival must take the harness guidance with it — the owner replaced the prompt, not merely prefixed it.
+    captured = undefined;
+    await collect({ ...request, systemPrompt: "You are a release-notes writer." }, capture);
+    expect(captured?.systemPrompt).toBe("You are a release-notes writer.");
 });
 
 // Two producers register PreToolUse:Bash — the tmux wrapper and the install steer. Merged with a plain object

@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { type AgentProvider, quickModelKey } from "@intentic/sandbox-contract";
+import { type AgentProvider, type DefaultSystemPrompt, quickModelKey } from "@intentic/sandbox-contract";
 import { Card, cmp, CopyButton, formatTokens, Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
+import Dialog from "primevue/dialog";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import { relativeTime } from "../../composables/chat/catalog";
 import { quickModelGroups, useQuickModel } from "../../composables/chat/quickModel";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
-import { errorMessage } from "../../composables/useAsyncAction";
+import { errorMessage, useAsyncAction } from "../../composables/useAsyncAction";
+import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { useCleanerSavings } from "../../composables/sandbox/useCleanerSavings";
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
@@ -63,41 +65,89 @@ const toggleTerseOutput = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, terseOutput: value });
 };
 
-/* --- Custom instructions -------------------------------------------------------------------------------------
- * The owner's standing instructions, appended to the end of the agent's system prompt (the Agent SDK's
- * `systemPrompt.append` — the seam `--append-system-prompt` writes to). Terse responses above is the same
- * mechanism with the text written for you; this is that text, opened up.
+/* --- System prompt -------------------------------------------------------------------------------------------
+ * The agent's system prompt, and the owner's ability to REPLACE it. Empty is the default and means Claude
+ * Code's own preset — not a copy of it kept here, the prompt inside the CLI this sandbox runs. Non-empty is a
+ * full replacement: the preset is gone and so is everything the daemon would otherwise append (the widget
+ * guidance the chat's cards need, and the terse steer, whose toggle then does nothing).
  *
- * A LOCAL draft rather than a computed over settings, because saving is a whole-object POST that every other
- * control on this page renders from, and the value is a system-prompt prefix every live conversation is caching:
- * a per-keystroke save would thrash both. It commits on blur (the textarea's own `change`) or from the Save
+ * A replace-only editor is a trap unless you can see what you are replacing, so the default is fetched from the
+ * daemon on demand and offered two ways: read it, or fork it into the editor. It is fetched ON DEMAND because
+ * producing it spawns a throwaway CLI turn daemon-side (preset-prompt.ts) — cheap, but not something every
+ * visit to this tab should pay for.
+ *
+ * The draft is LOCAL rather than a computed over settings: saving is a whole-object POST that every other
+ * control on this page renders from, and the text is a system prefix every live conversation is caching, so a
+ * per-keystroke save would thrash both. It commits on blur (the textarea's own `change`) or from the Save
  * button, which is there because a save nobody can see is a save nobody trusts. */
-const INSTRUCTIONS_MAX = 8000; // SandboxSettingsSchema.systemAppend's cap — the daemon rejects more.
-const instructions = ref(``);
-const instructionsDirty = computed(() => sandboxSettings.value !== undefined && instructions.value !== sandboxSettings.value.systemAppend);
+const PROMPT_MAX = 20000; // SandboxSettingsSchema.systemPrompt's cap — the daemon rejects more.
+const prompt = ref(``);
+const promptDirty = computed(() => sandboxSettings.value !== undefined && prompt.value !== sandboxSettings.value.systemPrompt);
+// Whether the SAVED state is a custom prompt — not the draft's, so the warnings below describe what the agent
+// is running right now rather than what this textarea happens to be holding.
+const promptReplaced = computed(() => (sandboxSettings.value?.systemPrompt ?? ``) !== ``);
 // Seed from the daemon on load, and follow a change made in ANOTHER window — but never over an unsaved edit in
 // this one, which is what the dirty check guards: the settings query refetches on every mutation from anywhere.
 watch(
-    () => sandboxSettings.value?.systemAppend,
+    () => sandboxSettings.value?.systemPrompt,
     (saved) => {
-        if (saved !== undefined && !instructionsDirty.value) {
-            instructions.value = saved;
+        if (saved !== undefined && !promptDirty.value) {
+            prompt.value = saved;
         }
     },
     { immediate: true },
 );
-const saveInstructions = (): void => {
+const savePrompt = (): void => {
     const current = sandboxSettings.value;
     if (current === undefined) {
         return;
     }
     // Normalise BEFORE the dirty check, not inside the payload: saving a trimmed copy of an untrimmed draft
     // leaves the two permanently unequal, and the row would sit there claiming unsaved changes forever.
-    instructions.value = instructions.value.trim();
-    if (!instructionsDirty.value) {
+    prompt.value = prompt.value.trim();
+    if (!promptDirty.value) {
         return;
     }
-    saveSandboxSettings.mutate({ ...current, systemAppend: instructions.value });
+    saveSandboxSettings.mutate({ ...current, systemPrompt: prompt.value });
+};
+// Reset IS clearing the box — the default is the preset itself, so there is no text to restore and nothing to
+// go stale. Saved immediately: "reset" that leaves you with an unsaved draft has not reset anything.
+const resetPrompt = (): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    prompt.value = ``;
+    if (current.systemPrompt !== ``) {
+        saveSandboxSettings.mutate({ ...current, systemPrompt: `` });
+    }
+};
+
+// Claude Code's own prompt, read out of the installed CLI (GET /settings/default-prompt). Held once fetched so
+// reopening the dialog is instant, and so "Edit a copy" doesn't have to fetch it a second time.
+const defaultPrompt = ref<DefaultSystemPrompt | undefined>(undefined);
+const defaultPromptOpen = ref(false);
+const { busy: defaultPromptBusy, error: defaultPromptError, run: runDefaultPrompt } = useAsyncAction();
+const loadDefaultPrompt = async (): Promise<DefaultSystemPrompt | undefined> => {
+    if (defaultPrompt.value === undefined) {
+        await runDefaultPrompt(async () => {
+            defaultPrompt.value = await sandboxJson<DefaultSystemPrompt>(`/settings/default-prompt`);
+        }, `Couldn't read Claude Code's default prompt from your sandbox.`);
+    }
+    return defaultPrompt.value;
+};
+const viewDefaultPrompt = async (): Promise<void> => {
+    defaultPromptOpen.value = true;
+    await loadDefaultPrompt();
+};
+// Fork the default into the editor. Deliberately NOT saved on the spot: the copy is a starting point to edit,
+// and saving it as-is would pin this sandbox to today's version of a prompt it currently gets for free.
+const forkDefaultPrompt = async (): Promise<void> => {
+    const fetched = await loadDefaultPrompt();
+    if (fetched !== undefined) {
+        prompt.value = fetched.text;
+        defaultPromptOpen.value = false;
+    }
 };
 
 // iq code search: load the iq plugin so the agent reaches for the iq CLI over grep/find/glob.
@@ -435,52 +485,94 @@ const importMemory = async (): Promise<void> => {
                         @update:model-value="toggleTerseOutput"
                     />
                 </template>
+                <!-- The steer is one line appended to the system prompt, so a custom prompt takes it with
+                     everything else. Said here rather than left to be discovered: a switch that is on and doing
+                     nothing is worse than one that is off. -->
+                <template v-if="promptReplaced" #below>
+                    <p class="text-2xs text-warning">Not applied while your own system prompt is set — say it in the prompt below instead.</p>
+                </template>
             </Row>
 
-            <!-- Custom instructions — the owner's own text on the end of the system prompt. Sits directly under
-                 Terse responses because it IS Terse responses generalised, and its help text has one job the
-                 toggles above don't: saying which of the two instruction surfaces this sandbox already has is
-                 the right one, so this doesn't become a third place people scatter standing orders. -->
-            <Row
-                icon="pencil"
-                title="Custom instructions"
-                description="Your standing instructions, added to the end of the assistant's system prompt on every turn in this sandbox."
-            >
+            <!-- System prompt — the one control on this page that can replace the agent wholesale rather than
+                 nudge it. It sits directly under Terse responses because it SUPERSEDES it: a custom prompt drops
+                 that steer along with everything else, and the row above is marked inert when it does.
+
+                 The two buttons carry the feature. A replace-only editor with no way to read what you are
+                 replacing is a trap, and one with no way back is a worse one — so the real default (read out of
+                 the installed CLI, not transcribed) is one click away, and reset is a clear rather than a
+                 restore, which is why it can never hand back a stale copy. -->
+            <Row icon="pencil" title="System prompt">
+                <template #description>
+                    <template v-if="promptReplaced">Your own prompt, replacing Claude Code's — the agent runs on this text alone.</template>
+                    <template v-else>Claude Code's own prompt. Replace it to define the agent from scratch.</template>
+                </template>
+                <template #control>
+                    <span
+                        class="rounded-md px-2 py-0.5 text-2xs font-medium"
+                        :class="promptReplaced ? `bg-warning/15 text-warning` : `bg-content/10 text-muted`"
+                    >
+                        {{ promptReplaced ? `Custom` : `Default` }}
+                    </span>
+                </template>
                 <template #below>
                     <textarea
-                        v-model="instructions"
-                        rows="4"
-                        :maxlength="INSTRUCTIONS_MAX"
+                        v-model="prompt"
+                        rows="5"
+                        :maxlength="PROMPT_MAX"
                         :disabled="sandboxSettings === undefined"
-                        placeholder="e.g. Answer in Polish. Never run migrations without asking. Prefer pnpm over npm."
-                        :class="cmp.input('w-full resize-y text-xs')"
-                        aria-label="Custom instructions"
-                        @change="saveInstructions"
+                        placeholder="Leave empty to use Claude Code's default prompt."
+                        :class="cmp.input('w-full resize-y font-mono text-xs')"
+                        aria-label="System prompt"
+                        @change="savePrompt"
                     ></textarea>
-                    <div class="mt-1.5 flex items-center justify-between gap-3">
-                        <p class="text-2xs text-subtle">
-                            Working on the code itself? That belongs in
-                            <RouterLink to="/workspace/CLAUDE.md" class="font-medium text-primary-500 hover:underline">CLAUDE.md</RouterLink>, which
-                            is committed with the repo and read by every assistant. This is for how the agent works with
-                            <span class="font-medium text-content">you</span> — it stays in this sandbox.
-                        </p>
+
+                    <!-- What replacing actually costs, shown while they are doing it rather than discovered later
+                         when the chat's cards quietly stop appearing. Keyed off the DRAFT so it lands as they
+                         type, not one save behind. -->
+                    <p v-if="prompt !== ``" :class="cmp.alertWarning('mt-1.5 text-2xs')">
+                        Your text becomes the whole system prompt. Claude Code's coding instructions are gone, and so is what this app tells the
+                        assistant about itself — the question and plan cards, the checklist panel, and the browser tools it would otherwise know to
+                        reach for. Terse responses stops applying too. Describe whatever you still want.
+                    </p>
+
+                    <div class="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                        <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <button type="button" class="text-2xs font-medium text-link hover:underline" @click="viewDefaultPrompt">
+                                View Claude's default
+                            </button>
+                            <button
+                                type="button"
+                                class="text-2xs font-medium text-link hover:underline disabled:opacity-50"
+                                :disabled="defaultPromptBusy"
+                                @click="forkDefaultPrompt"
+                            >
+                                Edit a copy of it
+                            </button>
+                            <button
+                                v-if="promptReplaced || prompt !== ``"
+                                type="button"
+                                class="text-2xs font-medium text-muted hover:text-content hover:underline"
+                                @click="resetPrompt"
+                            >
+                                Reset to default
+                            </button>
+                        </span>
                         <span class="flex shrink-0 items-center gap-2">
-                            <span v-if="instructions.length > INSTRUCTIONS_MAX - 500" class="text-2xs text-muted">
-                                {{ instructions.length }} / {{ INSTRUCTIONS_MAX }}
-                            </span>
+                            <span v-if="prompt.length > PROMPT_MAX - 1000" class="text-2xs text-muted">{{ prompt.length }} / {{ PROMPT_MAX }}</span>
                             <!-- Blur already saves; the button is for the user who can't tell that it did.
                                  `mousedown.prevent` keeps focus in the textarea, so pressing it doesn't blur-save
                                  the field and unmount the button out from under the click that was landing on it. -->
                             <Button
-                                v-if="instructionsDirty"
+                                v-if="promptDirty"
                                 label="Save"
                                 size="small"
                                 :loading="saveSandboxSettings.isPending.value"
                                 @mousedown.prevent
-                                @click="saveInstructions"
+                                @click="savePrompt"
                             />
                         </span>
                     </div>
+                    <p v-if="defaultPromptError !== undefined" :class="cmp.alertDanger('mt-1.5 text-2xs')">{{ defaultPromptError }}</p>
                 </template>
             </Row>
 
@@ -608,5 +700,37 @@ const importMemory = async (): Promise<void> => {
                 </div>
             </label>
         </Card>
+
+        <!-- Claude Code's own prompt, read out of the CLI this sandbox runs. Monospace and selectable because
+             the point is to be READ and forked, not admired; the version is on show because a copy taken today
+             is a snapshot, and knowing which build it came from is the only way to tell how old a fork is. -->
+        <Dialog
+            v-model:visible="defaultPromptOpen"
+            :modal="true"
+            :draggable="false"
+            :dismissable-mask="true"
+            header="Claude Code's default system prompt"
+            :style="{ width: '48rem', maxWidth: '95vw' }"
+        >
+            <div v-if="defaultPromptBusy" class="flex items-center gap-2 py-6 text-xs text-muted">
+                <Icon name="spinner" class="animate-spin" />
+                Reading it from the Claude Code in your sandbox…
+            </div>
+            <p v-else-if="defaultPromptError !== undefined" :class="cmp.alertDanger()">{{ defaultPromptError }}</p>
+            <template v-else-if="defaultPrompt !== undefined">
+                <p class="text-xs text-muted">
+                    This is what your agent runs on today, straight out of Claude Code
+                    <span class="font-mono text-content">{{ defaultPrompt.version }}</span> — not a copy kept by this app. Leave the setting empty and
+                    it keeps updating with the sandbox; fork it and you own it from here.
+                </p>
+                <pre class="mt-2 max-h-[55dvh] overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-canvas p-3 text-2xs text-content">{{
+                    defaultPrompt.text
+                }}</pre>
+                <div class="mt-3 flex items-center justify-end gap-2">
+                    <CopyButton :text="defaultPrompt.text" label="Copy" />
+                    <Button label="Edit a copy" size="small" @click="forkDefaultPrompt" />
+                </div>
+            </template>
+        </Dialog>
     </div>
 </template>
