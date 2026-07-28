@@ -42,7 +42,7 @@ const logout = async (): Promise<void> => {
 <template>
     <button
         type="button"
-        class="mt-auto flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-line text-muted transition-colors hover:border-line-strong hover:bg-content/5 hover:text-content"
+        class="account-control mt-auto flex items-center justify-center overflow-hidden rounded-full border border-line text-muted transition-colors hover:border-line-strong hover:bg-content/5 hover:text-content"
         aria-label="Account"
         v-tooltip.right="'Account'"
         @click="panel?.toggle($event)"
@@ -113,3 +113,10 @@ const logout = async (): Promise<void> => {
         </div>
     </Popover>
 </template>
+
+<style scoped>
+.account-control {
+    width: var(--icon-rail-account-size, 2.25rem);
+    height: var(--icon-rail-account-size, 2.25rem);
+}
+</style>

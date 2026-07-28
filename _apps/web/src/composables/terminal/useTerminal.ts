@@ -1,4 +1,5 @@
 import { ref, type Ref, watch } from "vue";
+import { showAgentTerminals } from "./useAgentTerminals";
 import { addPendingTerminal, dropPendingTerminal } from "./terminalsQuery";
 import { pruneTerminalMeta } from "./terminalMeta";
 import {
@@ -17,7 +18,9 @@ import {
  * only — restarting a dev-server tab is Start's job) and the background-process split: "process" sessions
  * never tab by themselves — they live in `processes` (the popover's list) and tab only as read-only log
  * views via viewProcess, whose × merely hides them (killing a background process is the popover's explicit
- * Stop, never a tab close).
+ * Stop, never a tab close). "agent" sessions follow the same shape for a different reason: an agent's shell is
+ * evidence about a turn rather than a tab the user keeps, so unless `showAgentTerminals` is on it tabs only
+ * once explicitly opened (the chat's Bash card, the AI-terminals popover) — see useAgentTerminals.
  *
  * Tabs arrange into GROUPS (VSCode's split terminals): `groups` is the strip order, each entry an ordered
  * list of session names rendered side by side in one pane when active. Grouping is pure client view state
@@ -122,6 +125,10 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const processes = ref<TerminalTab[]>([]);
     // Process sessions the user opened a log view for — the only "process" sessions that appear in `order`.
     const viewedProcesses = new Set<string>();
+    // Agent sessions revealed by an explicit open while the preference is off. Held for this surface's lifetime
+    // only, exactly like `viewedProcesses`: a reveal is "show me this now", so it must not outlive the panel or
+    // need pruning once the session is gone.
+    const revealedAgents = new Set<string>();
     const activeName = ref<string | undefined>(undefined);
     let container: HTMLElement | undefined;
     // The session names whose hosts are currently in the container — the active group's members.
@@ -148,6 +155,16 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     };
 
     const groupOf = (name: string): string[] => groups.value.find((group) => group.includes(name)) ?? [name];
+
+    // The two kinds that are listed by the daemon but do not tab on their own: a background process (its
+    // lifecycle belongs to the processes popover) and — unless the user asked for them — the agent's shells.
+    // Both become tabs the moment they are explicitly opened, and only then.
+    const hiddenFromStrip = (tab: TerminalTab): boolean => {
+        if (tab.kind === `process`) {
+            return !viewedProcesses.has(tab.name);
+        }
+        return tab.kind === `agent` && !showAgentTerminals.value && !revealedAgents.has(tab.name);
+    };
 
     const sessionOf = (name: string, readOnly = false): TerminalSession => {
         const cached = cache.get(name);
@@ -229,7 +246,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
         pruneTerminalMeta(new Set(listed.map((tab) => tab.name)));
         processes.value = listed.filter((tab) => tab.kind === `process`);
-        const tabs = listed.filter((tab) => tab.kind !== `process` || viewedProcesses.has(tab.name));
+        const tabs = listed.filter((tab) => !hiddenFromStrip(tab));
         order.value = tabs;
         reconcileGroups(tabs);
         for (const tab of tabs) {
@@ -256,6 +273,21 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         activeName.value = undefined;
         mountedNames = [];
         void refresh();
+    });
+
+    // The preference toggled while the panel is open (the bar menu, the palette, the Settings row): relist, so
+    // the agent's shells arrive as tabs — or leave — under the hand that just asked for it. Turning it off drops
+    // them from `order` and `groups`; refresh() re-mounts around the survivors if the focused tab was one of
+    // them, and their sockets stay parked in the cache in case the user flips back.
+    watch(showAgentTerminals, () => {
+        void refresh().then(() => {
+            // Hiding the last tab would leave the panel around a blank pane (only endSession retires it), which
+            // is the one case where the strip can empty without a session ending — so it opens a shell instead,
+            // the same thing attach() does for an empty panel.
+            if (order.value.length === 0 && source.create !== undefined) {
+                newTab();
+            }
+        });
     });
 
     const attach = async (el: HTMLElement): Promise<boolean> => {
@@ -292,6 +324,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // neighbour — its own group's survivor first — or hand off to onEmpty when it was the last.
     const endSession = (name: string): void => {
         viewedProcesses.delete(name);
+        revealedAgents.delete(name);
         // Whether or not the daemon ever listed it, this name is spent — a claim left standing would keep the
         // session in the shared list (and in the rail's count) until the page reloaded.
         dropPendingTerminal(name);
@@ -337,6 +370,11 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
 
     const focus = async (name: string): Promise<void> => {
         if (!order.value.some((tab) => tab.name === name)) {
+            // Focusing IS the explicit open that reveals a hidden agent shell (the chat's Bash card, the
+            // AI-terminals popover) — recorded before the relist, which is what decides whether it tabs.
+            // Unconditional: the set is only ever consulted for "agent" sessions, so a shell or panel name
+            // landing in it changes nothing.
+            revealedAgents.add(name);
             await refresh();
         }
         // A background-process session never tabs directly — route it through its read-only log view
@@ -353,6 +391,14 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // cover tmux-run's session-create lag; a session that never materializes just stops after ~1s. The
     // common case (already listed) exits on the first check.
     const surface = async (name: string): Promise<void> => {
+        // Only the agent channel surfaces, and by default its shells don't tab (useAgentTerminals) — so the
+        // retry loop has nothing to wait for. One relist still earns its keep: it writes the shared session
+        // list, which is what makes the AI-terminals popover show the turn's shell the moment it starts rather
+        // than up to a poll later.
+        if (!showAgentTerminals.value) {
+            await refresh();
+            return;
+        }
         for (let attempt = 0; attempt < 5 && !order.value.some((tab) => tab.name === name); attempt++) {
             await refresh();
             if (order.value.some((tab) => tab.name === name)) {

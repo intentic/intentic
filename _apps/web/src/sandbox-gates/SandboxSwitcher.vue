@@ -102,7 +102,7 @@ const confirmRemove = async (): Promise<void> => {
     <!-- The rail's top control: a live chip for the active sandbox (initial + online status), click to switch. -->
     <button
         type="button"
-        class="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-lg border border-line transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
+        class="sandbox-switcher relative flex items-center justify-center overflow-hidden rounded-lg border border-line transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
         :class="route.path.startsWith('/sandbox') ? 'bg-primary-600/15 text-link' : 'bg-card text-muted'"
         aria-label="Switch sandbox"
         v-tooltip.right="sandbox.active.value?.name ?? 'Sandboxes'"
@@ -209,3 +209,10 @@ const confirmRemove = async (): Promise<void> => {
         </template>
     </Dialog>
 </template>
+
+<style scoped>
+.sandbox-switcher {
+    width: var(--icon-rail-tile-size, 2.75rem);
+    height: var(--icon-rail-tile-size, 2.75rem);
+}
+</style>

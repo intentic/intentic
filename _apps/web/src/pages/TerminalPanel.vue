@@ -6,9 +6,11 @@ import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
+import AiTerminals from "../components/AiTerminals.vue";
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
 import { inTabSurface } from "../composables/commands/tabSurface";
 import { commandShortcut, registerCommand, type RegisteredCommand } from "../composables/commands/useCommands";
+import { showAgentTerminals } from "../composables/terminal/useAgentTerminals";
 import { setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
 import { useTerminalsQuery } from "../composables/terminal/terminalsQuery";
 import { createTerminalTabs, type TerminalTab, type TerminalTabsSource } from "../composables/terminal/useTerminal";
@@ -298,11 +300,23 @@ const stripItems = computed<MenuItem[]>(() => {
     if (killTabs !== undefined && dead.value.size > 0) {
         items.push({ label: clearFinishedLabel.value, shortcut: commandShortcut(`terminal.clearFinished`), command: clearFinished });
     }
-    items.push(...(items.length > 0 ? [{ separator: true }] : []), {
-        label: popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`,
-        shortcut: commandShortcut(`terminal.togglePopout`),
-        command: popout.toggle,
-    });
+    items.push(
+        ...(items.length > 0 ? [{ separator: true }] : []),
+        // The one CHECKED row in this menu (see the #item slot's checkmark gutter): whether the agent's shells
+        // tab here at all. It sits where the annoyance is felt — a right-click on the strip they were crowding —
+        // and writes the same preference as the AI-terminals popover's footer and Settings → Appearance.
+        {
+            label: `Show AI terminals`,
+            checked: showAgentTerminals.value,
+            shortcut: commandShortcut(`terminal.toggleAiTerminals`),
+            command: () => (showAgentTerminals.value = !showAgentTerminals.value),
+        },
+        {
+            label: popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`,
+            shortcut: commandShortcut(`terminal.togglePopout`),
+            command: popout.toggle,
+        },
+    );
     return items;
 });
 
@@ -520,6 +534,16 @@ const registerPanelCommands = (): void => {
                 if (activeName.value !== undefined) {
                     unsplit(activeName.value);
                 }
+            },
+        },
+        {
+            // Unbound by default, like the sweep and the cosmetic pickers: flipping a preference is a
+            // once-in-a-while act, and it already has two clickable homes (the bar menu, the popover footer).
+            command: `terminal.toggleAiTerminals`,
+            title: `Toggle AI Terminals in Panel`,
+            icon: `sparkles`,
+            handler: (): void => {
+                showAgentTerminals.value = !showAgentTerminals.value;
             },
         },
         {
@@ -879,6 +903,7 @@ const endResize = (event: PointerEvent): void => {
                 >
                     <Icon name="eraser" class="text-xs" />
                 </button>
+                <AiTerminals />
                 <BackgroundProcesses />
                 <button
                     v-if="restart !== undefined && activeShell"
@@ -956,6 +981,11 @@ const endResize = (event: PointerEvent): void => {
         >
             <template #item="{ item, props }">
                 <a v-bind="props.action">
+                    <!-- Checkmark gutter for the toggle rows (`checked` on the item) — reserved even when
+                         unchecked so the label doesn't shift as the state flips. -->
+                    <span v-if="'checked' in item" class="flex w-3 shrink-0 justify-center">
+                        <Icon v-if="item['checked']" name="check" class="text-2xs text-muted" />
+                    </span>
                     <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
                     <kbd
                         v-if="item['shortcut']"

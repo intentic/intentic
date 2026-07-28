@@ -419,6 +419,13 @@ export class Conversation {
     // already-open tab when the user reopens the same conversation from history.
     readonly session = ref<SessionRef | undefined>();
 
+    // The tmux session this conversation's Bash commands are running in (`agent-<sdk session>`), from the
+    // daemon's own `terminal` frame. Held so the transcript can offer to WATCH the shell — the agent's terminals
+    // no longer tab themselves into the panel (useAgentTerminals), so the Bash card is where that door lives.
+    // Undefined until the first Bash of a turn; a fresh conversation, a branch, and a restored transcript all
+    // start without one, because whatever shell they inherited belongs to a session they no longer run in.
+    readonly agentTerminal = ref<string | undefined>();
+
     // Whether this conversation's turns run in an isolated git worktree (the parallel-agents mode, the default
     // for new chats) or on the shared /work tree. Flipped off for history-menu restores (their sessions live in
     // the main tree's namespace) and legacy restored tabs.
@@ -728,6 +735,10 @@ export class Conversation {
             session !== undefined && session.provider === agent && session.account === account && session.harness === harness ? session : undefined;
         if (resume === undefined) {
             this.session.value = undefined;
+            // A turn that can't resume runs under a NEW sdk session, so it will run its Bash in a different
+            // tmux session — the remembered one belongs to the segment that just ended, and offering to watch
+            // it would point at a shell this conversation no longer uses.
+            this.agentTerminal.value = undefined;
         }
         const history = resume === undefined ? transcriptOf(this.messages.value).slice(-200) : [];
         // The switch divider (if any) is frozen into the transcript — the segment cut happened.
@@ -1403,10 +1414,16 @@ export class Conversation {
                 return;
             }
             case `surfaceTerminal`: {
-                // The agent started running Bash in its live `agent-<id>` tmux terminal — surface it as a tab in
-                // the global panel (relist so it appears; no auto-open, no focus steal). Lazily imported so the
-                // chat model doesn't statically pull in the xterm/terminal-panel chain.
+                // The agent started running Bash in its live `agent-<id>` tmux terminal. Remember it, so this
+                // conversation's Bash cards can offer to watch it, and tell the terminal layer whose it is, so
+                // its popover names the conversation instead of eight hex characters. The panel is then asked to
+                // surface it, which tabs it only if the user opted into AI terminals — no auto-open, no focus
+                // steal either way. Both imports are lazy so the chat model doesn't statically pull in the
+                // xterm/terminal-panel chain.
                 const { session } = effect;
+                this.agentTerminal.value = session;
+                const title = this.title.value;
+                void import("../terminal/useAgentTerminals").then((m) => m.noteAgentTerminal(session, title));
                 void import("../terminal/useTerminalPanel").then((m) => m.useTerminalPanel().surface(session));
                 return;
             }

@@ -3,11 +3,14 @@ import { Row, RowGroup, Segmented, useExplorerStyle, useIconSet, useTheme } from
 import { explorerTreatment } from "@intentic-app/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
+import { showAgentTerminals } from "../../composables/terminal/useAgentTerminals";
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useImportedTheme } from "../../composables/theme/useImportedTheme";
+import { useIconRailSize } from "../../composables/useIconRailSize";
 
 /* Appearance: how the workspace looks for this account — color scheme (data-mode), brand style (data-theme),
- * icon set, file-tree treatment, and an imported VSCode/OpenVSX theme. Each recolors/re-renders the whole UI
+ * icon set, file-tree treatment, which tabs the terminal strip carries, and an imported VSCode/OpenVSX theme.
+ * Each recolors/re-renders the whole UI
  * live, so most of the app is the preview; the Explorer gets a small inline sample because its tree isn't on
  * this page. Laid out as grouped rows (RowGroup/Row) rather than a card per option, with the borderless
  * Segmented control and the Explorer preview flush in the row's #below. */
@@ -15,6 +18,7 @@ import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 const { scheme, set: setScheme, theme, setTheme, themes } = useTheme();
 const { iconSet, iconSets } = useIconSet();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
+const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
 
 // Import a VSCode theme JSON → recolor the app's chrome tokens live (the biggest "familiar for developers" lever).
@@ -40,6 +44,10 @@ const schemeOptions = [
 const themeOptions = computed(() => themes.map((value) => ({ label: cap(value), value })));
 const iconOptions = computed(() => iconSets.map((value) => ({ label: cap(value), value })));
 const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: cap(value), value })));
+const iconRailOptions = [
+    { label: `Compact`, value: `compact` as const },
+    { label: `Comfortable`, value: `comfortable` as const },
+];
 
 // A few representative rows so the Explorer setup is visible here without opening the workspace.
 const explorerPreview: { name: string; type: "file" | "dir" }[] = [
@@ -68,6 +76,11 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     <Segmented :model-value="iconSet" :options="iconOptions" @update:model-value="(value) => (iconSet = value)" />
                 </template>
             </Row>
+            <Row icon="sliders-h" title="Icon rail" description="Width and spacing of the desktop navigation rail.">
+                <template #control>
+                    <Segmented :model-value="iconRailSize" :options="iconRailOptions" @update:model-value="(value) => (iconRailSize = value)" />
+                </template>
+            </Row>
         </RowGroup>
 
         <!-- File tree — the explorer's look, with its live preview flush under the row (no boxed inset). -->
@@ -89,6 +102,21 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
             <Row as="label" icon="folder-open" title="File nesting" description="Fold a folder's files under its package.json in the explorer.">
                 <template #control><ToggleSwitch v-model="fileNesting" /></template>
+            </Row>
+        </RowGroup>
+
+        <!-- Terminal — what the panel's strip carries. The agent's shells are hidden by default (they're
+             evidence about a turn, not tabs you keep — useAgentTerminals); this is the sticky way back. The same
+             preference is a checked row in the panel's own right-click menu and the AI-terminals popover's
+             footer, which is where someone irritated by it will actually reach for it. -->
+        <RowGroup label="Terminal">
+            <Row
+                as="label"
+                icon="sparkles"
+                title="AI terminals"
+                description="Give the shells an agent runs commands in their own tab in the terminal panel."
+            >
+                <template #control><ToggleSwitch v-model="showAgentTerminals" /></template>
             </Row>
         </RowGroup>
 

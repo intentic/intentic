@@ -15,6 +15,7 @@ import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useShellCommands } from "../composables/commands/useShellCommands";
 import { useKeybindings } from "../composables/commands/useKeybindings";
 import { useLayout } from "../composables/useLayout";
+import { useIconRailSize } from "../composables/useIconRailSize";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useChanges } from "../composables/workspace/useChanges";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -49,6 +50,7 @@ const changes = useChanges();
 // "Agents need you" (pending plans/questions, land conflicts, unread finishes) badges the Agents tile.
 const { attention: agentAttention } = useAgents();
 const layout = useLayout();
+const { iconRailSize } = useIconRailSize();
 const { poppedOut, body: chatPopoutBody, dock } = useChatPopout();
 const route = useRoute();
 
@@ -114,8 +116,20 @@ const initials = (name: string): string => {
 };
 
 // Collapse the chat column to nothing while the panel is popped out (it's teleported into its own window), so
-// the workspace reclaims the full width.
-const gridStyle = computed(() => ({ "--chat-width": poppedOut.value ? `0px` : `${layout.chatWidth.value}px` }));
+// the workspace reclaims the full width. The rail variables flow into its child controls too, keeping every tile
+// on one density without threading a presentation-only prop through the switcher and account components.
+const gridStyle = computed(() => {
+    const compact = iconRailSize.value === `compact`;
+    return {
+        "--chat-width": poppedOut.value ? `0px` : `${layout.chatWidth.value}px`,
+        "--icon-rail-width": compact ? `3.5rem` : `4rem`,
+        "--icon-rail-tile-size": compact ? `2.5rem` : `2.75rem`,
+        "--icon-rail-account-size": compact ? `2rem` : `2.25rem`,
+        "--icon-rail-divider-width": compact ? `1.75rem` : `2rem`,
+        "--icon-rail-gap": compact ? `0.375rem` : `0.5rem`,
+        "--icon-rail-padding": compact ? `0.5rem` : `0.75rem`,
+    };
+});
 
 // The global terminal panel: mounted here (below every view) because tmux sessions are sandbox-global facts —
 // shells and dev servers stay visible while navigating. Ctrl+` toggles it from anywhere in the shell.
@@ -158,13 +172,13 @@ onUnmounted(() => {
 
 <template>
     <div class="shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
-        <nav class="flex flex-col items-center gap-2 border-r border-line bg-card py-3" style="grid-area: rail">
+        <nav class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
             <!-- Top of the rail: the active sandbox's identity chip — switch between the user's sandboxes (owned +
                  shared), add another, or manage access. -->
             <SandboxSwitcher />
             <!-- The other members connected to this sandbox right now — live from the daemon's /events roster. -->
             <PresenceStack />
-            <span class="mb-1 h-px w-8 bg-line"></span>
+            <span class="mb-1 icon-rail-divider h-px bg-line"></span>
 
             <!-- The views (and the "+") all talk to the daemon, so they are inert while it is unreachable — the
                  gate in <main> is the only thing to see anyway. The switcher and account stay live. -->
@@ -172,7 +186,7 @@ onUnmounted(() => {
                 v-for="tile in tiles"
                 :key="tile.to"
                 :to="tile.to"
-                class="relative flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
+                class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
                 :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': isNavActive(tile.to) }"
                 :tabindex="reachable ? undefined : -1"
                 :aria-disabled="!reachable"
@@ -195,7 +209,7 @@ onUnmounted(() => {
                 >
             </RouterLink>
 
-            <span class="my-1 h-px w-8 bg-line"></span>
+            <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
             <!-- The VPN indicator: present ONLY while a tunnel is up, because that is a fact about the sandbox
                  the operator must be able to see from any view — while it is connected, the agent's traffic,
@@ -204,7 +218,7 @@ onUnmounted(() => {
             <RouterLink
                 v-if="connectedVpns.length > 0"
                 to="/sandbox/status"
-                class="flex h-11 w-11 items-center justify-center rounded-lg text-success transition-colors hover:bg-overlay"
+                class="icon-rail-tile flex items-center justify-center rounded-lg text-success transition-colors hover:bg-overlay"
                 :class="{ 'pointer-events-none opacity-40': !reachable }"
                 :tabindex="reachable ? undefined : -1"
                 :aria-label="vpnLabel"
@@ -219,7 +233,7 @@ onUnmounted(() => {
                  tiles: every session lives on that machine, so there is nothing to open without it. -->
             <button
                 type="button"
-                class="relative flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
+                class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
                 :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': terminal.open.value }"
                 :tabindex="reachable ? undefined : -1"
                 :aria-disabled="!reachable"
@@ -239,7 +253,7 @@ onUnmounted(() => {
                  is a write to the sandbox's deploy.config.ts or a clone into /work, never platform storage. -->
             <RouterLink
                 to="/capabilities"
-                class="flex h-11 w-11 items-center justify-center rounded-lg border border-dashed border-line text-muted transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
+                class="icon-rail-tile flex items-center justify-center rounded-lg border border-dashed border-line text-muted transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
                 :class="{ 'pointer-events-none opacity-40': !reachable, 'border-line-strong bg-overlay text-content': isNavActive('/capabilities') }"
                 :tabindex="reachable ? undefined : -1"
                 :aria-disabled="!reachable"
@@ -290,10 +304,24 @@ onUnmounted(() => {
 
 <style scoped>
 .shell {
-    grid-template-columns: 4rem minmax(0, 1fr) var(--chat-width, 22rem);
+    grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) var(--chat-width, 22rem);
     /* One real row fills 100vh; a stray fixed-position overlay anchor landing in an implicit row would let 1fr
      * starve it to 0 and split the height (see CLAUDE.md post-mortem). Pin a single explicit row so none can. */
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "rail workspace chat";
+}
+
+.icon-rail {
+    gap: var(--icon-rail-gap);
+    padding-block: var(--icon-rail-padding);
+}
+
+.icon-rail-tile {
+    width: var(--icon-rail-tile-size);
+    height: var(--icon-rail-tile-size);
+}
+
+.icon-rail-divider {
+    width: var(--icon-rail-divider-width);
 }
 </style>
