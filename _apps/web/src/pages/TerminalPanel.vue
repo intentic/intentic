@@ -364,9 +364,8 @@ const menuItems = computed<MenuItem[]>(() => {
 });
 
 // --- Panel geometry ----------------------------------------------------------------------------
-// Persisted per surface (maximized deliberately isn't — restoring a full-screen terminal across reloads would
-// be hostile). Height is clamped to a floor and ~80% of the viewport. Declared above the commands below, which
-// expand a collapsed panel and measure the root.
+// Persisted per surface. Height is clamped to a floor and ~80% of the viewport. Declared above the commands
+// below, which expand a collapsed panel and measure the root.
 const HEIGHT_KEY = `ui-${storageKey}-terminal-height`;
 const COLLAPSED_KEY = `ui-${storageKey}-terminal-collapsed`;
 const DEFAULT_HEIGHT = 240;
@@ -401,8 +400,6 @@ const collapsed = ref(readCollapsed());
 // A fixed surface (the mobile route, the pop-out window) has no collapse chevron, so honoring a collapsed
 // flag persisted from the docked panel would strand an empty pane there — ignore it while !resizable.
 const effectiveCollapsed = computed(() => collapsed.value && resizable);
-// Modeled so a parent can react (the workspace hides its file viewer while the panel is maximized).
-const maximized = defineModel<boolean>(`maximized`, { default: false });
 const setHeight = (px: number): void => {
     height.value = clampHeight(px);
     write(HEIGHT_KEY, String(height.value));
@@ -749,12 +746,12 @@ const endResize = (event: PointerEvent): void => {
         class="term relative flex min-h-0 shrink-0 border-t border-line"
         :class="[
             vertical ? 'flex-row' : 'flex-col',
-            { 'is-resizing': resizing, 'flex-1': resizable && maximized && !collapsed, 'h-full': !resizable },
+            { 'is-resizing': resizing, 'h-full': !resizable },
         ]"
-        :style="!resizable || maximized || collapsed ? undefined : { height: `${height}px` }"
+        :style="!resizable || collapsed ? undefined : { height: `${height}px` }"
     >
         <div
-            v-if="resizable && !maximized && !collapsed"
+            v-if="resizable && !collapsed"
             class="term-resize"
             @pointerdown="startResize"
             @pointermove="onResize"
@@ -902,16 +899,6 @@ const endResize = (event: PointerEvent): void => {
                     aria-label="Refresh sessions"
                 >
                     <Icon name="refresh" class="text-xs" />
-                </button>
-                <button
-                    v-if="resizable"
-                    type="button"
-                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                    @click="maximized = !maximized"
-                    v-tooltip.top="maximized ? 'Restore panel size' : 'Maximize panel'"
-                    aria-label="Toggle maximize"
-                >
-                    <Icon class="text-xs" :name="maximized ? 'window-minimize' : 'window-maximize'" />
                 </button>
                 <button
                     v-if="resizable"

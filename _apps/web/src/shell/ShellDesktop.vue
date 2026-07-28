@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic-app/ui";
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, onUnmounted, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { useAgents } from "../composables/agents/useAgents";
 import { useCapabilities } from "../composables/extensions/useCapabilities";
@@ -120,7 +120,6 @@ const gridStyle = computed(() => ({ "--chat-width": poppedOut.value ? `0px` : `$
 // The global terminal panel: mounted here (below every view) because tmux sessions are sandbox-global facts —
 // shells and dev servers stay visible while navigating. Ctrl+` toggles it from anywhere in the shell.
 const terminal = useTerminalPanel();
-const terminalMaximized = ref(false);
 // The rail's terminal entry: the ONLY visible affordance for the panel (the Workspace view no longer carries a
 // toggle — terminals are sandbox-global, so their control belongs on the sandbox-global surface). It doubles as
 // an indicator: the badge counts live sessions and the tooltip names them, so the shells and dev servers the
@@ -132,14 +131,8 @@ const terminalLabel = computed(() => {
     return chord === undefined ? what : `${what} (${chord})`;
 });
 // Like the chat, the whole panel can float in its own window (right-click its tab strip) — teleported there,
-// docked back on window close. Maximized makes no sense while floating (the panel isn't over the workspace),
-// and a hidden RouterView must not linger, so popping out resets it.
+// docked back on window close.
 const { poppedOut: terminalPoppedOut, body: terminalPopoutBody, dock: dockTerminal } = useTerminalPopout();
-watch(terminalPoppedOut, (out) => {
-    if (out) {
-        terminalMaximized.value = false;
-    }
-});
 // Closing the panel (its ×, Ctrl+`) while floating also retires the otherwise-empty pop-out window.
 watch(terminal.open, (open) => {
     if (!open) {
@@ -256,18 +249,6 @@ onUnmounted(() => {
                 <Icon name="plus" class="text-lg" />
             </RouterLink>
 
-            <!-- Return the popped-out chat to its docked column (only while it floats in its own window). -->
-            <button
-                v-if="poppedOut"
-                type="button"
-                class="flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-                @click="dock"
-                aria-label="Return chat"
-                v-tooltip.right="'Return chat'"
-            >
-                <Icon name="window-minimize" class="text-lg" />
-            </button>
-
             <!-- The account control: avatar → a rich popover (central account, sandbox workspace, theme, actions). -->
             <AccountPanel />
         </nav>
@@ -280,7 +261,7 @@ onUnmounted(() => {
 
         <main class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
             <SandboxGate>
-                <div class="min-h-0 flex-1 overflow-auto scrollbar-thin" :class="{ hidden: terminalMaximized }">
+                <div class="min-h-0 flex-1 overflow-auto scrollbar-thin">
                     <RouterView />
                 </div>
                 <!-- The ONE terminal panel — sandbox-global (shells + dev servers), persistent across views.
@@ -290,7 +271,6 @@ onUnmounted(() => {
                 <Teleport :to="terminalPopoutBody" :disabled="!terminalPoppedOut">
                     <TerminalPanel
                         v-if="terminal.open.value"
-                        v-model:maximized="terminalMaximized"
                         :source="globalTerminalSource"
                         storage-key="sandbox"
                         :initial="terminal.requested.value"

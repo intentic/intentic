@@ -48,7 +48,7 @@ const EDIT_MODE_KEY = `ui-workspace-edit-mode`;
 /* Owns shell-layout state shared across areas (module-level singleton): where the chat panel sits relative to
  * the workspace (bound onto a `data-chat-position` attribute whose CSS grid swaps
  * off it — mirroring how useTheme drives `data-mode`), the chat panel width, the workspace explorer
- * sidebar width/collapse, and the workspace terminal panel open/height/maximized. App-local because these are
+ * sidebar width/collapse, and the workspace terminal panel open/height. App-local because these are
  * application layout concepts, not generic @intentic-app/ui primitives. */
 
 // Clamp chat width to a floor and to ~95% of the viewport (leaving a sliver of workspace); otherwise unlimited.
