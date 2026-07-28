@@ -6,7 +6,8 @@ import { readCleanerSavings } from "../logs/filter-stats.js";
 import { reconcileSkills } from "./skills.js";
 
 // The per-sandbox agent-settings routes. `get` applies defaults when the manifest is absent; `set` overwrites it;
-// `savings` reports the output-cleaner token savings from the live filter-stats ledger (the rtk-`gain` surface).
+// `savings` reports the output-cleaner token savings from the ledger of whichever backend is currently doing the
+// compressing — so the setting that decides which cleaner runs also decides which ledger is read.
 export const createSettingsRoutes = (services: Services) => {
     const i = implement(settingsContract).$context<OrpcContext>();
     return {
@@ -18,6 +19,6 @@ export const createSettingsRoutes = (services: Services) => {
             await reconcileSkills(services, input.skills).catch((error: unknown) => services.logger.warn({ err: error }, "skill reconcile failed"));
             return { ok: true } as const;
         }),
-        savings: i.savings.handler(() => readCleanerSavings(services.config.historyRoot)),
+        savings: i.savings.handler(async () => readCleanerSavings(services.config.historyRoot, (await services.sandboxSettings.get()).filterBackend)),
     };
 };

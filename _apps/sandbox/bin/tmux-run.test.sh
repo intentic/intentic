@@ -8,7 +8,29 @@ W="$(dirname "$0")/tmux-run"
 command -v tmux >/dev/null || { echo "SKIP: tmux not installed"; exit 0; }
 S=selftest
 R=selftest-race
-trap 'tmux kill-session -t "$S" 2>/dev/null; tmux kill-session -t "$R" 2>/dev/null' EXIT
+# This script inherits a REAL sandbox's environment when it runs inside one, so it pins the two vars that decide
+# where its output goes and whether it is filtered. Neither may be left ambient:
+#
+#   INTENTIC_TERMINAL_LOGS_DIR — both downstream writers key off it: tmux-run's pane logs and, since
+#       agent-output-filter is on PATH image-wide, its telemetry row per command ($dir/../filter-stats.jsonl).
+#       Left inherited, this script's fixtures — `ls -la /` twenty times, `exit 7`, `echo hi; exit 3` — land in
+#       the REAL savings ledger and are then reported to the owner as agent traffic. A test must not be able to
+#       write the product's telemetry.
+#   INTENTIC_RUN_FILTER — off for the cases below, which assert on RAW capture; the filter block at the bottom
+#       turns it on for itself. Left inherited it is whatever the host sandbox's cleaner backend implies (the
+#       rtk backend exports 0), so the filter cases would quietly assert nothing.
+LOGS="$(mktemp -d)"
+F=""
+export INTENTIC_TERMINAL_LOGS_DIR="$LOGS/terminals"
+export INTENTIC_RUN_FILTER=0
+mkdir -p "$INTENTIC_TERMINAL_LOGS_DIR"
+# One cleanup for the whole run — a second `trap ... EXIT` later would silently replace this one, not add to it.
+cleanup() {
+    tmux kill-session -t "$S" 2>/dev/null
+    tmux kill-session -t "$R" 2>/dev/null
+    rm -rf "$LOGS" ${F:+"$F"}
+}
+trap cleanup EXIT
 
 # Fast command, many times: never empty, always exit 0.
 for i in $(seq 1 20); do
@@ -81,12 +103,12 @@ tmux list-panes -s -t "=$S" -F '#{pane_dead}' | grep -q 0 || { echo "FAIL: long-
 # With the output filter on PATH: failures pass through verbatim; command-matched noise is stripped on
 # success with the footer naming the elision.
 command -v node >/dev/null || { echo "SKIP filter cases: node not installed"; echo "PASS: tmux-run self-check"; exit 0; }
-F="$(mktemp -d)"; trap 'tmux kill-session -t "$S" 2>/dev/null; tmux kill-session -t "$R" 2>/dev/null; rm -rf "$F"' EXIT
+F="$(mktemp -d)"
 printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$(cd "$(dirname "$0")" && pwd)/agent-output-filter.mjs" > "$F/agent-output-filter"
 chmod +x "$F/agent-output-filter"
-out="$(PATH="$F:$PATH" bash "$W" "$S" 'echo hi; exit 3' run)"; rc=$?
+out="$(INTENTIC_RUN_FILTER=1 PATH="$F:$PATH" bash "$W" "$S" 'echo hi; exit 3' run)"; rc=$?
 [ "$out" = hi ] && [ "$rc" = 3 ] || { echo "FAIL: filtered failure got out='$out' rc=$rc (want hi/3)"; exit 1; }
-out="$(PATH="$F:$PATH" bash "$W" "$S" 'printf "npm warn deprecated x\nadded 1 package\n"' run)"; rc=$?
+out="$(INTENTIC_RUN_FILTER=1 PATH="$F:$PATH" bash "$W" "$S" 'printf "npm warn deprecated x\nadded 1 package\n"' run)"; rc=$?
 [ "$rc" = 0 ] || { echo "FAIL: filtered success exited $rc"; exit 1; }
 case "$out" in *"npm warn"*) echo "FAIL: npm warn survived the filter: '$out'"; exit 1;; esac
 case "$out" in *"added 1 package"*"filtered to"*) ;; *) echo "FAIL: filtered success missing summary/footer: '$out'"; exit 1;; esac
