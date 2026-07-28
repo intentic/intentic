@@ -1946,28 +1946,25 @@ test("agents.search matches titles and later prompts, across the archive, and ne
         "sess-1": ["fix the login bug", "actually make it use landAgent instead"],
         "sess-2": ["tidy the readme"],
     };
-    const client = clientFor(
-        createApp(
-            services({
-                agent: async function* () {
-                    yield { kind: "session", sessionId: "pending" };
-                    yield { kind: "done" };
-                },
-                sessions: {
-                    list: async () => [],
-                    read: async () => [],
-                    readConversation: async (dir) =>
-                        dir.endsWith("conv1")
-                            ? { sessionId: "replacement", messages: [{ role: "user" as const, text: "restored words" }] }
-                            : undefined,
-                    sessionIdForConversation: async (dir) => (dir.endsWith("conv1") ? "sess-1" : "sess-2"),
-                    search: async () => [],
-                    prompts: async (_root, id) => prompts[id] ?? [],
-                    exists: async () => true,
-                },
-            }),
-        ),
+    const app = createApp(
+        services({
+            agent: async function* () {
+                yield { kind: "session", sessionId: "pending" };
+                yield { kind: "done" };
+            },
+            sessions: {
+                list: async () => [],
+                read: async () => [],
+                readConversation: async (dir) =>
+                    dir.endsWith("conv1") ? { sessionId: "replacement", messages: [{ role: "user" as const, text: "restored words" }] } : undefined,
+                sessionIdForConversation: async (dir) => (dir.endsWith("conv1") ? "sess-1" : "sess-2"),
+                search: async () => [],
+                prompts: async (_root, id) => prompts[id] ?? [],
+                exists: async () => true,
+            },
+        }),
     );
+    const client = clientFor(app);
     await runAgentTurn(client, { prompt: "fix the login bug", conversationId: "conv1", isolated: true });
     await runAgentTurn(client, { prompt: "tidy the readme", conversationId: "conv2", isolated: true });
 
@@ -1975,7 +1972,12 @@ test("agents.search matches titles and later prompts, across the archive, and ne
         sessionId: "replacement",
         messages: [{ role: "user", text: "restored words" }],
     });
+    // An id the registry has never heard of is a 404 ON THE WIRE, not merely a rejected call: the browser reads
+    // that exact status as "this conversation has no entry any more" and stops a tab claiming a fleet card
+    // nothing on the board can render (see useChat's replayStoredSession). Anything else — a 500, an
+    // unreachable daemon — must stay a retryable read, so the status is the contract, not the message.
     await expect(client.agents.transcript({ id: "nope" })).rejects.toThrow();
+    expect((await app.request("/agents/nope/transcript")).status).toBe(404);
 
     // Under two characters the contract refuses: below that everything matches and the scan is pure cost.
     expect(await errorCode(client.agents.search({ query: "a" }))).toBe("BAD_REQUEST");

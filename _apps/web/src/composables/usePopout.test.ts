@@ -3,10 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPopout } from "./usePopout";
 
 /* The reload contract. A page refresh (dev-server HMR, an update, F5) destroys the realm driving a popped-out
- * panel but NOT the window it lives in: the window's keeper offers itself back to whatever page answers on the
- * opener next, and this module's hook takes it over. What is pinned here is that side of the handshake — the
- * fresh page adopts the returning window instead of docking the panel, gives up on one that never reports in,
- * and turns away one that arrives after the panel has been docked. */
+ * panel but NOT the window it lives in: the window's keeper asks whatever page answers on the opener next
+ * whether anyone is driving it, and this module's hook answers — taking the window over when nobody is.
+ *
+ * What is pinned here is that side of the handshake, and the ANSWER as much as the adoption. A pop-out window
+ * renders state that lives in another window's realm, so a keeper that hears "yes" from a page that is not
+ * actually driving it is how a panel ends up a photograph of the app: still showing the tabs, the selection
+ * and the drafts of a realm that is gone, while the board in the live window moves on without it. */
 
 // A stand-in for the pop-out window: a real (detached) document, so dressing it is exercised for real, plus the
 // window surface createPopout touches.
@@ -23,9 +26,8 @@ const fakeWindow = (name: string) => {
     };
 };
 
-const adopt = (name: string, win: ReturnType<typeof fakeWindow>): void => {
-    window.__intentic?.adoptPopout(name, win as unknown as Window);
-};
+// One keeper tick: "is a live page driving me?" — the boolean is what the window acts on.
+const adopt = (name: string, win: ReturnType<typeof fakeWindow>): boolean => window.__intentic?.adoptPopout(name, win as unknown as Window) === true;
 
 const size = () => ({ width: 500, height: 400 });
 
@@ -77,34 +79,67 @@ describe(`createPopout`, () => {
         expect(popout.body.value).toBe(win.document.body);
     });
 
-    it(`ignores the keeper re-offering the window it already owns`, () => {
+    it(`answers yes to the keeper of the window it already owns, without re-attaching`, () => {
         sessionStorage.setItem(`ui-popout-repeat-panel`, `1`);
         const popout = createPopout(`repeat-panel`, `Panel`, size);
         const win = fakeWindow(`repeat-panel`);
 
         adopt(`repeat-panel`, win);
         const listeners = win.addEventListener.mock.calls.length;
-        adopt(`repeat-panel`, win); // the keeper offers on every tick, forever
+        const driven = adopt(`repeat-panel`, win); // the keeper asks on every tick, forever
 
+        // The yes IS the proof of life: this page ran the code that produced it. The window keeps its panel
+        // uncovered on the strength of it, so it must never be answered by a page that isn't driving it.
+        expect(driven).toBe(true);
         expect(win.addEventListener.mock.calls).toHaveLength(listeners);
         expect(win.close).not.toHaveBeenCalled();
         expect(popout.poppedOut.value).toBe(true);
     });
 
-    it(`gives up on a window that never reports in, and turns it away if it does`, () => {
-        sessionStorage.setItem(`ui-popout-gone-panel`, `1`);
-        const popout = createPopout(`gone-panel`, `Panel`, size);
+    it(`says no for a window no page on this load is driving`, () => {
+        createPopout(`silent-panel`, `Panel`, size);
+        const win = fakeWindow(`other-panel`);
+
+        // A name this page has no store for, and a store that never adopted this window — the keeper of either
+        // hears no, veils its panel and keeps asking rather than showing a dead one.
+        expect(adopt(`no-such-panel`, win)).toBe(false);
+    });
+
+    it(`stops holding the docked slot for a window that never reports in — but still takes it if it does`, () => {
+        sessionStorage.setItem(`ui-popout-late-panel`, `1`);
+        const popout = createPopout(`late-panel`, `Panel`, size);
 
         vi.advanceTimersByTime(3000);
 
+        // The wait is over, so the panel shows in its column rather than nowhere.
         expect(popout.restoring.value).toBe(false);
         expect(popout.poppedOut.value).toBe(false);
-        // Nothing is coming back — the remembered state goes, so the next load starts docked.
-        expect(sessionStorage.getItem(`ui-popout-gone-panel`)).toBeNull();
+        expect(sessionStorage.getItem(`ui-popout-late-panel`)).toBeNull();
 
-        const win = fakeWindow(`gone-panel`);
-        adopt(`gone-panel`, win);
+        // ...and here it is, a beat late: a reload behind a slow tunnel, a cold dev server, a throttled
+        // background tab. It is a live window the user is looking at, so it gets the panel back. Closing it on
+        // the strength of a 2.5-second timer is the old behaviour and it took the user's floating chat with it.
+        const win = fakeWindow(`late-panel`);
+        const driven = adopt(`late-panel`, win);
 
+        expect(driven).toBe(true);
+        expect(popout.poppedOut.value).toBe(true);
+        expect(popout.body.value).toBe(win.document.body);
+        expect(win.close).not.toHaveBeenCalled();
+        expect(sessionStorage.getItem(`ui-popout-late-panel`)).toBe(`1`);
+    });
+
+    it(`turns away a window that reports in after the panel was docked deliberately`, () => {
+        sessionStorage.setItem(`ui-popout-docked-panel`, `1`);
+        const popout = createPopout(`docked-panel`, `Panel`, size);
+
+        // Docking while a window is still expected is a decision, not a timeout: the user asked for the panel
+        // in its column, so a leftover window arriving afterwards has nothing to show and is closed.
+        popout.dock();
+        const win = fakeWindow(`docked-panel`);
+        const driven = adopt(`docked-panel`, win);
+
+        expect(driven).toBe(false);
         expect(popout.poppedOut.value).toBe(false);
         expect(win.close).toHaveBeenCalled();
     });

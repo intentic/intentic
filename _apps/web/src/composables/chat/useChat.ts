@@ -45,6 +45,7 @@ import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
 import { withConcurrency } from "../concurrency";
 import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
+import { supportsRoute } from "../sandbox/useDaemonRoutes";
 import { useSandbox } from "../sandbox/useSandbox";
 import { errorMessage } from "../useAsyncAction";
 import { useWorkspaceTabs } from "../workspace/useWorkspaceTabs";
@@ -962,9 +963,23 @@ const fetchTranscript = async (conversation: Conversation, id: string): Promise<
     }
 };
 
-const fetchAgentTranscript = async (conversation: Conversation): Promise<{ sessionId?: string; messages: RestoredMessage[] } | undefined> => {
+/* A registered agent's transcript, with the one distinction that matters to the TAB: NOT_FOUND is the daemon
+ * saying this conversation has no registry entry any more (discarded, or a store that lost it), where a thrown
+ * request or any other status says only that we could not ask right now. Archiving keeps the entry — the
+ * registry holds archived agents and `entry(id)` finds them — so an archived agent answers 200 and its tab is
+ * never touched by this.
+ *
+ * The 404 is only believed when the daemon ADVERTISES this route. A daemon older than this browser answers 404
+ * for a route it simply doesn't have (see useDaemonRoutes), and reading that as "your agent is gone" would
+ * unregister every open agent tab in the app against a sandbox that is merely behind. */
+const fetchAgentTranscript = async (
+    conversation: Conversation,
+): Promise<{ sessionId?: string; messages: RestoredMessage[] } | "gone" | undefined> => {
     try {
         const response = await sandboxRequest(`/agents/${encodeURIComponent(conversation.conversationId)}/transcript`);
+        if (response.status === 404 && supportsRoute(`agents.transcript`)) {
+            return `gone`;
+        }
         if (!response.ok) {
             conversation.error.value = `Could not open that conversation.`;
             return undefined;
@@ -1029,16 +1044,38 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
         if (transcript === undefined) {
             return false;
         }
-        restored = transcript.messages;
-        if (transcript.sessionId !== undefined) {
-            conversation.session.value = {
-                id: transcript.sessionId,
-                provider: conversation.provider.value,
-                account: conversation.account.value,
-                harness: conversation.harness.value,
-            };
+        if (transcript === `gone`) {
+            /* THE ONE THING THAT UNLATCHES `registered`. The latch exists to outlive the roster — an archive
+             * takes the entry off the board, a dropped stream takes the whole roster away, and neither means a
+             * tab has stopped being an agent. But a NAMED 404 for this exact id is the daemon answering about
+             * this conversation, and a tab that goes on claiming a fleet identity nobody has is unreachable
+             * from the board while it sits in the strip: the registry half of the fleet has no entry for it and
+             * the DRAFT half skips it for being registered, so it shows up nowhere on /agents and the
+             * focus-leave sweep — which only ever takes unregistered drafts — can never take it either. That is
+             * how an empty, untitled, permanent "New agent" tab is born, in a strip that is supposed to be the
+             * board under another skin.
+             *
+             * Unlatched, it is what it actually is again: a conversation the daemon has never registered. Empty,
+             * that makes it an ordinary untouched draft, so the sweep below takes it the way it takes any other;
+             * with a transcript in it, it stays open and readable, and its next send registers it anew (the
+             * daemon rebuilds the entry at begin, the same path an archived agent's next message takes). */
+            conversation.registered.value = false;
+            setConversations(conversations.value, activeId.value);
+        } else {
+            restored = transcript.messages;
+            if (transcript.sessionId !== undefined) {
+                conversation.session.value = {
+                    id: transcript.sessionId,
+                    provider: conversation.provider.value,
+                    account: conversation.account.value,
+                    harness: conversation.harness.value,
+                };
+            }
         }
-    } else {
+    }
+    // Not an else: a tab that just lost its agent still has whatever SDK session it recorded, and that store is
+    // a different one — the transcript may well be readable there after the registry entry is gone.
+    if (restored === undefined) {
         const session = conversation.session.value;
         if (session === undefined) {
             return true;

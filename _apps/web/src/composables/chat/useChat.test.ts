@@ -46,6 +46,7 @@ const { sandboxJson, sandboxRequest } = await import("../sandbox/sandboxClient")
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 const sandboxJsonMock = vi.mocked(sandboxJson);
 const { useSandbox } = await import("../sandbox/useSandbox");
+const { setDaemonRoutes } = await import("../sandbox/useDaemonRoutes");
 const { loadAccountStatus, openAgentConversation, resetChat, useChat } = await import("./useChat");
 const { usageStatusByAccount } = await import("./usageStatus");
 
@@ -561,6 +562,62 @@ describe(`opening a fleet agent`, () => {
         await vi.waitFor(() => expect(sandboxRequestMock).toHaveBeenCalledWith(`/agent/attach`, expect.anything()));
         expect(sandboxRequestMock).not.toHaveBeenCalledWith(`/agents/a3/transcript`);
         expect(conversation.messages.value).toHaveLength(0);
+    });
+});
+
+/* A tab and its board card are one conversation under two skins, and `registered` is the claim that the fleet
+ * has a card for it — latched on daemon evidence so it outlives an archive and a dropped roster. What it must
+ * NOT outlive is the entry itself: a tab still claiming an agent the daemon has discarded is invisible on
+ * /agents (no registry entry to render, and the draft half of the fleet skips registered conversations) while
+ * sitting in the strip as an empty, untitled "New agent" that the focus-leave sweep is barred from taking —
+ * the ghost card behind "there's a New agent in the popped-out rail that doesn't exist on the board". */
+describe(`a tab whose agent the fleet no longer has`, () => {
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+        // Nothing running; the agent's transcript route answers NOT_FOUND — the daemon speaking about this exact
+        // id, which is what an archive (entry kept) or an unreachable daemon (throw) never do.
+        sandboxRequestMock.mockImplementation((path: string) =>
+            Promise.resolve(path.endsWith(`/transcript`) ? ({ ok: false, status: 404 } as Response) : ({ ok: false, status: 404 } as Response)),
+        );
+    });
+
+    it(`stops claiming the agent, so an empty one leaves the strip with the focus`, async () => {
+        const chat = useChat();
+        const first = chat.active.value.conversationId;
+        chat.draft.value = `real work`;
+        const ghost = openAgentConversation({ id: `discarded-agent`, provider: `claude`, harness: `claude-code` });
+
+        await vi.waitFor(() => expect(ghost.registered.value).toBe(false));
+        // Nothing in it and no entry behind it: an ordinary untouched draft again, and the sweep takes it the
+        // moment the focus moves — where before it was a permanent tab no surface could account for.
+        chat.setActive(first);
+
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first]);
+    });
+
+    it(`keeps one that has a transcript — the work is still readable, the fleet claim is not`, async () => {
+        const chat = useChat();
+        const kept = openAgentConversation({ id: `discarded-with-work`, provider: `claude`, harness: `claude-code`, title: `Ship the thing` });
+        kept.restoreMessages([{ role: `user`, text: `do the thing` }]);
+
+        await vi.waitFor(() => expect(kept.registered.value).toBe(false));
+
+        expect(chat.conversations.value).toContain(kept);
+        expect(kept.messages.value).toHaveLength(1);
+    });
+
+    it(`believes a 404 only from a daemon that advertises the route`, async () => {
+        // An older sandbox answers 404 for a route it was built without. Reading that as "your agent is gone"
+        // would unregister every open agent tab in the app against a daemon that is merely behind.
+        setDaemonRoutes([`agents.list`]);
+        const stale = openAgentConversation({ id: `still-there`, provider: `claude`, harness: `claude-code` });
+
+        await vi.waitFor(() => expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/still-there/transcript`));
+        await nextTick();
+
+        expect(stale.registered.value).toBe(true);
+        setDaemonRoutes(undefined);
     });
 });
 

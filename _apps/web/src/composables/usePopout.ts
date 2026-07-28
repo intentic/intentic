@@ -18,53 +18,91 @@ import { computed, type ComputedRef, nextTick, ref, type Ref, shallowRef, type S
  *
  * A page reload does NOT dock it. The window outlives the realm that opened it and is re-adopted by the fresh
  * page (see the keeper below), because a reload is not a decision to dock — dev-server HMR, an update reload
- * or an F5 would otherwise yank a full-screened chat back into its column every time. */
+ * or an F5 would otherwise yank a full-screened chat back into its column every time.
+ *
+ * WHICH MAKES LIVENESS THE ONE INVARIANT THIS MODULE OWES THE REST OF THE APP: everything a pop-out window
+ * shows is rendered by a realm in ANOTHER window, so the moment that realm goes away the panel out there stops
+ * being a view of the app and becomes a photograph of it — same pixels, no state behind them. Selecting a chat
+ * on the board leaves it unmoved; the tabs it lists are the ones that were open when the realm died; a draft
+ * that has since been swept sits there focused. Every "the popped-out window is out of sync" report is this,
+ * because two windows CANNOT hold divergent state while one realm drives both.
+ *
+ * So the keeper's tick is a question, not an announcement, and the answer below is the whole contract: a live
+ * page holding this window answers true, and anything else — no page, a page that has since docked the panel,
+ * a realm torn down mid-reload — answers false or doesn't answer at all. A window nobody answers for veils
+ * itself ("Reconnecting…") within a tick and closes itself if no page takes it over, so a stale panel is
+ * visibly stale for ~200ms and gone for good in seconds. It can never sit there looking live. */
 
 declare global {
     interface Window {
-        // The handshake a pop-out window's keeper calls on its opener to be re-adopted. Installed by this
-        // module on every load, so a window opened by the PREVIOUS page finds it on the next one.
-        __intentic?: { readonly adoptPopout: (name: string, win: Window) => void };
+        /* The question a pop-out window's keeper puts to its opener on every tick: "is a live page driving me?"
+         * Installed by this module on every load, so a window opened by the PREVIOUS page finds it on the next
+         * one. The BOOLEAN is what makes it a liveness check rather than only a re-adoption hook — and it is
+         * answered by running this page's own code, which is the only proof of life that can't be faked by a
+         * document still sitting on screen. */
+        __intentic?: { readonly adoptPopout: (name: string, win: Window) => boolean };
     }
 }
 
 // Marks the keeper script, so re-dressing an adopted document leaves the one live script in it alone.
 const KEEPER_ATTR = `data-intentic-keeper`;
 
-// How long a remembered window gets to come back before the panel gives up and docks. One keeper tick plus
-// the app's own boot; overshooting only means an emptier column for a moment, undershooting docks a window
-// that was about to return.
+// How long a remembered window gets to come back before the panel stops holding its docked slot shut. One
+// keeper tick plus the app's own boot. Both ways of being wrong are now cheap: overshooting means an emptier
+// column for a moment, and undershooting only means the panel shows docked until the window reports in — it is
+// no longer a deadline the window has to beat to survive (see stopWaiting).
 const RECLAIM_GRACE_MS = 2500;
 
 /* The only script that runs INSIDE the pop-out window — and the only thing about the panel that survives the
- * opener reloading, since every other part of it lives in the opener's realm. Each tick it offers the window
- * back to whatever page currently answers on the opener, so the fresh load re-adopts it; when nobody is
- * coming — the tab was closed, or navigated away from the app — it closes itself rather than leaving a
- * floating panel with nothing driving it. `window.name` is the target name window.open gave it, which is the
- * key the opener's stores are registered under. */
+ * opener reloading, since every other part of it lives in the opener's realm. That makes it the only party
+ * that can speak for this window when the realm behind it dies, so each tick it asks whatever page currently
+ * answers on the opener whether anyone is driving it, and acts on the answer:
+ *   · yes — a live page holds it (a fresh load takes it over on the very tick it first answers). Nothing to do.
+ *   · no  — veil the panel NOW. It may be a page mid-reload, in which case the veil lifts a few ticks later;
+ *           what it must never be is a dead panel that still looks like the app.
+ *   · nobody, for ~12s — close. The tab was shut, or navigated away from the app; a floating window with
+ *           nothing driving it is worse than no window.
+ * `window.name` is the target name window.open gave it, which is the key the opener's stores are registered
+ * under. */
 const KEEPER_SOURCE = `(() => {
-    let misses = 0;
+    const VEIL = "data-intentic-veil";
+    let orphaned = 0;
+    // Covers the panel the moment nobody answers for it, so a frozen picture of the app can never be mistaken
+    // for the app. Re-created rather than toggled: an adoption re-dresses this document (body and head are
+    // cleared), and the next tick simply puts it back if it is still needed.
+    const veil = (on) => {
+        const shown = document.querySelector("[" + VEIL + "]");
+        if (!on) {
+            if (shown) shown.remove();
+            return;
+        }
+        if (shown) return;
+        const el = document.createElement("div");
+        el.setAttribute(VEIL, "");
+        el.textContent = "Reconnecting…";
+        el.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;font:500 13px system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.62)";
+        (document.body || document.documentElement).appendChild(el);
+    };
     setInterval(() => {
         const opener = window.opener;
         if (!opener || opener.closed) {
             window.close();
             return;
         }
-        let adopt;
+        let driven = false;
         try {
-            adopt = opener.__intentic?.adoptPopout;
+            const adopt = opener.__intentic?.adoptPopout;
+            // Running the opener's code IS the proof of life — a page mid-reload has no hook yet, and a dead
+            // realm has none ever again. Either way the answer is false and this window says so.
+            driven = typeof adopt === "function" && adopt(window.name, window) === true;
         } catch {
             window.close(); // opener navigated cross-origin: its realm is unreachable, nobody can drive us
             return;
         }
-        if (typeof adopt === "function") {
-            misses = 0;
-            adopt(window.name, window);
-            return;
-        }
-        misses += 1;
-        if (misses > 50) {
-            window.close(); // ~10s with no app on the other end
+        veil(!driven);
+        orphaned = driven ? 0 : orphaned + 1;
+        if (orphaned > 60) {
+            window.close(); // ~12s with nothing on the other end — long enough to outlast a slow reload
         }
     }, 200);
 })();`;
@@ -124,9 +162,11 @@ const features = (size: { width: number; height: number }): string => {
 };
 
 // Every pop-out store on the page, by window name — a keeper knows only its own name, and the page it calls
-// back may be a completely fresh load, so the hook resolves the store at call time.
-const adopters = new Map<string, (win: Window) => void>();
-window.__intentic = { adoptPopout: (name, win) => adopters.get(name)?.(win) };
+// back may be a completely fresh load, so the hook resolves the store at call time. An unknown name answers
+// false rather than nothing: this page drives no window by that name, which is exactly what the asker needs
+// to hear.
+const adopters = new Map<string, (win: Window) => boolean>();
+window.__intentic = { adoptPopout: (name, win) => adopters.get(name)?.(win) === true };
 
 export interface Popout {
     readonly poppedOut: Ref<boolean>;
@@ -172,18 +212,26 @@ export const createPopout = (name: string, title: string, size: () => { width: n
     };
 
     const restoring = ref(sessionStorage.getItem(storageKey) === `1`);
-    // Docked away while a window was still expected: stop waiting, and shut the window down if it does report
-    // in (its keeper cannot know the panel was closed on this side in the meantime).
+
+    /* Two ways the wait for a returning window can end, and they are NOT the same decision — running them
+     * through one flag is what let a window that reported in a beat late get closed under the user, panel and
+     * all, for the crime of a slow reload:
+     *   · THE GRACE RUNS OUT — stop holding the docked slot shut, and nothing more. The window may well still
+     *     be alive out there (a reload behind a tunnel, a cold dev server, a throttled background tab), and its
+     *     keeper is still asking every 200ms; taking it over late is exactly what the user wants, so the store
+     *     stays adoptable and the panel simply pops back out when it arrives.
+     *   · THE PANEL IS DOCKED DELIBERATELY — refuse it. A window reporting in after that is a leftover with
+     *     nothing to show, and closing it is the only way it stops floating.
+     */
     let dismissed = false;
-    const giveUp = (): void => {
+    const stopWaiting = (): void => {
         restoring.value = false;
         remember(false);
-        dismissed = true;
     };
     if (restoring.value) {
         window.setTimeout(() => {
             if (restoring.value) {
-                giveUp();
+                stopWaiting();
             }
         }, RECLAIM_GRACE_MS);
     }
@@ -206,25 +254,6 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         return holder;
     };
 
-    /* This tab going away takes the panel's JS with it, so what is left in the window is a frozen picture of
-     * it: dim it and stop it taking clicks, so the seconds until the fresh page re-adopts it (or its keeper
-     * closes it) read as "reconnecting" rather than "typing here does nothing". pageshow undoes it for the
-     * back/forward cache, where the same realm comes back alive; a reload re-dresses the body instead. */
-    const markStale = (): void => {
-        const shown = popoutWindow?.document.body;
-        if (shown !== undefined) {
-            shown.style.opacity = `0.55`;
-            shown.style.pointerEvents = `none`;
-        }
-    };
-    const markLive = (): void => {
-        const shown = popoutWindow?.document.body;
-        if (shown !== undefined) {
-            shown.style.opacity = ``;
-            shown.style.pointerEvents = ``;
-        }
-    };
-
     const attach = (win: Window): void => {
         dressWindow(win, title);
         popoutWindow = win;
@@ -236,28 +265,35 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         // is the backstop for the paths that skip it.
         win.addEventListener(`beforeunload`, dock);
         win.addEventListener(`pagehide`, dock);
-        window.addEventListener(`pagehide`, markStale);
-        window.addEventListener(`pageshow`, markLive);
         themeObserver = new MutationObserver(() => mirrorRoot(win.document));
         themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: [`data-mode`, `class`] });
     };
 
-    // The keeper offers its window on every tick, from the moment it is popped out — so the common call is the
-    // window this page already owns, and only a window from before the reload is actually taken over.
+    /* The keeper's question, answered for this store's window. It arrives every 200ms from the moment the
+     * window opens, so the common case by far is "yes, still mine, still alive" — and answering it at all is
+     * the proof, since a torn-down realm never gets here. The three ways to say no each mean something
+     * different to the asker: a window this page no longer holds (docked deliberately, or replaced by another)
+     * is told to close, while a page that simply isn't driving it — because it never adopted it — lets the
+     * keeper veil the panel and keep asking. */
     adopters.set(name, (win) => {
-        if (popoutWindow === win || win.closed) {
-            return;
+        if (win.closed) {
+            return false;
+        }
+        if (popoutWindow === win) {
+            return true;
         }
         if (dismissed || poppedOut.value) {
             win.close();
-            return;
+            return false;
         }
         attach(win);
+        return true;
     });
 
     const dock = (): void => {
         if (!poppedOut.value) {
-            giveUp();
+            stopWaiting();
+            dismissed = true;
             return;
         }
         const win = popoutWindow;
@@ -275,8 +311,6 @@ export const createPopout = (name: string, title: string, size: () => { width: n
         body.value = undefined;
         remember(false);
         void nextTick(() => holder?.remove());
-        window.removeEventListener(`pagehide`, markStale);
-        window.removeEventListener(`pageshow`, markLive);
         win?.close();
     };
 

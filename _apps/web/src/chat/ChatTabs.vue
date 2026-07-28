@@ -930,7 +930,12 @@ const openHistory = (event: Event): void => {
              Note the division of labour with the filter at the top: typing SEARCHES past the open tabs already
              (the "Not open" group), so History is for BROWSING — recent chats, newest first, nothing typed. -->
         <div v-else class="flex shrink-0 flex-col gap-1 border-t border-line pt-1">
-            <button type="button" class="composer-ghost w-full justify-start gap-2 px-2 py-1.5 text-2xs" @click="openHistory" aria-label="Chat history">
+            <button
+                type="button"
+                class="composer-ghost w-full justify-start gap-2 px-2 py-1.5 text-2xs"
+                @click="openHistory"
+                aria-label="Chat history"
+            >
                 <Icon name="history" class="text-2xs" />
                 <span>Past chats…</span>
             </button>
