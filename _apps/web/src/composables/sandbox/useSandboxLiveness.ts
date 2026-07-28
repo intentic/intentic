@@ -5,6 +5,7 @@ import { presenceStreamOpened, resetPresence } from "../usePresence";
 import { markWorkspaceChanged } from "../workspace/useWorkspaceLive";
 import { classifyFailure, type ConnectionFailure } from "./connection";
 import { daemonErrorMessage, daemonErrorStatus, sandboxRpc, SandboxUnaddressedError } from "./sandboxRpc";
+import { useSandboxSession } from "./sandboxSession";
 import { applySystemEvent } from "./systemEvents";
 import { sandboxQueryPredicate } from "./systemEventRouting";
 import { resetDaemonRoutes } from "./useDaemonRoutes";
@@ -27,6 +28,7 @@ import { signalConnection, useSandbox } from "./useSandbox";
 const WATCHDOG_MS = 6000;
 
 const { daemonUrl, connection, activeSandboxId, refresh } = useSandbox();
+const { invalidateSession } = useSandboxSession();
 
 let running = false;
 let controller: AbortController | undefined;
@@ -133,6 +135,11 @@ const attempt = async (): Promise<void> => {
         }
         const failure = failureOf(error);
         signalConnection({ kind: `failed`, failure });
+        if (failure.kind === `unauthenticated`) {
+            // The daemon rejected the bearer we hold (session secret rotated, expiry raced the margin). Drop
+            // the session so the fast retry re-establishes from a Google proof instead of replaying a dead one.
+            invalidateSession();
+        }
         if (failure.kind === `forbidden`) {
             // A revoked member must not keep a cached (IndexedDB-persisted) copy of the sandbox on disk.
             queryClient.removeQueries({ predicate: sandboxQueryPredicate(sandboxId) });

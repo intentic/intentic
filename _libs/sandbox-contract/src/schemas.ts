@@ -1900,6 +1900,12 @@ export const InfoSchema = z.object({
     updateAvailable: z.boolean().optional(),
 });
 
+// A daemon-minted session (system.session): the steady-state browser credential, exchanged for a verified
+// Google ID token so Google UI is a sign-in moment instead of an hourly renewal. `expiresAt` is epoch ms —
+// the browser renews ahead of it without parsing the token; `email` is who the daemon verified.
+export const DaemonSessionSchema = z.object({ token: z.string(), expiresAt: z.number(), email: z.string() });
+export type DaemonSession = z.infer<typeof DaemonSessionSchema>;
+
 // Intentic-provided host SSH tunnel: minting it needs intentic's PLATFORM Cloudflare account, so the daemon
 // can't do it directly — it relays to the platform authenticated by the connect token (the announce pattern).
 // The panel embeds the returned connector token + hostname in its connect-host one-liner.

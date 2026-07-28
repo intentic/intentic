@@ -17,7 +17,7 @@ vi.mock("../sandbox/useSandbox", () => ({
     useSandbox: () => ({ active: { value: { token: `connect` } }, daemonUrl: { value: `https://daemon.test` } }),
     sandboxKey: (...parts: unknown[]) => parts,
 }));
-vi.mock("../useGoogleIdentity", () => ({ useGoogleIdentity: () => ({ getIdToken: async () => `id-token` }) }));
+vi.mock("../sandbox/sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => `session-token` }) }));
 
 const { landAgent } = await import("./agentActions");
 

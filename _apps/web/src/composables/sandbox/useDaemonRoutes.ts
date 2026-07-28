@@ -35,6 +35,11 @@ export const resetDaemonRoutes = (): void => {
 // UI only ever hides a feature it has POSITIVE evidence is missing.
 export const supportsRoute = (name: string): boolean => advertised.value === undefined || advertised.value.has(name);
 
+// The three-way answer supportsRoute folds away: true/false from a hello frame, undefined while nothing is
+// advertised (not connected yet, or a pre-advertisement daemon). useSandboxSession needs the distinction — a
+// positive "yes" clears its learned-by-404 fallback, a positive "no" skips the exchange without probing.
+export const routeAdvertised = (name: string): boolean | undefined => advertised.value?.has(name);
+
 // Routes this browser's contract has that the daemon does not — i.e. how far behind the sandbox is. Empty when
 // the daemon is level or newer (a daemon ahead of us simply advertises names we never ask about).
 export const missingRoutes = computed<string[]>(() => {

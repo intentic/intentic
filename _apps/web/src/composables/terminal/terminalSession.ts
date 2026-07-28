@@ -5,7 +5,7 @@ import type { TerminalClientMessage, TerminalServerMessage } from "@intentic/san
 import { useDevice } from "@intentic-app/ui";
 import { boundCommand } from "../commands/useCommands";
 import { isApplePlatform } from "../commands/keybindings";
-import { useGoogleIdentity } from "../useGoogleIdentity";
+import { useSandboxSession } from "../sandbox/sandboxSession";
 import { useSandbox } from "../sandbox/useSandbox";
 import { registerFilePathLinks } from "./terminalFileLinks";
 import { registerUrlLinks } from "./terminalUrlLinks";
@@ -105,7 +105,7 @@ const loadWebglRenderer = (term: Terminal): void => {
 
 // Build the authenticated wss URL for one session, or undefined if the sandbox isn't reachable / not signed in.
 const socketUrl = async (name: string, cols: number, rows: number): Promise<string | undefined> => {
-    const token = await useGoogleIdentity().getIdToken();
+    const token = await useSandboxSession().getSessionToken();
     if (token === undefined) {
         return undefined;
     }

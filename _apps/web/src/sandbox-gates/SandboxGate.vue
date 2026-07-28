@@ -5,6 +5,7 @@ import { useAuth } from "../composables/useAuth";
 import { useEnvironment } from "../composables/sandbox/useEnvironment";
 import { useSandboxVersion } from "../composables/sandbox/useSandboxVersion";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
+import { useSandboxSession } from "../composables/sandbox/sandboxSession";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../composables/workspace/useWorkspaceTree";
 import SandboxConnecting from "./SandboxConnecting.vue";
@@ -17,7 +18,8 @@ import SandboxUnauthorized from "./SandboxUnauthorized.vue";
  * provides the flex column and the positioning context for the absolute mismatch bar. */
 
 const { user } = useAuth();
-const { signedInEmail, clearCredential, getIdToken } = useGoogleIdentity();
+const { clearCredential } = useGoogleIdentity();
+const { presentedEmail, invalidateSession, getSessionToken } = useSandboxSession();
 const { reachable, connection } = useSandbox();
 // The daemon answered and refused this Google account (403) — its own screen, distinct from every reason the
 // daemon simply didn't answer. Read off the failure's tag rather than a separate sticky boolean.
@@ -36,17 +38,18 @@ const { pending: envPending, proposal: envProposal } = useEnvironment();
 // the env-rebuild bar — only shown when no env action is pending, so at most one bar competes for attention.
 const { bannerVisible: versionUpdateVisible, dismiss: dismissVersionUpdate } = useSandboxVersion();
 
-// Pre-check: the browser holds both the platform account email and the Google identity it presents to the
-// daemon. Before the daemon binds (the pre-bind window: not yet reachable, not yet 403), warn if they differ
-// so the wrong account never silently becomes owner. Suppressed once denied (the "no access" screen names both)
-// and once reachable (a reachable mismatch is a legit member on a second Google identity — not an error).
+// Pre-check: the browser holds both the platform account email and the identity it presents to the daemon
+// (useSandboxSession). Before the daemon binds (the pre-bind window: not yet reachable, not yet 403), warn if
+// they differ so the wrong account never silently becomes owner. Suppressed once denied (the "no access"
+// screen names both) and once reachable (a reachable mismatch is a legit member on a second Google identity).
 const accountMismatch = computed(
     () =>
-        user.value?.email !== undefined && signedInEmail.value !== undefined && user.value.email.toLowerCase() !== signedInEmail.value.toLowerCase(),
+        user.value?.email !== undefined && presentedEmail.value !== undefined && user.value.email.toLowerCase() !== presentedEmail.value.toLowerCase(),
 );
 const switchAccount = (): void => {
     clearCredential();
-    void getIdToken();
+    invalidateSession();
+    void getSessionToken();
 };
 </script>
 
@@ -57,7 +60,7 @@ const switchAccount = (): void => {
     >
         <Icon name="exclamation-triangle" />
         <span class="min-w-0 flex-1">
-            You're signed into Google as <span class="font-medium">{{ signedInEmail }}</span
+            You're signed into Google as <span class="font-medium">{{ presentedEmail }}</span
             >, but your intentic account is <span class="font-medium">{{ user?.email }}</span
             >.
         </span>

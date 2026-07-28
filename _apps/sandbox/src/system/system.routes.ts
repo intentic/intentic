@@ -134,6 +134,17 @@ export const createSystemRoutes = (services: Services) => {
             const latest = latestVersion();
             return { ...info, ...(latest !== undefined ? { latest, updateAvailable: isNewer(latest, info.version) } : {}) };
         }),
+        // Exchange the request's verified bearer for a daemon-minted session (the steady-state browser
+        // credential — see auth/session.ts). The bearer middleware already verified WHO is asking (a Google ID
+        // token, or a still-valid session — which makes this same route sliding renewal); loopback mode and
+        // token-scoped callers (panel/bridge/sync) carry no member identity and have no session to mint.
+        session: i.session.handler(async ({ context }) => {
+            if (services.auth === undefined || context.identity === undefined) {
+                throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to mint a session for" });
+            }
+            const { token, expiresAt } = await services.auth.mintSession(context.identity);
+            return { token, expiresAt, email: context.identity.email };
+        }),
         events: i.events.handler(({ input, context, signal }) =>
             systemEvents(
                 services,

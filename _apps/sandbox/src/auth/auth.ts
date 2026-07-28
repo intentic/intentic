@@ -113,8 +113,9 @@ export const tokenEquals = (a: string, b: string): boolean => {
 };
 
 export interface Authorizer {
-    // Verify a request's bearer Google ID token and enforce access. The FIRST authenticated request binds its
-    // email as the owner (TOFU); when a connectToken is configured, that first request must also carry it (the
+    // Verify a request's bearer — a daemon-minted session (auth/session.ts) or a Google ID token — and enforce
+    // access. The FIRST authenticated request binds its email as the owner (TOFU) and must be a fresh Google
+    // proof, never a session; when a connectToken is configured, that first request must also carry it (the
     // connection token only the operator holds — closes the first-bind race), and when an expectedOwner is
     // configured its email must match (pins ownership to the intentic account, not just the token holder). Every
     // later request must be the owner OR a granted member. Returns the caller's verified identity (presence
@@ -128,6 +129,9 @@ export interface Authorizer {
 
 export const createAuthorizer = (deps: {
     readonly verify: IdTokenVerifier;
+    // Local verify for daemon-minted sessions — the steady-state credential (no JWKS round trip). Optional so
+    // compositions without a session store keep authorizing pure Google bearers.
+    readonly session?: (bearer: string) => Promise<VerifiedIdentity>;
     readonly owner: OwnerStore;
     readonly members: MembersStore;
     readonly connectToken?: string;
@@ -135,14 +139,34 @@ export const createAuthorizer = (deps: {
     // must be THIS identity — so daemon ownership always matches the intentic account, not just whoever holds
     // the connect token first. Undefined ⇒ plain TOFU (headless/direct connect with no setup code).
     readonly expectedOwner?: string;
-}): Authorizer => ({
-    authorize: async (bearer, firstBind) => {
-        if (bearer === "") {
-            throw new Error("missing bearer token");
+}): Authorizer => {
+    // The bearer's verified identity once the daemon is bound: its own session when the token parses as one,
+    // otherwise a Google ID token against the JWKS. Session first — it is every call after sign-in.
+    const identify = async (bearer: string): Promise<VerifiedIdentity> => {
+        const session = deps.session === undefined ? undefined : await deps.session(bearer).catch(() => undefined);
+        return session ?? deps.verify(bearer);
+    };
+    const enforce = async (identity: VerifiedIdentity, owner: string): Promise<VerifiedIdentity> => {
+        if (identity.email === owner) {
+            return identity;
         }
-        const identity = await deps.verify(bearer);
-        const owner = await deps.owner.read();
-        if (owner === undefined) {
+        if (!(await deps.members.list()).includes(identity.email)) {
+            throw new ForbiddenError("not authorized for this sandbox");
+        }
+        return identity;
+    };
+    return {
+        authorize: async (bearer, firstBind) => {
+            if (bearer === "") {
+                throw new Error("missing bearer token");
+            }
+            const owner = await deps.owner.read();
+            if (owner !== undefined) {
+                return enforce(await identify(bearer), owner);
+            }
+            // First-bind takes a fresh Google proof only — a session lingering from a wiped owner file (a
+            // recreated workspace under the same sandbox id) must never seed ownership.
+            const identity = await deps.verify(bearer);
             if (deps.connectToken !== undefined && (firstBind === undefined || !tokenEquals(firstBind, deps.connectToken))) {
                 throw new Error("first-bind requires the connection token");
             }
@@ -154,22 +178,15 @@ export const createAuthorizer = (deps: {
             }
             await deps.owner.write(identity.email);
             return identity;
-        }
-        if (identity.email === owner) {
-            return identity;
-        }
-        if (!(await deps.members.list()).includes(identity.email)) {
-            throw new ForbiddenError("not authorized for this sandbox");
-        }
-        return identity;
-    },
-    authorizeOwner: async (bearer) => {
-        if (bearer === "") {
-            throw new Error("missing bearer token");
-        }
-        const { email } = await deps.verify(bearer);
-        if (email !== (await deps.owner.read())) {
-            throw new ForbiddenError("not the sandbox owner");
-        }
-    },
-});
+        },
+        authorizeOwner: async (bearer) => {
+            if (bearer === "") {
+                throw new Error("missing bearer token");
+            }
+            const { email } = await identify(bearer);
+            if (email !== (await deps.owner.read())) {
+                throw new ForbiddenError("not the sandbox owner");
+            }
+        },
+    };
+};

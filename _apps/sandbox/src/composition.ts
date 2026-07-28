@@ -38,6 +38,7 @@ import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
 import { createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStore, type MembersStore, type VerifiedIdentity } from "./auth/auth.js";
+import { createSessions, type MintedSession } from "./auth/session.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
 import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
 import { type ClaudeUsageStore, fileClaudeUsageStore } from "./claude/claude-usage.js";
@@ -333,13 +334,15 @@ export interface Services {
     // Shared-access grants — the emails authorized besides the owner. Always present; the /members routes read
     // and write it, and the authorizer consults it. The daemon is the enforcer; the platform only mirrors these.
     readonly members: MembersStore;
-    // When set, the daemon is exposed directly and verifies the owner's Google ID token on every route but
-    // /health; CORS is emitted for `allowOrigin`. Undefined ⇒ loopback mode (tests / host-internal preview).
-    // authorizeOwner gates the owner-only member-management routes.
+    // When set, the daemon is exposed directly and verifies the caller's bearer (a daemon-minted session, or a
+    // Google ID token) on every route but /health; CORS is emitted for `allowOrigin`. Undefined ⇒ loopback mode
+    // (tests / host-internal preview). authorizeOwner gates the owner-only member-management routes; mintSession
+    // backs system.session — the Google-verified exchange that makes sessions the steady-state credential.
     readonly auth:
         | {
               readonly authorize: (bearer: string, firstBind: string | undefined) => Promise<VerifiedIdentity>;
               readonly authorizeOwner: (bearer: string) => Promise<void>;
+              readonly mintSession: (identity: VerifiedIdentity) => Promise<MintedSession>;
               readonly allowOrigin?: string;
           }
         | undefined;
@@ -364,10 +367,14 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const info =
         config.sandbox.name !== "" && config.sandbox.image !== "" ? { name: config.sandbox.name, image: config.sandbox.image, version } : undefined;
     const members = fileMembersStore(join(workspace.root, ".intentic", "members.json"));
+    // The session secret lives under historyRoot (like the activity/usage ledgers) — daemon-private, outside
+    // the workspace, and persistent, so a daemon restart doesn't sign every browser out.
+    const sessions = createSessions(join(config.historyRoot, "session-secret"));
     const authorizer =
         config.google.clientId !== ""
             ? createAuthorizer({
                   verify: createGoogleVerifier(config.google.clientId),
+                  session: sessions.verify,
                   owner: fileOwnerStore(join(workspace.root, ".intentic", "owner.json")),
                   members,
                   ...(config.connectToken !== "" ? { connectToken: config.connectToken } : {}),
@@ -378,6 +385,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ? {
               authorize: authorizer.authorize,
               authorizeOwner: authorizer.authorizeOwner,
+              mintSession: sessions.mint,
               ...(config.webOrigin !== "" ? { allowOrigin: config.webOrigin } : {}),
           }
         : undefined;

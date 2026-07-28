@@ -713,6 +713,25 @@ test("system.killTerminal routes a panel-* session through the process manager, 
     expect(processes.stopped).toEqual(["app"]);
 });
 
+test("system.session exchanges the verified bearer for a daemon-minted session", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                auth: {
+                    authorize: async () => ({ email: "o@x.com" }),
+                    authorizeOwner: rejectForbidden,
+                    mintSession: async (identity: { email: string }) => ({ token: `sess-${identity.email}`, expiresAt: 42 }),
+                },
+            }),
+        ),
+    );
+    expect(await client.system.session()).toEqual({ token: "sess-o@x.com", expiresAt: 42, email: "o@x.com" });
+});
+
+test("system.session in loopback mode (no auth, no identity) answers 401 — there is no session to mint", async () => {
+    expect((await postJson(createApp(services({})), "/system/session")).status).toBe(401);
+});
+
 test("the panel token is accepted in place of a Google bearer (server-side panel → daemon calls)", async () => {
     // Auth rejects every bearer, so a 200 proves the x-intentic-panel token is the only thing admitting the call.
     const app = createApp(services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));

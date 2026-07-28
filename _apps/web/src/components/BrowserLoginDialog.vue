@@ -3,7 +3,7 @@ import { cmp } from "@intentic-app/ui";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import { onBeforeUnmount, ref, watch } from "vue";
-import { useGoogleIdentity } from "../composables/useGoogleIdentity";
+import { useSandboxSession } from "../composables/sandbox/sandboxSession";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 
 /* Guided browser login for a `browser`-kind capability. Opens the daemon's /system/browser-login WebSocket: the
@@ -44,7 +44,7 @@ const connect = async (): Promise<void> => {
     status.value = "connecting";
     errorMsg.value = undefined;
     frame.value = undefined;
-    const token = await useGoogleIdentity().getIdToken();
+    const token = await useSandboxSession().getSessionToken();
     const base = useSandbox().daemonUrl.value;
     const connectToken = useSandbox().active.value?.token;
     if (token === undefined || base === undefined || base === "" || connectToken === undefined) {

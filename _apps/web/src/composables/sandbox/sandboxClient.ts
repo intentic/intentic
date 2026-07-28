@@ -1,22 +1,22 @@
-import { useGoogleIdentity } from "../useGoogleIdentity";
+import { useSandboxSession } from "./sandboxSession";
 import { staleDaemonReason } from "./useDaemonRoutes";
 import { useSandbox } from "./useSandbox";
 import { CHUNK_BYTES } from "../workspace/uploadChunking";
 
-// Calls the ACTIVE sandbox's daemon DIRECTLY (browser → https://sandbox-<id>.<zone>), authenticated by a Google
-// ID token (Bearer, no cookies) — the platform is out of this path. The daemon base URL + connection token come
-// from the active sandbox (useSandbox, populated by sandbox.list); the id token from Google Identity Services.
+// Calls the ACTIVE sandbox's daemon DIRECTLY (browser → https://sandbox-<id>.<zone>), authenticated by a
+// daemon-session bearer (no cookies; see sandboxSession) — the platform is out of this path. The daemon base
+// URL + connection token come from the active sandbox (useSandbox, populated by sandbox.list).
 // Returns the raw Response so callers read `.json()` or stream `.body` themselves.
 
 const { active, daemonUrl } = useSandbox();
-const { getIdToken } = useGoogleIdentity();
+const { getSessionToken } = useSandboxSession();
 
 export async function sandboxRequest(path: string, init?: RequestInit): Promise<Response> {
     const base = daemonUrl.value;
     if (base === undefined || base === ``) {
         throw new Error(`Your sandbox isn't reachable yet — finish setup so it registers its address.`);
     }
-    const token = await getIdToken();
+    const token = await getSessionToken();
     if (token === undefined) {
         throw new Error(`Sign in with Google to reach your sandbox.`);
     }
@@ -111,8 +111,8 @@ export async function sandboxUpload(path: string, body: Blob, opts?: { onProgres
         if (signal?.aborted) {
             throw new DOMException(`Upload canceled`, `AbortError`);
         }
-        // Per part, so a token can't expire mid-way through a huge multi-part file (getIdToken caches/refreshes).
-        const token = await getIdToken();
+        // Per part, so a token can't expire mid-way through a huge multi-part file (getSessionToken caches/renews).
+        const token = await getSessionToken();
         if (token === undefined) {
             throw new Error(`Sign in with Google to reach your sandbox.`);
         }

@@ -60,14 +60,20 @@ flowchart TB
   (`intent` = `deploy.config.ts`, the IaC; `desired-state` = resolved artifact + status; `app` =
   the application code), and exposes its daemon over its **own Cloudflare tunnel**. SSH keys,
   Cloudflare and agent tokens ride straight into it and never reach the platform.
-- **Trust root = browser Google Sign-In** — the browser drives the daemon directly with a Google ID
-  token; the daemon verifies it against Google's JWKS and binds its owner **on first use**: the first
-  authenticated request must carry the `x-intentic-connect` connect token (and, when setup seeded an
-  expected owner, match that account's email), then the owner email persists in
-  `/work/.intentic/owner.json` ([auth.ts](_apps/sandbox/src/auth/auth.ts)). Additional collaborators
-  are granted via `/work/.intentic/members.json`. The platform never holds or forges the ID token, so
-  a platform breach can read the stored URL but **cannot drive any sandbox** — the hub's blast radius
-  is bounded to identity + the sandbox URL.
+- **Trust root = browser Google Sign-In** — the browser proves its identity to the daemon with a
+  Google ID token, verified against Google's JWKS, and the daemon binds its owner **on first use**:
+  the first authenticated request must carry the `x-intentic-connect` connect token (and, when setup
+  seeded an expected owner, match that account's email), then the owner email persists in
+  `/work/.intentic/owner.json` ([auth.ts](_apps/sandbox/src/auth/auth.ts)). Because a Google ID token
+  lives ~an hour and renewing it needs Google UI, it is only the **sign-in** credential: the browser
+  exchanges it at `system.session` for a **daemon-minted session** (HMAC-signed with a secret that
+  never leaves the sandbox, [session.ts](_apps/sandbox/src/auth/session.ts)) and presents that on
+  every call, renewing it silently — Google reappears only for a first visit, an account switch, or a
+  long-idle return. First-bind always takes a fresh Google proof, never a session. Additional
+  collaborators are granted via `/work/.intentic/members.json`, and owner/membership are re-checked
+  per request, so revoking a member kills their live sessions too. The platform never holds or forges
+  either credential, so a platform breach can read the stored URL but **cannot drive any sandbox** —
+  the hub's blast radius is bounded to identity + the sandbox URL.
 
 The lifecycle, from first sign-in to a reconciled deployment the operator can watch:
 

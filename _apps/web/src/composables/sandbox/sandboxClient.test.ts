@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-vi.mock("../useGoogleIdentity", () => ({ useGoogleIdentity: () => ({ getIdToken: async () => `id-token` }) }));
+vi.mock("./sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => `session-token` }) }));
 vi.mock("./useSandbox", () => ({ useSandbox: () => ({ active: { value: { token: `connect` } }, daemonUrl: { value: `https://daemon.test` } }) }));
 
 const { sandboxJson } = await import("./sandboxClient");

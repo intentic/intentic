@@ -2,7 +2,7 @@ import { sandboxContract } from "@intentic/sandbox-contract";
 import { createORPCClient, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
-import { useGoogleIdentity } from "../useGoogleIdentity";
+import { useSandboxSession } from "./sandboxSession";
 import { useSandbox } from "./useSandbox";
 
 /* The TYPED client for the active sandbox daemon, derived from the same `sandboxContract` the daemon
@@ -15,16 +15,16 @@ import { useSandbox } from "./useSandbox";
  * just discarded the types of. This client removes that round trip: `@orpc/openapi-client` decodes an
  * `text/event-stream` response back into the contract's async iterator, so a consumer awaits typed frames.
  *
- * Auth is identical to sandboxRequest — a per-call Google ID token plus the TOFU connect token — because both
- * option hooks accept a function and are evaluated per request, which is what lets one long-lived client
- * follow a switched sandbox and a refreshed token without being rebuilt.
+ * Auth is identical to sandboxRequest — a per-call daemon-session bearer (useSandboxSession) plus the TOFU
+ * connect token — because both option hooks accept a function and are evaluated per request, which is what
+ * lets one long-lived client follow a switched sandbox and a refreshed credential without being rebuilt.
  *
  * `sandboxRequest` stays for the non-contract surface it is the only way to reach: the hand-written Hono
  * routes (/health, /workspace/raw), the chunked XHR upload path, and the extension host's deliberately
  * path-based data plane (an extension bundle cannot import our contract). */
 
 const { active, daemonUrl } = useSandbox();
-const { getIdToken } = useGoogleIdentity();
+const { getSessionToken } = useSandboxSession();
 
 // The active sandbox has no address yet (setup unfinished, or the daemon has not announced itself). Its own
 // class because the connection supervisor treats it as a distinct, non-retryable-by-reconnect condition —
@@ -51,7 +51,7 @@ export const sandboxRpc: ContractRouterClient<typeof sandboxContract> = createOR
             return base;
         },
         headers: async () => {
-            const token = await getIdToken();
+            const token = await getSessionToken();
             if (token === undefined) {
                 throw new Error(`Sign in with Google to reach your sandbox.`);
             }

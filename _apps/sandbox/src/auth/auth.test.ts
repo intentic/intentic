@@ -141,3 +141,47 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         );
     });
 });
+
+describe("createAuthorizer (daemon-minted sessions)", () => {
+    test("a session bearer authorizes owner and member without touching the Google verifier", async () => {
+        const authz = createAuthorizer({
+            verify: async () => {
+                throw new Error("google verifier must not be consulted for a valid session");
+            },
+            session: verifierFor({ "sess-a": "a@x.com", "sess-m": "m@x.com", "sess-x": "x@x.com" }),
+            owner: memOwner("a@x.com"),
+            members: memMembers(["m@x.com"]),
+        });
+        await expect(authz.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com" });
+        await expect(authz.authorize("sess-m", undefined)).resolves.toEqual({ email: "m@x.com" });
+        // A verified session is still subject to per-request membership — revoking a member kills live sessions.
+        await expect(authz.authorize("sess-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
+        await expect(authz.authorizeOwner("sess-a")).resolves.toBeUndefined();
+        await expect(authz.authorizeOwner("sess-m")).rejects.toBeInstanceOf(ForbiddenError);
+    });
+
+    test("a bearer that is not a session falls through to the Google verifier", async () => {
+        const authz = createAuthorizer({
+            verify: verifierFor({ "tok-a": "a@x.com" }),
+            session: verifierFor({}),
+            owner: memOwner("a@x.com"),
+            members: memMembers(),
+        });
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com" });
+        await expect(authz.authorize("bogus", undefined)).rejects.toThrow(/invalid token/);
+    });
+
+    test("a session can never first-bind — an unbound daemon takes only a fresh Google proof", async () => {
+        const owner = memOwner();
+        const authz = createAuthorizer({
+            verify: verifierFor({ "tok-a": "a@x.com" }),
+            session: verifierFor({ "sess-a": "a@x.com" }),
+            owner,
+            members: memMembers(),
+        });
+        await expect(authz.authorize("sess-a", undefined)).rejects.toThrow(/invalid token/);
+        expect(await owner.read()).toBeUndefined();
+        await expect(authz.authorize("tok-a", undefined)).resolves.toEqual({ email: "a@x.com" });
+        expect(await owner.read()).toBe("a@x.com");
+    });
+});

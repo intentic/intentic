@@ -2,6 +2,7 @@
 import Button from "primevue/button";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
+import { useSandboxSession } from "../composables/sandbox/sandboxSession";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { connectionNotice } from "./connectionNotice";
@@ -14,16 +15,20 @@ import { connectionNotice } from "./connectionNotice";
  * views render. */
 
 const { active, daemonUrl, connection } = useSandbox();
-const { clearCredential, getIdToken } = useGoogleIdentity();
+const { clearCredential } = useGoogleIdentity();
+const { invalidateSession, getSessionToken } = useSandboxSession();
 const router = useRouter();
 
 const notice = computed(() => connectionNotice(connection.value.failure, active.value?.name));
 
 // Carry the sandbox id so /setup resumes THIS sandbox instead of offering a blank create form.
 const openSetup = (): void => void router.push({ path: `/setup`, query: { sandbox: active.value?.id } });
+// Drop both credentials so the re-establish goes through a fresh Google proof (with the account chooser —
+// clearCredential disables auto-select) instead of replaying whatever the daemon just refused.
 const signIn = (): void => {
     clearCredential();
-    void getIdToken();
+    invalidateSession();
+    void getSessionToken();
 };
 </script>
 

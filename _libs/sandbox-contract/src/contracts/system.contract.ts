@@ -2,6 +2,7 @@ import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
 import { SystemEventSchema } from "../events.js";
 import {
+    DaemonSessionSchema,
     HostTunnelInputSchema,
     HostTunnelSchema,
     InfoSchema,
@@ -19,6 +20,9 @@ import {
 // connection simply never joins the roster.
 export const systemContract = {
     info: oc.route({ method: "GET", path: "/info" }).output(InfoSchema),
+    // Exchange the request's verified bearer (a Google ID token — or a still-valid session, which makes this
+    // route sliding renewal) for a daemon-minted session, the credential every steady-state call presents.
+    session: oc.route({ method: "POST", path: "/system/session" }).output(DaemonSessionSchema),
     events: oc
         .route({ method: "GET", path: "/events" })
         .input(z.object({ clientId: z.string().optional() }))

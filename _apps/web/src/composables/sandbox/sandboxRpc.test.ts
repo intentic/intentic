@@ -1,7 +1,7 @@
 import type { SystemEvent } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
 
-vi.mock("../useGoogleIdentity", () => ({ useGoogleIdentity: () => ({ getIdToken: async () => `id-token` }) }));
+vi.mock("./sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => `session-token` }) }));
 vi.mock("./useSandbox", () => ({
     useSandbox: () => ({ active: { value: { token: `connect` } }, daemonUrl: { value: `https://daemon.test` } }),
 }));
@@ -40,14 +40,14 @@ it(`decodes the daemon's event stream into typed contract frames`, async () => {
     expect(hello?.kind === `hello` && hello.workspaceId).toBe(`ws-1`);
 });
 
-it(`sends the Google ID token and the TOFU connect token on the stream request`, async () => {
+it(`sends the session bearer and the TOFU connect token on the stream request`, async () => {
     const fetchMock = vi.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
     vi.stubGlobal(`fetch`, fetchMock);
     for await (const _frame of await sandboxRpc.system.events({ clientId: `c1` })) {
         break;
     }
     const request = fetchMock.mock.calls[0]![0];
-    expect(request.headers.get(`authorization`)).toBe(`Bearer id-token`);
+    expect(request.headers.get(`authorization`)).toBe(`Bearer session-token`);
     expect(request.headers.get(`x-intentic-connect`)).toBe(`connect`);
     expect(request.url).toContain(`https://daemon.test/events`);
     // The daemon keys this tab's presence roster entry by clientId, so a GET's input has to survive as a query

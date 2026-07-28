@@ -5,6 +5,7 @@ import { createAuthClient } from "better-auth/client";
 import { ref } from "vue";
 import { environment } from "../environments/environment";
 import { clearPersistedQueries, queryClient } from "./queryPersistence";
+import { useSandboxSession } from "./sandbox/sandboxSession";
 import { apiClient } from "./useApi";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 
@@ -18,6 +19,7 @@ const client = createAuthClient({
 });
 
 const { clearCredential } = useGoogleIdentity();
+const { clearSessions } = useSandboxSession();
 
 const user = ref<User | null>(null);
 // The central account's billing tier — surfaced as a badge in the account panel. `undefined` until the
@@ -64,6 +66,7 @@ const signInWithGoogle = async (callbackPath = `/`): Promise<void> => {
 
 const signOut = async (): Promise<void> => {
     clearCredential();
+    clearSessions();
     await clearPersistedQueries();
     await client.signOut();
     user.value = null;
@@ -92,6 +95,7 @@ const deleteAccount = async (): Promise<void> => {
         throw new Error(error.message ?? `Account deletion failed.`);
     }
     clearCredential();
+    clearSessions();
     await clearPersistedQueries();
     user.value = null;
     plan.value = undefined;
