@@ -554,7 +554,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     v-if="attachmentThumbs.length"
                     :attachments="attachmentThumbs"
                     class="order-first w-full flex-wrap justify-end"
-                    :class="attachmentsAside && '@lg:order-none @lg:mr-1 @lg:w-auto @lg:flex-col @lg:flex-nowrap @lg:self-start'"
+                    :class="attachmentsAside && '@lg:order-none @lg:mr-1 @lg:w-auto @lg:shrink-0 @lg:flex-col @lg:flex-nowrap @lg:self-start'"
                 />
                 <!-- Frame and scroller are two elements: the chip below must not scroll away with the text
                      when an open bubble runs past its cap (see .chat-prompt-bubble). -->

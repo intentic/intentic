@@ -17,4 +17,5 @@ export const useChat = (): Record<string, unknown> => ({
 
 export const restoreSnapshot = (): Promise<void> => Promise.resolve();
 export const openFileRefFromEvent = (): void => undefined;
+export const openWorkspaceRef = (): void => undefined;
 export const attachmentPreview = (): string | undefined => undefined;

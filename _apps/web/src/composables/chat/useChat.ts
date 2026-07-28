@@ -736,9 +736,9 @@ const refreshAccounts = async (target: AgentProvider): Promise<OauthAccount[]> =
     usageStatusByAccount.value = seeded;
     // The remembered pick, against the list that just landed — the only authority on whether it still exists.
     const picked = selectedAccountId.value[target];
-    const live = list.some((entry) => entry.id === picked) ? picked : list[0]?.id;
-    if (live !== picked) {
-        selectedAccountId.value = { ...selectedAccountId.value, [target]: live };
+    const valid = list.some((entry) => entry.id === picked) ? picked : list[0]?.id;
+    if (valid !== picked) {
+        selectedAccountId.value = { ...selectedAccountId.value, [target]: valid };
     }
     repointStranded(target, list);
     return list;
