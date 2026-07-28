@@ -42,7 +42,7 @@ const ensureInclude = async (): Promise<void> => {
 // active, and re-adding the connection just uploaded ANOTHER account key. The credential material lives on
 // /history instead (the daemon's own volume — outside the agent's /work mount, never synced to a laptop) and
 // ~/.ssh/intentic-hosts points at it, so every path the agent, the terminal, the skills and ssh itself use is
-// unchanged. Mirrors linkClaudeProjects, including its "a real dir means a dev-host run" guard.
+// unchanged. Mirrors linkClaudeState, including its "a real dir means a dev-host run" guard.
 export const linkSshHosts = async (historyRoot: string): Promise<void> => {
     const target = join(historyRoot, "ssh-hosts");
     const link = hostsDir();

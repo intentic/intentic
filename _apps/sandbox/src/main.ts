@@ -33,7 +33,7 @@ import { INFRA_APPLY_KEY } from "./intentic/infra-apply.js";
 import { killStaleManagedSessions, panelSession } from "./processes/managed-processes.js";
 import { createPreviewProxy } from "./panels/preview-proxy.js";
 import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
-import { linkClaudeProjects } from "./sessions/session-store.js";
+import { linkClaudeState } from "./sessions/session-store.js";
 import { createAnnouncer } from "./platform/announce.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { reapIdleWebSessions } from "./terminal/terminal-session.js";
@@ -80,11 +80,12 @@ const main = async (): Promise<void> => {
         logger.warn({ err: error }, "authorized_keys not restored — enrolled machines will be refused until they re-enroll"),
     );
 
-    // Claude chat transcripts live in the SDK's ~/.claude/projects — ephemeral container fs. Converge the
-    // store onto /work BEFORE serving (turns can't arrive until serve(), so the CLI can never race this).
-    // Awaited, unlike the best-effort steps below, because a turn spawning the CLI mid-link would fork stores.
-    await linkClaudeProjects(services.workspace.root).catch((error: unknown) =>
-        logger.warn({ err: error }, "claude session store not persisted — transcripts will not survive a rebuild"),
+    // Claude conversation state (transcripts, plans, backups, task outputs, todos) lives under the SDK's
+    // ~/.claude — ephemeral container fs. Converge every store onto /work BEFORE serving (turns can't arrive
+    // until serve(), so the CLI can never race this). Awaited, unlike the best-effort steps below, because a
+    // turn spawning the CLI mid-link would fork stores.
+    await linkClaudeState(services.workspace.root).catch((error: unknown) =>
+        logger.warn({ err: error }, "claude session state not persisted — sessions will not survive a rebuild whole"),
     );
 
     // The managed ssh dir (git-provider keys + every ssh capability's key) is the other store that lived in the
