@@ -37,10 +37,20 @@ If a hard question misses on the first try, rephrase 2–3 ways in ONE spawn —
 
 Every hit is a `path:line` anchor you can Read directly; hits show their enclosing symbol (`⟨in createWidget (fn)⟩`)
 and `ask` appends `related:` definition anchors. Output fits `--budget` (default 1500 tokens);
-truncation footers print the exact `--after <cursor>` command to continue. Scope with `--in <dir>`,
+truncation footers print the exact `--after <cursor>` command to continue. Scope with `--in <dir|file>`,
 `--repo <name>`, `--lang ts,py`, `--glob`/`--not-glob`, `--only tests|src|docs|config`; `--ignored` includes
 gitignored files (secrets stay unreachable). Exit codes: 0 hits, 1 none, 2 usage error. The index
 self-manages — run `iq index rebuild` only if results look stale.
+
+Don't work around the interface — it bends toward you:
+
+- **Paths in any frame.** `--in` and `outline`/`context`/`who` take cwd-relative, absolute, or workspace-relative
+  paths, and `--in` accepts a single file. A path that matches nothing is a loud error naming what was tried,
+  never a silent zero.
+- **grep vocabulary is absorbed.** `iq search …` runs `q`; `--include`/`--path`/`--max-results` map to
+  `--glob`/`--in`/`--limit`. A note on stderr names the canonical form — use it next time, don't retry.
+- **`find` recovers bad patterns.** A pattern rust regex rejects (`foo({`) reruns as literal text; grep-style
+  escapes (`a\|b`) rerun rewritten. The header says which ran, so a wrong pattern costs no extra turn.
 
 ## Session recall
 

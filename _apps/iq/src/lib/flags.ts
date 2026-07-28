@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { buildChoiceParser, numberParser } from "@stricli/core";
 import { canonicalLang, type RenderOptions, type Scope, type Verb, type VerbOptions } from "@intentic/iq-engine";
 
@@ -63,6 +65,37 @@ export const outputFlagParameters = {
 } as const;
 
 export const outputAliases = { C: "contextLines" } as const;
+
+// Agents address paths in whatever frame they were thinking in — root-relative (the canonical form),
+// cwd-relative (they just cd'd into a subdirectory), or absolute (a subagent handed one over). Transcript
+// mining showed all three in live use, the latter two silently zero-hitting under a misleading "scope too
+// narrow" hint. Resolve every frame to root-relative; a path that resolves nowhere is a loud usage error,
+// never an empty result. Returns "" when the path IS the root (scope no-op).
+export const rootRelativePath = (raw: string, root: string): string => {
+    const trimmed = raw.replace(/\/+$/, "");
+    const candidates = isAbsolute(trimmed) ? [trimmed] : [resolve(root, trimmed), resolve(process.cwd(), trimmed)];
+    for (const abs of candidates) {
+        const rel = relative(root, abs);
+        if (rel !== "" && (rel.startsWith("..") || isAbsolute(rel))) {
+            continue;
+        }
+        if (existsSync(abs)) {
+            return rel.split(sep).join("/");
+        }
+    }
+    throw new Error(
+        `path not found in the workspace: "${raw}" — tried root-relative (root: ${root}) and cwd-relative; locate it with: iq files ${basename(trimmed)}`,
+    );
+};
+
+export const rootRelativePaths = (paths: readonly string[], root: string): string[] =>
+    paths.map((path) => rootRelativePath(path, root)).filter((path) => path !== "");
+
+// outline/context/who address `path` or `path:line[-line]` — resolve the path part, keep the anchor.
+export const rootRelativeAnchor = (raw: string, root: string): string => {
+    const match = /^(.*?)(:\d+(?:-\d+)?)?$/.exec(raw)!;
+    return `${rootRelativePath(match[1]!, root)}${match[2] ?? ""}`;
+};
 
 export const toScope = (flags: ScopeFlags): Scope => ({
     ...(flags.in !== undefined ? { paths: flags.in } : {}),

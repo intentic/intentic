@@ -22,10 +22,17 @@ const request = (verb: QueryRequest["verb"], query: string, scope: QueryRequest[
     echo: `${verb} ${query}`,
 });
 
-test("find warns about grep-dialect escapes proactively (in the header, not only on zero hits)", async () => {
+test("find recovers grep-dialect escapes by rerunning with them stripped, and says so", async () => {
     const outcome = await engine.run(request("find", "create\\|Widget"));
-    expect(outcome.text).toContain("grep-style escapes");
-    expect(outcome.text).toContain("alternation is a|b");
+    expect(outcome.text).toContain("grep-style escapes rewritten to rust regex — matched: create|Widget");
+    expect(outcome.result.groups.some((group) => group.path.endsWith("widget.ts"))).toBe(true);
+    expect(outcome.exitCode).toBe(0);
+});
+
+test("find recovers a pattern rust regex rejects by rerunning it literally", async () => {
+    const outcome = await engine.run(request("find", "createWidget({"));
+    expect(outcome.text).toContain("ran as literal text");
+    expect(outcome.exitCode).toBe(1);
 });
 
 test("--lang matching zero files names the languages that ARE present, not a silent zero", async () => {

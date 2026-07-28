@@ -50,9 +50,13 @@ const HELP = `One search tool, intent-first. Bare query auto-detects intent and 
   iq sessions files "auth refresh"        files past sessions touched for a topic
 
 Every hit is a path:line anchor. Output fits --budget (default 1500 tokens); truncation footers
-give the exact --after command to continue. Scope: --in <dir> --repo <name> --lang ts,py
+give the exact --after command to continue. Scope: --in <dir|file> --repo <name> --lang ts,py
 --glob/--not-glob --only tests|src|docs|config --ignored (secrets floor never lifts).
-Exit codes: 0 hits, 1 none, 2 error. The index self-manages — iq index rebuild only if stale.`;
+Exit codes: 0 hits, 1 none, 2 error. The index self-manages — iq index rebuild only if stale.
+
+Paths may be cwd-relative, absolute, or workspace-relative; one that matches nothing is an error,
+not an empty result. grep habits are absorbed (search→q, --include/--path/--max-results), and find
+reruns a pattern rust regex rejects as literal text — the header names what actually ran.`;
 
 export const app = buildApplication(
     buildRouteMap({

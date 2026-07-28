@@ -75,7 +75,9 @@ export const matchSessions = (db: RecallDb, prompt: string, options: MatchOption
             bm25: (bestTurn.get(sessionRowId) ?? 0) + 0.5 * (titles.get(sessionRowId) ?? 0),
         });
     }
-    const maxBm25 = Math.max(...candidates.map((candidate) => candidate.bm25), 0);
+    // Reduced, not spread — candidates grows with the transcript corpus, and a spread argument list that long
+    // overflows the stack (see the same fix in iq-engine's fuse).
+    const maxBm25 = candidates.reduce((max, candidate) => (candidate.bm25 > max ? candidate.bm25 : max), 0);
     if (maxBm25 === 0) {
         return [];
     }

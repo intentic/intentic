@@ -2,6 +2,7 @@
 import type { StricliProcess } from "@stricli/core";
 import { run } from "@stricli/core";
 import { app } from "./app.js";
+import { normalizeArgv } from "./lib/argv.js";
 
 // Piping into `head` closes stdout mid-write — treat EPIPE as a clean stop, not a crash (grep convention).
 process.stdout.on("error", (error: NodeJS.ErrnoException) => {
@@ -30,14 +31,23 @@ const originalWrite = process.stderr.write.bind(process.stderr);
 process.stderr.write = ((chunk: string | Uint8Array, ...rest: unknown[]): boolean => {
     const text = typeof chunk === "string" ? chunk : chunk.toString();
     const alias = /No alias registered for -(\w)/.exec(text)?.[1];
-    const redirect = alias !== undefined ? FLAG_REDIRECTS[alias] : undefined;
+    const redirect =
+        alias !== undefined
+            ? FLAG_REDIRECTS[alias]
+            : /Too many arguments/.test(text)
+              ? 'each verb takes ONE query — quote multi-word queries (iq q "…") and scope with --in <dir>'
+              : undefined;
     return (originalWrite as (value: string | Uint8Array, ...args: unknown[]) => boolean)(
         redirect === undefined ? chunk : `${text.trimEnd()} — ${redirect}\n`,
         ...rest,
     );
 }) as typeof process.stderr.write;
 
-await run(app, process.argv.slice(2), { process: process as StricliProcess });
+const { argv, notes } = normalizeArgv(process.argv.slice(2));
+if (notes.length > 0) {
+    process.stderr.write(`iq: grep dialect absorbed: ${notes.join(", ")}\n`);
+}
+await run(app, argv, { process: process as StricliProcess });
 // Grep convention: 0 hits, 1 none, 2 anything else — clamp stricli's negative scanner/routing codes.
 if (process.exitCode !== undefined && process.exitCode !== 0 && process.exitCode !== 1) {
     process.exitCode = 2;

@@ -1,7 +1,9 @@
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { CommandContext } from "@stricli/core";
 import { createEngine, parseFeatures, type QueryOutcome, type Verb, type VerbOptions } from "@intentic/iq-engine";
 import { loadConfig } from "../env.config.js";
-import { echoOf, parseLangs, type ScopeFlags, type SearchFlags, toRender, toScope } from "./flags.js";
+import { echoOf, parseLangs, rootRelativeAnchor, rootRelativePaths, type ScopeFlags, type SearchFlags, toRender, toScope } from "./flags.js";
 
 export type OutputMode = "text" | "json" | "ndjson";
 
@@ -38,24 +40,50 @@ const emit = (write: (chunk: string) => void, mode: OutputMode, outcome: QueryOu
 export const engineFromEnv = (featuresSpec?: string): ReturnType<typeof createEngine> => {
     const config = loadConfig();
     return createEngine({
-        root: config.workspaceRoot === "" ? process.cwd() : config.workspaceRoot,
+        root: workspaceRoot(),
         features: parseFeatures(featuresSpec ?? (config.iqFeatures === "" ? undefined : config.iqFeatures)),
         ...(config.iqRgPath !== "" ? { rgPath: config.iqRgPath } : {}),
         ...(config.iqModelDir !== "" ? { modelDir: config.iqModelDir } : {}),
     });
 };
 
-// The one executor every search verb goes through: build engine from env, run, emit in the resolved mode, and
-// set the grep-convention exit code (0 hits, 1 none; thrown errors become 2 in cli.ts).
-export const runSearch = async (context: CommandContext, verb: Verb, query: string, flags: SearchFlags, options: VerbOptions): Promise<void> => {
-    const mode = resolveMode(flags, loadConfig().intenticOutput);
+// Verbs whose query is (or starts with) a workspace path — resolved like --in, not searched.
+const PATH_QUERY_VERBS = new Set<Verb>(["outline", "context", "who"]);
+
+// The sandbox pins WORKSPACE_ROOT (to /work), but agent sessions run in per-conversation worktrees OUTSIDE the
+// pin — transcript mining showed every such session silently searching the main checkout instead of its own
+// tree, and every worktree path zero-hitting. A pin the caller is not inside points at the wrong code: re-root
+// at the enclosing git workspace, falling back to cwd itself (matching the unpinned default).
+export const workspaceRoot = (): string => {
+    const config = loadConfig();
+    const cwd = process.cwd();
+    const pinned = config.workspaceRoot === "" ? cwd : config.workspaceRoot;
+    if (cwd === pinned || cwd.startsWith(`${pinned}/`)) {
+        return pinned;
+    }
+    for (let dir = cwd; dirname(dir) !== dir; dir = dirname(dir)) {
+        if (existsSync(join(dir, ".git"))) {
+            return dir;
+        }
+    }
+    return cwd;
+};
+
+// The one executor every search verb goes through: build engine from env, resolve path frames to root-relative,
+// run, emit in the resolved mode, and set the grep-convention exit code (0 hits, 1 none; thrown errors become 2
+// in cli.ts).
+export const runSearch = async (context: CommandContext, verb: Verb, query: string, rawFlags: SearchFlags, options: VerbOptions): Promise<void> => {
+    const mode = resolveMode(rawFlags, loadConfig().intenticOutput);
+    const root = workspaceRoot();
+    const flags = rawFlags.in === undefined ? rawFlags : { ...rawFlags, in: rootRelativePaths(rawFlags.in, root) };
+    const resolvedQuery = PATH_QUERY_VERBS.has(verb) ? rootRelativeAnchor(query, root) : query;
     const outcome = await engineFromEnv(flags.features).run({
         verb,
-        query,
+        query: resolvedQuery,
         scope: toScope(flags),
         render: toRender(flags),
         options,
-        echo: echoOf(verb, query, flags, options),
+        echo: echoOf(verb, resolvedQuery, flags, options),
     });
     emit((chunk) => context.process.stdout.write(chunk), mode, outcome);
     (context.process as { exitCode?: number | string | null }).exitCode = outcome.exitCode;
@@ -240,11 +268,25 @@ export const runMulti = async (context: CommandContext, flags: SearchFlags, inpu
         throw new Error("iq multi: no queries on stdin (one per line)");
     }
     const engine = engineFromEnv(flags.features);
+    const root = workspaceRoot();
     const budget = Math.max(150, Math.floor(flags.budget / lines.length));
     let anyHit = false;
     for (const [i, line] of lines.entries()) {
         const prefix = `[${i + 1}/${lines.length}]`;
-        const parsed = parseMultiLine(line);
+        let parsed = parseMultiLine(line);
+        if (parsed.error === undefined) {
+            // Path-frame resolution can reject a line (path outside the workspace) — that is this line's error,
+            // never the batch's.
+            try {
+                parsed = {
+                    ...parsed,
+                    query: PATH_QUERY_VERBS.has(parsed.verb) ? rootRelativeAnchor(parsed.query, root) : parsed.query,
+                    scope: parsed.scope.in === undefined ? parsed.scope : { ...parsed.scope, in: rootRelativePaths(parsed.scope.in, root) },
+                };
+            } catch (error) {
+                parsed = { ...parsed, error: error instanceof Error ? error.message : String(error) };
+            }
+        }
         if (parsed.error !== undefined) {
             const message = `${prefix} iq: ${line} — error: ${parsed.error}\n`;
             if (mode === "text") {
