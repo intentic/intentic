@@ -412,6 +412,15 @@ export class Conversation {
     // the main tree's namespace) and legacy restored tabs.
     readonly isolated = ref(true);
 
+    // Whether the fleet has ever known this conversation. The board's DRAFT card exists to bridge exactly one
+    // gap — "New agent" pressed → the first roster frame that registers it — and that crossing happens once, so
+    // this LATCHES rather than tracking the roster. Reading "absent from the roster" as "draft" instead is what
+    // put an agent the user had just ARCHIVED straight back in the Active lane under a fresh "New agent" card:
+    // the roster carries live agents only, so its open tab looked brand new again. A dropped events stream
+    // (resetAgents empties the roster) and a cold load before the first frame did the same to every open agent
+    // tab at once. Persisted with the tab, so a reload doesn't un-know it.
+    readonly registered = ref(false);
+
     // The conversation's worktree identity from the turn's `worktree` frame: its agent/<id> branch and the
     // root repo's short base sha. Undefined until the first isolated turn runs (or on main-tree conversations).
     readonly worktree = ref<{ branch: string; base: string } | undefined>();
@@ -476,14 +485,11 @@ export class Conversation {
     // instead of a browser frame.
     private rafId: number | null = null;
 
-    // `id` is the ephemeral tab id (c1, c2, … — never persisted); `conversationId` is the STABLE identity the
-    // daemon keys the fleet registry entry and the worktree on. It survives provider/harness switches (which
-    // retire sessions) and reloads (persisted in the tab snapshot), and its shape satisfies the wire's
-    // branch/path-safety regex (a UUID: hex + hyphens, starts alphanumeric).
-    constructor(
-        readonly id: string,
-        readonly conversationId: string = crypto.randomUUID(),
-    ) {
+    // `conversationId` is the conversation's whole identity — the key the daemon puts on the fleet registry
+    // entry and the worktree, the strip puts on the tab, and the transcript mirror puts on the cache entry. It
+    // survives provider/harness switches (which retire sessions) and reloads (persisted in the tab snapshot),
+    // and its shape satisfies the wire's branch/path-safety regex (a UUID: hex + hyphens, starts alphanumeric).
+    constructor(readonly conversationId: string = crypto.randomUUID()) {
         // A restored 'max' can be invalid two ways — Codex/Grok have no such tier, and Claude's API rejects it
         // with thinking off — and turnDefaults persists BOTH halves, so an unclamped pair would fail every turn
         // of every new conversation until the user happened to change one. The model is already provider-correct
@@ -1071,10 +1077,14 @@ export class Conversation {
         void this.drainQueue();
     }
 
-    // Dismisses a pending question. This TELLS the daemon (cancelled), rather than just dropping the stream:
-    // the agent is parked inside its `ask` tool holding the conversation's run lock, so a client-side-only
-    // dismissal would wedge the conversation until the daemon restarted. The tool result says the user
-    // declined to answer, which lets the agent proceed on sensible defaults or ask again more cheaply.
+    // Dismisses a pending question AND stops the turn. This TELLS the daemon (cancelled), rather than just
+    // dropping the stream: the agent is parked inside its `ask` tool holding the conversation's run lock, so a
+    // client-side-only dismissal would wedge the conversation until the daemon restarted.
+    //
+    // Stopping is the point, not a side effect — it is what Claude Code does, and for the same reason. The card
+    // was raised because the agent could not choose for itself; waving it away answers nothing, so letting the
+    // turn run on means it guesses at exactly the fork it just said it could not guess at. The user gets the
+    // wheel back instead, with the transcript recording both halves ("Question dismissed." then "Stopped.").
     async cancelQuestion(message: ChatMessage): Promise<void> {
         const question = message.question;
         if (question?.status !== `pending`) {
@@ -1087,11 +1097,15 @@ export class Conversation {
         }
         this.attachCard(message.id, { question: { ...question, status: `cancelled` } });
         this.appendNotice(`Question dismissed.`);
-        void this.drainQueue();
+        // After the card is frozen, so it reads back as dismissed rather than as a card the Stop caught pending.
+        this.stop();
     }
 
     // Answers a pending permission card. 'once' allows just this call, 'always' also persists the rules the
-    // SDK suggested so the same tool stops asking, 'deny' blocks it and hands the reason back to the agent.
+    // SDK suggested so the same tool stops asking, 'deny' blocks it — and stops the turn, for the same reason a
+    // dismissed question does (see cancelQuestion). The card offers no free text, so a denial hands the agent
+    // nothing to redirect with; Claude Code draws the line in exactly that place, aborting a denial that carries
+    // no feedback and letting one that does carry some steer the turn onward.
     async decidePermission(message: ChatMessage, decision: "once" | "always" | "deny", feedback?: string): Promise<void> {
         const permission = message.permission;
         if (permission?.status !== `pending`) {
@@ -1104,6 +1118,10 @@ export class Conversation {
         }
         const status = decision === `deny` ? `denied` : decision === `always` ? `always` : `allowed`;
         this.attachCard(message.id, { permission: { ...permission, status } });
+        if (decision === `deny` && feedback === undefined) {
+            this.stop();
+            return;
+        }
         void this.drainQueue();
     }
 

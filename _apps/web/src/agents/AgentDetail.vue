@@ -59,7 +59,7 @@ watch(
         }
         // No fleet entry means no registry entry, so there is no read marker to stamp — just focus the tab.
         if (conversation.value !== undefined) {
-            setActive(conversation.value.id);
+            setActive(conversation.value.conversationId);
             return;
         }
         void router.replace(`/agents`);

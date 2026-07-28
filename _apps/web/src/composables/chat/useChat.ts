@@ -39,6 +39,7 @@ import {
 import { providerReady } from "./access";
 import { type ChatAttachment, type ChatMessage, type PlanRequest } from "./transcript";
 import { approvalsFor } from "./catalog";
+import { readTabSnapshot, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
@@ -63,153 +64,95 @@ export interface ChatSession {
 
 const { activeSandboxId, reachable } = useSandbox();
 
-// Open conversations (tabs) and which one is active; always at least one. `convSeq` mints unique tab ids.
-let convSeq = 1;
+// Open conversations (tabs) and which one is focused; always at least one. A tab IS its conversation, so the
+// focus is a conversationId — the one identity the daemon, the fleet registry, the transcript mirror and the
+// workspace's plan preview all already key on. There is deliberately no second, tab-local id: the previous one
+// was minted from a counter that resetChat rewound, so a reused value silently aliased two different chats in
+// anything that outlived the reset.
 // shallowRef, not ref: a deep ref would unwrap each Conversation's internal Vue refs (messages, title, …)
 // and mangle the class type. The instances' own refs stay reactive; reassigning the array triggers updates.
 const conversations = shallowRef<Conversation[]>([]);
 const activeId = ref<string>(``);
 
-// --- Tab persistence ---------------------------------------------------------------------------
-// Each sandbox's open tabs — session/provider identity, title, and the composer draft (text + done-upload
-// metadata) — persist as one JSON blob, so a refresh or a switch back to the sandbox restores its open chats.
-// Transcript CONTENT is not in this snapshot — it is mirrored to IndexedDB instead (see transcriptCache), so
-// a restored tab paints from disk at once and the rehydration watch below then reconciles it with the daemon.
-const chatTabsKey = (sandboxId: string): string => `intentic.chatTabs.${sandboxId}`;
-// Providers are an open string vocabulary (native ids + installed ACP agent ids) — a stored provider is valid
-// when non-empty; a since-removed ACP id degrades at send time (the daemon's unknown-provider error frame).
-const validProvider = (value: unknown): value is AgentProvider => typeof value === `string` && value !== ``;
-
-interface StoredTab {
-    // The stable daemon-side conversation identity (fleet registry + worktree key); absent on a legacy
-    // snapshot ⇒ a fresh one is minted on restore.
-    readonly conversationId?: string;
-    // Whether the conversation runs in its isolated worktree. Absent (legacy snapshot): a tab WITH a session
-    // restores as main-tree (its session lives in /work's namespace); a fresh tab gets the isolated default.
-    readonly isolated?: boolean;
-    // The tab's turn selection; the session's provider may differ while a switch is picked but not yet sent.
-    readonly provider?: AgentProvider;
-    // The tab's harness selection (native vs the Claude Code loop); absent ⇒ the current default on restore.
-    readonly harness?: AgentHarness;
-    readonly session?: { id: string; provider: AgentProvider };
-    readonly title?: string;
-    readonly draft: string;
-    readonly attachments: { name: string; path: string }[];
-    // Messages submitted while a turn ran that hadn't reached the agent yet — user-written text, so a refresh
-    // must not swallow them. They restore as queued (not as draft, which would collide with the real draft)
-    // and go out when the tab's turn settles or with the user's next send. The editor-context chip on one is
-    // deliberately dropped: it points at a selection this window no longer has.
-    readonly queued: { text: string; attachments: { name: string; path: string }[] }[];
-}
-
-// The persisted shape of one attachment (upload metadata only — previewUrl/controller are client-session
-// objects), read back defensively from the tab snapshot's draft and queued entries alike.
-const readAttachments = (raw: unknown): { name: string; path: string }[] =>
-    (Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [])
-        .filter((entry) => typeof entry[`name`] === `string` && typeof entry[`path`] === `string`)
-        .map((entry) => ({ name: entry[`name`] as string, path: entry[`path`] as string }));
-
-// Validated read of a sandbox's persisted tab snapshot; anything malformed degrades to undefined (fresh tab).
-const readTabs = (sandboxId: string | undefined): { active: number; tabs: StoredTab[] } | undefined => {
-    if (sandboxId === undefined) {
-        return undefined;
-    }
-    try {
-        const raw = localStorage.getItem(chatTabsKey(sandboxId));
-        if (raw === null) {
-            return undefined;
-        }
-        const stored = JSON.parse(raw) as { active?: unknown; tabs?: unknown };
-        if (!Array.isArray(stored.tabs) || stored.tabs.length === 0) {
-            return undefined;
-        }
-        const tabs: StoredTab[] = [];
-        for (const tab of stored.tabs as Record<string, unknown>[]) {
-            if (typeof tab[`draft`] !== `string`) {
-                return undefined;
-            }
-            const session = tab[`session`] as Record<string, unknown> | null | undefined;
-            const validSession =
-                typeof session === `object` && session !== null && typeof session[`id`] === `string` && validProvider(session[`provider`])
-                    ? { id: session[`id`] as string, provider: session[`provider`] }
-                    : undefined;
-            tabs.push({
-                draft: tab[`draft`],
-                attachments: readAttachments(tab[`attachments`]),
-                queued: (Array.isArray(tab[`queued`]) ? (tab[`queued`] as Record<string, unknown>[]) : [])
-                    .filter((entry) => typeof entry[`text`] === `string`)
-                    .map((entry) => ({ text: entry[`text`] as string, attachments: readAttachments(entry[`attachments`]) })),
-                ...(typeof tab[`conversationId`] === `string` ? { conversationId: tab[`conversationId`] } : {}),
-                ...(typeof tab[`isolated`] === `boolean` ? { isolated: tab[`isolated`] } : {}),
-                ...(validProvider(tab[`provider`]) ? { provider: tab[`provider`] } : {}),
-                ...(tab[`harness`] === `claude-code` || tab[`harness`] === `native` ? { harness: tab[`harness`] as AgentHarness } : {}),
-                ...(validSession !== undefined ? { session: validSession } : {}),
-                ...(typeof tab[`title`] === `string` ? { title: tab[`title`] } : {}),
-            });
-        }
-        return { active: typeof stored.active === `number` ? stored.active : 0, tabs };
-    } catch {
-        return undefined;
-    }
+// The one writer of the tab list: whatever it is set to, the focus lands on a tab that is actually in it, and
+// on the LAST one when the tab that had it is gone (VSCode behaviour, the rule the workspace's tabs follow
+// too). A focus naming nothing is invisible rather than loud — the strip highlights no tab while the panel
+// quietly shows the first one, so every click afterwards looks like it did nothing.
+const setConversations = (next: readonly Conversation[], focus: string): void => {
+    conversations.value = [...next];
+    activeId.value = next.some((conversation) => conversation.conversationId === focus) ? focus : next[next.length - 1]!.conversationId;
 };
 
-// Rebuild the tab set from the active sandbox's snapshot (a single fresh tab when none) and focus the stored
-// active tab. Tab ids are minted anew — c0/c1 are ephemeral and never persisted. Restored attachments carry
-// upload metadata only (no previewUrl/controller — those are client-session objects); the chip falls back to
-// the file icon.
-const restoreTabs = (): Conversation[] => {
-    const stored = readTabs(activeSandboxId.value);
-    if (stored === undefined) {
-        const conversation = new Conversation(`c${convSeq++}`);
-        activeId.value = conversation.id;
-        return [conversation];
-    }
-    const restored = stored.tabs.map((tab) => {
-        const conversation = new Conversation(`c${convSeq++}`, tab.conversationId);
-        conversation.isolated.value = tab.isolated ?? tab.session === undefined;
-        // The posture isn't part of the snapshot (it is a per-task choice, not a preference) — a restored tab
-        // starts from the mode its tree calls for, same as a fresh one.
-        conversation.mode.value = startingMode(conversation.isolated.value);
-        conversation.draft.value = tab.draft;
-        conversation.attachments.value = tab.attachments.map((file) => ({
-            id: crypto.randomUUID(),
-            name: file.name,
-            path: file.path,
-            status: `done` as const,
-            progress: 1,
-        }));
-        conversation.queued.value = tab.queued.map((message) => ({ id: crypto.randomUUID(), text: message.text, attachments: message.attachments }));
-        conversation.title.value = tab.title ?? null;
-        // Restore the harness before the model — the native/claude-code model lists diverge for codex/grok.
-        if (tab.harness !== undefined) {
-            conversation.harness.value = tab.harness;
-        }
-        if (tab.provider !== undefined) {
-            conversation.provider.value = tab.provider;
-            conversation.account.value = rememberedAccountFor(tab.provider);
-            conversation.model.value = rememberedModelFor(tab.provider);
-        }
-        if (tab.session !== undefined) {
-            // Account ids are daemon-minted and loaded fresh per sandbox, so a restored session re-derives its
-            // account from the provider's remembered pick; its harness moves with the tab.
-            conversation.session.value = {
-                ...tab.session,
-                account: rememberedAccountFor(tab.session.provider),
-                harness: conversation.harness.value,
-            };
-        }
-        return conversation;
-    });
-    activeId.value = restored[Math.min(Math.max(stored.active, 0), restored.length - 1)]!.id;
-    return restored;
-};
-
-conversations.value = restoreTabs();
-
+// The focused conversation. The find always hits — setConversations reconciles the focus with every list it
+// writes — and list[0] is the floor that keeps a slip a wrong tab rather than a crashed panel.
 const active = computed<Conversation>(() => {
     const list = conversations.value;
-    return list.find((conversation) => conversation.id === activeId.value) ?? list[0]!;
+    return list.find((conversation) => conversation.conversationId === activeId.value) ?? list[0]!;
 });
+
+// --- Tab persistence ---------------------------------------------------------------------------
+// The snapshot's shape, storage and validation live in tabSnapshot.ts; what stays here is when it is read and
+// written. Which SANDBOX the open tabs belong to is recorded at restore rather than read live at write time:
+// activeSandboxId flips one flush before sandboxScope's watch re-scopes the list, so a snapshot that lands in
+// the incoming sandbox's key during that window is the OUTGOING sandbox's tabs — restored, on the very next
+// line, as if they were the new sandbox's own.
+let scopedSandboxId: string | undefined;
+
+// One persisted tab, back as a live conversation. Restored attachments carry upload metadata only (no
+// previewUrl/controller — those are client-session objects); the chip falls back to the file icon.
+const restoreTab = (tab: StoredTab): Conversation => {
+    const conversation = new Conversation(tab.conversationId);
+    conversation.isolated.value = tab.isolated;
+    conversation.registered.value = tab.registered;
+    // The posture isn't part of the snapshot (it is a per-task choice, not a preference) — a restored tab
+    // starts from the mode its tree calls for, same as a fresh one.
+    conversation.mode.value = startingMode(conversation.isolated.value);
+    conversation.draft.value = tab.draft;
+    conversation.attachments.value = tab.attachments.map((file) => ({
+        id: crypto.randomUUID(),
+        name: file.name,
+        path: file.path,
+        status: `done` as const,
+        progress: 1,
+    }));
+    conversation.queued.value = tab.queued.map((message) => ({ id: crypto.randomUUID(), text: message.text, attachments: message.attachments }));
+    conversation.title.value = tab.title ?? null;
+    // Restore the harness before the model — the native/claude-code model lists diverge for codex/grok.
+    if (tab.harness !== undefined) {
+        conversation.harness.value = tab.harness;
+    }
+    if (tab.provider !== undefined) {
+        conversation.provider.value = tab.provider;
+        conversation.account.value = rememberedAccountFor(tab.provider);
+        conversation.model.value = rememberedModelFor(tab.provider);
+    }
+    if (tab.session !== undefined) {
+        // Account ids are daemon-minted and loaded fresh per sandbox, so a restored session re-derives its
+        // account from the provider's remembered pick; its harness moves with the tab.
+        conversation.session.value = {
+            ...tab.session,
+            account: rememberedAccountFor(tab.session.provider),
+            harness: conversation.harness.value,
+        };
+    }
+    return conversation;
+};
+
+// Rebuild this window's tab set for the active sandbox — its own snapshot, the last window's as a seed, or a
+// single fresh tab when neither exists — and focus the stored active tab.
+const restoreTabs = (): void => {
+    scopedSandboxId = activeSandboxId.value;
+    const stored = readTabSnapshot(scopedSandboxId);
+    if (stored === undefined) {
+        const conversation = new Conversation();
+        setConversations([conversation], conversation.conversationId);
+        return;
+    }
+    // `stored.active` names one of the tabs — the reader guarantees it.
+    setConversations(stored.tabs.map(restoreTab), stored.active);
+};
+
+restoreTabs();
 
 // Persist the tab snapshot on any change: the stringified getter touches every persisted field, so tab
 // open/close/switch, keystrokes, uploads finishing, and session commits all write through automatically.
@@ -217,11 +160,12 @@ const active = computed<Conversation>(() => {
 watch(
     () =>
         JSON.stringify({
-            active: conversations.value.findIndex((conversation) => conversation.id === activeId.value),
+            active: activeId.value,
             tabs: conversations.value.map((conversation) => ({
                 // JSON.stringify drops undefined keys, matching StoredTab's optional fields.
                 conversationId: conversation.conversationId,
                 isolated: conversation.isolated.value,
+                registered: conversation.registered.value,
                 provider: conversation.provider.value,
                 harness: conversation.harness.value,
                 session: conversation.session.value && { id: conversation.session.value.id, provider: conversation.session.value.provider },
@@ -237,14 +181,8 @@ watch(
             })),
         }),
     (json) => {
-        const sandboxId = activeSandboxId.value;
-        if (sandboxId === undefined) {
-            return;
-        }
-        try {
-            localStorage.setItem(chatTabsKey(sandboxId), json);
-        } catch {
-            // Storage may be unavailable (private mode); the in-memory tabs still hold.
+        if (scopedSandboxId !== undefined) {
+            writeTabSnapshot(scopedSandboxId, json);
         }
     },
 );
@@ -282,12 +220,13 @@ const queued = computed(() => active.value.queued.value);
 const removeQueued = (id: string): void => active.value.removeQueued(id);
 const steerable = computed(() => active.value.steerable.value);
 
-// Open (or re-focus) the active conversation's plan preview tab in the main view — the tab id is derived from
-// the conversation, so any plan card in the transcript reopens/replaces the same preview. Also the target of
-// the auto-open watch below.
+// Open (or re-focus) the active conversation's plan preview tab in the main view — the workspace tab is keyed
+// `plan:<conversationId>`, so any plan card in the transcript reopens/replaces the same preview, and it stays
+// that conversation's preview across a reload rather than being inherited by whichever chat happens to land in
+// the same strip position. Also the target of the auto-open watch below.
 const { openPlan } = useWorkspaceTabs();
 const openPlanPreview = (plan: PlanRequest): void => {
-    openPlan(active.value.id, planParts(plan.text).title ?? `Plan`, plan.text);
+    openPlan(active.value.conversationId, planParts(plan.text).title ?? `Plan`, plan.text);
     void router.push({ name: `workspace` });
 };
 
@@ -816,10 +755,9 @@ export const resetChat = (): void => {
     for (const conversation of conversations.value) {
         conversation.abort();
     }
-    convSeq = 1;
-    conversations.value = restoreTabs();
-    // The new sandbox's tabs get the same instant paint a reload does; the mirror is keyed by sandbox, so a
-    // switch reads that sandbox's transcripts, never the one just left.
+    restoreTabs();
+    // The new sandbox's tabs get the same instant paint a reload does; the mirror is keyed by conversation, so
+    // a switch reads that sandbox's transcripts, never the one just left.
     paintCachedTranscripts(conversations.value);
     sessions.value = [];
     providerAccounts.value = perProvider<readonly OauthAccount[]>(() => []);
@@ -843,9 +781,8 @@ export const resetChat = (): void => {
 // action goes through startAgent (agents/agentActions.ts), which is the one place that also puts the caret in
 // the composer and, on mobile, navigates to the new agent's screen. Other tabs keep streaming.
 const newChat = (): Conversation => {
-    const conversation = new Conversation(`c${convSeq++}`);
-    conversations.value = [...conversations.value, conversation];
-    activeId.value = conversation.id;
+    const conversation = new Conversation();
+    setConversations([...conversations.value, conversation], conversation.conversationId);
     return conversation;
 };
 
@@ -858,8 +795,12 @@ export const focusComposer = (): void => {
     composerFocus.value++;
 };
 
-const setActive = (id: string): void => {
-    activeId.value = id;
+// Focus a tab. An id that names no open conversation is ignored rather than written: `active` would fall back
+// to the first tab, so a stale click would silently surface a chat the user didn't ask for.
+const setActive = (conversationId: string): void => {
+    if (conversations.value.some((conversation) => conversation.conversationId === conversationId)) {
+        activeId.value = conversationId;
+    }
 };
 
 // Close a set of tabs (the tab ×, or the strip menu's Close / Close Others / Close to the Right / Close All):
@@ -868,19 +809,14 @@ const setActive = (id: string): void => {
 // same rule the workspace's closeTabs follows). The daemon-side sessions survive: a closed chat is still in History.
 const closeTabs = (ids: ReadonlySet<string>): void => {
     for (const conversation of conversations.value) {
-        if (ids.has(conversation.id)) {
+        if (ids.has(conversation.conversationId)) {
             conversation.abort();
             void dropTranscript(conversation.conversationId);
         }
     }
-    let next = conversations.value.filter((conversation) => !ids.has(conversation.id));
-    if (next.length === 0) {
-        next = [new Conversation(`c${convSeq++}`)];
-    }
-    conversations.value = next;
-    if (ids.has(activeId.value)) {
-        activeId.value = next[next.length - 1]!.id;
-    }
+    const remaining = conversations.value.filter((conversation) => !ids.has(conversation.conversationId));
+    const next = remaining.length > 0 ? remaining : [new Conversation()];
+    setConversations(next, activeId.value);
 };
 
 // --- Active-conversation actions (forwarded) --------------------------------------------------
@@ -908,10 +844,9 @@ const editAndResend = async (message: ChatMessage, text: string): Promise<void> 
     if (text.trim().length === 0 && attachments.length === 0) {
         return;
     }
-    const branch = new Conversation(`c${convSeq++}`);
+    const branch = new Conversation();
     branch.branchFrom(source, index);
-    conversations.value = [...conversations.value, branch];
-    activeId.value = branch.id;
+    setConversations([...conversations.value, branch], branch.conversationId);
     track(`message_sent`, { agent: branch.provider.value, edited: true });
     await branch.send(text, branch.turnSettings(), attachments);
 };
@@ -970,7 +905,10 @@ const fetchTranscript = async (conversation: Conversation, id: string): Promise<
 // watch above and by opening a fleet agent, which is what lets an agent an AUTOMATION opened for an outside
 // message read as an ordinary chat: its whole transcript (the configured prompt, the message that woke it,
 // the reply) exists only daemon-side until this runs.
-const hydrate = async (conversation: Conversation): Promise<void> => {
+// Returns whether the tab is now as current as the daemon can make it. False means the round-trip itself
+// failed, not that there was nothing to show: the caller drops its hydrating mark then, so the next
+// reachability flip tries again instead of leaving a restored tab visibly empty until the window is reloaded.
+const hydrate = async (conversation: Conversation): Promise<boolean> => {
     /* The transcript has to be in place BEFORE attaching to anything live. reattach appends the running turn's
      * prompt bubble to whatever the transcript currently holds, and marks the conversation streaming — which
      * makes the cache paint stand down — so attaching first renders the live turn onto an EMPTY transcript and
@@ -987,19 +925,21 @@ const hydrate = async (conversation: Conversation): Promise<void> => {
     // mirror on its own, so a paint that declines because the transcript is already populated must not be read
     // as "empty" and pay a session fetch the user would wait through on every restored tab.
     const seeded = conversation.messages.value.length === 0;
-    if (seeded) {
-        await replayStoredSession(conversation);
+    // A failed seed still lets the attach below run — a live turn is worth rendering either way — but it rides
+    // out as the return value so the caller re-tries the read rather than settling for a tab that looks empty.
+    const seededOk = seeded ? await replayStoredSession(conversation) : true;
+    if (await conversation.reattach()) {
+        return seededOk;
     }
     // With nothing running, what the mirror painted still has to be reconciled against the daemon — unless the
     // seeding above already read the very same store a moment ago.
-    if (!(await conversation.reattach()) && !seeded) {
-        await replayStoredSession(conversation);
-    }
+    return seeded ? seededOk : await replayStoredSession(conversation);
 };
 
 // Redraw a conversation from the daemon's own session store — the authoritative transcript, and the only copy
-// that survives a device with no local mirror.
-const replayStoredSession = async (conversation: Conversation): Promise<void> => {
+// that survives a device with no local mirror. False when the READ failed, as opposed to finding nothing to
+// show, so a transient round-trip failure is retried instead of leaving a restored tab visibly empty.
+const replayStoredSession = async (conversation: Conversation): Promise<boolean> => {
     const session = conversation.session.value;
     // /sessions/:id reads the Claude Code Agent SDK's own store, so a transcript is replayable for exactly the
     // sessions that loop minted — which is NOT "provider is claude": kimi and gemini have no native runtime and
@@ -1008,15 +948,29 @@ const replayStoredSession = async (conversation: Conversation): Promise<void> =>
     // with its whole transcript sitting readable on the daemon. A native codex/grok thread lives in that
     // provider's own rollout store, and an ACP agent's in its own — neither is readable here, so both stand down.
     if (session === undefined || !runsClaudeCode(session.provider, session.harness)) {
-        return;
+        return true;
     }
     const restored = await fetchTranscript(conversation, session.id);
+    if (restored === undefined) {
+        return false;
+    }
     // An empty replay is not a transcript, it is the absence of one — the same distinction the mirror
     // makes when it refuses to save a blank. Painting it would blank a good cached transcript on any
     // daemon that answers but has nothing to say, which is exactly how a reopened tab goes empty.
-    if (restored !== undefined && restored.length > 0) {
+    if (restored.length > 0) {
         conversation.restoreMessages(restored);
     }
+    return true;
+};
+
+// Hydrate a tab once, holding the mark only while (and after) the daemon actually answered.
+const hydrateOnce = (conversation: Conversation): void => {
+    hydrating.add(conversation);
+    void hydrate(conversation).then((current) => {
+        if (!current) {
+            hydrating.delete(conversation);
+        }
+    });
 };
 
 // Open (or focus) the tab bound to a fleet agent's conversationId, seeding identity from its registry
@@ -1033,10 +987,15 @@ export const openAgentConversation = (agent: {
 }): Conversation => {
     const existing = conversations.value.find((conversation) => conversation.conversationId === agent.id);
     if (existing !== undefined) {
-        activeId.value = existing.id;
+        setActive(existing.conversationId);
+        // The fleet handed us this id, so the tab is a view of a real agent whatever the live roster says right
+        // now — which is how an ARCHIVED agent opened from the archive view stopped painting a phantom "New
+        // agent" card back onto the Active lane it had just left.
+        existing.registered.value = true;
         return existing;
     }
-    const conversation = new Conversation(`c${convSeq++}`, agent.id);
+    const conversation = new Conversation(agent.id);
+    conversation.registered.value = true;
     conversation.provider.value = agent.provider;
     conversation.harness.value = agent.harness;
     conversation.account.value = agent.account ?? rememberedAccountFor(agent.provider);
@@ -1050,13 +1009,11 @@ export const openAgentConversation = (agent: {
             harness: agent.harness,
         };
     }
-    conversations.value = [...conversations.value, conversation];
-    activeId.value = conversation.id;
+    setConversations([...conversations.value, conversation], conversation.conversationId);
     // The agent may be mid-turn right now — attach and render it live (the head synthesizes the prompt
     // bubble). Marked as hydrating so the restore watch above doesn't race a second attach; an idle agent's
     // probe just 404s and its stored transcript is replayed instead.
-    hydrating.add(conversation);
-    void hydrate(conversation);
+    hydrateOnce(conversation);
     return conversation;
 };
 
@@ -1064,12 +1021,11 @@ export const openAgentConversation = (agent: {
 const openConversation = async (id: string): Promise<void> => {
     const existing = conversations.value.find((conversation) => conversation.session.value?.id === id);
     if (existing) {
-        activeId.value = existing.id;
+        setActive(existing.conversationId);
         return;
     }
-    const conversation = new Conversation(`c${convSeq++}`);
-    conversations.value = [...conversations.value, conversation];
-    activeId.value = conversation.id;
+    const conversation = new Conversation();
+    setConversations([...conversations.value, conversation], conversation.conversationId);
     const restored = await fetchTranscript(conversation, id);
     if (restored !== undefined) {
         conversation.loadTranscript(restored, id, sessions.value.find((session) => session.id === id)?.title ?? null);
@@ -1112,8 +1068,7 @@ watch([reachable, conversations], ([isReachable]) => {
         if ((conversation.messages.value.length > 0 && !painted.has(conversation)) || conversation.streaming.value || hydrating.has(conversation)) {
             continue;
         }
-        hydrating.add(conversation);
-        void hydrate(conversation);
+        hydrateOnce(conversation);
     }
 });
 

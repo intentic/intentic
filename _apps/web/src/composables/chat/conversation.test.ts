@@ -689,6 +689,64 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value[1]!.question).toMatchObject({ status: `answered`, answers: { "Which?": [`A`] } });
     });
 
+    it(`dismissing a question stops the turn: the fork the agent could not call is not one it may now guess at`, async () => {
+        const conversation = new Conversation(`c1`);
+        const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `question`, requestId: `q1`, questions }], { stayOpen: true }));
+
+        const turn = conversation.send(`ask me`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        // Queued behind the card: a stopped turn must not fire it, the way an answered one would.
+        await conversation.enqueue(`and then the docs`);
+        await conversation.cancelQuestion(conversation.messages.value.find((message) => message.question !== undefined)!);
+        await turn;
+
+        const paths = sandboxRequestMock.mock.calls.map(([path]) => path);
+        expect(paths).toContain(`/agent/reply`);
+        expect(paths).toContain(`/agent/stop`);
+        expect(conversation.messages.value.find((message) => message.question !== undefined)!.question).toMatchObject({ status: `cancelled` });
+        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.error.value).toBeNull();
+        expect(conversation.messages.value.slice(-2)).toMatchObject([
+            { role: `notice`, text: `Question dismissed.` },
+            { role: `notice`, text: `Stopped.` },
+        ]);
+        expect(turnBodies()).toHaveLength(1);
+        expect(conversation.queued.value).toMatchObject([{ text: `and then the docs` }]);
+    });
+
+    it(`denying a permission stops the turn, and allowing one leaves it running`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse(
+                [
+                    { kind: `permission`, requestId: `p1`, toolName: `Bash` },
+                    { kind: `permission`, requestId: `p2`, toolName: `Write` },
+                ],
+                { stayOpen: true },
+            ),
+        );
+
+        const turn = conversation.send(`run it`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+
+        // Re-read per assertion: deciding a card replaces its message rather than mutating it.
+        const cards = (): ChatMessage[] => conversation.messages.value.filter((message) => message.permission !== undefined);
+        const [allowed, denied] = cards();
+        // An allow is the turn carrying on with the user's blessing — nothing to stop.
+        await conversation.decidePermission(allowed!, `once`);
+        expect(conversation.streaming.value).toBe(true);
+        expect(sandboxRequestMock.mock.calls.map(([path]) => path)).not.toContain(`/agent/stop`);
+
+        await conversation.decidePermission(denied!, `deny`);
+        await turn;
+
+        expect(sandboxRequestMock.mock.calls.map(([path]) => path)).toContain(`/agent/stop`);
+        expect(cards().map((card) => card.permission!.status)).toEqual([`allowed`, `denied`]);
+        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Stopped.` });
+    });
+
     it(`surfaces daemon error frames and ignores unfamiliar kinds`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

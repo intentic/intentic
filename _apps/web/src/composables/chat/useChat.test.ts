@@ -14,21 +14,38 @@ vi.mock("../sandbox/useSandbox", async () => {
     return { useSandbox: () => ({ activeSandboxId, reachable }) };
 });
 
-// The node test environment has no localStorage; the tab snapshot round-trips need one.
-const storage = new Map<string, string>();
-Object.defineProperty(globalThis, `localStorage`, {
-    configurable: true,
-    value: {
-        getItem: (key: string) => storage.get(key) ?? null,
-        setItem: (key: string, value: string) => void storage.set(key, value),
-        removeItem: (key: string) => void storage.delete(key),
-        clear: () => storage.clear(),
+// The node test environment has neither storage; the tab snapshot round-trips need both — sessionStorage is
+// where a window's own tabs live and localStorage is the seed a fresh window starts from (see tabSnapshot).
+const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {
+    const entries = new Map<string, string>();
+    Object.defineProperty(globalThis, name, {
+        configurable: true,
+        value: {
+            getItem: (key: string) => entries.get(key) ?? null,
+            setItem: (key: string, value: string) => void entries.set(key, value),
+            removeItem: (key: string) => void entries.delete(key),
+            clear: () => entries.clear(),
+        },
+    });
+    return entries;
+};
+const local = store(`localStorage`);
+const session = store(`sessionStorage`);
+const storage = {
+    clear: (): void => {
+        local.clear();
+        session.clear();
     },
-});
+    set: (key: string, value: string): void => {
+        local.set(key, value);
+        session.set(key, value);
+    },
+};
 
 const { sandboxJson, sandboxRequest } = await import("../sandbox/sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
 const sandboxJsonMock = vi.mocked(sandboxJson);
+const { useSandbox } = await import("../sandbox/useSandbox");
 const { loadAccountStatus, openAgentConversation, resetChat, useChat } = await import("./useChat");
 const { usageStatusByAccount } = await import("./usageStatus");
 
@@ -155,7 +172,7 @@ describe(`per-tab drafts`, () => {
 
     it(`keeps each tab's draft through new-tab and switching back`, () => {
         const chat = useChat();
-        const first = chat.active.value.id;
+        const first = chat.active.value.conversationId;
         chat.draft.value = `hello A`;
 
         chat.newChat();
@@ -204,6 +221,75 @@ describe(`per-tab drafts`, () => {
     });
 });
 
+/* A tab set belongs to the WINDOW it is open in, and the app is used in several at once — the daemon
+ * multiplexes attach streams and the presence roster counts viewers per connection precisely so it can be.
+ * While every window rewrote one shared key on every keystroke and streamed title, the last writer won: after
+ * a reload (the dev server's live-reload reloads them all at once) a window came back wearing another
+ * window's tabs — unfamiliar names, transcripts it had never cached, and a tab it had just closed back on the
+ * strip because a window that still had it open wrote it again. */
+describe(`tab snapshots across windows and sandboxes`, () => {
+    // What another window would leave in the shared seed: a snapshot naming conversations by id.
+    const foreignSnapshot = (active: string, ids: readonly string[]): string =>
+        JSON.stringify({ active, tabs: ids.map((conversationId) => ({ conversationId, isolated: true, draft: ``, attachments: [], queued: [] })) });
+
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+    });
+
+    it(`keeps a tab this window closed closed, whatever another window writes afterwards`, async () => {
+        const chat = useChat();
+        const kept = chat.active.value.conversationId;
+        const closed = chat.newChat().conversationId;
+        await nextTick();
+
+        chat.closeTabs(new Set([closed]));
+        await nextTick();
+
+        // The other window is still on the pre-close set and persists it on its next change.
+        local.set(`intentic.chatTabs.sb1`, foreignSnapshot(closed, [kept, closed]));
+
+        resetChat(); // a reload — the live-reload's or the user's
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([kept]);
+    });
+
+    // The seed is what makes "open the app, your chats are still there" survive closing the browser, so a
+    // window that has never opened this sandbox does adopt the last session's tabs.
+    it(`seeds a window with no tabs of its own from the last session's snapshot`, () => {
+        session.clear();
+        local.set(`intentic.chatTabs.sb1`, foreignSnapshot(`conv-b`, [`conv-a`, `conv-b`]));
+
+        resetChat();
+        const chat = useChat();
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([`conv-a`, `conv-b`]);
+        expect(chat.activeId.value).toBe(`conv-b`);
+    });
+
+    /* The switch flips activeSandboxId a flush before sandboxScope's watch re-scopes the chat. Anything that
+     * changes a tab inside that window — a keystroke, a streamed title landing on a background tab — used to
+     * write the OUTGOING sandbox's tabs under the INCOMING sandbox's key, which restoreTabs then read back one
+     * line later as if they were its own: a strip full of another sandbox's chats, every one of them empty
+     * because their conversations live on a daemon this sandbox has never spoken to. */
+    it(`writes a tab snapshot under the sandbox its tabs came from, never the one being switched to`, async () => {
+        const chat = useChat();
+        const { activeSandboxId } = useSandbox();
+        chat.draft.value = `still typing in sandbox one`;
+        await nextTick();
+
+        activeSandboxId.value = `sb2`;
+        chat.draft.value = `still typing in sandbox one, mid-switch`;
+        await nextTick();
+
+        resetChat(); // sandboxScope's watch, one flush later
+        expect(chat.conversations.value).toHaveLength(1);
+        expect(chat.draft.value).toBe(``);
+
+        activeSandboxId.value = `sb1`;
+        resetChat();
+        expect(chat.draft.value).toBe(`still typing in sandbox one, mid-switch`);
+    });
+});
+
 /* The strip's close sets (the tab ×, and the right-click menu's Close Others / Close to the Right / Close All)
  * all land here. The invariant the menu leans on: the strip is never left empty, and focus only moves when the
  * tab that had it is one of the closed ones. */
@@ -216,7 +302,7 @@ describe(`closing tabs`, () => {
     // Four tabs, the third active — the shape every case below closes a different slice out of.
     const openFour = (): readonly string[] => {
         const chat = useChat();
-        const ids = [chat.active.value.id, chat.newChat().id, chat.newChat().id, chat.newChat().id];
+        const ids = [chat.active.value.conversationId, chat.newChat().conversationId, chat.newChat().conversationId, chat.newChat().conversationId];
         chat.setActive(ids[2]!);
         return ids;
     };
@@ -227,7 +313,7 @@ describe(`closing tabs`, () => {
 
         chat.closeTabs(new Set([ids[0]!]));
 
-        expect(chat.conversations.value.map((c) => c.id)).toEqual([ids[1], ids[2], ids[3]]);
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[1], ids[2], ids[3]]);
         expect(chat.activeId.value).toBe(ids[2]); // untouched — it wasn't in the set
     });
 
@@ -238,7 +324,7 @@ describe(`closing tabs`, () => {
         // active one, so the active tab is among the closed and focus has to move.
         chat.closeTabs(new Set([ids[1]!, ids[2]!, ids[3]!]));
 
-        expect(chat.conversations.value.map((c) => c.id)).toEqual([ids[0]]);
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]]);
         expect(chat.activeId.value).toBe(ids[0]);
     });
 
@@ -248,7 +334,7 @@ describe(`closing tabs`, () => {
 
         chat.closeTabs(new Set([ids[2]!, ids[3]!])); // to the right of the second tab
 
-        expect(chat.conversations.value.map((c) => c.id)).toEqual([ids[0], ids[1]]);
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[1]]);
         expect(chat.activeId.value).toBe(ids[1]); // the active tab went; focus falls to the last remaining one
     });
 
@@ -260,8 +346,8 @@ describe(`closing tabs`, () => {
         chat.closeTabs(new Set(ids));
 
         expect(chat.conversations.value).toHaveLength(1);
-        expect(chat.conversations.value[0]!.id).not.toBeOneOf([...ids]);
-        expect(chat.activeId.value).toBe(chat.conversations.value[0]!.id);
+        expect(chat.conversations.value[0]!.conversationId).not.toBeOneOf([...ids]);
+        expect(chat.activeId.value).toBe(chat.conversations.value[0]!.conversationId);
         expect(chat.draft.value).toBe(``);
     });
 
@@ -271,8 +357,22 @@ describe(`closing tabs`, () => {
 
         chat.closeTabs(new Set([`c999`]));
 
-        expect(chat.conversations.value.map((c) => c.id)).toEqual(ids);
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual(ids);
         expect(chat.activeId.value).toBe(ids[2]);
+    });
+
+    // A click carrying a dead id (a strip that hasn't repainted since the tab went, another surface holding an
+    // id from before a reset) must not move the focus: `active` falls back to the FIRST tab, so writing it
+    // would surface a chat nobody asked for while the strip highlights none of them.
+    it(`ignores a click on a tab that is no longer open`, () => {
+        const chat = useChat();
+        const ids = openFour();
+        chat.closeTabs(new Set([ids[0]!]));
+
+        chat.setActive(ids[0]!);
+
+        expect(chat.activeId.value).toBe(ids[2]);
+        expect(chat.active.value.conversationId).toBe(ids[2]);
     });
 });
 
