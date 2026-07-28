@@ -1,4 +1,5 @@
 import { watch } from "vue";
+import { resetAgents } from "../agents/useAgents";
 import { loadAccountStatus, resetChat } from "../chat/useChat";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { resetPresence } from "../usePresence";
@@ -26,6 +27,12 @@ watch(activeSandboxId, (id, previous) => {
     resetWorkspaceTreeState();
     // The roster belongs to the daemon it came from; the new sandbox's stream repaints it on connect.
     resetPresence();
+    // Same for the fleet — and it can't be left to the liveness loop, which only clears it when a stream FAILS
+    // and stands down entirely when the failure was this switch aborting it. What survived was not just stale
+    // cards: the applied registry revision came along too, so an incoming daemon whose counter starts lower
+    // (a fresh container, a restart) had every roster frame it sent dropped as out-of-order, leaving the
+    // previous sandbox's agents on the board and its titles renaming this sandbox's tabs.
+    resetAgents();
 });
 
 // Account status lives on the daemon, so (re)load it whenever the ACTIVE daemon is reachable: first liveness

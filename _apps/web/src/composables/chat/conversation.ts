@@ -465,14 +465,11 @@ export class Conversation {
     // instead of a browser frame.
     private rafId: number | null = null;
 
-    // `id` is the ephemeral tab id (c1, c2, … — never persisted); `conversationId` is the STABLE identity the
-    // daemon keys the fleet registry entry and the worktree on. It survives provider/harness switches (which
-    // retire sessions) and reloads (persisted in the tab snapshot), and its shape satisfies the wire's
-    // branch/path-safety regex (a UUID: hex + hyphens, starts alphanumeric).
-    constructor(
-        readonly id: string,
-        readonly conversationId: string = crypto.randomUUID(),
-    ) {
+    // `conversationId` is the conversation's whole identity — the key the daemon puts on the fleet registry
+    // entry and the worktree, the strip puts on the tab, and the transcript mirror puts on the cache entry. It
+    // survives provider/harness switches (which retire sessions) and reloads (persisted in the tab snapshot),
+    // and its shape satisfies the wire's branch/path-safety regex (a UUID: hex + hyphens, starts alphanumeric).
+    constructor(readonly conversationId: string = crypto.randomUUID()) {
         // A restored 'max' can be invalid two ways — Codex/Grok have no such tier, and Claude's API rejects it
         // with thinking off — and turnDefaults persists BOTH halves, so an unclamped pair would fail every turn
         // of every new conversation until the user happened to change one. The model is already provider-correct

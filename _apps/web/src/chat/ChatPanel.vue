@@ -755,7 +755,7 @@ onMounted(() => {
 
 // A tab switch swaps a possibly multi-line draft under the textarea — re-size it to the new content.
 watch(
-    () => active.value.id,
+    () => active.value.conversationId,
     () => void nextTick(grow),
 );
 

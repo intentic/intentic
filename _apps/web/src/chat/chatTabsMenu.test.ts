@@ -103,7 +103,7 @@ const openStripMenu = async (): Promise<void> => {
 
 it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () => {
     const chat = useChat();
-    const ids = [chat.active.value.id, chat.newChat().id, chat.newChat().id, chat.newChat().id];
+    const ids = [chat.active.value.conversationId, chat.newChat().conversationId, chat.newChat().conversationId, chat.newChat().conversationId];
     chat.setActive(ids[3]!); // the LAST tab is active — every close below is aimed elsewhere
     await nextTick();
     expect(tabs()).toHaveLength(4);
@@ -113,14 +113,14 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
     expect(labels()).toEqual([`Rename`, `Close`, `Close Others`, `Close to the Right`, `Close All`, `Move chat into new window`]);
     await clickRow(`Close to the Right`);
 
-    expect(chat.conversations.value.map((c) => c.id)).toEqual([ids[0], ids[1]]);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[1]]);
     // The active tab was one of the closed ones, so focus falls to the last survivor.
     expect(chat.activeId.value).toBe(ids[1]);
 
     // Right-click the FIRST tab: "Close Others" keeps that one, not the active one.
     await openMenuOn(0);
     await clickRow(`Close Others`);
-    expect(chat.conversations.value.map((c) => c.id)).toEqual([ids[0]]);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]]);
     expect(chat.activeId.value).toBe(ids[0]);
 });
 
@@ -146,7 +146,7 @@ it(`teaches the shortcut a close command is bound to, and disables the rows with
 
 it(`offers the tab-less rows from the empty strip's menu instead of popping out on the right-click itself`, async () => {
     const chat = useChat();
-    const ids = [chat.active.value.id, chat.newChat().id];
+    const ids = [chat.active.value.conversationId, chat.newChat().conversationId];
     await nextTick();
 
     // The gesture used to toggle the pop-out on the spot, which tore the panel into its own window on a
@@ -159,7 +159,7 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
     // Close All means here what it means on a tab: the strip comes back as one fresh conversation.
     await clickRow(`Close All`);
     expect(chat.conversations.value).toHaveLength(1);
-    expect(chat.conversations.value[0]!.id).not.toBeOneOf(ids);
+    expect(chat.conversations.value[0]!.conversationId).not.toBeOneOf(ids);
 
     // The pop-out row still pops out — the menu is a step in front of the gesture, not a replacement for it.
     await openStripMenu();
@@ -169,7 +169,7 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
 
 it(`holds a mass close at a confirm when it would abort a running agent`, async () => {
     const chat = useChat();
-    const ids = [chat.active.value.id, chat.newChat().id];
+    const ids = [chat.active.value.conversationId, chat.newChat().conversationId];
     // The second tab is mid-turn: closing it aborts an agent that is still working, which is why the mass closes
     // ask first (the single × doesn't — that tab is on screen, pulsing).
     chat.conversations.value[1]!.streaming.value = true;
@@ -179,10 +179,10 @@ it(`holds a mass close at a confirm when it would abort a running agent`, async 
     await clickRow(`Close Others`);
 
     // Still two tabs: the confirm is up and nothing has been closed yet.
-    expect(chat.conversations.value.map((c) => c.id)).toEqual(ids);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual(ids);
     expect(document.querySelector(`.p-dialog`)?.textContent).toContain(`Stop the running agent?`);
 
     [...document.querySelectorAll<HTMLElement>(`.p-dialog button`)].find((button) => button.textContent?.includes(`Close anyway`))!.click();
     await flush();
-    expect(chat.conversations.value.map((c) => c.id)).toEqual([ids[0]]);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]]);
 });

@@ -100,7 +100,7 @@ describe("roster titles", () => {
     });
 
     it("repaints an open tab when the daemon promotes its title", async () => {
-        const conversation = new Conversation(`c1`, `a1`);
+        const conversation = new Conversation(`a1`);
         conversation.title.value = `The login page throws on submit`;
         useChat().conversations.value = [conversation];
 
@@ -113,7 +113,7 @@ describe("roster titles", () => {
     it("leaves a tab that named itself alone while its entry carries no title", async () => {
         // A draft's first turn has not begun, so the roster knows the conversation without knowing its name —
         // adopting that absence would blank a tab the browser had already titled from the prompt.
-        const conversation = new Conversation(`c1`, `a1`);
+        const conversation = new Conversation(`a1`);
         conversation.title.value = `The login page throws on submit`;
         useChat().conversations.value = [conversation];
 

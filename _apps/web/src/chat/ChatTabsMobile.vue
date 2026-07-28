@@ -19,7 +19,7 @@ const emit = defineEmits<{
 }>();
 
 const { conversations, activeId, sessions, loadSessions } = useChat();
-const active = computed(() => conversations.value.find((c) => c.id === activeId.value));
+const active = computed(() => conversations.value.find((c) => c.conversationId === activeId.value));
 
 const sheetOpen = ref(false);
 
@@ -73,14 +73,14 @@ const openFromHistory = (id: string): void => {
             <div class="flex flex-col gap-0.5">
                 <button
                     v-for="c in conversations"
-                    :key="c.id"
+                    :key="c.conversationId"
                     type="button"
                     class="flex h-12 items-center gap-2.5 rounded-lg px-2 text-left transition-colors active:bg-overlay"
-                    :class="{ 'bg-primary-600/15': activeId === c.id }"
-                    @click="pick(c.id)"
+                    :class="{ 'bg-primary-600/15': activeId === c.conversationId }"
+                    @click="pick(c.conversationId)"
                 >
                     <Icon v-bind="statusIcon(c.status.value)" />
-                    <span class="min-w-0 flex-1 truncate text-sm" :class="activeId === c.id ? 'text-link' : 'text-content'">{{
+                    <span class="min-w-0 flex-1 truncate text-sm" :class="activeId === c.conversationId ? 'text-link' : 'text-content'">{{
                         c.title.value ?? (c.isolated.value ? "New agent" : "New chat")
                     }}</span>
                     <PresenceAvatars v-if="c.session.value !== undefined" :viewers="viewersOfSession(c.session.value.id)" label="in this chat" />
@@ -89,7 +89,7 @@ const openFromHistory = (id: string): void => {
                         v-if="conversations.length > 1"
                         role="button"
                         class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-subtle active:bg-content/10"
-                        @click.stop="emit('close', new Set([c.id]))"
+                        @click.stop="emit('close', new Set([c.conversationId]))"
                         aria-label="Close chat"
                     >
                         <Icon name="times" class="text-xs" />
