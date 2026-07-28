@@ -9,7 +9,10 @@ vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../analytics", () => ({ track: vi.fn() }));
 vi.mock("../sandbox/useSandbox", async () => {
     const { ref } = await import("vue");
-    return { useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }) };
+    return {
+        useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
+        sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
+    };
 });
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
 
@@ -18,6 +21,7 @@ import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { nextTick } from "vue";
 import { Conversation } from "../chat/conversation";
 import { useChat } from "../chat/useChat";
+import { queryClient } from "../queryPersistence";
 import { canArchive, laneOf, resetAgents, setAgents, useAgents } from "./useAgents";
 
 // The kanban lane projection — pure over status + attention, so "finished" needs no explicit action:
@@ -121,6 +125,57 @@ describe("roster titles", () => {
         await nextTick();
 
         expect(conversation.title.value).toBe(`The login page throws on submit`);
+    });
+});
+
+/* The review panel's diff query is pull-only while the roster is push-fed, so a status transition is the one
+ * signal that a land performed elsewhere — the auto-land at turn completion, another device's button — changed
+ * what that query holds. Without it the header said "Landed" over a review still counting every file as
+ * pending, with Land now armed. */
+describe("diff invalidation", () => {
+    // seenAt outruns updatedAt so nothing here reads as unread — the markSeen watcher must stay out of a
+    // suite that is about cache invalidation, not read markers.
+    const summary = (id: string, status: AgentSummary["status"]): AgentSummary => ({
+        id,
+        status,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 1_000,
+        seenAt: 2_000,
+        attention: { plan: false, question: false, permission: false, conflict: false },
+    });
+
+    beforeEach(() => {
+        resetAgents();
+    });
+
+    it("invalidates an agent's diff on a status transition — the auto-land flip this browser never performed", () => {
+        setAgents([summary(`a1`, `running`)], 1);
+        const invalidate = vi.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
+
+        setAgents([summary(`a1`, `landed`)], 2);
+
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents`, `a1`, `diff`, `sbx-1`] });
+        invalidate.mockRestore();
+    });
+
+    it("stays quiet across frames that only tick activity — a running turn must not hammer the diff", () => {
+        setAgents([summary(`a1`, `running`)], 1);
+        const invalidate = vi.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
+
+        setAgents([{ ...summary(`a1`, `running`), updatedAt: 2_000 }], 2);
+
+        expect(invalidate).not.toHaveBeenCalled();
+        invalidate.mockRestore();
+    });
+
+    it("treats an unseen id as a transition — a reconnect's first snapshot may carry a land that happened offline", () => {
+        const invalidate = vi.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
+
+        setAgents([summary(`a1`, `landed`)], 0);
+
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents`, `a1`, `diff`, `sbx-1`] });
+        invalidate.mockRestore();
     });
 });
 

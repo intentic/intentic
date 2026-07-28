@@ -261,8 +261,9 @@ watch(
 );
 
 // --- Pinned state (see .chat-prompt-pinned) ----------------------------------------------------
-// CSS has no way to ask whether a sticky element is currently stuck, and the seam below a prompt must only be
-// drawn while it is — unpinned it lies over the answer below and dims it. The row is offset by a pixel above
+// CSS has no way to ask whether a sticky element is currently stuck, and the shadow under a prompt must only
+// be drawn while it is — on an in-flow row it would read as a card floating over the transcript. The row is
+// offset by a pixel above
 // the scroller's top edge (`top: -1px`), so the moment it pins that pixel is clipped and the ratio drops below
 // 1. The observer is rooted at the transcript scroller, the only scrolling ancestor the pin is relative to.
 const row = ref<HTMLElement>();
@@ -287,10 +288,25 @@ watch(
 
 // A clamped box has no scrollbar and cannot be scrolled by hand, so any scroll it reports came from the
 // browser revealing something inside it — find-in-page landing on a match below the fold, or a screen reader
-// moving to it. Both mean the same thing: open the message, and put the box back where it belongs.
+// moving to it. Both mean the same thing: open the message, and put the box back where it belongs. An OPEN
+// box is different — it owns a real scrollbar (see .chat-prompt-open), so its scrolls are the user reading
+// and must be left alone.
 const onBubbleScroll = (): void => {
+    if (expanded.value) {
+        return;
+    }
     if (bubble.value !== undefined && bubble.value.scrollTop > 0) {
         expanded.value = true;
+        bubble.value.scrollTop = 0;
+    }
+};
+
+const toggleExpanded = (): void => {
+    expanded.value = !expanded.value;
+    // Fold back up showing the top, and do it NOW, before Vue re-applies the clamp: a leftover offset from
+    // reading inside the open bubble would be clamped by the relayout, and that fires the very scroll event
+    // onBubbleScroll reads as find-in-page — reopening the message the click just closed.
+    if (!expanded.value && bubble.value !== undefined) {
         bubble.value.scrollTop = 0;
     }
 };
@@ -371,7 +387,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
         :class="{
             'chat-prompt items-end': message.role === 'user',
             'chat-prompt-open': expanded,
-            'chat-prompt-pinned': pinned && !expanded,
+            'chat-prompt-pinned': pinned,
         }"
         @click="onMarkdownClick"
     >
@@ -444,16 +460,17 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 <div
                     v-if="message.text"
                     ref="bubble"
-                    class="chat-prompt-text chat-surface whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content"
+                    class="chat-prompt-text chat-surface scrollbar-thin whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content"
                     :class="{ 'chat-prompt-clamped': overflowing && !expanded }"
                     @scroll="onBubbleScroll"
                 >
                     {{ message.text }}
                 </div>
             </div>
-            <!-- Only for a prompt the clamp actually cut. Opening it also unpins it, so a long message can be
-                 read in full without taking the screen over for the rest of the turn. -->
-            <button v-if="overflowing" type="button" class="composer-ghost h-5 gap-1 px-1.5 text-2xs" @click="expanded = !expanded">
+            <!-- Only for a prompt the clamp actually cut. Opening does NOT unpin: wanting the whole prompt
+                 while its answer streams beneath is exactly what the pin is for — past its cap the open
+                 bubble scrolls internally instead of taking the panel over (see .chat-prompt-open). -->
+            <button v-if="overflowing" type="button" class="composer-ghost h-5 gap-1 px-1.5 text-2xs" @click="toggleExpanded">
                 {{ expanded ? `Show less` : `Show more` }}
                 <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
             </button>

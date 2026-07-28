@@ -28,30 +28,20 @@
     background: var(--color-card);
     content-visibility: visible;
 }
-/* The seam, and ONLY while the row is actually pinned. That opaque background is a rectangle ending at the
-   row's own last pixel, so the turn sliding beneath a pinned prompt was cut off mid-glyph against a hard
-   horizontal edge — which reads as a rendering fault rather than as one layer passing under another. A
-   card-to-transparent ramp below the row gives the text somewhere to go.
-   Unpinned it is not free, which is why it is gated: the ramp is painted over the NEXT message (the row is a
-   z-index 5 layer), and the assistant's surface is translucent over the card, so an always-on ramp washed the
-   top of every answer out — the whole turn read dimmer than the prompt heading it. The stops ease the fade
-   instead of running alpha linearly: a straight ramp holds ~50% card across its middle, which is exactly the
-   half-erased smear that made a passing line look broken rather than covered. */
-.chat-prompt-pinned::after {
-    content: "";
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    height: 1.25rem;
-    background: linear-gradient(
-        to bottom,
-        var(--color-card) 0%,
-        color-mix(in srgb, var(--color-card) 78%, transparent) 30%,
-        color-mix(in srgb, var(--color-card) 30%, transparent) 62%,
-        transparent 100%
-    );
-    pointer-events: none;
+/* The depth cue, and ONLY while the row is actually pinned. That opaque background is a rectangle ending at
+   the row's own last pixel, so the turn sliding beneath a pinned prompt was cut off mid-glyph against a bare
+   horizontal edge — which reads as a rendering fault rather than as one layer passing under another. A short
+   drop shadow names the edge: this surface sits ABOVE the one scrolling past. It replaced a card-to-
+   transparent gradient painted over the answer, which in dark mode read as a fog bank smearing the first
+   lines of every reply. Gated because a shadow under an in-flow row would float the prompt over a transcript
+   it is supposed to sit in. */
+.chat-prompt-pinned {
+    box-shadow: 0 4px 8px -4px rgb(0 0 0 / 0.16);
+}
+/* Dark surfaces swallow soft black: the same shadow needs roughly triple the alpha to register against
+   surface-900 that 16% reaches against white. */
+[data-mode="dark"] .chat-prompt-pinned {
+    box-shadow: 0 4px 10px -4px rgb(0 0 0 / 0.5);
 }
 /* A prompt is pinned for as long as its answer runs, so its height is charged against the room that answer has
    to be read in — and an unbounded one (a pasted spec, a continued transcript) took half the panel for the
@@ -65,25 +55,36 @@
    leading-relaxed px-3 py-2`, so its line box is 1.625 × --text-xs and its padding is 1rem. A literal height
    silently becomes five-and-a-bit lines the next time that token moves. */
 .chat-prompt-text {
+    position: relative; /* anchors the clamp fade below; offset-free, so it costs nothing in the open state */
     max-height: calc(6 * 1.625 * var(--text-xs) + 1rem);
     overflow: hidden;
 }
 /* The "there is more of this" fade, applied only to a prompt the clamp actually cut (ChatMessageView measures
-   it). A mask erases the ELEMENT, not just its text — background and rounded border included — so on a message
-   that fits, this used to dissolve the bottom of the bubble itself: the border faded out mid-curve and whatever
-   sat below showed through it, which reads as a shadow bleeding over the edge rather than as text continuing
-   past a fold. A one-line prompt is barely taller than the fade, so most of it went dim. */
-.chat-prompt-clamped {
-    mask-image: linear-gradient(to bottom, #000 calc(100% - 1.75rem), transparent);
+   it). An overlay INSIDE the bubble rather than a mask on it: a mask erases the ELEMENT — rounded border and
+   background included — so the bubble's bottom edge dissolved mid-curve and whatever sat below showed through
+   it, reading as a shadow bleeding over the edge rather than as text continuing past a fold. The overlay fades
+   the text into the bubble's resting colour and leaves the box crisp. That colour is mixed by hand because
+   .chat-surface is a translucent wash: what the eye sees is the wash composited over the card everything in
+   the panel sits on — the same mix pinned (the row's own card backdrop) or in flow (the scroller's). */
+.chat-prompt-clamped::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 1.75rem;
+    border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
+    background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-overlay) 55%, var(--color-card)));
+    pointer-events: none;
 }
-/* Opening a prompt is a deliberate "I want to read this again", and one that stayed pinned while open would
-   hand back the problem the clamp exists to solve — so an open prompt stops pinning and scrolls away like any
-   other message. Still positioned, because ::after above anchors to it. */
-.chat-prompt-open {
-    position: relative;
-}
+/* Opening a prompt is a deliberate "I want to read this again" — asked, more often than not, while the answer
+   to it is streaming underneath, which is precisely when the pin earns its keep. So an open prompt STAYS
+   sticky (unpinning here scrolled the very text the click asked for straight out of the viewport); what it may
+   not do is take the panel, so the bubble caps at 45dvh and scrolls on its own past that — even a pasted spec
+   leaves the answer readable below it. The cap is unconditional for the same reason the six-line clamp is
+   (above): a height that changed at the pin threshold would yank the transcript by the difference. */
 .chat-prompt-open .chat-prompt-text {
-    max-height: none;
+    max-height: 45dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 .chat-surface {
     background: color-mix(in srgb, var(--color-overlay) 55%, transparent);

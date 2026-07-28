@@ -30,6 +30,10 @@ export interface AgentWorktrees {
     readonly worktreeDir: (id: string, repo: string) => string;
     readonly mainDir: (repo: string) => string;
     readonly exists: (id: string) => Promise<boolean>;
+    // Is this repo's checkout actually on disk? `archivedAt` cannot answer it: a restored agent keeps the
+    // marker clear while its checkout stays retired until the next turn's ensure() re-attaches it. Diff,
+    // fileDiff and land all branch on this — the checkout when it is there, the branch refs when it is not.
+    readonly attached: (id: string, repo: string) => Promise<boolean>;
     // Create the composition on first use (recorded = []), else repair what the recorded composition names.
     readonly ensure: (id: string, recorded: readonly { repo: string; base: string }[]) => Promise<ConversationWorktree>;
     // Tear down: worktree remove (before branch -D — git refuses to delete a checked-out branch), then the dir.
@@ -239,6 +243,7 @@ export const createAgentWorktrees = (
         worktreeDir,
         mainDir,
         exists: (id) => exists(conversationDir(id)),
+        attached: (id, repo) => exists(join(worktreeDir(id, repo), ".git")),
         ensure: async (id, recorded) => {
             const branch = `agent/${id}`;
             if (recorded.length > 0) {

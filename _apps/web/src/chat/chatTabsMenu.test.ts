@@ -4,7 +4,8 @@
 // Close / Close Others / Close to the Right / Close All for a while, and a chat tab now offers the same set.
 // Mounted rather than unit-tested against the store, because the interesting part is the wiring — which tab the
 // menu acts on (the RIGHT-CLICKED one, not the active one), which rows go disabled at the ends of the strip, and
-// that a mass close with a running agent in it stops at a confirm instead of aborting the turn.
+// that a mass close fires with no confirm even over a running agent — closing detaches from the turn
+// (Conversation.abort is soft), it doesn't stop it.
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
 
@@ -46,7 +47,7 @@ let resetChat: typeof import("../composables/chat/useChat").resetChat;
 
 // Mounted ONCE for the file: ChatTabs registers the chat.* commands on mount and the registry throws on a
 // duplicate id, so each test resets the conversation list instead of remounting. installUi rather than
-// startAgent.test.ts's stub Icon — the menu and its confirm ARE PrimeVue overlays, so they need the real plugin.
+// startAgent.test.ts's stub Icon — the menu IS a PrimeVue overlay, so it needs the real plugin.
 // `onClose` is the one line ChatPanel adds around the store call (it also re-pins the transcript scroller).
 beforeAll(async () => {
     const ChatTabs = (await import(`./ChatTabs.vue`)).default;
@@ -167,22 +168,17 @@ it(`offers the tab-less rows from the empty strip's menu instead of popping out 
     expect(requestWindow).toHaveBeenCalled();
 });
 
-it(`holds a mass close at a confirm when it would abort a running agent`, async () => {
+it(`mass closes past a running agent with no confirm — closing detaches from the turn, it doesn't stop it`, async () => {
     const chat = useChat();
     const ids = [chat.active.value.conversationId, chat.newChat().conversationId];
-    // The second tab is mid-turn: closing it aborts an agent that is still working, which is why the mass closes
-    // ask first (the single × doesn't — that tab is on screen, pulsing).
+    // The second tab is mid-turn. Its run is detached daemon-side, so closing the tab leaves the agent working
+    // and the chat reopenable from History mid-turn — there is nothing to warn about.
     chat.conversations.value[1]!.streaming.value = true;
     await nextTick();
 
     await openMenuOn(0);
     await clickRow(`Close Others`);
 
-    // Still two tabs: the confirm is up and nothing has been closed yet.
-    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual(ids);
-    expect(document.querySelector(`.p-dialog`)?.textContent).toContain(`Stop the running agent?`);
-
-    [...document.querySelectorAll<HTMLElement>(`.p-dialog button`)].find((button) => button.textContent?.includes(`Close anyway`))!.click();
-    await flush();
+    expect(document.querySelector(`.p-dialog`)).toBeNull();
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]]);
 });

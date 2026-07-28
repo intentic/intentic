@@ -33,6 +33,7 @@ import { startTurnRun, turnRunOf } from "./turn-runs.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
 import { delegationNote } from "./delegation.js";
+import { withTurnPreamble } from "./turn-preamble.js";
 
 // Fold attached-file paths into the prompt — Claude Code's canonical attachment mechanism (its Read tool
 // handles images and PDFs from disk natively, same as dragging a file into the CLI). An empty prompt is the
@@ -182,6 +183,12 @@ async function* runConversationTurn(
         const finished = services.agents.entry(conversationId);
         if (!failed && signal?.aborted !== true && finished !== undefined) {
             const landed = await landAgent(services.agentWorktrees, finished);
+            if (!landed.changed && landed.diff.files > 0) {
+                // Nothing NEW to land, but the agent's cumulative output exists and is all accounted for in
+                // the main tree — a follow-up turn that only answered a question must not downgrade the card
+                // from Landed to Idle. No frame and no chore: nothing moved.
+                outcome = "landed";
+            }
             if (landed.changed) {
                 await services.agents.recordLanded(conversationId, landed);
                 outcome = landed.landed ? "landed" : "conflict";
@@ -493,8 +500,12 @@ async function* runTurn(
         // name, and a post-edit type-check whose every error is false. Rides the USER message, never systemAppend:
         // it changes the moment an install finishes, and the system prefix is kept byte-stable for the prompt cache.
         const setupNotice = setupNoticeFor(await workspaceSetup(effectiveCwd, services.processes));
-        const preamble = [...(stableSystemPrompt && note !== undefined ? [note] : []), ...(setupNotice !== undefined ? [setupNotice] : [])];
-        const prompt = preamble.length > 0 ? `${preamble.join("\n\n")}\n\n---\n\n${promptWithAttachments}` : promptWithAttachments;
+        // withTurnPreamble so session restore can strip these notes back out of the stored message — they are
+        // protocol, not something the user said (turn-preamble.ts).
+        const prompt = withTurnPreamble(
+            [...(stableSystemPrompt && note !== undefined ? [note] : []), ...(setupNotice !== undefined ? [setupNotice] : [])],
+            promptWithAttachments,
+        );
         // System-prompt suffix: the delegation note (unless stableSystemPrompt moved it into the user message)
         // followed by the terse-output steer. Both are stable across a session, so appending here keeps the cached
         // system+tools prefix intact (the point of stableSystemPrompt).

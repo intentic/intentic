@@ -273,8 +273,11 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         worktreeDir: (id, repo) => (repo === "root" ? `/history/worktrees/${id}` : `/history/worktrees/${id}/${repo}`),
         mainDir: (repo) => (repo === "root" ? "/work" : `/work/${repo}`),
         exists: async () => false,
+        // A live checkout, so the routes read the worktree path — the steady state these fakes model.
+        attached: async () => true,
         ensure: async (id) => ({ cwd: `/history/worktrees/${id}`, branch: `agent/${id}`, repos: [{ repo: "root", base: "a".repeat(40) }] }),
         remove: async () => {},
+        retire: async () => {},
         prune: async () => {},
         withRepoLock: (_repo, task) => task(),
     },

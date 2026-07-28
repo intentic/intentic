@@ -17,6 +17,10 @@ export interface DelegationTargets {
     readonly grokModel?: string;
 }
 
+// The note's fixed opening — what stripTurnPreamble anchors on to recognize an injected note in a stored
+// user message (turn-preamble.ts).
+export const DELEGATION_NOTE_HEADER = "## Delegating to other coding agents";
+
 export const delegationNote = (targets: DelegationTargets): string | undefined => {
     if (targets.codexHome === undefined && targets.openCodeXdg === undefined) {
         return undefined;
@@ -37,7 +41,7 @@ export const delegationNote = (targets: DelegationTargets): string | undefined =
               `  Continue a session with \`--session <id>\`. Set XDG_DATA_HOME per command exactly as shown; never export it.${grokModelHint}`
             : "";
     return (
-        "## Delegating to other coding agents\n\n" +
+        `${DELEGATION_NOTE_HEADER}\n\n` +
         "The user's connected agent accounts are runnable from your shell. Delegates see none of this " +
         "conversation — give them a self-contained prompt with every path, requirement, and constraint. " +
         "Long runs detach into your tmux session after the soft timeout and hand back a follow log; tail it or " +

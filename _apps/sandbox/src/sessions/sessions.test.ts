@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
+import { listWorkspaceSessions, readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
 
 // Fake the SDK store the sessions module reads through. `listSessions` is newest-first; `getSessionMessages`
 // returns Anthropic-shaped turns (content is a string here for brevity).
@@ -120,4 +120,33 @@ test("a successful edit keeps its call-time diff instead of the result snippet",
         status: "completed",
         content: [{ type: "diff", path: "a.ts", oldText: "one", newText: "two" }],
     });
+});
+
+// The daemon prepends readiness/delegation notes to the prompt it files (agent.routes.ts); a redrawn tab must
+// show what the user typed, not the protocol around it — the original complaint was the "Dependencies are NOT
+// installed" note stapled onto old messages after every refresh.
+test("restore strips an injected turn preamble from the user's bubble", async () => {
+    const notice = [
+        "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet",
+        "(a dropped project arrives without them on purpose):",
+        "- intentic: run `pnpm install` there first.",
+    ].join("\n");
+    getSessionMessages.mockResolvedValue([{ type: "user", message: { content: `${notice}\n\n---\n\nfix the config` } }]);
+    const messages = await readWorkspaceSession("/work", "s0");
+    expect(messages).toEqual([{ role: "user", text: "fix the config" }]);
+});
+
+test("a history-list title falling back to firstPrompt names the chat, not the injected notice", async () => {
+    const first = [
+        "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet",
+        "(a dropped project arrives without them on purpose):",
+        "- intentic: run `pnpm install` there first.",
+        "",
+        "---",
+        "",
+        "fix the config",
+    ].join("\n");
+    listSessions.mockResolvedValue([{ sessionId: "s0", firstPrompt: first, lastModified: 1 }]);
+    const sessions = await listWorkspaceSessions("/work");
+    expect(sessions[0]?.title).toBe("fix the config");
 });

@@ -1,6 +1,7 @@
 import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
 import type { RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
 import { editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
+import { stripTurnPreamble } from "../agent/turn-preamble.js";
 
 // A past conversation in this workspace, for the platform's chat-history list. `title` is the SDK's
 // resolved display summary (custom title / auto-summary / first prompt); `updatedAt` is its last-modified ms.
@@ -36,7 +37,9 @@ export const listWorkspaceSessions = async (dir: string): Promise<SessionSummary
     const sessions = await listSessions({ dir, limit: 50 });
     return sessions.map((session) => ({
         id: session.sessionId,
-        title: session.customTitle ?? session.summary ?? session.firstPrompt ?? "New chat",
+        // firstPrompt is the stored first user message, which may open with an injected turn preamble — a
+        // history list titled "Dependencies are NOT installed…" names the daemon's note, not the chat.
+        title: session.customTitle ?? session.summary ?? (session.firstPrompt !== undefined ? stripTurnPreamble(session.firstPrompt) : undefined) ?? "New chat",
         updatedAt: session.lastModified,
     }));
 };
@@ -125,8 +128,9 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
                 }
             }
             // A user message carrying only tool_results is the SDK's plumbing, not something the user said.
+            // Neither is an injected turn preamble — the stored prompt carries it, the redrawn bubble must not.
             if (text.length > 0) {
-                out.push({ role: "user", text });
+                out.push({ role: "user", text: stripTurnPreamble(text) });
             }
             continue;
         }

@@ -56,6 +56,17 @@ const isAncestor = async (dir: string, ancestor: string, descendant: string, git
     }
 };
 
+// The branch's tip as the MAIN repo sees it — a retired checkout's stand-in for `rev-parse HEAD` in the
+// worktree (the refs live in the shared .git either way). Undefined when the branch is gone too, which reads
+// as "nothing of this agent's exists in this repo any more".
+const branchSha = async (main: string, branch: string, git: GitRunner): Promise<string | undefined> => {
+    try {
+        return (await git(main, ["rev-parse", "-q", "--verify", `refs/heads/${branch}`])).stdout.trim();
+    } catch {
+        return undefined;
+    }
+};
+
 /* WHERE this land's delta is measured from — which decides what "this agent's work" even means.
  *
  * An incremental land continues from `landedTip`, so a second land carries only what the agent has done
@@ -70,7 +81,9 @@ const isAncestor = async (dir: string, ancestor: string, descendant: string, git
  * that is a conflict report naming files the agent never touched, and no way forward. The merge-base is
  * immune — it moves with the rebase, and the delta stays exactly the agent's own work. */
 const anchorOf = async (
-    worktree: string,
+    // Where the ref reads run — the worktree while the checkout is attached, the main repo once it is retired
+    // (the object store is shared, so every sha the branch names answers in both).
+    dir: string,
     main: string,
     tip: string,
     landedTip: string | undefined,
@@ -78,13 +91,13 @@ const anchorOf = async (
     git: GitRunner,
 ): Promise<string> => {
     // Only while the branch still descends from it: a rewrite that dropped the landed work has to re-land it.
-    if (landedTip !== undefined && (await isAncestor(worktree, landedTip, tip, git))) {
+    if (landedTip !== undefined && (await isAncestor(dir, landedTip, tip, git))) {
         return landedTip;
     }
     const head = await headSha(main, git);
     if (head !== undefined) {
         try {
-            const merged = (await git(worktree, ["merge-base", head, tip])).stdout.trim();
+            const merged = (await git(dir, ["merge-base", head, tip])).stdout.trim();
             if (merged !== "") {
                 return merged;
             }
@@ -193,10 +206,6 @@ export const landAgent = async (
             const { repo, base } = composed;
             let next: PersistedAgent["repos"][number] = composed;
             await worktrees.withRepoLock(repo, async () => {
-                const worktree = worktrees.worktreeDir(entry.id, repo);
-                if (!(await exists(worktree))) {
-                    return;
-                }
                 const main = worktrees.mainDir(repo);
                 if (!(await exists(join(main, ".git")))) {
                     // The main checkout vanished — nothing to apply into; surfaced, not silently skipped. No
@@ -205,25 +214,40 @@ export const landAgent = async (
                     changed = true;
                     return;
                 }
+                /* Which checkout answers for the branch. A retired one (an archived agent, or a restored one
+                 * whose next turn hasn't re-attached it yet) is NOT "nothing to land": the branch still holds
+                 * everything — retire commits the worktree's remainder before reclaiming it — and the shared
+                 * object store makes all of it readable from the main repo. Skipping here was how landing an
+                 * archived agent "succeeded" while landing nothing, and stamped the card Landed over a review
+                 * still counting every file as pending. */
+                const attached = await worktrees.attached(entry.id, repo);
+                const worktree = worktrees.worktreeDir(entry.id, repo);
                 // 1. Preserve the worktree's uncommitted state as an agent-authored commit on its branch —
                 // staged, unstaged and untracked alike (`add -A` sweeps all three), and a no-op when staging
                 // leaves the index empty. That last case is the ROOT repo of a workspace whose only change
                 // lives inside a NESTED repo of the composition: root sees "modified: <repo> (modified
                 // content)" but can stage nothing, because a gitlink moves only when that repo's own HEAD
                 // does. The nested repo lands its own work below; root's gitlink follows whenever someone
-                // commits there.
-                await gitCommitAll(worktree, `Agent: ${entry.title ?? entry.id}`, AGENT_GIT_AUTHOR, git);
-                const tip = (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim();
+                // commits there. (A retired checkout has nothing uncommitted to preserve — its retire did this.)
+                if (attached) {
+                    await gitCommitAll(worktree, `Agent: ${entry.title ?? entry.id}`, AGENT_GIT_AUTHOR, git);
+                }
+                const tip = attached ? (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim() : await branchSha(main, entry.branch, git);
+                if (tip === undefined) {
+                    return;
+                }
+                // Ref-only reads run wherever the refs live: the worktree while attached, the main repo after.
+                const refDir = attached ? worktree : main;
                 // Cumulative diffstat vs the BASE (not landedTip) — the agent's total output for the card.
                 if (tip !== base) {
-                    const stat = SHORTSTAT.exec((await git(worktree, ["diff", "--shortstat", base, tip])).stdout);
+                    const stat = SHORTSTAT.exec((await git(refDir, ["diff", "--shortstat", base, tip])).stdout);
                     if (stat !== null) {
                         diff.files += Number(stat[1]);
                         diff.insertions += Number(stat[2] ?? 0);
                         diff.deletions += Number(stat[3] ?? 0);
                     }
                 }
-                const from = await anchorOf(worktree, main, tip, composed.landedTip, base, git);
+                const from = await anchorOf(refDir, main, tip, composed.landedTip, base, git);
                 if (tip === from) {
                     /* Everything already landed for this repo. Usually that is a recorded fact (landedTip is
                      * the tip) and this land is a true no-op — but when ANCESTRY says so, the registry is

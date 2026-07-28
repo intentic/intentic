@@ -69,15 +69,18 @@ export const createAgentsRoutes = (services: Services) => {
         diff: i.diff.handler(async ({ input }) => {
             const entry = entryOf(input.id);
             const repos: AgentRepoChanges[] = [];
-            // An ARCHIVED agent has no checkout, so its review reads the two refs out of the main repo instead
-            // (the object store is shared, and archiving committed the worktree's remainder onto the branch —
-            // so this is the same delta the worktree would have shown, not a lesser one).
-            const archived = entry.archivedAt !== undefined;
             for (const { repo, base, landedTip } of entry.repos) {
                 try {
-                    const dir = archived ? services.agentWorktrees.mainDir(repo) : services.agentWorktrees.worktreeDir(entry.id, repo);
+                    // The checkout when it is on disk, the two refs out of the main repo when it is not —
+                    // decided per repo, NOT by archivedAt: a restored agent keeps the marker clear while its
+                    // checkout stays retired until the next turn re-attaches it, and reading the worktree path
+                    // then reported a full branch as "no changes". The refs tell the same story either way
+                    // (retiring committed the worktree's remainder onto the branch; the object store is shared).
+                    const attached = await services.agentWorktrees.attached(entry.id, repo);
                     const against = (from: string): Promise<GitChange[]> =>
-                        archived ? services.git.changesBetweenRefs(dir, from, entry.branch) : services.git.changesAgainstBase(dir, from);
+                        attached
+                            ? services.git.changesAgainstBase(services.agentWorktrees.worktreeDir(entry.id, repo), from)
+                            : services.git.changesBetweenRefs(services.agentWorktrees.mainDir(repo), from, entry.branch);
                     const changes = await against(base);
                     if (changes.length === 0) {
                         continue;
@@ -108,10 +111,10 @@ export const createAgentsRoutes = (services: Services) => {
             if (composed === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "repo not in this agent's composition" });
             }
-            // Archived: both sides are blobs, read from the main repo (see diff above). The path guard still
-            // applies — it is validating the REQUEST, not the disk, and a `..` here would escape into rev-spec
-            // territory just as readily.
-            if (entry.archivedAt !== undefined) {
+            // Retired checkout: both sides are blobs, read from the main repo — the same per-repo seam as
+            // `diff` above. The path guard still applies — it is validating the REQUEST, not the disk, and a
+            // `..` here would escape into rev-spec territory just as readily.
+            if (!(await services.agentWorktrees.attached(entry.id, input.repo))) {
                 const main = services.agentWorktrees.mainDir(input.repo);
                 if (resolveWithin(main, input.path) === undefined) {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
@@ -137,7 +140,11 @@ export const createAgentsRoutes = (services: Services) => {
             }));
             const result = await landAgent(services.agentWorktrees, entry, input.mode);
             await services.agents.recordLanded(input.id, result);
-            await services.agents.finish(input.id, Date.now(), result.landed ? "landed" : "conflict");
+            // "Landed" only when there is landed WORK to stand behind it: a clean result with a cumulative
+            // diff means everything the agent produced is accounted for in the main tree, however it got
+            // there; a clean result with no output at all settles as idle (finish's no-outcome default) —
+            // stamping that "landed" is how an agent that landed nothing used to wear the badge.
+            await services.agents.finish(input.id, Date.now(), result.landed ? (result.diff.files > 0 ? "landed" : undefined) : "conflict");
             if (result.landed && result.changed) {
                 // The main tree changed under the user — same attribution convention as git.discard.
                 services.history.notifyUserWrite();
@@ -154,7 +161,13 @@ export const createAgentsRoutes = (services: Services) => {
                     streamAgent,
                 );
             }
-            return { landed: result.landed, ...(result.conflicts !== undefined ? { conflicts: result.conflicts } : {}) };
+            return {
+                landed: result.landed,
+                ...(result.conflicts !== undefined ? { conflicts: result.conflicts } : {}),
+                // A `merge` land's report of the paths it left carrying conflict markers — dropping this is
+                // how the panel's "Landed with N files to finish" strip went permanently dark.
+                ...(result.resolving !== undefined ? { resolving: result.resolving } : {}),
+            };
         }),
         discard: i.discard.handler(async ({ input }) => {
             const entry = entryOf(input.id);

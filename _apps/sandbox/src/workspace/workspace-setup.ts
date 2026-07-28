@@ -159,6 +159,12 @@ export const startInstall = async (root: string, project: WorkspaceProject, proc
 // per project is what stops the model rediscovering it the expensive way — through a `not found` from a
 // package script, an `npx` that hits the registry for a binary that was never a package, and a file of
 // type-check errors that are all false.
+
+// The notice's fixed opening — what stripTurnPreamble anchors on to recognize an injected note in a stored
+// user message (turn-preamble.ts).
+export const SETUP_NOTICE_HEADER =
+    "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet";
+
 export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string | undefined => {
     const pending = statuses.filter((status) => status.state === "needs-setup" || status.state === "unsupported");
     if (pending.length === 0) {
@@ -170,9 +176,5 @@ export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string 
             ? `- ${where}: needs \`${status.recipe.manager}\`, which is not installed in this sandbox. Do not attempt the install; say so if it blocks the task.`
             : `- ${where}: run \`${status.recipe.command}\` there first.`;
     });
-    return [
-        "Dependencies are NOT installed for the following projects, so their type-checks, linters and tests cannot work yet",
-        "(a dropped project arrives without them on purpose):",
-        ...lines,
-    ].join("\n");
+    return [SETUP_NOTICE_HEADER, "(a dropped project arrives without them on purpose):", ...lines].join("\n");
 };

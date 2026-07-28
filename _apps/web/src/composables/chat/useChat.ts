@@ -804,7 +804,8 @@ const setActive = (conversationId: string): void => {
 };
 
 // Close a set of tabs (the tab ×, or the strip menu's Close / Close Others / Close to the Right / Close All):
-// abort each in-flight turn, drop each cached transcript, and keep at least one conversation — a fresh chat when
+// detach from each in-flight turn (Conversation.abort is soft — the daemon-side run keeps working and reopening
+// reattaches to it), drop each cached transcript, and keep at least one conversation — a fresh chat when
 // the set empties the strip. Closing the active tab moves focus to the last remaining one (VSCode behaviour, the
 // same rule the workspace's closeTabs follows). The daemon-side sessions survive: a closed chat is still in History.
 const closeTabs = (ids: ReadonlySet<string>): void => {

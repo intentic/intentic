@@ -1,7 +1,9 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { openAgentConversation, useChat } from "../chat/useChat";
+import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
+import { sandboxKey } from "../sandbox/useSandbox";
 import { errorMessage } from "../useAsyncAction";
 
 /* The fleet store — the daemon's agent registry mirrored into the browser. Fed two ways: the /events stream's
@@ -84,12 +86,30 @@ const holdPending = (moves: readonly { id: string; present?: AgentSummary }[], r
     registry.value = withPending(registry.value.filter((agent) => !pending.has(agent.id)));
 };
 
+/* The review panel's diff query (the per-file landed flags behind "Land now", and the conflict report) is
+ * pull-only, while this roster is push-fed — so a land this browser didn't perform itself (the auto-land at
+ * turn completion, another device's manual land) used to flip the header badge to "Landed" while the panel
+ * kept its pre-land answer: every file "not landed" under an armed Land now button, until a remount or a
+ * window refocus happened to refetch. A status change is exactly "the daemon settled something about this
+ * agent's work", so it is the diff's invalidation signal. An id this roster has never seen counts as a
+ * change: the first snapshot of a (re)connection may be carrying the outcome of a turn that finished while
+ * no stream was up. Unobserved queries are only marked stale, so a closed panel costs no request. */
+const invalidateStaleDiffs = (agents: readonly AgentSummary[]): void => {
+    const held = new Map(registry.value.map((agent) => [agent.id, agent.status]));
+    for (const agent of agents) {
+        if (held.get(agent.id) !== agent.status) {
+            void queryClient.invalidateQueries({ queryKey: sandboxKey(`agents`, agent.id, `diff`) });
+        }
+    }
+};
+
 // Roster snapshot from the events stream or an explicit read. Dropped when it predates what we already hold —
 // an out-of-order answer is not news, it is a regression.
 export const setAgents = (agents: AgentSummary[], rev: number): void => {
     if (rev < appliedRev) {
         return;
     }
+    invalidateStaleDiffs(agents);
     appliedRev = rev;
     applySnapshot(agents, rev);
 };

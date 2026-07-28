@@ -2,9 +2,7 @@
 import type { IconName } from "@intentic-app/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { AgentOrigin } from "@intentic/sandbox-contract";
-import Button from "primevue/button";
 import ContextMenu from "primevue/contextmenu";
-import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import Popover from "primevue/popover";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -38,7 +36,7 @@ const { conversations, activeId, sessions, loadSessions } = useChat();
 const { agentById } = useAgents();
 const { supported: popoutSupported, poppedOut, toggle: togglePopout, overlayTarget } = useChatPopout();
 
-// What a tab (and the confirm dialog's list) calls a conversation: its derived title, else the noun for where it
+// What a tab calls a conversation: its derived title, else the noun for where it
 // works — an untitled isolated conversation IS a draft agent card on the fleet board.
 const tabLabel = (conversation: Conversation): string => conversation.title.value ?? (conversation.isolated.value ? `New agent` : `New chat`);
 
@@ -118,28 +116,10 @@ const toRightOf = (id: string): ReadonlySet<string> => {
 };
 const allTabs = (): ReadonlySet<string> => new Set(conversations.value.map((c) => c.conversationId));
 
-// A bulk close waiting on the "this aborts running turns" confirm — the chat's answer to the workspace's
-// unsaved-edits dialog. A single × (and the menu's "Close") stays silent: that tab is right there, pulsing if its
-// agent is working. A background tab's running agent is exactly what's easy to miss, so the mass closes ask.
-// Closing never destroys the conversation — it aborts the turn and drops the local transcript cache; the session
-// itself stays in the sandbox's store, reopenable from the history menu.
-const pendingClose = ref<ReadonlySet<string>>();
-const runningIn = (ids: ReadonlySet<string>): readonly Conversation[] =>
-    conversations.value.filter((c) => ids.has(c.conversationId) && c.streaming.value);
-const pendingCloseRunning = computed(() => (pendingClose.value === undefined ? [] : runningIn(pendingClose.value)));
-const requestClose = (ids: ReadonlySet<string>): void => {
-    if (runningIn(ids).length === 0) {
-        emit(`close`, ids);
-        return;
-    }
-    pendingClose.value = ids;
-};
-const confirmClose = (): void => {
-    if (pendingClose.value !== undefined) {
-        emit(`close`, pendingClose.value);
-    }
-    pendingClose.value = undefined;
-};
+// No close asks for a confirm, mass or single — unlike the workspace's file tabs, where closing discards unsaved
+// edits, closing a chat destroys nothing. A running agent's turn is detached daemon-side (Conversation.abort is
+// soft by design), so it keeps working and lands its work with the tab gone; the conversation stays in the
+// sandbox's store, and reopening it from the history menu reattaches to the still-live turn.
 
 // --- Right-click menu -----------------------------------------------------------------------------
 // The same close set the workspace's file tabs carry, plus this strip's own rename and the pop-out toggle. One
@@ -152,7 +132,7 @@ const menuTabId = ref<string>();
 // The rows that name no particular tab: they tail a tab's menu and they ARE the empty-space one. The pop-out
 // drops off Chromium, where there is no pip window to move the chat into.
 const stripItems = computed<MenuItem[]>(() => {
-    const items: MenuItem[] = [{ label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => requestClose(allTabs()) }];
+    const items: MenuItem[] = [{ label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) }];
     if (popoutSupported) {
         items.push(
             { separator: true },
@@ -184,13 +164,13 @@ const tabMenuItems = computed<MenuItem[]>(() => {
             label: `Close Others`,
             disabled: others.size === 0,
             shortcut: commandShortcut(`chat.closeOtherTabs`),
-            command: () => requestClose(others),
+            command: () => emit(`close`, others),
         },
         {
             label: `Close to the Right`,
             disabled: toRight.size === 0,
             shortcut: commandShortcut(`chat.closeTabsToRight`),
-            command: () => requestClose(toRight),
+            command: () => emit(`close`, toRight),
         },
         { separator: true },
         ...stripItems.value, // Close All, then the pop-out toggle behind its own separator
@@ -263,7 +243,7 @@ onMounted(() => {
             handler: (): void => {
                 const others = othersOf(activeId.value);
                 if (others.size > 0) {
-                    requestClose(others);
+                    emit(`close`, others);
                 }
             },
         },
@@ -276,7 +256,7 @@ onMounted(() => {
             handler: (): void => {
                 const toRight = toRightOf(activeId.value);
                 if (toRight.size > 0) {
-                    requestClose(toRight);
+                    emit(`close`, toRight);
                 }
             },
         },
@@ -286,7 +266,7 @@ onMounted(() => {
             icon: `times`,
             keybinding: `Ctrl+Shift+Backspace`,
             when: inTabSurface(`chat`),
-            handler: () => requestClose(allTabs()),
+            handler: () => emit(`close`, allTabs()),
         },
         { command: `chat.nextTab`, title: `Next Chat`, keybinding: `Alt+PageDown`, when: inTabSurface(`chat`), handler: () => cycleTab(1) },
         { command: `chat.previousTab`, title: `Previous Chat`, keybinding: `Alt+PageUp`, when: inTabSurface(`chat`), handler: () => cycleTab(-1) },
@@ -487,31 +467,4 @@ const openHistory = (event: Event): void => {
         </template>
     </ContextMenu>
 
-    <!-- The confirm a mass close gets when it would abort agents that are still working — the chat's counterpart
-         of the workspace's unsaved-edits dialog. -->
-    <Dialog
-        :visible="pendingClose !== undefined"
-        :modal="true"
-        :draggable="false"
-        :dismissable-mask="true"
-        :append-to="overlayTarget"
-        :style="{ width: '26rem' }"
-        :header="pendingCloseRunning.length === 1 ? 'Stop the running agent?' : `Stop ${pendingCloseRunning.length} running agents?`"
-        @update:visible="pendingClose = undefined"
-    >
-        <ul class="flex flex-col gap-1">
-            <li v-for="c in pendingCloseRunning.slice(0, 5)" :key="c.conversationId" class="flex min-w-0 items-center gap-2 text-sm">
-                <Icon name="spinner" spin class="shrink-0 text-2xs text-link" />
-                <span class="truncate text-content">{{ tabLabel(c) }}</span>
-            </li>
-            <li v-if="pendingCloseRunning.length > 5" class="text-xs text-subtle">…and {{ pendingCloseRunning.length - 5 }} more</li>
-        </ul>
-        <p class="mt-3 text-xs text-muted">Closing these chats stops the turns they're running. The conversations stay in History.</p>
-        <template #footer>
-            <Button label="Cancel" severity="secondary" :text="true" @click="pendingClose = undefined" />
-            <Button label="Close anyway" severity="danger" autofocus @click="confirmClose">
-                <template #icon><Icon name="times" /></template>
-            </Button>
-        </template>
-    </Dialog>
 </template>

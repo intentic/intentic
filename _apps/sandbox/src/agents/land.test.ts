@@ -337,6 +337,44 @@ test("a delta living only in a NESTED repo lands — root has nothing it can sta
     expect(result.repos.find((repo) => repo.repo === "inner")?.landedTip).toBe(await sh(worktrees.worktreeDir("c2", "inner"), "rev-parse", "HEAD"));
 });
 
+/* A RETIRED checkout (an archived agent, or a restored one whose next turn hasn't re-attached it yet) is not
+ * "nothing to land": retire commits the worktree's remainder onto agent/<id>, so the branch holds everything
+ * and the shared object store makes it readable from the main repo. Skipping the repo — the old behavior —
+ * returned landed:true having landed NOTHING, which stamped the card Landed over a review still counting
+ * every file as pending, with Land now armed and useless. */
+test("a retired checkout still lands: the branch answers for the missing worktree", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await writeFile(join(conversation.cwd, "added.ts"), "new file\n");
+    await worktrees.retire("c1", conversation.repos, "fix the thing");
+    expect(existsSync(worktrees.worktreeDir("c1", "root"))).toBe(false);
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos));
+
+    expect(result.landed).toBe(true);
+    expect(result.changed).toBe(true);
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one EDITED\nline two\nline three\n");
+    expect(await readFile(join(work, "added.ts"), "utf8")).toBe("new file\n");
+    // The cumulative diffstat still reports — the card's numbers survive the retired checkout.
+    expect(result.diff.files).toBe(2);
+    // landedTip reached the branch tip, so the review stops counting these files as pending.
+    expect(result.repos.find((repo) => repo.repo === "root")?.landedTip).toBe(await sh(work, "rev-parse", "agent/c1"));
+});
+
+test("a retired checkout with everything landed is a no-op that still reports the cumulative output", async () => {
+    const { worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    const first = await landAgent(worktrees, entryFor(conversation.repos));
+    await worktrees.retire("c1", conversation.repos, "fix the thing");
+
+    const again = await landAgent(worktrees, entryFor(first.repos));
+
+    // changed:false keeps the frame and status flip away; diff.files>0 is what lets the caller keep the
+    // settled status at "landed" rather than downgrading to idle.
+    expect(again).toMatchObject({ landed: true, changed: false });
+    expect(again.diff.files).toBe(1);
+});
+
 test("a discard fired during an in-flight land queues behind the repo lock — land finishes first", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
