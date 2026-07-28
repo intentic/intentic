@@ -12,7 +12,7 @@ vi.mock("../sandbox/useSandbox", async () => {
 });
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
 
-import { dropActionFor, dropRejection } from "./laneDrop";
+import { dropActionFor, dropActionLabel, dropRejection, type DropAction } from "./laneDrop";
 import type { FleetAgent } from "./useAgents";
 
 // A drop can't assign a status — the lanes are projections — so it runs the action that CAUSES one, and most
@@ -35,10 +35,16 @@ describe("dropActionFor", () => {
         expect(dropActionFor(agent({ status: `running` }), `finished`)).toBe(`stop`);
     });
 
-    it("lands work whose turn ended badly — conflict, error, or a raised land-conflict flag", () => {
-        expect(dropActionFor(agent({ status: `conflict` }), `finished`)).toBe(`land`);
+    // An errored turn never reached its auto-land, so the drop has a FIRST land to try. A conflicted one has
+    // already had that land refused, and check mode is atomic — pressing it again against an unchanged
+    // workspace fails identically, which is what made this drop a guaranteed no-op.
+    it("lands work whose turn errored out before it could land", () => {
         expect(dropActionFor(agent({ status: `error` }), `finished`)).toBe(`land`);
-        expect(dropActionFor(agent({ status: `idle`, attention: { ...none, conflict: true } }), `finished`)).toBe(`land`);
+    });
+
+    it("hands a conflict back to the agent instead of re-running the land that just refused", () => {
+        expect(dropActionFor(agent({ status: `conflict` }), `finished`)).toBe(`resolve`);
+        expect(dropActionFor(agent({ status: `idle`, attention: { ...none, conflict: true } }), `finished`)).toBe(`resolve`);
     });
 
     it("refuses to land an agent that is blocked on the user — it is mid-task, not done", () => {
@@ -91,5 +97,13 @@ describe("dropActionFor", () => {
                 expect(dropRejection(card, target) !== undefined).toBe(refused);
             }
         }
+    });
+
+    // The hint is the ghost's whole promise, so an action with no verb of its own would silently borrow
+    // another's — which is how "Discard this agent" came to be the fallback for anything unnamed.
+    it("names every action it can return", () => {
+        const labels = ([`land`, `resolve`, `stop`, `discard`] as const satisfies readonly DropAction[]).map(dropActionLabel);
+        expect(labels).toEqual([`Land the work`, `Ask the agent to resolve it`, `Stop the turn`, `Discard this agent`]);
+        expect(new Set(labels).size).toBe(labels.length);
     });
 });

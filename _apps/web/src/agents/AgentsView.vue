@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Disposable } from "@intentic/extension-api";
 import { cmp, useDevice } from "@intentic-app/ui";
+import Dialog from "primevue/dialog";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
@@ -70,9 +71,15 @@ const {
     receipt,
     dismissReceipt,
     busyIds,
+    agentById,
 } = useAgents();
 const { active } = useChat();
-const { dragged, dragging, draggedId, over, action, accepts, busyId, ghostStyle, begin, consumeSuppressedOpen } = useAgentDrag();
+const { dragged, dragging, draggedId, over, action, accepts, busyId, ghostStyle, begin, consumeSuppressedOpen, pendingResolve, confirmResolve, cancelResolve } =
+    useAgentDrag();
+
+// The card behind the resolve confirmation — looked up live rather than snapshotted with the drop, so a
+// rename or a status change while the dialog is open is reflected in what it is asking about.
+const resolveTarget = computed(() => (pendingResolve.value === undefined ? undefined : agentById(pendingResolve.value)));
 
 // The Finished lane's two extra states. Both live here rather than in the store: they are how this ONE board
 // is being looked at, and a second surface opening the fleet should not inherit a scroll-position-like choice.
@@ -473,6 +480,30 @@ const reviewAgent = (agent: FleetAgent): void => {
         >
             <Icon name="trash" class="text-2xs" />Discard
         </div>
+
+        <!-- Dropping a conflicted card on Finished spends a turn, and a drag is the easiest gesture on this
+             board to make by accident — so unlike stop / land / discard it stops here first. The dialog is the
+             whole explanation of what the agent is about to do, because the drag hint that got here is four
+             words long. -->
+        <Dialog
+            :visible="pendingResolve !== undefined"
+            :modal="true"
+            :draggable="false"
+            :dismissable-mask="true"
+            :style="{ width: '26rem' }"
+            header="Have the agent resolve the conflict?"
+            @update:visible="cancelResolve"
+        >
+            <p class="text-xs text-content">
+                {{ resolveTarget?.title ?? `This agent` }} will start a turn: it rebases its branch onto your current workspace, resolves the conflict
+                in its own worktree, and lands the result when it's done.
+            </p>
+            <p class="mt-2 text-xs text-muted">Nothing is written to your workspace unless it succeeds. You can stop the turn at any point.</p>
+            <template #footer>
+                <button type="button" class="rounded px-3 py-1 text-xs text-muted hover:text-content" @click="cancelResolve">Cancel</button>
+                <button type="button" :class="cmp.buttonPrimary('rounded px-3 py-1')" @click="confirmResolve">Ask the agent</button>
+            </template>
+        </Dialog>
 
         <!-- The ghost is a real card so the drag reads as the card itself; pointer-events-none keeps the hit
              test underneath it. -->

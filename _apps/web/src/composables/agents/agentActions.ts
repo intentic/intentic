@@ -1,3 +1,4 @@
+import type { AgentChangesResponse } from "@intentic-app/api-contract";
 import type { LandMode, LandResult } from "@intentic/sandbox-contract";
 import { useDevice } from "@intentic-app/ui";
 import { focusComposer, useChat } from "../chat/useChat";
@@ -5,6 +6,8 @@ import { queryClient } from "../queryPersistence";
 import { router } from "../../router";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
+import { resolvePrompt } from "./conflictResolution";
+import { useAgents } from "./useAgents";
 
 /* The fleet's mutations, addressed by agent id — the true source for both surfaces that invoke them: the
  * review panel (useAgentChanges, which binds one agent to its diff query) and the board's drag-to-act drops,
@@ -47,6 +50,46 @@ export const landAgent = (id: string, mode: LandMode = `check`): Promise<LandRes
         headers: { "content-type": `application/json` },
         body: JSON.stringify({ mode }),
     });
+
+/* THE MAIN ROAD OUT OF A LAND CONFLICT: hand it back to the agent that wrote the work.
+ *
+ * Everything the other two options cost the user, this one doesn't. `merge` writes conflict markers into THEIR
+ * checkout and makes them finish the merge by hand; discard throws the work away. The agent can do the same
+ * merge in its own worktree, where a bad resolution costs nobody anything — and land's anchorOf already
+ * re-anchors on the merge-base precisely so a rebased branch still lands exactly its own delta.
+ *
+ * It is an ordinary turn, not a new endpoint, and that is the point: the composed prompt lands in the
+ * transcript as a user message the human can read and argue with, a turn already running takes it as steering,
+ * and Stop works on it like any other. The loop then closes itself — a clean turn auto-lands (streamAgent),
+ * and recordLanded clears the entry's conflicts, so the report this was raised from disappears on its own.
+ *
+ * The tab is opened, not assumed: the board's drop fires this for a card whose conversation this browser may
+ * never have opened. `open` also marks it seen, which is right — the user is dealing with it.
+ *
+ * The report is re-read here rather than passed in, even though the review panel is holding one: the prompt is
+ * a description of a CURRENT refusal, and the two callers know it to different degrees of freshness (the
+ * board holds none at all). One cheap GET makes both of them right, and makes the daemon the only thing that
+ * ever decides what the agent is told to fix. */
+export const askAgentToResolve = async (id: string): Promise<void> => {
+    const { agentById, open } = useAgents();
+    const agent = agentById(id);
+    if (agent !== undefined) {
+        open(agent);
+    }
+    const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === id);
+    // A registered agent always has a tab by now (open() just made one); a card the roster has never heard of
+    // has no conversation to send to, and inventing one would start a turn on the wrong agent.
+    if (conversation === undefined) {
+        return;
+    }
+    const { conflicts } = await sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(id)}/diff`);
+    // Dispatched, not awaited — `enqueue` runs the queue, and drainQueue awaits `send`, which does not settle
+    // until the TURN does. Awaiting it here would hold the caller's busy flag across a multi-minute rebase and
+    // set the panel's "resolving" state only once there was nothing left to resolve. `void` is what every
+    // other send in this app does (ChatPanel): the turn reports itself in the transcript, which is where its
+    // failures belong too — this function's own promise is about getting the message away.
+    void conversation.enqueue(resolvePrompt(conflicts));
+};
 
 // Discard: drop the worktrees, the agent/<id> branches, and the registry entry. Irreversible.
 export const discardAgent = async (id: string): Promise<void> => {
