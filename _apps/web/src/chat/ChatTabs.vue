@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { IconName } from "@intentic-app/ui";
+import { cmp, type IconName } from "@intentic-app/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { AgentOrigin } from "@intentic/sandbox-contract";
 import ContextMenu from "primevue/contextmenu";
@@ -546,7 +546,8 @@ const openHistory = (event: Event): void => {
 
 <template>
     <!-- Docked: a header across the top of the chat column. Undocked: a resizable rail of lane-grouped cards
-         down the window's left edge, with the ✚ / history pair under the list instead of beside it. -->
+         down the window's left edge, over a foot that carries the same ✚ / history pair the docked strip wears
+         beside it — there as two bare glyphs, here as a labelled "Past chats" row and a filled "New agent". -->
     <component
         :is="vertical ? 'aside' : 'header'"
         class="flex gap-1 border-line"
@@ -568,8 +569,8 @@ const openHistory = (event: Event): void => {
         ></div>
         <!-- The rail's filter, pinned above the list. Only undocked: the docked strip is a row of pill tabs in
              a ~22rem column that already fights for width, and a field there would cost more than the handful
-             of tabs it could narrow. The ✚ / history pair stays at the bottom where it has always been —
-             this is where you look for something, that is where you start or browse for one. -->
+             of tabs it could narrow. The rail reads top-down as narrow it (filter) → pick one (the lanes) →
+             leave it (the foot's two doors out). -->
         <FilterField
             v-if="vertical"
             v-model="filterQuery"
@@ -906,14 +907,35 @@ const openHistory = (event: Event): void => {
         <span v-if="edit.error !== undefined" class="min-w-0 shrink truncate text-2xs text-danger" v-tooltip.bottom="edit.error">{{
             edit.error
         }}</span>
-        <!-- Beside the strip across the top, under it down the side — either way the pair stays together and
-             never scrolls with the tabs. -->
-        <div class="flex shrink-0 items-center gap-1" :class="{ 'border-t border-line pt-1': vertical }">
+        <!-- Docked: the ✚ / history pair beside the strip, unchanged — a header row has width to spare and no
+             room for two labels. Neither ever scrolls with the tabs. -->
+        <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
             <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="startAgent" v-tooltip.bottom="'New agent'" aria-label="New agent">
                 <Icon name="plus" class="text-sm" />
             </button>
             <button type="button" class="composer-ghost h-7 w-7 shrink-0" @click="openHistory" v-tooltip.bottom="'History'" aria-label="Chat history">
                 <Icon name="history" class="text-sm" />
+            </button>
+        </div>
+        <!-- FOOT OF THE RAIL: the two ways out of the list — one more session, or an older one. Both stay where
+             the ✚ / history pair has always been, at the bottom of the rail, because that is where the pointer
+             already is: the composer it is about to type into sits directly to the right, and the window's
+             bottom-left CORNER is an infinite-height target (Fitts) that a row at the top can never be. What
+             was wrong was never the position, it was the weight — two unlabelled 28px glyphs of equal rank,
+             reading as leftover toolbar rather than as "start a session".
+             So the foot keeps the slot and spends the rail's width on saying what the controls do, ranked:
+             browsing the archive is the quiet ghost row, and the primary act is a full-width filled button
+             wearing the fleet board's own fill, glyph and wording — one "New agent" across the product. It
+             takes the last row on purpose, hard against the corner, closest to the hand.
+             Note the division of labour with the filter at the top: typing SEARCHES past the open tabs already
+             (the "Not open" group), so History is for BROWSING — recent chats, newest first, nothing typed. -->
+        <div v-else class="flex shrink-0 flex-col gap-1 border-t border-line pt-1">
+            <button type="button" class="composer-ghost w-full justify-start gap-2 px-2 py-1.5 text-2xs" @click="openHistory" aria-label="Chat history">
+                <Icon name="history" class="text-2xs" />
+                <span>Past chats…</span>
+            </button>
+            <button type="button" :class="cmp.buttonPrimary('w-full justify-center gap-1.5 px-2.5 py-1.5 text-2xs')" @click="startAgent">
+                <Icon name="plus" class="text-2xs" />New agent
             </button>
         </div>
         <Popover ref="history" :append-to="overlayTarget" @show="searchInput?.focus()">
