@@ -1,5 +1,7 @@
 import { oc } from "@orpc/contract";
 import {
+    CommitMessageDraftSchema,
+    CommitMessageSchema,
     CommitResultSchema,
     CommitSchema,
     DiscardSchema,
@@ -39,6 +41,10 @@ import {
 // Changes panel renders; commit/discard take optional `paths` for per-file actions.
 export const gitContract = {
     changes: oc.route({ method: "GET", path: "/git/changes" }).output(GitChangesSchema),
+    // Drafts a commit message for what the commit box is about to record, on the sandbox's quick model (the
+    // cheap rung — see quick-model.ts). Workspace-wide like `changes` and for the same reason: one commit box,
+    // one message, every staged repo. POST because it spends a model call, not because it writes anything.
+    commitMessage: oc.route({ method: "POST", path: "/git/commit-message" }).input(CommitMessageDraftSchema).output(CommitMessageSchema),
     // The git-history graph over one repo's real commits: the repo list (for the tree affordance + switcher),
     // one repo's commit log, and lazy per-commit detail (changed files, then a file's before/after AT the
     // commit). Read-only — commit/discard on the working tree stay the write path (above).

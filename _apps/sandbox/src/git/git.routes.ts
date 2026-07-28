@@ -7,7 +7,9 @@ import type { OrpcContext } from "../context.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
 import { discoverRepos, isValidRepoId } from "../workspace/repo-discovery.js";
 import { isControlPlanePath, resolveWithin } from "../workspace/workspace-files.js";
+import { askQuickModel } from "../agent/quick-model.js";
 import type { ActionResult } from "./changes.js";
+import { cleanCommitSubject, commitMessagePrompt } from "./commit-message.js";
 import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
 
 // How long one Changes scan's result stands in for the next caller's. Long enough to swallow the browser's
@@ -209,6 +211,28 @@ export const createGitRoutes = (services: Services) => {
 
     return {
         changes: i.changes.handler(coalescedScan),
+        /* Drafts the message for the commit the panel is about to make, on the sandbox's quick model. Reads
+         * only — it spends a model call and touches neither the index nor the worktree, which is also why it
+         * takes no repo lock: a concurrent land can change what the diff says, and the worst outcome is a
+         * subject the user reads before clicking Commit.
+         *
+         * Every repo is described in ONE prompt rather than one call per repo, because the panel makes one
+         * commit per repo sharing a single message: drafting per repo would produce N messages to pick between,
+         * for N times the cost, and none of them would describe the change as a whole.
+         *
+         * An empty draft is an error, not an empty input: the model answering with nothing is a failure the
+         * user should see said out loud, rather than a sparkle click that appears to do nothing at all. */
+        commitMessage: i.commitMessage.handler(async ({ input, signal }) => {
+            const diffs = await Promise.all(
+                input.repos.map(async (repo) => services.git.collectRepoDiff(repo, await repoDir(repo), input.all === true)),
+            );
+            const { text, choice } = await askQuickModel(services, commitMessagePrompt(diffs), signal ?? new AbortController().signal);
+            const message = cleanCommitSubject(text);
+            if (message === "") {
+                throw new ORPCError("BAD_GATEWAY", { message: `${choice.model} returned an empty commit message — try again.` });
+            }
+            return { message, provider: choice.provider, model: choice.model };
+        }),
         // One row's own diff. The side is the row's side, not a convenience: for a partially staged file
         // HEAD↔worktree matches neither list, so opening it from either row would show a diff the panel never
         // claimed. The agents review keeps its own ref-vs-worktree route — a worktree has no index to split.

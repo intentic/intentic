@@ -77,6 +77,7 @@ import {
     unstagedFileDiff,
     workingFileDiff,
 } from "./git/changes.js";
+import { collectRepoDiff, type RepoDiff } from "./git/commit-message.js";
 import { createBranch, deleteBranch, listBranches } from "./git/branches.js";
 import { fetchRemote, pullRemote, pushBranch, remoteState } from "./git/remote.js";
 import { type GeminiCatalog, createGeminiCatalog } from "./gemini/gemini-catalog.js";
@@ -271,6 +272,10 @@ export interface Services {
         // The git-history graph (read-only): one repo's commit log across all refs, and lazy per-commit detail
         // (changed files, then a file's before/after AT the commit).
         readonly commitLog: (dir: string, limit: number) => Promise<{ branch?: string; commits: GitCommit[] }>;
+        // What one repo contributes to an AI-drafted commit message: its recent subjects (the house style), the
+        // file list, and the diff of whichever side the commit will record — `all` reads the worktree the way
+        // "Commit all" does, absent reads the index the way a bare commit does.
+        readonly collectRepoDiff: (repo: string, dir: string, all: boolean) => Promise<RepoDiff>;
         readonly commitChanges: (dir: string, sha: string) => Promise<GitChange[]>;
         readonly commitFileDiff: (dir: string, sha: string, path: string) => Promise<FileDiff>;
         // Graph write actions (VSCode "Git Graph" parity). Non-destructive refs (branch/tag) and the
@@ -469,6 +474,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             changesBetweenRefs,
             refFileDiff,
             commitLog,
+            collectRepoDiff,
             commitChanges,
             commitFileDiff,
             createBranchAt,

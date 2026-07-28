@@ -24,6 +24,9 @@ const DEFAULTS: SandboxSettings = {
     outputCleaners: "off",
     outputHoldout: 0,
     filterBackend: "native",
+    // Empty means Auto, not "none": the quick model is resolved from the connected accounts each time it is
+    // read, so there is no id for a fresh sandbox to store.
+    quickModel: "",
     agentRetentionDays: 3,
 };
 

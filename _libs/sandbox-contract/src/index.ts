@@ -65,6 +65,7 @@ export * from "./agent-catalog.js";
 export * from "./hostnames.js";
 export * from "./model-order.js";
 export * from "./path-refs.js";
+export * from "./quick-model.js";
 export * from "./schemas.js";
 export * from "./terminal-protocol.js";
 export * from "./title.js";

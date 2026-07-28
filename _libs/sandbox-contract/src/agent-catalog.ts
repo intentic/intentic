@@ -46,6 +46,12 @@ export const PROVIDER_ACCESS: Record<NativeProvider, ProviderAccess> = {
     gemini: { kind: "free", requirement: "Google sign-in", runs: "Gemini, Claude and GPT-OSS under Claude Code" },
 };
 
+// What a turn on this provider costs at the MARGIN, ordering the same three kinds by the only question a
+// helper spending the user's money on their behalf has to answer: free is free; a subscription is already paid
+// but has a quota the user watches; a key is metered, so every call is real money. Deliberately not folded into
+// AccessKind's declaration order — a union's order is not a runtime fact, and this one is load-bearing.
+export const ACCESS_COST: Record<AccessKind, number> = { free: 0, subscription: 1, key: 2 };
+
 // An ACP provider carries its own credentials — installed means runnable — so it has no access requirement at
 // all; `undefined` is that state, and every surface reads it as "nothing to connect".
 export const accessFor = (provider: AgentProvider): ProviderAccess | undefined => PROVIDER_ACCESS[provider as NativeProvider];

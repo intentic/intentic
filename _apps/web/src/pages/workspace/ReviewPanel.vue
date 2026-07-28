@@ -8,7 +8,9 @@ import DiffStat from "../../components/DiffStat.vue";
 import HoverCard from "../../components/HoverCard.vue";
 import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
+import { useQuickModel } from "../../composables/chat/quickModel";
 import { useLayout } from "../../composables/useLayout";
+import { useCommitDraft } from "../../composables/workspace/useCommitDraft";
 import { originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
@@ -377,6 +379,65 @@ const doCommit = async (): Promise<void> => {
     await runCommit(commitTarget.value);
 };
 
+/* --- AI autofill ---------------------------------------------------------------------------------------------
+ * One click drafts the subject line from what this commit will actually record — the same `commitTarget` and
+ * `commitAll` the button below reads, so the message can never describe a different set of changes than the
+ * commit contains.
+ *
+ * It runs on the sandbox's QUICK MODEL (the cheap rung — see the contract's quick-model.ts), never on whatever
+ * the chat is set to: a commit subject is a mechanical job, and spending a frontier model's quota on one is the
+ * thing this whole feature exists to avoid. The tooltip names the model and where to change it, which is how
+ * the setting on Sandbox ▸ Agent gets discovered at all.
+ *
+ * Everything it has to say goes in the READOUT SLOT the blocker notice already owns — "Drafted with X · Undo",
+ * or why it failed. Same reasoning as blockerNotice: that line answers "what is this box about to do", a draft
+ * is an answer to exactly that, and a two-line box cannot afford a row per state. */
+const commitDraft = useCommitDraft();
+const quickModel = useQuickModel();
+// Off when there is nothing to describe or nothing to describe it with. `commitTarget` is empty in exactly the
+// cases the Commit button is also off, so the two never disagree about whether this commit exists.
+const autofillReady = computed(() => commitTarget.value.length > 0 && quickModel.choice.value !== undefined && !commitDraft.busy.value);
+const autofillHint = computed(() => {
+    if (quickModel.choice.value === undefined) {
+        return `Connect an AI account in Sandbox ▸ Agent to draft commit messages.`;
+    }
+    if (commitTarget.value.length === 0) {
+        return `Nothing to describe yet — stage the changes you want to commit.`;
+    }
+    const scope = commitAll.value ? `every uncommitted change` : `the staged changes`;
+    return `Draft a message from ${scope} using ${quickModel.label.value} — change the model in Sandbox ▸ Agent.`;
+});
+const runAutofill = async (): Promise<void> => {
+    // A click while it is running means stop, not "run it again" — the model call is already paid for either
+    // way, and queueing a second would only overwrite the first answer with a near-identical one.
+    if (commitDraft.busy.value) {
+        commitDraft.cancel();
+        return;
+    }
+    if (!autofillReady.value) {
+        blockerNotice.value = autofillHint.value;
+        return;
+    }
+    const message = await commitDraft.draft(commitTarget.value, commitAll.value, commitMessage.value);
+    if (message !== undefined) {
+        commitMessage.value = message;
+    }
+};
+const undoAutofill = (): void => {
+    const restored = commitDraft.undo();
+    if (restored !== undefined) {
+        commitMessage.value = restored;
+    }
+};
+// The user has taken the message somewhere else — "Undo" would now restore text that predates their edit, and
+// "Drafted with X" would be describing a message they have since rewritten. Compared against the draft rather
+// than watching blindly so writing the draft itself doesn't immediately clear its own readout.
+watch(commitMessage, (message) => {
+    if (commitDraft.drafted.value !== undefined && message !== commitDraft.drafted.value.message) {
+        commitDraft.forget();
+    }
+});
+
 // --- stage / unstage ---------------------------------------------------------------------------------------
 // `staged` is the one side that moves BACK out of the index; the other two move in. For a conflict that inward
 // move is `git add`, which is precisely how you tell git the merge is resolved — same request, different word
@@ -615,14 +676,29 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
         <!-- Commit box (VSCode places it at the top). It records the index — staging is the selection. -->
         <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 border-b border-line p-2">
-            <input
-                v-model="commitMessage"
-                type="text"
-                placeholder="Message (Ctrl+Enter to commit)"
-                class="w-full min-w-0 rounded-md border border-line bg-canvas px-2 py-1 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
-                @keydown.ctrl.enter="doCommit"
-                @keydown.meta.enter="doCommit"
-            />
+            <!-- The AI autofill sits INSIDE the input's right edge (VSCode's "Generate Commit Message"
+                 placement): it acts on the field it is drawn in, and the sidebar has no room for a second
+                 labelled button beside Commit. Extra right padding keeps a long message from running under it. -->
+            <div class="relative">
+                <input
+                    v-model="commitMessage"
+                    type="text"
+                    placeholder="Message (Ctrl+Enter to commit)"
+                    class="w-full min-w-0 rounded-md border border-line bg-canvas py-1 pl-2 pr-7 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
+                    @keydown.ctrl.enter="doCommit"
+                    @keydown.meta.enter="doCommit"
+                />
+                <button
+                    type="button"
+                    class="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-40"
+                    :disabled="!autofillReady && !commitDraft.busy.value"
+                    @click="runAutofill"
+                    v-tooltip.top="commitDraft.busy.value ? 'Stop drafting' : autofillHint"
+                    :aria-label="commitDraft.busy.value ? 'Stop drafting the commit message' : 'Draft the commit message with AI'"
+                >
+                    <Icon :name="commitDraft.busy.value ? 'spinner' : 'sparkles'" class="text-2xs" :spin="commitDraft.busy.value" />
+                </button>
+            </div>
             <!-- What the commit will record, then the one button that records it. No checkboxes: the sentence
                  on the left is a readout of the index, not a control. A conflict replaces it outright — nothing
                  about the index matters while git is refusing to commit at all. -->
@@ -634,6 +710,37 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                      line, because it answers the same question the readout does — what will this commit do. -->
                 <span v-else-if="blockerNotice" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-warning" :title="blockerNotice">
                     {{ blockerNotice }}
+                </span>
+                <!-- The autofill failed. Same slot, same reasoning: the user clicked a button in this box and
+                     nothing appeared, so the answer belongs where they are already looking. -->
+                <span
+                    v-else-if="commitDraft.error.value"
+                    class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-danger"
+                    :title="commitDraft.error.value"
+                >
+                    {{ commitDraft.error.value }}
+                </span>
+                <!-- The message on screen was written by a model, and by WHICH one — with the single click that
+                     takes it back. Undo has to be offered explicitly because writing through v-model leaves the
+                     browser's own Ctrl+Z with nothing to restore; it is also what makes overwriting a typed
+                     message safe enough to need no confirmation. -->
+                <span v-else-if="commitDraft.drafted.value" class="flex min-w-0 flex-1 items-center gap-1 text-2xs text-muted">
+                    <span class="min-w-0 truncate whitespace-nowrap" :title="`Drafted with ${commitDraft.drafted.value.model}`">
+                        Drafted with {{ commitDraft.drafted.value.model }}
+                    </span>
+                    <button
+                        v-if="commitDraft.previous.value !== undefined"
+                        type="button"
+                        class="shrink-0 rounded px-1 text-2xs text-muted underline decoration-dotted transition-colors hover:text-content"
+                        @click="undoAutofill"
+                        v-tooltip.top="
+                            commitDraft.previous.value === ``
+                                ? `Clear the drafted message`
+                                : `Put back what you had typed: ${commitDraft.previous.value}`
+                        "
+                    >
+                        Undo
+                    </button>
                 </span>
                 <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
                     <template v-if="changes.stagedCount.value > 0"

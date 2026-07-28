@@ -17,9 +17,6 @@ import { mcpToolsOf } from "../capabilities/mcp-tools.js";
 import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
 import { extensionEnvOf } from "../extensions/extension-env.js";
 import { extensionAgentDirsOf, extensionBinDirsOf } from "../extensions/installed-extensions.js";
-import { ensureFreshToken } from "../claude/claude-credentials.js";
-import { resolveKimiKey } from "../kimi/kimi-credentials.js";
-import { MOONSHOT_ANTHROPIC_BASE } from "../kimi/kimi-models.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
@@ -30,23 +27,12 @@ import { landAgent } from "../agents/land.js";
 import type { AgentRequest } from "./agent.js";
 import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
+import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
 import { delegationNote } from "./delegation.js";
-
-// The upstream model id a routed turn (codex/grok under the Claude Code harness) hands the translator, which maps
-// it to its provider. Unlike native Codex (which uses the ChatGPT account default and omits the model), the router
-// requires an explicit id, and the only source that stays correct is the provider's own live catalog (discovery →
-// persisted → seed floor, never empty): keep the pinned pick while the catalog still offers it, else take the
-// catalog's default. Validating membership rather than naming a fallback id is what survives a retirement — a pick
-// the provider has dropped simply fails the test and falls to the live default. That covers Codex's own
-// `gpt-5-codex`, which the translator's ChatGPT subscription does not serve (it re-serves the account's real ids)
-// and rejects with a non-SSE error body that breaks the harness stream; it needs no special case now, and neither
-// does Grok, whose routed turns previously pinned a hardcoded `grok-4` that consulted no catalog at all.
-const routedModel = (catalog: { models: readonly { id: string }[]; default: string }, model: string | undefined): string =>
-    model !== undefined && model !== "" && catalog.models.some((entry) => entry.id === model) ? model : catalog.default;
 
 // Fold attached-file paths into the prompt — Claude Code's canonical attachment mechanism (its Read tool
 // handles images and PDFs from disk natively, same as dragging a file into the CLI). An empty prompt is the
@@ -406,86 +392,23 @@ async function* runTurn(
         const withTools = tools.length > 0 ? { ...base, tools } : base;
         request = attachmentPaths.length > 0 ? { ...withTools, attachments: attachmentPaths } : withTools;
     } else {
-        // Endpoint + credentials for the Claude Code harness. A native Claude turn authenticates with the user's
-        // Anthropic subscription OAuth. A codex/grok/gemini provider running UNDER this harness instead points the
-        // harness at the sandbox's translator (CLIProxyAPI), which serves that provider on its connected
-        // SUBSCRIPTION OAuth — so the turn only needs the provider's subscription connected in the translator.
-        // Codex and Grok reach this only under harness "claude-code" (their native runtimes are handled above);
-        // Gemini has no native runtime, so every Gemini turn is routed.
-        let oauthToken: string | undefined;
-        let endpoint: { baseUrl: string; authToken: string; model: string } | undefined;
-        if (input.agent === "codex" || input.agent === "grok" || input.agent === "gemini") {
-            if (services.config.translator.url === "") {
-                // Codex/Grok can fall back to their own runtime; Gemini has none, so it can only be an image problem.
-                const fallback =
-                    input.agent === "gemini"
-                        ? "Run a sandbox built from the published image."
-                        : "Use the provider's native harness, or run a sandbox built from the published image.";
-                yield {
-                    kind: "error",
-                    message: `This sandbox has no model translator, so a non-Claude model can't run under the Claude Code harness here. ${fallback}`,
-                };
-                yield { kind: "done" };
-                return;
-            }
-            if (!(await services.cliProxy.accounts())[input.agent]) {
-                const label = input.agent === "codex" ? "ChatGPT subscription" : input.agent === "grok" ? "SuperGrok subscription" : "Google account";
-                yield {
-                    kind: "error",
-                    code: "subscription-required",
-                    message: `Connect your ${label} in Sandbox ▸ Agent to run ${input.agent} under the Claude Code harness.`,
-                };
-                yield { kind: "done" };
-                return;
-            }
-            // Every routed provider resolves against its own live catalog — the same catalogs the native paths
-            // use, so a pick is validated identically whichever harness runs it.
-            const catalog =
-                input.agent === "codex"
-                    ? await services.codexModels.models()
-                    : input.agent === "grok"
-                      ? await services.openCode.xaiModels()
-                      : await services.geminiModels.models();
-            const model = routedModel(catalog, input.model);
-            endpoint = { baseUrl: services.config.translator.url, authToken: services.config.translator.token, model };
-        } else if (input.agent === "kimi") {
-            // Kimi (Moonshot) speaks the Anthropic Messages protocol, so it runs on THIS harness with the endpoint
-            // pointed at Moonshot's Anthropic-compatible base and authenticated with the sandbox-owned API key (the
-            // selected account's, else the first stored one, else the container MOONSHOT_API_KEY). Withholding the
-            // Claude OAuth token happens automatically once `endpoint` is set (baseUrl in agent.ts drops it).
-            const resolved = await resolveKimiKey(services.kimiStore, services.config, input.account);
-            if (resolved === undefined) {
-                yield {
-                    kind: "error",
-                    code: "subscription-required",
-                    message: "No Kimi account connected — add your Kimi (Moonshot) API key in Sandbox ▸ Agent before chatting.",
-                };
-                yield { kind: "done" };
-                return;
-            }
-            resolvedAccount = resolved.accountId;
-            // Resolve a concrete model so the turn never sends an empty id to Moonshot: the pinned pick, else the
-            // live catalog default (discovery → persisted → seed floor, never empty).
-            const model = input.model !== undefined && input.model !== "" ? input.model : (await services.kimiModels.models()).default;
-            endpoint = { baseUrl: MOONSHOT_ANTHROPIC_BASE, authToken: resolved.apiKey, model };
-        } else {
-            const accountId = input.account ?? (await services.claudeStore.list())[0]?.id;
-            if (accountId !== undefined) {
-                try {
-                    oauthToken = await ensureFreshToken(services.claudeStore, accountId);
-                } catch (error) {
-                    yield { kind: "error", message: error instanceof Error ? error.message : "claude credentials unavailable" };
-                    yield { kind: "done" };
-                    return;
-                }
-            }
-            resolvedAccount = oauthToken !== undefined ? accountId : undefined;
-            if (oauthToken === undefined && services.config.claudeCodeOauthToken === "" && services.config.anthropicApiKey === "") {
-                yield { kind: "error", message: "No Claude account connected — connect it in Setup before chatting." };
-                yield { kind: "done" };
-                return;
-            }
+        // Endpoint + credentials for the Claude Code harness — a native Claude turn's subscription OAuth, or the
+        // translator/Moonshot endpoint a routed provider rides. Resolved by harness-credentials.ts, which the
+        // quick-model one-shot behind the commit box's autofill reads too, so both authenticate identically.
+        // Its refusals are values (no translator in the image, an unconnected subscription); this is where they
+        // become the error frame the composer's connect gate reads.
+        const resolved = await resolveHarnessCredentials(services, {
+            agent: input.agent,
+            ...(input.account !== undefined ? { account: input.account } : {}),
+            ...(input.model !== undefined ? { model: input.model } : {}),
+        });
+        if (!resolved.ok) {
+            yield { kind: "error", ...(resolved.code !== undefined ? { code: resolved.code } : {}), message: resolved.message };
+            yield { kind: "done" };
+            return;
         }
+        const { oauthToken, endpoint } = resolved.credentials;
+        resolvedAccount = resolved.credentials.account;
         // Pre-flight the resume target: a session id that outlived its transcript (deleted, or minted before
         // the store persisted across rebuilds) would otherwise spawn the CLI just to fail opaquely — on every
         // retry. The coded error lets the UI drop the dead id so the next send starts fresh.

@@ -546,6 +546,12 @@ export const SandboxSettingsSchema = z.object({
     outputCleaners: z.string().default("off"),
     outputHoldout: z.number().min(0).max(1).default(0),
     filterBackend: z.enum(["native", "rtk"]).default("native"),
+    /* The model behind the one-click helpers that are not a conversation — today the commit box's autofill.
+     * `${provider}:${modelId}`, or EMPTY for Auto, which is the default and the interesting case: Auto is
+     * resolved from whatever accounts are connected at the moment it is read (resolveQuickModel), so it can
+     * never name a provider this sandbox has no credential for and it improves by itself when one is added.
+     * Storing a resolved id here instead would go stale exactly like a pinned model does. */
+    quickModel: z.string().default(""),
     // How long a finished agent stays on the board before it is archived automatically (days; 0 ⇒ never).
     // Unlike every other flag here this one defaults ON, because the lane it governs is the board's only
     // terminal state: without a sweep the Finished lane grows for the life of the sandbox, and each card it
@@ -614,6 +620,24 @@ export const GitStatusSchema = z.object({ branch: z.string(), dirty: z.boolean()
 export const GitFilesSchema = z.object({ files: z.array(z.string()) });
 export const GitFileSchema = z.object({ path: z.string(), content: z.string() });
 export const CommitResultSchema = z.object({ committed: z.boolean() });
+
+/* AI-drafted commit message. Workspace-wide, not per repo, because the commit box's target IS a set of repos
+ * sharing one message — so the draft has to see every one of their diffs to describe what the commit actually
+ * records. `repos` and `all` mirror the panel's own commit target exactly: `all` reads the WORKTREE (what
+ * "Commit all" would sweep), absent reads the INDEX (what a bare commit records). Getting that wrong would
+ * describe changes the commit isn't going to contain. */
+export const CommitMessageDraftSchema = z.object({
+    repos: z.array(z.string().min(1)).min(1).max(50),
+    all: z.boolean().optional(),
+});
+// The draft plus WHICH model wrote it, so the surface can name it rather than claiming an anonymous "AI" —
+// that name is also the only place the resolved quick model is visible before anyone opens settings.
+export const CommitMessageSchema = z.object({
+    message: z.string(),
+    provider: z.string(),
+    model: z.string(),
+});
+export type CommitMessageDraft = z.infer<typeof CommitMessageSchema>;
 // One change to a file — an uncommitted working-tree change (status vs HEAD, untracked included), an agent
 // worktree's delta vs its base, or a file in a commit. `additions`/`deletions` are the numstat line counts,
 // undefined for a binary file (git reports "-"/"-") or an untracked file (no HEAD blob to diff against).

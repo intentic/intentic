@@ -18,7 +18,7 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
         outputCleaners: "-cap",
         outputHoldout: 0.1,
     };
-    expect(SandboxSettingsSchema.parse(older)).toEqual({ ...older, filterBackend: "native", agentRetentionDays: 3 });
+    expect(SandboxSettingsSchema.parse(older)).toEqual({ ...older, filterBackend: "native", quickModel: "", agentRetentionDays: 3 });
 });
 
 test("an empty object is the full default settings object", () => {
@@ -31,6 +31,10 @@ test("an empty object is the full default settings object", () => {
         outputCleaners: "off",
         outputHoldout: 0,
         filterBackend: "native",
+        // Empty is not "no quick model" — it is Auto, resolved from the connected accounts on every read
+        // (quick-model.ts). Storing a resolved id as the default would name a provider a fresh sandbox has no
+        // credential for, and would go stale the moment one is connected.
+        quickModel: "",
         // The one default that isn't "off": the fleet board's Finished lane has no exit of its own, and each
         // card it holds is a worktree checkout. Opting INTO cleanup would mean shipping a leak by default.
         agentRetentionDays: 3,

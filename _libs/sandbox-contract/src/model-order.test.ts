@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { compareModelIds, compareUnrankedModelIds, familyOf, releaseOf, tierRankOf } from "./model-order.js";
+import { compareCheapestFirst, compareModelIds, compareUnrankedModelIds, familyOf, releaseOf, tierRankOf } from "./model-order.js";
 
 /* The order every provider's catalog is served and browsed in. The rule exists because only Anthropic publishes
  * a ranking: the OpenAI-compatible endpoints behind Codex, Gemini, Kimi and Grok hand back a SET, and taking
@@ -134,4 +134,43 @@ test("sorts an unversioned rolling alias under the releases that name their vers
     // `kimi-latest` claims no release; guessing one for it would seat it above models that do say what they are.
     expect(releaseOf("kimi-latest").version).toEqual([]);
     expect(["kimi-latest", "kimi-k2-0711-preview"].toSorted(compareModelIds)).toEqual(["kimi-k2-0711-preview", "kimi-latest"]);
+});
+
+// --- the cheap end (compareCheapestFirst) ---------------------------------------------------------------
+// What the quick model behind a one-click helper resolves against: the same tier scale, read for the weakest
+// row instead of the strongest.
+
+test("opens on the efficient rung and buries the frontier one — the exact inverse of the picker's order", () => {
+    const claude = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"];
+
+    expect(claude.toSorted(compareCheapestFirst)).toEqual(["claude-haiku-4-5-20251001", "claude-sonnet-5", "claude-opus-5"]);
+    expect(claude.toSorted(compareModelIds)).toEqual(["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"]);
+});
+
+test("keeps an UNRANKED family off the cheap end, where a plain reversal would have seated it first", () => {
+    // The whole reason this is not `-compareModelIds`. An id with no tier word is the provider's base line, and
+    // an unheard-of family is likelier the next flagship than the next budget tier — so both orders agree it is
+    // not the efficient rung, and a helper never spends frontier money on a commit message.
+    expect(["gpt-5.6", "gpt-5.4-mini"].toSorted(compareCheapestFirst)).toEqual(["gpt-5.4-mini", "gpt-5.6"]);
+    expect(["claude-mythos-1", "claude-haiku-4-5", "claude-sonnet-5"].toSorted(compareCheapestFirst).at(-1)).toBe("claude-mythos-1");
+});
+
+test("takes the NEWEST build of the cheap rung, not merely any of them", () => {
+    // Within one tier the release rule runs unchanged: cheap is a tier, not an excuse to serve a stale model.
+    expect(["claude-haiku-4-5-20251001", "claude-haiku-4-5-20260210"].toSorted(compareCheapestFirst)[0]).toBe("claude-haiku-4-5-20260210");
+    expect(["gemini-3-flash-lite", "gemini-2-flash-lite"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3-flash-lite");
+});
+
+test("finds each vendor's own cheap rung, including a re-served open-weights row", () => {
+    expect(["gemini-3-pro", "gemini-3-flash", "gemini-3-flash-lite"].toSorted(compareCheapestFirst)[0]).toBe("gemini-3-flash-lite");
+    // Google's channel vends gpt-oss beside Gemini's own line; it is there to be the cheap option, and `oss`
+    // is what says so — without that word the id carries no tier at all and would sink to the bottom.
+    expect(["claude-opus-4-6-thinking", "gpt-oss-120b-medium"].toSorted(compareCheapestFirst)[0]).toBe("gpt-oss-120b-medium");
+    expect(["grok-4", "grok-4-fast"].toSorted(compareCheapestFirst)[0]).toBe("grok-4-fast");
+});
+
+test("falls back on the newest release for a catalog that publishes no cheap tier at all", () => {
+    // Kimi names no tier word anywhere, so every row is UNRANKED and the tier term cancels. Serving the newest
+    // of what it does publish is the honest answer — there is no cheaper rung to find.
+    expect(["kimi-k2-0711-preview", "kimi-k2-0905-preview"].toSorted(compareCheapestFirst)[0]).toBe("kimi-k2-0905-preview");
 });
