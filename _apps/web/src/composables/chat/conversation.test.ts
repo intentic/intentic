@@ -913,7 +913,10 @@ describe(`Conversation`, () => {
         // Far-future reset so the re-attach probe this arms stays parked for the test's lifetime.
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
         sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `scheduled` }, { kind: `done` }]),
+            sseResponse([
+                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `scheduled` },
+                { kind: `done` },
+            ]),
         );
         await conversation.send(`hello`, settings);
 
@@ -930,7 +933,10 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
         sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `available` }, { kind: `done` }]),
+            sseResponse([
+                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `available` },
+                { kind: `done` },
+            ]),
         );
         await conversation.send(`hello`, settings);
 
@@ -1259,6 +1265,72 @@ describe(`Conversation`, () => {
             { role: `assistant`, text: `Done with step one.` },
             { role: `user`, text: `Continue` },
             { role: `assistant`, text: `Step two.` },
+        ]);
+    });
+
+    /* The duplicated-chat bug: the daemon's session store holds a turn from the moment it starts, so a hydrate
+     * that lands MID-TURN restores that turn and then attaches to the same run — and the synthesized bubble drew
+     * it a second time. The live replay owns the run, so the restored copy is adopted, not doubled. */
+    it(`reattach adopts a restored copy of the running turn instead of drawing it twice`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.restoreMessages([
+            { role: `user`, text: `start the migration` },
+            { role: `assistant`, text: `Done with step one.` },
+            // The turn that is still running: the store already has its prompt and the prose written so far.
+            { role: `user`, text: `now do step two`, attachments: [`plan.md`] },
+            { role: `assistant`, text: `Working on` },
+        ]);
+        sandboxRequestMock.mockImplementation(() => {
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(sseFrame(head({ prompt: `now do step two` })));
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `Working on it.` } }));
+                    controller.enqueue(sseFrame({ kind: `end` }));
+                    controller.close();
+                },
+            });
+            return Promise.resolve({ ok: true, body } as Response);
+        });
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `start the migration` },
+            { role: `assistant`, text: `Done with step one.` },
+            { role: `user`, text: `now do step two` },
+            // The replay rebuilt the answer from seq 0 — the store's partial copy came off with it.
+            { role: `assistant`, text: `Working on it.` },
+        ]);
+        // The adopted bubble is the restored one, chips and all — the head carries no attachments to rebuild.
+        expect(conversation.messages.value[2]?.attachments).toEqual([{ name: `plan.md`, path: `plan.md` }]);
+    });
+
+    /* The tail is only THIS run when it matches whole: a live "Continue" answering an earlier "Continue with the
+     * tests" must not swallow that turn. */
+    it(`reattach appends when the transcript's last prompt only looks like the running one`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.restoreMessages([
+            { role: `user`, text: `Continue with the tests` },
+            { role: `assistant`, text: `All green.` },
+        ]);
+        sandboxRequestMock.mockImplementation(() => {
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(sseFrame(head({ prompt: `Continue` })));
+                    controller.enqueue(sseFrame({ kind: `end` }));
+                    controller.close();
+                },
+            });
+            return Promise.resolve({ ok: true, body } as Response);
+        });
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `Continue with the tests` },
+            { role: `assistant`, text: `All green.` },
+            { role: `user`, text: `Continue` },
+            { role: `assistant`, text: `` },
         ]);
     });
 
