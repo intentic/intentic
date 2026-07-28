@@ -131,7 +131,10 @@ const confirmRestore = (id: string): void => {
                         <span class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[change.status]">{{
                             STATUS_LETTER[change.status]
                         }}</span>
-                        <span class="truncate text-2xs text-muted max-md:text-xs" dir="rtl">{{ changeLabel(change) }}</span>
+                        <!-- <bdi> keeps a leading "_" ("_apps/…") from being reordered to the far right by dir="rtl". -->
+                        <span class="truncate text-2xs text-muted max-md:text-xs" dir="rtl"
+                            ><bdi>{{ changeLabel(change) }}</bdi></span
+                        >
                     </button>
 
                     <div class="mt-1.5 flex items-center gap-2">
