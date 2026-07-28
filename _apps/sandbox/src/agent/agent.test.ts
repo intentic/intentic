@@ -437,6 +437,18 @@ test("a non-rate-limit assistant error with no explanation falls back to its bar
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", message: "agent error: overloaded" }, { kind: "done" }]);
 });
 
+// The CLI files a mid-session limit hit under a non-rate_limit category, with only the sentence saying what
+// happened ("You've hit your session limit · resets …"). The sentence is kept — it names the reset, our canned
+// line doesn't — but the code makes it the same condition as the assistant-error rate_limit above.
+test("a usage-limit sentence under another error category is classified as rate_limit, keeping its own text", async () => {
+    const limitText = "You've hit your session limit · resets 1:40pm (UTC)";
+    const events = await collect(
+        request,
+        fakeQuery({ type: "assistant", session_id: "s", error: "unknown", message: { content: [{ type: "text", text: limitText }] } }),
+    );
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "rate_limit", message: limitText }, { kind: "done" }]);
+});
+
 // 'unknown' is the SDK's catch-all for every 4xx, so the category names nothing the user can fix; the API's own
 // sentence rides in the synthetic message's text block and is the whole value of the frame.
 test("an API error surfaces the API's own sentence, not the SDK's error category", async () => {

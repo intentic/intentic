@@ -14,10 +14,12 @@ const PersistedAgentStatusSchema = z.enum(["idle", "landed", "conflict", "error"
 
 /* Where a title came from, which is the whole of what decides whether a better one may replace it.
  *
- * `derived` is the opening prompt read as prose (deriveTitle). `plan` is the heading of a plan the agent
- * wrote — its own name for the whole job, and so strictly better than the prompt it was derived from. `user`
- * is a rename, which outranks everything: an agent that renames a tab the user just named is a bug. */
-const AgentTitleSourceSchema = z.enum(["derived", "plan", "user"]);
+ * `derived` is the opening prompt read as prose (deriveTitle) — a guess made before the first frame came
+ * back. `summary` is the quick model's reading of a finished turn (agent/title-summary.ts): it has seen the
+ * answer, so it beats the guess. `plan` is the heading of a plan the agent wrote — its own name for the whole
+ * job, better than any reading of it. `user` is a rename, which outranks everything: an agent that renames a
+ * tab the user just named is a bug. */
+const AgentTitleSourceSchema = z.enum(["derived", "summary", "plan", "user"]);
 export type AgentTitleSource = z.infer<typeof AgentTitleSourceSchema>;
 
 export const PersistedAgentSchema = z.object({

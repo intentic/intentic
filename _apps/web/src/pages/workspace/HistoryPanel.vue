@@ -84,20 +84,20 @@ const confirmRestore = (id: string): void => {
         <div class="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
             <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Checkpoints</span>
             <span class="flex-1"></span>
-            <Icon name="spinner" v-if="busy" v-tooltip.top="'Working…'" class="text-xs text-muted" spin />
+            <Icon name="spinner" v-if="busy" v-tooltip.right="'Working…'" class="text-xs text-muted" spin />
             <button
                 type="button"
                 class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                 @click="refetch()"
-                v-tooltip.top="'Refresh'"
+                v-tooltip.right="'Refresh'"
                 aria-label="Refresh checkpoints"
             >
                 <Icon name="refresh" class="text-xs" :spin="isLoading" />
             </button>
         </div>
 
-        <p v-if="error" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.bottom="error">{{ error }}</p>
-        <p v-if="actionError" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.bottom="actionError">{{ actionError }}</p>
+        <p v-if="error" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.right="error">{{ error }}</p>
+        <p v-if="actionError" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.right="actionError">{{ actionError }}</p>
 
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
             <p v-if="snapshots.length === 0" class="px-3 py-2 text-2xs text-subtle">
@@ -155,7 +155,7 @@ const confirmRestore = (id: string): void => {
                             class="rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content max-md:min-h-11 max-md:px-3 max-md:text-xs"
                             :disabled="busy"
                             @click="confirmRestoreId = snapshot.id"
-                            v-tooltip.bottom="
+                            v-tooltip.right="
                                 'Bring the workspace back to this checkpoint. Secrets and git branches are untouched; a safety checkpoint is saved first.'
                             "
                         >

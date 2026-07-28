@@ -219,8 +219,7 @@ RUN cd /opt/sandbox \
 # entry. connectors is data-only (manifest + connector skills + client image fragments) so it copies straight
 # from context; discord and imap ship their deployed gateway trees from the trees context (node_modules included).
 # The web-builtin UI extensions (automations, logs, …) are NOT baked — they compile into the web bundle and
-# contribute nothing daemon-side; rtk stays a git-install (its environment fragment only composes for
-# extension-kind capability entries, so baking it would be inert).
+# contribute nothing daemon-side.
 COPY _extensions/connectors /opt/extensions/connectors
 COPY --from=trees extensions/discord /opt/extensions/discord
 # Same glibc rationale as the sandbox rebuild above — the discord gateway's voice stack compiles opus from source.
@@ -247,6 +246,25 @@ COPY --chmod=755 _apps/sandbox/bin/agent-output-filter.mjs /usr/local/bin/agent-
 COPY --chmod=755 _apps/sandbox/bin/cleaners.mjs /usr/local/bin/cleaners.mjs
 # retrieve-output on PATH — the reversible half of the filter (fetch back elided output; the footer names it).
 COPY --chmod=755 _apps/sandbox/bin/retrieve-output.mjs /usr/local/bin/retrieve-output
+# rtk (rtk-ai/rtk, Apache-2.0) — the alternate cleaner backend the `filterBackend` setting switches to (the
+# PreToolUse hook rewrites each Bash command to `rtk <cmd>` and turns the native filter off). Baked, not shipped
+# as an installable extension's fragment: the setting is a plain toggle with no capability behind it, so an
+# extension-gated binary meant flipping it silently broke EVERY Bash command with `rtk: command not found`
+# until the owner happened to install an extension and rebuild. A ~10 MiB static binary is far cheaper than a
+# switch that can only be used wrong. Pin RTK_VERSION deliberately — an image build fails loudly on a bad asset.
+ENV RTK_VERSION=0.44.0
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+      x86_64) target="x86_64-unknown-linux-musl" ;; \
+      aarch64) target="aarch64-unknown-linux-gnu" ;; \
+      *) echo "rtk: unsupported arch $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/rtk-${target}.tar.gz" -o /tmp/rtk.tar.gz; \
+    tar -xzf /tmp/rtk.tar.gz -C /usr/local/bin rtk; \
+    rm /tmp/rtk.tar.gz; \
+    chmod +x /usr/local/bin/rtk; \
+    rtk --version
 # The VPN command the agent's vpn skill teaches and an owner can run in a terminal. It calls the daemon's /vpn
 # routes (never a VPN client directly), so agent-initiated and UI-initiated connects are the same operation.
 # The clients themselves are NOT baked — they ride the vpn capability's environment fragment, like WireGuard

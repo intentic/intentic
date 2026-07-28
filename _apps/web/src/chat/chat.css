@@ -38,20 +38,18 @@
     background: var(--color-card);
     content-visibility: visible;
 }
-/* The depth cue, and ONLY while the row is actually pinned. That opaque background is a rectangle ending at
-   the row's own last pixel, so the turn sliding beneath a pinned prompt was cut off mid-glyph against a bare
-   horizontal edge — which reads as a rendering fault rather than as one layer passing under another. A short
-   drop shadow names the edge: this surface sits ABOVE the one scrolling past. It replaced a card-to-
-   transparent gradient painted over the answer, which in dark mode read as a fog bank smearing the first
-   lines of every reply. Gated because a shadow under an in-flow row would float the prompt over a transcript
-   it is supposed to sit in. */
+/* The clip edge, named — and ONLY while the row is actually pinned. That opaque background is a rectangle
+   ending at the row's own last pixel, so the turn sliding beneath a pinned prompt was cut off mid-glyph
+   against nothing — which reads as a rendering fault rather than as one layer passing under another. A
+   hairline at the row's bottom edge draws the boundary the way a sticky header's divider does: the surface
+   ends here, and what is cut below is passing under it. It replaced a drop shadow, which read as a halo
+   hanging off the prompt rather than an edge of the band — worst in the popped-out window, where the band
+   runs wide of the bubble and the dark-mode alpha the shadow needed to register smeared the first line of
+   every reply. A box-shadow rather than border-bottom because a border is a pixel of height appearing at
+   the pin threshold, and any height change there yanks the transcript (see .chat-prompt-text). Gated
+   because a divider under an in-flow row would fence the prompt off from the transcript it sits in. */
 .chat-prompt-pinned {
-    box-shadow: 0 4px 8px -4px rgb(0 0 0 / 0.16);
-}
-/* Dark surfaces swallow soft black: the same shadow needs roughly triple the alpha to register against
-   surface-900 that 16% reaches against white. */
-[data-mode="dark"] .chat-prompt-pinned {
-    box-shadow: 0 4px 10px -4px rgb(0 0 0 / 0.5);
+    box-shadow: 0 1px 0 0 var(--color-line);
 }
 /* A prompt is pinned for as long as its answer runs, so its height is charged against the room that answer has
    to be read in — and an unbounded one (a pasted spec, a continued transcript) took half the panel for the

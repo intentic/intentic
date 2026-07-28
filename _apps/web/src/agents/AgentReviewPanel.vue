@@ -5,6 +5,7 @@ import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import DiffStat from "../components/DiffStat.vue";
+import { stopAgent } from "../composables/agents/agentActions";
 import { type AgentReviewFile, useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
@@ -15,6 +16,7 @@ import BinaryDiffView from "../pages/workspace/viewers/BinaryDiffView.vue";
 import DiffView from "../pages/workspace/viewers/DiffView.vue";
 import { rendersAsBytes } from "../pages/workspace/fileType";
 import { STATUS_CLASS, STATUS_LETTER } from "../pages/workspace/workspaceTabs";
+import AgentConflictReport from "./AgentConflictReport.vue";
 
 /* One agent's work, as a REVIEW: the file list on the left, that file's diff on the right, in this view — the
  * shape every code review has (GitHub, VSCode's SCM, `git add -p`), because the job is scanning a body of
@@ -38,6 +40,10 @@ import { STATUS_CLASS, STATUS_LETTER } from "../pages/workspace/workspaceTabs";
  * disabled up front when this browser is the one streaming. */
 
 const props = defineProps<{ agentId: string }>();
+// "Watch it work" — the conflict block's link to the turn it just started. On desktop the conversation is
+// already on screen in the docked chat, so this is a mobile affair: only there is the chat a mode this view
+// has to be switched INTO, and only the parent owns that switch.
+const emit = defineEmits<{ chat: [] }>();
 const router = useRouter();
 const { mobile } = useDevice();
 const { explorerStyle } = useExplorerStyle();
@@ -282,46 +288,16 @@ const layoutOptions: { label: string; value: `split` | `unified` }[] = [
 const ICON_BUTTON = `flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40`;
 const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-danger/10 px-2 py-1.5`;
 
-/* THE CONFLICT REPORT — the panel's one job when a land is refused.
- *
- * What it replaced named every path in the delta and said "your workspace's copy of these paths differs",
- * which was wrong twice over: `git apply` is atomic, so a handful of real conflicts held back everything and
- * the report listed the lot; and the stated cause was the rarest of the three. A user reading it had no way
- * to tell four blocked files from fourteen, no idea which of their own edits was implicated, and — since the
- * only buttons were Archive, Discard and a Land that would fail identically forever — nothing to do about it.
- *
- * So: count what is actually blocked against what would land anyway, group the blockers by CAUSE, and end on
- * the one action that fits the causes present. */
-const REASON_COPY = {
-    diverged: {
-        title: `your workspace moved on since the agent branched`,
-        fix: `A three-way merge can reconcile these.`,
-    },
-    workspace: {
-        title: `you have uncommitted edits to these`,
-        fix: `Commit or stash your copy, then land again — git cannot merge through unstaged work.`,
-    },
-    binary: {
-        title: `binary files, which have no automatic merge`,
-        fix: `Land the rest, then copy these across by hand.`,
-    },
-} as const;
-
-const conflictPaths = computed(() => (changes.conflicts.value ?? []).flatMap((conflict) => conflict.paths));
-const blockedCount = computed(() => conflictPaths.value.length);
-// What the atomic refusal is holding hostage — the number that tells the user how little is actually wrong.
-const cleanCount = computed(() => (changes.conflicts.value ?? []).reduce((total, conflict) => total + conflict.clean, 0));
-// Grouped by cause, because the three want three different things from the user.
-const conflictGroups = computed(() =>
-    (Object.keys(REASON_COPY) as (keyof typeof REASON_COPY)[]).flatMap((reason) => {
-        const paths = conflictPaths.value.filter((conflict) => conflict.reason === reason).map((conflict) => conflict.path);
-        return paths.length === 0 ? [] : [{ reason, paths, ...REASON_COPY[reason] }];
-    }),
-);
-// A three-way apply goes through the index, so git refuses it outright on an unstaged path. Offering the
-// button in that case would promise something the daemon has to decline.
-const mergeable = computed(() => blockedCount.value > 0 && conflictPaths.value.every((conflict) => conflict.reason !== `workspace`));
+// What a refused land left behind. The report itself — the causes, and the ladder of actions ordered by who
+// can take them — is AgentConflictReport; this panel only owns where its buttons lead.
 const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
+
+// Where the user's own half of a conflict is dealt with: the workspace sidebar's Changes panel, which is
+// where these paths get committed or stashed. Same deep-link the badges use — setSidebarPanel un-collapses.
+const openChanges = (): void => {
+    shell.setSidebarPanel(`changes`);
+    void router.push({ name: `workspace` });
+};
 
 // --- the list's width ----------------------------------------------------------------------------------
 // The file list is a column of PATHS, and how much of one you need is the reviewer's call, not a constant:
@@ -482,43 +458,21 @@ const confirmDiscard = (): void => {
             <p class="break-all font-mono text-2xs text-muted">{{ resolvingPaths.join(", ") }}</p>
         </div>
 
-        <!-- The conflict report. Nothing was written: the worktree still holds every change, so this is a
-             decision point rather than a failure — hence the count of what is being held back by how little,
-             the cause of each blocker, and an action that fits the causes present. -->
-        <div
+        <!-- The conflict report, and the ladder of what to do about it. Mounted rather than inlined: it is
+             the one part of this panel with a decision tree in it (see AgentConflictReport). -->
+        <AgentConflictReport
             v-if="changes.conflicts.value !== undefined && changes.conflicts.value.length > 0"
-            class="mx-2 mt-2 flex shrink-0 flex-col gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5"
-        >
-            <span class="text-2xs font-medium text-warning">
-                <template v-if="blockedCount === 0">Couldn't reach your workspace's copy of this repo</template>
-                <template v-else>
-                    {{ blockedCount }} file{{ blockedCount === 1 ? "" : "s" }} couldn't be applied<template v-if="cleanCount > 0">
-                        — holding back {{ cleanCount }} that {{ cleanCount === 1 ? "would" : "would all" }} land cleanly</template
-                    >
-                </template>
-            </span>
-            <!-- Grouped by cause: which of the three is in play decides what the user does next. -->
-            <div v-for="group in conflictGroups" :key="group.reason" class="flex flex-col">
-                <span class="text-2xs text-content">{{ group.title }}</span>
-                <span class="break-all font-mono text-2xs text-muted">{{ group.paths.join(", ") }}</span>
-                <span class="text-2xs text-subtle">{{ group.fix }}</span>
-            </div>
-            <p v-if="blockedCount === 0" class="text-2xs text-muted">
-                Nothing was applied and nothing was lost — the agent's work is still on its branch.
-            </p>
-            <div v-if="mergeable" class="mt-0.5 flex items-center gap-2">
-                <button
-                    type="button"
-                    :class="cmp.buttonWarning('gap-0 whitespace-nowrap px-2.5 py-1 text-2xs')"
-                    :disabled="changes.actionBusy.value || streaming"
-                    @click="changes.land('merge')"
-                    v-tooltip.bottom="'Applies everything that fits and leaves the rest with conflict markers to resolve in your workspace'"
-                >
-                    <Icon name="check" class="mr-1 text-2xs" />Land with conflict markers
-                </button>
-                <span class="text-2xs text-subtle">Writes to your workspace — "Land now" does not.</span>
-            </div>
-        </div>
+            class="mx-2 mt-2"
+            :conflicts="changes.conflicts.value"
+            :streaming="streaming"
+            :busy="changes.actionBusy.value"
+            :asked="changes.asked.value"
+            @resolve="changes.askResolve()"
+            @merge="changes.land('merge')"
+            @commit="openChanges"
+            @stop="stopAgent(agentId)"
+            @chat="emit('chat')"
+        />
 
         <p v-if="changes.loading.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">Loading the agent's diff…</p>
         <div v-else-if="changes.count.value === 0" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
@@ -590,7 +544,7 @@ const confirmDiscard = (): void => {
                                 <span
                                     v-if="!file.change.landed"
                                     class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-                                    v-tooltip.top="'Not yet landed in your workspace'"
+                                    v-tooltip.right="'Not yet landed in your workspace'"
                                 ></span>
                                 <DiffStat :additions="file.change.additions" :deletions="file.change.deletions" />
                             </button>
@@ -603,7 +557,7 @@ const confirmDiscard = (): void => {
                                         : 'opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:opacity-100'
                                 "
                                 @click="toggleViewed(file)"
-                                v-tooltip.left="isViewed(file) ? 'Reviewed — click to unmark' : 'Mark as reviewed'"
+                                v-tooltip.right="isViewed(file) ? 'Reviewed — click to unmark' : 'Mark as reviewed'"
                                 :aria-label="`Mark ${file.label} as reviewed`"
                             >
                                 <Icon :name="isViewed(file) ? 'check-square' : 'check'" class="text-2xs" />

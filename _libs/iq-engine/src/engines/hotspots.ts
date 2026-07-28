@@ -15,22 +15,50 @@ export interface HotspotOptions extends ChurnOptions {
     readonly pattern?: string;
 }
 
-export const hotspotFiles = async (db: IndexDb, root: string, entries: readonly FileEntry[], options: HotspotOptions): Promise<RankedGroup[]> => {
+// One ranked file, in numbers rather than a rendered line — the terminal verb formats these, and the daemon's
+// codebase-health panel plots them (engines/health.ts). One ranking, two presentations.
+export interface HotspotFile {
+    readonly path: string;
+    readonly commits: number;
+    readonly adds: number;
+    readonly dels: number;
+    readonly complexity: number;
+    // commits × complexity: the risk product the whole verb exists to rank by.
+    readonly score: number;
+    readonly latestMs: number;
+}
+
+export const rankHotspots = async (db: IndexDb, root: string, entries: readonly FileEntry[], options: HotspotOptions): Promise<HotspotFile[]> => {
     const complexity = new Map(
         db.all("SELECT path, complexity FROM files WHERE complexity > 0").map((row) => [row["path"] as string, Number(row["complexity"])]),
     );
     const churn = await churnOf(root, entries, options);
     const pattern = options.pattern !== undefined && options.pattern !== "" ? options.pattern.toLowerCase() : undefined;
     return [...churn.entries()]
-        .map(([path, entry]) => {
+        .flatMap(([path, activity]) => {
             const cx = complexity.get(path) ?? 0;
-            return { path, entry, cx, product: entry.commits * cx };
+            // A file needs BOTH signals to place: no branch points, no risk product, no row.
+            if (cx === 0 || (pattern !== undefined && !path.toLowerCase().includes(pattern))) {
+                return [];
+            }
+            return [
+                {
+                    path,
+                    commits: activity.commits,
+                    adds: activity.adds,
+                    dels: activity.dels,
+                    complexity: cx,
+                    score: activity.commits * cx,
+                    latestMs: activity.latestMs,
+                },
+            ];
         })
-        .filter((item) => item.cx > 0 && (pattern === undefined || item.path.toLowerCase().includes(pattern)))
-        .toSorted((a, b) => b.product - a.product || (a.path < b.path ? -1 : 1))
-        .map((item, rank) => {
-            const score = 1 / (rank + 1);
-            const summary = `${item.entry.commits} commit${item.entry.commits === 1 ? "" : "s"}   +${item.entry.adds} -${item.entry.dels}   cx ${item.cx}   score ${item.product}`;
-            return { path: item.path, score, hits: [{ path: item.path, line: 1, text: summary, tags: [], score }] };
-        });
+        .toSorted((a, b) => b.score - a.score || (a.path < b.path ? -1 : 1));
 };
+
+export const hotspotFiles = async (db: IndexDb, root: string, entries: readonly FileEntry[], options: HotspotOptions): Promise<RankedGroup[]> =>
+    (await rankHotspots(db, root, entries, options)).map((file, rank) => {
+        const score = 1 / (rank + 1);
+        const summary = `${file.commits} commit${file.commits === 1 ? "" : "s"}   +${file.adds} -${file.dels}   cx ${file.complexity}   score ${file.score}`;
+        return { path: file.path, score, hits: [{ path: file.path, line: 1, text: summary, tags: [], score }] };
+    });

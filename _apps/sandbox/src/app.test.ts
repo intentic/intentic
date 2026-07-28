@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { createResidentEngine, type QueryRequest } from "@intentic/iq-engine";
+import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 import type { AgentEvent, Capability } from "@intentic/sandbox-contract";
-import { portUrl, sandboxContract } from "@intentic/sandbox-contract";
+import { HEALTH_LIMIT, portUrl, sandboxContract } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
 import { createORPCClient } from "@orpc/client";
@@ -296,6 +296,12 @@ const services = (overrides: Partial<Services> = {}): Services => ({
             text: "",
             exitCode: 1 as const,
         }),
+        health: async () => ({
+            totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
+            hotspots: [],
+            modules: [],
+            freshness: { state: "fresh" as const },
+        }),
         markDirty: () => {},
         warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh" as const, ageMs: 0 } }),
         close: () => {},
@@ -424,6 +430,12 @@ test("workspace.search runs the resident engine in-process, mapping the wire que
                             exitCode: 0,
                         };
                     },
+                    health: async () => ({
+                        totals: { files: 0, symbols: 0, complexity: 0, hotspots: 0 },
+                        hotspots: [],
+                        modules: [],
+                        freshness: { state: "fresh" },
+                    }),
                     markDirty: () => {},
                     warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh", ageMs: 0 } }),
                     close: () => {},
@@ -443,6 +455,41 @@ test("workspace.search runs the resident engine in-process, mapping the wire que
             echo: 'find "createWidget" --ignored',
         },
     ]);
+});
+
+test("workspace.health scopes the resident engine to one repo — 'root' is the workspace repo's empty scope", async () => {
+    const requests: HealthRequest[] = [];
+    const report = {
+        totals: { files: 12, symbols: 40, complexity: 88, hotspots: 3 },
+        hotspots: [{ path: "app/src/gate.ts", commits: 7, adds: 120, dels: 40, complexity: 19, score: 133, latestMs: 1_700_000_000_000 }],
+        modules: [{ path: "app/src/widget.ts", exports: 4 }],
+        freshness: { state: "fresh" as const },
+    };
+    const client = clientFor(
+        createApp(
+            services({
+                workspace: tempWorkspace([{ name: "app" }]),
+                iq: {
+                    ...services().iq,
+                    health: async (request) => {
+                        requests.push(request);
+                        return report;
+                    },
+                },
+            }),
+        ),
+    );
+    expect(await client.workspace.health({ repo: "root" })).toEqual({ repo: "root", ...report });
+    await client.workspace.health({ repo: "app", since: "30d", limit: 5 });
+    expect(requests).toEqual([
+        // The sweep tags a workspace-root file with the empty repo id, so "root" narrows to exactly those files
+        // — not to everything, which would fold every nested repo's churn into the root repo's report.
+        { scope: { repo: "" }, limit: HEALTH_LIMIT },
+        { scope: { repo: "app" }, since: "30d", limit: 5 },
+    ]);
+    // A report for a repo that isn't there would read as a healthy repo, so it is an error instead.
+    expect(await errorCode(client.workspace.health({ repo: "ghost" }))).toBe("NOT_FOUND");
+    expect(await errorCode(client.workspace.health({ repo: "../escape" }))).toBe("BAD_REQUEST");
 });
 
 test("panels.list reports the content facts extensions detect on", async () => {

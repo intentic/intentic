@@ -6,7 +6,8 @@ import type { GitChange, SnapshotChange } from "@intentic-app/api-contract";
  * diff payloads that Workspace.vue turns into diff tabs; the chat pushes plan previews in via
  * useWorkspaceTabs.openPlan. A `directory` tab is a repository's management surface (DirectoryOperator); a
  * `graph` tab is one repo's git-history graph (GitGraph.vue) — a wide document, so it lives here in the main
- * area (not the narrow sidebar), the same division VSCode makes between its SCM list and the Git Graph tab. */
+ * area (not the narrow sidebar), the same division VSCode makes between its SCM list and the Git Graph tab.
+ * A `health` tab is the third per-repo document: its codebase-health report (CodebaseHealth.vue). */
 
 // A snapshot's parent-vs-snapshot statuses plus the working tree's (which adds "renamed").
 export type ChangeStatus = SnapshotChange["status"] | GitChange["status"];
@@ -43,7 +44,8 @@ export type WorkspaceTab =
       }
     | { readonly kind: "plan"; readonly id: string; readonly title: string; readonly text: string }
     | { readonly kind: "directory"; readonly id: string; readonly dir: string }
-    | { readonly kind: "graph"; readonly id: string; readonly repo: string };
+    | { readonly kind: "graph"; readonly id: string; readonly repo: string }
+    | { readonly kind: "health"; readonly id: string; readonly repo: string };
 
 // What the Changes/History panels hand up when a changed file is clicked; Workspace derives the diff tab's id
 // from it. `key` is the diff source's identity: a snapshot id, or `working:<repo>` for an uncommitted change.

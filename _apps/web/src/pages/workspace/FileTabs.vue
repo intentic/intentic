@@ -23,8 +23,17 @@ const { explorerStyle } = useExplorerStyle();
 const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 const fileIcon = (path: string): IconName => iconForEntry(basename(path), `file`);
 
-const tabLabel = (tab: WorkspaceTab): string =>
-    tab.kind === `plan` ? tab.title : tab.kind === `directory` ? basename(tab.dir) : tab.kind === `graph` ? basename(tab.repo) : basename(tab.path);
+const tabLabel = (tab: WorkspaceTab): string => {
+    if (tab.kind === `plan`) {
+        return tab.title;
+    }
+    if (tab.kind === `directory`) {
+        return basename(tab.dir);
+    }
+    // The two per-repo documents are named for their repo, so the icon is what tells them apart in the strip —
+    // and both can be open for the same repo at once.
+    return tab.kind === `graph` || tab.kind === `health` ? basename(tab.repo) : basename(tab.path);
+};
 const tabHint = (tab: WorkspaceTab): string => {
     if (tab.kind === `plan`) {
         return tab.title;
@@ -34,6 +43,9 @@ const tabHint = (tab: WorkspaceTab): string => {
     }
     if (tab.kind === `graph`) {
         return `${tab.repo} · git history`;
+    }
+    if (tab.kind === `health`) {
+        return `${tab.repo} · codebase health`;
     }
     return tab.kind === `diff` ? `${tab.label} (diff)` : tab.path;
 };
@@ -146,6 +158,7 @@ watch(
                 <Icon name="list-check" v-else-if="tab.kind === 'plan'" class="text-2xs text-link" />
                 <Icon name="cog" v-else-if="tab.kind === 'directory'" class="text-2xs text-link" />
                 <Icon name="sitemap" v-else-if="tab.kind === 'graph'" class="text-2xs text-link" />
+                <Icon name="wave-pulse" v-else-if="tab.kind === 'health'" class="text-2xs text-link" />
                 <span v-else class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[tab.status]">{{
                     STATUS_LETTER[tab.status]
                 }}</span>

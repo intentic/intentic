@@ -7,10 +7,11 @@ import { NATIVE_PROVIDERS, type NativeProvider, providerLabel } from "@intentic/
 import { useAgents } from "../composables/agents/useAgents";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
-import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
-import { bindingWindow, formatUtilization, isStale, usageDetail, usageStatusFor } from "../composables/chat/usageStatus";
+import { acksOf, type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
+import { bindingWindow, formatReset, formatUtilization, isStale, usageDetail, usageStatusFor } from "../composables/chat/usageStatus";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useChat } from "../composables/chat/useChat";
+import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { useChatPopout } from "../composables/chat/useChatPopout";
 import { useSpeechInput } from "../composables/chat/useSpeechInput";
 import { sandboxJson, sandboxUpload } from "../composables/sandbox/sandboxClient";
@@ -121,6 +122,20 @@ const activeAccountReauth = computed(() => {
     const id = account.value ?? accounts.value[0]?.id;
     return accounts.value.find((entry) => entry.id === id && entry.needsReauth === true);
 });
+
+// The usage-limit auto-resume offer (Conversation.limitResume): the daemon remembered the turn the limit
+// killed, and one press here flips the STANDING autoResumeOnLimit setting (Sandbox ▸ Agent) — the save alone
+// arms that resume daemon-side; armLimitResume then reflects it in this chat (notice + re-attach probe).
+const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
+const limitResume = computed(() => active.value.limitResume.value);
+const enableAutoResume = async (): Promise<void> => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    await saveSandboxSettings.mutateAsync({ ...current, autoResumeOnLimit: true });
+    active.value.armLimitResume();
+};
 
 /* Archiving an agent does NOT close its chat tab — see the archive note in useAgents for why the quiet,
  * undoable action is the wrong one to hang a tab close off. What it must not do either is leave the tab
@@ -914,13 +929,16 @@ watch(keyboardInset, () => {
             >
                 <div ref="content" class="chat-turns flex flex-1 flex-col gap-1 pt-4">
                     <template v-if="messages.length > 0">
-                        <!-- One section per turn, purely so each prompt's sticky range ends where its answer does. -->
+                        <!-- One section per turn, purely so each prompt's sticky range ends where its answer does.
+                             A bare "continue" folds into the turn it nudges (see turnsOf), so the question that
+                             defines the work stays pinned through the continued answer. -->
                         <section v-for="turn in turns" :key="turn.id" class="flex flex-col gap-1">
                             <ChatMessageView
                                 v-for="message in turn.messages"
                                 :key="message.id"
                                 :message="message"
                                 :streaming="isStreaming(message)"
+                                :acks="message.id === turn.id ? acksOf(turn) : undefined"
                             />
                         </section>
                     </template>
@@ -977,6 +995,28 @@ watch(keyboardInset, () => {
                             <span class="font-semibold underline">Reconnect</span></span
                         >
                     </button>
+                    <!-- Usage-limit auto-resume offer: surfaced at the moment it would have helped — the daemon
+                         remembered the turn the limit killed, and enabling the standing toggle here arms that very
+                         resume (~1 min after the limit resets), plus every future one. -->
+                    <div
+                        v-if="limitResume"
+                        class="flex items-start gap-2 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
+                    >
+                        <Icon name="clock" class="mt-0.5 shrink-0" />
+                        <span class="min-w-0 flex-1"
+                            >Usage limit reached — resets {{ formatReset(limitResume.resetsAt) }}. Auto-resume can continue this chat by itself
+                            about a minute after.</span
+                        >
+                        <button
+                            type="button"
+                            class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
+                            :disabled="sandboxSettings === undefined || saveSandboxSettings.isPending.value"
+                            v-tooltip.top="'Turns on the standing auto-resume toggle (Sandbox ▸ Agent) and resumes this chat at reset'"
+                            @click="enableAutoResume"
+                        >
+                            Enable auto-resume
+                        </button>
+                    </div>
                     <template v-if="connected">
                         <!-- Messages written while the agent was busy that haven't reached it yet. They sit here
                              rather than in the transcript because they are not part of the conversation until the

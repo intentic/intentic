@@ -1,7 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Conversation, turnDefaults } from "./conversation";
-import { type ChatMessage, transcriptOf, turnsOf } from "./transcript";
+import { acksOf, type ChatMessage, isAcknowledgment, transcriptOf, turnsOf } from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
 
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
@@ -232,6 +232,38 @@ describe(`Conversation`, () => {
             { id: 6, ids: [6] },
         ]);
         expect(turnsOf([])).toEqual([]);
+    });
+
+    it(`turnsOf folds a bare acknowledgment into the turn it nudges instead of opening one`, () => {
+        const messages: ChatMessage[] = [
+            { id: 1, role: `user`, text: `refactor the parser` },
+            { id: 2, role: `assistant`, text: `on it` },
+            { id: 3, role: `user`, text: `Continue.` },
+            { id: 4, role: `assistant`, text: `done` },
+            // An ack with trailing content is a fresh instruction, not a nudge.
+            { id: 5, role: `user`, text: `continue, but skip the tests` },
+        ];
+        const turns = turnsOf(messages);
+        expect(turns.map((turn) => ({ id: turn.id, ids: turn.messages.map((message) => message.id) }))).toEqual([
+            { id: 1, ids: [1, 2, 3, 4] },
+            { id: 5, ids: [5] },
+        ]);
+        expect(acksOf(turns[0]!).map((message) => message.id)).toEqual([3]);
+        expect(acksOf(turns[1]!)).toEqual([]);
+    });
+
+    it(`isAcknowledgment matches whole-message lexicon entries through trailing punctuation, nothing more`, () => {
+        const user = (text: string): ChatMessage => ({ id: 1, role: `user`, text });
+        for (const text of [`continue`, `Continue.`, `go for it`, `OK!!`, `yes…`, ` proceed `, `Go   ahead.`, `👍`]) {
+            expect(isAcknowledgment(user(text)), text).toBe(true);
+        }
+        // "continue?" asks, "Continue. Then stop." instructs — neither is bare consent.
+        for (const text of [``, `continue?`, `continue, but skip the tests`, `go for it as recommended`, `Continue. Then stop.`]) {
+            expect(isAcknowledgment(user(text)), text).toBe(false);
+        }
+        // An attachment is content of its own, whatever the caption says; and only the user nudges.
+        expect(isAcknowledgment({ id: 1, role: `user`, text: `continue`, attachments: [{ name: `a.png`, path: `p/a.png` }] })).toBe(false);
+        expect(isAcknowledgment({ id: 1, role: `assistant`, text: `continue` })).toBe(false);
     });
 
     it(`selectProvider re-scopes model + effort and prevents a Claude alias reaching Codex`, async () => {
@@ -874,6 +906,44 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)!.text).toContain(`usage limit`);
         expect(conversation.error.value).toBeNull();
         expect(conversation.status.value).not.toBe(`error`);
+    });
+
+    it(`says when the chat continues by itself when the daemon scheduled the auto-resume`, async () => {
+        const conversation = new Conversation(`c1`);
+        // Far-future reset so the re-attach probe this arms stays parked for the test's lifetime.
+        const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `scheduled` }, { kind: `done` }]),
+        );
+        await conversation.send(`hello`, settings);
+
+        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
+        expect(conversation.messages.value.at(-1)!.text).toContain(`Auto-resume is on`);
+        // Scheduled daemon-side — nothing to offer, so no banner state.
+        expect(conversation.limitResume.value).toBeUndefined();
+        expect(conversation.error.value).toBeNull();
+        // Tears down the armed probe timer so the test leaves no open handle behind.
+        conversation.abort();
+    });
+
+    it(`offers enabling auto-resume when the daemon only remembered the failed turn, and arming retires the offer`, async () => {
+        const conversation = new Conversation(`c1`);
+        const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `available` }, { kind: `done` }]),
+        );
+        await conversation.send(`hello`, settings);
+
+        // The offer banner's state, alongside the usual muted notice.
+        expect(conversation.limitResume.value).toEqual({ resetsAt });
+        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
+        expect(conversation.error.value).toBeNull();
+
+        // The user enabled the setting: the offer retires and the transcript says when the chat continues.
+        conversation.armLimitResume();
+        expect(conversation.limitResume.value).toBeUndefined();
+        expect(conversation.messages.value.at(-1)!.text).toContain(`Auto-resume enabled`);
+        conversation.abort();
     });
 
     it(`stores an account_usage frame against its account, stamped so staleness is comparable`, async () => {

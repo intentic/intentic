@@ -1296,8 +1296,6 @@ importers:
         specifier: 'catalog:'
         version: 3.3.6(typescript@5.9.3)
 
-  _extensions/rtk: {}
-
   _extensions/viewers:
     dependencies:
       '@intentic/extension-api':

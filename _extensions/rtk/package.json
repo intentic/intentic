@@ -1,8 +1,0 @@
-{
-    "name": "@intentic/ext-rtk",
-    "version": "1.0.0",
-    "description": "rtk (rtk-ai/rtk) as an opt-in output-cleaner backend — baked into the image overlay so the `filterBackend` setting can A/B it against the native filter. Environment-only: no code, no UI.",
-    "license": "MIT",
-    "private": true,
-    "type": "module"
-}

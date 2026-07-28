@@ -5,7 +5,7 @@ import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { useAsyncAction } from "../useAsyncAction";
-import { discardAgent, invalidateAgentAction, landAgent } from "./agentActions";
+import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent } from "./agentActions";
 import { useAgents } from "./useAgents";
 
 /* Per-agent isolated review — one conversation worktree's CUMULATIVE output (GET /agents/{id}/diff, the
@@ -39,6 +39,9 @@ const reviewFileKey = (repo: string, path: string): string => JSON.stringify([re
 // not lose the pass; in-memory only, because a reload means a fresh look anyway.
 const viewedByAgent = ref<Record<string, ReadonlySet<string>>>({});
 const NONE: ReadonlySet<string> = new Set();
+
+// The agents whose land conflict the user has handed back to them — see `asked` below for what retires it.
+const askedByAgent = ref<ReadonlySet<string>>(new Set());
 
 export function useAgentChanges(agentId: Ref<string>) {
     const { query, error } = useSandboxQuery({
@@ -109,11 +112,40 @@ export function useAgentChanges(agentId: Ref<string>) {
     // state: nothing on the daemon still knows those markers are outstanding once the user resolves them.
     const resolving = ref<LandResult[`resolving`]>(undefined);
 
+    /* Has the user handed this conflict back to the agent? Local like `resolving`, and for the same reason —
+     * the daemon records the OUTCOME of a land, not why a turn was started, so nothing on it can tell a turn
+     * that is rebasing away a conflict from an ordinary follow-up message.
+     *
+     * Its whole job is to keep the panel from claiming the conflict is still the user's move while the agent
+     * is already fixing it. The definitive answer to "did it work" is a CHANGED conflict report, so that is
+     * what retires it: cleared on its way in (undefined ⇒ the block unmounts entirely) or replaced by a fresh
+     * refusal (⇒ the buttons come back, over a report that is actually current). vue-query's structural
+     * sharing means a refetch that changed nothing doesn't fire this, so watching the value is enough.
+     * Keyed by agent id at module level, like the viewed set: stepping out to the workspace and back is not
+     * the user withdrawing the request. */
+    const asked = computed(() => askedByAgent.value.has(agentId.value));
+    watch(conflicts, () => {
+        if (askedByAgent.value.has(agentId.value)) {
+            const next = new Set(askedByAgent.value);
+            next.delete(agentId.value);
+            askedByAgent.value = next;
+        }
+    });
+
     const land = (mode: LandMode = `check`): Promise<void> =>
         run(async () => {
             resolving.value = (await landAgent(agentId.value, mode)).resolving;
             await invalidateAgentAction(agentId.value);
         }, `Land failed.`);
+
+    // Hand the conflict to the agent (agentActions.askAgentToResolve). The flag is set only once the turn is
+    // away, so a send that fails leaves the buttons where they were rather than parking the panel on a
+    // "resolving" state nothing is working on.
+    const askResolve = (): Promise<void> =>
+        run(async () => {
+            await askAgentToResolve(agentId.value);
+            askedByAgent.value = new Set(askedByAgent.value).add(agentId.value);
+        }, `Couldn't ask the agent to resolve it.`);
 
     const discard = (): Promise<void> =>
         run(async () => {
@@ -142,10 +174,12 @@ export function useAgentChanges(agentId: Ref<string>) {
         viewedCount,
         setViewed,
         land,
+        askResolve,
         discard,
         archive,
         conflicts,
         resolving,
+        asked,
         actionBusy,
         actionError,
     };

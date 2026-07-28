@@ -1,9 +1,0 @@
-{
-    "publisher": "intentic",
-    "name": "rtk",
-    "version": "1.0.0",
-    "engines": { "intentic": "^0.2.0" },
-    "contributes": {
-        "environment": { "fragment": "env/rtk.Dockerfile" }
-    }
-}

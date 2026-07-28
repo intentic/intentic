@@ -4,7 +4,8 @@ import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
-import { type ChatMessage, type PlanRequest } from "../composables/chat/transcript";
+import { clearQuestionDraft, readQuestionDraft, writeQuestionDraft } from "../composables/chat/questionDraft";
+import { type ChatMessage, isAcknowledgment, type PlanRequest } from "../composables/chat/transcript";
 import { copyCodeFromEvent } from "../composables/markdownCode";
 import { useMarkdown } from "../composables/useMarkdown";
 import { openFileRefFromEvent } from "../composables/workspace/openFileRef";
@@ -22,6 +23,9 @@ const props = defineProps<{
     message: ChatMessage;
     // True while this message is the turn currently being streamed.
     streaming: boolean;
+    // The bare "continue"-style nudges turnsOf folded into this turn — set only on the turn's opening
+    // message, which renders them as its "↳ continue ×N" trailer (see acksOf).
+    acks?: readonly ChatMessage[];
 }>();
 
 const {
@@ -130,9 +134,40 @@ watch(
 );
 
 // --- Interactive question card ---------------------------------------------------------------
-// Local selection state for a pending question card, keyed by question index.
+// Selection state for a pending question card, keyed by question index. Held here because it is UI state of
+// this card, but mirrored to localStorage per requestId (see questionDraft) so a reload — which reattaches to
+// the same still-parked card — doesn't make the user pick everything again.
 const selections = ref<Record<number, string[]>>({});
 const otherTexts = ref<Record<number, string>>({});
+
+// Load the draft when a pending card appears (mount, or the frame arriving mid-turn), and drop it the moment
+// the card settles — answered, dismissed, or frozen `cancelled` by a stop. One watcher for both because they
+// are the same event seen from either side: this card is no longer taking picks.
+watch(
+    () => [props.message.question?.requestId, props.message.question?.status] as const,
+    ([requestId, status]) => {
+        if (requestId === undefined) {
+            return;
+        }
+        if (status !== `pending`) {
+            clearQuestionDraft(requestId);
+            return;
+        }
+        const draft = readQuestionDraft(requestId);
+        selections.value = draft.selections;
+        otherTexts.value = draft.otherTexts;
+    },
+    { immediate: true },
+);
+
+// Both refs are replaced wholesale on every edit (see toggleOption/setOther), so a shallow watch sees them all.
+watch([selections, otherTexts], ([picks, texts]) => {
+    const question = props.message.question;
+    if (question?.status !== `pending`) {
+        return;
+    }
+    writeQuestionDraft(question.requestId, { selections: picks, otherTexts: texts });
+});
 
 const isSelected = (index: number, label: string): boolean => (selections.value[index] ?? []).includes(label);
 
@@ -261,8 +296,13 @@ watch(
     { immediate: true },
 );
 
+// A bare "keep going" never pins: sticking it would cover the very prompt it defers to (two sticky siblings
+// in one turn section share the same top edge, and the later one wins). It stays an ordinary bubble that
+// slides beneath the pinned question like the rest of the turn.
+const ack = computed(() => isAcknowledgment(props.message));
+
 // --- Pinned state (see .chat-prompt-pinned) ----------------------------------------------------
-// CSS has no way to ask whether a sticky element is currently stuck, and the shadow under a prompt must only
+// CSS has no way to ask whether a sticky element is currently stuck, and the edge under a prompt must only
 // be drawn while it is — on an in-flow row it would read as a card floating over the transcript. The row is
 // offset by a pixel above
 // the scroller's top edge (`top: -1px`), so the moment it pins that pixel is clipped and the ratio drops below
@@ -274,7 +314,7 @@ watch(
     row,
     (element, _previous, onCleanup) => {
         pinned.value = false;
-        if (element === undefined || props.message.role !== `user`) {
+        if (element === undefined || props.message.role !== `user` || ack.value) {
             return;
         }
         const observer = new IntersectionObserver(([entry]) => (pinned.value = entry !== undefined && entry.intersectionRatio < 1), {
@@ -393,11 +433,15 @@ const onEditKeydown = (event: KeyboardEvent): void => {
 <template>
     <!-- The click handler is delegated for the markdown's own controls — copy buttons and file links — which
          live inside v-html and so can hold no component of their own (see onMarkdownClick). -->
+    <!-- An acknowledgment bubble keeps the prompt's alignment and breathing room (pt-3 pb-2 mirrors
+         .chat-prompt's padding) but not its stickiness — see `ack`. -->
     <div
         ref="row"
         class="chat-message flex flex-col gap-1"
         :class="{
-            'chat-prompt items-end': message.role === 'user',
+            'chat-prompt': message.role === 'user' && !ack,
+            'items-end': message.role === 'user',
+            'pt-3 pb-2': ack,
             'chat-prompt-open': expanded,
             'chat-prompt-pinned': pinned,
         }"
@@ -486,6 +530,14 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 {{ expanded ? `Show less` : `Show more` }}
                 <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
             </button>
+            <!-- The nudge trailer: this turn was kept going by folded acknowledgments the pin skipped, and the
+                 pinned prompt must not pretend otherwise. In the user's own words (the last nudge) — the acks
+                 are lexicon entries, so the line stays short. In flow whenever nudges exist rather than only
+                 while pinned: an element appearing at the pin threshold would change the row's height there,
+                 which yanks the transcript (the same rule .chat-prompt-text's clamp obeys). -->
+            <span v-if="acks?.length" class="text-2xs text-subtle"
+                >↳ {{ acks.at(-1)?.text.trim() }}<template v-if="acks.length > 1"> ×{{ acks.length }}</template></span
+            >
         </div>
         <div v-else-if="message.role === 'notice'" class="flex items-center gap-2 self-center py-0.5 text-2xs text-subtle">
             <Icon name="info-circle" class="text-2xs" />
@@ -531,7 +583,9 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <div v-if="message.plan" class="chat-surface w-full overflow-hidden rounded-xl">
                 <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
                     <Icon name="list-check" class="text-sm text-link" />
-                    <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.bottom="planTitle(message.plan)">{{
+                    <!-- Sideways: this reveals the title of the very body it sits on, and under the header is
+                         exactly where that body starts. -->
+                    <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.left="planTitle(message.plan)">{{
                         planTitle(message.plan)
                     }}</span>
                     <span v-if="message.plan.status === 'approved'" class="text-2xs font-medium text-success">✓ Approved</span>
@@ -676,7 +730,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <div v-if="message.permission" class="chat-surface w-full overflow-hidden rounded-xl">
                 <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
                     <Icon name="shield" class="text-sm text-primary-500" />
-                    <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.bottom="permissionTitle">{{
+                    <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.left="permissionTitle">{{
                         permissionTitle
                     }}</span>
                     <span v-if="message.permission.status === 'allowed'" class="text-2xs font-medium text-success">✓ Allowed</span>

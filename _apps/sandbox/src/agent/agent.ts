@@ -17,6 +17,7 @@ import {
     type SpawnedProcess,
     type SpawnOptions,
     tool,
+    USAGE_LIMIT_ERROR_PREFIXES,
 } from "@anthropic-ai/claude-agent-sdk";
 import { spawn } from "node:child_process";
 import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
@@ -286,6 +287,12 @@ const apiErrorMessage = (message: SDKAssistantMessage): string => {
     return explained ?? `agent error: ${message.error}`;
 };
 
+// The CLI reports a mid-session limit hit ("You've hit your session limit · resets 1:40pm (UTC)") as an API
+// error whose CATEGORY is not `rate_limit` — only the sentence says what happened. The SDK publishes the exact
+// prefixes those sentences use, so matching them is classification, not text-sniffing: both roads to a spent
+// allowance end at the same `rate_limit` code, which is what the auto-resume machinery keys off.
+const isUsageLimitText = (text: string): boolean => USAGE_LIMIT_ERROR_PREFIXES.some((prefix) => text.startsWith(prefix));
+
 // Normalize the SDK's SDKMessage stream onto AgentEvents. High-value block types get a dedicated frame;
 // any SDK message without a mapping is dropped. Does NOT emit the terminal `done` (runAgent does that once
 // the whole turn settles).
@@ -383,6 +390,10 @@ async function* streamSdk(
             if (message.error !== undefined) {
                 // rate_limit is Claude's subscription usage cap, not a workspace fault — tag it so the UI can
                 // render it as a "wait and retry" notice instead of a red crash line (see conversation.ts).
+                // A limit hit the SDK filed under another category keeps its own sentence (the CLI's "You've
+                // hit your session limit · resets …" names the reset; our canned line doesn't) but carries the
+                // same code, so every spent-allowance failure reaches the client as one condition.
+                const explained = apiErrorMessage(message);
                 yield message.error === "rate_limit"
                     ? {
                           kind: "error",
@@ -390,7 +401,9 @@ async function* streamSdk(
                           message:
                               "Claude usage limit reached — this is the Claude subscription's rate limit resetting, not a workspace problem. Your last message wasn't processed; try again shortly.",
                       }
-                    : { kind: "error", message: apiErrorMessage(message) };
+                    : isUsageLimitText(explained)
+                      ? { kind: "error", code: "rate_limit", message: explained }
+                      : { kind: "error", message: explained };
             } else {
                 const content = message.message.content as ReadonlyArray<{ type: string; id?: string; name?: string; input?: unknown }>;
                 for (const block of content) {

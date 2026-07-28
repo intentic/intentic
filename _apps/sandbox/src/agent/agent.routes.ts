@@ -32,7 +32,9 @@ import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
+import { accountLimitReset, clearLimitHit, recordLimitHit } from "./limit-resume.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
+import { summarizeAgentTitle } from "./title-summary.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
 import { delegationNote } from "./delegation.js";
@@ -166,11 +168,25 @@ async function* runConversationTurn(
         const base = (worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0])?.base.slice(0, 7) ?? "";
         yield { kind: "worktree", branch: worktree.branch, base };
         // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
+        // The agent's top-level text is accumulated on the way past: the CLOSING block is what the title-
+        // summary pass below reads, and collecting it here costs nothing a transcript re-read would.
+        let textBlock = "";
+        let closing = "";
         for await (const event of runTurn(services, input, signal, { id: conversationId, cwd: worktree.cwd }, steering)) {
             if (event.kind === "error") {
                 failed = true;
             }
+            if (event.kind === "delta" && event.parentToolUseId === undefined) {
+                textBlock += event.text;
+            }
+            if (event.kind === "text_end" && event.parentToolUseId === undefined && textBlock !== "") {
+                closing = textBlock;
+                textBlock = "";
+            }
             yield event;
+        }
+        if (textBlock !== "") {
+            closing = textBlock;
         }
         // Auto-land at clean turn completion — the Claude Code review model: the delta arrives in the main
         // tree as UNCOMMITTED changes and the user's ordinary Changes-panel commit is the review. Aborted or
@@ -208,6 +224,11 @@ async function* runConversationTurn(
                     );
                 }
             }
+            // A whole turn is now readable — name the job. Fire-and-forget: a title is never worth failing a
+            // turn over, and the gate inside skips conversations already carrying a better-than-derived name.
+            summarizeAgentTitle(services, conversationId, { prompt: input.prompt, closing }).catch((error: unknown) =>
+                services.logger.debug({ err: error }, "agents: title summary failed"),
+            );
         }
     } finally {
         await services.agents.finish(conversationId, Date.now(), outcome);
@@ -241,6 +262,11 @@ async function* runTurn(
     conversation: { readonly id: string; readonly cwd: string } | undefined,
     steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
+    // Whatever turn runs on this conversation supersedes a pending usage-limit resume — the user retrying by
+    // hand (or the scheduler's own fire, which comes through here) must not be doubled by the scheduler later.
+    if (input.conversationId !== undefined) {
+        clearLimitHit(input.conversationId);
+    }
     // cli-kind capabilities contribute env vars (their stored credentials) so either agent's shell can run
     // their CLI tools; extension `contributes.settings` with an `env` name inject theirs the same way.
     const capabilities = await services.capabilities.list();
@@ -603,6 +629,12 @@ async function* runTurn(
     // the SDK transcript. Fire-and-forget: logging must never delay or fail a turn.
     const provider = input.agent ?? "claude";
     let sessionId = input.sessionId;
+    // The usage-limit trail for auto-resume: the reset instant the stream last named (rate_limit_event rides
+    // ahead of the refusal it explains), and — once a rate_limit error actually ends the turn's work — the
+    // instant the pending resume is recorded against in the finally below. Recorded at settle, not at the
+    // error frame, so the resume snapshots the turn's LAST session id rather than a mid-turn one.
+    let limitReset: number | undefined;
+    let limitHitAt: number | undefined;
     let usageExtra: Record<string, unknown> | undefined;
     // The turn's usage, kept typed (unlike usageExtra, which is the activity log's opaque `extra`) so the spend
     // ledger below appends numbers rather than re-narrowing unknowns. SUMMED, not last-wins: a turn emits one
@@ -638,6 +670,7 @@ async function* runTurn(
                 yield { ...event, ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}) };
                 continue;
             } else if (event.kind === "rate_limit_info") {
+                limitReset = event.resetsAt ?? limitReset;
                 yield { ...event, ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}) };
                 continue;
             } else if (event.kind === "account_usage") {
@@ -656,6 +689,18 @@ async function* runTurn(
                 record({ type: "turn.plan", content: event.text, extra: { requestId: event.requestId } });
             } else if (event.kind === "error") {
                 record({ type: "turn.error", outcome: "error", error: event.message });
+                // A spent Claude allowance: resolve when the window reopens (the stream's own rate_limit_event,
+                // else the account's persisted binding window) and tell the client where the resume stands, so
+                // the chat can say "continues automatically at …" or offer the toggle at the moment it would
+                // have helped. No reset instant ⇒ nothing to schedule against ⇒ the plain frame, as before.
+                if (event.code === "rate_limit" && input.conversationId !== undefined) {
+                    limitHitAt = limitReset ?? (await accountLimitReset(services, resolvedAccount));
+                    if (limitHitAt !== undefined) {
+                        const { autoResumeOnLimit } = await services.sandboxSettings.get();
+                        yield { ...event, resetsAt: limitHitAt, autoResume: autoResumeOnLimit ? "scheduled" : "available" };
+                        continue;
+                    }
+                }
             }
             yield event;
         }
@@ -664,6 +709,16 @@ async function* runTurn(
         // server it started) is still in there and keeps it alive until it exits, which is exactly the
         // behaviour a user watching that terminal expects.
         isolation?.dispose();
+        // The limit killed this turn's work — remember it for the resume scheduler, with the last session the
+        // stream reported (the one holding any partial progress). Recorded whatever the toggle says: enabling
+        // autoResumeOnLimit right after the failure arms exactly this resume.
+        if (limitHitAt !== undefined && input.conversationId !== undefined) {
+            recordLimitHit({
+                input: { ...input, conversationId: input.conversationId },
+                ...(sessionId !== undefined ? { sessionId } : {}),
+                resetsAt: limitHitAt,
+            });
+        }
         record({ type: "turn.completed", ...(usageExtra !== undefined ? { extra: usageExtra } : {}) });
         // The spend ledger — the durable, never-pruned record the cost dashboard reads. Only turns the provider
         // actually billed land here: no usage frame means no spend to attribute, and a zero row would inflate

@@ -140,6 +140,9 @@ const status = computed(() => (fleetAgent.value === undefined ? undefined : agen
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
         <ChatPanel v-if="mobile && view === 'chat'" class="min-h-0 flex-1" />
-        <AgentReviewPanel v-else-if="agentId !== ''" :agent-id="agentId" class="min-h-0 flex-1" />
+        <!-- `chat` is the review asking to be swapped for the conversation — raised when it hands a land
+             conflict back to the agent and offers to show the turn. Desktop never sees it: the docked chat is
+             already on screen there, so the review has nothing to swap itself for. -->
+        <AgentReviewPanel v-else-if="agentId !== ''" :agent-id="agentId" class="min-h-0 flex-1" @chat="view = 'chat'" />
     </div>
 </template>

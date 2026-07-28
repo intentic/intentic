@@ -119,9 +119,10 @@ const toggleOrigin = (id: string): void => {
 const agentOf = (id: string) => fleet.value.find((agent) => agent.id === id);
 const originLabel = (id: string): string => agentOf(id)?.title ?? `Agent ${id.slice(0, 6)}`;
 
-// The chip is a 14px logo and, at best, a title truncated to max-w-24 — so hovering it raises the SAME card the
-// chat tab strip raises for that session: the full derived title, and under it the first message it came from
-// when that conversation is open in the panel (the roster carries no prompt, only the ≤40-char title).
+// A chip is a 14px logo and, at best, a title truncated to max-w-24 — so hovering one (on a file row, or in the
+// From legend above the list) raises the SAME card the chat tab strip raises for that session: the full derived
+// title, and under it the first message it came from when that conversation is open in the panel (the roster
+// carries no prompt, only the ≤40-char title).
 const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
 const firstPromptOf = (id: string): string | undefined => {
     const conversation = conversations.value.find((c) => c.conversationId === id);
@@ -641,7 +642,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         <div class="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
             <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Changes</span>
             <span class="flex-1"></span>
-            <Icon name="spinner" v-if="changes.actionBusy.value" v-tooltip.top="'Working…'" class="text-xs text-muted" spin />
+            <Icon name="spinner" v-if="changes.actionBusy.value" v-tooltip.right="'Working…'" class="text-xs text-muted" spin />
             <!-- Git history: the committed side of this same real-git story (uncommitted work is above). Opens
                  the /work root repo's graph — as does the Files toolbar's icon, root having no tree row of its
                  own; nested repos open theirs from their file-tree row. -->
@@ -650,7 +651,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 type="button"
                 class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                 @click="emit('open-graph', 'root')"
-                v-tooltip.top="'Git history'"
+                v-tooltip.right="'Git history'"
                 aria-label="Open git history"
             >
                 <Icon name="sitemap" class="text-xs" />
@@ -659,7 +660,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 type="button"
                 class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                 @click="changes.refresh()"
-                v-tooltip.top="'Refresh'"
+                v-tooltip.right="'Refresh'"
                 aria-label="Refresh changes"
             >
                 <Icon name="refresh" class="text-xs" :spin="changes.loading.value" />
@@ -695,7 +696,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     class="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-40"
                     :disabled="!autofillReady && !commitDraft.busy.value"
                     @click="runAutofill"
-                    v-tooltip.top="commitDraft.busy.value ? 'Stop drafting' : autofillHint"
+                    v-tooltip.right="commitDraft.busy.value ? 'Stop drafting' : autofillHint"
                     :aria-label="commitDraft.busy.value ? 'Stop drafting the commit message' : 'Draft the commit message with AI'"
                 >
                     <Icon :name="commitDraft.busy.value ? 'spinner' : 'sparkles'" class="text-2xs" :spin="commitDraft.busy.value" />
@@ -735,7 +736,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         type="button"
                         class="shrink-0 rounded px-1 text-2xs text-muted underline decoration-dotted transition-colors hover:text-content"
                         @click="undoAutofill"
-                        v-tooltip.top="
+                        v-tooltip.right="
                             commitDraft.previous.value === ``
                                 ? `Clear the drafted message`
                                 : `Put back what you had typed: ${commitDraft.previous.value}`
@@ -755,7 +756,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     :class="cmp.buttonSuccess('shrink-0 gap-0 whitespace-nowrap px-2 py-1 text-2xs')"
                     :disabled="!commitReady"
                     @click="doCommit"
-                    v-tooltip.top="
+                    v-tooltip.right="
                         blockedByConflicts
                             ? 'git cannot commit while a path is unmerged — resolve the conflicts (stage each file to mark it resolved)'
                             : commitAll
@@ -783,7 +784,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         class="mt-1 inline-flex items-center whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
                         :disabled="!commitReady"
                         @click="runCommit(unaffected)"
-                        v-tooltip.top="`Commit only the repos no agent is writing: ${unaffected.join(`, `)}`"
+                        v-tooltip.right="`Commit only the repos no agent is writing: ${unaffected.join(`, `)}`"
                     >
                         <Icon name="check" class="mr-1 text-2xs" />Commit
                         {{ unaffected.length === 1 ? unaffected[0] : `the other ${unaffected.length} repos` }}
@@ -804,7 +805,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     type="button"
                     class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
                     @click="changes.dismissFailure(COMMIT_SCOPE)"
-                    v-tooltip.top="'Dismiss'"
+                    v-tooltip.right="'Dismiss'"
                     aria-label="Dismiss commit error"
                 >
                     <Icon name="times" class="text-2xs" />
@@ -824,7 +825,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 :class="cmp.buttonPrimary('shrink-0 gap-0 whitespace-nowrap px-2 py-1 text-2xs')"
                 :disabled="changes.actionBusy.value"
                 @click="doSync"
-                v-tooltip.top="syncMeta!.hint"
+                v-tooltip.right="syncMeta!.hint"
             >
                 <Icon :name="syncMeta!.icon" class="mr-1 text-2xs" />{{ syncMeta!.label }}
             </button>
@@ -833,7 +834,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         <!-- WHOSE WORK IS IN MY TREE — one line, only when an agent actually landed something. Each entry is a
              filter: it narrows the list (and every section verb below it) to that origin's files, so "stage
              everything this agent did" is two clicks and no path-picking. "you" is the complement — the files
-             no agent landed, which is also every terminal edit and anything the daemon can't attribute. -->
+             no agent landed, which is also every terminal edit and anything the daemon can't attribute.
+             A chip is a logo and a title squeezed into a shared row, so it hovers into the SAME card its file
+             rows (and the chat tab strip) raise for that session — the full derived title and the message it
+             came from. What the click does is the one thing a hover need not spell out: the chips visibly dim
+             to leave the filtered one lit, which says it better than a sentence restating the label. -->
         <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
             <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">From</span>
             <button
@@ -843,9 +848,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 class="flex min-w-0 max-w-full shrink items-center gap-1 rounded-full py-px pl-1 pr-1.5 text-2xs transition-opacity"
                 :class="[originHue(entry.id).chip, originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '']"
                 @click="toggleOrigin(entry.id)"
-                v-tooltip.top="
-                    originFilter === entry.id ? 'Showing only this agent — click to clear' : `Show only what ${originLabel(entry.id)} landed`
-                "
+                @mouseenter="showOrigins($event, [entry.id])"
+                @mouseleave="hoverCard?.hide()"
             >
                 <ProviderLogo v-if="agentOf(entry.id)" :provider="agentOf(entry.id)!.provider" class="shrink-0 text-2xs" />
                 <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
@@ -858,7 +862,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 class="flex shrink-0 items-center gap-1 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted transition-opacity"
                 :class="originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : ''"
                 @click="toggleOrigin(YOURS)"
-                v-tooltip.top="'Files no agent landed — your own edits, the terminal, a main-tree chat'"
+                v-tooltip.right="'Files no agent landed — your own edits, the terminal, a main-tree chat'"
             >
                 you <span class="opacity-70">{{ legend.yours }}</span>
             </button>
@@ -912,7 +916,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :class="SYNC_PILL"
                         :disabled="changes.actionBusy.value"
                         @click="changes.pullRepo(group.repo)"
-                        v-tooltip.top="pullHint(group)"
+                        v-tooltip.right="pullHint(group)"
                         :aria-label="`Pull ${group.repo}`"
                     >
                         <Icon name="arrow-down-left" class="text-[0.6rem]" />{{ behind(group) }}
@@ -926,7 +930,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         class="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded border border-line px-1.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
                         :disabled="changes.actionBusy.value"
                         @click="changes.pushRepo(group.repo)"
-                        v-tooltip.top="'Push and start tracking this branch on the remote'"
+                        v-tooltip.right="'Push and start tracking this branch on the remote'"
                     >
                         <Icon name="cloud-upload" class="mr-1 text-[0.6rem]" />Publish
                     </button>
@@ -936,7 +940,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :class="SYNC_PILL"
                         :disabled="changes.actionBusy.value"
                         @click="changes.pushRepo(group.repo)"
-                        v-tooltip.top="pushHint(group)"
+                        v-tooltip.right="pushHint(group)"
                         :aria-label="`Push ${group.repo}`"
                     >
                         <Icon name="arrow-up-right" class="text-[0.6rem]" />{{ ahead(group) }}
@@ -952,7 +956,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
                         :disabled="changes.actionBusy.value"
                         @click="changes.fetchRepo(group.repo)"
-                        v-tooltip.top="'Fetch — refresh what this repo knows about its remote'"
+                        v-tooltip.right="'Fetch — refresh what this repo knows about its remote'"
                         :aria-label="`Fetch ${group.repo}`"
                     >
                         <Icon name="sync" class="text-2xs" />
@@ -962,7 +966,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
                         :disabled="changes.actionBusy.value || repoCount(group) === 0"
                         @click="askDiscardRepo(group)"
-                        v-tooltip.top="'Discard all changes in this repo'"
+                        v-tooltip.right="'Discard all changes in this repo'"
                         aria-label="Discard all changes in this repo"
                     >
                         <Icon name="trash" class="text-2xs" />
@@ -983,7 +987,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         type="button"
                         class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
                         @click="changes.dismissFailure(group.repo)"
-                        v-tooltip.top="'Dismiss'"
+                        v-tooltip.right="'Dismiss'"
                         :aria-label="`Dismiss error for ${group.repo}`"
                     >
                         <Icon name="times" class="text-2xs" />
@@ -1012,7 +1016,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                 ]"
                                 :disabled="changes.actionBusy.value"
                                 @click="stageSide(group, section.side)"
-                                v-tooltip.top="INDEX_VERB[section.side].all"
+                                v-tooltip.right="INDEX_VERB[section.side].all"
                                 :aria-label="`${INDEX_VERB[section.side].all} in ${group.repo}`"
                             >
                                 <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
@@ -1087,7 +1091,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                     class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
                                     :disabled="changes.actionBusy.value"
                                     @click="stageRow({ repo: group.repo, side: section.side, path: change.path })"
-                                    v-tooltip.top="INDEX_VERB[section.side].one"
+                                    v-tooltip.right="INDEX_VERB[section.side].one"
                                     :aria-label="`${INDEX_VERB[section.side].one}: ${change.path}`"
                                 >
                                     <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
@@ -1097,7 +1101,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                     class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
                                     :disabled="changes.actionBusy.value"
                                     @click="askDiscardRow({ repo: group.repo, side: section.side, path: change.path }, change)"
-                                    v-tooltip.top="'Discard'"
+                                    v-tooltip.right="'Discard'"
                                     :aria-label="`Discard ${change.path}`"
                                 >
                                     <Icon name="trash" class="text-2xs" />

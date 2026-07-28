@@ -337,6 +337,18 @@ type AttachHead = Extract<AttachFrame, { kind: "attached" }>;
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+/* Usage-limit auto-resume, as this window sees it. The daemon owns the resume itself (limit-resume.ts fires
+ * a minute after the provider's reset instant, so a skewed clock can't retry into the same closed window);
+ * what the client owns is RENDERING it — attach streams are pull, and an open tab re-probes only on
+ * reachability flips, so a resumed run would play to nobody without a local probe armed for around when the
+ * daemon fires. Probing starts a beat after the daemon's own delay and retries across its poll cadence; it
+ * gives up quietly once the window has clearly passed (the toggle went off, or the resumed run already
+ * finished — its transcript replays on the next hydrate either way). */
+const RESUME_DELAY_S = 60;
+const LIMIT_REATTACH_DELAY_MS = 70_000;
+const LIMIT_REATTACH_INTERVAL_MS = 15_000;
+const LIMIT_REATTACH_TRIES = 20;
+
 /* One chat conversation: its transcript, the resumed sandbox session, and the streaming machinery for a
  * turn. Self-contained so the manager can run several at once — each instance owns its AbortController and
  * typewriter loop, so tabs stream independently. A turn EXECUTES as a detached run on the sandbox daemon
@@ -453,6 +465,12 @@ export class Conversation {
     // Messages submitted while a turn was running and not yet delivered — see enqueue/drainQueue. Rendered
     // above the composer so nothing the user wrote is ever invisible, and persisted with the draft.
     readonly queued = ref<QueuedMessage[]>([]);
+
+    // A usage-limit failure the daemon remembered but will only resume once the autoResumeOnLimit setting
+    // comes on — what the composer's offer banner renders (enable → armLimitResume). Cleared by the next
+    // send, which supersedes the pending resume daemon-side the same way. Not persisted: after a reload the
+    // standing toggle on the settings page is the offer.
+    readonly limitResume = ref<{ resetsAt: number } | undefined>();
 
     // Whether the running turn can absorb a message mid-flight: the Claude Code loop only (see runsClaudeCode,
     // the same predicate the daemon's streamAgent gates its SteeringQueue on). Used for WORDING alone (the
@@ -695,6 +713,10 @@ export class Conversation {
         this.interrupted = false;
 
         this.error.value = null;
+        // A fresh turn supersedes a pending usage-limit resume — the daemon clears its side at turn start the
+        // same way, so the offer banner and the probe must not outlive the failure they described.
+        this.limitResume.value = undefined;
+        clearTimeout(this.limitReattachTimer);
         // The session is resumed only while the selection still matches the runtime/account that minted it — a
         // switched provider or account retires it, and the transcript so far (captured before this turn's
         // bubbles land) seeds the replacement session on the new runtime.
@@ -842,6 +864,44 @@ export class Conversation {
             bubbleId: null,
         };
         this.queued.value = [{ id: crypto.randomUUID(), text: bubble.text, attachments: bubble.attachments ?? [] }, ...this.queued.value];
+    }
+
+    // The user enabled auto-resume while this conversation's limit failure was still pending. The daemon's
+    // scheduler owns the resume from here (it remembered the failed turn regardless of the toggle), so this
+    // only reflects that: retire the offer, say when the chat continues, and arm the re-attach probe that
+    // renders the resumed run in this window.
+    armLimitResume(): void {
+        const pending = this.limitResume.value;
+        if (pending === undefined) {
+            return;
+        }
+        this.limitResume.value = undefined;
+        this.appendNotice(`Auto-resume enabled — this chat continues by itself around ${formatReset(pending.resetsAt + RESUME_DELAY_S)}.`);
+        this.scheduleLimitReattach(pending.resetsAt);
+        this.persist();
+    }
+
+    // Timer for the pending probe (armed by a scheduled resume, re-armed between attempts); one per
+    // conversation, so a fresh failure's schedule replaces a stale one.
+    private limitReattachTimer: ReturnType<typeof setTimeout> | undefined;
+
+    // See the RESUME_* constants above: wait out the reset plus the daemon's fire delay, then re-attach on
+    // its poll cadence until the resumed run answers (or the attempts run out).
+    private scheduleLimitReattach(resetsAt: number): void {
+        clearTimeout(this.limitReattachTimer);
+        let attempts = 0;
+        const probe = (): void => {
+            if (this.streaming.value) {
+                return;
+            }
+            attempts += 1;
+            void this.reattach().then((attached) => {
+                if (!attached && attempts < LIMIT_REATTACH_TRIES && !this.streaming.value) {
+                    this.limitReattachTimer = setTimeout(probe, LIMIT_REATTACH_INTERVAL_MS);
+                }
+            });
+        };
+        this.limitReattachTimer = setTimeout(probe, Math.max(0, resetsAt * 1000 + LIMIT_REATTACH_DELAY_MS - Date.now()));
     }
 
     // Release a hold placed by a failure the user has now fixed (reconnecting a revoked account) and let
@@ -997,6 +1057,9 @@ export class Conversation {
         this.flushType();
         this.probe?.abort();
         this.inflight?.abort();
+        // A closed tab (or a sandbox switch) takes its resume probe with it — the daemon still fires the
+        // resume; reopening the conversation replays it like any other detached run.
+        clearTimeout(this.limitReattachTimer);
     }
 
     // Attach to a turn already running daemon-side — started before a reload, or by another window/device on
@@ -1348,7 +1411,7 @@ export class Conversation {
                 return;
             }
             case `error`:
-                this.applyTurnError(effect.message, effect.code, turn);
+                this.applyTurnError(effect, turn);
                 return;
         }
     }
@@ -1357,7 +1420,8 @@ export class Conversation {
     // business reaching for — the account's usage windows, the provider's account list — to phrase themselves,
     // and because the choice between a muted notice and the red error line is a product decision rather than a
     // transcript rule.
-    private applyTurnError(message: string, code: Extract<AgentEvent, { kind: "error" }>["code"], turn: TurnContext): void {
+    private applyTurnError(error: Extract<TurnEffect, { kind: "error" }>, turn: TurnContext): void {
+        const { message, code } = error;
         if (code === `claude-reauth`) {
             /* The Claude credential is dead and the daemon refused the turn before running any of it. Nothing
              * was processed, so the message is not part of the conversation yet — pull the bubble back out of
@@ -1398,10 +1462,20 @@ export class Conversation {
         if (code === `rate_limit`) {
             // Claude's subscription usage cap, not a crash — render the daemon's message as a muted notice
             // (like session-not-found) rather than the red error ref, so it reads as "wait and retry" instead
-            // of "the workspace broke". Append the concrete reset time when the usage store knows it — from the
-            // account's FULLEST pool, which is the one that just refused the turn; a pool with room left resets
-            // at an instant that has nothing to do with this wait.
-            const resetsAt = bindingWindow(usageStatusFor(this.account.value))?.resetsAt;
+            // of "the workspace broke". The daemon says where the resume stands: "scheduled" means it re-runs
+            // this turn by itself a minute after the reset (arm the re-attach probe so this window renders the
+            // resumed run); "available" means it remembered the failed turn and enabling autoResumeOnLimit
+            // arms that same resume — surfaced as the composer's offer banner. The frame's own reset instant
+            // wins over the usage store's binding window (the frame names the pool that actually refused).
+            const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.account.value))?.resetsAt;
+            if (error.autoResume === `scheduled` && resetsAt !== undefined) {
+                this.appendNotice(`${message} Auto-resume is on — this chat continues by itself around ${formatReset(resetsAt + RESUME_DELAY_S)}.`);
+                this.scheduleLimitReattach(resetsAt);
+                return;
+            }
+            if (error.autoResume === `available` && resetsAt !== undefined) {
+                this.limitResume.value = { resetsAt };
+            }
             this.appendNotice(resetsAt !== undefined ? `${message} Resets ${formatReset(resetsAt)}.` : message);
             return;
         }

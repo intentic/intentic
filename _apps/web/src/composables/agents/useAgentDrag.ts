@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { errorMessage } from "../useAsyncAction";
-import { discardAgent, invalidateAgentAction, landAgent, stopAgent } from "./agentActions";
+import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, stopAgent } from "./agentActions";
 import { dropActionFor, type DropAction, type DropTarget } from "./laneDrop";
 import { useAgents, type FleetAgent } from "./useAgents";
 
@@ -89,8 +89,14 @@ const perform = async (id: string, chosen: DropAction): Promise<void> => {
             const result = await landAgent(id);
             await invalidateAgentAction(id);
             if (!result.landed) {
-                notice.value = `Landing hit a conflict — open the agent to resolve it.`;
+                // Only reachable from an ERRORED card now (a conflicted one resolves instead), so this is a
+                // first refusal with a report to read, not the repeat of one the user has already seen.
+                notice.value = `Landing hit a conflict — open the agent to see what blocked it.`;
             }
+        } else if (chosen === `resolve`) {
+            // The turn does the rest: it rebases, resolves, and the auto-land at completion moves the card.
+            // Its own frames are the progress report, so nothing is said here.
+            await askAgentToResolve(id);
         } else {
             await discardAgent(id);
             await invalidateAgentAction(id);
@@ -102,6 +108,32 @@ const perform = async (id: string, chosen: DropAction): Promise<void> => {
     } finally {
         busyId.value = undefined;
     }
+};
+
+/* WHY THE RESOLVE DROP ASKS FIRST, and the other three don't.
+ *
+ * Stop, land and discard all act on state this browser already has: what they will do is fully described by
+ * the card and the drag hint, and each is either reversible or already carries its own confirmation elsewhere.
+ * `resolve` STARTS A TURN — it spends the agent's time and the user's money on work nobody has seen the shape
+ * of yet — and a drag is the easiest gesture here to make by accident: a card grabbed to be read, released a
+ * few pixels into the wrong lane. So it stops at a dialog naming the agent, and the board performs it only
+ * when the user says so. The review panel's button doesn't ask, because a deliberate press under a paragraph
+ * explaining the mechanics is already the answer this dialog exists to collect.
+ *
+ * Held as the id alone: by the time the dialog is answered the roster has probably moved, and the confirm
+ * should act on the agent that was dropped, not on a snapshot of what it looked like when it was. */
+const pendingResolve = ref<string | undefined>(undefined);
+
+const confirmResolve = (): void => {
+    const id = pendingResolve.value;
+    pendingResolve.value = undefined;
+    if (id !== undefined) {
+        void perform(id, `resolve`);
+    }
+};
+
+const cancelResolve = (): void => {
+    pendingResolve.value = undefined;
 };
 
 const onMove = (event: PointerEvent): void => {
@@ -122,9 +154,15 @@ const onUp = (): void => {
     const id = draggedId.value;
     const chosen = action.value;
     cancel();
-    if (id !== undefined && chosen !== undefined) {
-        void perform(id, chosen);
+    if (id === undefined || chosen === undefined) {
+        return;
     }
+    // The one drop that starts a turn stops for an answer first; the rest go straight through.
+    if (chosen === `resolve`) {
+        pendingResolve.value = id;
+        return;
+    }
+    void perform(id, chosen);
 };
 
 const onKey = (event: KeyboardEvent): void => {
@@ -164,5 +202,19 @@ const begin = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): void 
 };
 
 export function useAgentDrag() {
-    return { dragged, dragging, draggedId, over, action, accepts, busyId, ghostStyle, begin, consumeSuppressedOpen };
+    return {
+        dragged,
+        dragging,
+        draggedId,
+        over,
+        action,
+        accepts,
+        busyId,
+        ghostStyle,
+        begin,
+        consumeSuppressedOpen,
+        pendingResolve,
+        confirmResolve,
+        cancelResolve,
+    };
 }

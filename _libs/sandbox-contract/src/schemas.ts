@@ -553,7 +553,7 @@ export const SessionsListSchema = z.object({ sessions: z.array(SessionSummarySch
 //                        (recorded raw as `heldOut`), so the savings report compares a real cleaned-vs-raw
 //                        population instead of an estimate. 0 = no holdout (default).
 //   filterBackend     — which cleaner runs the compression: "native" (agent-output-filter, default) or "rtk"
-//                        (the rtk binary from its installed extension, rewritten at the PreToolUse hook) — an
+//                        (the image-baked rtk binary, rewritten at the PreToolUse hook) — an
 //                        A/B backend switch, so native and rtk can be benchmarked head-to-head.
 // The booleans default off, skills defaults [] (no skill loaded), outputCleaners defaults "off" (cleaning off),
 // outputHoldout 0, filterBackend "native" — a fresh sandbox starts with cleaning and iq off until the owner enables them.
@@ -585,6 +585,12 @@ export const SandboxSettingsSchema = z.object({
     // terminal state: without a sweep the Finished lane grows for the life of the sandbox, and each card it
     // holds is a live worktree checkout, not just a row.
     agentRetentionDays: z.number().min(0).max(365).default(3),
+    // When a turn dies on the Claude subscription's usage limit, re-run it automatically once the limit
+    // window resets (a minute after, so a skewed clock can't retry into the same closed window). Off by
+    // default: an unattended retry spends the fresh window without the user in the room, so the daemon
+    // records every limit-hit either way and the chat OFFERS the toggle at the moment it would have helped —
+    // enabling it then still resumes the turn that just bounced.
+    autoResumeOnLimit: z.boolean().default(false),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 
@@ -1000,6 +1006,58 @@ export const WorkspaceSearchResultSchema = z.object({
     features: z.array(z.string()).optional(),
 });
 export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
+
+// ---- codebase health: one repository's structure and risk, in numbers ----
+
+// The repo-level companion to the management panel and the git-history graph: what the same resident engine's
+// `hotspots` (churn × complexity) and `map` (PageRank over the import graph) verbs rank, as figures a panel can
+// plot instead of lines a terminal prints.
+//
+// Every field is a COUNT that can be recounted in the files themselves — commits, branch points, exported
+// symbols. Deliberately no composite "maintainability grade": those aren't comparable across projects and can't
+// be checked, and a repo-health surface that launders counts into a letter is worse than none.
+// How many hotspot files and key modules a report carries when the caller names no limit. A leaderboard, not an
+// inventory: past a screenful the ranking stops being the point, and the reader should be reading the files.
+export const HEALTH_LIMIT = 20;
+export const WorkspaceHealthQuerySchema = z.object({
+    // "root" (the /work repo) or a nested repo's root-relative dir — the same {repo} ids the git routes take.
+    repo: z.string().min(1),
+    // Churn window (2d, 12h, 1w, 3m). Absent = all of history, which is what a hotspot ranking wants by default.
+    since: z.string().max(16).optional(),
+    limit: z.coerce.number().int().positive().max(200).optional(),
+});
+// One file that is BOTH churning and tangled. `score` is the product the ranking sorts by — carried explicitly
+// so the panel plots the number it ranks by rather than recomputing it.
+export const WorkspaceHotspotSchema = z.object({
+    path: z.string(),
+    commits: z.number(),
+    adds: z.number(),
+    dels: z.number(),
+    complexity: z.number(),
+    score: z.number(),
+    // Epoch ms of the latest commit touching the file, within the window.
+    latestMs: z.number(),
+});
+export type WorkspaceHotspot = z.infer<typeof WorkspaceHotspotSchema>;
+// A file of the import graph's ranked skeleton — order IS the rank, so no rank number rides along.
+export const WorkspaceKeyModuleSchema = z.object({ path: z.string(), exports: z.number() });
+export type WorkspaceKeyModule = z.infer<typeof WorkspaceKeyModuleSchema>;
+export const WorkspaceHealthSchema = z.object({
+    repo: z.string(),
+    totals: z.object({
+        files: z.number(),
+        symbols: z.number(),
+        // Summed branch points across the scoped files.
+        complexity: z.number(),
+        // How many files qualify as hotspots at all — the lists below are capped, this is not.
+        hotspots: z.number(),
+    }),
+    hotspots: z.array(WorkspaceHotspotSchema),
+    modules: z.array(WorkspaceKeyModuleSchema),
+    // Same index-freshness signal the search route reports: a panel drawn off a half-built index says so.
+    freshness: WorkspaceSearchFreshnessSchema,
+});
+export type WorkspaceHealth = z.infer<typeof WorkspaceHealthSchema>;
 
 // ---- workspace setup (dependency readiness) ----
 

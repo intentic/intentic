@@ -210,6 +210,15 @@ const toggleIqSearch = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, iqSearch: value });
 };
 
+// Usage-limit auto-resume: re-run a limit-killed turn once the limit window reopens (see limit-resume.ts).
+const toggleAutoResume = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, autoResumeOnLimit: value });
+};
+
 /* --- Quick model ---------------------------------------------------------------------------------------------
  * The cheap, fast model behind the one-click helpers that are not a conversation (today: the commit box's AI
  * autofill). It belongs on THIS tab and not in personal Settings for one decisive reason — the provider
@@ -361,7 +370,7 @@ const setHoldoutPercent = (percent: number): void => {
     saveSandboxSettings.mutate({ ...current, outputHoldout: clamped / 100 });
 };
 
-// Cleaner backend: native (agent-output-filter) vs rtk (the rtk extension binary, rewritten at the hook).
+// Cleaner backend: native (agent-output-filter) vs rtk (the image-baked rtk binary, rewritten at the hook).
 const setFilterBackend = (backend: `native` | `rtk`): void => {
     const current = sandboxSettings.value;
     if (current === undefined) {
@@ -675,7 +684,7 @@ const importMemory = async (): Promise<void> => {
             <Row
                 icon="arrows-h"
                 title="Cleaner backend"
-                description="Which tool compresses shell output. rtk requires the rtk extension installed + rebuilt."
+                description="Which tool compresses shell output. Both ship with the sandbox — no install, no rebuild."
             >
                 <template #control>
                     <Segmented
@@ -737,6 +746,22 @@ const importMemory = async (): Promise<void> => {
                         :model-value="sandboxSettings?.iqSearch ?? false"
                         :disabled="sandboxSettings === undefined"
                         @update:model-value="toggleIqSearch"
+                    />
+                </template>
+            </Row>
+
+            <!-- Auto-resume — re-run a turn the Claude subscription's usage limit killed, a minute after the
+                 limit window resets. The chat also offers this at the moment a limit hit lands. -->
+            <Row
+                icon="clock"
+                title="Auto-resume after usage limits"
+                description="When a turn dies on the Claude usage limit, re-run it automatically about a minute after the limit resets."
+            >
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="sandboxSettings?.autoResumeOnLimit ?? false"
+                        :disabled="sandboxSettings === undefined"
+                        @update:model-value="toggleAutoResume"
                     />
                 </template>
             </Row>

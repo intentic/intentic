@@ -179,6 +179,25 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.title).toBe("Fix the login submit handler");
     });
 
+    it("slots a summary above the derived guess and below a plan's own name", async () => {
+        const registry = createAgentsRegistry(memoryStore());
+        await registry.init();
+        await registry.begin(turn({ prompt: "we have recently added the fleet board" }), 1_000);
+
+        // The quick model has read the finished turn — its reading beats the pre-turn guess…
+        expect((await registry.setTitle("c1", "Wire the fleet board broadcast", "summary"))?.title).toBe("Wire the fleet board broadcast");
+        // …once. A second summary is a sideways move, so the first reading stands.
+        await registry.setTitle("c1", "A second reading", "summary");
+        expect(registry.get("c1")?.title).toBe("Wire the fleet board broadcast");
+
+        // A plan heading is the agent's own name for the job: it replaces a summary —
+        registry.observe("c1", { kind: "plan", requestId: "r1", text: "# Fix the fleet broadcast fan-out" });
+        expect(registry.get("c1")?.title).toBe("Fix the fleet broadcast fan-out");
+        // — and is never replaced by one.
+        await registry.setTitle("c1", "A late reading", "summary");
+        expect(registry.get("c1")?.title).toBe("Fix the fleet broadcast fan-out");
+    });
+
     it("never lets a plan rename what the user named, and still allows a second rename", async () => {
         const registry = createAgentsRegistry(memoryStore());
         await registry.init();
