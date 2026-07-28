@@ -4,6 +4,7 @@ import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
 import { computed, nextTick, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
+import { clearQuestionDraft, readQuestionDraft, writeQuestionDraft } from "../composables/chat/questionDraft";
 import { type ChatMessage, isAcknowledgment, type PlanRequest } from "../composables/chat/transcript";
 import { copyCodeFromEvent } from "../composables/markdownCode";
 import { useMarkdown } from "../composables/useMarkdown";
@@ -133,9 +134,40 @@ watch(
 );
 
 // --- Interactive question card ---------------------------------------------------------------
-// Local selection state for a pending question card, keyed by question index.
+// Selection state for a pending question card, keyed by question index. Held here because it is UI state of
+// this card, but mirrored to localStorage per requestId (see questionDraft) so a reload — which reattaches to
+// the same still-parked card — doesn't make the user pick everything again.
 const selections = ref<Record<number, string[]>>({});
 const otherTexts = ref<Record<number, string>>({});
+
+// Load the draft when a pending card appears (mount, or the frame arriving mid-turn), and drop it the moment
+// the card settles — answered, dismissed, or frozen `cancelled` by a stop. One watcher for both because they
+// are the same event seen from either side: this card is no longer taking picks.
+watch(
+    () => [props.message.question?.requestId, props.message.question?.status] as const,
+    ([requestId, status]) => {
+        if (requestId === undefined) {
+            return;
+        }
+        if (status !== `pending`) {
+            clearQuestionDraft(requestId);
+            return;
+        }
+        const draft = readQuestionDraft(requestId);
+        selections.value = draft.selections;
+        otherTexts.value = draft.otherTexts;
+    },
+    { immediate: true },
+);
+
+// Both refs are replaced wholesale on every edit (see toggleOption/setOther), so a shallow watch sees them all.
+watch([selections, otherTexts], ([picks, texts]) => {
+    const question = props.message.question;
+    if (question?.status !== `pending`) {
+        return;
+    }
+    writeQuestionDraft(question.requestId, { selections: picks, otherTexts: texts });
+});
 
 const isSelected = (index: number, label: string): boolean => (selections.value[index] ?? []).includes(label);
 
