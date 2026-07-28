@@ -13,7 +13,9 @@ import { STATUS_CLASS, STATUS_LETTER, type WorkspaceTab } from "./workspaceTabs"
  * icon + its title; neither is ever dirty. */
 
 const { tabs, active } = defineProps<{ tabs: readonly WorkspaceTab[]; active?: string | null }>();
-const emit = defineEmits<{ select: [id: string]; close: [id: string]; contextmenu: [id: string, event: Event] }>();
+// `contextmenu` carries the right-clicked tab's id, or undefined when the click landed on the strip's empty
+// space — the parent owns both menus, so it decides which rows a tab-less right-click deserves.
+const emit = defineEmits<{ select: [id: string]; close: [id: string]; contextmenu: [id: string | undefined, event: Event] }>();
 
 const { isDirty } = useEditBuffers();
 const { explorerStyle } = useExplorerStyle();
@@ -117,7 +119,15 @@ watch(
 
 <template>
     <div class="group/tabs relative flex min-w-0 flex-1">
-        <div ref="scroller" class="ftabs-scroll flex min-w-0 flex-1 items-stretch overflow-x-auto" @scroll="updateThumb" @wheel="onWheel">
+        <!-- A right-click that lands on the scroller ITSELF (past the last tab) is the strip's own menu; a tab
+             stops its own event before it gets here. -->
+        <div
+            ref="scroller"
+            class="ftabs-scroll flex min-w-0 flex-1 items-stretch overflow-x-auto"
+            @scroll="updateThumb"
+            @wheel="onWheel"
+            @contextmenu="emit('contextmenu', undefined, $event)"
+        >
             <div
                 v-for="tab in tabs"
                 :key="tab.id"

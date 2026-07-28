@@ -75,11 +75,25 @@ const persistable = (messages: readonly ChatMessage[]): ChatMessage[] =>
               },
     );
 
-export const saveTranscript = async (conversationId: string, messages: readonly ChatMessage[]): Promise<void> => {
+/* `authoritative` marks a transcript the DAEMON confirmed (a session replay), which is allowed to shrink the
+ * mirror — it is the source of truth, and a compacted or trimmed session legitimately has fewer messages than
+ * the copy on disk.
+ *
+ * Every other write is a window reporting what it happens to be showing, and a window can be showing less than
+ * the whole conversation: attaching to a turn that is already running renders that turn alone, and its settle
+ * used to persist those two or three bubbles over a 300-message mirror — losing the history locally on any
+ * reload that landed mid-turn. So an unconfirmed write may extend the mirror, never truncate it. */
+export const saveTranscript = async (conversationId: string, messages: readonly ChatMessage[], authoritative = false): Promise<void> => {
     // An empty transcript is the absence of a mirror, not a mirror of nothing — writing it would blank a good
     // cache entry when a conversation is reset before its replacement content arrives.
     if (messages.length === 0) {
         return;
+    }
+    if (!authoritative) {
+        const cached = await readTranscript(conversationId);
+        if (cached !== undefined && cached.length > messages.length) {
+            return;
+        }
     }
     await run(`readwrite`, (store) => store.put(persistable(messages), conversationId));
 };

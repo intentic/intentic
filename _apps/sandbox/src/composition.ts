@@ -382,7 +382,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
           }
         : undefined;
 
-    const claudeStore = fileClaudeStore(join(authRoot, "claude"));
+    const claudeStore = fileClaudeStore(join(authRoot, "claude"), logger);
     const kimiStore = fileKimiStore(join(authRoot, "kimi"));
 
     // Hoisted (not inline in the literal below): the ACP connection pool implements ACP terminal/* over the

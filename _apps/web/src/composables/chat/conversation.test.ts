@@ -689,6 +689,64 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value[1]!.question).toMatchObject({ status: `answered`, answers: { "Which?": [`A`] } });
     });
 
+    it(`dismissing a question stops the turn: the fork the agent could not call is not one it may now guess at`, async () => {
+        const conversation = new Conversation(`c1`);
+        const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `question`, requestId: `q1`, questions }], { stayOpen: true }));
+
+        const turn = conversation.send(`ask me`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        // Queued behind the card: a stopped turn must not fire it, the way an answered one would.
+        await conversation.enqueue(`and then the docs`);
+        await conversation.cancelQuestion(conversation.messages.value.find((message) => message.question !== undefined)!);
+        await turn;
+
+        const paths = sandboxRequestMock.mock.calls.map(([path]) => path);
+        expect(paths).toContain(`/agent/reply`);
+        expect(paths).toContain(`/agent/stop`);
+        expect(conversation.messages.value.find((message) => message.question !== undefined)!.question).toMatchObject({ status: `cancelled` });
+        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.error.value).toBeNull();
+        expect(conversation.messages.value.slice(-2)).toMatchObject([
+            { role: `notice`, text: `Question dismissed.` },
+            { role: `notice`, text: `Stopped.` },
+        ]);
+        expect(turnBodies()).toHaveLength(1);
+        expect(conversation.queued.value).toMatchObject([{ text: `and then the docs` }]);
+    });
+
+    it(`denying a permission stops the turn, and allowing one leaves it running`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse(
+                [
+                    { kind: `permission`, requestId: `p1`, toolName: `Bash` },
+                    { kind: `permission`, requestId: `p2`, toolName: `Write` },
+                ],
+                { stayOpen: true },
+            ),
+        );
+
+        const turn = conversation.send(`run it`, settings);
+        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+
+        // Re-read per assertion: deciding a card replaces its message rather than mutating it.
+        const cards = (): ChatMessage[] => conversation.messages.value.filter((message) => message.permission !== undefined);
+        const [allowed, denied] = cards();
+        // An allow is the turn carrying on with the user's blessing — nothing to stop.
+        await conversation.decidePermission(allowed!, `once`);
+        expect(conversation.streaming.value).toBe(true);
+        expect(sandboxRequestMock.mock.calls.map(([path]) => path)).not.toContain(`/agent/stop`);
+
+        await conversation.decidePermission(denied!, `deny`);
+        await turn;
+
+        expect(sandboxRequestMock.mock.calls.map(([path]) => path)).toContain(`/agent/stop`);
+        expect(cards().map((card) => card.permission!.status)).toEqual([`allowed`, `denied`]);
+        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Stopped.` });
+    });
+
     it(`surfaces daemon error frames and ignores unfamiliar kinds`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -788,7 +846,8 @@ describe(`Conversation`, () => {
                 {
                     kind: `error`,
                     code: `codex-advisory`,
-                    message: "Model metadata for `gpt-5.6-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.",
+                    message:
+                        "Model metadata for `gpt-5.6-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.",
                 },
                 { kind: `delta`, text: `ok` },
                 { kind: `done` },
@@ -1099,6 +1158,110 @@ describe(`Conversation`, () => {
         // The run's frames armed the session exactly as they would have for the initiating window.
         expect(conversation.session.value).toMatchObject({ id: `s-9` });
         expect(conversation.streaming.value).toBe(false);
+    });
+
+    /* The transcript-loss bug: reattach appends the running turn's prompt bubble to whatever the transcript
+     * holds. A reload that lands mid-turn used to attach before the history was in place, so the chat came back
+     * showing only the message being answered — and the settle then persisted that stub over the local mirror.
+     * Attaching on top of an ALREADY-restored transcript is the shape hydrate now guarantees. */
+    it(`reattach adds the live turn to the history already on screen instead of replacing it`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.restoreMessages([
+            { role: `user`, text: `start the migration` },
+            { role: `assistant`, text: `Done with step one.` },
+        ]);
+        sandboxRequestMock.mockImplementation(() => {
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(sseFrame(head({ prompt: `Continue` })));
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `Step two.` } }));
+                    controller.enqueue(sseFrame({ kind: `end` }));
+                    controller.close();
+                },
+            });
+            return Promise.resolve({ ok: true, body } as Response);
+        });
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `start the migration` },
+            { role: `assistant`, text: `Done with step one.` },
+            { role: `user`, text: `Continue` },
+            { role: `assistant`, text: `Step two.` },
+        ]);
+    });
+
+    /* The daemon refused the turn before running any of it, so the message was never part of the conversation.
+     * It comes back OUT of the transcript and into the queue — which is what makes reconnecting replay it,
+     * rather than leaving the user to retype it into every chat the revocation hit. */
+    it(`holds an undelivered message in the queue when the Claude credential is revoked`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `claude-reauth`, message: `Claude sign-in was revoked — reconnect the account.` }]),
+        );
+
+        await conversation.send(`land the branch`, {
+            agent: `claude`,
+            harness: `native`,
+            model: `opus`,
+            effort: `medium`,
+            thinking: false,
+            account: `acct-dead`,
+        });
+
+        expect(conversation.messages.value.map((message) => message.role)).toEqual([`notice`]);
+        expect(conversation.queued.value.map((message) => message.text)).toEqual([`land the branch`]);
+        // Muted, not the red error line: the fix is one click away on the banner this raises.
+        expect(conversation.error.value).toBeNull();
+    });
+
+    it(`replays the held message once the account is reconnected`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `claude-reauth`, message: `Claude sign-in was revoked — reconnect the account.` }]),
+        );
+        await conversation.send(`land the branch`, {
+            agent: `claude`,
+            harness: `native`,
+            model: `opus`,
+            effort: `medium`,
+            thinking: false,
+            account: `acct-dead`,
+        });
+
+        // The reconnect: a new credential id, and the hold released.
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `Landed.` }]));
+        conversation.rebindAccount(`acct-new`);
+        await conversation.resume();
+
+        expect(conversation.queued.value).toEqual([]);
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `notice`, text: expect.stringContaining(`revoked`) as unknown as string },
+            { role: `user`, text: `land the branch` },
+            { role: `assistant`, text: `Landed.` },
+        ]);
+    });
+
+    // A reconnect mints a NEW account id. Leaving the old one on the session ref would read as a deliberate
+    // account switch and retire a session that resumes perfectly well — the user reconnected to carry on.
+    it(`keeps the session resumable across a reconnect`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.send(`hi`, { agent: `claude`, harness: `native`, model: `opus`, effort: `medium`, thinking: false, account: `acct-dead` });
+
+        conversation.rebindAccount(`acct-new`);
+        await conversation.send(`again`, {
+            agent: `claude`,
+            harness: `native`,
+            model: `opus`,
+            effort: `medium`,
+            thinking: false,
+            account: `acct-new`,
+        });
+
+        const body = JSON.parse(sandboxRequestMock.mock.calls.at(-2)![1]!.body as string) as Record<string, unknown>;
+        expect(body[`sessionId`]).toBe(`s-1`);
     });
 
     it(`reattach replays an already-answered question card as decided, not as a live prompt`, async () => {

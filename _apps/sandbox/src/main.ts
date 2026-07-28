@@ -13,6 +13,7 @@ import { linkSshHosts } from "./capabilities/ssh-hosts.js";
 import { startTranslator } from "./agent/translator.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
 import { writeAgentToken } from "./auth/agent-token.js";
+import { startClaudeRefresh } from "./claude/claude-credentials.js";
 import { reconnectVpns } from "./vpn/vpn-links.js";
 import { writeCodexConfig } from "./codex/codex-config.js";
 import { createServices } from "./composition.js";
@@ -263,6 +264,12 @@ const main = async (): Promise<void> => {
     // Repo-set change push riding the same watcher: a repo cloned/deleted anywhere under /work re-frames the
     // discovered repo list on /events (the watcher itself never sees .git paths).
     startRepoWatch(services.workspace.root, logger);
+
+    // Rotate Claude subscription tokens on a quiet timer rather than letting a burst of turn starts discover the
+    // expiry together. Anthropic rotates refresh tokens and revokes the whole family on a replay, so the goal is
+    // for a turn to never be the thing that triggers a refresh — the locking in claude-credentials is the
+    // backstop for when it is anyway.
+    startClaudeRefresh(services.claudeStore);
 
     // Warm the resident search engine (sweep + symbols + the embedding backlog) so the first search hits a ready
     // index. Incremental — a valid on-disk index survives boot instead of being dropped and rebuilt — and it runs

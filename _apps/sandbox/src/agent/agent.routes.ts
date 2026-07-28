@@ -392,11 +392,12 @@ async function* runTurn(
         const withTools = tools.length > 0 ? { ...base, tools } : base;
         request = attachmentPaths.length > 0 ? { ...withTools, attachments: attachmentPaths } : withTools;
     } else {
-        // Endpoint + credentials for the Claude Code harness — a native Claude turn's subscription OAuth, or the
-        // translator/Moonshot endpoint a routed provider rides. Resolved by harness-credentials.ts, which the
-        // quick-model one-shot behind the commit box's autofill reads too, so both authenticate identically.
-        // Its refusals are values (no translator in the image, an unconnected subscription); this is where they
-        // become the error frame the composer's connect gate reads.
+        // Endpoint + credentials for the Claude Code harness — a native Claude turn's subscription OAuth (with
+        // its mid-turn refresh callback), or the translator/Moonshot endpoint a routed provider rides. Resolved
+        // by harness-credentials.ts, which the quick-model one-shot behind the commit box's autofill reads too,
+        // so both authenticate identically. Its refusals are values (no translator in the image, an unconnected
+        // subscription, a revoked sign-in); this is where they become the error frame the composer's connect
+        // gate reads.
         const resolved = await resolveHarnessCredentials(services, {
             agent: input.agent,
             ...(input.account !== undefined ? { account: input.account } : {}),
@@ -407,7 +408,7 @@ async function* runTurn(
             yield { kind: "done" };
             return;
         }
-        const { oauthToken, endpoint } = resolved.credentials;
+        const { oauthToken, refreshOauthToken, endpoint } = resolved.credentials;
         resolvedAccount = resolved.credentials.account;
         // Pre-flight the resume target: a session id that outlived its transcript (deleted, or minted before
         // the store persisted across rebuilds) would otherwise spawn the CLI just to fail opaquely — on every
@@ -514,6 +515,7 @@ async function* runTurn(
                           ? { model: services.config.intenticAgentModel }
                           : {}),
                       ...(oauthToken !== undefined ? { oauthToken } : {}),
+                      ...(refreshOauthToken !== undefined ? { refreshOauthToken } : {}),
                   }),
             ...(plugins.length > 0 ? { plugins } : {}),
             ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),

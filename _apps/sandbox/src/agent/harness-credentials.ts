@@ -1,5 +1,5 @@
 import { type AgentProvider, NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract";
-import { ensureFreshToken } from "../claude/claude-credentials.js";
+import { ensureFreshToken, replaceRejectedToken } from "../claude/claude-credentials.js";
 import { resolveKimiKey } from "../kimi/kimi-credentials.js";
 import { MOONSHOT_ANTHROPIC_BASE } from "../kimi/kimi-models.js";
 import type { Services } from "../composition.js";
@@ -35,6 +35,11 @@ export interface HarnessEndpoint {
 
 export interface HarnessCredentials {
     readonly oauthToken?: string;
+    // Re-mints `oauthToken` mid-turn. The CLI calls this when the API refuses the token it was given — expired
+    // under a long turn, or revoked account-wide — and carries on with what comes back, so a credential that
+    // dies while the agent is working costs a pause rather than the turn. Present only alongside a stored
+    // account's token: the container-env fallback and the routed endpoints have nothing to rotate.
+    readonly refreshOauthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
     readonly endpoint?: HarnessEndpoint;
     // Which stored account answered — the attribution key stamped onto usage/rate-limit frames. Undefined when
     // the credential came from the container env or from the translator's own subscription rather than an
@@ -63,7 +68,7 @@ export const harnessEnv = (credentials: {
 
 export type HarnessCredentialsResult =
     | { readonly ok: true; readonly credentials: HarnessCredentials }
-    | { readonly ok: false; readonly code?: "subscription-required"; readonly message: string };
+    | { readonly ok: false; readonly code?: "subscription-required" | "claude-reauth"; readonly message: string };
 
 // The label a routed provider's missing subscription is named by — the vendor's own noun, matching the connect
 // prompts (PROVIDER_ACCESS.requirement).
@@ -196,12 +201,34 @@ export const resolveHarnessCredentials = async (
         }
     }
     if (oauthToken === undefined && services.config.claudeCodeOauthToken === "" && services.config.anthropicApiKey === "") {
-        return { ok: false, message: "No Claude account connected — connect it in Setup before chatting." };
+        // A connected-but-revoked account is a different problem from having no account at all, and it has a
+        // different fix: reconnect this one, in place, rather than go find Setup. The code lets the UI offer
+        // that inline and hold the message for replay once it lands.
+        const revoked = accountId !== undefined && (await services.claudeStore.list()).some((a) => a.id === accountId && a.needsReauth === true);
+        return revoked
+            ? { ok: false, code: "claude-reauth", message: "Claude sign-in was revoked — reconnect the account to pick this conversation back up." }
+            : { ok: false, message: "No Claude account connected — connect it in Setup before chatting." };
     }
     // Attribution follows the TOKEN, not the id: an account whose refresh yielded nothing served none of this
     // turn (the container's own credential did), so naming it would file the usage against one that never ran.
     if (oauthToken === undefined) {
         return { ok: true, credentials: {} };
     }
-    return { ok: true, credentials: { oauthToken, ...(accountId !== undefined ? { account: accountId } : {}) } };
+    // Hand the CLI a way to re-mint the token it was given. It calls this on a 401 and carries on with the
+    // result, so a credential that expires or is revoked mid-turn costs a pause instead of the turn's work.
+    // `current` tracks what the CLI holds so the rotation supersedes exactly that one — and so a token another
+    // turn already rotated is adopted, never re-refreshed.
+    let current: string | undefined = oauthToken;
+    const refreshOauthToken = async (): Promise<string | undefined> => {
+        if (current === undefined || accountId === undefined) {
+            return undefined;
+        }
+        const replacement = await replaceRejectedToken(services.claudeStore, accountId, current).catch((error: unknown) => {
+            services.logger.warn({ err: error, account: accountId }, "claude mid-turn token refresh failed");
+            return undefined;
+        });
+        current = replacement;
+        return replacement;
+    };
+    return { ok: true, credentials: { oauthToken, refreshOauthToken, ...(accountId !== undefined ? { account: accountId } : {}) } };
 };
