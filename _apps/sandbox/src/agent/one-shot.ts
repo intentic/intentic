@@ -15,6 +15,15 @@ import { type HarnessCredentials, harnessEnv } from "./harness-credentials.js";
  *   maxTurns: 1         — with no tools there is nothing to iterate on; this is the backstop that says so.
  *   no systemPrompt     — the SDK then sends an EMPTY one, which for a text task is right: the claude_code
  *                         preset is a coding agent's instructions and would only argue with the prompt.
+ *   thinking: disabled  — see below. NOT a default; it has to be said.
+ *
+ * THINKING IS OFF, EXPLICITLY, and this is the one setting here that is not merely tidy. Adaptive thinking is
+ * the SDK's DEFAULT on every model that supports it, quick rungs included, so a helper that says nothing gets
+ * it — and then spends thousands of reasoning tokens deciding a single line. Measured on Haiku 4.5 against an
+ * ordinary commit diff: 27s and ~2.9k output tokens with the default, 2s and ~12 tokens with it disabled, for
+ * the same subject line. That is the difference between a sparkle click that feels instant and one the user
+ * assumes is broken. Every caller of this seam is a one-liner (a commit subject, a session title) where the
+ * answer is a rewrite of material already in the prompt, so there is nothing for a reasoning pass to add.
  *
  * It runs on the same credentials the chat does (harness-credentials.ts), including the withholding rule that
  * keeps a subscription token away from a foreign endpoint — a helper is not a reason to authenticate a second
@@ -42,6 +51,9 @@ export const runOneShot = async (params: {
         settingSources: [],
         allowedTools: [],
         maxTurns: 1,
+        // The header's headline setting: the SDK thinks by default, and on a one-line rewrite that costs ~10x
+        // the latency for the same answer.
+        thinking: { type: `disabled` },
         // A routed provider is reached through a translator that maps model → upstream, so its endpoint names
         // the id; a native Claude call uses the resolved quick model directly.
         model: endpoint?.model ?? params.model,
