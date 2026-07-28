@@ -1,17 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-// laneDrop is pure, but it imports laneOf from the fleet store, which pulls useChat -> the app shell. Cut the
-// same edges useAgents.test.ts cuts: the router (createWebHistory wants window, and its @intentic-app/ui barrel
-// drags in .vue files the node test env can't transform), plus the three modules that reach environment.ts's
-// window.env read — analytics (direct), useSandbox (via useApi), and sandboxClient (via useGoogleIdentity).
-vi.mock("../../router", () => ({ router: { push: vi.fn() } }));
-vi.mock("../analytics", () => ({ track: vi.fn() }));
-vi.mock("../sandbox/useSandbox", async () => {
-    const { ref } = await import("vue");
-    return { useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }) };
-});
-vi.mock("../sandbox/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
-
+// No mocks. laneDrop reads the lane machine from agentStatus — a leaf of pure functions — and its only tie to
+// the fleet store is a type-only import, which the transform erases. Nothing here reaches the app shell.
 import { dropActionFor, dropActionLabel, dropRejection, type DropAction } from "./laneDrop";
 import type { FleetAgent } from "./useAgents";
 

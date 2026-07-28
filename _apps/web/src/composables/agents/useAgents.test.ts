@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// laneOf is pure, but it lives beside the fleet store, so importing it pulls useChat -> the app shell. Cut the
-// edges that need a browser at module-eval, exactly as useChat.test.ts does: the router (createWebHistory wants
+// canArchive is pure, but it lives beside the fleet store, so importing it pulls useChat -> the app shell. Cut
+// the edges that need a browser at module-eval, exactly as useChat.test.ts does: the router (createWebHistory wants
 // window, and its @intentic-app/ui barrel drags in .vue files the node test env can't transform), plus the three
 // modules that reach environment.ts's window.env read — analytics (direct), useSandbox (via useApi), and
 // sandboxClient (via useGoogleIdentity). The projection under test touches none of them.
@@ -22,31 +22,7 @@ import { nextTick } from "vue";
 import { Conversation } from "../chat/conversation";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
-import { canArchive, laneOf, resetAgents, setAgents, useAgents } from "./useAgents";
-
-// The kanban lane projection — pure over status + attention, so "finished" needs no explicit action:
-// a cleanly-completed, auto-landed turn reads landed/idle and the card moves lanes on the next roster frame.
-describe("laneOf", () => {
-    const none = { plan: false, question: false, permission: false, conflict: false };
-
-    it("routes pending plan/question/conflict and errors to attention", () => {
-        expect(laneOf({ status: `running`, attention: { ...none, plan: true } })).toBe(`attention`);
-        expect(laneOf({ status: `running`, attention: { ...none, question: true } })).toBe(`attention`);
-        expect(laneOf({ status: `conflict`, attention: { ...none, conflict: true } })).toBe(`attention`);
-        expect(laneOf({ status: `awaiting`, attention: none })).toBe(`attention`);
-        expect(laneOf({ status: `error`, attention: none })).toBe(`attention`);
-    });
-
-    it("routes running turns and fresh drafts to active", () => {
-        expect(laneOf({ status: `running`, attention: none })).toBe(`active`);
-        expect(laneOf({ status: `draft`, attention: none })).toBe(`active`);
-    });
-
-    it("routes landed and idle agents to finished — the auto-finish rule", () => {
-        expect(laneOf({ status: `landed`, attention: none })).toBe(`finished`);
-        expect(laneOf({ status: `idle`, attention: none })).toBe(`finished`);
-    });
-});
+import { canArchive, resetAgents, setAgents, useAgents } from "./useAgents";
 
 /* The board's exit gate, which is NOT the Finished lane. Gating it on the lane is what stranded a failed turn:
  * an errored card's only offered drop is a land onto Finished, so an agent that failed with nothing landable

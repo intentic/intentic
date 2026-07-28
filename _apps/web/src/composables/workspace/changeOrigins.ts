@@ -29,9 +29,9 @@ export const ALL_SIDES: readonly GitDiffSide[] = [`conflicted`, `staged`, `unsta
 // edited again is two rows and one file, and "3 files from this agent" must not read 4 because one of them was
 // half-staged. A file two agents landed counts for both — that is the whole reason origins is a list.
 //
-// `sides` narrows WHICH changes are counted, for the one caller that asks a different question: the commit box's
-// suggested subject (commitSuggestion.ts) describes what the commit will RECORD, so with something staged it
-// counts the index alone. The legend takes every side.
+// `sides` narrows WHICH changes are counted, for the caller that asks a different question: the commit box's
+// "a session hasn't finished" warning is about what the commit will RECORD, so for a plain Commit it counts the
+// index alone. The legend takes every side.
 export const summarizeOrigins = (
     repos: readonly RepoChanges[],
     sides: readonly GitDiffSide[] = ALL_SIDES,

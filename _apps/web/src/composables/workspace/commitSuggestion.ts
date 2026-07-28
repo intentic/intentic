@@ -1,25 +1,16 @@
-import type { GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
-import { ALL_SIDES, summarizeOrigins } from "./changeOrigins";
-
-/* THE COMMIT BOX'S FREE FIRST DRAFT — the session titles already on screen, read as a commit subject.
+/* A SESSION TITLE, READ AS A COMMIT SUBJECT — what the Changes panel files into the commit box when the user
+ * clicks a session in its "From" legend.
  *
- * The Changes panel's "From" row names, per agent, the session whose work is sitting in the tree, and those
- * titles are derived from the opening prompt by the same rule everything else names a conversation with
+ * Those titles are derived from the opening prompt by the same rule everything else names a conversation with
  * (sandbox-contract's title.ts): an imperative line about the work, cut to one bounded sentence. That is
- * already most of a commit subject — "Fix cascading workspace tree truncation markers" — so an empty commit box
- * above a legend that says exactly what the change was is a blank the user fills in by retyping what they can
- * already read. This turns it into the box's starting text.
+ * already most of a commit subject — "Fix cascading workspace tree truncation markers" — so a user typing a
+ * message above a legend that says exactly what the change was is retyping what they can already read. One
+ * click moves it across, in the shape a subject line wants.
  *
- * A SUGGESTION, NOT A MESSAGE. It only ever fills a box the user has nothing of their own in (see
- * commitMessage.ts), it is one keystroke from being overwritten, and it costs nothing — which is what separates
- * it from the AI autofill next to it: that one reads the actual diff on a model, so it is worth a click and a
- * quota, and it stays the way to get a message about what the code does rather than what the ask was.
- *
- * IT DESCRIBES WHAT THE COMMIT WILL RECORD, the one rule this whole family of files shares (see the daemon's
- * commit-message.ts). With something staged, the titles come from the STAGED files' origins and nothing else —
- * a commit records the index, and naming it after an agent whose work is sitting unstaged would put the wrong
- * subject over the wrong diff. With nothing staged the button is "Commit all", which sweeps every side, so
- * every side's origins count.
+ * A CHOSEN LINE, NOT A GUESS ABOUT THE DIFF. It arrives only when asked for, it is one keystroke from being
+ * overwritten, and it costs nothing — which is what separates it from the AI autofill next to it: that one
+ * reads the actual diff on a model, so it is worth a click and a quota, and it stays the way to get a message
+ * about what the code does rather than what the ask was.
  *
  * The prefix is PRESCRIBED here, and deliberately unlike the daemon's draft (which infers the house style from
  * the repo's own recent subjects and knows nothing of Conventional Commits). Nothing on this side of the wire
@@ -215,16 +206,16 @@ const readTitle = (title: string): { readonly type: string; readonly subject: st
     return { type: verb.type, subject: rest === `` ? decapitalized(clean) : rest };
 };
 
-/* One subject line from the titles of every session whose work this commit will record, newest-busiest first
- * (the order the legend is already read in).
+/* One subject line from one or more session titles.
  *
- * Several sessions share ONE commit and therefore one subject, so their titles are joined rather than reduced
- * to the first: a commit that carries three sessions' work and names one of them is a message that is wrong
- * about two thirds of itself. Nothing is dropped to keep the line short for the same reason — the box is one
- * edit away, and a suggestion that silently omits a session is worse than a long one that doesn't.
+ * It takes a LIST because a commit box is a single line and a commit can carry several sessions' work, so the
+ * titles are joined rather than reduced to the first: a message that names one of three sessions is wrong about
+ * two thirds of itself. Nothing is dropped to keep the line short — the box is one edit away, and silently
+ * omitting a session is worse than a long line that doesn't. The legend's click passes exactly one title; the
+ * plural shape is what makes "and this one too" a one-line change rather than a rewrite.
  *
- * The type comes from the FIRST title, the session with the most files in the tree: types don't merge (a commit
- * that fixes and features is both), and the busiest session is the best single answer available. */
+ * The type comes from the FIRST title: types don't merge (a commit that fixes and features is both), and the
+ * leading session — the busiest, in the order the legend is already read in — is the best single answer. */
 export const conventionalSubject = (titles: readonly string[]): string | undefined => {
     const parts = titles.map(readTitle).filter((part) => part !== undefined);
     // Two sessions named the same thing describe it once — in the FIRST one's spelling, since that is the
@@ -234,22 +225,4 @@ export const conventionalSubject = (titles: readonly string[]): string | undefin
         return undefined;
     }
     return `${parts[0]!.type}: ${subjects.join(`, `)}`;
-};
-
-// The index alone — what a plain Commit records. Its counterpart is the legend's ALL_SIDES, which is also what
-// "Commit all" sweeps, so the two shapes of the button need no third list.
-const STAGED: readonly GitDiffSide[] = [`staged`];
-
-/* The suggestion itself: the subject the commit box falls back to, or undefined when there is nothing to
- * suggest from — no agent landed anything here, or the ones that did have no title in this browser's fleet
- * mirror yet. An untitled origin is skipped rather than named: the legend's "Agent 4f2a1c" placeholder is an
- * id, and an id is not a description of a change.
- *
- * `titleOf` resolves an agent id through the fleet roster the panel already mirrors, and is passed in rather
- * than read here so this stays a pure function of the review set (the daemon sends ids, never titles).
- */
-export const suggestCommitMessage = (repos: readonly RepoChanges[], titleOf: (id: string) => string | undefined): string | undefined => {
-    const staged = repos.some((repo) => repo.staged.length > 0);
-    const { agents } = summarizeOrigins(repos, staged ? STAGED : ALL_SIDES);
-    return conventionalSubject(agents.flatMap((agent) => titleOf(agent.id) ?? []));
 };

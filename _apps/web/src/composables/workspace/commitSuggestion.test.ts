@@ -1,15 +1,5 @@
-import type { GitChange, RepoChanges } from "@intentic-app/api-contract";
 import { describe, expect, test } from "vitest";
-import { conventionalSubject, suggestCommitMessage } from "./commitSuggestion";
-
-const change = (path: string, status: GitChange[`status`] = `modified`): GitChange => ({ path, status });
-const repo = (name: string, sides: Partial<Pick<RepoChanges, `conflicted` | `staged` | `unstaged` | `origins`>>): RepoChanges => ({
-    repo: name,
-    conflicted: [],
-    staged: [],
-    unstaged: [],
-    ...sides,
-});
+import { conventionalSubject } from "./commitSuggestion";
 
 describe(`conventionalSubject`, () => {
     test(`a verb that names its type is dropped, article and all`, () => {
@@ -60,40 +50,5 @@ describe(`conventionalSubject`, () => {
     test(`nothing to say`, () => {
         expect(conventionalSubject([])).toBeUndefined();
         expect(conventionalSubject([`  `, `.`])).toBeUndefined();
-    });
-});
-
-describe(`suggestCommitMessage`, () => {
-    const titles: Record<string, string> = { "agent-1": `Fix cascading markers`, "agent-2": `Add chat tab icons` };
-    const titleOf = (id: string): string | undefined => titles[id];
-
-    test(`with nothing staged, every side's origins describe the "Commit all"`, () => {
-        const repos = [
-            repo(`root`, { unstaged: [change(`a.ts`)], origins: { "a.ts": [`agent-2`] } }),
-            repo(`intentic`, { unstaged: [change(`b.ts`), change(`c.ts`)], origins: { "b.ts": [`agent-1`], "c.ts": [`agent-1`] } }),
-        ];
-        // Busiest session first, and it sets the type.
-        expect(suggestCommitMessage(repos, titleOf)).toBe(`fix: cascading markers, add chat tab icons`);
-    });
-
-    test(`with something staged, the unstaged sessions are not described — the commit records the index`, () => {
-        const repos = [
-            repo(`root`, {
-                staged: [change(`a.ts`)],
-                unstaged: [change(`b.ts`)],
-                origins: { "a.ts": [`agent-2`], "b.ts": [`agent-1`] },
-            }),
-        ];
-        expect(suggestCommitMessage(repos, titleOf)).toBe(`feat: add chat tab icons`);
-    });
-
-    test(`an origin with no title in the fleet mirror is skipped, not named by its id`, () => {
-        const repos = [repo(`root`, { unstaged: [change(`a.ts`)], origins: { "a.ts": [`ghost`] } })];
-        expect(suggestCommitMessage(repos, titleOf)).toBeUndefined();
-    });
-
-    test(`nothing an agent landed, nothing to suggest`, () => {
-        expect(suggestCommitMessage([repo(`root`, { unstaged: [change(`mine.ts`)] })], titleOf)).toBeUndefined();
-        expect(suggestCommitMessage([], titleOf)).toBeUndefined();
     });
 });

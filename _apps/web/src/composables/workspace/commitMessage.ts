@@ -1,16 +1,22 @@
 import { computed, ref, watch } from "vue";
 import { useSandbox } from "../sandbox/useSandbox";
 
-/* WHAT IS IN THE COMMIT BOX — the user's own draft, or the suggestion standing in for it while they have none.
+/* WHAT IS IN THE COMMIT BOX — one value, the user's draft, and nothing standing in for it.
  *
- * TWO SOURCES, ONE VALUE, and the value is what everything reads: the input's v-model, the Commit button's
- * readiness, the message the commit is made with, the text the AI autofill stashes for Undo. A panel that
- * consulted a draft here and a fallback there would eventually commit one while displaying the other.
+ * IT STARTS EMPTY, and stays empty until the user asks for something. The version this replaces auto-filled the
+ * box with a subject derived from EVERY session in the "From" legend, on the reasoning that the titles were
+ * already on screen and retyping them was waste. What it actually produced was a message nobody chose: a tree
+ * carrying four sessions' work got all four titles joined into one line, the line changed under the user
+ * whenever another agent landed, and a commit's subject is the last thing that should arrive by default —
+ * a message you did not write is one you do not read before pressing Commit.
  *
- * The draft always wins, and the fallback returns the moment there is no draft again — the suggestion is not
- * seeded INTO the draft, which is the version of this that goes subtly wrong: seeding writes a message the user
- * never typed into the persisted draft, so it outlives the work it described, keeps its own text after the
- * sessions it named have been committed, and cannot refresh when a new agent lands better material.
+ * So naming the commit is now a GESTURE: clicking a session in the From legend files its title into the box
+ * (fillFromOrigin below), which is the same click that narrows the list to that session's files. One session,
+ * one subject, chosen — and the two halves of "commit this agent's work" are one action instead of two.
+ *
+ * WHAT THE USER TYPED IS UNTOUCHABLE, which is why a fill records the exact text it wrote. A later fill may
+ * replace its own output, and clicking off the legend takes its own output back; neither may touch a keystroke.
+ * There is no Undo here for the same reason (the AI autofill next door needs one — it overwrites on purpose).
  *
  * THE COMMIT BOX'S DRAFT, OUTLIVING ITS INPUT. The Changes panel is mounted behind a v-if — the sidebar's
  * Files|Changes|History switch and the mobile segment both destroy it — so a message held in the component died
@@ -40,29 +46,56 @@ const read = (sandboxId: string | undefined): string => {
 
 const { activeSandboxId } = useSandbox();
 
-// What the user has typed (or accepted from the AI autofill) for this sandbox. Empty = nothing of their own,
-// which is also what a successful commit leaves behind — so the suggestion is free to take the box back.
+// What the user has typed, accepted from the AI autofill, or filed in from a From chip, for this sandbox.
+// Empty = nothing at all, which is also what a successful commit leaves behind.
 const draft = ref(read(activeSandboxId.value));
 
-/* The suggested subject, derived from the session titles of the agents whose work this commit will record — see
- * commitSuggestion.ts for what it says and why. Written by the Changes panel rather than derived here: it comes
- * out of the review set, which is a vue-query read, and a query can only be created from a component's setup —
- * this module is imported long before one exists. The panel keeps it current for as long as the commit box is on
- * screen, which is exactly as long as anything reads it. */
-export const commitSuggestion = ref<string | undefined>(undefined);
+/* The exact text the last legend fill wrote, while the box still holds it verbatim. This is the whole of the
+ * fill's claim on the box: it may replace or retract its OWN line and nothing else, so a user who has typed
+ * (or edited a filled line by one character) can click through the legend's filters without their message
+ * moving. Undefined = the box is the user's, whatever is in it.
+ *
+ * Deliberately NOT persisted alongside the draft: a filled line that survives a reload comes back as the
+ * user's own, untouchable. That is the safe direction — a message restored from storage is one they left there
+ * on purpose, and a legend click has no business retracting it a week later. */
+const filled = ref<string | undefined>(undefined);
 
 export const commitMessage = computed<string>({
-    get: () => (draft.value === `` ? (commitSuggestion.value ?? ``) : draft.value),
-    // Typing over the suggestion (or clearing the box) is a write to the draft, and only the draft: the
-    // suggestion describes the tree, not the user's intent, so nothing here may edit it.
+    get: () => draft.value,
     set: (message) => {
+        // Any write that isn't the fill's own output ends the fill's claim — a keystroke, the AI autofill, the
+        // clear a successful commit does. Set before the draft so a watcher on the message sees the final state.
+        if (message !== filled.value) {
+            filled.value = undefined;
+        }
         draft.value = message;
     },
 });
 
+// A session's title, read as this commit's subject — the From legend's click. Declines while the box holds
+// anything the fill did not put there.
+export const fillCommitMessage = (message: string): void => {
+    if (draft.value !== `` && draft.value !== filled.value) {
+        return;
+    }
+    filled.value = message;
+    draft.value = message;
+};
+
+// The legend no longer points at the session whose title is in the box (the chip was toggled off, the filter
+// moved, or that agent's work left the tree), so the line it filed in goes with it. A message the user has
+// since made their own stays — `filled` no longer matches it.
+export const clearFilledMessage = (): void => {
+    if (filled.value !== undefined && draft.value === filled.value) {
+        draft.value = ``;
+    }
+    filled.value = undefined;
+};
+
 // Switching sandboxes swaps the draft for that sandbox's own — which is also what re-persists it below, under
-// the id it was just loaded from.
+// the id it was just loaded from. The fill's claim does not travel: it was made against another tree's legend.
 watch(activeSandboxId, (sandboxId) => {
+    filled.value = undefined;
     draft.value = read(sandboxId);
 });
 

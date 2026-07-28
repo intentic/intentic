@@ -1,4 +1,5 @@
-import { laneOf, type FleetAgent, type FleetLane } from "./useAgents";
+import { laneOf, type FleetLane } from "./agentStatus";
+import type { FleetAgent } from "./useAgents";
 
 /* What dragging a card across the board actually DOES. The lanes are pure projections of the daemon's status
  * machine (laneOf), so a drop cannot assign a status — it can only invoke the action that CAUSES one, and only

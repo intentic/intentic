@@ -28,9 +28,15 @@ const { to = `body` } = defineProps<{
 
 // What one anchor reveals. `label` is the muted eyebrow ("Landed by"), `title` the full derived title, `body`
 // the fuller text it came from (a tab's first message) when the surface has it.
+//
+// `note` is the one line about the session's state RIGHT NOW rather than its identity — what a glanceable mark
+// on the anchor stands for, spelled out ("Running · turn 2 · editing ReviewPanel.vue · 2m"). It sits between
+// the title and the body because it qualifies the title: it is the difference between "this is what that
+// session was for" and "and it is still doing it".
 interface HoverCardContent {
     readonly label?: string;
     readonly title?: string;
+    readonly note?: string;
     readonly body?: string;
 }
 
@@ -99,6 +105,8 @@ defineExpose({ show, hide });
             <p v-if="placement.content.title" class="break-words whitespace-pre-wrap text-xs font-medium leading-relaxed text-content">
                 {{ placement.content.title }}
             </p>
+            <!-- Accented, because it is the only line here that can be out of date a second from now. -->
+            <p v-if="placement.content.note" class="break-words text-2xs leading-relaxed text-link">{{ placement.content.note }}</p>
             <p
                 v-if="body"
                 class="line-clamp-[12] break-words whitespace-pre-wrap text-xs leading-relaxed text-muted"
