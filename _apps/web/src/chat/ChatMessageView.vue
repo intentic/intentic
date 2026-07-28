@@ -540,27 +540,25 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 >
                     <Icon name="pencil" class="text-2xs" />
                 </button>
-                <!-- Aside: the same attachments as a fixed column to the LEFT of the prompt, taking over from
-                     the stacked row above once the panel is wide enough. A prompt is pinned for as long as its
-                     answer runs, so its height is charged against the room that answer is read in — the
-                     six-line clamp on .chat-prompt-text is that budget — and a 56px thumbnail row was 62px on
-                     top of it that nothing accounted for. Side by side the pair costs the TALLER of the two
-                     rather than their sum, on the one row of the transcript that is never off screen.
-                     Two elements rather than one moved by CSS because the two arrangements do not share a flex
-                     parent: reaching the stacked position from in here needs the row to wrap, and a wrapping
-                     row drops the action buttons onto a line of their own as soon as the bubble fills the
-                     width — 28px of dead height spent to save 62.
-                     @lg is the floor at which the bubble still keeps a readable measure once this column and
-                     the action gutter come out of 85% of the transcript width; at the docked default the same
-                     arrangement sets the prompt to about twenty characters a line, so it stays stacked and the
-                     vertical saving is simply not available there. The query is on the transcript column
-                     (ChatPanel's @container), so it answers to a dragged panel edge and to the pop-out window
-                     alike. -->
-                <ChatAttachmentStrip
-                    v-if="attachmentsAside"
-                    :attachments="attachmentThumbs"
-                    class="mr-1 hidden shrink-0 flex-col self-start @lg:flex"
-                />
+                <!-- Aside: the same thumbnail to the LEFT of the prompt, taking over from the stacked row
+                     above once the panel is wide enough (attachmentsAside settles everything except width).
+                     A prompt is pinned for as long as its answer runs, so its height is charged against the
+                     room that answer is read in — the six-line clamp on .chat-prompt-text is that budget —
+                     and a 56px thumbnail row was 62px on top of it that nothing accounted for. Beside the
+                     bubble the pair costs the TALLER of the two rather than their sum: measured, a screenshot
+                     with a short prompt goes 121px -> 77px and one with a clamped prompt 218px -> 156px, on
+                     the one row of the transcript that is never off screen.
+                     Two elements rather than one moved by CSS, because the two arrangements do not share a
+                     flex parent: reaching the stacked position from in here needs the row to wrap, and a
+                     wrapping row drops the action buttons onto a line of their own as soon as the bubble
+                     fills the width — 28px of dead height spent to save 62.
+                     @lg is the floor at which the bubble still keeps a readable measure once the thumbnail
+                     and the action gutter come out of 85% of the transcript width (47 characters there,
+                     against 49 stacked one step narrower); at the docked default the same arrangement sets
+                     the prompt to about twenty characters a line, so it stays stacked and the saving is
+                     simply not available there. The query is on the transcript column (ChatPanel's
+                     @container), so it answers to a dragged panel edge and to the pop-out window alike. -->
+                <ChatAttachmentStrip v-if="attachmentsAside" :attachments="attachmentThumbs" class="mr-1 hidden shrink-0 self-start @lg:flex" />
                 <!-- Frame and scroller are two elements: the chip below must not scroll away with the text
                      when an open bubble runs past its cap (see .chat-prompt-bubble). -->
                 <div
