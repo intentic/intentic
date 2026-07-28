@@ -92,6 +92,17 @@ test("a call whose result never arrived stays in progress rather than claiming i
     expect(messages[0]?.tools?.[0]?.status).toBe("in_progress");
 });
 
+// An archived agent's transcript is keyed by its retired worktree path, which the dir-scoped search (workspace
+// root + registered worktrees) no longer reaches — the read falls back to the all-projects search rather than
+// reporting a transcript that exists on disk as empty.
+test("a session outside the dir scope is found by the all-projects fallback", async () => {
+    getSessionMessages.mockImplementation(async (_id: string, options?: { dir?: string }) =>
+        options?.dir !== undefined ? [] : [{ type: "user", message: { content: "archived words" } }],
+    );
+    const messages = await readWorkspaceSession("/work", "s0");
+    expect(messages).toEqual([{ role: "user", text: "archived words" }]);
+});
+
 // A successful Edit's result is the redundant "file updated" snippet; the card keeps the diff derived from the
 // call's own input, exactly as the live stream leaves it.
 test("a successful edit keeps its call-time diff instead of the result snippet", async () => {

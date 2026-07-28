@@ -80,7 +80,14 @@ const blocksOf = (message: { message?: unknown }): StoredBlock[] => {
 // fresh assistant message around each prose block, so its tool_use blocks land under the prose that
 // introduced them instead of all hanging off the end of the turn.
 export const readWorkspaceSession = async (dir: string, id: string): Promise<RestoredMessage[]> => {
-    const messages = await getSessionMessages(id, { dir });
+    // The dir-scoped read covers the workspace root and its LIVE worktrees — the SDK resolves worktree
+    // project dirs through `git worktree list`. An ARCHIVED agent's transcript is keyed by its retired
+    // worktree path, which that list no longer names, so the scoped search comes back empty with the file
+    // sitting right in this workspace's own store (~/.claude/projects is symlinked per sandbox — see
+    // session-store.ts). Fall back to the all-projects search before calling the session empty; ids are
+    // UUIDs, so the widened search can only find the session that was asked for.
+    const scoped = await getSessionMessages(id, { dir });
+    const messages = scoped.length > 0 ? scoped : await getSessionMessages(id);
     const out: RestoredMessage[] = [];
     // tool_use id → the card to settle when its result arrives on the following (synthetic) user message. The
     // card is already in `out`; it is mutated in place, so ordering needs no second pass.
