@@ -47,6 +47,11 @@ const tabLabel = (conversation: Conversation): string => conversation.title.valu
 // already leads with who sent the message.
 const originOf = (conversation: Conversation): AgentOrigin | undefined => agentById(conversation.conversationId)?.origin;
 
+// Off the board, still open. Archiving an agent deliberately leaves its tab alone (see the archive note in
+// useAgents), so the strip is what says so for a BACKGROUND tab — the panel's own line only speaks for the
+// active one, and a tab that looks identical to a live agent is how "didn't I just archive that?" starts.
+const isArchived = (conversation: Conversation): boolean => agentById(conversation.conversationId)?.archivedAt !== undefined;
+
 const history = ref<InstanceType<typeof Popover> | null>(null);
 const searchInput = ref<HTMLInputElement | null>(null);
 
@@ -366,6 +371,10 @@ const openHistory = (event: Event): void => {
                 >
                     <!-- Came in from outside (a Discord mention, a visitor, a webhook) rather than from you. -->
                     <OriginMark :origin="originOf(c)" compact />
+                    <!-- Archived: the agent is off the board, but its conversation is still right here. -->
+                    <span v-if="isArchived(c)" v-tooltip.bottom="'Archived — off the agents board'" class="flex shrink-0 items-center">
+                        <Icon name="box" class="text-2xs text-subtle" />
+                    </span>
                     <!-- One noun with the fleet: an untitled isolated conversation IS a draft agent card there. -->
                     <span class="min-w-0 flex-1 truncate text-left" :class="statusTabClass(c.status.value)">{{ tabLabel(c) }}</span>
                     <!-- Members with this same conversation active right now. -->

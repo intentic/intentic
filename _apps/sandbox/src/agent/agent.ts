@@ -582,10 +582,13 @@ async function* streamSdk(
     }
 }
 
-// Render the user's question picks (or a dismissal) as the `ask` tool's text result.
+// Render the user's question picks (or a dismissal) as the `ask` tool's text result. A dismissal is not a
+// quieter answer: the client stops the turn on it (and the stand-in an aborted turn settles with lands here
+// too), so this text is read on the NEXT turn, where "proceed on defaults" would be an instruction to resume
+// work the user just pulled the plug on.
 const formatAnswers = (questions: AskQuestion[], reply: Extract<AgentReply, { kind: "question" }>): string => {
     if (reply.cancelled || reply.answers === undefined) {
-        return "The user dismissed the questions without answering. Proceed with sensible defaults unless essential.";
+        return "The user dismissed the questions without answering and stopped the turn. STOP what you are doing and wait for them to say how to proceed.";
     }
     const answers = reply.answers;
     const lines = questions.map((q) => {
@@ -879,9 +882,14 @@ const permissionGate =
         const { reply, resolved } = await wait(request.signal);
         push(resolved);
         if (reply.decision === "deny") {
+            // A denial carrying feedback is a redirection — the turn runs on and takes it. A bare one is the
+            // user pulling the plug (the card has no free-text field, and the client stops the turn on it), so
+            // "find another way" would be a standing order to work around a refusal, read back on the next turn.
             return {
                 behavior: "deny",
-                message: reply.feedback?.trim() || `The user declined ${toolName}. Do not retry it; find another way or ask.`,
+                message:
+                    reply.feedback?.trim() ||
+                    `The user declined ${toolName} and stopped the turn. STOP what you are doing and wait for them to say how to proceed.`,
             };
         }
         return {

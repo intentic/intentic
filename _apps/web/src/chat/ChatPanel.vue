@@ -4,6 +4,7 @@ import Popover from "primevue/popover";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { NATIVE_PROVIDERS, type NativeProvider, providerLabel } from "@intentic/sandbox-contract";
+import { useAgents } from "../composables/agents/useAgents";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
 import { type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
@@ -118,6 +119,32 @@ const activeError = computed(() => active.value.error.value);
 const activeAccountReauth = computed(() => {
     const id = account.value ?? accounts.value[0]?.id;
     return accounts.value.find((entry) => entry.id === id && entry.needsReauth === true);
+});
+
+/* Archiving an agent does NOT close its chat tab — see the archive note in useAgents for why the quiet,
+ * undoable action is the wrong one to hang a tab close off. What it must not do either is leave the tab
+ * looking live, so the panel says the agent is off the board and offers the one press back. The line also
+ * spends its second half on the fact nothing else here could tell the user: a message sent from this tab
+ * un-archives the agent (the daemon rebuilds the entry without its marker — registry.begin), which is a
+ * feature, not a surprise to walk into.
+ *
+ * Archived agents ride their own list rather than the live roster, so it has to be asked for. On the REACHABLE
+ * seam, not at setup: this panel mounts with the shell, long before the daemon is answering, and a read fired
+ * then simply fails — leaving every archived tab in the app looking live until the user happened to open the
+ * board. Only while the list is empty, so the one request is not repeated per reconnect once it has landed. */
+const { agentById, archived, loadArchived, restore, busyIds } = useAgents();
+watch(
+    reachable,
+    (live) => {
+        if (live && archived.value.length === 0) {
+            void loadArchived();
+        }
+    },
+    { immediate: true },
+);
+const activeArchived = computed(() => {
+    const agent = agentById(active.value.conversationId);
+    return agent?.archivedAt === undefined ? undefined : agent;
 });
 
 // Compact "142k" style token count for the context tooltip.
@@ -843,6 +870,27 @@ watch(keyboardInset, () => {
                 }}
             </p>
             <template v-else>
+                <!-- This conversation's agent is off the board. Muted, not a warning: archiving loses nothing
+                     (the branch, the diff, the transcript and every counter stay — this tab is the proof), so
+                     the line states a fact rather than raising an alarm. It carries the one thing no other
+                     surface could tell the user in time — that sending from here un-archives the agent — and
+                     the press that does it deliberately, without sending anything. -->
+                <div
+                    v-if="activeArchived !== undefined"
+                    class="flex items-center gap-2 rounded-xl border border-line bg-overlay/60 px-3 py-2 text-2xs text-muted"
+                >
+                    <Icon name="box" class="shrink-0" />
+                    <span class="min-w-0 flex-1">Archived — off the agents board. Sending a message puts it back.</span>
+                    <button
+                        type="button"
+                        class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
+                        :disabled="busyIds.includes(activeArchived.id)"
+                        v-tooltip.top="'Put this agent back on the board now'"
+                        @click="restore([activeArchived.id])"
+                    >
+                        Restore
+                    </button>
+                </div>
                 <ChatAccountPanel />
                 <!-- Proactive re-auth prompt: the account is connected (a credential exists) but can no longer be
                      refreshed, so surface it here — before a send fails opaquely — with a jump to reconnect. -->

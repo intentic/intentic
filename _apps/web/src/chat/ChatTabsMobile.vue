@@ -2,6 +2,7 @@
 import { BottomSheet } from "@intentic-app/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
+import { useAgents } from "../composables/agents/useAgents";
 import { relativeTime, statusIcon } from "../composables/chat/catalog";
 import { useChat } from "../composables/chat/useChat";
 import { viewersOfSession } from "../composables/usePresence";
@@ -20,6 +21,11 @@ const emit = defineEmits<{
 
 const { conversations, activeId, sessions, loadSessions } = useChat();
 const active = computed(() => conversations.value.find((c) => c.id === activeId.value));
+
+// Archiving an agent leaves its chat alone (see the archive note in useAgents), so the sheet marks the ones
+// that are off the board — the panel's own line only speaks for whichever chat is open.
+const { agentById } = useAgents();
+const isArchived = (conversationId: string): boolean => agentById(conversationId)?.archivedAt !== undefined;
 
 const sheetOpen = ref(false);
 
@@ -83,6 +89,8 @@ const openFromHistory = (id: string): void => {
                     <span class="min-w-0 flex-1 truncate text-sm" :class="activeId === c.id ? 'text-link' : 'text-content'">{{
                         c.title.value ?? (c.isolated.value ? "New agent" : "New chat")
                     }}</span>
+                    <!-- Archived: off the agents board, but the conversation is still open right here. -->
+                    <Icon v-if="isArchived(c.conversationId)" name="box" class="shrink-0 text-2xs text-subtle" />
                     <PresenceAvatars v-if="c.session.value !== undefined" :viewers="viewersOfSession(c.session.value.id)" label="in this chat" />
                     <!-- span, not button — a real button can't nest inside the row button. -->
                     <span
