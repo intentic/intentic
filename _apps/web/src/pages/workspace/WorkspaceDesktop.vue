@@ -25,6 +25,7 @@ import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { filesToEntries } from "./dropEntries";
 import BinaryDiffView from "./viewers/BinaryDiffView.vue";
+import CodebaseHealth from "./CodebaseHealth.vue";
 import DiffView from "./viewers/DiffView.vue";
 import DirectoryOperator from "./DirectoryOperator.vue";
 import DirectoryUiHost from "./DirectoryUiHost.vue";
@@ -93,7 +94,7 @@ const {
 } = useWorkspaceSearch(filter, contentMode);
 // The open tabs live in the useWorkspaceTabs singleton (the chat pushes plan previews in from the shell, and
 // tabs survive navigation); this component owns closing — the dirty-confirm dialog and edit-buffer forget.
-const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, openDirectory, openGraph, selectTab } = useWorkspaceTabs();
+const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, openDirectory, openGraph, openHealth, selectTab } = useWorkspaceTabs();
 // Mirror the active file into the URL (`/workspace/<path>`) so a reload / shared link reopens it.
 useWorkspaceRoute();
 
@@ -338,6 +339,8 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
     // The workspace root's commit graph. Root is a repo like any other but owns no tree row, so this is its
     // keyboard/palette route to the graph — the same target the explorer toolbar's icon opens.
     { command: `workspace.gitHistory`, title: `Show Git History`, icon: `sitemap`, handler: () => openGraph(`root`) },
+    // Same story for the root repo's health report — the palette route to what a nested repo opens from its row.
+    { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => layout.toggleSidebar() },
     // The tab family is shared with the chat and terminal strips and resolved by focus (tabSurface.ts). The
     // workspace is the FALLBACK surface, so its gate is "the keystroke came from neither of the other two" —
@@ -458,6 +461,7 @@ const explorerTooltip = computed(() =>
     tooltipWithChord(layout.sidebarCollapsed.value ? `Show explorer` : `Hide explorer`, `workspace.toggleSidebar`),
 );
 const rootHistoryTooltip = computed(() => tooltipWithChord(`Git history of the workspace root`, `workspace.gitHistory`));
+const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of the workspace root`, `workspace.codebaseHealth`));
 
 const startResize = (event: PointerEvent): void => {
     event.preventDefault();
@@ -616,6 +620,17 @@ const endResize = (event: PointerEvent): void => {
                         >
                             <Icon name="sitemap" class="text-xs" />
                         </button>
+                        <!-- The root repo's codebase health, sibling to its history for the same reason: root
+                             owns no tree row to hang the pair off. A nested repo carries both on its own row. -->
+                        <button
+                            type="button"
+                            class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
+                            v-tooltip.bottom="rootHealthTooltip"
+                            aria-label="Open codebase health of the workspace root"
+                            @click="openHealth('root')"
+                        >
+                            <Icon name="wave-pulse" class="text-xs" />
+                        </button>
                         <!-- Collapse every open folder. Tree scope only (content search shows a flat match list);
                              inert while a name filter is active (a filter force-expands matches) or nothing is open. -->
                         <button
@@ -653,6 +668,7 @@ const endResize = (event: PointerEvent): void => {
                         @open-file="openFile"
                         @open-directory="openDirectory"
                         @open-graph="openGraph"
+                        @open-health="openHealth"
                     />
                 </div>
                 <div
@@ -721,6 +737,11 @@ const endResize = (event: PointerEvent): void => {
                 </div>
                 <div v-else-if="activeTab?.kind === 'graph'" class="min-h-0 flex-1">
                     <GitGraph :repo="activeTab.repo" @open-diff="openDiff" @switch-repo="openGraph" />
+                </div>
+                <div v-else-if="activeTab?.kind === 'health'" class="min-h-0 flex-1">
+                    <!-- Every ranked row is an anchor: clicking one opens the file it names, because a ranking
+                         whose rows don't go anywhere just makes the reader retype a path. -->
+                    <CodebaseHealth :repo="activeTab.repo" @open-file="openFile" @switch-repo="openHealth" />
                 </div>
                 <WorkspaceEmptyState v-else @pick="fileInput?.click()" />
                 <!-- Drop-to-root hint over the viewer, shown only for external file drags (an internal move is

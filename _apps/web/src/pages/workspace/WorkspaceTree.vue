@@ -54,13 +54,13 @@ const {
     // Directory paths that have a management surface (a directory-surface extension serves the repo). Activating
     // such a row also opens its operator tab, and the row shows a cog affordance.
     manageableDirs?: ReadonlySet<string>;
-    // Directory paths that are git repos (nested under /work). Each shows a git-history affordance that opens
-    // its commit graph as a tab — the per-repo entry point for the graph (root has no row, so its own icon sits
-    // on the explorer toolbar). This is where the multi-repo axis surfaces: a repo nested in the workspace gets
-    // its own history right here.
+    // Directory paths that are git repos (nested under /work). Each shows two affordances — its commit graph
+    // and its codebase-health report — which open as tabs (root has no row, so its own icons sit on the
+    // explorer toolbar). This is where the multi-repo axis surfaces: a repo nested in the workspace gets its
+    // own history and its own health right here.
     repoDirs?: ReadonlySet<string>;
 }>();
-const emit = defineEmits<{ openFile: [path: string]; openDirectory: [path: string]; openGraph: [path: string] }>();
+const emit = defineEmits<{ openFile: [path: string]; openDirectory: [path: string]; openGraph: [path: string]; openHealth: [path: string] }>();
 
 const {
     saveText,
@@ -296,6 +296,12 @@ const onCogClick = (entry: WorkspaceTreeEntry): void => {
 const onGraphClick = (entry: WorkspaceTreeEntry): void => {
     selectSingle(entry.path);
     emit(`openGraph`, entry.path);
+};
+
+// The codebase-health affordance, the third of the same family: this repo's hotspots and key modules as a tab.
+const onHealthClick = (entry: WorkspaceTreeEntry): void => {
+    selectSingle(entry.path);
+    emit(`openHealth`, entry.path);
 };
 
 const onRowClick = (event: MouseEvent, row: Row): void => {
@@ -762,17 +768,25 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         aria-hidden="true"
                         class="shrink-0 text-2xs text-subtle"
                     />
-                    <!-- Git repo: a git-history affordance opens its commit graph as a tab — the per-repo entry
-                         point, sibling to the management cog (root has no row; its graph opens from the explorer
-                         toolbar or the Changes header). -->
-                    <Icon
-                        v-if="row.entry.type === 'dir' && repoDirs.has(row.entry.path)"
-                        name="sitemap"
-                        aria-hidden="true"
-                        class="shrink-0 cursor-pointer text-2xs text-subtle hover:text-content"
-                        v-tooltip.right="'Open git history'"
-                        @click.stop="onGraphClick(row.entry)"
-                    />
+                    <!-- Git repo: two affordances, both opening a per-repo document as a tab — its codebase
+                         health (churn × complexity, the import graph's key modules) and its commit graph. Root
+                         has no row, so its pair sits on the explorer toolbar instead. -->
+                    <template v-if="row.entry.type === 'dir' && repoDirs.has(row.entry.path)">
+                        <Icon
+                            name="wave-pulse"
+                            aria-hidden="true"
+                            class="shrink-0 cursor-pointer text-2xs text-subtle hover:text-content"
+                            v-tooltip.right="'Open codebase health'"
+                            @click.stop="onHealthClick(row.entry)"
+                        />
+                        <Icon
+                            name="sitemap"
+                            aria-hidden="true"
+                            class="shrink-0 cursor-pointer text-2xs text-subtle hover:text-content"
+                            v-tooltip.right="'Open git history'"
+                            @click.stop="onGraphClick(row.entry)"
+                        />
+                    </template>
                     <!-- Managed repo: its cog opens the management surface as a tab (row click only expands). -->
                     <Icon
                         v-if="row.entry.type === 'dir' && manageableDirs.has(row.entry.path)"

@@ -4,6 +4,7 @@ import { Worker } from "node:worker_threads";
 import type { WorkspaceSearchFreshness } from "@intentic/sandbox-contract";
 import { type Embedder, loadEmbedder } from "./embed/embedder.js";
 import { loadReranker, type Reranker } from "./embed/reranker.js";
+import { type CodebaseHealth, codebaseHealth, type HealthRequest } from "./engines/health.js";
 import { embedPending } from "./engines/semantic.js";
 import type { IndexWorkerData, IndexWorkerEvent, IndexWorkerRequest } from "./indexer/index-worker.js";
 import { revalidate, syncModel } from "./indexer/indexer.js";
@@ -32,6 +33,8 @@ export type {
     Verb,
     VerbOptions,
 } from "./types.js";
+export type { CodebaseHealth, HealthRequest, HealthTotals, KeyModule } from "./engines/health.js";
+export type { HotspotFile } from "./engines/hotspots.js";
 export { disabledOf, type Feature, FEATURES, parseFeatures } from "./features.js";
 export { estimateTokens } from "./render/budget.js";
 export { isIqDenied, IQ_DIR } from "./workspace/floor.js";
@@ -67,6 +70,10 @@ export interface ResidentEngine {
     // FIRST sweep (a query before it has no admitted-paths authority to filter against). `signal` aborts
     // cancellable work (the rg child) when the caller's request dies.
     run(request: QueryRequest, signal?: AbortSignal): Promise<QueryOutcome>;
+    // One repository's health in numbers (churn × complexity, index totals, the import graph's top modules) —
+    // the same rankings `hotspots` and `map` render as text, for a host that plots them instead. Reads the same
+    // resident sweep + index as run(), plus one `git log` per scoped repo.
+    health(request: HealthRequest): Promise<CodebaseHealth>;
     // Filesystem changed — the worker picks it up; bursts coalesce into one extra pass.
     markDirty(): void;
     // Boot warmup: first index pass + the full embedding backlog. Queries may run concurrently throughout, and
@@ -282,6 +289,10 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
                 request,
                 entries,
             );
+        },
+        async health(request) {
+            await firstSweep;
+            return codebaseHealth({ db, root: options.root, freshness: freshness() }, request, entries);
         },
         markDirty() {
             dirtySeq += 1;

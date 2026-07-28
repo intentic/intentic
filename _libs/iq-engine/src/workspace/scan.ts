@@ -15,7 +15,11 @@ export const sweep = async (root: string, includeIgnored: boolean): Promise<File
     const walk = async (dir: string, rel: string, scope: IgnoreScope, repo: string | undefined): Promise<void> => {
         const here = await scope.descend(dir, rel);
         const dirents = await readdir(dir, { withFileTypes: true }).catch(() => []);
-        const ownsGit = dirents.some((d) => d.name === ".git" && d.isDirectory());
+        // A `.git` FILE is a repo boundary exactly like a `.git` dir: git worktrees, submodules, and any repo
+        // created with --separate-git-dir (which is how the daemon versions /work itself) keep only a pointer
+        // file in the worktree. Requiring a directory here left those repos with no `repo` on their entries, and
+        // every git-backed verb — churn, hotspots, recent, log, who — silently skipped them.
+        const ownsGit = dirents.some((d) => d.name === ".git");
         const repoHere = ownsGit ? rel : repo;
         for (const dirent of dirents.toSorted((a, b) => (a.name < b.name ? -1 : 1))) {
             if (dirent.isSymbolicLink()) {

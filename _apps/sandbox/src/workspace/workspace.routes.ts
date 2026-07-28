@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { MAX_REF_CANDIDATES, previewLabel, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
+import { HEALTH_LIMIT, MAX_REF_CANDIDATES, previewLabel, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -11,7 +11,7 @@ import { shellQuote } from "../terminal/terminal-run.js";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 import { classifyWorkspace } from "./classify.js";
 import { readPackageGraph } from "./package-graph.js";
-import { discoverRepos, isValidRepoName } from "./repo-discovery.js";
+import { discoverRepos, isValidRepoId, isValidRepoName } from "./repo-discovery.js";
 import { resolveReference } from "./resolve-reference.js";
 import { startInstall, workspaceSetup } from "./workspace-setup.js";
 import { syncWorkspaceRepos } from "./sync-repos.js";
@@ -117,6 +117,27 @@ export const createWorkspaceRoutes = (services: Services) => {
                 signal,
             );
             return outcome.result;
+        }),
+        /* One repository's codebase health, off the same resident engine: churn × complexity per file, what the
+         * index holds, and the import graph's top modules. The repo-level companion to the management panel and
+         * the git-history graph, so it takes the same {repo} ids those do — "root" is the /work repo, which the
+         * iq scope calls "" (the sweep tags a file with its enclosing repo's root-relative dir, and the root's
+         * is the empty path). Anything that is not a DISCOVERED repo is NOT_FOUND rather than an empty report:
+         * every figure here is scoped by the sweep's repo tag, so a plain directory would report zeros, and
+         * zeros read as a healthy repository rather than as a wrong question. */
+        health: i.health.handler(async ({ input }) => {
+            if (input.repo !== "root" && !isValidRepoId(input.repo)) {
+                throw new ORPCError("BAD_REQUEST", { message: "invalid repo" });
+            }
+            if (input.repo !== "root" && !(await discoverRepos(services.workspace.root)).includes(input.repo)) {
+                throw new ORPCError("NOT_FOUND", { message: `no repo named "${input.repo}"` });
+            }
+            const report = await services.iq.health({
+                scope: { repo: input.repo === "root" ? "" : input.repo },
+                ...(input.since !== undefined ? { since: input.since } : {}),
+                limit: input.limit ?? HEALTH_LIMIT,
+            });
+            return { repo: input.repo, ...report };
         }),
         // Read-only, no-LLM classification of the dropped workspace into coarse buckets. Runs over the same
         // filtered tree the file view uses, so it never sees .git/secrets/node_modules. The browser turns the

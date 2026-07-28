@@ -89,11 +89,22 @@ const openGraph = (repo: string): void => {
     }
 };
 
+// One repo's codebase-health report — its hotspots and key modules. Open-or-focus by repo, like the graph: the
+// third per-repo document, and the third affordance on a repo's row in the tree.
+const openHealth = (repo: string): void => {
+    const id = `health:${repo}`;
+    openLine.value = undefined;
+    activeId.value = id;
+    if (!tabs.value.some((tab) => tab.id === id)) {
+        tabs.value = [...tabs.value, { kind: `health`, id, repo }];
+    }
+};
+
 const selectTab = (id: string): void => {
     openLine.value = undefined;
     activeId.value = id;
 };
 
 export function useWorkspaceTabs() {
-    return { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, openPlan, openDirectory, openGraph, selectTab };
+    return { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, openPlan, openDirectory, openGraph, openHealth, selectTab };
 }

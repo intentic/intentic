@@ -19,6 +19,8 @@ import {
     WorkspaceFileQuerySchema,
     WorkspaceFileSchema,
     WorkspaceGraphSchema,
+    WorkspaceHealthQuerySchema,
+    WorkspaceHealthSchema,
     WorkspaceInstallResultSchema,
     WorkspaceInstallSchema,
     WorkspaceMoveSchema,
@@ -45,6 +47,10 @@ export const workspaceContract = {
     // Ranked groups, match-reason tags, freshness, resumable cursor. `mode` narrows to one verb; default is
     // auto-mode fusion. (Implementation detail: the daemon backs this with a resident in-process iq engine.)
     search: oc.route({ method: "GET", path: "/workspace/search" }).input(WorkspaceSearchQuerySchema).output(WorkspaceSearchResultSchema),
+    // One repository's health in numbers: churn × complexity per file, index totals, and the import graph's
+    // top modules — the `hotspots` and `map` rankings the CLI prints, shaped for a panel. Repo-scoped, because
+    // "the codebase" is a repo, not the whole /work drop.
+    health: oc.route({ method: "GET", path: "/workspace/health" }).input(WorkspaceHealthQuerySchema).output(WorkspaceHealthSchema),
     // Deterministic, no-LLM classification of the dropped workspace into coarse buckets (repositories / documents
     // / media / archives / other). Read-only proposal: the browser renders it and applies accepted moves via the
     // existing /workspace/move route — this route never touches the tree.

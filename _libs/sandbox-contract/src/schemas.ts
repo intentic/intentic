@@ -979,6 +979,58 @@ export const WorkspaceSearchResultSchema = z.object({
 });
 export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
 
+// ---- codebase health: one repository's structure and risk, in numbers ----
+
+// The repo-level companion to the management panel and the git-history graph: what the same resident engine's
+// `hotspots` (churn × complexity) and `map` (PageRank over the import graph) verbs rank, as figures a panel can
+// plot instead of lines a terminal prints.
+//
+// Every field is a COUNT that can be recounted in the files themselves — commits, branch points, exported
+// symbols. Deliberately no composite "maintainability grade": those aren't comparable across projects and can't
+// be checked, and a repo-health surface that launders counts into a letter is worse than none.
+// How many hotspot files and key modules a report carries when the caller names no limit. A leaderboard, not an
+// inventory: past a screenful the ranking stops being the point, and the reader should be reading the files.
+export const HEALTH_LIMIT = 20;
+export const WorkspaceHealthQuerySchema = z.object({
+    // "root" (the /work repo) or a nested repo's root-relative dir — the same {repo} ids the git routes take.
+    repo: z.string().min(1),
+    // Churn window (2d, 12h, 1w, 3m). Absent = all of history, which is what a hotspot ranking wants by default.
+    since: z.string().max(16).optional(),
+    limit: z.coerce.number().int().positive().max(200).optional(),
+});
+// One file that is BOTH churning and tangled. `score` is the product the ranking sorts by — carried explicitly
+// so the panel plots the number it ranks by rather than recomputing it.
+export const WorkspaceHotspotSchema = z.object({
+    path: z.string(),
+    commits: z.number(),
+    adds: z.number(),
+    dels: z.number(),
+    complexity: z.number(),
+    score: z.number(),
+    // Epoch ms of the latest commit touching the file, within the window.
+    latestMs: z.number(),
+});
+export type WorkspaceHotspot = z.infer<typeof WorkspaceHotspotSchema>;
+// A file of the import graph's ranked skeleton — order IS the rank, so no rank number rides along.
+export const WorkspaceKeyModuleSchema = z.object({ path: z.string(), exports: z.number() });
+export type WorkspaceKeyModule = z.infer<typeof WorkspaceKeyModuleSchema>;
+export const WorkspaceHealthSchema = z.object({
+    repo: z.string(),
+    totals: z.object({
+        files: z.number(),
+        symbols: z.number(),
+        // Summed branch points across the scoped files.
+        complexity: z.number(),
+        // How many files qualify as hotspots at all — the lists below are capped, this is not.
+        hotspots: z.number(),
+    }),
+    hotspots: z.array(WorkspaceHotspotSchema),
+    modules: z.array(WorkspaceKeyModuleSchema),
+    // Same index-freshness signal the search route reports: a panel drawn off a half-built index says so.
+    freshness: WorkspaceSearchFreshnessSchema,
+});
+export type WorkspaceHealth = z.infer<typeof WorkspaceHealthSchema>;
+
 // ---- workspace setup (dependency readiness) ----
 
 // One project under /work and whether its dependencies are actually installed. A drop omits node_modules/.venv

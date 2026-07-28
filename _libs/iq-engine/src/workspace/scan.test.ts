@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { makeFixtureWorkspace } from "../testing.js";
 import { filterScope, langOf } from "./scan.js";
@@ -52,6 +54,18 @@ test("filterScope narrows by path, lang, glob, and file class", () => {
     expect(filterScope(entries, { notGlobs: ["**/*.ts"] }).some((entry) => entry.path.endsWith(".ts"))).toBe(false);
     expect(filterScope(entries, { only: "tests" }).map((entry) => entry.path)).toEqual(["alpha/src/widget.spec.ts"]);
     expect(filterScope(entries, { repo: "alpha" }).every((entry) => entry.path.startsWith("alpha/"))).toBe(true);
+});
+
+// A worktree, a submodule, and any --separate-git-dir repo (how the daemon versions the workspace root) carry a
+// `.git` POINTER FILE instead of a directory. Missing that left their files unattributed, and every git-backed
+// verb reads `repo` — churn, hotspots, recent, log, who.
+test("a .git pointer file bounds a repo exactly like a .git directory", async () => {
+    await writeFile(join(root, "beta/.git"), "gitdir: /elsewhere/beta.git\n");
+    const swept = await sweep(root, false);
+    expect(swept.find((entry) => entry.path === "beta/app.py")?.repo).toBe("beta");
+    // Nested boundaries still win over the enclosing one, and unrepo'd files stay unattributed.
+    expect(swept.find((entry) => entry.path === "alpha/src/widget.ts")?.repo).toBe("alpha");
+    expect(swept.find((entry) => entry.path === "notes.md")?.repo).toBeUndefined();
 });
 
 test("langOf maps extensions", () => {

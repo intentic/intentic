@@ -39,6 +39,10 @@ const git = async (root: string, repo: string, args: string[]): Promise<string> 
 };
 
 const toWorkspacePath = (repo: string, repoRel: string): string => (repo === "" ? repoRel : `${repo}/${repoRel}`);
+// The inverse, for handing a workspace path back to `git -C <repo>`. The workspace root can itself be a repo
+// (id ""), where the two forms are the same string — slicing a prefix length there would eat the first
+// character. A path that is already repo-relative passes through untouched.
+const toRepoPath = (repo: string, path: string): string => (repo !== "" && path.startsWith(`${repo}/`) ? path.slice(repo.length + 1) : path);
 
 export interface ChurnOptions {
     // Omitted means all of history — what `hotspots` wants, where `recent` always has a window.
@@ -161,8 +165,7 @@ export const logSearch = async (root: string, entries: readonly FileEntry[], pat
                 args.push(`--author=${options.author}`);
             }
             if (options.path !== undefined) {
-                const inRepo = options.path.startsWith(`${repo}/`) ? options.path.slice(repo.length + 1) : options.path;
-                args.push("--", inRepo);
+                args.push("--", toRepoPath(repo, options.path));
             }
             return git(root, repo, args);
         }),
@@ -190,9 +193,15 @@ export const whoAnchor = async (
     if (entry?.repo === undefined) {
         throw new Error(`iq who: ${anchor.path} is not inside a git repo the sweep admits`);
     }
-    const repoRel = anchor.path.slice(entry.repo.length + 1);
     const to = anchor.endLine ?? anchor.line;
-    const stdout = await git(root, entry.repo, ["blame", "-L", `${anchor.line},${to}`, "--line-porcelain", "--", repoRel]);
+    const stdout = await git(root, entry.repo, [
+        "blame",
+        "-L",
+        `${anchor.line},${to}`,
+        "--line-porcelain",
+        "--",
+        toRepoPath(entry.repo, anchor.path),
+    ]);
     if (stdout === "") {
         return [];
     }
