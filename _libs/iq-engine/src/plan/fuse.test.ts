@@ -55,6 +55,22 @@ test("def boost outranks equal-rank text hits", () => {
     expect(reversed[0]?.path).toBe("x.ts");
 });
 
+test("a file with a huge number of hits fuses instead of overflowing the stack", () => {
+    const many: EngineResult = {
+        engine: "lexical",
+        hits: Array.from({ length: 200_000 }, (_unused, index) => ({
+            path: "big.ts",
+            line: index + 1,
+            text: "widget()",
+            tags: [{ kind: "text" as const }],
+        })),
+    };
+    const groups = fuse([many], context);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.hits).toHaveLength(200_000);
+    expect(Number.isFinite(groups[0]?.score)).toBe(true);
+});
+
 test("deterministic: shuffled engine-result order yields identical output", () => {
     const a = JSON.stringify(fuse([lexical, semantic], context));
     const b = JSON.stringify(fuse([semantic, lexical], context));

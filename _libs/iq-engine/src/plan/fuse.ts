@@ -93,7 +93,10 @@ export const fuse = (results: readonly EngineResult[], context: FuseContext): Ra
     }
     const groups: RankedGroup[] = [];
     for (const [path, groupHits] of byPath) {
-        const best = Math.max(...groupHits.map((hit) => hit.score));
+        // Reduced, not spread: a spread argument list is a stack frame per hit, and one path CAN accumulate an
+        // unbounded number of them (every engine's hits for a file that matches on every line) — which is the
+        // "Maximum call stack size exceeded" a search has no business ever raising.
+        const best = groupHits.reduce((max, hit) => (hit.score > max ? hit.score : max), Number.NEGATIVE_INFINITY);
         groups.push({
             path,
             score: best * (1 + 0.05 * Math.log(groupHits.length)),

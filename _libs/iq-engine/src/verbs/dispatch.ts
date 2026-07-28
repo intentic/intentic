@@ -308,22 +308,43 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
     };
 
     if (request.verb === "find") {
-        const hits = await rgSearch({
-            ...rgBase,
-            pattern: request.query,
-            ...(request.options.literal ? { literal: true } : {}),
+        const modifiers = {
             ...(request.options.word ? { word: true } : {}),
             ...(request.options.caseSensitive ? { caseSensitive: true } : {}),
-        });
+        };
+        // Recover instead of hinting — a hint costs the agent a whole retry turn, a rerun costs milliseconds.
+        // A pattern rust regex rejects (`foo({`) reruns literally; grep-style escapes (`a\|b`) that matched
+        // nothing rerun with the escapes stripped. The note names what ran so the next call is canonical.
+        let hits: EngineHit[];
+        let note: string | undefined;
+        try {
+            hits = await rgSearch({ ...rgBase, pattern: request.query, ...modifiers, ...(request.options.literal ? { literal: true } : {}) });
+        } catch (error) {
+            if (request.options.literal || !(error instanceof Error) || !error.message.includes("regex parse error")) {
+                throw error;
+            }
+            hits = await rgSearch({ ...rgBase, pattern: request.query, ...modifiers, literal: true });
+            note = "pattern isn't valid rust regex — ran as literal text (--literal)";
+        }
+        if (hits.length === 0 && note === undefined && !request.options.literal && GREP_DIALECT.test(request.query)) {
+            const rewritten = request.query.replaceAll(/\\([|+?(){}])/g, "$1");
+            const retried = await rgSearch({ ...rgBase, pattern: rewritten, ...modifiers }).catch(() => []);
+            if (retried.length > 0) {
+                hits = retried;
+                note = `grep-style escapes rewritten to rust regex — matched: ${rewritten}`;
+            }
+        }
         // Warn about grep-dialect escapes up front — even when they accidentally matched something — so the agent
         // doesn't have to hit zero results to learn the pattern was wrong.
-        const dialectNote = !request.options.literal && GREP_DIALECT.test(request.query) ? GREP_DIALECT_NOTE : undefined;
+        if (note === undefined && !request.options.literal && GREP_DIALECT.test(request.query)) {
+            note = GREP_DIALECT_NOTE;
+        }
         return {
             groups: toGroups([{ engine: "lexical", hits }], request.query, entries, boosts),
             unit: "matches",
             style: "hits",
             showTags: false,
-            ...(dialectNote !== undefined ? { headerNote: dialectNote } : {}),
+            ...(note !== undefined ? { headerNote: note } : {}),
         };
     }
 
@@ -503,7 +524,14 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
                 results.push({ engine: "bm25", hits: bm25Search(context.db, request.query, allowed) });
             }
         } else if (kind === "regex") {
-            results.push({ engine: "lexical", hits: await rgSearch({ ...rgBase, pattern: request.query }) });
+            // Same recovery as `find`: a query that only LOOKS like regex (`foo({`) must not crash auto mode.
+            const hits = await rgSearch({ ...rgBase, pattern: request.query }).catch(async (error: Error) => {
+                if (!error.message.includes("regex parse error")) {
+                    throw error;
+                }
+                return rgSearch({ ...rgBase, pattern: request.query, literal: true });
+            });
+            results.push({ engine: "lexical", hits });
         } else {
             if (on("bm25")) {
                 results.push({ engine: "bm25", hits: bm25Search(context.db, request.query, allowed) });

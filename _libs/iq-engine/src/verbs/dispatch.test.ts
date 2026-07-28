@@ -1,3 +1,5 @@
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { createEngine, type Engine } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
@@ -80,6 +82,17 @@ test("--ignored lifts .gitignore but keeps ranking honest", async () => {
     expect(withIgnored.result.groups.map((group) => group.path)).toEqual(["alpha/dist/decoy.js"]);
     const without = await engine.run(request({ verb: "find", query: "IGNORED_BUILD_ARTIFACT" }));
     expect(without.result.total).toBe(0);
+});
+
+test("the sweep — not ripgrep's own ignore handling — decides what find can match", async () => {
+    // git's repo-local excludes are a source rg reads and the sweep does not. A workspace whose code sits under
+    // such an exclude answered files/ask normally while every find returned zero; the sweep is the authority.
+    const alphaExclude = join(root, "alpha/.git/info/exclude");
+    await mkdir(dirname(alphaExclude), { recursive: true });
+    await writeFile(alphaExclude, "/src/\n");
+    const outcome = await createEngine({ root }).run(request({ verb: "find", query: "createWidget" }));
+    expect(outcome.result.groups.map((group) => group.path)).toContain("alpha/src/widget.ts");
+    await rm(alphaExclude, { force: true });
 });
 
 test("cursor: truncated result resumes exactly with --after", async () => {

@@ -10,6 +10,11 @@ const MAX_FILES = 100_000;
 
 // Stat-sweep the workspace: every file the ignore model admits, sorted by path for determinism. This list is the
 // single authority on what any engine may surface — ripgrep/git results are post-filtered against it.
+//
+// Every directory's entries are walked and stat'd CONCURRENTLY. Serially, this was thousands of round-trips
+// awaited one after another — measured at ~3s on a large workspace, paid inline by every CLI query before a
+// byte was searched, which is the latency that sent agents back to grep. Nothing about WHAT is admitted
+// changes: the final sort makes the result order-independent, so concurrency cannot alter the output.
 export const sweep = async (root: string, includeIgnored: boolean): Promise<FileEntry[]> => {
     const entries: FileEntry[] = [];
     const walk = async (dir: string, rel: string, scope: IgnoreScope, repo: string | undefined): Promise<void> => {
@@ -21,36 +26,40 @@ export const sweep = async (root: string, includeIgnored: boolean): Promise<File
         // every git-backed verb — churn, hotspots, recent, log, who — silently skipped them.
         const ownsGit = dirents.some((d) => d.name === ".git");
         const repoHere = ownsGit ? rel : repo;
-        for (const dirent of dirents.toSorted((a, b) => (a.name < b.name ? -1 : 1))) {
-            if (dirent.isSymbolicLink()) {
-                continue;
-            }
-            const relPath = rel === "" ? dirent.name : `${rel}/${dirent.name}`;
-            if (isIqDenied(relPath) || (!includeIgnored && here.isIgnored(dirent.name, relPath, dirent.isDirectory()))) {
-                continue;
-            }
-            if (dirent.isDirectory()) {
-                await walk(join(dir, dirent.name), relPath, here, repoHere);
-                continue;
-            }
-            if (!dirent.isFile() || entries.length >= MAX_FILES) {
-                continue;
-            }
-            const stats = await stat(join(dir, dirent.name)).catch(() => undefined);
-            if (stats === undefined) {
-                continue;
-            }
-            entries.push({
-                path: relPath,
-                abs: join(dir, dirent.name),
-                mtimeMs: stats.mtimeMs,
-                size: stats.size,
-                ...(repoHere !== undefined ? { repo: repoHere } : {}),
-            });
-        }
+        await Promise.all(
+            dirents.map(async (dirent) => {
+                if (dirent.isSymbolicLink()) {
+                    return;
+                }
+                const relPath = rel === "" ? dirent.name : `${rel}/${dirent.name}`;
+                if (isIqDenied(relPath) || (!includeIgnored && here.isIgnored(dirent.name, relPath, dirent.isDirectory()))) {
+                    return;
+                }
+                if (dirent.isDirectory()) {
+                    await walk(join(dir, dirent.name), relPath, here, repoHere);
+                    return;
+                }
+                if (!dirent.isFile() || entries.length >= MAX_FILES) {
+                    return;
+                }
+                const stats = await stat(join(dir, dirent.name)).catch(() => undefined);
+                if (stats === undefined) {
+                    return;
+                }
+                entries.push({
+                    path: relPath,
+                    abs: join(dir, dirent.name),
+                    mtimeMs: stats.mtimeMs,
+                    size: stats.size,
+                    ...(repoHere !== undefined ? { repo: repoHere } : {}),
+                });
+            }),
+        );
     };
     await walk(root, "", createIgnoreScope(), undefined);
-    return entries.toSorted((a, b) => (a.path < b.path ? -1 : 1));
+    // The runaway guard is enforced here as well as during the walk: concurrent pushes can overshoot the check
+    // by the number of stats in flight, and the sorted prefix is the deterministic half to keep.
+    return entries.toSorted((a, b) => (a.path < b.path ? -1 : 1)).slice(0, MAX_FILES);
 };
 
 const CLASS_TESTS = /(^|\/)((__tests__|tests?)\/|test_[^/]*$)|\.(test|spec)\.[^/.]+$/;

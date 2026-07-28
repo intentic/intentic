@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { EngineHit } from "../types.js";
-import { IQ_DIR } from "../workspace/floor.js";
+import { DENIED_GLOBS } from "../workspace/floor.js";
 
 const exec = promisify(execFile);
 
@@ -49,10 +49,14 @@ export const rgSearch = async (options: RgOptions): Promise<EngineHit[]> => {
     for (const dir of options.ignored ? [".git"] : [...IGNORED_DIRS, ".git"]) {
         args.push("-g", `!**/${dir}`);
     }
-    args.push("-g", `!${IQ_DIR}`);
-    if (options.ignored) {
-        args.push("--no-ignore");
+    for (const glob of DENIED_GLOBS) {
+        args.push("-g", glob);
     }
+    // ALWAYS --no-ignore: rg's own ignore handling reads sources the sweep does not (git's info/exclude, nested
+    // repo boundaries), and when the two disagreed rg won — silently. That is how a workspace whose code sits
+    // under a locally-excluded directory answered `files`/`ask` normally while every `find` returned zero. The
+    // sweep decides what exists; rg only has to look, and IGNORED_DIRS above keeps it out of the expensive trees.
+    args.push("--no-ignore");
     if (options.literal) {
         args.push("-F");
     }

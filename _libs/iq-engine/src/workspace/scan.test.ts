@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { makeFixtureWorkspace } from "../testing.js";
@@ -38,6 +38,26 @@ test("sweep enforces .gitignore + junk dirs (incl. .git) by default and always s
     expect(fullPaths).toContain("alpha/dist/decoy.js"); // --ignored lifts .gitignore + junk dirs…
     expect(fullPaths.some((path) => path.includes(".git/"))).toBe(true); // …including .git now
     expect(fullPaths.some((path) => path.startsWith(".intentic/iq"))).toBe(false); // …but never the index dir
+});
+
+test("the agent plane's byproducts are excluded, its manifests are not", async () => {
+    await writeFile(join(root, ".intentic/settings.json"), '{ "theme": "dark" }\n');
+    await mkdir(join(root, ".intentic/claude/projects"), { recursive: true });
+    await writeFile(join(root, ".intentic/claude/projects/session.jsonl"), '{"type":"user","text":"createWidget"}\n');
+    // A workspace can contain checkouts that are themselves intentic workspaces — their byproducts are no more
+    // searchable than the root's own.
+    await mkdir(join(root, "alpha/.intentic/iq"), { recursive: true });
+    await writeFile(join(root, "alpha/.intentic/iq/index.db"), "binary index\n");
+    const swept = (await sweep(root, false)).map((entry) => entry.path);
+    // Transcripts are the agent's own past conversations — they were outranking source in real results.
+    expect(swept).not.toContain(".intentic/claude/projects/session.jsonl");
+    expect(swept).not.toContain("alpha/.intentic/iq/index.db");
+    // Manifests are user-authored config an agent is routinely asked to find and edit.
+    expect(swept).toContain(".intentic/settings.json");
+    // …and the floor holds with --ignored too, which lifts only the gitignore/junk layers.
+    const full = (await sweep(root, true)).map((entry) => entry.path);
+    expect(full).not.toContain("alpha/.intentic/iq/index.db");
+    expect(full).not.toContain(".intentic/claude/projects/session.jsonl");
 });
 
 test("sweep tags files with their enclosing git repo", () => {
