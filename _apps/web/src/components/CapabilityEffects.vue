@@ -68,7 +68,7 @@ const rows = computed<readonly EffectRow[]>(() => effects.map(describe));
 
 <template>
     <div v-if="compact && rows.length > 0" class="flex items-center gap-1.5 text-2xs text-subtle">
-        <span v-for="(row, index) in rows" :key="index" :title="row.label" :class="row.warn ? 'text-warning' : ''">
+        <span v-for="(row, index) in rows" :key="index" v-tooltip.top="row.label" :class="row.warn ? 'text-warning' : ''">
             <Icon :name="row.icon" />
         </span>
     </div>

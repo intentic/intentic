@@ -601,7 +601,7 @@ const endResize = (event: PointerEvent): void => {
                             v-if="filter"
                             type="button"
                             class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                            title="Clear (Esc)"
+                            v-tooltip.bottom="'Clear (Esc)'"
                             aria-label="Clear filter"
                             @click="clearFilter"
                         >
@@ -624,10 +624,10 @@ const endResize = (event: PointerEvent): void => {
                             class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium text-muted transition-colors hover:text-content"
                             :class="{ 'bg-primary-600/15 text-link': layout.includeIgnored.value }"
                             :aria-pressed="layout.includeIgnored.value"
-                            :title="
+                            v-tooltip.bottom="
                                 layout.includeIgnored.value
-                                    ? 'Searching ignored files too (node_modules, gitignored paths). Click to skip them.'
-                                    : 'Search skips ignored files (node_modules, gitignored paths). Click to include them.'
+                                    ? 'Including ignored files — node_modules, gitignored paths'
+                                    : 'Skipping ignored files — node_modules, gitignored paths'
                             "
                             @click="layout.toggleIncludeIgnored()"
                         >
@@ -727,13 +727,13 @@ const endResize = (event: PointerEvent): void => {
                     </button>
                     <FileTabs :tabs="tabs" :active="activeId" @select="selectTab" @close="closeTab" @contextmenu="openTabMenu" />
                     <div class="flex shrink-0 items-center gap-2 px-2">
-                        <span v-if="actionError" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom="actionError">{{
+                        <span v-if="actionError" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="actionError">{{
                             actionError
                         }}</span>
                         <!-- The lone remaining status: one spinner for both a running file action and a tree
                              (re)load — the Refresh button that used to spin is now only the command. -->
                         <Icon name="spinner" v-if="busy || isLoading" v-tooltip.bottom="'Working…'" class="text-sm text-muted" spin />
-                        <span v-if="error" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom="error">{{ error }}</span>
+                        <span v-if="error" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{ error }}</span>
                         <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
                     </div>
                 </div>

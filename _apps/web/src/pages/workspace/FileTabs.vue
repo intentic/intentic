@@ -145,7 +145,7 @@ watch(
                 :key="tab.id"
                 class="ftab group flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs"
                 :class="{ 'ftab-on': tab.id === active }"
-                :title="tabHint(tab)"
+                v-tooltip.bottom="tabHint(tab)"
                 @click="emit('select', tab.id)"
                 @contextmenu.prevent.stop="emit('contextmenu', tab.id, $event)"
             >

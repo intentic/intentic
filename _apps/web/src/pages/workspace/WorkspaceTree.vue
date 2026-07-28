@@ -711,7 +711,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                 v-if="'more' in row"
                 class="flex items-center gap-1.5 py-1 pr-2 text-2xs italic text-subtle select-none"
                 :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
-                :title="`This folder holds more entries than the explorer lists at once. Use search (Ctrl+P) to reach the remaining ${row.more}.`"
+                v-tooltip.top="'Search with Ctrl+P'"
             >
                 <span class="w-[0.7rem] shrink-0"></span>
                 <span class="min-w-0 flex-1 truncate"

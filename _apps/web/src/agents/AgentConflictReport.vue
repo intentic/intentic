@@ -132,7 +132,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                 type="button"
                 :class="QUIET_BUTTON"
                 @click="emit('stop')"
-                v-tooltip.bottom="'Stop the turn. The conflict stays exactly as it is.'"
+                v-tooltip.bottom="'The conflict stays exactly as it is'"
             >
                 Stop
             </button>
@@ -148,11 +148,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     :class="cmp.buttonPrimary('gap-0 whitespace-nowrap px-2.5 py-1 text-2xs')"
                     :disabled="busy || streaming"
                     @click="emit('resolve')"
-                    v-tooltip.bottom="
-                        streaming
-                            ? 'Wait for the agent turn to finish'
-                            : 'Starts a turn: the agent rebases onto your current main line in its own worktree, resolves there, and lands when it is done'
-                    "
+                    v-tooltip.bottom="streaming ? 'Wait for the agent turn to finish' : undefined"
                 >
                     <Icon name="sparkles" class="mr-1 text-2xs" />Have the agent resolve it
                 </button>
@@ -171,7 +167,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     type="button"
                     :class="mine.length === 0 ? cmp.buttonPrimary('gap-0 whitespace-nowrap px-2.5 py-1 text-2xs') : QUIET_BUTTON"
                     @click="emit('commit')"
-                    v-tooltip.bottom="'Open the Changes panel, where your own edits get committed or stashed'"
+                    v-tooltip.bottom="'Opens the Changes panel'"
                 >
                     <Icon name="file-edit" class="mr-1 text-2xs" />Commit or stash yours
                 </button>
@@ -185,7 +181,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     :class="QUIET_BUTTON"
                     :disabled="busy || streaming"
                     @click="emit('merge')"
-                    v-tooltip.bottom="'Applies everything that fits and leaves the rest with conflict markers to resolve in your workspace'"
+                    v-tooltip.bottom="streaming ? 'Wait for the agent turn to finish' : undefined"
                 >
                     <Icon name="check" class="mr-1 text-2xs" />Land with conflict markers
                 </button>

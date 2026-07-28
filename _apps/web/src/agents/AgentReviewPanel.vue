@@ -353,14 +353,14 @@ const confirmDiscard = (): void => {
             <span
                 v-if="changes.pending.value.length > 0"
                 class="whitespace-nowrap rounded-full bg-warning/15 px-1.5 py-px text-2xs font-medium text-warning"
-                v-tooltip.bottom="'Not yet applied to your workspace — this is what Land now applies'"
+                v-tooltip.bottom="'What Land now will apply'"
             >
                 {{ changes.pending.value.length }} not landed
             </span>
             <span
                 v-else-if="changes.count.value > 0"
                 class="inline-flex items-center gap-1 whitespace-nowrap text-2xs text-success"
-                v-tooltip.bottom="'Every change is already in your workspace — review it here, commit it from the Changes panel'"
+                v-tooltip.bottom="'Already in your workspace — commit it from the Changes panel'"
             >
                 <Icon name="check" class="text-2xs" />landed
             </span>
@@ -370,7 +370,7 @@ const confirmDiscard = (): void => {
             <span
                 v-if="changes.count.value > 0"
                 class="whitespace-nowrap text-2xs text-subtle"
-                v-tooltip.bottom="'Files you have looked at. ↑/↓ or j/k move · v marks viewed and advances'"
+                v-tooltip.bottom="'↑/↓ or j/k to move · v marks viewed and advances'"
             >
                 {{ changes.viewedCount.value }}/{{ changes.count.value }} reviewed
             </span>
@@ -393,7 +393,7 @@ const confirmDiscard = (): void => {
                 :disabled="changes.actionBusy.value || archiveBusy || streaming"
                 @click="changes.archive()"
                 v-tooltip.bottom="
-                    streaming ? 'Wait for the agent turn to finish' : 'Take this agent off the board. Its branch, diff and conversation are kept.'
+                    streaming ? 'Wait for the agent turn to finish' : 'The branch, diff and conversation are kept'
                 "
             >
                 <Icon name="box" class="mr-1 text-2xs" />Archive
@@ -404,7 +404,7 @@ const confirmDiscard = (): void => {
                 class="inline-flex items-center whitespace-nowrap rounded border border-line px-2 py-0.5 text-2xs text-link transition-colors hover:bg-overlay disabled:opacity-40"
                 :disabled="archiveBusy"
                 @click="restore([agentId])"
-                v-tooltip.bottom="'Archived. Put it back on the board.'"
+                v-tooltip.bottom="'Puts it back on the board'"
             >
                 <Icon name="history" class="mr-1 text-2xs" />Restore
             </button>
@@ -426,8 +426,8 @@ const confirmDiscard = (): void => {
                     streaming
                         ? 'Wait for the agent turn to finish'
                         : changes.pending.value.length === 0
-                          ? 'Nothing left to land — this work is already in your workspace'
-                          : `Apply ${changes.pending.value.length} change(s) to your workspace`
+                          ? 'Already in your workspace'
+                          : `Applies ${changes.pending.value.length} change(s) to your workspace`
                 "
             >
                 <Icon name="check" class="mr-1 text-2xs" />Land now
@@ -523,7 +523,6 @@ const confirmDiscard = (): void => {
                                 type="button"
                                 class="flex min-w-0 flex-1 items-center gap-1.5 py-1 pl-1.5 pr-1 text-left max-md:min-h-11"
                                 :class="isViewed(file) ? 'opacity-50' : ''"
-                                :title="file.label"
                                 @click="select(file)"
                             >
                                 <span class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[file.change.status]">
@@ -537,7 +536,7 @@ const confirmDiscard = (): void => {
                                 <!-- Basename first and legible, its directory trailing and dimmed: a review is
                                      read by file name, and the middle-truncated full paths this replaces made
                                      every row in a deep tree look the same. -->
-                                <span class="min-w-0 flex-1 truncate text-2xs max-md:text-xs">
+                                <span class="min-w-0 flex-1 truncate text-2xs max-md:text-xs" v-tooltip.right.overflow="file.label">
                                     <span class="font-medium text-content">{{ basename(file.change.path) }}</span>
                                     <span class="ml-1 text-subtle">{{ parentDir(file.change.path) }}</span>
                                 </span>
@@ -591,14 +590,14 @@ const confirmDiscard = (): void => {
                         <span class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[selected.change.status]">
                             {{ STATUS_LETTER[selected.change.status] }}
                         </span>
-                        <span class="min-w-0 flex-1 truncate text-2xs" :title="selected.label">
+                        <span class="min-w-0 flex-1 truncate text-2xs" v-tooltip.bottom.overflow="selected.label">
                             <span v-if="parentDir(selected.label) !== ''" class="text-subtle">{{ parentDir(selected.label) }}/</span>
                             <span class="font-medium text-content">{{ basename(selected.label) }}</span>
                         </span>
                         <span
                             v-if="selected.change.from !== undefined"
                             class="hidden max-w-40 truncate font-mono text-2xs text-subtle md:inline-block"
-                            :title="`renamed from ${selected.change.from}`"
+                            v-tooltip.bottom="`renamed from ${selected.change.from}`"
                         >
                             ← {{ selected.change.from }}
                         </span>

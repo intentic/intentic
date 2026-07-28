@@ -3,7 +3,8 @@ import { type AgentProvider, quickModelKey } from "@intentic/sandbox-contract";
 import { Card, cmp, CopyButton, formatTokens, Picker, type PickerOptions, Row, RowGroup, Segmented } from "@intentic-app/ui";
 import Button from "primevue/button";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { relativeTime } from "../../composables/chat/catalog";
 import { quickModelGroups, useQuickModel } from "../../composables/chat/quickModel";
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { errorMessage } from "../../composables/useAsyncAction";
@@ -386,13 +387,20 @@ const importMemory = async (): Promise<void> => {
                 </template>
             </Row>
 
-            <!-- Savings report (rtk-`gain`) — realized token savings from the live filter-stats ledger, so the owner
-                 can see what each cleaner is worth and where to add the next handler. -->
+            <!-- Savings report (rtk-`gain`) — realized token savings from the ledger of whichever backend is doing
+                 the compressing, so the owner can see what each cleaner is worth and where to add the next handler.
+                 Source and last-recorded-command are shown next to the numbers on purpose: this card once sat on a
+                 ledger nothing was writing any more, and without its provenance a frozen number reads exactly like
+                 a live one. -->
             <Row v-if="savings !== undefined && savings.commands > 0" icon="wave-pulse" title="Output savings">
                 <template #description>
                     {{ savings.commands }} commands · ~{{ formatTokens(savings.rawTokens) }} → ~{{ formatTokens(savings.emittedTokens) }} tokens ·
                     <span class="font-medium text-success">{{ savings.savedPct }}% saved</span>
                     <span v-if="savings.holdout.measuredSavedPct !== undefined"> · {{ savings.holdout.measuredSavedPct }}% measured (holdout)</span>
+                    <span class="text-muted">
+                        · via {{ savings.source === `rtk` ? `rtk gain` : `output filter` }}
+                        <template v-if="savings.updatedAt !== undefined">· last command {{ relativeTime(savings.updatedAt) }}</template>
+                    </span>
                 </template>
                 <template #below>
                     <div v-if="savings.perCleaner.length > 0" class="flex flex-wrap gap-1.5">

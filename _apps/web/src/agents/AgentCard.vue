@@ -12,11 +12,12 @@ import {
     formatCost,
     formatElapsed,
     formatTokens,
+    laneOf,
     reviewAction,
 } from "../composables/agents/agentStatus";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { markSegments } from "../composables/agents/useAgentFilter";
-import { canArchive, laneOf, type FleetAgent } from "../composables/agents/useAgents";
+import { canArchive, type FleetAgent } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { modelLabelFor } from "../composables/chat/conversation";
 
@@ -172,7 +173,7 @@ const grab = (event: PointerEvent): void => {
                     v-if="archivable"
                     type="button"
                     aria-label="Archive agent"
-                    v-tooltip.top="'Archive — takes it off the board. The branch, the diff and the conversation are kept.'"
+                    v-tooltip.top="'Archive — the branch, diff and conversation are kept'"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`archive`)"
                 >

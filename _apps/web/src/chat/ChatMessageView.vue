@@ -611,7 +611,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     <Icon name="list-check" class="text-sm text-link" />
                     <!-- Sideways: this reveals the title of the very body it sits on, and under the header is
                          exactly where that body starts. -->
-                    <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.left="planTitle(message.plan)">{{
+                    <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.left.overflow="planTitle(message.plan)">{{
                         planTitle(message.plan)
                     }}</span>
                     <span v-if="message.plan.status === 'approved'" class="text-2xs font-medium text-success">✓ Approved</span>
@@ -744,7 +744,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         <button
                             type="button"
                             class="plan-reject plan-sm"
-                            v-tooltip.bottom="'Dismiss and stop the turn'"
+                            v-tooltip.bottom="'Also stops the turn'"
                             @click="cancelQuestion(message)"
                         >
                             Dismiss
@@ -756,7 +756,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
             <div v-if="message.permission" class="chat-surface w-full overflow-hidden rounded-xl">
                 <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
                     <Icon name="shield" class="text-sm text-primary-500" />
-                    <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.left="permissionTitle">{{
+                    <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.left.overflow="permissionTitle">{{
                         permissionTitle
                     }}</span>
                     <span v-if="message.permission.status === 'allowed'" class="text-2xs font-medium text-success">✓ Allowed</span>
@@ -785,7 +785,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     <button
                         type="button"
                         class="plan-reject"
-                        v-tooltip.bottom="'Decline and stop the turn'"
+                        v-tooltip.bottom="'Also stops the turn'"
                         @click="decidePermission(message, 'deny')"
                     >
                         <Icon name="times" class="text-xs" />

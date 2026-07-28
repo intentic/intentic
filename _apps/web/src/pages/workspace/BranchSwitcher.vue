@@ -108,7 +108,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                     class="w-full rounded-md border border-line bg-canvas px-2 py-1 text-xs text-content placeholder:text-subtle focus:border-line-strong focus:outline-none"
                 />
 
-                <p v-if="actionError" class="truncate text-2xs text-danger" v-tooltip.bottom="actionError">{{ actionError }}</p>
+                <p v-if="actionError" class="truncate text-2xs text-danger" v-tooltip.bottom.overflow="actionError">{{ actionError }}</p>
 
                 <div class="scrollbar-thin flex max-h-64 flex-col overflow-auto">
                     <template v-for="branch in shown" :key="branch.name">

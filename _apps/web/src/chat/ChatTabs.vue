@@ -9,12 +9,12 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { startAgent } from "../composables/agents/agentActions";
 import { createTitleEdit } from "../composables/agents/titleEdit";
 import { markSegments, useAgentFilter } from "../composables/agents/useAgentFilter";
-import { type FleetAgent, type FleetLane, laneOf, useAgents } from "../composables/agents/useAgents";
+import { type FleetAgent, useAgents } from "../composables/agents/useAgents";
 import FilterField from "../components/FilterField.vue";
 import HoverCard from "../components/HoverCard.vue";
 import OriginMark from "../components/OriginMark.vue";
 import ProviderLogo from "./ProviderLogo.vue";
-import { activityIcon, agentStatusMeta, attentionReason, formatCost, formatElapsed } from "../composables/agents/agentStatus";
+import { activityIcon, agentStatusMeta, attentionReason, type FleetLane, formatCost, formatElapsed, laneOf } from "../composables/agents/agentStatus";
 import { relativeTime, statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
 import { type Conversation, modelLabelFor } from "../composables/chat/conversation";
 import { useChat } from "../composables/chat/useChat";
@@ -723,9 +723,9 @@ const openHistory = (event: Event): void => {
                             >
                                 <span class="flex w-full min-w-0 items-start gap-1.5">
                                     <!-- Status leads the TITLE row, where the docked tabs wear it — it is the
-                                         first thing a glance at the rail asks. Native title, not v-tooltip: a
-                                         pop-out's PrimeVue tooltips render into the main window. -->
-                                    <span class="flex h-4 shrink-0 items-center" :title="railStatus({ conversation: c, agent }).label">
+                                         first thing a glance at the rail asks. Sideways for the same reason the
+                                         title below is: under a rail card is the next rail card. -->
+                                    <span class="flex h-4 shrink-0 items-center" v-tooltip.right="railStatus({ conversation: c, agent }).label">
                                         <Icon
                                             :name="railStatus({ conversation: c, agent }).icon"
                                             :spin="railStatus({ conversation: c, agent }).spin"
@@ -905,7 +905,7 @@ const openHistory = (event: Event): void => {
             </template>
         </div>
         <!-- A failed rename already reverted the title; this says why. Cleared by the next rename. -->
-        <span v-if="edit.error !== undefined" class="min-w-0 shrink truncate text-2xs text-danger" v-tooltip.bottom="edit.error">{{
+        <span v-if="edit.error !== undefined" class="min-w-0 shrink truncate text-2xs text-danger" v-tooltip.bottom.overflow="edit.error">{{
             edit.error
         }}</span>
         <!-- Docked: the ✚ / history pair beside the strip, unchanged — a header row has width to spare and no
@@ -964,7 +964,7 @@ const openHistory = (event: Event): void => {
                         v-if="query"
                         type="button"
                         class="absolute right-3 top-1/2 flex -translate-y-1/2 items-center rounded text-2xs text-subtle transition-colors hover:text-content"
-                        title="Clear (Esc)"
+                        v-tooltip.bottom="'Clear (Esc)'"
                         aria-label="Clear search"
                         @click="query = ``"
                     >

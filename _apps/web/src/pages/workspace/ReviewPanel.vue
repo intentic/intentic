@@ -2,7 +2,7 @@
 import type { GitChange, GitDiffSide, RepoChanges } from "@intentic-app/api-contract";
 import { cmp, useDevice } from "@intentic-app/ui";
 import Dialog from "primevue/dialog";
-import { computed, ref, watch, watchEffect } from "vue";
+import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import DiffStat from "../../components/DiffStat.vue";
 import HoverCard from "../../components/HoverCard.vue";
@@ -10,10 +10,11 @@ import { useAgents } from "../../composables/agents/useAgents";
 import { useChat } from "../../composables/chat/useChat";
 import { useQuickModel } from "../../composables/chat/quickModel";
 import { useLayout } from "../../composables/useLayout";
-import { commitMessage, commitSuggestion } from "../../composables/workspace/commitMessage";
-import { suggestCommitMessage } from "../../composables/workspace/commitSuggestion";
+import { clearFilledMessage, commitMessage, fillCommitMessage } from "../../composables/workspace/commitMessage";
+import { conventionalSubject } from "../../composables/workspace/commitSuggestion";
 import { useCommitDraft } from "../../composables/workspace/useCommitDraft";
-import { originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
+import { ALL_SIDES, originHue, originsOf, summarizeOrigins, YOURS } from "../../composables/workspace/changeOrigins";
+import { formatElapsed, unfinishedMark } from "../../composables/agents/agentStatus";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { repoOfPath, turnWrites } from "../../composables/workspace/liveWrites";
 import { COMMIT_SCOPE, type RepoPaths, useChanges } from "../../composables/workspace/useChanges";
@@ -97,7 +98,8 @@ const layout = useLayout();
 
 const legend = computed(() => summarizeOrigins(scannable.value));
 const originFilter = ref<string | undefined>(undefined);
-// The filter outlives neither the agent's work nor a commit that swept it away.
+// The filter outlives neither the agent's work nor a commit that swept it away — and neither does the subject
+// that agent's chip filed into the commit box.
 watch(legend, ({ agents, yours }) => {
     if (originFilter.value === undefined) {
         return;
@@ -105,11 +107,9 @@ watch(legend, ({ agents, yours }) => {
     const stillHasWork = originFilter.value === YOURS ? yours > 0 : agents.some((entry) => entry.id === originFilter.value);
     if (!stillHasWork) {
         originFilter.value = undefined;
+        clearFilledMessage();
     }
 });
-const toggleOrigin = (id: string): void => {
-    originFilter.value = originFilter.value === id ? undefined : id;
-};
 
 /* Resolving an origin id to a name and a provider logo, from two sources in this order:
  *   - THE OPEN FLEET CARD, when there is one, because it is the LIVE copy: a rename repaints the chip on the
@@ -123,8 +123,73 @@ const toggleOrigin = (id: string): void => {
  * A chip is still drawn for it, because hiding one would silently re-attribute the file to the user. */
 const agentOf = (id: string) => fleet.value.find((agent) => agent.id === id);
 const originOf = (id: string) => changes.originAgents.value[id];
-const originLabel = (id: string): string => agentOf(id)?.title ?? originOf(id)?.title ?? `Agent ${id.slice(0, 6)}`;
+// The title as a session actually HAS one — undefined for the id-shaped fallback below, because the two are
+// interchangeable to read and not at all interchangeable to use as a commit subject.
+const originTitle = (id: string): string | undefined => agentOf(id)?.title ?? originOf(id)?.title;
+const originLabel = (id: string): string => originTitle(id) ?? `Agent ${id.slice(0, 6)}`;
 const originProvider = (id: string): string | undefined => agentOf(id)?.provider ?? originOf(id)?.provider;
+
+/* --- and is it FINISHED ---------------------------------------------------------------------------------------
+ * A chip's file count is a total for a session that has stopped and an instalment for one that hasn't, and
+ * nothing on this panel said which. The gap is narrow but real: the "commit while an agent works" warning below
+ * covers a main-tree turn writing the worktree mid-`commit -a`, which is an ATOMICITY problem the index already
+ * solves for everything else — while an isolated agent on its second iteration is a COMPLETENESS problem the
+ * index cannot touch. It will land more files, into a tree you are about to commit, and the panel was silent.
+ *
+ * So one bit rides the chip (unfinishedMark), and it is `laneOf` — the fleet board's OWN lane machine — read as
+ * a boolean. Not a status list of this panel's own: an agent parked on a question carries a settled `status`
+ * with an attention flag raised, so a status-only reading calls it finished while its card sits in the board's
+ * Attention lane, and the user is looking at two surfaces disagreeing about one session.
+ *
+ * Read from the fleet roster, not from `originAgents`, which carries identity only. That is the right source
+ * anyway: the roster drops archived agents, and an archived agent is by definition one whose session is over,
+ * so absence means finished rather than unknown. */
+const originMark = (id: string) => unfinishedMark(agentOf(id));
+
+// The hover card's live line — what the mark stands for, in words, with what the roster knows about the turn.
+// `turns` counts COMPLETED turns, so a session that has landed files and is running again is on turn N+1: the
+// "second iteration" this whole affordance exists to name.
+//
+// The elapsed reading is stamped when the card OPENS rather than ticked by an interval: this panel is one of
+// several the sidebar swaps between, and a timer running behind a v-if to animate a string nobody is looking at
+// is a re-render per second for nothing. A card the user holds open for a minute reads a minute stale, which is
+// the correct trade for a line whose point is "this started a while ago".
+const now = ref(0);
+const originNote = (id: string): string | undefined => {
+    const mark = originMark(id);
+    const agent = agentOf(id);
+    if (mark === undefined || agent === undefined) {
+        return undefined;
+    }
+    const turn = agent.turns !== undefined && agent.turns > 0 ? `turn ${agent.turns + 1}` : undefined;
+    const doing = agent.activity?.tool !== undefined ? [agent.activity.tool, agent.activity.target].filter(Boolean).join(` `) : agent.activity?.todo;
+    const since = agent.startedAt !== undefined ? formatElapsed(agent.startedAt, now.value) : undefined;
+    return [mark.label, turn, doing, since].filter((part) => part !== undefined && part !== ``).join(` · `);
+};
+
+/* ONE CLICK, TWO HALVES OF THE SAME INTENT — "commit this session's work". The chip has always narrowed the
+ * list (and every section verb under it) to that agent's files; it now also files that session's title into the
+ * commit box as a subject line. Those were the two things a user did by hand, in a row, every time: filter to
+ * the agent, then retype the title they could already read one line above the input.
+ *
+ * Which is also why the box no longer fills itself. It used to open holding every legend session's title joined
+ * into one line — a message nobody chose, that changed under them whenever another agent landed. Naming a
+ * commit is now something you ASK for, and the ask is the click you were already making.
+ *
+ * Untitled origins file nothing: the chip's "Agent 4f2a1c" fallback is an id, and an id is not a description of
+ * a change. The filter still applies — you can narrow to a session you cannot name. */
+const toggleOrigin = (id: string): void => {
+    const next = originFilter.value === id ? undefined : id;
+    originFilter.value = next;
+    const subject = next === undefined || next === YOURS ? undefined : conventionalSubject([originTitle(next) ?? ``]);
+    if (subject === undefined) {
+        // Toggled off, moved to "you", or a session with no title to lend — either way the line the legend put
+        // there no longer has a chip behind it. Anything the user has made their own survives this.
+        clearFilledMessage();
+        return;
+    }
+    fillCommitMessage(subject);
+};
 
 // A chip is a 14px logo and, at best, a title truncated to max-w-24 — so hovering one (on a file row, or in the
 // From legend above the list) raises the SAME card the chat tab strip raises for that session: the full derived
@@ -136,12 +201,13 @@ const firstPromptOf = (id: string): string | undefined => {
     return conversation?.messages.value.find((message) => message.role === `user`)?.text;
 };
 const showOrigins = (event: MouseEvent, ids: readonly string[]): void => {
+    now.value = Date.now();
     // Two agents on one file is a real (if rare) case, and it is exactly the case a single title can't state —
     // so the card lists them and the first message stays out of it.
     hoverCard.value?.show(
         event,
         ids.length === 1
-            ? { label: `Landed by`, title: originLabel(ids[0]!), body: firstPromptOf(ids[0]!) }
+            ? { label: `Landed by`, title: originLabel(ids[0]!), note: originNote(ids[0]!), body: firstPromptOf(ids[0]!) }
             : { label: `Landed by`, title: ids.map((id) => originLabel(id)).join(`\n`) },
     );
 };
@@ -315,14 +381,24 @@ const commitReady = computed(
 );
 const commitLabel = computed(() => (commitAll.value ? `Commit all` : `Commit`));
 
-// The box's starting text, while the user has typed nothing of their own: the "From" legend's session titles,
-// read as a Conventional Commits subject (commitSuggestion.ts). Pushed from here because the derivation needs
-// the review set — a query, which only a component can own — while the fallback rule belongs next to the draft
-// it competes with. Kept current, not seeded once: a title that changes, or work that lands from another
-// session, must change the suggestion it produced.
-watchEffect(() => {
-    commitSuggestion.value = suggestCommitMessage(scannable.value, (id) => agentOf(id)?.title);
-});
+/* --- committing an unfinished session's work ------------------------------------------------------------------
+ * The sessions this commit would RECORD, and which of them are still going. Scoped exactly like the button:
+ * the staged side alone for a plain Commit (a commit records the index), every side for "Commit all", and only
+ * the repos in `commitTarget` — the same rule the whole family of files shares.
+ *
+ * A warning rather than a gate, for the same reason as the mid-write one below: nothing here is at risk of
+ * corruption, the commit is a legitimate thing to make (staging the first half of an agent's work on purpose is
+ * ordinary), and `reset --soft` walks it back. What it prevents is the silent version — committing under a
+ * subject that describes an intent the agent has not finished carrying out, which is exactly what the legend's
+ * click-to-name makes easy to do without noticing. */
+const commitOrigins = computed(
+    () =>
+        summarizeOrigins(
+            scannable.value.filter((repo) => commitTarget.value.includes(repo.repo)),
+            commitAll.value ? ALL_SIDES : [`staged`],
+        ).agents,
+);
+const unfinished = computed(() => commitOrigins.value.filter((entry) => originMark(entry.id) !== undefined));
 
 /* --- committing while an agent works ------------------------------------------------------------------------
  * THE INDEX IS ALREADY THE ISOLATION, which is why nothing here blocks. A plain Commit records what you
@@ -638,8 +714,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
 // A repo's own change count, for the row badge — every side it is SHOWING, so under an origin filter the badge
 // counts what the list holds rather than advertising rows the filter is hiding. The daemon-truncated remainder
 // counts too: a repo with 30k deletions must read as 30k, not as the 500 rows that fit the payload.
-const repoCount = (repo: RepoChanges): number =>
-    sidesOf(repo).reduce((total, section) => total + section.changes.length, repo.truncated ?? 0);
+const repoCount = (repo: RepoChanges): number => sidesOf(repo).reduce((total, section) => total + section.changes.length, repo.truncated ?? 0);
 
 // Where a failed action gets drawn: the repo's own row, or the commit box for a commit that spans repos.
 const failureIn = (scope: string) => changes.failures.value.get(scope);
@@ -703,7 +778,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </span>
                 <!-- Why the button just refused a Ctrl+Enter. It takes the readout's place rather than adding a
                      line, because it answers the same question the readout does — what will this commit do. -->
-                <span v-else-if="blockerNotice" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-warning" :title="blockerNotice">
+                <span v-else-if="blockerNotice" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-warning" v-tooltip.right.overflow="blockerNotice">
                     {{ blockerNotice }}
                 </span>
                 <!-- The autofill failed. Same slot, same reasoning: the user clicked a button in this box and
@@ -711,7 +786,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <span
                     v-else-if="commitDraft.error.value"
                     class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-danger"
-                    :title="commitDraft.error.value"
+                    v-tooltip.right.overflow="commitDraft.error.value"
                 >
                     {{ commitDraft.error.value }}
                 </span>
@@ -720,7 +795,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                      browser's own Ctrl+Z with nothing to restore; it is also what makes overwriting a typed
                      message safe enough to need no confirmation. -->
                 <span v-else-if="commitDraft.drafted.value" class="flex min-w-0 flex-1 items-center gap-1 text-2xs text-muted">
-                    <span class="min-w-0 truncate whitespace-nowrap" :title="`Drafted with ${commitDraft.drafted.value.model}`">
+                    <span class="min-w-0 truncate whitespace-nowrap" v-tooltip.right.overflow="`Drafted with ${commitDraft.drafted.value.model}`">
                         Drafted with {{ commitDraft.drafted.value.model }}
                     </span>
                     <button
@@ -750,10 +825,10 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     @click="doCommit"
                     v-tooltip.right="
                         blockedByConflicts
-                            ? 'git cannot commit while a path is unmerged — resolve the conflicts (stage each file to mark it resolved)'
+                            ? 'A path is unmerged — stage each conflicted file to mark it resolved'
                             : commitAll
-                              ? 'Nothing is staged — stage every change and commit it'
-                              : 'Commit the staged changes, one commit per repo'
+                              ? 'Stages every change, then commits'
+                              : 'One commit per repo'
                     "
                 >
                     <Icon name="check" class="mr-1 text-2xs" />{{ commitLabel }}
@@ -776,12 +851,24 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         class="mt-1 inline-flex items-center whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
                         :disabled="!commitReady"
                         @click="runCommit(unaffected)"
-                        v-tooltip.right="`Commit only the repos no agent is writing: ${unaffected.join(`, `)}`"
+                        v-tooltip.right="`Commits ${unaffected.join(`, `)}`"
                     >
                         <Icon name="check" class="mr-1 text-2xs" />Commit
                         {{ unaffected.length === 1 ? unaffected[0] : `the other ${unaffected.length} repos` }}
                     </button>
                 </div>
+            </div>
+            <!-- A session whose work this commit records is STILL GOING. Not the race the strip above warns
+                 about — the index already froze these files and nothing can move them — but the other half of
+                 the same question: what you are about to record is that session's work so far, and it has more
+                 coming. Named rather than counted, because "which agent" is what decides whether you wait. -->
+            <div v-if="unfinished.length > 0" :class="WARNING">
+                <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-warning" />
+                <p class="min-w-0 flex-1 break-words text-2xs text-warning">
+                    {{ unfinished.map((entry) => originLabel(entry.id)).join(`, `) }}
+                    {{ unfinished.length === 1 ? `hasn't` : `haven't` }} finished — this commit records the
+                    {{ unfinished.reduce((total, entry) => total + entry.files, 0) === 1 ? `file` : `files` }} landed so far.
+                </p>
             </div>
             <!-- A commit spans every staged repo, so its failure belongs to the box that fired it — under the
                  button, where the user is already looking, with the message they typed still in the input. -->
@@ -789,7 +876,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
                 <div class="min-w-0 flex-1">
                     <p class="text-2xs font-medium text-danger">{{ failureIn(COMMIT_SCOPE)!.action }}</p>
-                    <p class="line-clamp-4 break-words text-2xs text-muted" :title="failureIn(COMMIT_SCOPE)!.detail">
+                    <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="failureIn(COMMIT_SCOPE)!.detail">
                         {{ failureIn(COMMIT_SCOPE)!.detail }}
                     </p>
                 </div>
@@ -834,7 +921,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              load-bearing — the one you have filtered to, which is now silently hiding rows — earns its title
              inline. Everything else stays a hover away, on the SAME card the file rows and the chat tab strip
              raise for that session. What the click does needs no words either: the chips visibly dim to leave
-             the filtered one lit. -->
+             the filtered one lit.
+             The click ALSO names the commit, with that session's title (toggleOrigin) — the second half of the
+             "commit this agent's work" intent the filter was always the first half of. And a chip whose session
+             has not finished wears a leading dot, because a count from a session still running is an instalment
+             rather than a total, and every other reading on this panel silently assumes a total. -->
         <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
             <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">From</span>
             <button
@@ -850,8 +941,17 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 @click="toggleOrigin(entry.id)"
                 @mouseenter="showOrigins($event, [entry.id])"
                 @mouseleave="hoverCard?.hide()"
-                :aria-label="`${originFilter === entry.id ? `Clear the filter on` : `Show only`} ${originLabel(entry.id)} — ${plural(entry.files, `file`)}`"
+                :aria-label="`${originFilter === entry.id ? `Clear the filter on` : `Show only`} ${originLabel(entry.id)} — ${plural(entry.files, `file`)}${
+                    originMark(entry.id) ? `, ${originMark(entry.id)!.label.toLowerCase()}` : ``
+                }${originTitle(entry.id) ? `; names the commit` : ``}`"
             >
+                <!-- The session has not finished with your tree: its count above is an instalment, not a total.
+                     A dot rather than a status glyph, and BEFORE the logo rather than on it — the logo is 11px,
+                     which leaves no corner to put anything in, and this strip's hard constraint is horizontal
+                     (spelled-out titles once wrapped it to five rows and pushed the file list off the fold). A
+                     leading dot costs 10px, only on the rare chip that is actually live, and the words are one
+                     hover away on the card the chip already raises. -->
+                <span v-if="originMark(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(entry.id)!.dot"></span>
                 <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="shrink-0 text-2xs" />
                 <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
                 <span v-if="originFilter === entry.id" class="min-w-0 truncate">{{ originLabel(entry.id) }}</span>
@@ -863,7 +963,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 class="flex shrink-0 items-center gap-1 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted transition-opacity"
                 :class="originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : ''"
                 @click="toggleOrigin(YOURS)"
-                v-tooltip.right="'Files no agent landed — your own edits, the terminal, a main-tree chat'"
+                v-tooltip.right="'Your own edits, the terminal, a main-tree chat'"
             >
                 you <span class="opacity-70">{{ legend.yours }}</span>
             </button>
@@ -890,7 +990,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <div :class="[NOTICE, 'mx-2 mb-1.5']">
                     <div class="min-w-0 flex-1">
                         <p class="text-2xs font-medium text-danger">Couldn't read this repo</p>
-                        <p class="line-clamp-4 break-words text-2xs text-muted" :title="group.error">{{ group.error }}</p>
+                        <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="group.error">{{ group.error }}</p>
                     </div>
                 </div>
             </div>
@@ -980,7 +1080,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
                     <div class="min-w-0 flex-1">
                         <p class="text-2xs font-medium text-danger">{{ failureIn(group.repo)!.action }}</p>
-                        <p class="line-clamp-4 break-words text-2xs text-muted" :title="failureIn(group.repo)!.detail">
+                        <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="failureIn(group.repo)!.detail">
                             {{ failureIn(group.repo)!.detail }}
                         </p>
                     </div>
@@ -1050,15 +1150,19 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                     type="button"
                                     class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-0.5 text-left max-md:min-h-11"
                                     @click="clickRow({ repo: group.repo, side: section.side, path: change.path }, change, $event)"
-                                    :title="changeLabel(group.repo, change)"
                                 >
                                     <span class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[change.status]">{{
                                         STATUS_LETTER[change.status]
                                     }}</span>
                                     <!-- dir="rtl" ellipsizes the head of the path so the filename survives truncation, but it
                                          also lets bidi-neutral edge characters jump sides: a leading "_" in "_apps/…" renders
-                                         at the far right. <bdi> isolates the path as one LTR run, keeping the glyphs in order. -->
-                                    <span class="min-w-0 flex-1 truncate text-2xs text-muted max-md:text-xs" dir="rtl"
+                                         at the far right. <bdi> isolates the path as one LTR run, keeping the glyphs in order.
+                                         The tooltip is what that truncation costs — the full label, repo included, and only
+                                         while the row is actually cut off. -->
+                                    <span
+                                        class="min-w-0 flex-1 truncate text-2xs text-muted max-md:text-xs"
+                                        dir="rtl"
+                                        v-tooltip.right.overflow="changeLabel(group.repo, change)"
                                         ><bdi>{{ change.path }}</bdi></span
                                     >
                                     <!-- Who landed it: a provider chip per agent (two, then a count), and the name
@@ -1120,8 +1224,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                          without it reads as complete — and whole-repo actions (commit all, discard repo) still
                          cover every file, capped or not. -->
                     <p v-if="(group.truncated ?? 0) > 0" class="py-1 pl-4 text-2xs text-subtle">
-                        …and {{ group.truncated }} more — showing the first {{ repoCount(group) - (group.truncated ?? 0) }}. Repo-wide commit
-                        and discard still cover everything.
+                        …and {{ group.truncated }} more — showing the first {{ repoCount(group) - (group.truncated ?? 0) }}. Repo-wide commit and
+                        discard still cover everything.
                     </p>
                 </div>
             </div>

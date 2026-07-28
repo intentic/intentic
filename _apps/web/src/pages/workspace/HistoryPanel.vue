@@ -96,8 +96,8 @@ const confirmRestore = (id: string): void => {
             </button>
         </div>
 
-        <p v-if="error" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.right="error">{{ error }}</p>
-        <p v-if="actionError" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.right="actionError">{{ actionError }}</p>
+        <p v-if="error" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.right.overflow="error">{{ error }}</p>
+        <p v-if="actionError" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.right.overflow="actionError">{{ actionError }}</p>
 
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
             <p v-if="snapshots.length === 0" class="px-3 py-2 text-2xs text-subtle">
@@ -111,7 +111,7 @@ const confirmRestore = (id: string): void => {
                 >
                     <Icon class="text-2xs text-subtle" :name="selectedId === snapshot.id ? 'chevron-down' : 'chevron-right'" />
                     <Icon class="shrink-0 text-2xs text-muted" :name="TRIGGER_META[snapshot.trigger].icon" />
-                    <span class="min-w-0 flex-1 truncate text-xs text-content" :title="snapshot.label">{{
+                    <span class="min-w-0 flex-1 truncate text-xs text-content" v-tooltip.right.overflow="snapshot.label">{{
                         snapshot.label ?? TRIGGER_META[snapshot.trigger].title
                     }}</span>
                     <span class="shrink-0 text-2xs text-muted">{{ timeAgo(snapshot.at) }}</span>
@@ -126,13 +126,13 @@ const confirmRestore = (id: string): void => {
                         type="button"
                         class="cv-file flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left transition-colors hover:bg-overlay max-md:min-h-11"
                         @click="openDiff(change)"
-                        :title="changeLabel(change)"
                     >
                         <span class="w-3 shrink-0 text-center font-mono text-2xs" :class="STATUS_CLASS[change.status]">{{
                             STATUS_LETTER[change.status]
                         }}</span>
-                        <!-- <bdi> keeps a leading "_" ("_apps/…") from being reordered to the far right by dir="rtl". -->
-                        <span class="truncate text-2xs text-muted max-md:text-xs" dir="rtl"
+                        <!-- <bdi> keeps a leading "_" ("_apps/…") from being reordered to the far right by dir="rtl";
+                             the tooltip gives the whole path back, but only while the row is actually cut off. -->
+                        <span class="truncate text-2xs text-muted max-md:text-xs" dir="rtl" v-tooltip.right.overflow="changeLabel(change)"
                             ><bdi>{{ changeLabel(change) }}</bdi></span
                         >
                     </button>
@@ -158,9 +158,7 @@ const confirmRestore = (id: string): void => {
                             class="rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content max-md:min-h-11 max-md:px-3 max-md:text-xs"
                             :disabled="busy"
                             @click="confirmRestoreId = snapshot.id"
-                            v-tooltip.right="
-                                'Bring the workspace back to this checkpoint. Secrets and git branches are untouched; a safety checkpoint is saved first.'
-                            "
+                            v-tooltip.right="'Files only — secrets and branches untouched. A safety checkpoint is saved first.'"
                         >
                             <Icon name="history" class="mr-1 text-2xs" />Restore
                         </button>

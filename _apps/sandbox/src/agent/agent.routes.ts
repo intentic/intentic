@@ -11,6 +11,7 @@ import {
 import { implement, ORPCError } from "@orpc/server";
 import { createOutboundSniffer } from "../activity/outbound.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
+import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
 import { cliEnvOf } from "../capabilities/cli-env.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
@@ -565,6 +566,9 @@ async function* runTurn(
             ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
             ...(tools.length > 0 ? { tools } : {}),
             ...(Object.keys(sdkServers).length > 0 ? { sdkServers } : {}),
+            // The same directory the browser servers got as `--output-dir` — the hook that redirects
+            // model-named screenshots into it needs the value too, and one source keeps them from drifting.
+            browserOutputDir: browserOutputDir(services.workspace.root),
             // hashlineEdits owns file mutation via the hashline MCP server above, so drop the native Edit/Write
             // from the model's context (native Read stays for viewing images/PDFs).
             ...(hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),

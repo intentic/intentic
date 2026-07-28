@@ -291,7 +291,7 @@ const runAction = (kind: ActionKind, commit: GitCommit, name: string): Promise<u
             <Icon v-if="loading" name="spinner" class="shrink-0 text-2xs text-subtle" spin />
         </div>
 
-        <p v-if="error" class="shrink-0 truncate px-3 py-1 text-2xs text-danger" v-tooltip.bottom="error">{{ error }}</p>
+        <p v-if="error" class="shrink-0 truncate px-3 py-1 text-2xs text-danger" v-tooltip.bottom.overflow="error">{{ error }}</p>
 
         <!-- The graph: one row per commit (a per-row SVG gutter drawing lanes/edges/node, then metadata). Click a
              row to expand its detail inline (accordion); right-click for the commit action menu. -->

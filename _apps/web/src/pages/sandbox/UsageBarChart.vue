@@ -20,7 +20,7 @@ const max = computed(() => Math.max(...entries.map((entry) => entry.value), 0) |
     <ul class="flex flex-col gap-2.5">
         <li v-for="entry in entries" :key="rankedKey(entry)" class="grid grid-cols-[minmax(0,8rem)_1fr_auto] items-center gap-3">
             <!-- Text wears text tokens, never the series colour: the swatch beside it carries identity. -->
-            <span v-tooltip.top="entry.label" class="truncate text-xs" :class="entry.kind === `value` ? `text-content` : `text-muted italic`">{{
+            <span v-tooltip.top.overflow="entry.label" class="truncate text-xs" :class="entry.kind === `value` ? `text-content` : `text-muted italic`">{{
                 entry.label
             }}</span>
             <div class="min-w-0">

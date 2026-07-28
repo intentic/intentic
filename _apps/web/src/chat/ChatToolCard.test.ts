@@ -36,7 +36,7 @@ const mount = (tool: ChatTool, live = true): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatToolCard, { tool, live }) });
-    // Icon is registered app-wide in the real app; v-tooltip is PrimeVue's directive. Stand-ins keep the test
+    // Icon and v-tooltip are both registered app-wide by installUi. Stand-ins keep the test
     // off the whole UI plugin. Icon renders which glyph it was handed (and whether it spins), because that IS
     // what the liveness rule below decides; the tooltip's content is not under test.
     app.component(

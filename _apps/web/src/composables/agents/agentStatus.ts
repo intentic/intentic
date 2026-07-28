@@ -1,10 +1,30 @@
 import type { IconName } from "@intentic-app/ui";
-import type { AgentOrigin, AgentStatus } from "@intentic/sandbox-contract";
+import type { AgentAttention, AgentOrigin, AgentStatus } from "@intentic/sandbox-contract";
 
-/* Presentational metadata for fleet-agent statuses + the card's number formatters. Extends the conversation
- * status idiom (catalog.ts statusIcon) with the registry-only outcomes (landed / conflict) and the
- * client-only `draft` (an open isolated conversation that hasn't run its first turn); kept separate because
- * the fleet renders the widened FleetAgent status, not ConversationStatus (the live-stream union). */
+/* WHERE AN AGENT STANDS, and how each surface draws it. Every projection of a fleet agent's state lives here —
+ * the lane machine, the "why does this need me" label, the drill-in verb, the glyphs — and NOTHING else in the
+ * app is allowed to answer those questions its own way.
+ *
+ * That rule is load-bearing rather than tidy. The board, the chat rail and the Changes panel each ask some form
+ * of "is this session done?", and the moment one of them answers from `status` alone it starts contradicting
+ * the other two on screen: an agent parked on a question is `idle` in the registry with an attention flag
+ * raised, so a status-only reading calls it finished while the board has it sitting in Attention. The user
+ * reads that as the app being confused about its own state, and they are right.
+ *
+ * So `laneOf` is the single projection (the fleet store's lanes, the rail's groups, the drop targets and the
+ * Changes legend's mark all derive from it), and it reads BOTH halves of the state: `status`, the turn
+ * lifecycle, and `attention`, the flags a parked turn raises independently of it.
+ *
+ * This module is deliberately a LEAF — pure functions over plain data, no store, no query, no Vue. That is what
+ * lets the panel, the rail and the tests all reach the same answer without any of them dragging in the app
+ * shell (useAgents pulls useChat pulls the router). */
+
+// Enough of an agent to place one. Every predicate below takes this and nothing more, so a caller holding a
+// FleetAgent, a roster AgentSummary or a test literal can all ask the same question.
+export interface AgentStanding {
+    readonly status: AgentStatus | "draft";
+    readonly attention: AgentAttention;
+}
 
 export const agentStatusMeta = (status: AgentStatus | "draft"): { icon: IconName; spin?: boolean; label: string; class: string } => {
     // Not `pencil` — that's the card's rename affordance; the draft glyph is a not-yet-started marker.
@@ -29,56 +49,23 @@ export const agentStatusMeta = (status: AgentStatus | "draft"): { icon: IconName
     return { icon: `circle-fill`, label: `Idle`, class: `text-subtle` };
 };
 
-// The sources an agent can be OPENED BY, when it wasn't opened by the user: the label and glyph the card's
-// provenance line wears. Keyed by AgentOrigin.provider, which is an open string (listener sources are
-// extension-declared), so an unknown one degrades to its own name rather than disappearing.
-const ORIGIN_SOURCES: Record<string, { icon: IconName; label: string }> = {
-    discord: { icon: `comments`, label: `Discord` },
-    imap: { icon: `envelope`, label: `Email` },
-    webchat: { icon: `globe`, label: `Web chat` },
-    webhook: { icon: `bolt`, label: `Webhook` },
-};
+// "Blocked on you" — the agent literally cannot go on (or has failed) until you act. Deliberately NOT the same
+// thing as unread, which only says you haven't looked at it yet: a board that tells the user seven finished
+// agents "need you" teaches them to ignore the word.
+export const blocked = (agent: AgentStanding): boolean =>
+    agent.attention.plan || agent.attention.question || agent.attention.permission || agent.attention.conflict || agent.status === `error`;
 
-// The card's "this conversation came in from outside" line: what opened it, who sent it, and — in the tooltip
-// — which automation was configured to answer. The user never typed this agent's first message, and a card
-// that doesn't say so reads as an agent they forgot starting.
-export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string; detail: string | undefined; hint: string } => {
-    const source = ORIGIN_SOURCES[origin.provider] ?? { icon: `wave-pulse` as IconName, label: origin.provider };
-    const where = origin.channelId !== undefined ? ` in ${origin.channelId}` : ``;
-    const who = origin.author !== undefined ? ` from ${origin.author}` : ``;
-    return {
-        icon: source.icon,
-        label: source.label,
-        detail: origin.author,
-        hint: `Started by the "${origin.automationId}" automation for a ${source.label} message${who}${where} — its first prompt is the automation's, not yours.`,
-    };
-};
+// The half of "blocked" that is literally WAITING TO BE TOLD SOMETHING — a plan to approve, a question, a
+// permission, a paused turn. Deliberately narrower than `blocked`, which also covers the DEAD ENDS (a failed
+// turn, an unlandable conflict): those want looking at, but nothing about them is outstanding on the user's
+// side, so ending the agent throws away no answer it was owed. laneDrop draws the same line in the same order
+// for the same reason — a drop is refused for this set and offered for the dead ends.
+export const awaitingUser = (agent: AgentStanding): boolean =>
+    agent.attention.plan || agent.attention.question || agent.attention.permission || agent.status === `awaiting`;
 
-// Dollars with sensible precision: sub-cent turns still show something, big totals stay short.
-export const formatCost = (usd: number): string => (usd >= 10 ? `$${usd.toFixed(0)}` : usd >= 0.1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(3)}`);
-
-export const formatTokens = (tokens: number): string =>
-    tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1_000 ? `${(tokens / 1_000).toFixed(0)}k` : `${tokens}`;
-
-// Elapsed readout for a running turn's startedAt (ms since epoch).
-export const formatElapsed = (startedAt: number, now: number): string => {
-    const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
-    if (seconds < 60) {
-        return `${seconds}s`;
-    }
-    const minutes = Math.floor(seconds / 60);
-    return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
-};
-
-// Context-window fill percentage (0–100), clamped; undefined when either side is unknown.
-export const contextPct = (tokens: number | undefined, window: number | undefined): number | undefined =>
-    tokens === undefined || window === undefined || window === 0 ? undefined : Math.min(100, Math.round((tokens / window) * 100));
-
-// The one-line "why this card is in the Attention lane" label — shared by the card chip and any future toast.
-export const attentionReason = (agent: {
-    readonly status: AgentStatus | "draft";
-    readonly attention: { plan: boolean; question: boolean; conflict: boolean };
-}): string | undefined => {
+// The one-line "why this card is in the Attention lane" label — shared by the card chip, the Changes legend's
+// hover card, and any future toast.
+export const attentionReason = (agent: AgentStanding): string | undefined => {
     if (agent.attention.plan) {
         return `Approval needed`;
     }
@@ -94,16 +81,62 @@ export const attentionReason = (agent: {
     return undefined;
 };
 
+export type FleetLane = "attention" | "active" | "finished";
+
+// THE projection — the board's kanban lanes, and by extension every other surface's answer to "where does this
+// one stand" (see the header: two of them may never disagree on screen about the same agent). A pure reading of
+// the state machine, so "finished" needs no explicit action or timer: the auto-land flow flips a
+// cleanly-completed turn to landed/idle within ms of it ending, and any follow-up message moves the card
+// straight back to active. Unread stays a card badge, not a promotion.
+export const laneOf = (agent: AgentStanding): FleetLane => {
+    if (blocked(agent) || agent.status === `awaiting` || agent.status === `conflict`) {
+        return `attention`;
+    }
+    if (agent.status === `running` || agent.status === `draft`) {
+        return `active`;
+    }
+    return `finished`; // landed | idle — the work is in the workspace (or there was none).
+};
+
+/* ONE BIT — "this session isn't done with your tree yet" — for surfaces that name an agent while showing its
+ * OUTPUT rather than the agent itself (the Changes panel's From legend). Those chips spend their glyph on
+ * identity, so the full status vocabulary above cannot ride them; and most of it would say nothing there
+ * anyway, because every chip in such a legend is by definition a session that already landed something — the
+ * resting state drawn four times.
+ *
+ * It is `laneOf` narrowed to a boolean and NOT a status list of its own, which is the whole point: the file
+ * count on a chip is a total for a finished session and an instalment for every other kind, and "finished" has
+ * to mean on this panel exactly what it means on the board. A second definition here is what put an amber dot
+ * on a chip whose card sat in the board's Finished lane.
+ *
+ * A dot, not the status icon, and NOT the running spinner: this is a filter control, and a rotating glyph per
+ * chip would make the legend the busiest thing on a panel whose subject is the file list below it. The active
+ * lane pulses only so the mark is told apart by behaviour from the eight identity hues a chip's tint is drawn
+ * from; the attention lane is static, because a stalled session is not motion.
+ *
+ * `undefined` in means an agent the roster no longer carries (archived, or retired by the retention sweep),
+ * which is not "unknown" for this question: leaving the board is what a finished session does. */
+export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string; label: string } | undefined => {
+    if (agent === undefined) {
+        return undefined;
+    }
+    const lane = laneOf(agent);
+    if (lane === `finished`) {
+        return undefined;
+    }
+    return lane === `active`
+        ? { dot: `bg-link animate-pulse`, label: `Still working` }
+        : // Named by the same reason the board's chip wears. The fallback covers a bare `awaiting` — a turn
+          // parked with no flag yet raised, which has nothing more specific to say than that it stopped.
+          { dot: `bg-primary-500`, label: attentionReason(agent) ?? `Waiting on you` };
+};
+
 // The card's drill-in affordance label (desktop) — the verb that names what the review detail opens onto, so
 // the button reads as a destination rather than a generic "open". A DRAFT has no worktree/diff yet, so it has
 // no review detail (returns undefined): its click only focuses the docked chat. Everything registered has a
 // destination; the label leads with why-you'd-go — pending approval/question first, then a land conflict or
 // error, then a diff to look over, falling back to a plain "Review" for a running agent with nothing yet.
-export const reviewAction = (agent: {
-    readonly status: AgentStatus | "draft";
-    readonly attention: { plan: boolean; question: boolean; permission: boolean; conflict: boolean };
-    readonly diff?: { files: number };
-}): string | undefined => {
+export const reviewAction = (agent: AgentStanding & { readonly diff?: { files: number } }): string | undefined => {
     if (agent.status === `draft`) {
         return undefined;
     }
@@ -127,6 +160,53 @@ export const reviewAction = (agent: {
     }
     return `Review`;
 };
+
+// The sources an agent can be OPENED BY, when it wasn't opened by the user: the label and glyph the card's
+// provenance line wears. Keyed by AgentOrigin.provider, which is an open string (listener sources are
+// extension-declared), so an unknown one degrades to its own name rather than disappearing.
+const ORIGIN_SOURCES: Record<string, { icon: IconName; label: string }> = {
+    discord: { icon: `comments`, label: `Discord` },
+    imap: { icon: `envelope`, label: `Email` },
+    webchat: { icon: `globe`, label: `Web chat` },
+    webhook: { icon: `bolt`, label: `Webhook` },
+};
+
+// The card's "this conversation came in from outside" line: what opened it, who sent it, and — in the tooltip
+// — which automation was configured to answer. The user never typed this agent's first message, and a card
+// that doesn't say so reads as an agent they forgot starting.
+//
+// The hint carries ONLY what the mark itself cannot: OriginMark already prints the source and the sender
+// beside the glyph, so naming them again just made the box tall enough to cover the card underneath it.
+export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string; detail: string | undefined; hint: string } => {
+    const source = ORIGIN_SOURCES[origin.provider] ?? { icon: `wave-pulse` as IconName, label: origin.provider };
+    const where = origin.channelId !== undefined ? ` in ${origin.channelId}` : ``;
+    return {
+        icon: source.icon,
+        label: source.label,
+        detail: origin.author,
+        hint: `Opened by the "${origin.automationId}" automation${where} — its first prompt is not yours`,
+    };
+};
+
+// Dollars with sensible precision: sub-cent turns still show something, big totals stay short.
+export const formatCost = (usd: number): string => (usd >= 10 ? `$${usd.toFixed(0)}` : usd >= 0.1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(3)}`);
+
+export const formatTokens = (tokens: number): string =>
+    tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1_000 ? `${(tokens / 1_000).toFixed(0)}k` : `${tokens}`;
+
+// Elapsed readout for a running turn's startedAt (ms since epoch).
+export const formatElapsed = (startedAt: number, now: number): string => {
+    const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+    if (seconds < 60) {
+        return `${seconds}s`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+};
+
+// Context-window fill percentage (0–100), clamped; undefined when either side is unknown.
+export const contextPct = (tokens: number | undefined, window: number | undefined): number | undefined =>
+    tokens === undefined || window === undefined || window === 0 ? undefined : Math.min(100, Math.round((tokens / window) * 100));
 
 // The activity line's icon by tool family — a glanceable "what is it doing" glyph, mock-style.
 export const activityIcon = (tool: string | undefined): IconName => {

@@ -128,12 +128,9 @@ const status = computed(() => (fleetAgent.value === undefined ? undefined : agen
             >
                 <Icon name="code" class="text-2xs" /><span class="truncate">{{ fleetAgent.branch }}</span>
             </span>
-            <span
-                v-if="status !== undefined"
-                class="inline-flex shrink-0 items-center gap-1 text-2xs"
-                :class="status.class"
-                v-tooltip.bottom="status.label"
-            >
+            <!-- No tooltip: the chip prints status.label already, and hovering it to be told the word you are
+                 reading is the kind of hint that teaches people not to hover anything. -->
+            <span v-if="status !== undefined" class="inline-flex shrink-0 items-center gap-1 text-2xs" :class="status.class">
                 <Icon :name="status.icon" :spin="status.spin" class="text-2xs" />{{ status.label }}
             </span>
             <Segmented v-if="mobile" v-model="view" :options="viewOptions" />

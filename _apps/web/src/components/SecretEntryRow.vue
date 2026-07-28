@@ -108,7 +108,7 @@ const removeKey = async (): Promise<void> => {
                     class="shrink-0 text-2xs text-subtle transition-transform"
                     :class="expanded ? `rotate-90` : ``"
                 />
-                <span v-tooltip.top="entry.key" class="truncate font-mono text-sm text-content">{{ entry.key }}</span>
+                <span v-tooltip.top.overflow="entry.key" class="truncate font-mono text-sm text-content">{{ entry.key }}</span>
                 <span
                     v-if="entry.ci !== undefined && !entry.ci.synced"
                     v-tooltip.top="`CI out of date`"

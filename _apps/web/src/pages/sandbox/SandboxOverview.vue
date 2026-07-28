@@ -130,7 +130,7 @@ const save = async (): Promise<void> => {
                         type="button"
                         :disabled="!editing"
                         :aria-label="editing ? `Change logo` : undefined"
-                        :title="editing ? `Change logo` : undefined"
+                        v-tooltip.bottom="editing ? `Change logo` : undefined"
                         class="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-card text-muted"
                         :class="editing ? 'cursor-pointer border-line-strong' : 'border-line'"
                         @click="fileInput?.click()"

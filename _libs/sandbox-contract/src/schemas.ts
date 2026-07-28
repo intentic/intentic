@@ -623,11 +623,24 @@ export const SandboxSettingsSchema = z.object({
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 
 // ---- output-cleaner savings report (rtk-`gain`-style) ----
-// Aggregated from historyRoot/logs/filter-stats.jsonl (one row per agent Bash command). `perCleaner` attributes
-// which cleaner ids fired across commands; `holdout` is the measured control (commands the holdout bypassed) vs
-// the cleaned population — a real saved-% rather than an estimate; `gaps` are high-volume commands that matched
-// no cleaner (the next handler to write). Empty/zeroed when no commands have run yet.
+// Whichever cleaner is ACTUALLY compressing output owns the numbers, so the report is read from that backend's
+// own ledger: "native" aggregates historyRoot/logs/filter-stats.jsonl (one row per agent Bash command, written
+// by agent-output-filter), "rtk" reads rtk's own gain ledger. Reading one ledger regardless of backend is how
+// this card went stale: under rtk the native filter is switched off, nothing appends, and the last numbers
+// written — a test run's, as it happened — sat on the card looking live.
+//
+// `perCleaner` attributes which cleaner ids fired across commands; `holdout` is the measured control (commands
+// the holdout bypassed) vs the cleaned population — a real saved-% rather than an estimate; `gaps` are
+// high-volume commands that matched no cleaner (the next handler to write). All three are native-only: rtk
+// reports totals, not per-command attribution, so they arrive empty under that backend. Empty/zeroed when no
+// commands have run yet.
 export const CleanerSavingsSchema = z.object({
+    // Which backend's ledger these numbers came from — shown on the card, because a number without its source
+    // cannot be told apart from a stale one. Defaulted for the same daemon-older-than-browser seam as settings.
+    source: z.enum(["native", "rtk"]).default("native"),
+    // When that ledger last recorded a command (epoch ms), so the card can show its age instead of implying
+    // freshness it doesn't have. Absent when the ledger has never been written or its age can't be read.
+    updatedAt: z.number().optional(),
     commands: z.number(),
     rawTokens: z.number(),
     emittedTokens: z.number(),

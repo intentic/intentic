@@ -69,7 +69,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
             <Icon v-if="loading" name="spinner" class="shrink-0 text-2xs text-subtle" spin />
         </div>
 
-        <p v-if="error" class="shrink-0 truncate px-3 py-1 text-2xs text-danger" v-tooltip.bottom="error">{{ error }}</p>
+        <p v-if="error" class="shrink-0 truncate px-3 py-1 text-2xs text-danger" v-tooltip.bottom.overflow="error">{{ error }}</p>
 
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto px-3 py-3">
             <p v-if="totals === undefined" class="py-3 text-2xs text-subtle">{{ loading ? "Reading the index…" : "No report yet." }}</p>
@@ -133,7 +133,7 @@ const building = computed(() => health.value?.freshness.state === `building`);
                                 <button
                                     type="button"
                                     class="hs-row w-full rounded px-1 py-1 text-left transition-colors hover:bg-overlay"
-                                    v-tooltip.top="`${row.path} — +${row.adds} -${row.dels} lines over ${row.commits} commits`"
+                                    v-tooltip.top="`${row.path} — +${row.adds} -${row.dels} lines`"
                                     @click="emit('open-file', row.path)"
                                 >
                                     <span class="text-2xs tabular-nums text-subtle">{{ index + 1 }}</span>

@@ -20,7 +20,14 @@ import type { Directive, DirectiveBinding } from "vue";
  *
  * Modifiers: `top` (default) | `bottom` | `left` | `right` pick the preferred side — it flips to the opposite
  * one when there is no room; `overflow` shows the label ONLY while the anchor's own text is clipped, which is
- * what a truncated cell wants (repeating text the user can already read in full is noise). */
+ * what a truncated cell wants (repeating text the user can already read in full is noise). Put `.overflow` on
+ * the element that actually clips, not on a wrapper around it — the check is that element's own scrollWidth.
+ *
+ * This is the app's ONE tooltip. Native `title=` survives in exactly two places, both deliberate: an `<iframe
+ * title>`, which is a required accessible name rather than a hint, and the panel resize handles, where the
+ * browser's ~1s delay is the point — these open instantly, and a handle you sweep past on the way somewhere
+ * else should not flash a box each time. Everything else that hints belongs here, so it can be restyled,
+ * re-measured and kept out of the wrong window from one file. */
 
 const GAP = 6; // px between the anchor and the box — leaves room for the arrow
 const EDGE = 8; // px of viewport kept clear on every side

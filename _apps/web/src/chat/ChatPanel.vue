@@ -96,6 +96,13 @@ const providerName = computed(() => providerLabel(provider.value));
 // The chip's model name: shared with the picker menu so they can't drift; falls back to the provider name (never
 // blank) while Grok's daemon catalog is still loading.
 const modelLabelText = computed(() => modelLabelFor(provider.value, model.value));
+// The pill already reads "Claude Opus 5", so a tooltip saying "claude-opus-5" is the same fact in a worse
+// font. What the pill CANNOT show is the provider (its logo is a glyph, not a word) and the case where the
+// running turn reports a different model than the one selected — a fallback, or a provider alias. Those, and
+// nothing else, are what hovering it is worth.
+const modelHint = computed(() =>
+    activeModel.value === null || activeModel.value === model.value ? providerName.value : `${providerName.value} · this turn is running ${activeModel.value}`,
+);
 // An ACP provider owns its own model AND reasoning settings — no effort scale to offer (the segments hide).
 const nativeProvider = computed(() => NATIVE_PROVIDERS.includes(provider.value as NativeProvider));
 const efforts = computed(() => (nativeProvider.value ? effortsFor(provider.value, model.value, thinking.value) : []));
@@ -983,7 +990,7 @@ watch(
                                     type="button"
                                     class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
                                     :disabled="sandboxSettings === undefined || saveSandboxSettings.isPending.value"
-                                    v-tooltip.top="'Turns on the standing auto-resume toggle (Sandbox ▸ Agent) and resumes this chat at reset'"
+                                    v-tooltip.top="'Also turns on the standing toggle in Sandbox ▸ Agent'"
                                     @click="enableAutoResume"
                                 >
                                     Enable auto-resume
@@ -1103,8 +1110,8 @@ watch(
                                             type="button"
                                             class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                             @click="mobile ? (modelSheetOpen = true) : providerModel?.toggle($event)"
-                                            v-tooltip.top="activeModel ?? `${providerName} · ${modelLabelText}`"
-                                            aria-label="Provider and model"
+                                            v-tooltip.top="modelHint"
+                                            :aria-label="`Provider and model: ${providerName} · ${modelLabelText}`"
                                         >
                                             <ProviderLogo :provider="provider" class="shrink-0 text-2xs text-link" />
                                             <span class="truncate @max-xs:hidden">{{ modelLabelText }}</span>

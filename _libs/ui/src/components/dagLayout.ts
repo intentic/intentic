@@ -9,7 +9,7 @@ export interface DagNode<T = unknown> {
     readonly id: string;
     // Opaque payload handed to the #node slot.
     readonly data: T;
-    // Native/PrimeVue tooltip content for the node's card (DagGraph owns the card wrapper, so the caller
+    // Tooltip content for the node's card (DagGraph owns the card wrapper, so the caller
     // can't attach a directive itself).
     readonly tooltip?: string;
     // Closure highlighting: fade this node without removing it from the layout.

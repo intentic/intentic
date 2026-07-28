@@ -151,7 +151,7 @@ const pushToCi = async (): Promise<void> => {
                         v-if="filter"
                         type="button"
                         aria-label="Clear filter"
-                        title="Clear (Esc)"
+                        v-tooltip.bottom="'Clear (Esc)'"
                         class="absolute right-2 top-1/2 -translate-y-1/2 rounded text-2xs text-subtle transition-colors hover:text-content"
                         @click="filter = ``"
                     >

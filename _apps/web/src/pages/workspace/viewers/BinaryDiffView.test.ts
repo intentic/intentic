@@ -48,7 +48,7 @@ const mount = (props: { path: string; before?: string; after?: string }): HTMLEl
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(BinaryDiffView, props) });
-    // Icon is registered app-wide in the real app; v-tooltip is PrimeVue's directive. Stand-ins keep the test
+    // Icon and v-tooltip are both registered app-wide by installUi. Stand-ins keep the test
     // off the whole UI plugin.
     app.component(`Icon`, defineComponent({ props: { name: String, spin: Boolean }, render: () => h(`i`) }));
     app.directive(`tooltip`, {});

@@ -8,7 +8,8 @@ import { startAgent } from "../composables/agents/agentActions";
 import { dropActionLabel, dropRejection } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
-import { FINISHED_WINDOW, type FleetAgent, type FleetLane, useAgents } from "../composables/agents/useAgents";
+import type { FleetLane } from "../composables/agents/agentStatus";
+import { FINISHED_WINDOW, type FleetAgent, useAgents } from "../composables/agents/useAgents";
 import { relativeTime } from "../composables/chat/catalog";
 import { useChat } from "../composables/chat/useChat";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
@@ -558,7 +559,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 v-if="archived.length > 0"
                                 type="button"
                                 :aria-label="`Open the archive (${archived.length})`"
-                                v-tooltip.bottom="'Agents taken off the board. Their branches and conversations are kept.'"
+                                v-tooltip.bottom="'Taken off the board — branches and conversations are kept'"
                                 class="inline-flex shrink-0 items-center gap-1 rounded px-1 py-px text-2xs transition-colors"
                                 :class="
                                     pulsing
@@ -576,7 +577,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 v-if="clearable > 0 && !filtering"
                                 type="button"
                                 aria-label="Archive every finished agent"
-                                v-tooltip.bottom="`Archive all ${clearable} — nothing is lost, and you can undo it`"
+                                v-tooltip.bottom="`Archive all ${clearable} — you can undo it`"
                                 class="shrink-0 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
                                 @click="archive()"
                             >

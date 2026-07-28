@@ -1,5 +1,6 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
+import { awaitingUser, blocked, type FleetLane, laneOf } from "./agentStatus";
 import { openAgentConversation, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -173,20 +174,6 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
 // board and a TransitionGroup running FLIP over several hundred cards.
 export const FINISHED_WINDOW = 6;
 
-// "Blocked on you" — the agent literally cannot go on (or has failed) until you act. Deliberately NOT the same
-// thing as unread, which only says you haven't looked at it yet: a board that tells the user seven finished
-// agents "need you" teaches them to ignore the word.
-const blocked = (agent: Pick<FleetAgent, "status" | "attention">): boolean =>
-    agent.attention.plan || agent.attention.question || agent.attention.permission || agent.attention.conflict || agent.status === `error`;
-
-// The half of "blocked" that is literally WAITING TO BE TOLD SOMETHING — a plan to approve, a question, a
-// permission, a paused turn. Deliberately narrower than `blocked`, which also covers the DEAD ENDS (a failed
-// turn, an unlandable conflict): those want looking at, but nothing about them is outstanding on the user's
-// side, so ending the agent throws away no answer it was owed. laneDrop draws the same line in the same order
-// for the same reason — a drop is refused for this set and offered for the dead ends.
-const awaitingUser = (agent: Pick<FleetAgent, "status" | "attention">): boolean =>
-    agent.attention.plan || agent.attention.question || agent.attention.permission || agent.status === `awaiting`;
-
 // Attention first, then running + fresh drafts, then most recently active.
 const weight = (entry: FleetAgent): number =>
     blocked(entry) ? 0 : entry.status === `running` || entry.status === `awaiting` || entry.status === `draft` ? 1 : 2;
@@ -292,20 +279,6 @@ watch(
         }
     },
 );
-
-// The kanban lanes — pure projections of the status machine, so "finished" needs no explicit action or
-// timer: the auto-land flow flips a cleanly-completed turn to landed/idle within ms of it ending, and any
-// follow-up message animates the card straight back to active. Unread stays a card badge, not a promotion.
-export type FleetLane = "attention" | "active" | "finished";
-export const laneOf = (agent: Pick<FleetAgent, "status" | "attention">): FleetLane => {
-    if (blocked(agent) || agent.status === `awaiting` || agent.status === `conflict`) {
-        return `attention`;
-    }
-    if (agent.status === `running` || agent.status === `draft`) {
-        return `active`;
-    }
-    return `finished`; // landed | idle — the work is in the workspace (or there was none).
-};
 
 /* May this card be archived from the board? NOT the same question as "is it in the Finished lane", which is
  * what the affordance used to be gated on — and the gate that left an errored agent with no exit at all: its

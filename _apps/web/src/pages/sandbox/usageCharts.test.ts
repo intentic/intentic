@@ -35,7 +35,7 @@ const host = (): HTMLElement => {
     return element;
 };
 
-// The charts carry `v-tooltip` (PrimeVue's directive, installed app-wide in the real app). A no-op stand-in
+// The charts carry `v-tooltip` (installed app-wide by installUi). A no-op stand-in
 // keeps these tests off the whole UI plugin — the tooltip's CONTENT is not what is under test here.
 const mount = (component: unknown, props: Record<string, unknown>): HTMLElement => {
     const element = host();
