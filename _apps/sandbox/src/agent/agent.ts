@@ -17,7 +17,6 @@ import {
     type SpawnedProcess,
     type SpawnOptions,
     tool,
-    USAGE_LIMIT_ERROR_PREFIXES,
 } from "@anthropic-ai/claude-agent-sdk";
 import { spawn } from "node:child_process";
 import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, SystemPromptMode, UsageWindow } from "@intentic/sandbox-contract";
@@ -36,6 +35,7 @@ import { harnessEnv } from "./harness-credentials.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
 import { TaskChecklist } from "./task-checklist.js";
 import { editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
+import { isUsageLimitText } from "./usage-limit-text.js";
 
 export interface AgentRequest {
     readonly prompt: string;
@@ -298,12 +298,6 @@ const apiErrorMessage = (message: SDKAssistantMessage): string => {
     const explained = content.find((block) => block.type === "text" && block.text !== undefined && block.text.trim() !== "")?.text;
     return explained ?? `agent error: ${message.error}`;
 };
-
-// The CLI reports a mid-session limit hit ("You've hit your session limit · resets 1:40pm (UTC)") as an API
-// error whose CATEGORY is not `rate_limit` — only the sentence says what happened. The SDK publishes the exact
-// prefixes those sentences use, so matching them is classification, not text-sniffing: both roads to a spent
-// allowance end at the same `rate_limit` code, which is what the auto-resume machinery keys off.
-const isUsageLimitText = (text: string): boolean => USAGE_LIMIT_ERROR_PREFIXES.some((prefix) => text.startsWith(prefix));
 
 // Normalize the SDK's SDKMessage stream onto AgentEvents. High-value block types get a dedicated frame;
 // any SDK message without a mapping is dropped. Does NOT emit the terminal `done` (runAgent does that once

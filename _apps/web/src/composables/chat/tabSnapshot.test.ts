@@ -145,9 +145,9 @@ describe(`reading a tab snapshot`, () => {
             }),
         );
 
-        const tab = readTabSnapshot(`sb1`)?.tabs[0];
-        expect(tab?.account).toBe(`acct-work`);
-        expect(tab?.session?.account).toBe(`acct-personal`);
+        const restored = readTabSnapshot(`sb1`)?.tabs[0];
+        expect(restored?.account).toBe(`acct-work`);
+        expect(restored?.session?.account).toBe(`acct-personal`);
     });
 
     it(`drops an account that isn't a usable id, leaving the restore to fall back`, () => {
@@ -169,9 +169,9 @@ describe(`reading a tab snapshot`, () => {
             }),
         );
 
-        const tab = readTabSnapshot(`sb1`)?.tabs[0];
-        expect(tab).not.toHaveProperty(`account`);
-        expect(tab?.session).toEqual({ id: `sess-1`, provider: `claude` });
+        const restored = readTabSnapshot(`sb1`)?.tabs[0];
+        expect(restored).not.toHaveProperty(`account`);
+        expect(restored?.session).toEqual({ id: `sess-1`, provider: `claude` });
     });
 });
 
