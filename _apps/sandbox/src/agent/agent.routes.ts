@@ -33,6 +33,7 @@ import { commandsOf } from "./agent-commands.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { accountLimitReset, clearLimitHit, recordLimitHit } from "./limit-resume.js";
+import { withRuntimeHistory } from "./runtime-history.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
 import { summarizeAgentTitle } from "./title-summary.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
@@ -55,27 +56,6 @@ const editorContextNote = (context: EditorContext): string => {
 // model's OWN output tokens without dropping substance. Kept short so it barely costs tokens itself each turn.
 const TERSE_NOTE =
     "Response style: be concise — don't restate the request, re-quote files you just read, or echo tool output the user can already see. Lead with the answer or the action; expand only where detail changes a decision.";
-
-// Fold a switched conversation's prior transcript into the turn as a role-attributed preamble — ONE format
-// for all three runtimes (native per-adapter injection can come later). Newest messages win the budget so
-// long conversations keep their tail; an oversized single message is head-truncated.
-const HISTORY_MESSAGE_CHAR_CAP = 4_000;
-const HISTORY_CHAR_CAP = 24_000;
-const withHistory = (prompt: string, history: NonNullable<AgentTurn["history"]>): string => {
-    const lines: string[] = [];
-    let used = 0;
-    for (const message of history.toReversed()) {
-        const text =
-            message.text.length > HISTORY_MESSAGE_CHAR_CAP ? `${message.text.slice(0, HISTORY_MESSAGE_CHAR_CAP)}\n… (truncated)` : message.text;
-        const line = `${message.role === "user" ? "User" : "Assistant"}: ${text}`;
-        if (used + line.length > HISTORY_CHAR_CAP) {
-            break;
-        }
-        lines.unshift(line);
-        used += line.length;
-    }
-    return `This conversation continues from another AI runtime. Prior transcript (oldest first) — treat it as your own conversation history:\n\n${lines.join("\n\n")}\n\n---\n\n${prompt}`;
-};
 
 // Run one agent turn, streaming typed AgentEvents. `input.agent` picks the provider adapter (absent =
 // claude); each provider's token is the sandbox's own credential, never held by the platform, with the
@@ -334,7 +314,7 @@ async function* runTurn(
     // Editor context attaches to THIS message, so it folds in before the (older) history preamble wraps it.
     const promptWithEditor = input.editorContext !== undefined ? `${input.prompt}\n\n${editorContextNote(input.editorContext)}` : input.prompt;
     const base: AgentRequest = {
-        prompt: input.history !== undefined && input.history.length > 0 ? withHistory(promptWithEditor, input.history) : promptWithEditor,
+        prompt: input.history !== undefined && input.history.length > 0 ? withRuntimeHistory(promptWithEditor, input.history) : promptWithEditor,
         cwd: effectiveCwd,
         ...(isolation !== undefined ? { isolation } : {}),
         signal: signal ?? new AbortController().signal,

@@ -953,6 +953,21 @@ const fetchTranscript = async (conversation: Conversation, id: string): Promise<
     }
 };
 
+const fetchAgentTranscript = async (conversation: Conversation): Promise<{ sessionId?: string; messages: RestoredMessage[] } | undefined> => {
+    try {
+        const response = await sandboxRequest(`/agents/${encodeURIComponent(conversation.conversationId)}/transcript`);
+        if (!response.ok) {
+            conversation.error.value = `Could not open that conversation.`;
+            return undefined;
+        }
+        const body = (await response.json()) as { sessionId?: string; messages?: RestoredMessage[] };
+        return { ...(body.sessionId !== undefined ? { sessionId: body.sessionId } : {}), messages: body.messages ?? [] };
+    } catch {
+        conversation.error.value = `Could not open that conversation.`;
+        return undefined;
+    }
+};
+
 // Bring a tab with no visible transcript up to date with the daemon: attach to the turn running for its
 // conversation right now, or — when nothing is running — replay its stored session. Shared by the restore
 // watch above and by opening a fleet agent, which is what lets an agent an AUTOMATION opened for an outside
@@ -993,19 +1008,36 @@ const hydrate = async (conversation: Conversation): Promise<boolean> => {
 // that survives a device with no local mirror. False when the READ failed, as opposed to finding nothing to
 // show, so a transient round-trip failure is retried instead of leaving a restored tab visibly empty.
 const replayStoredSession = async (conversation: Conversation): Promise<boolean> => {
-    const session = conversation.session.value;
-    // /sessions/:id reads the Claude Code Agent SDK's own store, so a transcript is replayable for exactly the
-    // sessions that loop minted — which is NOT "provider is claude": kimi and gemini have no native runtime and
-    // always run it, and codex/grok do whenever they were routed under it. Gating on the provider alone left a
-    // finished Gemini (or Kimi) agent opening from the fleet board as an empty "start a conversation" panel
-    // with its whole transcript sitting readable on the daemon. A native codex/grok thread lives in that
-    // provider's own rollout store, and an ACP agent's in its own — neither is readable here, so both stand down.
-    if (session === undefined || !runsClaudeCode(session.provider, session.harness)) {
+    // A fleet conversation is stable across runtime switches; its session id is not. Resolve registered agents
+    // by conversation/worktree identity, then adopt the SDK session that actually supplied the transcript so the
+    // next turn resumes what the user is looking at. History-menu tabs still mean one exact runtime session.
+    if (!runsClaudeCode(conversation.provider.value, conversation.harness.value)) {
         return true;
     }
-    const restored = await fetchTranscript(conversation, session.id);
-    if (restored === undefined) {
-        return false;
+    let restored: RestoredMessage[] | undefined;
+    if (conversation.registered.value) {
+        const transcript = await fetchAgentTranscript(conversation);
+        if (transcript === undefined) {
+            return false;
+        }
+        restored = transcript.messages;
+        if (transcript.sessionId !== undefined) {
+            conversation.session.value = {
+                id: transcript.sessionId,
+                provider: conversation.provider.value,
+                account: conversation.account.value,
+                harness: conversation.harness.value,
+            };
+        }
+    } else {
+        const session = conversation.session.value;
+        if (session === undefined) {
+            return true;
+        }
+        restored = await fetchTranscript(conversation, session.id);
+        if (restored === undefined) {
+            return false;
+        }
     }
     // An empty replay is not a transcript, it is the absence of one — the same distinction the mirror
     // makes when it refuses to save a blank. Painting it would blank a good cached transcript on any
@@ -1051,6 +1083,12 @@ export const openAgentConversation = (agent: {
         // agent" card back onto the Active lane it had just left.
         if (registered) {
             existing.registered.value = true;
+        }
+        // An earlier probe may legitimately have found no transcript yet (the external runtime had not minted
+        // its replacement SDK session). Opening the card is an explicit request to look again, not merely focus
+        // the empty result that the restore sweep cached.
+        if (existing.messages.value.length === 0 && !existing.streaming.value) {
+            hydrateOnce(existing);
         }
         return existing;
     }

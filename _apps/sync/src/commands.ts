@@ -7,6 +7,7 @@ import { buildCommand, type CommandContext } from "@stricli/core";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { registerAutostart, unregisterAutostart } from "./autostart.js";
 import { knownHostsPath, type Log, readConfig, type SyncConfig, type SyncMode, sshKeyPath, writeConfig } from "./config.js";
+import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { type CliLauncher, runMirrorWatch, startMirrorWatcher, stopMirror } from "./mirror.js";
 import { ensureCloudflared, ensureMutagen, ensureSyncSession, runMutagen, sessionName } from "./mutagen.js";
 import { ensureSshKey, INCLUDE_MARKER, sanitizeId, sshAlias, sshConfigBlock, writeManagedSshConfig } from "./ssh.js";
@@ -162,6 +163,9 @@ const setup = buildCommand<SetupFlags>({
         // Start the file sync — or, when re-running setup found the same session already running on this
         // version's rules, leave it exactly as it is rather than paying a full rescan for nothing.
         ensureSyncSession(mutagen, config, out);
+        // One bridge pass right away, so a fresh pairing's local repos carry the sandbox's git history from
+        // the first minute rather than waiting out the watcher's cadence.
+        runGitBridge(realBridgeExec, config, out);
         // Register the Mutagen daemon to autostart at login and resume sessions across reboots — it holds BOTH
         // sync and forward sessions, so this covers mirror-only too. Its own native mechanism (launchd/Task
         // Scheduler); no register verb on Linux. Best-effort: already-registered isn't worth failing on.

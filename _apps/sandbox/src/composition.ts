@@ -96,7 +96,9 @@ import { createPushSender, type PushSender } from "./push/push.js";
 import { type PortForwards, createPortForwards } from "./ports/port-forwards.js";
 import { type ListeningPort, scanListeningPorts } from "./ports/port-scan.js";
 import {
+    conversationSessionId,
     listWorkspaceSessions,
+    readConversationSession,
     readWorkspaceSession,
     searchWorkspaceSessions,
     type SessionSummary,
@@ -327,6 +329,8 @@ export interface Services {
     readonly sessions: {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
         readonly read: (dir: string, id: string) => Promise<RestoredMessage[]>;
+        readonly readConversation: (dir: string) => Promise<{ sessionId: string; messages: RestoredMessage[] } | undefined>;
+        readonly sessionIdForConversation: (dir: string) => Promise<string | undefined>;
         readonly search: (dir: string, query: string) => Promise<SessionSummary[]>;
         // The user's own prompts in one session, for the fleet filter (agents.search matches them per AGENT,
         // which the session list can't do — an archived agent's transcript is keyed by a worktree path
@@ -537,6 +541,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         sessions: {
             list: listWorkspaceSessions,
             read: readWorkspaceSession,
+            readConversation: readConversationSession,
+            sessionIdForConversation: conversationSessionId,
             search: searchWorkspaceSessions,
             prompts: readSessionPrompts,
             exists: workspaceSessionExists,

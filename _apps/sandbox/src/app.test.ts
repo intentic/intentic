@@ -306,7 +306,15 @@ const services = (overrides: Partial<Services> = {}): Services => ({
         warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh" as const, ageMs: 0 } }),
         close: () => {},
     },
-    sessions: { list: async () => [], read: async () => [], search: async () => [], prompts: async () => [], exists: async () => true },
+    sessions: {
+        list: async () => [],
+        read: async () => [],
+        readConversation: async () => undefined,
+        sessionIdForConversation: async () => undefined,
+        search: async () => [],
+        prompts: async () => [],
+        exists: async () => true,
+    },
     platformHostTunnel: async () => ({ status: 200, json: { hostname: "ssh-abc.example.com", tunnelToken: "tok" } }),
     ensurePreviewRoutes: async () => {},
     members: { list: async () => [], add: async () => {}, remove: async () => {} },
@@ -796,7 +804,15 @@ test("a bridge token reaches the agent-conversation surface and NOTHING else", a
     const app = createApp(
         services({
             auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
-            sessions: { list: async () => [], read: async () => [], search: async () => [], prompts: async () => [], exists: async () => true },
+            sessions: {
+                list: async () => [],
+                read: async () => [],
+                readConversation: async () => undefined,
+                sessionIdForConversation: async () => undefined,
+                search: async () => [],
+                prompts: async () => [],
+                exists: async () => true,
+            },
         }),
     );
     const bridge = { "x-intentic-bridge": "ibt_valid" };
@@ -850,8 +866,11 @@ test("sessions.list returns the full list, and routes to search when a query is 
                 sessions: {
                     list: async () => all,
                     read: async () => [],
+                    readConversation: async () => undefined,
+                    sessionIdForConversation: async () => undefined,
                     search: async (_root, query) => (query === "auth" ? matches : []),
                     prompts: async () => [],
+                    exists: async () => true,
                 },
             }),
         ),
@@ -874,7 +893,19 @@ test("sessions.get restores a transcript, and a session the store cannot read is
         ];
     });
     const client = clientFor(
-        createApp(services({ sessions: { list: async () => [], read, search: async () => [], prompts: async () => [], exists: async () => true } })),
+        createApp(
+            services({
+                sessions: {
+                    list: async () => [],
+                    read,
+                    readConversation: async () => undefined,
+                    sessionIdForConversation: async () => undefined,
+                    search: async () => [],
+                    prompts: async () => [],
+                    exists: async () => true,
+                },
+            }),
+        ),
     );
 
     // The tool cards ride along, which is what lets a reopened tab show the run and not just the prose.
@@ -1676,7 +1707,15 @@ test("agent.run pre-flights a dead resume target with a coded error instead of s
     const client = clientFor(
         createApp(
             services({
-                sessions: { list: async () => [], read: async () => [], search: async () => [], prompts: async () => [], exists: async () => false },
+                sessions: {
+                    list: async () => [],
+                    read: async () => [],
+                    readConversation: async () => undefined,
+                    sessionIdForConversation: async () => undefined,
+                    search: async () => [],
+                    prompts: async () => [],
+                    exists: async () => false,
+                },
                 agent: async function* () {
                     agentCalled = true;
                     yield { kind: "done" };
@@ -1917,6 +1956,11 @@ test("agents.search matches titles and later prompts, across the archive, and ne
                 sessions: {
                     list: async () => [],
                     read: async () => [],
+                    readConversation: async (dir) =>
+                        dir.endsWith("conv1")
+                            ? { sessionId: "replacement", messages: [{ role: "user" as const, text: "restored words" }] }
+                            : undefined,
+                    sessionIdForConversation: async (dir) => (dir.endsWith("conv1") ? "sess-1" : "sess-2"),
                     search: async () => [],
                     prompts: async (_root, id) => prompts[id] ?? [],
                     exists: async () => true,
@@ -1926,6 +1970,12 @@ test("agents.search matches titles and later prompts, across the archive, and ne
     );
     await runAgentTurn(client, { prompt: "fix the login bug", conversationId: "conv1", isolated: true });
     await runAgentTurn(client, { prompt: "tidy the readme", conversationId: "conv2", isolated: true });
+
+    expect(await client.agents.transcript({ id: "conv1" })).toEqual({
+        sessionId: "replacement",
+        messages: [{ role: "user", text: "restored words" }],
+    });
+    await expect(client.agents.transcript({ id: "nope" })).rejects.toThrow();
 
     // Under two characters the contract refuses: below that everything matches and the scan is pure cost.
     expect(await errorCode(client.agents.search({ query: "a" }))).toBe("BAD_REQUEST");

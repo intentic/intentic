@@ -639,8 +639,10 @@ const SYNC_PILL = `flex h-5 shrink-0 items-center gap-0.5 rounded px-1 text-2xs 
 const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group-hover/repo:opacity-100 max-md:opacity-100`;
 
 // A repo's own change count, for the row badge — every side it is SHOWING, so under an origin filter the badge
-// counts what the list holds rather than advertising rows the filter is hiding.
-const repoCount = (repo: RepoChanges): number => sidesOf(repo).reduce((total, section) => total + section.changes.length, 0);
+// counts what the list holds rather than advertising rows the filter is hiding. The daemon-truncated remainder
+// counts too: a repo with 30k deletions must read as 30k, not as the 500 rows that fit the payload.
+const repoCount = (repo: RepoChanges): number =>
+    sidesOf(repo).reduce((total, section) => total + section.changes.length, repo.truncated ?? 0);
 
 // Where a failed action gets drawn: the repo's own row, or the commit box for a commit that spans repos.
 const failureIn = (scope: string) => changes.failures.value.get(scope);
@@ -1128,6 +1130,14 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                             </div>
                         </template>
                     </template>
+                    <!-- The daemon caps how many rows one repo ships (a cloned monorepo, a mass delete); the
+                         remainder arrives as a count. Said plainly under the group, because a list that ends
+                         without it reads as complete — and whole-repo actions (commit all, discard repo) still
+                         cover every file, capped or not. -->
+                    <p v-if="(group.truncated ?? 0) > 0" class="py-1 pl-4 text-2xs text-subtle">
+                        …and {{ group.truncated }} more — showing the first {{ repoCount(group) - (group.truncated ?? 0) }}. Repo-wide commit
+                        and discard still cover everything.
+                    </p>
                 </div>
             </div>
         </div>

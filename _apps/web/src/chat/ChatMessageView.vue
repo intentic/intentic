@@ -342,6 +342,17 @@ const onBubbleScroll = (): void => {
     }
 };
 
+// A clamped bubble is its own expand target — the chip is only where that affordance is drawn, and a cut
+// prompt is a thing you reach for by pointing at the text, not by finding a 20px control. One direction
+// only: a body click that FOLDED the box would fire under a reader who is still inside it, and the chip is
+// on screen throughout. Guarded on a live selection so dragging text out of a prompt doesn't unfold it.
+const onBubbleClick = (): void => {
+    if (expanded.value || !overflowing.value || window.getSelection()?.isCollapsed === false) {
+        return;
+    }
+    expanded.value = true;
+};
+
 const toggleExpanded = (): void => {
     expanded.value = !expanded.value;
     // Fold back up showing the top, and do it NOW, before Vue re-applies the clamp: a leftover offset from
@@ -513,23 +524,38 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 >
                     <Icon name="pencil" class="text-2xs" />
                 </button>
+                <!-- Frame and scroller are two elements: the chip below must not scroll away with the text
+                     when an open bubble runs past its cap (see .chat-prompt-bubble). -->
                 <div
                     v-if="message.text"
-                    ref="bubble"
-                    class="chat-prompt-text chat-surface scrollbar-thin whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content"
+                    class="chat-prompt-bubble chat-surface rounded-lg"
                     :class="{ 'chat-prompt-clamped': overflowing && !expanded }"
-                    @scroll="onBubbleScroll"
                 >
-                    {{ message.text }}
+                    <div
+                        ref="bubble"
+                        class="chat-prompt-text scrollbar-thin whitespace-pre-wrap px-3 py-2 text-xs leading-relaxed text-content"
+                        :class="{ 'cursor-pointer': overflowing && !expanded }"
+                        @scroll="onBubbleScroll"
+                        @click="onBubbleClick"
+                    >
+                        {{ message.text }}
+                    </div>
+                    <!-- Only for a prompt the clamp actually cut. Opening does NOT unpin: wanting the whole
+                         prompt while its answer streams beneath is exactly what the pin is for — past its cap
+                         the open bubble scrolls internally instead of taking the panel over. -->
+                    <button
+                        v-if="overflowing"
+                        type="button"
+                        class="chat-prompt-toggle"
+                        :aria-expanded="expanded"
+                        :aria-label="expanded ? 'Collapse message' : 'Expand message'"
+                        v-tooltip.left="expanded ? 'Show less' : 'Show more'"
+                        @click="toggleExpanded"
+                    >
+                        <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                    </button>
                 </div>
             </div>
-            <!-- Only for a prompt the clamp actually cut. Opening does NOT unpin: wanting the whole prompt
-                 while its answer streams beneath is exactly what the pin is for — past its cap the open
-                 bubble scrolls internally instead of taking the panel over (see .chat-prompt-open). -->
-            <button v-if="overflowing" type="button" class="composer-ghost h-5 gap-1 px-1.5 text-2xs" @click="toggleExpanded">
-                {{ expanded ? `Show less` : `Show more` }}
-                <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-            </button>
             <!-- The nudge trailer: this turn was kept going by folded acknowledgments the pin skipped, and the
                  pinned prompt must not pretend otherwise. In the user's own words (the last nudge) — the acks
                  are lexicon entries, so the line stays short. In flow whenever nudges exist rather than only

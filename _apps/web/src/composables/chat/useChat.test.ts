@@ -506,8 +506,8 @@ describe(`abandoned drafts`, () => {
     });
 });
 
-/* Opening a card on the fleet board replays the agent's transcript from /sessions/:id — the Claude Code Agent
- * SDK's own session store, which holds every session that loop minted. Gating the replay on `provider ===
+/* Opening a card on the fleet board resolves the agent's current transcript by durable conversation/worktree
+ * identity — the Claude Code Agent SDK store may hold several runtime sessions for it. Gating replay on `provider ===
  * 'claude'` opened a finished Gemini (or Kimi) agent as an empty "start a conversation with Google" panel while
  * its whole transcript sat readable on the daemon: neither provider has a native runtime, so both ALWAYS run the
  * Claude Code loop whatever harness the registry recorded. */
@@ -518,11 +518,12 @@ describe(`opening a fleet agent`, () => {
         // Nothing is running for the agent, so the attach probe stands down and the stored transcript is what
         // paints — the finished-lane case the board's cards are mostly made of.
         sandboxRequestMock.mockImplementation((path: string) => {
-            if (path.startsWith(`/sessions/`)) {
+            if (path.endsWith(`/transcript`)) {
                 return Promise.resolve({
                     ok: true,
                     json: () =>
                         Promise.resolve({
+                            sessionId: `current-sdk-session`,
                             messages: [
                                 { role: `user`, text: `What model are you?` },
                                 { role: `assistant`, text: `Gemini.` },
@@ -541,22 +542,24 @@ describe(`opening a fleet agent`, () => {
         const conversation = openAgentConversation({ id: `a1`, sessionId: `sess-g`, provider: `gemini`, harness: `native` });
 
         await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
-        expect(sandboxRequestMock).toHaveBeenCalledWith(`/sessions/sess-g`);
+        expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/a1/transcript`);
         expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `Gemini.` });
+        expect(conversation.session.value?.id).toBe(`current-sdk-session`);
     });
 
     it(`replays a Codex agent routed under the Claude Code harness`, async () => {
         const conversation = openAgentConversation({ id: `a2`, sessionId: `sess-c`, provider: `codex`, harness: `claude-code` });
 
         await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
-        expect(sandboxRequestMock).toHaveBeenCalledWith(`/sessions/sess-c`);
+        expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/a2/transcript`);
+        expect(conversation.session.value?.id).toBe(`current-sdk-session`);
     });
 
     it(`leaves a NATIVE Codex agent alone — its thread lives in Codex's own rollout store, not the SDK's`, async () => {
         const conversation = openAgentConversation({ id: `a3`, sessionId: `sess-n`, provider: `codex`, harness: `native` });
 
         await vi.waitFor(() => expect(sandboxRequestMock).toHaveBeenCalledWith(`/agent/attach`, expect.anything()));
-        expect(sandboxRequestMock).not.toHaveBeenCalledWith(`/sessions/sess-n`);
+        expect(sandboxRequestMock).not.toHaveBeenCalledWith(`/agents/a3/transcript`);
         expect(conversation.messages.value).toHaveLength(0);
     });
 });

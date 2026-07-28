@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
+import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { discoverRepos, hasGitEntry } from "../workspace/repo-discovery.js";
@@ -209,10 +210,59 @@ export const createWorkspaceHistory = (
         }
     };
 
+    // A repo the user deleted must STAY deleted: its parked git dir moves to <historyRoot>/trash (kept, not
+    // erased — it may hold unpushed commits) so nothing re-adopts a future dir of the same name and heal stops
+    // resurrecting it. Its scope repo is deliberately NOT reaped — deleted repos stay on the Checkpoints
+    // timeline, diffable and restorable, and a restore recreates the worktree (restoreScope) which a later
+    // snapshot cycle then re-discovers as an ordinary in-tree repo.
+    const reapGitDir = async (entry: string, reason: string): Promise<void> => {
+        const trashRoot = join(historyRoot, "trash");
+        await mkdir(trashRoot, { recursive: true });
+        await rename(join(historyRoot, "gits", entry), join(trashRoot, `${entry}-${Date.now()}`));
+        logger.info({ repo: decodeURIComponent(entry), reason }, "history: reaped a deleted repo's git dir");
+    };
+
+    // Is the worktree down to deletion remnants? A deletion (local rm carried in by desktop sync, an agent's
+    // rm -rf) removes every tracked file but CANNOT remove what sync ignores — node_modules, dist, the .git
+    // pointer — so "the directory still exists" proves nothing. This readdir is the cheap gate in front of the
+    // real check below: a live repo virtually always has a plain file or dir at its root, so the healthy case
+    // costs one readdir and no git spawn.
+    const looksEmptied = async (worktree: string): Promise<boolean> => {
+        const entries = await readdir(worktree, { withFileTypes: true }).catch(() => []);
+        return entries.every((entry) => entry.name.startsWith(".") || IGNORED_DIRS.has(entry.name));
+    };
+
+    // The definitive read: "deleted" ⇔ the index names files and NONE of them is on disk. An empty index is a
+    // fresh repo, not a deletion. Early exit on the first file found keeps a merely dotfile-rooted repo cheap.
+    const deletionState = async (gitDir: string, worktree: string): Promise<"live" | "fresh" | "deleted"> => {
+        const { stdout } = await git(["ls-files", "-z"], { cwd: worktree, env: { GIT_DIR: gitDir, GIT_WORK_TREE: worktree } });
+        const paths = stdout.split("\0").filter((path) => path !== "");
+        if (paths.length === 0) {
+            return "fresh";
+        }
+        for (const path of paths) {
+            if (await exists(join(worktree, path))) {
+                return "live";
+            }
+        }
+        return "deleted";
+    };
+
+    // A deletion seen while the pointer is still in place waits out one full snapshot interval before it reaps
+    // (git-dir entry → when it was first seen empty): a huge clone's checkout can momentarily be file-less, and
+    // real files appearing by the next cycle clears the suspicion. A deliberate deletion only gets more deleted.
+    const emptySince = new Map<string, number>();
+    const REAP_GRACE_MS = SNAPSHOT_INTERVAL_MS * 1.5;
+
     // Pre-discovery heal for every DAEMON-created repo (/history/gits/*): a repo whose in-worktree .git the
     // agent deleted would otherwise vanish from .git-based discovery — and with it from history. Repos the
     // AGENT created (in-worktree .git dirs, no /history/gits entry) that lose their .git intentionally stop
     // being repos: their files dissolve into the root scope, which still covers them.
+    //
+    // Healing is for ACCIDENTS, so it first rules out intent. Rewriting the pointer into a deletion's remnant
+    // dir used to resurrect the repo as thousands of phantom deletions, forever — sync could never remove the
+    // ignored remnants keeping the dir alive, and every cycle re-adopted them. A worktree that is gone, or
+    // holds none of its tracked files, is a deletion: reap the git dir instead of healing it.
     const healGitPointers = async (): Promise<void> => {
         for (const entry of await readdir(join(historyRoot, "gits")).catch(() => [])) {
             const id = decodeURIComponent(entry);
@@ -220,8 +270,39 @@ export const createWorkspaceHistory = (
                 continue;
             }
             const worktree = join(workspace.root, id);
-            if ((await exists(worktree)) && !(await hasGitEntry(worktree))) {
-                await writeFile(join(worktree, ".git"), `gitdir: ${join(historyRoot, "gits", entry)}\n`);
+            const gitDir = join(historyRoot, "gits", entry);
+            try {
+                if (!(await exists(worktree))) {
+                    emptySince.delete(entry);
+                    await reapGitDir(entry, "worktree deleted");
+                    continue;
+                }
+                const hasPointer = await hasGitEntry(worktree);
+                if (!(await looksEmptied(worktree)) || (await deletionState(gitDir, worktree)) !== "deleted") {
+                    emptySince.delete(entry);
+                    if (!hasPointer) {
+                        await writeFile(join(worktree, ".git"), `gitdir: ${gitDir}\n`);
+                    }
+                    continue;
+                }
+                // Deleted. Without a pointer the intent is doubly clear — reap now. With one still in place,
+                // hold for a grace cycle, then reap AND drop the pointer so discovery stops finding a repo
+                // whose git dir is gone.
+                if (!hasPointer) {
+                    emptySince.delete(entry);
+                    await reapGitDir(entry, "worktree emptied");
+                    continue;
+                }
+                const since = emptySince.get(entry);
+                if (since === undefined) {
+                    emptySince.set(entry, Date.now());
+                } else if (Date.now() - since >= REAP_GRACE_MS) {
+                    emptySince.delete(entry);
+                    await reapGitDir(entry, "worktree emptied");
+                    await rm(join(worktree, ".git"), { force: true });
+                }
+            } catch (error) {
+                logger.warn({ err: error, repo: id }, "history: git-dir heal failed");
             }
         }
     };

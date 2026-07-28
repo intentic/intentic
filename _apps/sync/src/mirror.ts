@@ -6,6 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import { unregisterAutostart } from "./autostart.js";
 import { type Log, type MirroredPort, mirrorLogPath, mirrorPidPath, readConfig, type SyncConfig, writeConfig } from "./config.js";
+import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { ensureMutagen, ensureSyncSession, forwardSessionName, mutagenForwardArgs, runMutagen } from "./mutagen.js";
 import { sshAlias } from "./ssh.js";
 
@@ -22,6 +23,11 @@ export type CliLauncher = readonly [string, ...string[]];
 // How often the watcher re-reads the sandbox's ports. Fast enough that a just-started dev server is reachable
 // before the user finishes alt-tabbing to the browser; slow enough to be free.
 const POLL_MS = 5000;
+
+// Every Nth port poll also runs the git bridge (git-bridge.ts): no .git file-syncs anymore, so this is how the
+// sandbox's commits reach the local clones. Each pass shells ssh + git over the tunnel per repo, so it earns a
+// once-a-minute cadence where the ports poll is a single cheap HTTP read.
+const BRIDGE_EVERY_TICKS = 12;
 
 // Consecutive definitive token rejections before the watcher treats the enrollment as revoked ("Disable sync"
 // in the browser, or a recreated sandbox that lost the enrollment) and tears itself down. Revocation never
@@ -177,7 +183,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     log(`mirror watcher started (pid ${process.pid}); polling ${first.sandboxUrl}/ports every ${POLL_MS / 1000}s`);
 
     let rejectedPolls = 0;
-    for (;;) {
+    for (let tick = 0; ; tick += 1) {
         try {
             const config = await readConfig();
             const ports = config.syncToken === undefined ? [] : await fetchWorkspacePorts(config.sandboxUrl, config.syncToken);
@@ -185,6 +191,9 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
             const next = await reconcileForwards(mutagenExecutor(mutagen, config), config.mirroredPorts ?? [], ports, log);
             if (!sameMirrorSet(config.mirroredPorts ?? [], next)) {
                 await writeConfig({ ...config, mirroredPorts: next });
+            }
+            if (tick % BRIDGE_EVERY_TICKS === 0) {
+                runGitBridge(realBridgeExec, config, log);
             }
         } catch (error) {
             // Revocation is definitive: after REVOKED_POLLS consecutive rejections, stop for good — drop the
