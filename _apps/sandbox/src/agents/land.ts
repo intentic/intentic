@@ -225,7 +225,19 @@ export const landAgent = async (
                 }
                 const from = await anchorOf(worktree, main, tip, composed.landedTip, base, git);
                 if (tip === from) {
-                    return; // Everything already landed for this repo.
+                    /* Everything already landed for this repo. Usually that is a recorded fact (landedTip is
+                     * the tip) and this land is a true no-op — but when ANCESTRY says so, the registry is
+                     * hearing it for the first time: the main line merged the branch, or fast-forwarded onto
+                     * it, since the last land — an agent told to "land on main" that ran the merge itself.
+                     * That is a real outcome and must be persisted like one: with landedTip left behind, the
+                     * review re-offers the whole delta as "not landed" forever and a conflict report from
+                     * before the merge never clears. No landedHead/landedAt, as with the net-zero delta:
+                     * nothing here arrived as uncommitted content to attribute. */
+                    if ((composed.landedTip ?? base) !== tip) {
+                        next = { repo, base, landedTip: tip };
+                        changed = true;
+                    }
+                    return;
                 }
                 changed = true;
                 // How this delta gets marked accounted-for — every ending below that puts it in the main tree

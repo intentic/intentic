@@ -207,6 +207,35 @@ test("work the agent committed onto the main line itself lands as a no-op instea
     expect(result.repos[0]?.landedTip).toBe(await sh(conversation.cwd, "rev-parse", "HEAD"));
 });
 
+/* The other road work reaches main without landing: the BRANCH ITSELF gets merged — an agent told to "land
+ * on main" runs the merge with its own git, or the user merges the branch by hand. Ancestry then says
+ * everything is merged (the merge-base IS the tip), so land rightly applies nothing — but it must still SAY
+ * SO: with landedTip left behind, the review counts every file as "not landed" forever, Land now stays armed
+ * doing nothing, and a conflict report from before the merge never clears. */
+test("work that reached main by merging the branch advances landedTip as a real outcome", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const recorded = entryFor(conversation.repos);
+    await writeFile(join(conversation.cwd, "agent.ts"), "agent work\n");
+    await sh(conversation.cwd, "add", "-A");
+    await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "agent");
+    const tip = await sh(conversation.cwd, "rev-parse", "HEAD");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "--no-ff", "-m", "land it", tip);
+
+    const result = await landAgent(worktrees, recorded);
+
+    expect(result.conflicts).toBeUndefined();
+    expect(result.landed).toBe(true);
+    // A real outcome, not a silent no-op: changed makes the caller persist the tip and clear old conflicts.
+    expect(result.changed).toBe(true);
+    expect(result.repos[0]?.landedTip).toBe(tip);
+    // Nothing was applied and nothing was disturbed — main is exactly where its merge commit left it.
+    expect(await sh(work, "status", "--porcelain")).toBe("");
+
+    // With the tip recorded, the NEXT land is the true no-op: no frame, no status flip.
+    const again = await landAgent(worktrees, entryFor(result.repos));
+    expect(again.changed).toBe(false);
+});
+
 test("a delta half-landed by hand lands its remainder, and reports no conflict for the half already there", async () => {
     const { work, worktrees, conversation } = await setup();
     const recorded = entryFor(conversation.repos);
