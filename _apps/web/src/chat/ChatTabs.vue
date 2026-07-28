@@ -275,7 +275,8 @@ const focusedTabId = (): string | undefined => {
 };
 
 // --- Hover preview --------------------------------------------------------------------------------
-// A tab wears its title clipped to max-w-40 on top of the 40-char derivation, so hovering reveals the FULL
+// A tab wears its title clipped to whatever width its row gave it, on top of the 40-char derivation, so
+// hovering reveals the FULL
 // derived title and, under it, the first message that title was derived from. The card itself is the shared
 // HoverCard — the Changes panel's agent chips raise the same one for the same session.
 const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
@@ -515,7 +516,15 @@ const openHistory = (event: Event): void => {
             class="shrink-0"
         />
         <!-- Tabs fill one row, then wrap to a second; only past two rows does the strip scroll vertically. It
-             never scrolls sideways, so no tab hides off the right edge. One row still measures exactly a
+             never scrolls sideways, so no tab hides off the right edge.
+             A tab is elastic, not a fixed 10rem box: basis-40 is what it ASKS for (so tabs wrap at the same
+             counts they always did), and `grow` then hands each row's leftover width back to the tabs ON THAT
+             ROW instead of leaving a gap between the last tab and the ✚ / history pair. Rows therefore differ
+             in tab width — a row of two divides more slack than a row of four — which is the trade for every
+             row spending its width on TITLE rather than on emptiness. max-w-72 is the ceiling: a derived title
+             is 40 chars, which fits inside 18rem at text-2xs, so past that a lone tab would only stretch its
+             own whitespace. Below it, min-w-20 still floors a squeezed strip.
+             One row still measures exactly a
              .view-header (a 26px tab row plus its py-1 is under the 2.25rem floor), so the shell-wide header
              line reads unbroken until there are genuinely more tabs than fit; from the second row on, this bar
              alone stands taller (.view-header-wrap, styles.css). max-h-16 is those two rows WITH the padding —
@@ -557,7 +566,7 @@ const openHistory = (event: Event): void => {
                         v-else
                         type="button"
                         :data-chat-tab="c.conversationId"
-                        class="chat-tab group flex min-w-20 max-w-40 shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-2xs"
+                        class="chat-tab group flex min-w-20 max-w-72 shrink-0 grow basis-40 items-center gap-1.5 rounded-md px-2 py-1 text-2xs"
                         :class="{ 'chat-tab-on': activeId === c.conversationId }"
                         @click="emit('select', c.conversationId)"
                         @dblclick.prevent.stop="beginRename(c.conversationId)"
