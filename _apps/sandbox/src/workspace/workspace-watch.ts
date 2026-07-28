@@ -2,7 +2,7 @@ import { sep } from "node:path";
 import { watch } from "chokidar";
 import type { Logger } from "pino";
 import { IQ_DIR } from "@intentic/iq-engine";
-import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, toRelPath } from "@intentic/workspace-ignore";
+import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath, toRelPath } from "@intentic/workspace-ignore";
 
 // Live file-change push. The agent edits /work out-of-band (its own Write/Edit/Bash tools — never the daemon's
 // HTTP routes), so nothing else can tell the browser its view went stale. A single filesystem watcher on the
@@ -37,12 +37,18 @@ const isDaemonStatePath = (abs: string): boolean => {
     return index !== -1 && DAEMON_STATE_DIRS.has(segments.slice(index, index + 2).join("/"));
 };
 
-export const isWatchIgnored = (abs: string): boolean => {
+export const isWatchIgnored = (root: string, abs: string): boolean => {
     const segments = abs.split(sep);
-    // The browser-login profile churns constantly (Chromium rewrites Cookies etc.), and agent worktrees are
-    // whole checkouts an agent edits at full speed — never watch either, or every write fires a tree refetch.
+    // The browser-login profile churns constantly (Chromium rewrites Cookies etc.), agent worktrees are whole
+    // checkouts an agent edits at full speed, and a reference clone into the shelf writes thousands of files in
+    // one burst — never watch any of them, or every write fires a tree refetch. The shelf is root-level-only,
+    // so its predicate needs the root-relative path, not the absolute one.
     return (
-        segments.some((segment) => IGNORE_SEGMENTS.has(segment)) || isBrowserProfilePath(abs) || isAgentWorktreePath(abs) || isDaemonStatePath(abs)
+        segments.some((segment) => IGNORE_SEGMENTS.has(segment)) ||
+        isBrowserProfilePath(abs) ||
+        isAgentWorktreePath(abs) ||
+        isReferencePath(toRelPath(root, abs)) ||
+        isDaemonStatePath(abs)
     );
 };
 
@@ -76,7 +82,7 @@ export const createWorkspaceWatch = (root: string, logger?: Logger): WorkspaceWa
         }
     };
 
-    const watcher = watch(root, { ignoreInitial: true, followSymlinks: false, ignored: (path) => isWatchIgnored(path) });
+    const watcher = watch(root, { ignoreInitial: true, followSymlinks: false, ignored: (path) => isWatchIgnored(root, path) });
     watcher.on("all", (_event, abs) => {
         pending.add(toRelPath(root, abs));
         timer ??= setTimeout(flush, DEBOUNCE_MS);

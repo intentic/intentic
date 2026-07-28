@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { IGNORED_DIRS } from "@intentic/workspace-ignore";
+import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { isManifest, managerFromPackageJson, recipeFor, type SetupRecipe } from "@intentic/workspace-setup";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 
@@ -89,8 +89,9 @@ const packageManagerField = async (dir: string, names: readonly string[]): Promi
 };
 
 // Every project under `root`. The walk STOPS at the first manifest on a branch: a monorepo installs once from
-// its root, so descending into its members would report N projects that are really one. Hidden dirs and the
-// junk denylist (node_modules, dist, …) are never descended into — same pruning as the tree walk.
+// its root, so descending into its members would report N projects that are really one. Hidden dirs, the
+// junk denylist (node_modules, dist, …) and the reference shelf are never descended into — same pruning as the
+// tree walk (a cloned reference repo is consulted, not installed, so its missing node_modules must not nag).
 export const discoverProjects = async (root: string): Promise<WorkspaceProject[]> => {
     const projects: WorkspaceProject[] = [];
     let visited = 0;
@@ -110,7 +111,13 @@ export const discoverProjects = async (root: string): Promise<WorkspaceProject[]
         }
         await Promise.all(
             entries
-                .filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && !IGNORED_DIRS.has(entry.name))
+                .filter(
+                    (entry) =>
+                        entry.isDirectory() &&
+                        !entry.name.startsWith(".") &&
+                        !IGNORED_DIRS.has(entry.name) &&
+                        !(rel === "" && entry.name === REFERENCE_DIR),
+                )
                 .map((entry) => walk(join(dir, entry.name), rel === "" ? entry.name : `${rel}/${entry.name}`, depth + 1)),
         );
     };

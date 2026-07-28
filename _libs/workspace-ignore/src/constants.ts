@@ -27,6 +27,18 @@ export const IGNORED_DIRS = new Set([
     ".gradle",
 ]);
 
+// The workspace's reference shelf: a reserved TOP-LEVEL directory where the agent or the user drops material
+// that is consulted, not worked on — a third-party repo cloned to compare against, vendored docs, a tarball.
+// Everything under it stays readable and addressable by full path, but it is out of the workspace's focus:
+// grayed + lazy-loaded in the tree, skipped by default search, never discovered as a workspace repo, never
+// dependency-scanned or remote-synced, never snapshotted by history. The classification is an ATTENTION
+// boundary, not an access one — same philosophy as the rest of this package.
+export const REFERENCE_DIR = "refs";
+
+// Root-relative paths only: the predicate matches the FIRST segment, so a repo's own `refs/` subdir
+// ("myrepo/refs") stays ordinary content. Callers holding an absolute path must relativize first (toRelPath).
+export const isReferencePath = (relPath: string): boolean => relPath.split(/[\\/]/).find((segment) => segment.length > 0) === REFERENCE_DIR;
+
 // The persisted browser-login profiles (.intentic/browser/<platform>) are a Chromium user-data dir: thousands of
 // constantly-rewritten files (Cookies, Login Data, …). Treated as ignored so the tree grays + lazy-loads the
 // subtree instead of eagerly walking it, and the file watcher skips its churn. Not a read block — its files are

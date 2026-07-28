@@ -40,6 +40,17 @@ test("sweep enforces .gitignore + junk dirs (incl. .git) by default and always s
     expect(fullPaths.some((path) => path.startsWith(".intentic/iq"))).toBe(false); // …but never the index dir
 });
 
+test("the reference shelf is skipped by default and reachable via --ignored, like the junk layer", async () => {
+    await mkdir(join(root, "refs/react/src"), { recursive: true });
+    await writeFile(join(root, "refs/react/src/scheduler.ts"), "export const schedule = 1;\n");
+    const swept = (await sweep(root, false)).map((entry) => entry.path);
+    // Consultation material must not outrank (or even sit beside) the workspace's own code in default search.
+    expect(swept).not.toContain("refs/react/src/scheduler.ts");
+    // …but it is an attention boundary, not a floor: --ignored (and explicit path scoping with it) reaches it.
+    const full = (await sweep(root, true)).map((entry) => entry.path);
+    expect(full).toContain("refs/react/src/scheduler.ts");
+});
+
 test("the agent plane's byproducts are excluded, its manifests are not", async () => {
     await writeFile(join(root, ".intentic/settings.json"), '{ "theme": "dark" }\n');
     await mkdir(join(root, ".intentic/claude/projects"), { recursive: true });

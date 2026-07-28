@@ -58,6 +58,9 @@ test("intentic ships its own prompt as the base, with the harness guidance after
     expect(text).toContain("AskUserQuestion");
     expect(text).toContain("TaskCreate");
     expect(text).toContain("mcp__web__browser_take_screenshot");
+    // The reference shelf is a workspace convention, not a model trait: every scanner excludes /work/refs, so
+    // this line is the only thing that stops the agent treating a clone dropped there as project code.
+    expect(text).toContain("`refs/`");
     expect(text.endsWith("extra")).toBe(true);
 });
 
@@ -74,6 +77,7 @@ test("claude keeps the CLI's preset and hands the same guidance to its append", 
     expect(append).toContain("AskUserQuestion");
     expect(append).toContain("EnterPlanMode");
     expect(append).toContain("TaskCreate");
+    expect(append).toContain("`refs/`");
     // The browser guidance names the directory the redirect hook actually enforces, so the agent is told a fact
     // rather than a convention — a turn whose screenshots land elsewhere costs it a failed Read and a `find /`.
     expect(append).toContain("/work/.intentic/browser/output");

@@ -4,7 +4,7 @@ import { access, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
-import { IGNORED_DIRS } from "@intentic/workspace-ignore";
+import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { discoverRepos, hasGitEntry } from "../workspace/repo-discovery.js";
@@ -82,9 +82,16 @@ const COMMON_EXCLUDES = [
     ".gradle/",
 ];
 // The root scope additionally skips every discovered repo dir (each repo is its own scope — also avoids git's
-// embedded-repo gitlink handling) and /.intentic/ (daemon-internal manifests + credentials). Repos can appear
-// anywhere under /work, so the list is DERIVED from the live repo set, not static.
-export const rootExcludes = (repoIds: readonly string[]): string[] => [...repoIds.map((id) => `/${id}/`), "/.intentic/", ...COMMON_EXCLUDES];
+// embedded-repo gitlink handling), /.intentic/ (daemon-internal manifests + credentials), and the reference
+// shelf (/refs/ — dropped clones are re-fetchable consultation material, not workspace state worth snapshotting;
+// its nested repos are never in repoIds because discovery skips the shelf). Repos can appear anywhere under
+// /work, so the list is DERIVED from the live repo set, not static.
+export const rootExcludes = (repoIds: readonly string[]): string[] => [
+    ...repoIds.map((id) => `/${id}/`),
+    "/.intentic/",
+    `/${REFERENCE_DIR}/`,
+    ...COMMON_EXCLUDES,
+];
 
 // Converge the root exclude list onto both consumers — the real /work repo's git dir (git/root-repo.ts; its
 // info/ is shared with every agent worktree) and the history root scope's — so history and the Changes review

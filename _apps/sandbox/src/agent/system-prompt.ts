@@ -45,6 +45,18 @@ const CHECKLIST_GUIDANCE =
     "task to in_progress before you start it and to completed the moment it is done. The user watches this list to see " +
     "where you are, so keep it current as you go rather than updating it in a batch at the end.";
 
+// The workspace's reference shelf (REFERENCE_DIR in @intentic/workspace-ignore; every scanner honours it).
+// Named here because the convention only works if the model knows it: without this line, a discovered
+// /work/refs gets treated as workspace code the moment a task touches it, and a "clone X so we can study it"
+// lands the clone at the top level, where it becomes a sidebar repo, a setup nag, and a sync target. One
+// stable sentence buys both the exclusion and the correct behaviour when the user points into the shelf.
+const REFERENCE_GUIDANCE =
+    "The workspace's top-level `refs/` directory is a reference shelf: repos cloned or files dropped there are " +
+    "consultation material (compare against, analyze, cite by full path), NOT part of the project. It is excluded " +
+    "from workspace views, default search, dependency setup, and sync on purpose — read it when a task points " +
+    "there, never edit it, and never treat its contents as workspace code. When asked to fetch an external " +
+    "codebase for study, clone it into `refs/` rather than the workspace root.";
+
 // The browser tools are deferred (see isolatedBrowserSpec — ~20 tools is too much to pin into every prompt),
 // and a model that does not know a browser exists never ToolSearches for one: it reaches for curl, gives up on
 // anything client-rendered, or installs its own. Naming the server is what makes the capability discoverable.
@@ -117,11 +129,12 @@ export interface SdkSystemPromptInput {
 }
 
 // This harness's own guidance, in most-stable-first order, with whatever the turn composed after it. Shared by
-// both built-in bases so they differ only in the base itself — the guidance describes widgets THIS app renders,
-// which is true whichever prompt the agent is wearing.
+// both built-in bases so they differ only in the base itself — the guidance describes widgets THIS app renders
+// and conventions THIS workspace enforces, both of which hold whichever prompt the agent is wearing.
 const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
     ...(unattended ? [] : [INTERACTIVE_GUIDANCE]),
     CHECKLIST_GUIDANCE,
+    REFERENCE_GUIDANCE,
     browserGuidance(browserOutputDir),
     ...(append === undefined ? [] : [append]),
 ];

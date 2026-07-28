@@ -47,6 +47,15 @@ test("junk dirs are never descended into — a vendored manifest is not a projec
     expect(await discoverProjects(root)).toEqual([]);
 });
 
+test("the reference shelf is never descended into — a cloned reference repo must not nag for an install", async () => {
+    const root = await workspace();
+    await write(root, "refs/react/package.json");
+    await write(root, "refs/react/yarn.lock", "");
+    // A repo's OWN refs dir is not the shelf and scans normally.
+    await write(root, "app/refs/package.json");
+    expect((await discoverProjects(root)).map((project) => project.dir)).toEqual(["app/refs"]);
+});
+
 test("two unrelated dropped projects are found independently", async () => {
     const root = await workspace();
     await write(root, "api/package.json");

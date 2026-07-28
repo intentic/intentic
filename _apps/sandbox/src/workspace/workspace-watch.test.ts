@@ -5,7 +5,9 @@ import { join, sep } from "node:path";
 import { expect, test } from "vitest";
 import { createWorkspaceWatch, isWatchIgnored } from "./workspace-watch.js";
 
-const at = (...segments: string[]): string => join(sep, "work", ...segments);
+const ROOT = join(sep, "work");
+const at = (...segments: string[]): string => join(ROOT, ...segments);
+const watchIgnored = (abs: string): boolean => isWatchIgnored(ROOT, abs);
 const waitFor = async (predicate: () => boolean, timeoutMs: number): Promise<void> => {
     const deadline = Date.now() + timeoutMs;
     while (!predicate() && Date.now() < deadline) {
@@ -14,26 +16,30 @@ const waitFor = async (predicate: () => boolean, timeoutMs: number): Promise<voi
 };
 
 test("isWatchIgnored skips junk dirs (incl. .git) + browser profiles, but not source or former-secret files", () => {
-    expect(isWatchIgnored(at("app", "node_modules", "dep", "index.js"))).toBe(true);
-    expect(isWatchIgnored(at("app", ".git", "config"))).toBe(true);
-    expect(isWatchIgnored(at("app", "dist", "bundle.js"))).toBe(true);
+    expect(watchIgnored(at("app", "node_modules", "dep", "index.js"))).toBe(true);
+    expect(watchIgnored(at("app", ".git", "config"))).toBe(true);
+    expect(watchIgnored(at("app", "dist", "bundle.js"))).toBe(true);
     // The browser-login profile churns credential files constantly — still never watched (event-spam guard).
-    expect(isWatchIgnored(at(".intentic", "browser", "reddit", "Default", "Cookies"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "browser", "reddit", "Default", "Cookies"))).toBe(true);
     // Agent worktrees are full checkouts an agent edits at speed — never watched; sibling .claude config is.
-    expect(isWatchIgnored(at("app", ".claude", "worktrees", "fix", "src", "main.ts"))).toBe(true);
-    expect(isWatchIgnored(at("app", ".claude", "settings.json"))).toBe(false);
+    expect(watchIgnored(at("app", ".claude", "worktrees", "fix", "src", "main.ts"))).toBe(true);
+    expect(watchIgnored(at("app", ".claude", "settings.json"))).toBe(false);
     // The daemon's own state: the iq index's WAL churns for minutes through a rebuild's re-embed, and the agent
     // transcripts churn through every turn — watching either feeds the daemon (and every browser) its own noise.
-    expect(isWatchIgnored(at(".intentic", "iq", "index.db-wal"))).toBe(true);
-    expect(isWatchIgnored(at(".intentic", "claude", "projects", "-work", "session.jsonl"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "iq", "index.db-wal"))).toBe(true);
+    expect(watchIgnored(at(".intentic", "claude", "projects", "-work", "session.jsonl"))).toBe(true);
     // The manifests next to them still push: that's how another member's capability write reaches this browser.
-    expect(isWatchIgnored(at(".intentic", "capabilities.json"))).toBe(false);
-    expect(isWatchIgnored(at(".intentic", "environment.Dockerfile"))).toBe(false);
-    expect(isWatchIgnored(at(".intentic", "approvals", "wake-1.json"))).toBe(false);
+    expect(watchIgnored(at(".intentic", "capabilities.json"))).toBe(false);
+    expect(watchIgnored(at(".intentic", "environment.Dockerfile"))).toBe(false);
+    expect(watchIgnored(at(".intentic", "approvals", "wake-1.json"))).toBe(false);
     // No security floor: secret files are watched now, so a change to .env pushes a refresh like any other file.
-    expect(isWatchIgnored(at("app", ".env"))).toBe(false);
-    expect(isWatchIgnored(at("app", ".env.example"))).toBe(false);
-    expect(isWatchIgnored(at("app", "src", "main.ts"))).toBe(false);
+    expect(watchIgnored(at("app", ".env"))).toBe(false);
+    expect(watchIgnored(at("app", ".env.example"))).toBe(false);
+    expect(watchIgnored(at("app", "src", "main.ts"))).toBe(false);
+    // The reference shelf: a clone into it writes thousands of files in one burst — never watched. Only the
+    // ROOT-level refs/ is the shelf; a repo's own refs dir pushes like any source dir.
+    expect(watchIgnored(at("refs", "react", "packages", "scheduler", "index.js"))).toBe(true);
+    expect(watchIgnored(at("app", "refs", "notes.md"))).toBe(false);
 });
 
 test("createWorkspaceWatch emits visible root-relative paths, skips node_modules, and coalesces a burst", async () => {

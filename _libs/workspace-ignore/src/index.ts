@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join, posix, relative, sep } from "node:path";
 import ignore, { type Ignore } from "ignore";
-import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath } from "./constants.js";
+import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath } from "./constants.js";
 
 // The single source of "what the workspace views gray out". Both the file tree (walkWorkspaceTree) and content
 // search (searchWorkspaceFiles) build an IgnoreScope from here and consult it per entry, so the two views agree on
@@ -17,7 +17,7 @@ import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath } from "./const
 // they live in ./constants (no node deps) so the platform's browser bundle can import them via
 // `@intentic/workspace-ignore/constants`. Re-exported here so the daemon keeps importing from the package root,
 // and the node-based .gitignore scope layers on top.
-export { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath } from "./constants.js";
+export { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath, REFERENCE_DIR } from "./constants.js";
 
 // A .gitignore matcher rooted at `base` (root-relative, forward-slash). Patterns in it apply to paths relative
 // to that directory.
@@ -33,11 +33,11 @@ export type IgnoreScope = {
 
 const makeScope = (layers: readonly GitignoreLayer[]): IgnoreScope => ({
     isIgnored(name, relPath, isDir) {
-        // Junk denylist (dirs) + the browser-profile and agent-worktree subtrees.
+        // Junk denylist (dirs) + the browser-profile, agent-worktree, and reference-shelf subtrees.
         if (isDir && IGNORED_DIRS.has(name)) {
             return true;
         }
-        if (isBrowserProfilePath(relPath) || isAgentWorktreePath(relPath)) {
+        if (isBrowserProfilePath(relPath) || isAgentWorktreePath(relPath) || isReferencePath(relPath)) {
             return true;
         }
         // .gitignore, nearest (deepest) matcher with an opinion wins.

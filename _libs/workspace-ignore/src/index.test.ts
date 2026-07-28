@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { createIgnoreScope, isAgentWorktreePath, isBrowserProfilePath } from "./index.js";
+import { createIgnoreScope, isAgentWorktreePath, isBrowserProfilePath, isReferencePath } from "./index.js";
 
 test("the browser-login profile subtree (auth cookies) is treated as ignored, but the rest of .intentic isn't", () => {
     expect(isBrowserProfilePath(".intentic/browser/reddit/Default/Cookies")).toBe(true);
@@ -18,6 +18,14 @@ test("agent worktrees (.claude/worktrees — throwaway full checkouts) are treat
     expect(isAgentWorktreePath("repo/worktrees/main")).toBe(false);
 });
 
+test("the reference shelf is the ROOT-level refs/ only — a repo's own refs dir stays ordinary content", () => {
+    expect(isReferencePath("refs")).toBe(true);
+    expect(isReferencePath("refs/react/packages/scheduler/index.js")).toBe(true);
+    expect(isReferencePath("myrepo/refs/notes.md")).toBe(false);
+    expect(isReferencePath("refactor/src/main.ts")).toBe(false);
+    expect(isReferencePath("")).toBe(false);
+});
+
 test("IgnoreScope.isIgnored grays junk dirs (incl. .git) + browser profiles; leaves tracked source & lone secrets alone", () => {
     const scope = createIgnoreScope();
     // Junk denylist.
@@ -30,6 +38,11 @@ test("IgnoreScope.isIgnored grays junk dirs (incl. .git) + browser profiles; lea
     // The browser-profile subtree is ignored (grayed + lazy) regardless of the inner file names.
     expect(scope.isIgnored("browser", ".intentic/browser", true)).toBe(true);
     expect(scope.isIgnored("Cookies", ".intentic/browser/reddit/Default/Cookies", false)).toBe(true);
+    // The reference shelf is ignored as a subtree (grayed + lazy, skipped by default search); a repo's own
+    // refs/ dir is not the shelf.
+    expect(scope.isIgnored("refs", "refs", true)).toBe(true);
+    expect(scope.isIgnored("scheduler.js", "refs/react/packages/scheduler.js", false)).toBe(true);
+    expect(scope.isIgnored("refs", "myrepo/refs", true)).toBe(false);
     // Agent worktrees are ignored as a subtree; sibling .claude config stays tracked.
     expect(scope.isIgnored("worktrees", "repo/.claude/worktrees", true)).toBe(true);
     expect(scope.isIgnored("land.ts", "repo/.claude/worktrees/fix/src/land.ts", false)).toBe(true);
