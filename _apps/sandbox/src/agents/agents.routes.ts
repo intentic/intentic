@@ -93,6 +93,16 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
+        // Legal mid-turn too (no notRunning): the override is read at turn COMPLETION, so flipping it while
+        // the agent works is exactly "hold THIS turn's work for review" — the press that matters most.
+        autoLand: i.autoLand.handler(async ({ input }) => {
+            entryOf(input.id);
+            const summary = await services.agents.setAutoLand(input.id, input.autoLand);
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+            }
+            return summary;
+        }),
         // The read marker behind the card's unread badge. Daemon-side, so the badge stays cleared after a
         // browser cache wipe and clears on the other devices the moment one of them opens the agent.
         seen: i.seen.handler(async ({ input }) => {
@@ -187,8 +197,13 @@ export const createAgentsRoutes = (services: Services) => {
             // "Landed" only when there is landed WORK to stand behind it: a clean result with a cumulative
             // diff means everything the agent produced is accounted for in the main tree, however it got
             // there; a clean result with no output at all settles as idle (finish's no-outcome default) —
-            // stamping that "landed" is how an agent that landed nothing used to wear the badge.
-            await services.agents.finish(input.id, Date.now(), result.landed ? (result.diff.files > 0 ? "landed" : undefined) : "conflict");
+            // stamping that "landed" is how an agent that landed nothing used to wear the badge. A `measure`
+            // land that held an outstanding delta settles as `ready` — the deliberate-land queue, not a refusal.
+            await services.agents.finish(
+                input.id,
+                Date.now(),
+                result.held === true ? "ready" : result.landed ? (result.diff.files > 0 ? "landed" : undefined) : "conflict",
+            );
             if (result.landed && result.changed) {
                 // The main tree changed under the user — same attribution convention as git.discard.
                 services.history.notifyUserWrite();
@@ -211,6 +226,7 @@ export const createAgentsRoutes = (services: Services) => {
                 // A `merge` land's report of the paths it left carrying conflict markers — dropping this is
                 // how the panel's "Landed with N files to finish" strip went permanently dark.
                 ...(result.resolving !== undefined ? { resolving: result.resolving } : {}),
+                ...(result.held === true ? { held: true } : {}),
             };
         }),
         discard: i.discard.handler(async ({ input }) => {

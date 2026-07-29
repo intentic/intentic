@@ -2,6 +2,7 @@ import { oc } from "@orpc/contract";
 import { AgentTranscriptSchema } from "../events.js";
 import {
     AgentArchiveSchema,
+    AgentAutoLandSchema,
     AgentChangesSchema,
     AgentFileDiffQuerySchema,
     AgentIdSchema,
@@ -52,6 +53,10 @@ export const agentsContract = {
     get: oc.route({ method: "GET", path: "/agents/{id}" }).input(AgentIdSchema).output(AgentSummarySchema),
     transcript: oc.route({ method: "GET", path: "/agents/{id}/transcript" }).input(AgentIdSchema).output(AgentTranscriptSchema),
     rename: oc.route({ method: "POST", path: "/agents/{id}/rename" }).input(AgentRenameSchema).output(AgentSummarySchema),
+    // This agent's own land-at-completion posture — an override of the sandbox-wide `autoLand` setting; null
+    // clears it back to "inherit". Legal mid-turn on purpose: the setting is read at turn COMPLETION, so
+    // flipping it while the agent works is exactly "hold THIS turn's work for review", the press that matters.
+    autoLand: oc.route({ method: "POST", path: "/agents/{id}/auto-land" }).input(AgentAutoLandSchema).output(AgentSummarySchema),
     seen: oc.route({ method: "POST", path: "/agents/{id}/seen" }).input(AgentIdSchema).output(AgentSummarySchema),
     seenAll: oc.route({ method: "POST", path: "/agents/seen" }).output(AgentsListSchema),
     diff: oc.route({ method: "GET", path: "/agents/{id}/diff" }).input(AgentIdSchema).output(AgentChangesSchema),
