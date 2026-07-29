@@ -134,6 +134,32 @@ export interface ChatMessage {
     readonly usage?: ChatUsage;
 }
 
+/* THE INTERACTIVE CARDS a turn can park on. They differ in what they ask — a plan to approve, questions to
+ * answer, a tool to permit — and in nothing else: each carries a `requestId` the daemon un-parks on, each is
+ * `pending` until the user answers it, and each can be `cancelled` by a Stop instead. Every site that has to
+ * reach "whatever card this bubble is waiting on" derives from this list, so a fourth kind is one edit here
+ * rather than a hunt through the three places that used to spell them out. */
+export const CARD_KINDS = ["plan", "question", "permission"] as const;
+export type CardKind = (typeof CARD_KINDS)[number];
+
+// Whether a bubble is holding the turn open on a card the user hasn't answered.
+export const isAwaitingDecision = (message: ChatMessage): boolean => CARD_KINDS.some((kind) => message[kind]?.status === `pending`);
+
+/* Freeze whatever cards a bubble is parked on as `cancelled` — the user stopped the turn out from under the
+ * question instead of answering it. Returns the SAME message when it holds none, so a Stop mid-transcript
+ * re-renders only the bubbles it actually changed. */
+export const withCancelledCards = (message: ChatMessage): ChatMessage => {
+    if (!isAwaitingDecision(message)) {
+        return message;
+    }
+    return {
+        ...message,
+        ...(message.plan?.status === `pending` ? { plan: { ...message.plan, status: `cancelled` } } : {}),
+        ...(message.question?.status === `pending` ? { question: { ...message.question, status: `cancelled` } } : {}),
+        ...(message.permission?.status === `pending` ? { permission: { ...message.permission, status: `cancelled` } } : {}),
+    };
+};
+
 // One exchange: the user's prompt and everything the agent produced in reply, up to the next prompt. The
 // transcript renders a group per turn so the prompt can pin to the top of the scroller while its answer scrolls
 // beneath it — the group is what bounds the pin, so the next prompt pushes this one out instead of stacking on

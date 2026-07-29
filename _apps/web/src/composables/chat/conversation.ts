@@ -27,7 +27,7 @@ import { computed, ref, watch } from "vue";
 import { sandboxRequest } from "../sandbox/sandboxClient";
 import { errorMessage } from "../useAsyncAction";
 import { mentionPaths } from "./useMentions";
-import { type ChatAttachment, type ChatMessage, transcriptOf } from "./transcript";
+import { type CardKind, type ChatAttachment, type ChatMessage, isAwaitingDecision, transcriptOf, withCancelledCards } from "./transcript";
 import { readTranscript, saveTranscript } from "./transcriptCache";
 import {
     appendMessage,
@@ -334,6 +334,15 @@ export interface SessionRef {
     readonly harness: AgentHarness;
 }
 
+/* WHETHER A SESSION SURVIVES THE NEXT SEND. A provider mints a session on one runtime under one credential, so
+ * all three have to still match the selection for it to resume; any one of them moving retires it and the next
+ * turn starts a fresh session seeded with the transcript so far. Written once because two places ask it about
+ * two different things — the composer's "switched to…" divider asks BEFORE the send (is there anything to
+ * announce), send() asks at the moment of truth — and a drift between them would show a divider promising a
+ * fresh session for a turn that then resumed, or say nothing before one that didn't. */
+const resumes = (session: SessionRef | undefined, selection: { agent: AgentProvider; account: string | undefined; harness: AgentHarness }): boolean =>
+    session !== undefined && session.provider === selection.agent && session.account === selection.account && session.harness === selection.harness;
+
 // One in-flight turn's streaming context: which assistant bubble frames write into (`id` is mutable — a plan
 // card nulls it mid-turn, and each `usage` frame nulls it at the turn boundary, so the continuation / the
 // next steered turn on the same stream opens a fresh bubble), plus the provider/account serving the turn —
@@ -353,6 +362,57 @@ interface TurnContext {
 type AttachHead = Extract<AttachFrame, { kind: "attached" }>;
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/* THE TURN AS THE DAEMON RECEIVES IT. Every field here is a rule about what the daemon then does — an omitted
+ * `model` makes it resolve its own live-catalog default, an omitted `harness` means the native loop, `history`
+ * and `sessionId` are mutually exclusive (seed a fresh session, or resume an existing one), `isolated` decides
+ * whether the turn runs in this conversation's worktree or on /work. Assembled as a value instead of inline in
+ * send() so those rules can be read — and tested — without a conversation and a fetch wrapped around them.
+ * Undefined keys drop out at JSON.stringify, which is what makes "omitted" expressible at all. */
+export const turnRequestBody = (input: {
+    readonly text: string;
+    readonly conversationId: string;
+    readonly title: string | null;
+    readonly isolated: boolean;
+    readonly mode: PermissionMode;
+    readonly settings: TurnSettings;
+    // The session this turn resumes, when the selection still matches the runtime/account that minted it.
+    readonly resume: SessionRef | undefined;
+    // The transcript seeding a fresh-after-switch session; empty whenever `resume` carries one.
+    readonly history: readonly { readonly role: "user" | "assistant"; readonly text: string }[];
+    // Uploaded attachments plus @-mentioned workspace paths — the daemon resolves both the same way.
+    readonly attachmentPaths: readonly string[];
+    readonly editorContext: EditorContext | undefined;
+}) => ({
+    prompt: input.text,
+    // The display title (derived at send or user-chosen) seeds a fresh registry entry, so a renamed draft
+    // keeps its title through its first turn; existing entries keep theirs.
+    ...(input.title !== null ? { title: input.title } : {}),
+    ...(input.attachmentPaths.length > 0 ? { attachments: input.attachmentPaths } : {}),
+    agent: input.settings.agent,
+    // The stable conversation identity + the worktree opt-in: an isolated turn runs in this conversation's
+    // own git worktree (branch agent/<conversationId>) instead of /work.
+    conversationId: input.conversationId,
+    ...(input.isolated ? { isolated: true } : {}),
+    // `native` is the daemon's default, so only `claude-code` rides the wire — that's what routes codex/grok
+    // through the translator under the Claude Code loop.
+    ...(input.settings.harness === `claude-code` ? { harness: input.settings.harness } : {}),
+    // Which connected account of the provider serves the turn; omitted ⇒ the daemon picks the first.
+    account: input.settings.account,
+    sessionId: input.resume?.id,
+    ...(input.history.length > 0 ? { history: input.history } : {}),
+    // An empty selection (a catalog not yet loaded) is dropped from the wire; the daemon then resolves the
+    // provider's live catalog default server-side.
+    model: input.settings.model || undefined,
+    effort: input.settings.effort,
+    thinking: input.settings.thinking,
+    // The turn's STARTING permission posture. The daemon hands it straight to the SDK, so all four modes are
+    // real: 'plan' proposes-then-executes, 'default' prompts per tool on the permission card, 'acceptEdits'
+    // auto-accepts edits, 'bypassPermissions' asks nothing.
+    permissionMode: input.mode,
+    // The opt-in editor-context chip: the file (and selection) the user chose to attach.
+    ...(input.editorContext !== undefined ? { editorContext: input.editorContext } : {}),
+});
 
 /* Usage-limit auto-resume, as this window sees it. The daemon owns the resume itself (limit-resume.ts fires
  * a minute after the provider's reset instant, so a skewed clock can't retry into the same closed window);
@@ -390,11 +450,7 @@ export class Conversation {
     // True while a turn is paused on a card awaiting the user's input (a pending plan, question, or tool
     // permission). The attach stream stays open during this, so `streaming` is still true — but the agent
     // isn't generating, so the composer should drop the Stop spinner and show a ready Send (Claude Code style).
-    readonly awaitingDecision = computed(() =>
-        this.messages.value.some(
-            (message) => message.plan?.status === `pending` || message.question?.status === `pending` || message.permission?.status === `pending`,
-        ),
-    );
+    readonly awaitingDecision = computed(() => this.messages.value.some(isAwaitingDecision));
 
     // The message carrying a plan currently awaiting the user's decision, if any. Lets the composer route
     // typed feedback into a plan rejection (reject-with-feedback) instead of starting a fresh turn.
@@ -606,13 +662,8 @@ export class Conversation {
     // notice says what the next message starts. send() freezes it into the transcript at the segment cut.
     private refreshSwitchNotice(): void {
         const session = this.session.value;
-        const resumes =
-            session !== undefined &&
-            session.provider === this.provider.value &&
-            session.account === this.account.value &&
-            session.harness === this.harness.value;
         const started = this.messages.value.length > 0 || session !== undefined;
-        if (resumes || !started) {
+        if (resumes(session, this.turnSettings()) || !started) {
             this.dropSwitchNotice();
             return;
         }
@@ -733,25 +784,15 @@ export class Conversation {
         if ((text.length === 0 && attachments.length === 0) || this.streaming.value) {
             return;
         }
-        // A pending reattach probe must not race this send's own stream over the same run.
+        // A pending reattach probe must not race this send's own stream over the same run, and the resume this
+        // send supersedes must not fire one later either (the daemon clears its own side at turn start).
         this.probe?.abort();
-        // A turn is starting: whatever interrupted the last one is history, so this one's clean end may flush.
-        this.interrupted = false;
-
-        this.error.value = null;
-        // A fresh turn supersedes a pending usage-limit resume — the daemon clears its side at turn start the
-        // same way, so the offer banner and the probe must not outlive the failure they described.
-        this.limitResume.value = undefined;
         clearTimeout(this.limitReattachTimer);
         // The session is resumed only while the selection still matches the runtime/account that minted it — a
         // switched provider or account retires it, and the transcript so far (captured before this turn's
         // bubbles land) seeds the replacement session on the new runtime.
-        const agent = settings.agent;
-        const harness = settings.harness;
-        const account = settings.account;
         const session = this.session.value;
-        const resume =
-            session !== undefined && session.provider === agent && session.account === account && session.harness === harness ? session : undefined;
+        const resume = resumes(session, settings) ? session : undefined;
         if (resume === undefined) {
             this.session.value = undefined;
             // A turn that can't resume runs under a NEW sdk session, so it will run its Bash in a different
@@ -772,14 +813,14 @@ export class Conversation {
         // typing indicator shows immediately; a plan card clears it so the post-decision continuation streams
         // into a new bubble below the card) — plus the provider/account attribution for the session frame.
         this.openBubble();
-        const turn: TurnContext = { userMessageId, provider: agent, account, harness };
+        const turn: TurnContext = { userMessageId, provider: settings.agent, account: settings.account, harness: settings.harness };
         // This turn starts from the user's pick; the previous turn's live posture (a plan it entered, a mode an
-        // approval landed in) is history, and the daemon will echo this one back at init.
+        // approval landed in) is history, and the daemon will echo this one back at init. Only this path clears
+        // it — a REATTACHED turn is already running under a posture of its own, and blanking the composer's
+        // live pill until the next `mode` frame would be a lie in the other direction.
         this.liveMode.value = undefined;
-        this.streaming.value = true;
-        this.turnStartedAt.value = Date.now();
         const controller = new AbortController();
-        this.inflight = controller;
+        this.beginTurn(controller, Date.now());
 
         // Uploaded attachments plus @-mentioned workspace paths — one wire field, the daemon resolves both the
         // same way (workspace-relative → absolute, folded into the prompt as a Read-tool note). Mentions never
@@ -793,40 +834,20 @@ export class Conversation {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
                 signal: controller.signal,
-                body: JSON.stringify({
-                    prompt: text,
-                    // The display title (derived above or user-chosen) seeds a fresh registry entry, so a
-                    // renamed draft keeps its title through its first turn; existing entries keep theirs.
-                    ...(this.title.value !== null ? { title: this.title.value } : {}),
-                    ...(attachmentPaths.length > 0 ? { attachments: attachmentPaths } : {}),
-                    agent,
-                    // The stable conversation identity + the worktree opt-in: an isolated turn runs in this
-                    // conversation's own git worktree (branch agent/<conversationId>) instead of /work.
-                    conversationId: this.conversationId,
-                    ...(this.isolated.value ? { isolated: true } : {}),
-                    // The harness (loop) for the turn; `native` is the daemon's default, so only `claude-code`
-                    // rides the wire — that's what routes codex/grok through the translator under the Claude Code loop.
-                    ...(harness === `claude-code` ? { harness } : {}),
-                    // Which connected account of the provider serves the turn; omitted (undefined dropped by
-                    // JSON.stringify) ⇒ the daemon picks the provider's first account.
-                    account,
-                    // The resume rides only while the session still matches the selection; JSON.stringify
-                    // drops the undefined key.
-                    sessionId: resume?.id,
-                    // The transcript seed for a fresh-after-switch session; mutually exclusive with sessionId.
-                    ...(history.length > 0 ? { history } : {}),
-                    // An empty selection (a catalog not yet loaded) is dropped from the wire; the daemon then
-                    // resolves the provider's live catalog default server-side.
-                    model: settings.model || undefined,
-                    effort: settings.effort,
-                    thinking: settings.thinking,
-                    // The turn's STARTING permission posture. The daemon hands it straight to the SDK, so all
-                    // four modes are real: 'plan' proposes-then-executes, 'default' prompts per tool on the
-                    // permission card, 'acceptEdits' auto-accepts edits, 'bypassPermissions' asks nothing.
-                    permissionMode: this.mode.value,
-                    // The opt-in editor-context chip: the file (and selection) the user chose to attach.
-                    ...(editorContext !== undefined ? { editorContext } : {}),
-                }),
+                body: JSON.stringify(
+                    turnRequestBody({
+                        text,
+                        conversationId: this.conversationId,
+                        title: this.title.value,
+                        isolated: this.isolated.value,
+                        mode: this.mode.value,
+                        settings,
+                        resume,
+                        history,
+                        attachmentPaths,
+                        editorContext,
+                    }),
+                ),
             });
             if (!response.ok) {
                 throw new Error(
@@ -845,13 +866,37 @@ export class Conversation {
                 this.error.value = errorMessage(err, `Chat failed.`);
             }
         } finally {
-            this.flushType();
-            this.inflight = null;
-            this.streaming.value = false;
-            this.turnStartedAt.value = undefined;
-            this.persist();
-            void this.drainQueue();
+            this.endTurn();
         }
+    }
+
+    /* WHAT IT MEANS FOR A TURN TO BE LIVE IN THIS WINDOW, opened and closed in one place. Two paths run one —
+     * send() starts a turn, reattach() adopts one already running daemon-side — and each wrote these same
+     * assignments out longhand. The pair that has to move together is `streaming` + `inflight`: every
+     * affordance the composer offers keys off them, so a path that set one without the other would leave a
+     * Stop button attached to nothing. */
+    private beginTurn(controller: AbortController, startedAt: number): void {
+        this.inflight = controller;
+        this.streaming.value = true;
+        // Whatever interrupted the last turn is history, so THIS one's clean end may flush the queue.
+        this.interrupted = false;
+        this.error.value = null;
+        // A live turn supersedes a pending usage-limit resume — the daemon cleared its side at this turn's
+        // start — so the offer banner must not outlive the failure it described, whether the scheduler fired
+        // the resume, another window did, or the user simply sent something over there.
+        this.limitResume.value = undefined;
+        this.turnStartedAt.value = startedAt;
+    }
+
+    // Settle it: drain whatever the typewriter still holds, drop the streaming affordances, mirror the finished
+    // transcript, and let anything queued behind the turn go.
+    private endTurn(): void {
+        this.flushType();
+        this.inflight = null;
+        this.streaming.value = false;
+        this.turnStartedAt.value = undefined;
+        this.persist();
+        void this.drainQueue();
     }
 
     /* The composer's one send path — the message is accepted whatever the conversation is doing, and the
@@ -1101,15 +1146,7 @@ export class Conversation {
         if (!this.awaitingDecision.value) {
             return;
         }
-        const cancel = (message: ChatMessage): ChatMessage => {
-            const cancelled: Pick<ChatMessage, "plan" | "question" | "permission"> = {
-                ...(message.plan?.status === `pending` ? { plan: { ...message.plan, status: `cancelled` } } : {}),
-                ...(message.question?.status === `pending` ? { question: { ...message.question, status: `cancelled` } } : {}),
-                ...(message.permission?.status === `pending` ? { permission: { ...message.permission, status: `cancelled` } } : {}),
-            };
-            return Object.keys(cancelled).length > 0 ? { ...message, ...cancelled } : message;
-        };
-        this.state.value = { ...this.state.value, messages: this.state.value.messages.map(cancel) };
+        this.state.value = { ...this.state.value, messages: this.state.value.messages.map(withCancelledCards) };
     }
 
     // Aborts this tab's attach stream; whatever streamed so far stays in the transcript. The run itself is
@@ -1145,16 +1182,7 @@ export class Conversation {
                 return undefined;
             }
             engaged = true;
-            this.inflight = controller;
-            this.streaming.value = true;
-            // This window is now watching a live turn — its clean end may flush the queue (see send).
-            this.interrupted = false;
-            this.error.value = null;
-            // A live turn supersedes a pending usage-limit resume (the daemon cleared its side at this turn's
-            // start) — the offer banner must not outlive the failure, whether the scheduler fired the resume,
-            // another window did, or the user simply sent something over there.
-            this.limitResume.value = undefined;
-            this.turnStartedAt.value = head.startedAt;
+            this.beginTurn(controller, head.startedAt);
             // The restored copy of THIS run, when the transcript already carries one, is adopted rather than
             // appended alongside — see adoptRunningTurn.
             const userMessageId = this.adoptRunningTurn(head.prompt) ?? this.append({ role: `user`, text: head.prompt });
@@ -1166,14 +1194,27 @@ export class Conversation {
         } finally {
             this.probe = undefined;
             if (engaged) {
-                this.flushType();
-                this.inflight = null;
-                this.streaming.value = false;
-                this.turnStartedAt.value = undefined;
-                this.persist();
-                void this.drainQueue();
+                this.endTurn();
             }
         }
+    }
+
+    /* THE ONE PATH EVERY CARD ANSWER TAKES. All three kinds (plan, question, permission) are decided the same
+     * way — un-park the turn on the daemon's side channel, and only once it has actually taken the answer
+     * freeze that answer into the transcript — and they were written out once per method, which is how the
+     * "could not record it" wording came to differ four ways for one failure. Ordering is the part worth
+     * holding in one place: the daemon goes first, because a card frozen against a reply that 404'd reads as
+     * answered while the agent is still waiting on it.
+     *
+     * Returns whether the decision landed. What happens NEXT genuinely differs per card — a notice, the
+     * rejection feedback as a user bubble, stopping the turn — so the callers keep their own tails. */
+    private async decide(id: number, body: AgentReply, failure: string, decided: Pick<ChatMessage, CardKind>): Promise<boolean> {
+        if (!(await this.postTurnControl(`/agent/reply`, body))) {
+            this.error.value = failure;
+            return false;
+        }
+        this.attachCard(id, decided);
+        return true;
     }
 
     // Answers a pending plan card. The turn is parked on ExitPlanMode, so on approval it executes in `mode`
@@ -1184,12 +1225,15 @@ export class Conversation {
         if (plan?.status !== `pending`) {
             return;
         }
-        const ok = await this.reply({ kind: `plan`, requestId: plan.requestId, approve, mode, feedback });
-        if (!ok) {
-            this.error.value = `Could not record your plan decision — the turn may have ended.`;
+        const landed = await this.decide(
+            message.id,
+            { kind: `plan`, requestId: plan.requestId, approve, mode, feedback },
+            `Could not record your plan decision — the turn may have ended.`,
+            { plan: { ...plan, status: approve ? `approved` : `rejected` } },
+        );
+        if (!landed) {
             return;
         }
-        this.attachCard(message.id, { plan: { ...plan, status: approve ? `approved` : `rejected` } });
         this.appendNotice(approve ? `Plan approved.` : `Kept planning.`);
         // Keep the rejection feedback visible as the user's turn — otherwise the typed text vanishes from the
         // transcript even though it was sent to the agent.
@@ -1208,13 +1252,15 @@ export class Conversation {
         if (question?.status !== `pending`) {
             return;
         }
-        const ok = await this.reply({ kind: `question`, requestId: question.requestId, answers });
-        if (!ok) {
-            this.error.value = `Could not submit your answers — the turn may have ended.`;
-            return;
+        const landed = await this.decide(
+            message.id,
+            { kind: `question`, requestId: question.requestId, answers },
+            `Could not submit your answers — the turn may have ended.`,
+            { question: { ...question, status: `answered`, answers } },
+        );
+        if (landed) {
+            void this.drainQueue();
         }
-        this.attachCard(message.id, { question: { ...question, status: `answered`, answers } });
-        void this.drainQueue();
     }
 
     // Dismisses a pending question AND stops the turn. This TELLS the daemon (cancelled), rather than just
@@ -1230,12 +1276,15 @@ export class Conversation {
         if (question?.status !== `pending`) {
             return;
         }
-        const ok = await this.reply({ kind: `question`, requestId: question.requestId, cancelled: true });
-        if (!ok) {
-            this.error.value = `Could not dismiss the question — the turn may have ended.`;
+        const landed = await this.decide(
+            message.id,
+            { kind: `question`, requestId: question.requestId, cancelled: true },
+            `Could not dismiss the question — the turn may have ended.`,
+            { question: { ...question, status: `cancelled` } },
+        );
+        if (!landed) {
             return;
         }
-        this.attachCard(message.id, { question: { ...question, status: `cancelled` } });
         this.appendNotice(`Question dismissed.`);
         // After the card is frozen, so it reads back as dismissed rather than as a card the Stop caught pending.
         this.stop();
@@ -1251,25 +1300,21 @@ export class Conversation {
         if (permission?.status !== `pending`) {
             return;
         }
-        const ok = await this.reply({ kind: `permission`, requestId: permission.requestId, decision, feedback });
-        if (!ok) {
-            this.error.value = `Could not record your decision — the turn may have ended.`;
+        const status = decision === `deny` ? `denied` : decision === `always` ? `always` : `allowed`;
+        const landed = await this.decide(
+            message.id,
+            { kind: `permission`, requestId: permission.requestId, decision, feedback },
+            `Could not record your decision — the turn may have ended.`,
+            { permission: { ...permission, status } },
+        );
+        if (!landed) {
             return;
         }
-        const status = decision === `deny` ? `denied` : decision === `always` ? `always` : `allowed`;
-        this.attachCard(message.id, { permission: { ...permission, status } });
         if (decision === `deny` && feedback === undefined) {
             this.stop();
             return;
         }
         void this.drainQueue();
-    }
-
-    // Un-parks the turn's pending card on the daemon's side channel. Returns whether it succeeded — a 404
-    // means nothing holds that id any more (already answered, or the turn ended), which the callers surface
-    // rather than silently freezing a card the agent is still waiting on.
-    private async reply(body: AgentReply): Promise<boolean> {
-        return this.postTurnControl(`/agent/reply`, body);
     }
 
     // Posts a turn-control message to the platform side-channel, which relays it to the sandbox daemon.
@@ -1497,92 +1542,101 @@ export class Conversation {
     // transcript rule.
     private applyTurnError(error: Extract<TurnEffect, { kind: "error" }>, turn: TurnContext): void {
         const { message, code } = error;
-        if (code === `claude-reauth`) {
-            /* The Claude credential is dead and the daemon refused the turn before running any of it. Nothing
-             * was processed, so the message is not part of the conversation yet — pull the bubble back out of
-             * the transcript and return it to the queue, which is exactly what the queue means (written, not
-             * delivered) and what makes reconnecting REPLAY it instead of asking the user to retype into every
-             * chat that bounced. `interrupted` holds the drain until then, so it can't immediately re-fail. */
-            this.requeueUndelivered(turn.userMessageId);
-            this.interrupted = true;
-            const provider = this.provider.value;
-            const accounts = providerAccounts.value[provider] ?? [];
-            const accountId = this.account.value ?? accounts[0]?.id;
-            const markReauth = (account: OauthAccount): OauthAccount =>
-                account.id === accountId ? { ...account, needsReauth: true, detail: message } : account;
-            providerAccounts.value = { ...providerAccounts.value, [provider]: accounts.map(markReauth) };
-            // Muted, like session-not-found: the condition has a one-click fix sitting right above the composer
-            // (ChatPanel's reauth banner, which this needsReauth flag raises), so the red line would overstate it.
-            this.appendNotice(`${message} Your message is held here and goes as soon as the account is back.`);
-            return;
+        switch (code) {
+            case `claude-reauth`:
+                /* The Claude credential is dead and the daemon refused the turn before running any of it. Nothing
+                 * was processed, so the message is not part of the conversation yet — pull the bubble back out of
+                 * the transcript and return it to the queue, which is exactly what the queue means (written, not
+                 * delivered) and what makes reconnecting REPLAY it instead of asking the user to retype into every
+                 * chat that bounced. `interrupted` holds the drain until then, so it can't immediately re-fail. */
+                this.requeueUndelivered(turn.userMessageId);
+                this.interrupted = true;
+                this.markAccountReauth(message);
+                // Muted, like session-not-found: the condition has a one-click fix sitting right above the composer
+                // (ChatPanel's reauth banner, which this needsReauth flag raises), so the red line would overstate it.
+                this.appendNotice(`${message} Your message is held here and goes as soon as the account is back.`);
+                return;
+            case `codex-reauth`:
+                // The daemon rejected this account's credential before the turn. Same badge as claude-reauth (the
+                // account IS connected, its grant is dead), but the red line too: there is no held message to
+                // replay here, so nothing else would tell the user the turn didn't happen.
+                this.markAccountReauth(message);
+                this.error.value = message;
+                return;
+            case `session-not-found`:
+                // The sandbox no longer has this chat's transcript — drop the dead session so the next send starts
+                // a fresh one instead of replaying the failure forever. A muted notice, not the error ref: the
+                // condition is self-healed, so the red line + error tab status would overstate it.
+                this.session.value = undefined;
+                this.appendNotice(
+                    `This chat's server-side history is gone (the sandbox was rebuilt or the session was deleted). Your last message wasn't processed — send it again; a fresh session starts, seeded with this window's transcript.`,
+                );
+                return;
+            case `codex-advisory`:
+                // Codex warned about the turn it then ran to completion (its pinned CLI has no metadata for a model
+                // the subscription already serves, so the turn runs on fallback context/compaction limits). The red
+                // line said the turn had failed, directly under the answer it had just produced. Muted, like the
+                // other codes that describe a turn rather than end one.
+                this.appendNotice(message);
+                return;
+            case `rate_limit`:
+                this.applyLimitError(error);
+                return;
+            case `grok-model-invalid`:
+            case `codex-model-invalid`:
+                // The daemon rejected the pinned model. Grok self-heals mid-turn (re-prompting with a model xAI
+                // named), so its code reaches us only when that failed; Codex can't (OpenAI names no alternative),
+                // so its code always lands here. Either way: surface it (red) and reload the provider's live catalog
+                // so the picker — and any conversation still pinning the dead id — repoints to what the daemon
+                // actually serves. Dynamic import breaks the static cycle (useChat imports this module).
+                void import(`./useChat`).then((chat) => chat.loadProviderModels(this.provider.value));
+                this.error.value = message;
+                return;
+            default:
+                // `subscription-required`, `agent-busy`, and every uncoded failure: the red line and nothing else.
+                this.error.value = message;
+                return;
         }
-        if (code === `session-not-found`) {
-            // The sandbox no longer has this chat's transcript — drop the dead session so the next send starts
-            // a fresh one instead of replaying the failure forever. A muted notice, not the error ref: the
-            // condition is self-healed, so the red line + error tab status would overstate it.
-            this.session.value = undefined;
-            this.appendNotice(
-                `This chat's server-side history is gone (the sandbox was rebuilt or the session was deleted). Your last message wasn't processed — send it again; a fresh session starts, seeded with this window's transcript.`,
-            );
-            return;
-        }
-        if (code === `codex-advisory`) {
-            // Codex warned about the turn it then ran to completion (its pinned CLI has no metadata for a model
-            // the subscription already serves, so the turn runs on fallback context/compaction limits). The red
-            // line said the turn had failed, directly under the answer it had just produced. Muted, like the
-            // other codes that describe a turn rather than end one.
+    }
+
+    // Light the reauth badge on the account this conversation's turn ran under, so the fix is offered where the
+    // user already is instead of waiting for the next status load to discover it. Both reauth codes mean the
+    // same thing about the account and differ only in how the turn itself reads, so they mark it the same way.
+    private markAccountReauth(detail: string): void {
+        const provider = this.provider.value;
+        const accounts = providerAccounts.value[provider] ?? [];
+        const accountId = this.account.value ?? accounts[0]?.id;
+        const marked = accounts.map((account: OauthAccount) => (account.id === accountId ? { ...account, needsReauth: true, detail } : account));
+        providerAccounts.value = { ...providerAccounts.value, [provider]: marked };
+    }
+
+    /* Claude's subscription usage cap, not a crash — the daemon's message renders as a muted notice (like
+     * session-not-found) rather than the red error ref, so it reads as "wait and retry" instead of "the
+     * workspace broke". The daemon says where the resume stands: "scheduled" means it re-runs this turn by
+     * itself a minute after the reset (arm the re-attach probe so this window renders the resumed run);
+     * "available" means it remembered the failed turn and enabling autoResumeOnLimit arms that same resume —
+     * surfaced as the composer's offer banner. The frame's own reset instant wins over the usage store's
+     * binding window (the frame names the pool that actually refused). */
+    private applyLimitError(error: Extract<TurnEffect, { kind: "error" }>): void {
+        const { message } = error;
+        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.account.value))?.resetsAt;
+        if (resetsAt === undefined) {
             this.appendNotice(message);
             return;
         }
-        if (code === `rate_limit`) {
-            // Claude's subscription usage cap, not a crash — render the daemon's message as a muted notice
-            // (like session-not-found) rather than the red error ref, so it reads as "wait and retry" instead
-            // of "the workspace broke". The daemon says where the resume stands: "scheduled" means it re-runs
-            // this turn by itself a minute after the reset (arm the re-attach probe so this window renders the
-            // resumed run); "available" means it remembered the failed turn and enabling autoResumeOnLimit
-            // arms that same resume — surfaced as the composer's offer banner. The frame's own reset instant
-            // wins over the usage store's binding window (the frame names the pool that actually refused).
-            const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.account.value))?.resetsAt;
-            if (error.autoResume === `scheduled` && resetsAt !== undefined) {
-                this.appendNotice(`${message} Auto-resume is on — this chat continues by itself around ${formatReset(resetsAt + RESUME_DELAY_S)}.`);
-                // The banner rides alongside the schedule, not instead of it: waiting is the default outcome,
-                // but another account of this provider can carry the turn NOW, and that offer belongs in the
-                // room while the timer runs.
-                this.limitResume.value = { resetsAt, scheduled: true, account: error.account };
-                this.scheduleLimitReattach(resetsAt);
-                return;
-            }
-            if (error.autoResume === `available` && resetsAt !== undefined) {
-                this.limitResume.value = { resetsAt, scheduled: false, account: error.account };
-            }
-            this.appendNotice(resetsAt !== undefined ? `${message} Resets ${formatReset(resetsAt)}.` : message);
+        if (error.autoResume === `scheduled`) {
+            this.appendNotice(`${message} Auto-resume is on — this chat continues by itself around ${formatReset(resetsAt + RESUME_DELAY_S)}.`);
+            // The banner rides alongside the schedule, not instead of it: waiting is the default outcome, but
+            // another account of this provider can carry the turn NOW, and that offer belongs in the room while
+            // the timer runs.
+            this.limitResume.value = { resetsAt, scheduled: true, account: error.account };
+            this.scheduleLimitReattach(resetsAt);
             return;
         }
-        if (code === `codex-reauth`) {
-            // The daemon rejected this account's credential before the turn. Surface the red line AND light the
-            // account's reauth badge immediately (the proactive probe confirms it on the next status load) by
-            // marking the matching account in the shared list — no daemon round-trip.
-            const provider = this.provider.value;
-            const accounts = providerAccounts.value[provider] ?? [];
-            const accountId = this.account.value ?? accounts[0]?.id;
-            const markReauth = (account: OauthAccount): OauthAccount =>
-                account.id === accountId ? { ...account, needsReauth: true, detail: message } : account;
-            providerAccounts.value = { ...providerAccounts.value, [provider]: accounts.map(markReauth) };
-            this.error.value = message;
-            return;
+        if (error.autoResume === `available`) {
+            this.limitResume.value = { resetsAt, scheduled: false, account: error.account };
         }
-        if (code === `grok-model-invalid` || code === `codex-model-invalid`) {
-            // The daemon rejected the pinned model. Grok self-heals mid-turn (re-prompting with a model xAI
-            // named), so its code reaches us only when that failed; Codex can't (OpenAI names no alternative),
-            // so its code always lands here. Either way: surface it (red) and reload the provider's live catalog
-            // so the picker — and any conversation still pinning the dead id — repoints to what the daemon
-            // actually serves. Dynamic import breaks the static cycle (useChat imports this module).
-            const provider = this.provider.value;
-            void import(`./useChat`).then((chat) => chat.loadProviderModels(provider));
-            this.error.value = message;
-            return;
-        }
-        this.error.value = message;
+        this.appendNotice(`${message} Resets ${formatReset(resetsAt)}.`);
     }
 
     // --- transcript writes the conversation itself makes (control actions, restores) --------------------------
@@ -1646,7 +1700,7 @@ export class Conversation {
     // Hang an interactive card (plan / question / permission) on a bubble — and, with the answered card, freeze
     // that answer into the transcript. One writer for all three: they differ in what they ask, not in how they
     // attach.
-    private attachCard(id: number, card: Pick<ChatMessage, "plan" | "question" | "permission">): void {
+    private attachCard(id: number, card: Pick<ChatMessage, CardKind>): void {
         this.state.value = {
             ...this.state.value,
             messages: this.state.value.messages.map((message) => (message.id === id ? { ...message, ...card } : message)),
