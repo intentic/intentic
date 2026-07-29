@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readdir, rm } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { promisify } from "node:util";
@@ -55,10 +55,56 @@ export interface IsolationPlan {
     readonly worktree: string;
     // The real workspace root, bound aside at MAIN_MOUNT.
     readonly root: string;
-    // Root-relative dirs owning an installed dependency tree, bound in from the main checkout ("" is the
+    // Root-relative dirs owning an installed dependency tree, overlaid from the main checkout ("" is the
     // root itself). Ordered shallowest-first so a parent's mount can never shadow a child's.
     readonly modules: readonly string[];
+    // Where this conversation's private overlay layers live — one upper/work pair per entry in `modules`.
+    // Outside the worktree on purpose: inside it, every write an install makes would show up as untracked
+    // content in the agent's own `git status` and ride its next commit.
+    readonly overlays: string;
 }
+
+// A conversation's overlay scratch, and the root they all sit under. Derived here for both the daemon (which
+// creates and later reclaims them) and the plan, so there is one path and not two conventions that can drift.
+export const overlaysRoot = (historyRoot: string): string => join(historyRoot, "overlays");
+export const overlaysDir = (historyRoot: string, id: string): string => join(overlaysRoot(historyRoot), id);
+
+/* WHY A DEPENDENCY TREE IS AN OVERLAY AND NOT A BIND.
+ *
+ * node_modules has to READ as the main checkout's — an isolated turn cannot afford its own install, and the
+ * bind that used to provide that also kept the same st_dev, which is what let pnpm hardlink into it.
+ *
+ * That last part is exactly the hole. pnpm's `injectWorkspacePackages` HARDLINKS each workspace package's
+ * source files into `node_modules/.pnpm/<pkg>@file+…/`, so `node_modules/…/ext-preview/src/x.ts` and the
+ * tracked `_extensions/preview/src/x.ts` in the MAIN checkout are one inode with two names. A hardlink has no
+ * side: anything writing through the node_modules name — an install, a build dropping a tsbuildinfo, a stray
+ * `cp` — rewrote the main checkout's tracked source, around the worktree, the agent branch and `land`. The
+ * same window let a half-finished install delete a shared package out from under every other conversation.
+ *
+ * An overlay keeps the read and drops the write-through: the main tree is the lowerdir, so reads cost nothing
+ * and see exactly what an install produced, while the first write to any path COPIES IT UP into this turn's
+ * own upper layer and every later write lands there. The main checkout's inode is never opened for writing,
+ * so there is nothing for a hardlink to carry back. The layers die with the conversation.
+ *
+ * The trade is deliberate: an upper layer is a different filesystem from the workspace, so a `pnpm install`
+ * INSIDE a turn copies where it used to hardlink. Slower, and only for the turns that install.
+ */
+// The "device" an overlay mount reports. Cosmetic, but it is what `mount` and `df` show, so name it after
+// what it is rather than leaving another anonymous `overlay` row in the sandbox's mount table.
+const OVERLAY_FS_NAME = "intentic-modules";
+
+/* Overlay options are ONE comma-separated argv word, and the kernel splits it on `,` and `:` with no
+ * escaping worth relying on. Every path here is composed from the workspace root, a repo-relative directory
+ * and the history root, so a comma or colon in any of them would produce a mount that fails loudly at build
+ * time (`set -e`) rather than one that silently mounts the wrong thing — which is why this refuses instead. */
+const overlayOptions = (lower: string, upper: string, work: string): string => {
+    for (const path of [lower, upper, work]) {
+        if (path.includes(",") || path.includes(":")) {
+            throw new Error(`turn isolation: overlay path cannot contain "," or ":" — ${path}`);
+        }
+    }
+    return `lowerdir=${lower},upperdir=${upper},workdir=${work}`;
+};
 
 // POSIX single-quote escaping for the bootstrap script — every path rides as one word.
 const quote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
@@ -88,8 +134,10 @@ const quote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
  *     "isolated" turn silently rewrites the real /work for everyone.
  *  2. the main root is bound aside BEFORE the shadow goes up; afterwards there is no path left that names it.
  *  3. the shadow.
- *  4. the shared/dependency re-binds, each sourced from MAIN_MOUNT — the only surviving handle on the real
- *     tree — and each preceded by `mkdir -p` because a fresh checkout has no mount point for an untracked dir.
+ *  4. the shared state and the dependency trees, each sourced from MAIN_MOUNT — the only surviving handle on
+ *     the real tree — and each preceded by `mkdir -p` because a fresh checkout has no mount point for an
+ *     untracked dir. `.intentic` is a BIND, because a transcript written there has to reach the daemon; a
+ *     dependency tree is an OVERLAY, because nothing written there should reach anyone (see overlayOptions).
  *
  * Every step is fatal (`set -e`): a half-built namespace is worse than no namespace, because the agent would
  * be writing into a tree that looks right and is not. The caller degrades to the plain unshadowed spawn only
@@ -106,13 +154,20 @@ export const isolationScript = (plan: IsolationPlan, trailer: string = ANCHOR_TR
         `mount --bind ${quote(plan.root)} ${quote(MAIN_MOUNT)}`,
         `mount --bind ${quote(plan.worktree)} ${quote(plan.root)}`,
     ];
-    const rebind = (rel: string): void => {
-        const target = join(plan.root, rel);
-        lines.push(`mkdir -p ${quote(target)}`, `mount --bind ${quote(join(MAIN_MOUNT, rel))} ${quote(target)}`);
-    };
-    rebind(SHARED_STATE);
+    const shared = join(plan.root, SHARED_STATE);
+    lines.push(`mkdir -p ${quote(shared)}`, `mount --bind ${quote(join(MAIN_MOUNT, SHARED_STATE))} ${quote(shared)}`);
     for (const pkg of plan.modules) {
-        rebind(pkg === "" ? MODULES : `${pkg}/${MODULES}`);
+        const rel = pkg === "" ? MODULES : `${pkg}/${MODULES}`;
+        const target = join(plan.root, rel);
+        // One layer dir per mount: upperdir and workdir must be siblings on one filesystem, and workdir must
+        // not sit inside upperdir. The package's path is encoded so nested dirs can't collide or nest.
+        const layer = join(plan.overlays, encodeURIComponent(rel));
+        const upper = join(layer, "upper");
+        const work = join(layer, "work");
+        lines.push(
+            `mkdir -p ${quote(target)} ${quote(upper)} ${quote(work)}`,
+            `mount -t overlay ${OVERLAY_FS_NAME} -o ${quote(overlayOptions(join(MAIN_MOUNT, rel), upper, work))} ${quote(target)}`,
+        );
     }
     lines.push(trailer);
     return lines.join("\n");
@@ -133,8 +188,7 @@ export const nsenterArgv = (anchorPid: number, cwd: string, command: string, arg
 
 // The same thing as ONE shell word, for the callers that compose a command STRING rather than an argv — the
 // Bash tool's tmux rewrite, whose pane runs a shell line. Quoted so a path with a space can't split it.
-export const nsenterPrefix = (anchorPid: number, cwd: string): string =>
-    `nsenter --mount=/proc/${anchorPid}/ns/mnt --wd=${quote(cwd)} -- `;
+export const nsenterPrefix = (anchorPid: number, cwd: string): string => `nsenter --mount=/proc/${anchorPid}/ns/mnt --wd=${quote(cwd)} -- `;
 
 /* Can this container actually build the namespace? CAP_SYS_ADMIN is required for both `unshare --mount` and
  * `mount`, and the sandbox is launched unprivileged unless the host provider granted it
@@ -143,15 +197,37 @@ export const nsenterPrefix = (anchorPid: number, cwd: string): string =>
  * whole feature is opt-out by absence.
  *
  * Probed, not inferred from capabilities: seccomp can block the syscall with the capability present, and the
- * only honest test is doing the thing. The probe mounts nothing — `unshare --mount true` proves the namespace,
- * and a namespace with no mount permission cannot exist (both gate on CAP_SYS_ADMIN).
+ * only honest test is doing the thing. The probe DOES the overlay too, rather than proving the namespace
+ * alone: overlayfs is a separate kernel gate (a filesystem that may simply not be built in, and one whose
+ * unprivileged use is newer than the capability), and a container that can unshare but not overlay would
+ * otherwise pass here and then fail `set -e` inside every anchor.
+ *
+ * ON THE HISTORY VOLUME, not in /tmp, and that is not a detail: overlayfs REFUSES an upperdir that is itself
+ * on an overlay, and a container's own root filesystem usually IS one (docker's storage driver) — so a probe
+ * in /tmp fails on exactly the healthy container this feature is for, and would switch isolation off for
+ * everyone. It has to run on the filesystem the real upper layers will use, which is the one under
+ * historyRoot. The probe dir is made and removed from OUT here, because the mount inside the namespace holds
+ * it busy until that namespace dies.
  */
-export const isolationAvailable = async (): Promise<boolean> => {
+const probeScript = (dir: string): string =>
+    [
+        `set -e`,
+        `mount -t overlay ${OVERLAY_FS_NAME} -o ${quote(overlayOptions(join(dir, "lower"), join(dir, "upper"), join(dir, "work")))} ${quote(join(dir, "merged"))}`,
+    ].join("\n");
+
+export const isolationAvailable = async (historyRoot: string): Promise<boolean> => {
+    const dir = join(historyRoot, ".isolation-probe");
     try {
-        await execFileAsync("unshare", ["--mount", "--propagation", "private", "true"], { timeout: 5_000 });
+        await rm(dir, { recursive: true, force: true });
+        for (const part of ["lower", "upper", "work", "merged"]) {
+            await mkdir(join(dir, part), { recursive: true });
+        }
+        await execFileAsync("unshare", ["--mount", "--propagation", "private", "sh", "-c", probeScript(dir)], { timeout: 5_000 });
         return true;
     } catch {
         return false;
+    } finally {
+        await rm(dir, { recursive: true, force: true }).catch(() => undefined);
     }
 };
 
@@ -267,13 +343,13 @@ export interface TurnIsolation {
     readonly available: () => Promise<boolean>;
 }
 
-export const createTurnIsolation = (options: { readonly root: string; readonly logger: Logger }): TurnIsolation => {
-    const { root, logger } = options;
+export const createTurnIsolation = (options: { readonly root: string; readonly historyRoot: string; readonly logger: Logger }): TurnIsolation => {
+    const { root, historyRoot, logger } = options;
     // Probed once per daemon life: the answer is a property of how the container was launched, and re-probing
     // would spawn a process on every turn to re-learn it.
     let probe: Promise<boolean> | undefined;
     const available = (): Promise<boolean> => {
-        probe ??= isolationAvailable().then((ok) => {
+        probe ??= isolationAvailable(historyRoot).then((ok) => {
             if (!ok) {
                 logger.warn(
                     {},
@@ -289,7 +365,10 @@ export const createTurnIsolation = (options: { readonly root: string; readonly l
         // Re-read per turn rather than cached: an install that finished since the last turn has to be visible,
         // and this is one cheap directory walk against a warm dentry cache. Run even when the namespace is
         // unavailable — the redirect needs the same dependency dirs the mounts would have re-bound.
-        planFor: async (worktree) => ({ worktree, root, modules: await modulesDirs(root) }),
+        // The conversation id is the worktree's own directory name (worktrees.ts owns that layout), so the
+        // overlay scratch is derived from it rather than threaded separately — and the teardown paths there
+        // reclaim the same path with the same helper.
+        planFor: async (worktree) => ({ worktree, root, modules: await modulesDirs(root), overlays: overlaysDir(historyRoot, basename(worktree)) }),
     };
 };
 

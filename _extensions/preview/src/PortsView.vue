@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, cmp, Icon, InfoHint, Page, PageHeader, StatusBadge } from "@intentic/extension-ui";
+import { Button, cmp, Icon, InfoHint, StatusBadge } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import SharePreview from "./SharePreview.vue";
 import { usePorts } from "./usePorts";
@@ -9,7 +9,10 @@ import { usePorts } from "./usePorts";
  * published containers) leads; the sandbox's internals (agent runtimes, translator, docker plumbing) sit in a
  * muted section below, listed for transparency rather than previewing. "Preview" forwards the port onto its
  * public port-<slot> hostname and opens it; forwarded rows keep a live link until "Stop". Forwarding is the
- * explicit exposure gesture — previews are public. */
+ * explicit exposure gesture — previews are public.
+ *
+ * Mounted as a tab on the sandbox hub (surface: "sandbox"), so it renders a BODY — the hub owns the Page and
+ * the header above the tab strip. What would have been the page's description rides the section's InfoHint. */
 
 const { ports, error, isLoading, forward, unforward } = usePorts();
 const workspacePorts = computed(() => ports.value.filter((entry) => entry.kind === `workspace`));
@@ -91,30 +94,33 @@ const displayCwd = (cwd: string): string => cwd.replace(/^\/work\//, ``);
 </script>
 
 <template>
-    <div class="h-full min-h-0 overflow-auto">
-        <Page width="wide">
-            <PageHeader title="Ports" description="What's serving inside the sandbox — and which of it your browser can reach.">
-                <template #info>
-                    <InfoHint label="Ports">
-                        <span class="block text-sm font-medium text-content">Listening ports</span>
-                        <span class="mt-1 block text-xs text-muted">
-                            Every TCP port something inside the sandbox is listening on — dev servers started in terminals, published containers,
-                            anything. <b>Preview</b> makes one reachable in your browser through the sandbox's tunnel; a forwarded port stays public
-                            until you stop it.
-                        </span>
-                    </InfoHint>
-                </template>
-            </PageHeader>
+    <div class="flex flex-col gap-4">
+        <div v-if="error || actionError" :class="cmp.alertDanger('px-4 py-3 text-sm')">{{ error ?? actionError }}</div>
 
-            <div v-if="error || actionError" :class="cmp.alertDanger('mb-4 px-4 py-3 text-sm')">{{ error ?? actionError }}</div>
+        <section>
+            <div class="mb-2 flex items-center gap-2">
+                <h3 :class="cmp.sectionLabel()">Listening</h3>
+                <InfoHint label="Ports">
+                    <span class="block text-sm font-medium text-content">Listening ports</span>
+                    <span class="mt-1 block text-xs text-muted">
+                        Every TCP port something inside the sandbox is listening on — dev servers started in terminals, published containers,
+                        anything.
+                        <b>Preview</b> makes one reachable in your browser through the sandbox's tunnel; a forwarded port stays public until you stop
+                        it.
+                    </span>
+                </InfoHint>
+            </div>
 
-            <div v-if="workspacePorts.length === 0 && !isLoading" class="flex flex-col items-center gap-2 py-10 text-center">
+            <div
+                v-if="workspacePorts.length === 0 && !isLoading"
+                class="flex flex-col items-center gap-2 rounded-lg border border-line bg-card py-10 text-center"
+            >
                 <Icon name="desktop" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">Nothing of yours is listening yet.</p>
                 <p class="text-2xs text-subtle">Start a dev server in a terminal and it appears here.</p>
             </div>
 
-            <section v-else class="rounded-lg border border-line bg-card">
+            <div v-else class="rounded-lg border border-line bg-card">
                 <div class="flex flex-col divide-y divide-line">
                     <div v-for="entry in workspacePorts" :key="entry.port" class="flex items-center gap-3 px-4 py-2">
                         <span class="w-14 shrink-0 font-mono text-sm text-content">{{ entry.port }}</span>
@@ -164,62 +170,62 @@ const displayCwd = (cwd: string): string => cwd.replace(/^\/work\//, ``);
                         </span>
                     </div>
                 </div>
-            </section>
+            </div>
+        </section>
 
-            <!-- The sandbox's own machinery — visible for transparency, muted because nobody previews it.
-                 Forwarding stays possible (it's explicitly gated anyway), just de-emphasized. -->
-            <section v-if="systemPorts.length > 0" class="mt-6">
-                <h3 :class="cmp.sectionLabel('mb-2')">Sandbox internals</h3>
-                <div class="rounded-lg border border-line/60">
-                    <div class="flex flex-col divide-y divide-line/60">
-                        <div v-for="entry in systemPorts" :key="entry.port" class="flex items-center gap-3 px-4 py-1.5 opacity-70">
-                            <span class="w-14 shrink-0 font-mono text-xs text-muted">{{ entry.port }}</span>
-                            <StatusBadge v-if="entry.forwarded" variant="success" label="forwarded" size="xs" />
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate font-mono text-2xs text-subtle" :title="entry.command">{{ entry.command ?? `unknown process` }}</p>
-                            </div>
-                            <a
-                                v-if="entry.previewUrl"
-                                :href="entry.previewUrl"
-                                target="_blank"
-                                rel="noopener"
-                                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-subtle hover:bg-overlay hover:text-content"
-                                :aria-label="`Open the port ${entry.port} preview in a new tab`"
-                                v-tooltip.bottom="'Open in new tab'"
-                            >
-                                <Icon name="external-link" />
-                            </a>
-                            <Button
-                                v-if="entry.forwarded"
-                                label="Stop"
-                                size="small"
-                                severity="secondary"
-                                :disabled="busy !== undefined"
-                                @click="stop(entry.port)"
-                            >
-                                <template #icon><Icon name="stop" /></template>
-                            </Button>
-                            <Button
-                                v-else-if="entry.forwardable"
-                                label="Preview"
-                                size="small"
-                                severity="secondary"
-                                :disabled="busy !== undefined"
-                                @click="openPreview(entry.port)"
-                            >
-                                <template #icon><Icon name="play" /></template>
-                            </Button>
-                            <span
-                                v-else
-                                class="shrink-0 text-2xs text-subtle"
-                                v-tooltip.bottom="'Bound to a loopback alias the preview proxy cannot reach.'"
-                            >
-                                not forwardable
-                            </span>
+        <!-- The sandbox's own machinery — visible for transparency, muted because nobody previews it.
+             Forwarding stays possible (it's explicitly gated anyway), just de-emphasized. -->
+        <section v-if="systemPorts.length > 0">
+            <h3 :class="cmp.sectionLabel('mb-2')">Sandbox internals</h3>
+            <div class="rounded-lg border border-line/60">
+                <div class="flex flex-col divide-y divide-line/60">
+                    <div v-for="entry in systemPorts" :key="entry.port" class="flex items-center gap-3 px-4 py-1.5 opacity-70">
+                        <span class="w-14 shrink-0 font-mono text-xs text-muted">{{ entry.port }}</span>
+                        <StatusBadge v-if="entry.forwarded" variant="success" label="forwarded" size="xs" />
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate font-mono text-2xs text-subtle" :title="entry.command">{{ entry.command ?? `unknown process` }}</p>
                         </div>
+                        <a
+                            v-if="entry.previewUrl"
+                            :href="entry.previewUrl"
+                            target="_blank"
+                            rel="noopener"
+                            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-subtle hover:bg-overlay hover:text-content"
+                            :aria-label="`Open the port ${entry.port} preview in a new tab`"
+                            v-tooltip.bottom="'Open in new tab'"
+                        >
+                            <Icon name="external-link" />
+                        </a>
+                        <Button
+                            v-if="entry.forwarded"
+                            label="Stop"
+                            size="small"
+                            severity="secondary"
+                            :disabled="busy !== undefined"
+                            @click="stop(entry.port)"
+                        >
+                            <template #icon><Icon name="stop" /></template>
+                        </Button>
+                        <Button
+                            v-else-if="entry.forwardable"
+                            label="Preview"
+                            size="small"
+                            severity="secondary"
+                            :disabled="busy !== undefined"
+                            @click="openPreview(entry.port)"
+                        >
+                            <template #icon><Icon name="play" /></template>
+                        </Button>
+                        <span
+                            v-else
+                            class="shrink-0 text-2xs text-subtle"
+                            v-tooltip.bottom="'Bound to a loopback alias the preview proxy cannot reach.'"
+                        >
+                            not forwardable
+                        </span>
                     </div>
                 </div>
-            </section>
-        </Page>
+            </div>
+        </section>
     </div>
 </template>

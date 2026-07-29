@@ -49,7 +49,7 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     await writeFile(join(work, "other.ts"), "untouched\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "baseline");
-    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), isolation: noIsolation, logger });
+    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), historyRoot, isolation: noIsolation, logger });
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 

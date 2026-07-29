@@ -48,7 +48,7 @@ const setup = async (): Promise<{ work: string; historyRoot: string; worktrees: 
     await writeFile(join(work, "CLAUDE.md"), "workspace notes\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "baseline");
-    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), isolation: noIsolation, logger });
+    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(historyRoot, "worktrees"), historyRoot, isolation: noIsolation, logger });
     return { work, historyRoot, worktrees };
 };
 
@@ -152,6 +152,7 @@ test("re-ensure converts pre-namespace symlinks into mount points once isolation
     const isolated = createAgentWorktrees({
         workspace: workspacePaths(work),
         worktreesRoot: join(historyRoot, "worktrees"),
+        historyRoot,
         isolation: { available: async () => true, planFor: async () => undefined },
         logger,
     });
@@ -172,6 +173,7 @@ test("re-ensure restores the symlink when isolation is lost, but never over a re
     const isolated = createAgentWorktrees({
         workspace: workspacePaths(work),
         worktreesRoot: join(historyRoot, "worktrees"),
+        historyRoot,
         isolation: { available: async () => true, planFor: async () => undefined },
         logger,
     });

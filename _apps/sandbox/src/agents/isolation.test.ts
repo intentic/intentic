@@ -16,7 +16,12 @@ afterEach(async () => {
     }
 });
 
-const plan: IsolationPlan = { worktree: "/history/worktrees/abc", root: "/work", modules: ["", "_apps/web"] };
+const plan: IsolationPlan = {
+    worktree: "/history/worktrees/abc",
+    root: "/work",
+    modules: ["", "_apps/web"],
+    overlays: "/history/overlays/abc",
+};
 
 test("the namespace is made private before anything is mounted", () => {
     const lines = isolationScript(plan).split("\n");
@@ -34,15 +39,39 @@ test("the main root is bound aside before the worktree shadows it", () => {
     expect(shadow).toBeGreaterThan(aside);
 });
 
-test("shared state and dependency trees are re-bound from the aside mount, not from the shadowed path", () => {
+test("shared state is re-bound from the aside mount, not from the shadowed path", () => {
     const script = isolationScript(plan);
-    // Sourcing these from /work would name the worktree's own (empty) copy — the mount would succeed and the
-    // agent would silently lose the transcript store.
+    // Sourcing this from /work would name the worktree's own (empty) copy — the mount would succeed and the
+    // agent would silently lose the transcript store. A BIND, not an overlay: a transcript written here has
+    // to reach the daemon.
     expect(script).toContain(`mount --bind '${MAIN_MOUNT}/.intentic' '/work/.intentic'`);
-    expect(script).toContain(`mount --bind '${MAIN_MOUNT}/node_modules' '/work/node_modules'`);
-    expect(script).toContain(`mount --bind '${MAIN_MOUNT}/_apps/web/node_modules' '/work/_apps/web/node_modules'`);
     // A fresh checkout has no mount point for an untracked dir.
     expect(script).toContain(`mkdir -p '/work/.intentic'`);
+});
+
+test("a dependency tree is an overlay over the main checkout, never a writable bind onto it", () => {
+    const script = isolationScript(plan);
+    // The whole point: pnpm hardlinks workspace sources into node_modules, so a WRITABLE bind here let a
+    // write through the node_modules name rewrite the main checkout's tracked file. Reads still come from
+    // the main tree (lowerdir); writes land in this turn's own upper layer.
+    expect(script).toContain(
+        `mount -t overlay intentic-modules -o 'lowerdir=${MAIN_MOUNT}/node_modules,upperdir=/history/overlays/abc/node_modules/upper,workdir=/history/overlays/abc/node_modules/work' '/work/node_modules'`,
+    );
+    // One layer per mount, keyed by the package path — a nested tree must not share (or nest inside) the
+    // root's layer, and upper/work must be siblings.
+    expect(script).toContain(
+        `mount -t overlay intentic-modules -o 'lowerdir=${MAIN_MOUNT}/_apps/web/node_modules,upperdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/work' '/work/_apps/web/node_modules'`,
+    );
+    // Both layer dirs have to exist before the mount that names them.
+    expect(script).toContain(`mkdir -p '/work/node_modules' '/history/overlays/abc/node_modules/upper' '/history/overlays/abc/node_modules/work'`);
+    // Nothing binds a dependency tree any more — a single leftover bind is the whole hole reopened.
+    expect(script).not.toContain(`mount --bind '${MAIN_MOUNT}/node_modules'`);
+});
+
+test("a path that would corrupt the overlay option string is refused rather than mounted wrong", () => {
+    // The kernel splits these options on "," and ":", so a path carrying either would mount something other
+    // than what was asked for — which is exactly the silent-wrong-tree failure this module exists to prevent.
+    expect(() => isolationScript({ ...plan, overlays: "/history/overlays/a,b" })).toThrow(/cannot contain/);
 });
 
 test("the anchor announces readiness only after the mounts, then becomes the namespace's inhabitant", () => {
@@ -51,7 +80,7 @@ test("the anchor announces readiness only after the mounts, then becomes the nam
     // half-built namespace writing through to the shared tree.
     expect(lines.at(-2)).toBe(`echo ${ANCHOR_READY}`);
     expect(lines.at(-1)).toBe("exec sleep infinity");
-    expect(lines.lastIndexOf(`mount --bind '${MAIN_MOUNT}/_apps/web/node_modules' '/work/_apps/web/node_modules'`)).toBeLessThan(lines.length - 2);
+    expect(lines.findLastIndex((line) => line.startsWith("mount -t overlay"))).toBeLessThan(lines.length - 2);
     // `exec`, so the sleep IS the pid nsenter targets — a shell waiting on a child would hold the namespace
     // under a different pid than the one handed out.
     expect(lines.at(-1)?.startsWith("exec ")).toBe(true);

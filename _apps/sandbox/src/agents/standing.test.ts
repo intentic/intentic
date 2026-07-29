@@ -35,7 +35,13 @@ const setup = async (): Promise<{ work: string; worktrees: AgentWorktrees; conve
     await writeFile(join(work, "app.ts"), "line one\nline two\nline three\n");
     await sh(work, "add", "-A");
     await commit(work, "baseline");
-    const worktrees = createAgentWorktrees({ workspace, worktreesRoot: join(base, "history", "worktrees"), isolation: noIsolation, logger });
+    const worktrees = createAgentWorktrees({
+        workspace,
+        worktreesRoot: join(base, "history", "worktrees"),
+        historyRoot: join(base, "history"),
+        isolation: noIsolation,
+        logger,
+    });
     return { work, worktrees, conversation: await worktrees.ensure("c1", []) };
 };
 

@@ -54,6 +54,10 @@ export function useShellCommands(): void {
             // surface you work from) — so the palette is what makes it one keystroke away when something broke,
             // instead of a permanently present tile that never carries a signal.
             { command: `view.logs`, title: `Go to Sandbox Logs`, icon: `file`, handler: () => router.push(`/sandbox/logs`) },
+            // Ports likewise lives on the hub; the rail carries only its exposure indicator, which is absent
+            // exactly when there is nothing exposed — so this is the way in when you want to look rather than
+            // when the sandbox wants to tell you something.
+            { command: `view.ports`, title: `Go to Sandbox Ports`, icon: `globe`, handler: () => router.push(`/sandbox/ports`) },
             { command: `view.capabilities`, title: `Add a Capability`, icon: `plus`, handler: () => router.push(`/capabilities`) },
             { command: `view.keybindings`, title: `Keyboard Shortcuts`, icon: `sliders-h`, handler: () => router.push(`/settings/keybindings`) },
             { command: `terminal.toggle`, title: `Toggle Terminal Panel`, icon: `code`, keybinding: `Ctrl+\``, handler: () => terminal.toggle() },

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -79,6 +79,30 @@ test("a repo already pointing out of tree is left exactly as it is", async () =>
     await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
     expect(await readFile(join(repo, ".git"), "utf8")).toBe(pointer);
     expect(await git(repo, "log", "--format=%s", "-1")).toBe("first");
+});
+
+test("the relocated repo pins no working tree, so its path means the caller's tree and not one written down", async () => {
+    const { root, historyRoot, repo } = await workspace();
+    await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
+
+    // core.worktree records an ABSOLUTE path in the config every worktree of the repo shares. Pinned to the
+    // workspace path, it names a different directory in every mount namespace — so an isolated turn reaching
+    // for the main checkout got redirected into its own worktree instead. Unset, the `.git` file decides, and
+    // it decides relative to where the caller stands.
+    await expect(git(repo, "config", "--get", "core.worktree")).rejects.toThrow();
+    expect(await git(repo, "rev-parse", "--show-toplevel")).toBe(await realpath(repo));
+});
+
+test("a repo converged by an earlier boot still loses a worktree pin left behind by that boot", async () => {
+    const { root, historyRoot, repo } = await workspace();
+    await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
+    // What every already-converged repo in the field carries: the pin the relocation used to write. It is
+    // never relocated again, so convergence has to reach it on its own.
+    await git(repo, "config", "core.worktree", repo);
+
+    await ensureRepoGitDirs(workspacePaths(root), historyRoot, logger);
+
+    await expect(git(repo, "config", "--get", "core.worktree")).rejects.toThrow();
 });
 
 test("an occupied target leaves the repo working rather than clobbering either git dir", async () => {

@@ -417,10 +417,16 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const pushStore = filePushStore(join(config.historyRoot, "push.json"));
     // Shared by the turn path (which builds a namespace per isolated turn) and worktree creation (which plants
     // mount points rather than symlinks when it knows the namespace is coming), so both read ONE probe.
-    const turnIsolation = createTurnIsolation({ root: workspace.root, logger });
+    const turnIsolation = createTurnIsolation({ root: workspace.root, historyRoot: config.historyRoot, logger });
     // Hoisted ABOVE the registry, which now derives each card's land standing through it (standing.ts) rather
     // than reading a verdict off the entry.
-    const agentWorktrees = createAgentWorktrees({ workspace, worktreesRoot: join(config.historyRoot, "worktrees"), isolation: turnIsolation, logger });
+    const agentWorktrees = createAgentWorktrees({
+        workspace,
+        worktreesRoot: join(config.historyRoot, "worktrees"),
+        historyRoot: config.historyRoot,
+        isolation: turnIsolation,
+        logger,
+    });
     // Hoisted: the Changes scan's per-file attribution reads the SAME registry the turns write to — a
     // second instance would answer from a stale agents.json.
     const agents = createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json")), createLandStandings(agentWorktrees));

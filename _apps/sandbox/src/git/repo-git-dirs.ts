@@ -34,13 +34,32 @@ const gitEntryKind = async (repoDir: string): Promise<"dir" | "file" | undefined
     return stats.isDirectory() ? "dir" : "file";
 };
 
-const relocateOne = async (
-    repo: string,
-    workspace: WorkspacePaths,
-    historyRoot: string,
-    logger: Logger,
-    git: GitRunner,
-): Promise<void> => {
+/* NO REPO PINS ITS OWN WORKING TREE — the second half of the same invariant.
+ *
+ * `core.worktree` records an ABSOLUTE path in the repo's config, and the config lives in the git dir that
+ * every worktree of the repo shares. Set to `/work/<repo>` it names a different directory in every mount
+ * namespace: the main checkout for the daemon, and the turn's OWN worktree for an isolated turn. So a turn
+ * that deliberately reached for the main tree at MAIN_MOUNT — the one path isolation.ts provides for exactly
+ * that — got git silently redirected back to its own worktree, compared against the MAIN checkout's index,
+ * and answered with a diff belonging to neither. That is the "compare against main" case the aside mount
+ * exists to serve, reporting confident nonsense.
+ *
+ * Nothing needs the pin. A `.git` FILE makes the worktree implicit: git discovers upward, finds the pointer,
+ * and takes the directory CONTAINING it as the working tree — which is the right answer in every namespace
+ * precisely because it is resolved relative to where the caller stands rather than written down once. (This
+ * is also what `git init --separate-git-dir` produces; it sets no core.worktree either.) The one caller that
+ * enters by git dir alone passes GIT_WORK_TREE explicitly (history.ts deletionState), so it never depended on
+ * the config value.
+ *
+ * Unset rather than merely not-set: convergence re-runs every boot, and a repo carrying the pin from an
+ * earlier one is exactly the repo this has to fix.
+ */
+const unpinWorktree = async (repoDir: string, git: GitRunner): Promise<void> => {
+    // Exits non-zero when the key was already absent — the steady state, not a failure.
+    await git(repoDir, ["config", "--unset", "core.worktree"]).catch(() => undefined);
+};
+
+const relocateOne = async (repo: string, workspace: WorkspacePaths, historyRoot: string, logger: Logger, git: GitRunner): Promise<void> => {
     const repoDir = join(workspace.root, repo);
     if ((await gitEntryKind(repoDir)) !== "dir") {
         return;
@@ -66,9 +85,6 @@ const relocateOne = async (
         await rm(target, { recursive: true, force: true });
         throw error;
     });
-    // A separate git dir has no implicit worktree — `--separate-git-dir` records this on the daemon's own
-    // repos, and a hand-moved one has to be told the same thing or every command runs bare.
-    await git(repoDir, ["config", "core.worktree", repoDir]);
     /* Every worktree of this repo holds a pointer into the OLD admin path, and the admin dirs hold a backlink
      * to each worktree. `worktree repair`, run from the main checkout, rewrites both sides for all of them —
      * the same call worktrees.ts::repairOne makes for a single conversation. Without it, every existing agent
@@ -77,8 +93,10 @@ const relocateOne = async (
     logger.info({ repo, target }, "git dirs: relocated in-tree git dir off the workspace root");
 };
 
-// Converge every workspace repo onto an out-of-tree git dir. Best-effort per repo: one repo that cannot move
-// must not stop the others, and must not stop the boot — it only loses isolation for itself.
+// Converge every workspace repo onto an out-of-tree git dir with no pinned worktree. Best-effort per repo: one
+// repo that cannot move must not stop the others, and must not stop the boot — it only loses isolation for
+// itself. The unpin runs for EVERY repo, not only the ones that move: a repo converged by an earlier boot is
+// already in the pointer shape and would otherwise keep the stale pin forever.
 export const ensureRepoGitDirs = async (
     workspace: WorkspacePaths,
     historyRoot: string,
@@ -89,5 +107,6 @@ export const ensureRepoGitDirs = async (
         await relocateOne(repo, workspace, historyRoot, logger, git).catch((error: unknown) =>
             logger.warn({ err: error, repo }, "git dirs: relocation failed, repo keeps its in-tree git dir"),
         );
+        await unpinWorktree(join(workspace.root, repo), git);
     }
 };

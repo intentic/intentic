@@ -9,7 +9,7 @@
     "contributes": {
         "views": [
             { "id": "preview", "label": "Preview", "surface": "directory" },
-            { "id": "ports", "label": "Ports", "surface": "rail" }
+            { "id": "ports", "label": "Ports", "surface": "sandbox" }
         ]
     }
 }

@@ -18,6 +18,7 @@ import { useLayout } from "../composables/useLayout";
 import { useIconRailSize } from "../composables/useIconRailSize";
 import { usePanels } from "../composables/extensions/usePanels";
 import { useChanges } from "../composables/workspace/useChanges";
+import { usePorts } from "../composables/sandbox/usePorts";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { useVpn } from "../composables/sandbox/useVpn";
 import AccountPanel from "./AccountPanel.vue";
@@ -61,6 +62,16 @@ const vpnLabel = computed(() =>
     connectedVpns.value.length === 1
         ? `VPN connected: ${connectedVpns.value[0]?.id}`
         : `${connectedVpns.value.length} VPNs connected: ${connectedVpns.value.map((link) => link.id).join(`, `)}`,
+);
+
+// The exposure indicator, on the same terms as the VPN one: a forwarded port is reachable by anyone holding
+// its hostname until someone stops it, so the fact belongs on the surface that is visible from every view —
+// not behind the Ports tab it is managed from. Absent while nothing is forwarded, which is the whole signal.
+const { forwarded: forwardedPorts } = usePorts();
+const forwardedLabel = computed(() =>
+    forwardedPorts.value.length === 1
+        ? `Port ${forwardedPorts.value[0]?.port} is publicly reachable`
+        : `${forwardedPorts.value.length} ports are publicly reachable: ${forwardedPorts.value.map((entry) => entry.port).join(`, `)}`,
 );
 
 // A rail link is active for its route AND any sub-path — `active-class` can't do this: with a splat/optional
@@ -226,6 +237,26 @@ onUnmounted(() => {
                 v-tooltip.right="vpnLabel"
             >
                 <Icon name="shield" class="text-lg" />
+            </RouterLink>
+
+            <!-- The exposure indicator: present ONLY while a port is forwarded, because that is when something
+                 inside the sandbox is answering the public internet. Links to the Ports tab, which owns the
+                 controls (and the "Stop" that revokes it). -->
+            <RouterLink
+                v-if="forwardedPorts.length > 0"
+                to="/sandbox/ports"
+                class="icon-rail-tile relative flex items-center justify-center rounded-lg text-warning transition-colors hover:bg-overlay"
+                :class="{ 'pointer-events-none opacity-40': !reachable }"
+                :tabindex="reachable ? undefined : -1"
+                :aria-label="forwardedLabel"
+                v-tooltip.right="forwardedLabel"
+            >
+                <Icon name="globe" class="text-lg" />
+                <span
+                    v-if="forwardedPorts.length > 1"
+                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-warning/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-warning"
+                    >{{ forwardedPorts.length }}</span
+                >
             </RouterLink>
 
             <!-- The terminal: toggles the one global panel from any view, highlighted while it is open, badged

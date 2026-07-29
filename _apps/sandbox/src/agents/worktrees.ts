@@ -6,7 +6,7 @@ import type { Logger } from "pino";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
-import type { TurnIsolation } from "./isolation.js";
+import { overlaysDir, overlaysRoot, type TurnIsolation } from "./isolation.js";
 
 // A conversation's isolated checkout: one git worktree per workspace repo, mirroring the /work layout —
 // <worktreesRoot>/<id>/ is the ROOT repo's worktree and <worktreesRoot>/<id>/<repo>/ each nested
@@ -72,11 +72,12 @@ const exists = async (path: string): Promise<boolean> => {
 // and a monorepo's workspace links resolve cross-package imports to /work's sources rather than the worktree's
 // edited ones. Both beat the alternative, which is that nothing resolves at all.
 //
-// WHERE ISOLATION IS AVAILABLE, this is done with BIND MOUNTS instead (agents/isolation.ts) and only the empty
-// mount point is created here. That is strictly better and not just different: an absolute symlink into
-// /work/... would, inside the namespace, point back into the worktree that now occupies /work — a loop. A bind
-// also keeps the source's st_dev, so pnpm's hardlinking works in a worktree for the first time (the symlink
-// layout is why `pnpm run` in a worktree dies with EXDEV today).
+// WHERE ISOLATION IS AVAILABLE, this is done with OVERLAY MOUNTS instead (agents/isolation.ts) and only the
+// empty mount point is created here. That is strictly better and not just different: an absolute symlink into
+// /work/... would, inside the namespace, point back into the worktree that now occupies /work — a loop. And
+// unlike the symlink (or a plain bind), an overlay does not share the WRITE side: pnpm hardlinks a workspace
+// package's sources into node_modules, so a write through the mirrored path used to land on the main
+// checkout's own tracked file. Reads still come from the main tree; writes stop at the turn's layer.
 const MODULES = "node_modules";
 
 // Deep enough for the layouts that exist (a monorepo's `_apps/<pkg>`, `_libs/<pkg>`), bounded so a pathological
@@ -113,12 +114,23 @@ const packagesWithModules = async (main: string): Promise<string[]> => {
 };
 
 export const createAgentWorktrees = (
-    options: { readonly workspace: WorkspacePaths; readonly worktreesRoot: string; readonly isolation: TurnIsolation; readonly logger: Logger },
+    options: {
+        readonly workspace: WorkspacePaths;
+        readonly worktreesRoot: string;
+        readonly historyRoot: string;
+        readonly isolation: TurnIsolation;
+        readonly logger: Logger;
+    },
     git: GitRunner = defaultGit,
 ): AgentWorktrees => {
-    const { workspace, worktreesRoot, isolation, logger } = options;
+    const { workspace, worktreesRoot, historyRoot, isolation, logger } = options;
 
     const conversationDir = (id: string): string => join(worktreesRoot, id);
+    /* An isolated turn's dependency overlays (isolation.ts) live OUTSIDE the checkout, so reclaiming the
+     * checkout does not reclaim them — every teardown path below drops both. They hold only what a turn wrote
+     * over the main tree's node_modules (a tsbuildinfo, an install's output), so this is space, never work:
+     * nothing an agent is meant to keep is ever written there. */
+    const overlaysFor = (id: string): string => overlaysDir(historyRoot, id);
     const worktreeDir = (id: string, repo: string): string => (repo === "root" ? conversationDir(id) : join(conversationDir(id), repo));
     const mainDir = (repo: string): string => (repo === "root" ? workspace.root : join(workspace.root, repo));
 
@@ -310,6 +322,7 @@ export const createAgentWorktrees = (
                 });
             }
             await rm(conversationDir(id), { recursive: true, force: true });
+            await rm(overlaysFor(id), { recursive: true, force: true });
         },
         retire: async (id, recorded, title) => {
             // Two passes on purpose. EVERY repo is committed before ANY checkout goes, so a failure partway
@@ -360,6 +373,9 @@ export const createAgentWorktrees = (
                 await removeOne("root");
             }
             await rm(conversationDir(id), { recursive: true, force: true });
+            // The branch is the archive; the overlays are not part of it — an archived conversation's
+            // dependency scratch has no more claim on the disk than a removed one's.
+            await rm(overlaysFor(id), { recursive: true, force: true });
         },
         prune: async (knownIds) => {
             const known = new Set(knownIds);
@@ -367,6 +383,14 @@ export const createAgentWorktrees = (
                 if (!known.has(name)) {
                     logger.warn({ id: name }, "agents: pruning orphaned worktree dir");
                     await rm(conversationDir(name), { recursive: true, force: true });
+                }
+            }
+            // Swept separately, not alongside the checkouts: an overlay outlives its checkout by design (retire
+            // drops the worktree and keeps the branch), so the leftovers here are the ones whose conversation
+            // is gone entirely — including any a crash left behind between the two removals above.
+            for (const name of await readdir(overlaysRoot(historyRoot)).catch(() => [])) {
+                if (!known.has(name)) {
+                    await rm(overlaysFor(name), { recursive: true, force: true });
                 }
             }
             for (const repo of await liveRepos()) {
