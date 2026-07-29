@@ -95,22 +95,30 @@ export const anchorOf = async (
     base: string,
     git: GitRunner = defaultGit,
 ): Promise<string> => {
-    // Only while the branch still descends from it: a rewrite that dropped the landed work has to re-land it.
-    if (landedTip !== undefined && (await isAncestor(dir, landedTip, tip, git))) {
-        return landedTip;
-    }
     const head = await headSha(main, git);
+    let merged = "";
     if (head !== undefined) {
         try {
-            const merged = (await git(dir, ["merge-base", head, tip])).stdout.trim();
-            if (merged !== "") {
-                return merged;
-            }
+            merged = (await git(dir, ["merge-base", head, tip])).stdout.trim();
         } catch {
-            // Unrelated histories — fall through to the recorded base.
+            // Unrelated histories — the merge-base rung simply doesn't exist.
         }
     }
-    return base;
+    /* landedTip only while the branch still descends from it (a rewrite that dropped the landed work has to
+     * re-land it) AND the merge-base still sits behind it. The second condition is what a `merge main` into
+     * the branch changes: the branch then contains main-line state landedTip's span predates, and a patch
+     * measured from landedTip carries pre-images main has already moved past — every such hunk "conflicts"
+     * with content the merge already reconciled, which read to the user as a land that could never succeed.
+     * Once the merge-base is no longer an ancestor of landedTip, IT is the honest anchor: everything at or
+     * before it is in main by definition, and anything landed-but-newer that the span re-offers is excluded
+     * per file by classifyDelta's reverse probe, exactly as for work that reached main by another road. */
+    if (landedTip !== undefined && (await isAncestor(dir, landedTip, tip, git))) {
+        if (merged === "" || (await isAncestor(dir, merged, landedTip, git))) {
+            return landedTip;
+        }
+        return merged;
+    }
+    return merged === "" ? base : merged;
 };
 
 /* Does a patch fit the main tree — and, asked in `reverse`, is it ALREADY IN IT?

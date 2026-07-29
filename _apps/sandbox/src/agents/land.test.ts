@@ -545,3 +545,40 @@ test("a worktree synced onto newer main commits does not review main's work as i
     // The frozen creation-time base tells the broken story this replaced.
     expect((await changesAgainstBase(conversation.cwd, base)).map((change) => change.path)).toContain("foreign.ts");
 });
+
+/* The exact sequence that stranded a real card on "1 file couldn't be applied": land → the user commits the
+ * landed content on main → main also gains someone else's work → the agent merges main into its branch and
+ * keeps working → land again. The landedTip-spanned patch carries pre-images main has moved past (the second
+ * edit's hunk context reaches lines someone else changed), so the land read as a conflict the merge had
+ * already reconciled. The merge-base must supersede the stale landedTip. */
+test("after merging main into the branch, land measures from the merge-base, not the stale landedTip", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const lines = (...replaced: [number, string][]): string =>
+        ["one", "two", "three", "four", "five", "six", "seven"].map((word, at) => replaced.find(([i]) => i === at)?.[1] ?? word).join("\n") + "\n";
+    await writeFile(join(work, "long.ts"), lines());
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "long file");
+    await worktrees.remove("c1", conversation.repos);
+    const fresh = await worktrees.ensure("c1", []);
+
+    // Turn 1: edit the top + land + the user commits the landed content on main.
+    await writeFile(join(fresh.cwd, "long.ts"), lines([0, "one AGENT"]));
+    const first = await landAgent(worktrees, entryFor(fresh.repos));
+    expect(first.landed).toBe(true);
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "commit landed work");
+    // Main also gains someone else's edit at the bottom of the same file.
+    await writeFile(join(work, "long.ts"), lines([0, "one AGENT"], [6, "seven OTHERS"]));
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "someone else");
+    // The agent syncs (merge main into its branch) and keeps working — an edit whose hunk CONTEXT reaches
+    // the line someone else changed, which is what made the stale-anchored patch unapplicable.
+    await sh(fresh.cwd, "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "-m", "sync", await sh(work, "rev-parse", "HEAD"));
+    await writeFile(join(fresh.cwd, "long.ts"), lines([0, "one AGENT"], [6, "seven OTHERS"], [3, "four AGAIN"]));
+
+    const second = await landAgent(worktrees, entryFor(first.repos));
+    // Without the merge-base rung superseding landedTip this reported a conflict on long.ts.
+    expect(second.landed).toBe(true);
+    expect(second.conflicts).toBeUndefined();
+    expect(await readFile(join(work, "long.ts"), "utf8")).toBe(lines([0, "one AGENT"], [6, "seven OTHERS"], [3, "four AGAIN"]));
+});
