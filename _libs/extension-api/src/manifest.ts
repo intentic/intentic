@@ -6,11 +6,13 @@ import { z } from "zod";
  * and the host refuses runtime registrations (views, commands) whose ids the approved manifest never declared. */
 
 // A sidebar element family the extension may register at runtime (api.views.register): `rail` = a global
-// left-rail tile routed at /ext/:ext/:key?; `directory` = a per-repo panel opened from the Workspace tree.
+// left-rail tile routed at /ext/:ext/:key?; `directory` = a per-repo panel opened from the Workspace tree;
+// `sandbox` = a tab on the Sandbox hub, for a view whose subject is the BOX rather than the work (see
+// ViewRegistration.surface).
 export const ViewContributionSchema = z.object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
     label: z.string().min(1),
-    surface: z.enum(["rail", "directory"]),
+    surface: z.enum(["rail", "directory", "sandbox"]),
 });
 export type ViewContribution = z.infer<typeof ViewContributionSchema>;
 

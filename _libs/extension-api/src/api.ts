@@ -31,7 +31,12 @@ export interface ViewRegistration {
     // The view family's human name (distinct from an Activation's per-repo `title`) — labels the directory
     // panel's surface switch when a repo activates several.
     readonly label: string;
-    readonly surface: "rail" | "directory";
+    // Where the view's activations mount. `rail` is the always-visible left column — a place the user ACTS
+    // from, so a tile there must earn a permanently occupied slot. `directory` is a per-repo panel opened from
+    // the Workspace tree. `sandbox` is a tab on the Sandbox hub, where the subject is the box itself (its
+    // logs, its status, its consumption) — inspected occasionally rather than worked in, so it costs a tab in
+    // a scrolling word-labelled strip instead of an icon in the rail's fixed budget.
+    readonly surface: "rail" | "directory" | "sandbox";
     // Evidence-based detection over the public facts — one activation per sidebar element. Called on every
     // facts poll; a throwing detect contributes nothing that round.
     readonly detect: (repos: readonly RepoFacts[], capabilities: readonly CapabilityFacts[]) => Activation[];

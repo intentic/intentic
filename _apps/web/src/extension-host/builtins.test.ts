@@ -21,10 +21,10 @@ const noRepos: readonly RepoFacts[] = [];
 const discordCap: CapabilityFacts = { id: `bot`, kind: `cli`, config: { provider: `discord` } };
 
 describe(`ext-logs`, () => {
-    it(`registers an always-present Logs rail view`, () => {
+    it(`registers an always-present Logs tab on the sandbox hub`, () => {
         const view = activateAndCapture(logs);
         expect(view.id).toBe(`logs`);
-        expect(view.surface).toBe(`rail`);
+        expect(view.surface).toBe(`sandbox`);
         expect(view.detect(noRepos, [])).toEqual([{ key: `logs`, title: `Logs`, icon: `file` }]);
     });
 });

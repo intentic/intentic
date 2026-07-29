@@ -2,7 +2,7 @@
     "publisher": "intentic",
     "name": "preview",
     "version": "1.0.0",
-    "engines": { "intentic": "^0.3.0" },
+    "engines": { "intentic": "^0.4.0" },
     "permissions": {
         "sandbox": ["GET /panels", "POST /panels/*/start", "POST /panels/*/stop", "GET /ports", "POST /ports/forward", "POST /ports/unforward"]
     },

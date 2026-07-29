@@ -50,6 +50,10 @@ export function useShellCommands(): void {
             { command: `view.workspace`, title: `Go to Workspace`, icon: `folder`, handler: () => router.push(`/workspace`) },
             { command: `view.agents`, title: `Go to Agents`, icon: `comments`, handler: () => router.push(`/agents`) },
             { command: `view.secrets`, title: `Go to Sandbox Secrets`, icon: `key`, handler: () => router.push(`/sandbox/secrets`) },
+            // Logs sits on the sandbox hub rather than the rail (it is read-only forensics about the box, not a
+            // surface you work from) — so the palette is what makes it one keystroke away when something broke,
+            // instead of a permanently present tile that never carries a signal.
+            { command: `view.logs`, title: `Go to Sandbox Logs`, icon: `file`, handler: () => router.push(`/sandbox/logs`) },
             { command: `view.capabilities`, title: `Add a Capability`, icon: `plus`, handler: () => router.push(`/capabilities`) },
             { command: `view.keybindings`, title: `Keyboard Shortcuts`, icon: `sliders-h`, handler: () => router.push(`/settings/keybindings`) },
             { command: `terminal.toggle`, title: `Toggle Terminal Panel`, icon: `code`, keybinding: `Ctrl+\``, handler: () => terminal.toggle() },

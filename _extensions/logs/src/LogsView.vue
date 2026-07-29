@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { cmp, Code, formatBytes, Icon, InfoHint, Page, PageHeader, Segmented, timeAgo } from "@intentic/extension-ui";
+import { cmp, Code, formatBytes, Icon, InfoHint, Segmented, timeAgo } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { useLogs, useLogTail } from "./useLogs";
 
 /* The logs extension: the debug surface for everything the sandbox records under /history/logs — terminal
  * session captures (crashed ones included), intentic CLI run logs, and the daemon's own log. Read-only; the
- * files are written by the daemon/tmux only. */
+ * files are written by the daemon/tmux only.
+ *
+ * Mounted as a tab on the sandbox hub (surface: "sandbox"), so it renders a BODY — the hub owns the Page and
+ * the header above the tab strip, exactly as its built-in tabs assume. What would have been the page's
+ * description rides the Files section's InfoHint instead. */
 
 const { files, error, isLoading } = useLogs();
 
@@ -81,10 +85,13 @@ watch(tail, () => {
 </script>
 
 <template>
-    <div class="h-full min-h-0 overflow-auto">
-        <Page width="wide">
-            <PageHeader title="Logs" description="Terminal sessions, infra runs, and the sandbox daemon — durable and tamper-proof.">
-                <template #info>
+    <div class="flex min-h-0 flex-col gap-4">
+        <div v-if="error" :class="cmp.alertDanger('px-4 py-3 text-sm')">{{ error }}</div>
+
+        <section class="rounded-lg border border-line bg-card p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <h3 :class="cmp.sectionLabel()">Files</h3>
                     <InfoHint label="Logs">
                         <span class="block text-sm font-medium text-content">Sandbox logs</span>
                         <span class="mt-1 block text-xs text-muted">
@@ -93,87 +100,77 @@ watch(tail, () => {
                             survives rebuilds.
                         </span>
                     </InfoHint>
-                </template>
-            </PageHeader>
-
-            <div v-if="error" :class="cmp.alertDanger('mb-4 px-4 py-3 text-sm')">{{ error }}</div>
-
-            <div class="flex min-h-0 flex-col gap-4">
-                <section class="rounded-lg border border-line bg-card p-4">
-                    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                        <h3 :class="cmp.sectionLabel()">Files</h3>
-                        <Segmented v-model="groupChoice" size="xs" :options="groupTabs" />
-                    </div>
-                    <div class="mb-3 flex flex-wrap items-center gap-2">
-                        <input v-model="query" type="search" placeholder="Filter by name…" :class="cmp.input(`h-7 w-44 px-2 py-0 text-2xs`)" />
-                        <Segmented
-                            v-model="windowChoice"
-                            size="xs"
-                            :options="[
-                                { label: `1h`, value: `1h` },
-                                { label: `24h`, value: `24h` },
-                                { label: `7d`, value: `7d` },
-                                { label: `All`, value: `all` },
-                            ]"
-                        />
-                        <input v-model="customFrom" type="datetime-local" title="Modified after" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
-                        <input v-model="customTo" type="datetime-local" title="Modified before" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
-                    </div>
-                    <!-- Fixed default height, natively resizable (drag the bottom-right grip) so the user can trade
-                         list height against the viewer below; only mounted when there are rows, so the empty state
-                         never sits under a tall empty box. Height is an inline style, not a Tailwind class: the app's
-                         tailwind @source globs don't scan _extensions, so a novel height utility would be dropped. -->
-                    <div v-if="visible.length > 0" class="resize-y overflow-auto" style="height: 20rem; min-height: 8rem">
-                        <div v-for="group in groups" :key="group.title" class="mb-2">
-                            <p v-if="groupChoice === `all`" class="mb-1 font-mono text-2xs uppercase text-subtle/70">{{ group.title }}</p>
-                            <div class="flex flex-col divide-y divide-line">
-                                <button
-                                    v-for="file in group.entries"
-                                    :key="file.name"
-                                    type="button"
-                                    class="flex items-center gap-3 py-1.5 text-left hover:bg-hover"
-                                    :class="selected === file.name ? `text-content` : `text-muted`"
-                                    @click="selected = file.name"
-                                >
-                                    <Icon name="file" class="text-xs" :class="selected === file.name ? `text-link` : `text-subtle`" />
-                                    <span class="min-w-0 flex-1 truncate font-mono text-xs" :title="file.name">{{ displayName(file.name) }}</span>
-                                    <span class="shrink-0 text-2xs text-subtle">{{ formatBytes(file.sizeBytes) }}</span>
-                                    <span class="shrink-0 text-2xs text-subtle" :title="new Date(file.modifiedAt).toLocaleString()">
-                                        {{ timeAgo(file.modifiedAt) }}
-                                    </span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <p v-else-if="files.length === 0 && !isLoading" class="py-6 text-center text-sm text-muted">
-                        Nothing yet. Logs appear as terminals run, infra commands execute, and the daemon works.
-                    </p>
-                    <p v-else-if="files.length > 0" class="py-6 text-center text-sm text-muted">No files match the current filters.</p>
-                </section>
-
-                <section v-if="selected" class="rounded-lg border border-line bg-card p-4">
-                    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                        <h3 class="min-w-0 truncate font-mono text-xs text-content">{{ selected }}</h3>
-                        <div class="flex items-center gap-2">
-                            <span v-if="tail?.truncated" class="text-2xs text-subtle">tail of {{ formatBytes(tail.sizeBytes) }}</span>
-                            <Segmented
-                                v-model="bytesChoice"
-                                :options="[
-                                    { label: `64 KB`, value: `65536` },
-                                    { label: `256 KB`, value: `262144` },
-                                    { label: `1 MB`, value: `1048576` },
-                                ]"
-                            />
-                        </div>
-                    </div>
-                    <div v-if="tailError" :class="cmp.alertDanger('mb-2')">
-                        {{ tailError }}
-                    </div>
-                    <div ref="pane" class="max-h-128 overflow-auto">
-                        <Code :code="tail?.text ?? (tailLoading ? `Loading…` : ``)" lang="log" :wrap="true" :copyable="false" />
-                    </div>
-                </section>
+                </div>
+                <Segmented v-model="groupChoice" size="xs" :options="groupTabs" />
             </div>
-        </Page>
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+                <input v-model="query" type="search" placeholder="Filter by name…" :class="cmp.input(`h-7 w-44 px-2 py-0 text-2xs`)" />
+                <Segmented
+                    v-model="windowChoice"
+                    size="xs"
+                    :options="[
+                        { label: `1h`, value: `1h` },
+                        { label: `24h`, value: `24h` },
+                        { label: `7d`, value: `7d` },
+                        { label: `All`, value: `all` },
+                    ]"
+                />
+                <input v-model="customFrom" type="datetime-local" title="Modified after" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
+                <input v-model="customTo" type="datetime-local" title="Modified before" :class="cmp.input(`h-7 px-2 py-0 text-2xs`)" />
+            </div>
+            <!-- Fixed default height, natively resizable (drag the bottom-right grip) so the user can trade
+                 list height against the viewer below; only mounted when there are rows, so the empty state
+                 never sits under a tall empty box. Height is an inline style, not a Tailwind class: the app's
+                 tailwind @source globs don't scan _extensions, so a novel height utility would be dropped. -->
+            <div v-if="visible.length > 0" class="resize-y overflow-auto" style="height: 20rem; min-height: 8rem">
+                <div v-for="group in groups" :key="group.title" class="mb-2">
+                    <p v-if="groupChoice === `all`" class="mb-1 font-mono text-2xs uppercase text-subtle/70">{{ group.title }}</p>
+                    <div class="flex flex-col divide-y divide-line">
+                        <button
+                            v-for="file in group.entries"
+                            :key="file.name"
+                            type="button"
+                            class="flex items-center gap-3 py-1.5 text-left hover:bg-hover"
+                            :class="selected === file.name ? `text-content` : `text-muted`"
+                            @click="selected = file.name"
+                        >
+                            <Icon name="file" class="text-xs" :class="selected === file.name ? `text-link` : `text-subtle`" />
+                            <span class="min-w-0 flex-1 truncate font-mono text-xs" :title="file.name">{{ displayName(file.name) }}</span>
+                            <span class="shrink-0 text-2xs text-subtle">{{ formatBytes(file.sizeBytes) }}</span>
+                            <span class="shrink-0 text-2xs text-subtle" :title="new Date(file.modifiedAt).toLocaleString()">
+                                {{ timeAgo(file.modifiedAt) }}
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <p v-else-if="files.length === 0 && !isLoading" class="py-6 text-center text-sm text-muted">
+                Nothing yet. Logs appear as terminals run, infra commands execute, and the daemon works.
+            </p>
+            <p v-else-if="files.length > 0" class="py-6 text-center text-sm text-muted">No files match the current filters.</p>
+        </section>
+
+        <section v-if="selected" class="rounded-lg border border-line bg-card p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <h3 class="min-w-0 truncate font-mono text-xs text-content">{{ selected }}</h3>
+                <div class="flex items-center gap-2">
+                    <span v-if="tail?.truncated" class="text-2xs text-subtle">tail of {{ formatBytes(tail.sizeBytes) }}</span>
+                    <Segmented
+                        v-model="bytesChoice"
+                        :options="[
+                            { label: `64 KB`, value: `65536` },
+                            { label: `256 KB`, value: `262144` },
+                            { label: `1 MB`, value: `1048576` },
+                        ]"
+                    />
+                </div>
+            </div>
+            <div v-if="tailError" :class="cmp.alertDanger('mb-2')">
+                {{ tailError }}
+            </div>
+            <div ref="pane" class="max-h-128 overflow-auto">
+                <Code :code="tail?.text ?? (tailLoading ? `Loading…` : ``)" lang="log" :wrap="true" :copyable="false" />
+            </div>
+        </section>
     </div>
 </template>
