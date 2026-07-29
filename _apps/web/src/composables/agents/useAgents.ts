@@ -111,6 +111,16 @@ export const setAgents = (agents: AgentSummary[], rev: number): void => {
         return;
     }
     invalidateStaleDiffs(agents);
+    // An id leaving the roster by another hand than this browser's — the daemon's retention sweep, an archive
+    // or discard on another device — is the one signal the pull-only archive list ever gets that it changed,
+    // so it is its invalidation. Without it the Finished header's count (and the door it gates) kept whatever
+    // the last visit read until the next one. Local moves are excluded: they already wrote both halves, and
+    // `pending` is exactly the set of them still unconfirmed. A reset board has no ids to depart, so the
+    // reconnect's first snapshot stays quiet.
+    const incoming = new Set(agents.map((agent) => agent.id));
+    if (registry.value.some((agent) => !incoming.has(agent.id) && !pending.has(agent.id))) {
+        void loadArchived();
+    }
     appliedRev = rev;
     applySnapshot(agents, rev);
 };
@@ -310,7 +320,10 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
         (a, b) => Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt),
     );
     grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt);
-    grouped.finished.sort((a, b) => b.updatedAt - a.updatedAt);
+    // Ready-to-land cards lead Finished: they are the one kind of finished card still owed a press, and the
+    // lane windows to a handful (FINISHED_WINDOW) — recency alone would let other agents finishing push a
+    // held card behind the fold, where "waiting for you" quietly becomes "forgotten".
+    grouped.finished.sort((a, b) => Number(b.status === `ready`) - Number(a.status === `ready`) || b.updatedAt - a.updatedAt);
     return grouped;
 });
 
@@ -332,7 +345,10 @@ const refresh = async (): Promise<void> => {
  * and discard stays the destructive one. See the daemon's agents/archive.ts for what it actually costs.
  *
  * Archived agents are absent from the roster the /events stream carries, which is the point: the board's live
- * state stays the size of the work in flight. They load on demand instead, when the archive is opened.
+ * state stays the size of the work in flight. The list is PULL-ONLY instead, read where something can have
+ * changed it: at the board's mount, when the archive is opened, when the active daemon (re)appears
+ * (sandboxScope's reachable watch — a daemon that just booted may have filed agents away itself), and when an
+ * id leaves the roster by another hand than this browser's (see setAgents).
  *
  * Archiving TAKES THE AGENT'S CHAT TAB WITH IT. One agent is one thing under two skins — a card on the board and
  * a tab in the strip — so filing it away has to move both, or the strip keeps a row for work the board says is
@@ -349,7 +365,16 @@ const refresh = async (): Promise<void> => {
 const archived = ref<FleetAgent[]>([]);
 const archiveLoading = ref(false);
 
-const loadArchived = async (): Promise<void> => {
+// A sandbox SWITCH is the one thing the archive list must not survive: another daemon's archive on this board
+// would offer restores of agents this one has never heard of. Deliberately NOT folded into resetAgents — that
+// also runs on every stream failure, and blanking the count (and the archive door it gates) on a network blip
+// is a disappearing button; the last list is better company for a reconnect than an empty one, and the
+// reachable seam re-reads it the moment the daemon answers again.
+export const resetArchive = (): void => {
+    archived.value = [];
+};
+
+export const loadArchived = async (): Promise<void> => {
     archiveLoading.value = true;
     try {
         const body = await sandboxJson<{ agents: AgentSummary[] }>(`/agents/archived`);
@@ -619,6 +644,33 @@ const rename = async (id: string, title: string): Promise<void> => {
     }
 };
 
+// Set or clear (null ⇒ inherit the sandbox setting) an agent's auto-land override — whether ITS clean turns
+// keep applying to the workspace at completion, or wait on the branch for a deliberate Land. Same optimistic
+// grammar as rename: the registry entry flips in place (every surface stating the posture repaints on the
+// tick of the click), the daemon's summary replaces it, and a failure reverts against the CURRENT roster and
+// propagates for the caller's inline reporting.
+const setAutoLand = async (id: string, autoLand: boolean | null): Promise<void> => {
+    const previous = registry.value.find((agent) => agent.id === id);
+    const revert = previous?.autoLand;
+    if (previous !== undefined) {
+        previous.autoLand = autoLand ?? undefined;
+    }
+    try {
+        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/auto-land`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ autoLand }),
+        });
+        registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
+    } catch (error) {
+        const target = registry.value.find((agent) => agent.id === id);
+        if (target !== undefined) {
+            target.autoLand = revert;
+        }
+        throw error;
+    }
+};
+
 // Open (or focus) an agent's conversation tab and mark it seen. Takes just the identity fields so registry
 // cards and client-only draft cards both route through it.
 const open = (agent: Pick<FleetAgent, "id" | "provider" | "harness" | "sessionId" | "title" | "account" | "status">): void => {
@@ -648,6 +700,7 @@ export function useAgents() {
         markSeen,
         markAllSeen,
         rename,
+        setAutoLand,
         agentById,
         archived,
         archiveLoading,

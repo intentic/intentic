@@ -22,7 +22,7 @@ import { nextTick } from "vue";
 import { Conversation } from "../chat/conversation";
 import { useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
-import { canArchive, resetAgents, setAgents, useAgents } from "./useAgents";
+import { canArchive, resetAgents, resetArchive, setAgents, useAgents } from "./useAgents";
 
 /* The board's exit gate, which is NOT the Finished lane. Gating it on the lane is what stranded a failed turn:
  * an errored card's only offered drop is a land onto Finished, so an agent that failed with nothing landable
@@ -553,5 +553,80 @@ describe("archive", () => {
             expect(receipt.value).toBeUndefined();
             expect(undoable.value).toEqual([`a`, `b`]);
         });
+    });
+});
+
+/* The archive list is the fleet's pull-only half — no stream carries it — so its one invalidation signal is an
+ * id leaving the roster by another hand than this browser's (the daemon's retention sweep, another device's
+ * archive or discard). Without it the Finished header's count, and the archive door it gates, froze at
+ * whatever the last visit read — which is how the door came to look like it disappears. */
+describe("the archive list", () => {
+    const agent = (id: string): AgentSummary => ({
+        id,
+        status: `landed`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 1_000,
+        seenAt: 2_000,
+        attention: { plan: false, question: false, permission: false, conflict: false },
+    });
+    const archivedAgent = (id: string): AgentSummary => ({ ...agent(id), archivedAt: 2_000 });
+    const post = vi.mocked(sandboxJson);
+    const archivedReads = (): number => post.mock.calls.filter(([path]) => path === `/agents/archived`).length;
+
+    beforeEach(() => {
+        post.mockReset().mockResolvedValue({} as never);
+        resetAgents();
+        resetArchive();
+        const other = new Conversation();
+        other.isolated.value = false;
+        useChat().conversations.value = [other];
+    });
+
+    it("re-reads itself when an id leaves the roster by another hand — the daemon's sweep, another device", async () => {
+        const { archived } = useAgents();
+        setAgents([agent(`a`), agent(`b`)], 1);
+        post.mockResolvedValueOnce({ agents: [archivedAgent(`b`)] } as never);
+
+        // The retention sweep archived `b`: the next roster frame simply arrives without it.
+        setAgents([agent(`a`)], 2);
+        await vi.waitFor(() => expect(archived.value.map((entry) => entry.id)).toEqual([`b`]));
+
+        expect(archivedReads()).toBe(1);
+    });
+
+    it("stays quiet when the departure is this browser's own archive — both halves are already written", async () => {
+        const { archive } = useAgents();
+        setAgents([agent(`a`), agent(`b`)], 1);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 2 } as never);
+        await archive([`a`]);
+
+        // The daemon's own account of the archive, and a later unrelated frame — neither is news to the list.
+        setAgents([agent(`b`)], 2);
+        setAgents([agent(`b`)], 3);
+
+        expect(archivedReads()).toBe(0);
+    });
+
+    it("stays quiet across a reconnect's first snapshot — a reset board has no ids to depart", () => {
+        setAgents([agent(`a`)], 42);
+        resetAgents();
+
+        setAgents([agent(`a`)], 0);
+
+        expect(archivedReads()).toBe(0);
+    });
+
+    it("is cleared by resetArchive alone — a stream failure must not blank the archive door", async () => {
+        const { archived } = useAgents();
+        archived.value = [Object.assign(archivedAgent(`a`), { open: false, unread: false })];
+
+        // The liveness loop's failure path: the roster resets, the archive list keeps its last reading.
+        resetAgents();
+        expect(archived.value.map((entry) => entry.id)).toEqual([`a`]);
+
+        // The sandbox switch: another daemon's archive must not be offered on this board.
+        resetArchive();
+        expect(archived.value).toEqual([]);
     });
 });

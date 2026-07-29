@@ -1,5 +1,5 @@
 import { watch } from "vue";
-import { resetAgents } from "../agents/useAgents";
+import { loadArchived, resetAgents, resetArchive } from "../agents/useAgents";
 import { loadAccountStatus, resetChat } from "../chat/useChat";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { resetPresence } from "../usePresence";
@@ -33,6 +33,8 @@ watch(activeSandboxId, (id, previous) => {
     // (a fresh container, a restart) had every roster frame it sent dropped as out-of-order, leaving the
     // previous sandbox's agents on the board and its titles renaming this sandbox's tabs.
     resetAgents();
+    // The archive half goes with it — but ONLY here, not on stream failures (see resetArchive on why).
+    resetArchive();
 });
 
 // Account status lives on the daemon, so (re)load it whenever the ACTIVE daemon is reachable: first liveness
@@ -43,5 +45,11 @@ watch(activeSandboxId, (id, previous) => {
 watch([reachable, activeSandboxId], ([isReachable]) => {
     if (isReachable) {
         void loadAccountStatus();
+        // The archive list rides the same seam: it is pull-only (the roster stream never carries it), and the
+        // daemon that just (re)appeared may have filed agents away itself — its boot sweep archives entries
+        // whose worktree vanished, its retention pass archives what aged out. Without this re-read, the
+        // Finished header's count froze at whatever the last visit saw — a daemon restart away from reading 0
+        // and hiding the archive door with every agent the user ever ran behind it.
+        void loadArchived();
     }
 });

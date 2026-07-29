@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, LandConflictSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -9,8 +9,9 @@ import { z } from "zod";
 // registry's memory and is rebuilt from turn frames; only what must survive a restart is here.
 
 // Persisted status excludes the transient running/awaiting — a daemon restart mid-turn must rehydrate to a
-// state the user can act on (the turn itself is gone).
-const PersistedAgentStatusSchema = z.enum(["idle", "landed", "conflict", "error"]);
+// state the user can act on (the turn itself is gone). `ready` IS persisted: a held delta waits on the branch
+// across restarts exactly as it waits across turns, and rehydrating it to `idle` would hide work from review.
+const PersistedAgentStatusSchema = z.enum(["idle", "ready", "landed", "conflict", "error"]);
 
 /* Where a title came from, which is the whole of what decides whether a better one may replace it.
  *
@@ -56,6 +57,9 @@ export const PersistedAgentSchema = z.object({
         }),
     ),
     status: PersistedAgentStatusSchema,
+    // Per-agent override of the sandbox-wide autoLand setting, absent ⇒ inherit — see AgentSummarySchema.
+    // Persisted because it must govern turns that finish with no browser attached (automations included).
+    autoLand: z.boolean().optional(),
     // Why the last land refused, kept alongside the `conflict` status it produced — the two are one fact, and
     // a status the UI can render but not explain is what makes a conflicted card a dead end. Written and
     // cleared by the same recordLanded that advances the tips, so it is exactly as current as they are.
@@ -89,17 +93,49 @@ export interface AgentsStore {
     readonly save: (agents: readonly PersistedAgent[]) => Promise<void>;
 }
 
+/* This file is the fleet's ONLY record of which conversations exist — archived ones included, whose whole
+ * promise is "nothing is lost". The registry write-through persists the in-memory array on every mutation, so
+ * a load that answers a bad file with `[]` doesn't merely start one boot empty: the first mutation after it
+ * WRITES that emptiness back, and every agent the sandbox ever ran is gone for good. Both halves below exist
+ * to make that impossible:
+ *   · save is atomic (tmp + rename) — a daemon killed mid-write (a container rebuild deploys one on every
+ *     update here) leaves the previous file intact instead of a truncated one
+ *   · load never lets what it couldn't read be overwritten — an unparseable file is set ASIDE, an invalid
+ *     entry is dropped alone. Only a file that is genuinely absent reads as a fresh sandbox. */
 export const fileAgentsStore = (path: string): AgentsStore => ({
     load: async () => {
+        let raw: string;
         try {
-            const parsed = z.array(PersistedAgentSchema).safeParse(JSON.parse(await readFile(path, "utf8")));
-            return parsed.success ? parsed.data : [];
+            raw = await readFile(path, "utf8");
         } catch {
+            return []; // Absent ⇒ a fresh sandbox — the one case where an empty fleet is the truth.
+        }
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(raw);
+        } catch {
+            // The file exists but isn't JSON (a torn write from before saves were atomic, a stray editor).
+            // Returning [] here with the file still in place is how one bad boot used to erase the fleet: move
+            // the bytes out of the write path so the next persist cannot overwrite the only copy of them.
+            await rename(path, `${path}.corrupt`).catch(() => undefined);
             return [];
         }
+        if (!Array.isArray(parsed)) {
+            await rename(path, `${path}.corrupt`).catch(() => undefined);
+            return [];
+        }
+        // Per entry, not the array at once: one row a schema change no longer accepts must cost that row, not
+        // the whole roster it sits in.
+        return parsed.flatMap((entry) => {
+            const result = PersistedAgentSchema.safeParse(entry);
+            return result.success ? [result.data] : [];
+        });
     },
     save: async (agents) => {
         await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, `${JSON.stringify(agents, undefined, 2)}\n`);
+        // Write-then-rename so the file is always one COMPLETE roster or the previous one — never a prefix.
+        const tmp = `${path}.tmp`;
+        await writeFile(tmp, `${JSON.stringify(agents, undefined, 2)}\n`);
+        await rename(tmp, path);
     },
 });

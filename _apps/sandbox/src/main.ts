@@ -111,9 +111,9 @@ const main = async (): Promise<void> => {
     // whose excludes it does not disturb, and before the registry loads the worktrees it repairs.
     await ensureRepoGitDirs(services.workspace, config.historyRoot, logger);
 
-    // The fleet registry: load persisted conversations, drop entries whose worktree vanished, sweep orphaned
-    // worktree dirs + stale admin entries (`git worktree prune`). Awaited (cheap, and the /agents routes assume
-    // a loaded registry); a failure degrades to an empty fleet, never a dead daemon.
+    // The fleet registry: load persisted conversations, file away entries whose worktree vanished, sweep
+    // orphaned worktree dirs + stale admin entries (`git worktree prune`). Awaited (cheap, and the /agents
+    // routes assume a loaded registry); a failure degrades to an empty fleet, never a dead daemon.
     await services.agents
         .init()
         .then(async () => {
@@ -128,9 +128,15 @@ const main = async (): Promise<void> => {
                     vanished.push(id);
                 }
             }
-            // One write for the whole sweep: a boot that drops a dozen dead entries owes the disk one persist.
+            // A live entry with no checkout is an ARCHIVED agent in every way that matters — off the board,
+            // held by its branch — so that is what it becomes. This sweep used to `remove()` these outright,
+            // and it was the fleet's quietest data loss: a rebuild that lost worktree dirs, or an unarchive
+            // whose re-attach failed mid-way, left live entries with no checkout, and the next boot deleted
+            // the user's only handle on their branches and transcripts. Deletion stays where the user can see
+            // it: discard, and the archive's own purge. One write for the whole sweep either way.
             if (vanished.length > 0) {
-                await services.agents.remove(vanished);
+                await services.agents.setArchived(vanished, Date.now());
+                logger.info({ count: vanished.length }, "agents: archived entries whose worktree vanished");
             }
             await services.agentWorktrees.prune(services.agents.ids());
         })
