@@ -10,7 +10,6 @@ import {
     type PermissionUpdate,
     query,
     type SDKAssistantMessage,
-    type SDKControlGetUsageResponse,
     type SDKMessage,
     type SDKUserMessage,
     type SlashCommand,
@@ -139,15 +138,14 @@ export interface AgentRequest {
     readonly unattended?: boolean;
 }
 
-// What a turn needs from the SDK: the message stream, the session's slash-command list, and the plan's usage
-// windows. The real `query` returns a Query, which satisfies all three; both methods are optional because a
-// fake stream legitimately has neither (they resolve control requests, which no canned generator answers).
+// What a turn needs from the SDK: the message stream and the session's slash-command list. The real `query`
+// returns a Query, which satisfies both; the method is optional because a fake stream legitimately has none
+// (it resolves a control request, which no canned generator answers).
 export type AgentQuery = AsyncIterable<SDKMessage> & {
     readonly supportedCommands?: () => Promise<readonly SlashCommand[]>;
-    readonly usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<SDKControlGetUsageResponse>;
 };
 
-// A window the CLI's usage endpoint reports, or nothing when it has no reading for that pool. `resets_at` is
+// A window the usage endpoint reports, or nothing when it has no reading for that pool. `resets_at` is
 // ISO-8601 there and epoch SECONDS on our wire (the unit the SDK's own rate_limit frame uses).
 const usageWindow = (
     kind: string,
@@ -166,21 +164,38 @@ const usageWindow = (
     };
 };
 
-/* Every plan-limit pool for this session's account, straight from the CLI's usage endpoint — the same read
- * behind Claude Code's own /usage dialog. A CONTROL request: it never touches the model, so it costs no tokens
- * and adds no turns to the bill.
+/* Every plan-limit pool for this turn's credential, read straight from Anthropic's OAuth usage endpoint — the
+ * same data behind Claude Code's own /usage dialog, at no token cost. Deliberately NOT the SDK's usage control
+ * request: the CLI only reports rate limits for a profile it signed in itself, and a daemon turn hands it a
+ * bare env token, so that read answers `rate_limits: null` on every turn — which is how this pipeline shipped
+ * without ever producing a reading.
  *
  * This exists because the stream's rate_limit_event names exactly ONE window (whichever the CLI treated as
  * binding for that request), and persisting it as the account's headroom is how a Usage tab came to say
  * "Weekly limit 1%" for an account that was really at 98% on its all-models weekly pool. All pools or none.
  *
- * Everything here is best-effort by construction: the SDK marks the method experimental, an API-key session has
- * no plan limits at all (`rate_limits_available: false`), and a usage read must never be able to fail a turn
- * that has already produced its answer. */
-const claudeUsageWindows = async (session: AgentQuery): Promise<UsageWindow[]> => {
-    const response = await session.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?.().catch(() => undefined);
-    const limits = response?.rate_limits;
-    if (limits === undefined || limits === null) {
+ * Best-effort by construction: a usage read must never be able to fail — or stall, hence the timeout — a turn
+ * that has already produced its answer, so every failure reads as "no reading". */
+const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage";
+type UsageReading = { utilization: number | null; resets_at: string | null } | null;
+const claudeUsageWindows = async (oauthToken: string, fetchFn: typeof fetch): Promise<UsageWindow[]> => {
+    const limits = await fetchFn(USAGE_ENDPOINT, {
+        headers: { Authorization: `Bearer ${oauthToken}`, "anthropic-beta": "oauth-2025-04-20" },
+        signal: AbortSignal.timeout(10_000),
+    })
+        .then((response) =>
+            response.ok
+                ? (response.json() as Promise<{
+                      five_hour?: UsageReading;
+                      seven_day?: UsageReading;
+                      seven_day_opus?: UsageReading;
+                      seven_day_sonnet?: UsageReading;
+                      seven_day_oauth_apps?: UsageReading;
+                  }>)
+                : undefined,
+        )
+        .catch(() => undefined);
+    if (limits === undefined) {
         return [];
     }
     return [
@@ -189,9 +204,6 @@ const claudeUsageWindows = async (session: AgentQuery): Promise<UsageWindow[]> =
         usageWindow("seven_day_opus", limits.seven_day_opus),
         usageWindow("seven_day_sonnet", limits.seven_day_sonnet),
         usageWindow("seven_day_oauth_apps", limits.seven_day_oauth_apps),
-        // Per-model buckets are additive and server-named ('Fable'), so they key off that name and carry it as
-        // their label rather than being mapped onto a fixed list we'd have to chase.
-        ...(limits.model_scoped ?? []).map((entry) => usageWindow(`model:${entry.display_name}`, entry, entry.display_name)),
     ].filter((window) => window !== undefined);
 };
 
@@ -312,6 +324,9 @@ async function* streamSdk(
     cwd: string,
     tmuxEnabled: boolean,
     steering: SteeringQueue | undefined,
+    // Reads the credential's plan-limit pools at turn settle; absent when the turn ran on a credential with no
+    // pools to read (an API endpoint, the container env) — no read, no frame.
+    readUsage: (() => Promise<UsageWindow[]>) | undefined,
 ): AsyncGenerator<AgentEvent> {
     let sessionSent = false;
     let terminalSent = false;
@@ -630,12 +645,11 @@ async function* streamSdk(
                 yield { kind: "error", message: `agent did not complete (${message.subtype})` };
             }
             // The account's headroom, re-read now that the turn has settled — the freshest this account's
-            // limits get without spending anything to find out. After the result frames on purpose: the
-            // control request is a round trip to the CLI, and nothing about it should sit between the user
-            // and the answer they were waiting for. An empty read (API key session, an older CLI, a failed
-            // request) yields no frame at all rather than an empty window list, which would read as
-            // "measured, and you have no limits".
-            const windows = await claudeUsageWindows(session);
+            // limits get without spending anything to find out. After the result frames on purpose: the read
+            // is a network round trip, and nothing about it should sit between the user and the answer they
+            // were waiting for. An empty read (no pools reported, a failed request) yields no frame at all
+            // rather than an empty window list, which would read as "measured, and you have no limits".
+            const windows = readUsage === undefined ? [] : await readUsage();
             if (windows.length > 0) {
                 yield { kind: "account_usage", windows };
             }
@@ -996,7 +1010,7 @@ const permissionGate =
 //
 // A throwing/aborted turn surfaces as an `error` event (errors are reported to the UI, not swallowed), then
 // the stream closes with `done`.
-export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaultQuery): AsyncGenerator<AgentEvent> {
+export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaultQuery, usageFetch: typeof fetch = fetch): AsyncGenerator<AgentEvent> {
     const abortController = new AbortController();
     if (request.signal.aborted) {
         abortController.abort();
@@ -1033,9 +1047,15 @@ export async function* runAgent(request: AgentRequest, queryFn: QueryFn = defaul
         canUseTool: permissionGate(request, push),
     };
 
+    // A turn that authenticated with a stored account's OAuth token can read that plan's limit pools at settle;
+    // endpoint turns (translator, Moonshot) and container-env turns have no pools to read — and no account to
+    // file a reading under (agent.routes persists only attributed frames).
+    const oauthToken = request.oauthToken;
+    const readUsage = oauthToken === undefined ? undefined : (): Promise<UsageWindow[]> => claudeUsageWindows(oauthToken, usageFetch);
+
     const pump = (async () => {
         try {
-            for await (const event of streamSdk(queryFn, promptInput(request), options, request.cwd, tmuxEnabled, request.steering)) {
+            for await (const event of streamSdk(queryFn, promptInput(request), options, request.cwd, tmuxEnabled, request.steering, readUsage)) {
                 push(event);
             }
         } catch (error) {
