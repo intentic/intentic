@@ -441,6 +441,65 @@ test("a fully reverted delta lands as a no-op: landedTip advances, no phantom co
     expect(again).toMatchObject({ landed: true, changed: false });
 });
 
+/* MEASURE MODE — auto-land off. Everything a land does except touching the main tree: the provenance commit,
+ * the diffstat and the already-in-main bookkeeping all run, and the outstanding delta is reported `held`
+ * rather than applied — the caller stamps the card "Ready to land" on it. */
+test("measure holds the delta on the branch: nothing applies, tips stay, the diffstat still reports", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await writeFile(join(conversation.cwd, "added.ts"), "new file\n");
+
+    const result = await landAgent(worktrees, entryFor(conversation.repos), "measure");
+
+    // A real outcome (the caller persists and flips status on it), but not a landed one and not a refusal.
+    expect(result).toMatchObject({ landed: false, changed: true, held: true });
+    expect(result.conflicts).toBeUndefined();
+    // The main tree is byte-identical — the whole point of holding.
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one\nline two\nline three\n");
+    expect(existsSync(join(work, "added.ts"))).toBe(false);
+    expect(await sh(work, "status", "--porcelain")).toBe("");
+    // The card's numbers stay as current as a landed agent's.
+    expect(result.diff).toEqual({ files: 2, insertions: 2, deletions: 1 });
+    // landedTip did NOT advance — the eventual deliberate land carries this exact delta…
+    expect(result.repos.find((repo) => repo.repo === "root")?.landedTip).toBeUndefined();
+    // …and the provenance commit happened: the worktree's dirty state is safe on agent/c1.
+    expect(await sh(conversation.cwd, "status", "--porcelain")).toBe("");
+
+    // The deliberate land is an ordinary check land of the cumulative delta.
+    const landed = await landAgent(worktrees, entryFor(result.repos));
+    expect(landed.landed).toBe(true);
+    expect(landed.held).toBeUndefined();
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one EDITED\nline two\nline three\n");
+    expect(await readFile(join(work, "added.ts"), "utf8")).toBe("new file\n");
+});
+
+test("measure still recognizes work that reached main by another road, instead of holding it forever", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const recorded = entryFor(conversation.repos);
+    await writeFile(join(conversation.cwd, "agent.ts"), "agent work\n");
+    await sh(conversation.cwd, "add", "-A");
+    await sh(conversation.cwd, "-c", "user.name=a", "-c", "user.email=a@a", "commit", "-q", "-m", "agent");
+    // The same content reaches main as its OWN commit — a held card offering to land this could never do
+    // anything, which is the dead end the reverse probe exists to rule out.
+    await writeFile(join(work, "agent.ts"), "agent work\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "the same work, by hand");
+
+    const result = await landAgent(worktrees, entryFor(recorded.repos), "measure");
+
+    expect(result.held).toBeUndefined();
+    expect(result).toMatchObject({ landed: true, changed: true });
+    expect(result.repos[0]?.landedTip).toBe(await sh(conversation.cwd, "rev-parse", "HEAD"));
+    expect(await sh(work, "status", "--porcelain")).toBe("");
+});
+
+test("measure with nothing to measure stays changed:false, like any other no-op land", async () => {
+    const { worktrees, conversation } = await setup();
+    const result = await landAgent(worktrees, entryFor(conversation.repos), "measure");
+    expect(result).toMatchObject({ landed: true, changed: false });
+    expect(result.held).toBeUndefined();
+});
+
 test("deletes and renames land; a conflicted land keeps landedTip so recovery applies the same delta", async () => {
     const { work, worktrees, conversation } = await setup();
     await sh(conversation.cwd, "mv", "app.ts", "renamed.ts");

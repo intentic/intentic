@@ -63,26 +63,35 @@ export const accountLimitReset = async (services: Services, account: string | un
     )?.resetsAt;
 };
 
-// Prepended to the resumed turn's prompt. Startswith-checked before wrapping so a resume that ALSO dies on
-// the limit (and is re-recorded from its own input) doesn't stack a second copy on the next fire.
+// Prepended to the resumed turn's prompt — one wording per way a resume starts, so the model knows whether it
+// is waiting out a reset or riding a fresh allowance. Startswith-checked against BOTH before wrapping, so a
+// resume that ALSO dies on the limit (and is re-recorded from its own input) doesn't stack a second copy on
+// the next fire, whichever road that fire takes.
 const RESUME_NOTE = "The Claude usage limit that interrupted this conversation has reset, and this turn resumed automatically.";
+const SWITCH_NOTE = "The Claude usage limit interrupted this conversation, and this turn now resumes on a different account.";
 
-const withResumeNote = (prompt: string): string =>
-    prompt.startsWith(RESUME_NOTE)
+const withResumeNote = (prompt: string, note: string): string =>
+    [RESUME_NOTE, SWITCH_NOTE].some((known) => prompt.startsWith(known))
         ? prompt
-        : `${RESUME_NOTE} The interrupted request is repeated below — where part of it was already completed in this session, continue from that point instead of starting over.\n\n${prompt}`;
+        : `${note} The interrupted request is repeated below — where part of it was already completed in this session, continue from that point instead of starting over.\n\n${prompt}`;
 
 /* The turn a fire runs. The original prompt rides again IN FULL rather than as a bare "continue": whether
  * the CLI persisted the unprocessed user message before the refusal is its own implementation detail, and a
  * resume that guesses wrong there loses the message — repeating it costs at most a duplicate the model reads
  * past. The session override keeps partial work; `history` seeds a FRESH session, so it only rides when there
- * is no session to return to. */
-export const resumeTurnOf = (hit: LimitHit): AgentTurn & { conversationId: string } => {
+ * is no session to return to.
+ *
+ * `account` is the resume-now path (/agent/resume-limit): the same turn pointed at a different connected
+ * account of the same provider, whose allowance is not the spent one. The session STILL rides — Claude
+ * sessions live in the sandbox's own store, not the account, so the partial work continues under whichever
+ * credential serves the resume. */
+export const resumeTurnOf = (hit: LimitHit, account?: string): AgentTurn & { conversationId: string } => {
     const sessionId = hit.sessionId ?? hit.input.sessionId;
     const { history, ...rest } = hit.input;
     return {
         ...rest,
-        prompt: withResumeNote(hit.input.prompt),
+        prompt: withResumeNote(hit.input.prompt, account === undefined ? RESUME_NOTE : SWITCH_NOTE),
+        ...(account !== undefined ? { account } : {}),
         ...(sessionId !== undefined ? { sessionId } : history !== undefined ? { history } : {}),
     };
 };

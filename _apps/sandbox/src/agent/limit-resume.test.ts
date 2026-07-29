@@ -54,6 +54,21 @@ test("resumeTurnOf repeats the original request under the resume note and return
     expect(again.prompt).toBe(turn.prompt);
 });
 
+test("an account override points the resume at the other allowance, under its own note, session intact", () => {
+    const turn = resumeTurnOf(hit("lr-switch", { sessionId: "s-live", input: { prompt: "finish the report", conversationId: "lr-switch", account: "acct-spent" } }), "acct-b");
+    // The switch wording, not the reset wording — the model should know it is riding a fresh allowance.
+    expect(turn.prompt).toContain("different account");
+    expect(turn.prompt).toContain("finish the report");
+    expect(turn.account).toBe("acct-b");
+    // Sessions live in the sandbox's store, not the account: the partial work continues under the new credential.
+    expect(turn.sessionId).toBe("s-live");
+
+    // Cross-note dedup: a switched resume that ALSO dies on the limit and then resumes by reset (or vice
+    // versa) must not stack the other road's note on top.
+    const again = resumeTurnOf(hit("lr-switch", { input: { prompt: turn.prompt, conversationId: "lr-switch" } }));
+    expect(again.prompt).toBe(turn.prompt);
+});
+
 test("with no session anywhere, the history seed rides the resume unchanged", () => {
     const turn = resumeTurnOf(hit("lr-hist", { input: { prompt: "p", conversationId: "lr-hist", history: [{ role: "user", text: "hi" }] } }));
     expect(turn.sessionId).toBeUndefined();

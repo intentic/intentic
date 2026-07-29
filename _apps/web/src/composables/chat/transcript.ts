@@ -106,6 +106,11 @@ export interface ChatMessage {
     readonly id: number;
     readonly role: ChatRole;
     readonly text: string;
+    // A one-press follow-up a notice line can carry (notices only; today just the landed notice's "keep
+    // future work on the branch" offer). A KIND, not a callback — the transcript is rebuilt from replayed
+    // frames, so the renderer owns what the press does and whether the offer is still standing
+    // (ChatMessageView reads the CURRENT auto-land posture and hides a stale offer).
+    readonly noticeAction?: "landHold";
     // Files the user attached to this turn (user bubbles only), for the chip/thumbnail row.
     readonly attachments?: readonly ChatAttachment[];
     // The workspace checkpoint capturing the state BEFORE this turn ran (user bubbles only, main-tree turns
