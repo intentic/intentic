@@ -49,7 +49,12 @@ setup_builder
 # Build + push one image under every requested tag. The Dockerfile + build context differ per image: the
 # sandbox builds from the monorepo root plus the pre-built `trees` context; the dind-host from its
 # self-contained _tools/dind-host package. Extra args after the context pass through to buildx.
-# A missing cache ref (first ever build) is a non-fatal warning, so this is safe on a cold registry.
+# Caching must never fail a build, on EITHER side. An unreachable/missing cache ref on IMPORT is already a
+# non-fatal warning (so this is safe on a cold registry); ignore-error=true makes a failed cache EXPORT one
+# too. That export is not hypothetical: gitlab.com's registry answers the finalizing PUT of the sandbox
+# image's largest cache blob with a 400, and buildkit cancels the image push running alongside it — the image
+# is fully pushed ("pushing layers 126.7s done") and then thrown away. That is how 1.159.0 and 1.160.0
+# reached npm with no sandbox image behind them.
 publish() {
     local image="$1" dockerfile="$2" context="$3"
     shift 3
@@ -59,7 +64,7 @@ publish() {
     done
     if [ "$REGISTRY_CACHE" = 1 ]; then
         cache_args=(--cache-from "type=registry,ref=$REGISTRY/$image:buildcache"
-                    --cache-to "type=registry,ref=$REGISTRY/$image:buildcache,mode=max,image-manifest=true")
+                    --cache-to "type=registry,ref=$REGISTRY/$image:buildcache,mode=max,image-manifest=true,ignore-error=true")
     else
         cache_args=(--cache-from "$REGISTRY/$image:latest" --cache-to "type=inline")
     fi
