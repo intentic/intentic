@@ -6,7 +6,7 @@ import { useRoute, useRouter } from "vue-router";
 import { type AgentCommand, NATIVE_PROVIDERS, type NativeProvider, type OauthAccount, providerLabel } from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
 import { effortsFor, MODES } from "../composables/chat/catalog";
-import { modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
+import { effectiveAccount, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
 import { acksOf, type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
 import { bindingWindow, formatReset, formatUtilization, isStale, usageDetail, usageStatusFor, usageTone } from "../composables/chat/usageStatus";
 import { errorMessage } from "../composables/useAsyncAction";
@@ -196,7 +196,10 @@ const activeArchived = computed(() => {
 // fills. Keyed by account so switching accounts shows the right one. The ring tracks the FULLEST pool (the one
 // that will gate the next turn); the tooltip lists them all, because which one is binding shifts between turns.
 const usageRing = computed(() => {
-    const info = usageStatusFor(active.value.account.value);
+    // Resolved through effectiveAccount: a conversation that never picked an account runs on the daemon's
+    // first, and the usage map is keyed by that real id — looking up `undefined` kept this chip invisible on
+    // every single-account setup.
+    const info = usageStatusFor(effectiveAccount(active.value.provider.value, active.value.account.value));
     const window = bindingWindow(info);
     if (info === undefined || window === undefined) {
         return undefined;

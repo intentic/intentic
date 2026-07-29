@@ -291,6 +291,12 @@ export const rememberedModelFor = (provider: AgentProvider): string => turnDefau
 export const providerAccounts = ref<Record<AgentProvider, readonly OauthAccount[]>>(perProvider<readonly OauthAccount[]>(() => []));
 export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>(perProvider<string | undefined>(() => undefined));
 
+// The account a turn actually runs on when the conversation hasn't picked one: the daemon resolves undefined
+// to its first account, so any reader of account-KEYED state (the usage map above all) must resolve the same
+// way — looking up `undefined` misses entries the daemon filed under the real id.
+export const effectiveAccount = (provider: AgentProvider, picked: string | undefined): string | undefined =>
+    picked ?? providerAccounts.value[provider]?.[0]?.id;
+
 // Which SUBSCRIPTIONS the bundled translator holds (codex/grok/gemini) — the other half of "can this provider
 // run", since those three authenticate through the translator rather than through a daemon-stored account.
 // Written by useChat (refreshTranslatorAccounts / resetChat); kept here beside providerAccounts so the access
