@@ -1,25 +1,11 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
+import { readWindowState, writeWindowState } from "../windowStore";
 
 /* Where a sandbox's open chat tabs live between page loads: session/provider identity, title, and the composer
- * draft (text + done-upload metadata), as one JSON blob per sandbox. Transcript CONTENT is not in here — it is
+ * draft (text + done-upload metadata), as one JSON blob per sandbox — this window's own, seeded by the last
+ * window's (windowStore holds the two-store mechanics and why). Transcript CONTENT is not in here — it is
  * mirrored to IndexedDB instead (see transcriptCache), so a restored tab paints from disk at once and useChat's
- * rehydration watch then reconciles it with the daemon.
- *
- * TWO STORES, because a tab set belongs to a WINDOW and a sandbox outlives every window that ever opened it:
- *
- *   · sessionStorage — this window's own tabs. Per browser tab, and it survives a reload (including the dev
- *     server's live-reload and a crash restore), which is exactly the lifetime an open tab set has. This is
- *     the authority: what this window restores is what this window last showed.
- *   · localStorage — the same blob as a SEED, read only by a window that has never opened this sandbox. It is
- *     how "open the app, your chats are still there" survives closing the browser.
- *
- * One shared key for both roles is what the split fixes. Every open window rewrites the snapshot on every
- * keystroke, upload and streamed title, so with several sessions open the last writer won: a window came back
- * from a reload wearing another window's tabs (wrong names, transcripts it had never cached, so empty), and a
- * tab closed in one window was resurrected by the next write from another. Windows are supposed to differ —
- * the daemon multiplexes attach streams and the presence roster counts viewers per connection precisely so two
- * windows can sit on different chats — and now their tab sets can too. The seed write stays last-writer-wins,
- * which is harmless: no window ever reads it back while it is open. */
+ * rehydration watch then reconciles it with the daemon. */
 
 // One tab, as persisted. Everything optional is a value the tab can genuinely lack; nothing here is a
 // compatibility shim, so a blob that doesn't fit is dropped rather than migrated.
@@ -71,25 +57,6 @@ export interface TabSnapshot {
 }
 
 const snapshotKey = (sandboxId: string): string => `intentic.chatTabs.${sandboxId}`;
-
-// Storage can be missing entirely (private mode, disabled site data) and merely TOUCHING it throws there, so
-// both accessors are guarded: a read degrades to "no snapshot" and a write to a no-op, which leaves exactly
-// the in-memory tabs this window already holds.
-const readFrom = (storage: () => Storage, key: string): string | null => {
-    try {
-        return storage().getItem(key);
-    } catch {
-        return null;
-    }
-};
-
-const writeTo = (storage: () => Storage, key: string, json: string): void => {
-    try {
-        storage().setItem(key, json);
-    } catch {
-        // Unavailable or over quota; the in-memory tabs still hold for the life of the window.
-    }
-};
 
 // Providers are an open string vocabulary (native ids + installed ACP agent ids) — a stored provider is valid
 // when non-empty; a since-removed ACP id degrades at send time (the daemon's unknown-provider error frame).
@@ -144,10 +111,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
 // Parse one stored blob into a coherent snapshot: readable tabs only, each conversation once (a duplicate id
 // would render as two tabs sharing a key, which is how a strip ends up with the wrong name on the wrong tab
 // and a × that removes neither), and a focus that names one of them.
-const parse = (raw: string | null): TabSnapshot | undefined => {
-    if (raw === null) {
-        return undefined;
-    }
+const parse = (raw: string): TabSnapshot | undefined => {
     let stored: { active?: unknown; tabs?: unknown };
     try {
         stored = JSON.parse(raw) as { active?: unknown; tabs?: unknown };
@@ -175,18 +139,11 @@ const parse = (raw: string | null): TabSnapshot | undefined => {
 };
 
 // This window's tabs for a sandbox, else the last window's (the seed) when this one has never opened it.
-export const readTabSnapshot = (sandboxId: string | undefined): TabSnapshot | undefined => {
-    if (sandboxId === undefined) {
-        return undefined;
-    }
-    const key = snapshotKey(sandboxId);
-    return parse(readFrom(() => sessionStorage, key)) ?? parse(readFrom(() => localStorage, key));
-};
+export const readTabSnapshot = (sandboxId: string | undefined): TabSnapshot | undefined =>
+    sandboxId === undefined ? undefined : readWindowState(snapshotKey(sandboxId), parse);
 
 // Persist this window's strip. Takes the serialized snapshot because the store watches that string: it is what
 // makes "any field of any tab changed" a single cheap comparison, so re-serializing here would only repeat it.
 export const writeTabSnapshot = (sandboxId: string, json: string): void => {
-    const key = snapshotKey(sandboxId);
-    writeTo(() => sessionStorage, key, json);
-    writeTo(() => localStorage, key, json);
+    writeWindowState(snapshotKey(sandboxId), json);
 };

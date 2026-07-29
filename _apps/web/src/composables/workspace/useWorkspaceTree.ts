@@ -2,10 +2,11 @@ import type { WorkspaceChildrenResponse, WorkspaceFileResponse, WorkspaceTreeEnt
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { sandboxBlob, sandboxJson } from "../sandbox/sandboxClient";
-import { sandboxKey } from "../sandbox/useSandbox";
+import { sandboxKey, useSandbox } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { errorMessage, useAsyncAction } from "../useAsyncAction";
 import { resetUploadQueue } from "./useUploadQueue";
+import { readExpandedDirs, writeExpandedDirs } from "./workspaceSnapshot";
 
 // Shared, module-level feedback for user file actions (rename, delete, save, move…) so the explorer, the tree
 // rows, and the editor all report through ONE busy spinner + error line. Errors are surfaced, not thrown — a
@@ -25,7 +26,26 @@ const lazyLoading = ref<Set<string>>(new Set());
 // Expanded directory paths (also the nest parents that fold sibling files, keyed by path). Module-level, next to
 // the lazy subtrees above, so the explorer's toolbar (WorkspaceDesktop) and its context menu can Collapse All
 // against the same set the tree rows toggle. Only consulted when not filtering — a filter force-expands matches.
+// PERSISTED per sandbox (workspaceSnapshot): which folders are open is where the user is working, and a reload
+// that collapsed the tree threw away every step they took to get there.
 const expanded = ref<ReadonlySet<string>>(new Set());
+// Which sandbox the open folders belong to, recorded at restore rather than read live at write time — the same
+// hazard useChat's tab snapshot documents: activeSandboxId flips one flush before sandboxScope re-scopes this
+// state, so a write during that window would file the OUTGOING sandbox's folders under the incoming one's key.
+let scopedSandboxId: string | undefined;
+const { activeSandboxId } = useSandbox();
+
+const restoreExpanded = (): void => {
+    scopedSandboxId = activeSandboxId.value;
+    expanded.value = new Set(readExpandedDirs(scopedSandboxId));
+};
+restoreExpanded();
+
+watch(expanded, (dirs) => {
+    if (scopedSandboxId !== undefined) {
+        writeExpandedDirs(scopedSandboxId, [...dirs]);
+    }
+});
 // The explorer's cut/copy clipboard — paths staged by Ctrl+X/Ctrl+C, consumed by the next paste. Module-level for
 // the same reason `expanded` is: the tree component unmounts whenever the sidebar flips to Changes/Checkpoints or
 // the search scope flips to Content, and a clipboard that died with it would make "copy here, look there, paste
@@ -39,15 +59,16 @@ const collapseAll = (): void => {
 
 // Clear the shared file-action feedback when the active sandbox changes (see sandboxScope) — a spinner or error
 // from the previous sandbox must not bleed onto the next, and the upload queue + lazy-loaded subtrees are reset
-// alongside it.
+// alongside it. The open folders are RE-SCOPED rather than cleared: each sandbox is its own tree, and coming
+// back to one should land on the folders it was left open at, exactly as a reload does.
 export const resetWorkspaceTreeState = (): void => {
     busy.value = false;
     actionError.value = undefined;
     lazyChildren.value = new Map();
     lazyHidden.value = new Map();
     lazyLoading.value = new Set();
-    expanded.value = new Set();
     clipboard.value = undefined;
+    restoreExpanded();
     resetUploadQueue();
 };
 
@@ -185,9 +206,11 @@ export function useWorkspaceTree() {
     // The tree entry for a root-relative path (size/type), or undefined when not in the loaded tree.
     const entry = (path: string | undefined): WorkspaceTreeEntry | undefined => (path === undefined ? undefined : entriesByPath.value.get(path));
 
-    // Lazy-load the children of a dir the walk left unlisted — ignored, or below the entry budget — on first
-    // expand (no-op once loaded or already in flight). Errors surface on the shared actionError line, like the
-    // file mutations above.
+    // Load the children of a dir the walk left unlisted — ignored, or below the entry budget (no-op once loaded
+    // or already in flight). Expansion drives this on its own (the watch below); this is the direct route for
+    // the callers that need a dir's real contents WITHOUT showing it — the mobile browser drilling into a
+    // folder, and the paste that checks which names are already taken. Errors surface on the shared actionError
+    // line, like the file mutations above.
     const loadChildren = async (path: string): Promise<void> => {
         if (lazyChildren.value.has(path) || lazyLoading.value.has(path)) {
             return;
@@ -210,6 +233,29 @@ export function useWorkspaceTree() {
             lazyLoading.value.delete(path);
         }
     };
+
+    // An expanded dir the walk never listed (ignored, or below its entry budget) fetches its children here —
+    // ONE rule covering both ways a dir comes to be open: the user clicked its chevron, or a reload restored it
+    // from the snapshot. Restored expansion is why this can't live in the toggle: a folder that came back open
+    // would have drawn its chevron down over nothing, since only a click ever fetched it.
+    // Re-runs on `entriesByPath`, which spans the eager tree AND every lazy subtree, so a restored chain
+    // (node_modules → .bin) resolves one level per pass as each parent's children land, and stops when nothing
+    // new is loadable — loadChildren itself no-ops for anything loaded or in flight.
+    // Immediate, because the tree can already be in hand when this mounts (a cached query, or a second explorer
+    // opening over the first): waiting for the next change would leave a restored folder empty until something
+    // else happened to move.
+    watch(
+        [expanded, entriesByPath],
+        () => {
+            for (const path of expanded.value) {
+                const node = entriesByPath.value.get(path);
+                if (node?.type === `dir` && node.children === undefined) {
+                    void loadChildren(path);
+                }
+            }
+        },
+        { immediate: true },
+    );
 
     // A lazily-loaded subtree lives outside the tree query, so a tree refresh (a user mutation, or the daemon's
     // file-watch push) would leave it frozen at whatever it held when it was expanded — a file created inside an

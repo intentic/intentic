@@ -1,5 +1,7 @@
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { type DiffTabPayload, diffTabId, type LineJump, type WorkspaceTab } from "../../pages/workspace/workspaceTabs";
+import { useSandbox } from "../sandbox/useSandbox";
+import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspaceSnapshot";
 
 /* The Workspace editor area's open tabs, as a module-level singleton (like useChat/useLayout): the chat panel
  * lives in the persistent shell and pushes plan previews in from outside the Workspace subtree, and the open
@@ -16,6 +18,49 @@ const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeId.va
 // Every jump is a NEW object (seq++), so the viewer reacts even when the same hit is clicked again.
 const openLine = ref<LineJump | undefined>(undefined);
 let jumpSeq = 0;
+
+// --- Tab persistence ---------------------------------------------------------------------------
+/* The strip is where the user left off, so it comes back per sandbox on a reload (workspaceSnapshot holds the
+ * shape and what a diff tab costs to store). Only the URL used to survive, which restored the ONE active file
+ * and dropped every other tab the session had accumulated.
+ *
+ * Which sandbox the tabs belong to is recorded at restore rather than read live at write time, for the reason
+ * useChat's snapshot documents: activeSandboxId flips one flush before sandboxScope re-scopes this state, and a
+ * write in that window would file the outgoing sandbox's paths under the incoming sandbox's key. */
+let scopedSandboxId: string | undefined;
+const { activeSandboxId } = useSandbox();
+
+const restoreTabs = (): void => {
+    scopedSandboxId = activeSandboxId.value;
+    const stored = readTabStrip(scopedSandboxId);
+    tabs.value = stored?.tabs ?? [];
+    activeId.value = stored?.active ?? null;
+    openLine.value = undefined;
+};
+restoreTabs();
+
+// Re-scope to the incoming sandbox (see sandboxScope) — a path names a file in ONE sandbox's /work, so the
+// outgoing sandbox's tabs would open nothing here. Its own strip takes their place.
+export const resetWorkspaceTabs = (): void => {
+    restoreTabs();
+};
+
+// What the strip persists: every tab but a diff, and a focus that survives the cut — one focused on a diff
+// comes back on its last surviving neighbour (the rule closeTabs already uses for a closed tab), while one
+// focused on nothing (a bare /workspace, where mobile browses folders) stays that way.
+const persistedStrip = (): string => {
+    const persistable = tabs.value.filter((tab): tab is StoredWorkspaceTab => tab.kind !== `diff`);
+    const focused = persistable.find((tab) => tab.id === activeId.value);
+    return JSON.stringify({
+        active: activeId.value === null ? null : (focused?.id ?? persistable.at(-1)?.id ?? null),
+        tabs: persistable,
+    });
+};
+watch(persistedStrip, (json) => {
+    if (scopedSandboxId !== undefined) {
+        writeTabStrip(scopedSandboxId, json);
+    }
+});
 
 const openFile = (path: string): void => {
     openLine.value = undefined;

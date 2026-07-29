@@ -4,6 +4,7 @@ import { loadAccountStatus, resetChat } from "../chat/useChat";
 import { resetEditBuffers } from "../workspace/useEditBuffers";
 import { resetPresence } from "../usePresence";
 import { useSandbox } from "./useSandbox";
+import { resetWorkspaceTabs } from "../workspace/useWorkspaceTabs";
 import { resetWorkspaceTreeState } from "../workspace/useWorkspaceTree";
 
 /* One central place that re-scopes the browser's client-side state to the active sandbox. vue-query server
@@ -25,6 +26,9 @@ watch(activeSandboxId, (id, previous) => {
     resetChat();
     resetEditBuffers();
     resetWorkspaceTreeState();
+    // The editor strip goes with the tree it browses: both are paths into ONE sandbox's /work, and each sandbox
+    // has its own snapshot to come back to.
+    resetWorkspaceTabs();
     // The roster belongs to the daemon it came from; the new sandbox's stream repaints it on connect.
     resetPresence();
     // Same for the fleet — and it can't be left to the liveness loop, which only clears it when a stream FAILS

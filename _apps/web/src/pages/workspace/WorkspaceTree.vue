@@ -17,6 +17,7 @@ import { explorerTreatment, iconForEntry } from "@intentic-app/ui";
 import { filesToEntries } from "./dropEntries";
 import { movableInto, pastePairs } from "./explorerPaste";
 import { nestSiblings, type NestedEntry } from "./fileNesting";
+import { revealTargets } from "./revealPath";
 import { selectRange, stepLead } from "./treeSelect";
 
 interface Row {
@@ -221,6 +222,48 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
 });
 // Visible order = the axis for Shift-range and arrow steps; markers are excluded so they can't be selected/focused.
 const orderedPaths = computed<string[]>(() => visibleRows.value.filter((row): row is Row => !(`more` in row)).map((row) => row.entry.path));
+
+/* ---- reveal (the open file, wherever it was opened from) ----
+ * Open the tree to the selected file: expand the way down to it (revealPath.ts does that arithmetic) and bring
+ * its row on screen. Without this, the file the user is looking at is invisible in the explorer they are
+ * looking at it with — and on a reload it was the whole workspace that seemed to have collapsed, since the
+ * restored tab points at a file buried under closed folders.
+ *
+ * Once per path, and only once the row exists: on a reload the path is known before the tree query lands, so an
+ * early pass expands and a later one — the tree, or a lazy subtree, arriving — does the scroll. `visibleRows`
+ * as the source is what makes that retry automatic. Keyed on the path rather than re-running per tree refetch
+ * (the file watcher fires one on every agent write), so a folder the user collapses stays collapsed, and the
+ * reveal is silent about focus: it orients, it doesn't take the keyboard away from whatever holds it. */
+let revealedPath: string | undefined;
+watch(
+    [() => selectedPath, visibleRows],
+    async () => {
+        const path = selectedPath;
+        if (path === undefined || path === null || path === revealedPath) {
+            return;
+        }
+        // The path's own directory, whose entries decide whether a nest folds it. The root's are the tree
+        // itself; a dir whose children haven't landed yet folds nothing.
+        const parent = parentDir(path);
+        const parentEntry = byPath.value.get(parent);
+        const siblings = parent === `` ? tree : parentEntry === undefined ? [] : childrenOf(parentEntry);
+        const targets = revealTargets(path, siblings, fileNesting.value);
+        if (targets.some((target) => !expanded.value.has(target))) {
+            expanded.value = new Set([...expanded.value, ...targets]);
+        }
+        // Claimed before the await, not after: expanding re-runs this watch, and two passes that both got past
+        // the guard would each scroll the same row.
+        revealedPath = path;
+        await nextTick();
+        const el = rowEls.get(path);
+        if (el === undefined) {
+            revealedPath = undefined; // not painted yet (or filtered out) — a later pass reveals it
+            return;
+        }
+        el.scrollIntoView({ block: `nearest` });
+    },
+    { immediate: true },
+);
 // The single tab stop: the lead when it's visible, else the first row (so Tab can always enter the tree even when
 // a filter has hidden the previous lead).
 const tabbablePath = computed<string | null>(() =>
@@ -240,17 +283,15 @@ const treatEntry = (name: string, type: "file" | "dir", isExpanded: boolean, ign
     explorerTreatment(explorerStyle.value, name, type, isExpanded, ignored);
 const treat = (row: Row) => treatEntry(row.entry.name, row.entry.type, row.isExpanded, row.entry.ignored);
 
+// Expansion is the whole gesture: a dir the walk never listed (ignored, or below its entry budget) fetches its
+// children off this set, in useWorkspaceTree — so a folder restored open on reload loads exactly like one the
+// user just clicked.
 const toggleExpand = (path: string): void => {
     const next = new Set(expanded.value);
     if (next.has(path)) {
         next.delete(path);
     } else {
         next.add(path);
-        // Expanding a dir the walk never listed (ignored, or below its entry budget) fetches its children now.
-        const entry = byPath.value.get(path);
-        if (entry !== undefined && isUnlisted(entry)) {
-            void loadChildren(path);
-        }
     }
     expanded.value = next;
 };
