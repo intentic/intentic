@@ -264,8 +264,11 @@ onMounted(() => {
 </script>
 
 <template>
-    <div role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Model picker">
-        <div class="relative border-b border-line">
+    <!-- A flex column with a shrinkable middle, so the panel fits whatever height its host gives it: the
+         desktop popover caps itself to the room above the composer pill (ChatPanel), which on a short window is
+         less than the list's preferred height. Search and footer hold their size; the list gives. -->
+    <div class="flex min-h-0 flex-col" role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Model picker">
+        <div class="relative shrink-0 border-b border-line">
             <Icon name="search" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-subtle" aria-hidden="true" />
             <!-- text-base below md: 16px is the iOS threshold under which focusing zooms the page. -->
             <input
@@ -284,13 +287,18 @@ onMounted(() => {
             />
         </div>
 
-        <div class="flex max-md:flex-col">
+        <!-- Fixed height on desktop so the panel's overall size never changes as the rail filters between
+             sparse and dense providers — a variable height makes the bottom-anchored popover grow upward and the
+             rail icons jump under the cursor. It lives on the row rather than the list so the rail is bounded by
+             the same height, and `min-h-0` lets the row give way when the host is shorter than that. Mobile
+             keeps its flexible height inside the sheet. -->
+        <div class="flex h-80 min-h-0 max-md:h-auto max-md:flex-col">
             <!-- Provider rail: a filter, never a switcher — scoping the list to one provider must stay a
                  safe exploratory glance, so switching only ever happens by picking a model row. -->
             <div
                 role="radiogroup"
                 aria-label="Filter by provider"
-                class="flex w-10 shrink-0 flex-col items-center gap-1 border-r border-line py-1.5 max-md:w-full max-md:flex-row max-md:overflow-x-auto max-md:border-b max-md:border-r-0 max-md:px-1.5"
+                class="scrollbar-thin flex w-10 shrink-0 flex-col items-center gap-1 border-r border-line py-1.5 md:overflow-y-auto max-md:w-full max-md:flex-row max-md:overflow-x-auto max-md:border-b max-md:border-r-0 max-md:px-1.5"
             >
                 <button
                     type="button"
@@ -341,15 +349,7 @@ onMounted(() => {
                 </button>
             </div>
 
-            <!-- Fixed height on desktop so the popover's overall size never changes as the rail filters between
-                 sparse and dense providers — a variable height makes the bottom-anchored popover grow upward and
-                 the rail icons jump under the cursor. Mobile keeps its flexible max-height inside the sheet. -->
-            <div
-                id="model-picker-list"
-                class="scrollbar-thin h-80 min-w-0 flex-1 overflow-y-auto py-1 max-md:h-auto max-md:max-h-80"
-                role="listbox"
-                aria-label="Models"
-            >
+            <div id="model-picker-list" class="scrollbar-thin min-w-0 flex-1 overflow-y-auto py-1 max-md:max-h-80" role="listbox" aria-label="Models">
                 <template v-for="section in sections" :key="section.provider ?? `search`">
                     <!-- The provider header doubles as the access line: what this group costs, and the way out of
                          it. The chip is absent once connected — a usable provider should read as the plain
@@ -478,7 +478,7 @@ onMounted(() => {
 
         <!-- Session controls that have no T3Chat analogue: which connected account serves the next turn, the
              harness axis (codex/grok), Claude's extended-thinking knob, and the mid-chat switch hint. -->
-        <div v-if="footerVisible" class="flex flex-col gap-2 border-t border-line p-2">
+        <div v-if="footerVisible" class="flex shrink-0 flex-col gap-2 border-t border-line p-2">
             <template v-if="accounts.length > 1">
                 <div class="flex items-center justify-between gap-2">
                     <span class="text-2xs font-medium uppercase tracking-wide text-muted">Account</span>

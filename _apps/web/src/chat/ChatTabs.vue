@@ -944,9 +944,13 @@ const openHistory = (event: Event): void => {
                 <Icon name="plus" class="text-2xs" />New agent
             </button>
         </div>
+        <!-- Capped to the room above the trigger, which sits at the foot of the rail: an overlay that does not
+             fit gets pinned to the top of the viewport by PrimeVue, landing on top of the button that owns it —
+             and a panel covering its own trigger swallows every click meant to close it (same reasoning as the
+             model picker's cap in ChatPanel). The session list gives way; the search box holds its size. -->
         <Popover ref="history" :append-to="overlayTarget" @show="searchInput?.focus()">
-            <div class="flex w-72 flex-col">
-                <div class="relative p-1">
+            <div class="flex max-h-[calc(100dvh-10rem)] w-72 flex-col overflow-hidden">
+                <div class="relative shrink-0 p-1">
                     <Icon
                         name="search"
                         aria-hidden="true"
@@ -971,7 +975,7 @@ const openHistory = (event: Event): void => {
                         <Icon name="times" />
                     </button>
                 </div>
-                <div class="scrollbar-thin flex max-h-80 flex-col gap-0.5 overflow-auto p-1 pt-0">
+                <div class="scrollbar-thin flex min-h-0 max-h-80 flex-col gap-0.5 overflow-auto p-1 pt-0">
                     <template v-if="sessions.length > 0">
                         <button
                             v-for="session in sessions"

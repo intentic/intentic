@@ -133,3 +133,38 @@ test("the rail filters without switching, and the no-results escape widens the s
 
     await page.screenshot({ path: "./.cache/model-picker.png", fullPage: true });
 });
+
+/* THE PANEL MUST NEVER COVER THE PILL IT HANGS OFF. The picker is the tallest overlay in the app and its
+ * trigger sits a couple of rows off the bottom of the window, so on a short window the panel wants more room
+ * than there is above it — and PrimeVue answers that by pinning the overlay to the top of the viewport, which
+ * put it straight over the pill. That is unrecoverable from the pointer alone: every click aimed at the pill
+ * lands inside the overlay, which is the one click the dismiss logic deliberately ignores, so the picker could
+ * not be closed by its own button or by the space around it. The panel is capped to the room it has instead
+ * (ChatPanel), and this is the geometry that says so. */
+test("on a short window the panel fits above the pill instead of covering it", async ({ page }) => {
+    const { pageErrors, vueErrors } = collectErrors(page);
+    // Short enough that the picker's natural height (search + list + session footer) exceeds the room above
+    // the composer pill — the state a small laptop window or a popped-out chat window is routinely in.
+    await page.setViewportSize({ width: 1100, height: 520 });
+    await connectAll(page);
+    await openPicker(page);
+
+    const pill = page.getByRole("button", { name: "Provider and model" });
+    const panel = page.locator(".p-popover");
+    await expect(page.getByRole("option", { name: "Opus 4.6 — current model" })).toBeVisible({ timeout: 15_000 });
+
+    const pillBox = (await pill.boundingBox())!;
+    const panelBox = (await panel.boundingBox())!;
+    // Wholly above the pill, and wholly on screen — a panel clipped off the top hides its own search box.
+    expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(pillBox.y);
+    expect(panelBox.y).toBeGreaterThanOrEqual(0);
+    // The list gave way rather than the panel overflowing: rows still scroll inside it.
+    await expect(page.locator("#model-picker-list")).toBeVisible();
+
+    // And so the pill still closes what it opened.
+    await pill.click();
+    await expect(page.getByRole("searchbox")).toBeHidden();
+
+    expect(pageErrors, `uncaught page errors:\n${pageErrors.join("\n")}`).toEqual([]);
+    expect(vueErrors, `Vue render/lifecycle errors:\n${vueErrors.join("\n")}`).toEqual([]);
+});

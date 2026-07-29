@@ -1387,9 +1387,19 @@ watch(
         </template>
         <template v-else>
             <!-- Flush content (no composer-pop-content padding): the picker's search bar and rail sit
-                     edge-to-edge against the popover chrome. -->
+                     edge-to-edge against the popover chrome.
+
+                     CAPPED TO THE ROOM ABOVE THE PILL, because the pill is a few rows off the bottom of the
+                     window and everything the picker has is above it. PrimeVue positions an overlay that does
+                     not fit by pinning it to the top of the viewport — so a picker taller than that gap opened
+                     ON TOP OF the pill that owns it, and a panel covering its own trigger cannot be closed:
+                     every click meant for the pill lands inside the overlay, which is exactly the click the
+                     dismiss logic ignores (and the search box was clipped off the top of the screen at the same
+                     time). The cap is static rather than measured so it is in force on the very first layout —
+                     the pill's distance from the bottom edge is fixed by the composer's own rows, so the slack
+                     here only has to clear those. The list inside shrinks to fit (see ChatModelPicker). -->
             <Popover ref="providerModel" :append-to="overlayTarget" :pt="{ content: { class: '!p-0' } }">
-                <div class="w-[26rem]">
+                <div class="flex max-h-[calc(100dvh-10rem)] w-[26rem] flex-col overflow-hidden">
                     <ChatModelPicker @selected="providerModel?.hide()" />
                 </div>
             </Popover>
