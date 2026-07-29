@@ -26,7 +26,16 @@ import { withAttachmentNote } from "./attachment-note.js";
 import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
-import { accountLimitReset, clearPendingResume, pendingLimitHit, recordAuthFailure, recordLimitHit, resumeTurnOf } from "./turn-resume.js";
+import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
+import {
+    accountLimitReset,
+    clearPendingResume,
+    pendingLimitHit,
+    recordAuthFailure,
+    recordLimitHit,
+    recordOutageFailure,
+    resumeTurnOf,
+} from "./turn-resume.js";
 import { withRuntimeHistory } from "./runtime-history.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
 import { summarizeAgentTitle } from "./title-summary.js";
@@ -44,6 +53,22 @@ const editorContextNote = (context: EditorContext): string => {
     const range = context.startLine !== undefined && context.endLine !== undefined ? ` (lines ${context.startLine}-${context.endLine})` : "";
     return `The user has \`${context.file}\` open in the editor with this text selected${range} — "this" likely refers to it:\n\`\`\`\`\n${context.selection}\n\`\`\`\``;
 };
+
+/* Frames that could only exist because a model request SUCCEEDED: the provider's own words, its thinking, or a
+ * tool it decided to call. Any one of them clears a standing outage for every conversation stranded on that
+ * provider (provider-health.ts).
+ *
+ * Both exclusions are load-bearing, and each is a way this list could quietly stop working.
+ *
+ * The frames the harness mints LOCALLY — `init`, `mode`, `commands`, `session` — prove only that the CLI started.
+ * A CLI that boots perfectly and then cannot reach the API emits exactly those and nothing else, so counting them
+ * would clear the breaker on the strength of a turn that never got an answer, and release the whole stranded fleet
+ * into an outage that is still running.
+ *
+ * The end-of-turn ACCOUNTING frames — `usage`, `account_usage`, `rate_limit_info` — are the subtler trap: a turn
+ * killed by a 500 still reports what its failed attempt cost, and those frames arrive AFTER the error. Counting
+ * them would mean every outage failure immediately un-did itself. */
+const ANSWERED_FRAMES = new Set<AgentEvent["kind"]>(["delta", "thinking", "tool_call"]);
 
 // Run one agent turn, streaming typed AgentEvents. `input.agent` picks the provider adapter (absent =
 // claude); each provider's token is the sandbox's own credential, never held by the platform, with the
@@ -404,6 +429,14 @@ async function* runTurn(
     // Set when the API refused this turn's credential mid-flight. Like limitHitAt, it is acted on in the
     // finally so the resume snapshots the turn's LAST session id — the one holding whatever it had done.
     let authRefused = false;
+    /* The provider failed this turn transiently and a resume is worth arming. Same finally-time handling as the
+     * two above, for the same reason: the resume wants the LAST session id, because a 500 that lands mid-turn
+     * leaves real work behind it and the resume should continue from there rather than redo it. */
+    let outageHit = false;
+    // Whether the provider has answered THIS turn at all. Any real content proves it is serving requests, which
+    // is what clears a standing outage for every conversation stranded on it — recovery is detected off ordinary
+    // traffic instead of a probe anyone has to pay for. Once per turn: the breaker only needs the first word.
+    let providerAnswered = false;
     let usageExtra: Record<string, unknown> | undefined;
     // The turn's usage, kept typed (unlike usageExtra, which is the activity log's opaque `extra`) so the spend
     // ledger below appends numbers rather than re-narrowing unknowns. SUMMED, not last-wins: a turn emits one
@@ -433,6 +466,22 @@ async function* runTurn(
             // Fold every frame into the fleet registry so the card shows live status/activity/cost.
             if (conversation !== undefined) {
                 services.agents.observe(conversation.id, event);
+            }
+            /* The provider spoke. Whatever this turn is — a resume, a fresh message, an automation wake — it has
+             * just proved the outage is over for every conversation stranded on this provider, so the whole
+             * stranded set is released instead of each waiting out its own backoff (provider-health.ts).
+             *
+             * Above the routing chain rather than inside it: this is a fact about the provider, not about what the
+             * frame means to the client, and the branches below `continue` past each other freely. Once per turn —
+             * the breaker only needs the first word. */
+            if (ANSWERED_FRAMES.has(event.kind)) {
+                // Content AFTER an outage failure means the harness got past it and this turn carried on, so there
+                // is nothing stranded here to resume — the pending record would re-run a turn that finished.
+                outageHit = false;
+                if (!providerAnswered) {
+                    providerAnswered = true;
+                    recordProviderSuccess(provider);
+                }
             }
             if (event.kind === "session") {
                 sessionId = event.sessionId;
@@ -464,6 +513,28 @@ async function* runTurn(
                 record({ type: "turn.plan", content: event.text, extra: { requestId: event.requestId } });
             } else if (event.kind === "error") {
                 record({ type: "turn.error", outcome: "error", error: event.message });
+                /* The provider failed us, not the workspace. Open (or re-observe) its outage and tell the client
+                 * where the resume stands: which attempt this is, when the next one is due, and whether it is
+                 * armed or merely on offer behind the setting. Past the attempt budget nothing more will fire, so
+                 * the frame goes out bare — a promise of a retry that will never come is worse than the red line
+                 * it replaced. */
+                if (event.code === "provider-outage" && input.conversationId !== undefined) {
+                    const outage = recordProviderFailure(provider);
+                    if (outage.attempt < OUTAGE_MAX_ATTEMPTS) {
+                        outageHit = true;
+                        const { resumeAfterOutage } = await services.sandboxSettings.get();
+                        yield {
+                            ...event,
+                            autoResume: resumeAfterOutage ? "scheduled" : "available",
+                            outage: {
+                                retryAt: Math.round(outage.retryAt / 1000),
+                                attempt: outage.attempt + 1,
+                                maxAttempts: OUTAGE_MAX_ATTEMPTS,
+                            },
+                        };
+                        continue;
+                    }
+                }
                 // A spent Claude allowance: resolve when the window reopens (the stream's own rate_limit_event,
                 // else the account's persisted binding window) and tell the client where the resume stands, so
                 // the chat can say "continues automatically at …" or offer the toggle at the moment it would
@@ -516,6 +587,16 @@ async function* runTurn(
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 account: resolvedAccount,
                 refusedToken: request.oauthToken,
+            });
+        }
+        // The provider killed this turn — hand it to the outage pass with the last session the stream reported, so
+        // the resume continues from whatever it had already done rather than paying for all of it twice. Recorded
+        // whatever the toggle says, so turning resumeAfterOutage on right after the failure arms this very turn.
+        if (outageHit && input.conversationId !== undefined) {
+            recordOutageFailure({
+                input: { ...input, conversationId: input.conversationId },
+                ...(sessionId !== undefined ? { sessionId } : {}),
+                provider,
             });
         }
         record({ type: "turn.completed", ...(usageExtra !== undefined ? { extra: usageExtra } : {}) });

@@ -106,11 +106,15 @@ export interface ChatMessage {
     readonly id: number;
     readonly role: ChatRole;
     readonly text: string;
-    // A one-press follow-up a notice line can carry (notices only; today just the landed notice's "keep
-    // future work on the branch" offer). A KIND, not a callback — the transcript is rebuilt from replayed
-    // frames, so the renderer owns what the press does and whether the offer is still standing
-    // (ChatMessageView reads the CURRENT auto-land posture and hides a stale offer).
-    readonly noticeAction?: "landHold";
+    /* A one-press follow-up a notice line can carry (notices only): the landed notice's "keep future work on the
+     * branch" offer, and the outage notice's "stop resuming these by itself". A KIND, not a callback — the
+     * transcript is rebuilt from replayed frames, so the renderer owns what the press does and whether the offer
+     * is still standing (ChatMessageView reads the CURRENT posture and hides a stale offer).
+     *
+     * Both are the same shape of affordance, and it is the one that earns an on-by-default automation the right to
+     * be on by default: the moment the automatic behaviour fires is the moment "don't do that" is worth exactly
+     * one press, so the opt-out is offered there rather than only in a settings page nobody is looking at. */
+    readonly noticeAction?: "landHold" | "outageOptOut";
     // Files the user attached to this turn (user bubbles only), for the chip/thumbnail row.
     readonly attachments?: readonly ChatAttachment[];
     // The workspace checkpoint capturing the state BEFORE this turn ran (user bubbles only, main-tree turns
@@ -221,7 +225,14 @@ export const isAcknowledgment = (message: ChatMessage): boolean => {
     if (message.role !== `user` || (message.attachments?.length ?? 0) > 0) {
         return false;
     }
-    return ACKNOWLEDGMENTS.has(message.text.trim().toLowerCase().replace(/[.!…]+$/u, ``).trim().replace(/\s+/gu, ` `));
+    return ACKNOWLEDGMENTS.has(
+        message.text
+            .trim()
+            .toLowerCase()
+            .replace(/[.!…]+$/u, ``)
+            .trim()
+            .replace(/\s+/gu, ` `),
+    );
 };
 
 // A conversation can open with frames that answer no prompt of this session — a restored history's assistant
@@ -244,5 +255,4 @@ export const turnsOf = (messages: readonly ChatMessage[]): ChatTurn[] => {
 
 // The nudges turnsOf folded into a turn — every user message after the opener is one. Rendered by the
 // opener's bubble as its "↳ continue ×N" trailer, so a pinned prompt still admits it has been nudged since.
-export const acksOf = (turn: ChatTurn): readonly ChatMessage[] =>
-    turn.messages.filter((message, index) => index > 0 && message.role === `user`);
+export const acksOf = (turn: ChatTurn): readonly ChatMessage[] => turn.messages.filter((message, index) => index > 0 && message.role === `user`);

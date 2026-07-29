@@ -1,6 +1,17 @@
 import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { bindingWindow, formatAge, formatReset, formatUtilization, isStale, orderedWindows, usageDetail, usagePercent, usageWindowLabel } from "./usageStatus";
+import {
+    bindingWindow,
+    formatAge,
+    formatReset,
+    formatUtilization,
+    formatWait,
+    isStale,
+    orderedWindows,
+    usageDetail,
+    usagePercent,
+    usageWindowLabel,
+} from "./usageStatus";
 
 const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: `seven_day`, utilization: 42.4, ...over });
 const usage = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: 0, ...over });
@@ -110,5 +121,26 @@ describe(`usageDetail`, () => {
     it(`marks every figure as a floor once the reading is old enough to have been overtaken elsewhere`, () => {
         const detail = usageDetail(usage({ windows: [window({ kind: `seven_day`, utilization: 1 })], measuredAt: Date.now() - 8 * 3_600_000 }));
         expect(detail).toBe(`Weekly · all models ≥1% · measured 8h ago`);
+    });
+});
+
+/* The outage retry's wait, which is the one instant in the app a wall-clock time would misreport: it is seconds
+ * to minutes out, not hours, and it grows with every attempt. Coarse on purpose — the daemon's schedule carries
+ * jitter and polls on its own cadence, so second-accurate wording here would promise precision it cannot keep. */
+describe(`formatWait`, () => {
+    const now = 1_000_000_000;
+
+    it(`reads as seconds for a short wait, rounded so it never looks second-accurate`, () => {
+        expect(formatWait(now / 1000 + 30, now)).toBe(`about 30s`);
+        expect(formatWait(now / 1000 + 32, now)).toBe(`about 30s`);
+    });
+
+    it(`switches to minutes once seconds stop being useful`, () => {
+        expect(formatWait(now / 1000 + 300, now)).toBe(`about 5 min`);
+        expect(formatWait(now / 1000 + 1_200, now)).toBe(`about 20 min`);
+    });
+
+    it(`never counts backwards past zero — a due-but-unfired retry reads as imminent, not overdue`, () => {
+        expect(formatWait(now / 1000 - 60, now)).toBe(`about 5s`);
     });
 });

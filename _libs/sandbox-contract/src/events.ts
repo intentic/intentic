@@ -239,6 +239,27 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // The live gate: the provider's answer to "may this turn run", pushed mid-turn. Drives the rate-limited
     // notice, not the headroom readouts — see RateLimitInfoSchema.
     RateLimitInfoSchema.extend({ kind: z.literal("rate_limit_info"), account: z.string().optional() }),
+    /* The turn is alive but WAITING on the provider: a request failed transiently (5xx, 529, a dropped socket)
+     * and the harness is retrying it inside this same turn. A status, not a failure — nothing has been lost and
+     * the turn may still finish normally, so the client renders it where "thinking" goes rather than in the
+     * transcript.
+     *
+     * It exists because the retry budget is deliberately long (see CLAUDE_CODE_RETRY_WATCHDOG in
+     * harness-credentials.ts): a turn can now sit silent for minutes riding out an outage, and silence reads as
+     * a hang. The one action a user takes against an apparent hang is Stop, which is the only action that
+     * actually loses the work — so the wait has to be visible, with its own next-attempt clock.
+     *
+     * `attempt`/`maxAttempts` are the harness's own counters; `nextAttemptAt` (epoch ms) is when it will try
+     * again, so the readout counts down instead of freezing on a number nobody can interpret. */
+    z.object({
+        kind: z.literal("provider_retry"),
+        attempt: z.number(),
+        maxAttempts: z.number(),
+        nextAttemptAt: z.number(),
+        // The HTTP status behind it when there was one (529 reads as capacity, 500 as a fault — the client says
+        // which). Absent for a transport failure that never got a response.
+        status: z.number().optional(),
+    }),
     // Every plan-limit pool for the account that served the turn, read from the CLI's usage endpoint once the
     // turn settles. `account` tags which Claude account it belongs to, so the client keys headroom by account;
     // absent on an env-token turn, which has no account to attribute it to. No `measuredAt` on the wire: both
@@ -291,6 +312,12 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // that resumed itself, not a request for the user to do anything. It only reaches the client
                 // when the resume could NOT start, which is when reconnecting really is the fix.
                 "claude-token-refused",
+                // The model provider itself failed transiently — 500/502/503, a 529 at capacity, a dropped
+                // socket — and the harness's own in-turn retries did not outlast it. Nothing about the workspace
+                // or the request is wrong, so the daemon remembers the turn and re-runs it on an escalating
+                // backoff (provider-health.ts): the frame is a notice about a turn that is coming back, and
+                // reaches the client as a plain failure only once the attempts are spent.
+                "provider-outage",
                 // The harness read the message as a slash command it doesn't have, and discarded everything
                 // after the name — the model never saw the message. Nothing was processed, so the client holds
                 // the text back instead of leaving the user to retype it (same treatment as claude-reauth).
@@ -302,13 +329,24 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
             ])
             .optional(),
         // rate_limit only: when the exhausted window reopens (epoch seconds, from the stream's own
-        // rate_limit_event or the account's persisted usage windows), and what the daemon did about it —
-        // "scheduled" = auto-resume is on and this turn re-runs itself a minute after `resetsAt`;
-        // "available" = the daemon remembered the failed turn and enabling the autoResumeOnLimit setting
-        // arms that same resume, which is what the chat's offer banner hangs off. Absent together when the
-        // reset instant is unknown (nothing to schedule against).
+        // rate_limit_event or the account's persisted usage windows). Absent when the reset instant is unknown
+        // (nothing to schedule against).
         resetsAt: z.number().optional(),
+        // Where the daemon's resume of THIS turn stands — the same two states for a spent allowance and for a
+        // provider outage, because the client's reading of them is the same: "scheduled" = the resume is armed
+        // and this turn comes back by itself; "available" = the daemon remembered the failed turn and turning
+        // the setting on (autoResumeOnLimit / resumeAfterOutage) arms that same resume, which is what the
+        // chat's offer banner hangs off. Absent ⇒ there is nothing to resume.
         autoResume: z.enum(["scheduled", "available"]).optional(),
+        /* provider-outage only: the shape of the wait. `retryAt` (epoch seconds) is when the next attempt is
+         * due — not a fixed cadence, because an outage has no reset instant to aim at and hammering a provider
+         * that is down only spends tokens on refusals, so each attempt waits longer than the last
+         * (provider-health.ts owns the schedule).
+         *
+         * `attempt`/`maxAttempts` are on the wire so the notice can say the automation is BOUNDED. An
+         * on-by-default retry that gives no account of how long it will keep going is the kind users switch off
+         * defensively; one that says "attempt 2 of 6" is one they leave on. */
+        outage: z.object({ retryAt: z.number(), attempt: z.number(), maxAttempts: z.number() }).optional(),
         // rate_limit only: the account whose allowance is spent, as the DAEMON resolved it (the client's own
         // selection can be empty, which means "the provider's first"). It is what lets the chat offer the
         // provider's OTHER accounts as a resume-now instead of a wait — see /agent/resume-limit.

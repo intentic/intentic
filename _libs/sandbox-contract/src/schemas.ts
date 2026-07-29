@@ -705,6 +705,16 @@ export const SandboxSettingsSchema = z.object({
     // records every limit-hit either way and the chat OFFERS the toggle at the moment it would have helped —
     // enabling it then still resumes the turn that just bounced.
     autoResumeOnLimit: z.boolean().default(false),
+    /* When a turn dies because the MODEL PROVIDER was failing (500/502/503, a 529 at capacity, a dropped
+     * socket), re-run it on an escalating backoff until it goes through or the attempts are spent.
+     *
+     * Defaults ON, unlike autoResumeOnLimit, and the difference is not an inconsistency: a spent allowance is
+     * the user's own budget, and resuming into a fresh window spends something they may have been saving. An
+     * outage resume spends nothing the dead turn had not already committed, resolves in minutes rather than
+     * hours, and — the deciding argument — the turns hurt worst by it are the ones with nobody in the room
+     * (automation wakes, Discord, webhooks), which no browser-held preference could ever rescue. It is the same
+     * reasoning that leaves the auth resume ungated: this is the provider's failure, not the user's decision. */
+    resumeAfterOutage: z.boolean().default(true),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 

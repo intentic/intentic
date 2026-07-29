@@ -8,7 +8,16 @@ import { useAgents } from "../composables/agents/useAgents";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { effectiveAccount, modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
 import { acksOf, type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
-import { bindingWindow, formatReset, formatUtilization, isStale, usageDetail, usageStatusFor, usageTone } from "../composables/chat/usageStatus";
+import {
+    bindingWindow,
+    formatReset,
+    formatUtilization,
+    formatWait,
+    isStale,
+    usageDetail,
+    usageStatusFor,
+    usageTone,
+} from "../composables/chat/usageStatus";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useChat } from "../composables/chat/useChat";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
@@ -162,6 +171,22 @@ const limitSwitchAccounts = computed<OauthAccount[]>(() => {
     return accounts.value.filter((entry) => entry.id !== spent && entry.needsReauth !== true);
 });
 const resumeWith = (target: OauthAccount): Promise<void> => active.value.resumeOnAccount(target.id, target.label);
+
+/* The outage banner (Conversation.outageResume). Deliberately NOT the limit banner reused: a limit has a known
+ * reset instant and other accounts that can carry the turn now, and an outage has neither — the only honest
+ * offers are the wait (with its escalating clock) and, when the user would rather not wait, sending again by
+ * hand. Its whole job is to answer "is anything still happening?", which during an outage is the only question
+ * anyone has. When auto-resume is off it is instead the offer to turn it on, which arms the very turn that
+ * bounced (the daemon remembered it either way). */
+const outageResume = computed(() => active.value.outageResume.value);
+const enableOutageResume = async (): Promise<void> => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    await saveSandboxSettings.mutateAsync({ ...current, resumeAfterOutage: true });
+    active.value.armOutageResume();
+};
 
 /* Archiving an agent closes its chat tab (see the archive note in useAgents), but an archived agent can still be
  * READ in a tab — opened from the archive view, or filed away by the daemon's retention sweep while it sat open.
@@ -1074,6 +1099,34 @@ watch(
                                     :disabled="sandboxSettings === undefined || saveSandboxSettings.isPending.value"
                                     v-tooltip.top="'Also turns on the standing toggle in Sandbox ▸ Agent'"
                                     @click="enableAutoResume"
+                                >
+                                    Enable auto-resume
+                                </button>
+                            </div>
+                            <!-- Provider-outage banner: the turn is coming back on an escalating backoff, and this
+                         says when and how many tries are left. Naming the bound is the point — an automation
+                         that is on by default has to account for itself, or the reasonable response is to
+                         switch it off. -->
+                            <div
+                                v-if="outageResume"
+                                class="flex flex-wrap items-start gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
+                            >
+                                <Icon name="clock" class="mt-0.5 shrink-0" />
+                                <span v-if="outageResume.scheduled" class="min-w-0 flex-1"
+                                    >The model provider failed this turn — retrying by itself in {{ formatWait(outageResume.retryAt) }} (attempt
+                                    {{ outageResume.attempt }} of {{ outageResume.maxAttempts }}). Sending again yourself works too.</span
+                                >
+                                <span v-else class="min-w-0 flex-1"
+                                    >The model provider failed this turn. Auto-resume is off — turn it on and this chat continues from here by
+                                    itself.</span
+                                >
+                                <button
+                                    v-if="!outageResume.scheduled"
+                                    type="button"
+                                    class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
+                                    :disabled="sandboxSettings === undefined || saveSandboxSettings.isPending.value"
+                                    v-tooltip.top="'Also turns on the standing toggle in Sandbox ▸ Agent'"
+                                    @click="enableOutageResume"
                                 >
                                     Enable auto-resume
                                 </button>

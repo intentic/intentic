@@ -28,6 +28,7 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
         agentRetentionDays: 3,
         autoLand: true,
         autoResumeOnLimit: false,
+        resumeAfterOutage: true,
     });
 });
 
@@ -57,6 +58,9 @@ test("an empty object is the full default settings object", () => {
         // sandbox's finished work on branches nobody is watching.
         autoLand: true,
         autoResumeOnLimit: false,
+        // On, unlike the limit resume beside it: an outage resume spends nothing the dead turn hadn't already
+        // committed, and the turns it saves are the unattended ones nobody is watching to restart by hand.
+        resumeAfterOutage: true,
     });
 });
 

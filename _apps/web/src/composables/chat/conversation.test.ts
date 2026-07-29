@@ -964,6 +964,100 @@ describe(`Conversation`, () => {
         conversation.abort();
     });
 
+    /* A PROVIDER OUTAGE, which reads like a limit hit and behaves nothing like one: no reset instant to aim at,
+     * an escalating wait instead of a fixed one, and a bounded number of tries. What must survive refactors is the
+     * severity — the turn is coming back, so a red line here would be reporting a failure the user never has to
+     * act on — and the fact that the wait names an instant, because a silently growing backoff with no clock is
+     * indistinguishable from nothing happening. */
+    it(`reads an outage as a wait with its own clock, not as a crash`, async () => {
+        const conversation = new Conversation(`c1`);
+        // Far-future so the re-attach probe this arms stays parked for the test's lifetime.
+        const retryAt = Math.floor(Date.now() / 1000) + 3_600;
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                {
+                    kind: `error`,
+                    code: `provider-outage`,
+                    message: `API Error: 529 Overloaded.`,
+                    autoResume: `scheduled`,
+                    outage: { retryAt, attempt: 2, maxAttempts: 6 },
+                },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`hello`, settings);
+
+        const notice = conversation.messages.value.at(-1)!;
+        expect(notice.role).toBe(`notice`);
+        expect(notice.text).toContain(`attempt 2 of 6`);
+        // The moment-of-regret opt-out rides the notice the automation's own firing produced.
+        expect(notice.noticeAction).toBe(`outageOptOut`);
+        expect(conversation.outageResume.value).toEqual({ retryAt, attempt: 2, maxAttempts: 6, scheduled: true });
+        expect(conversation.error.value).toBeNull();
+        expect(conversation.status.value).not.toBe(`error`);
+        conversation.abort();
+    });
+
+    it(`hands the message back and says so plainly once the retries are spent`, async () => {
+        const conversation = new Conversation(`c1`);
+        // No `outage` block: the daemon's attempts are gone, so nothing is coming back.
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `provider-outage`, message: `API Error: 500 Internal server error.` }, { kind: `done` }]),
+        );
+        await conversation.send(`hello`, settings);
+
+        // The red line is now honest — and the words the user typed are back in the queue rather than lost with
+        // the turn, which is the part of this failure that was ever actually ours.
+        expect(conversation.error.value).toContain(`500`);
+        expect(conversation.outageResume.value).toBeUndefined();
+        expect(conversation.queued.value.some((message) => message.text === `hello`)).toBe(true);
+    });
+
+    it(`offers turning outage auto-resume on when the daemon only remembered the turn`, async () => {
+        const conversation = new Conversation(`c1`);
+        const retryAt = Math.floor(Date.now() / 1000) + 3_600;
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                {
+                    kind: `error`,
+                    code: `provider-outage`,
+                    message: `API Error: 500 Internal server error.`,
+                    autoResume: `available`,
+                    outage: { retryAt, attempt: 1, maxAttempts: 6 },
+                },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`hello`, settings);
+
+        expect(conversation.outageResume.value).toEqual({ retryAt, attempt: 1, maxAttempts: 6, scheduled: false });
+        // Nothing is armed, so no opt-out is offered — there is nothing to opt out of yet.
+        expect(conversation.messages.value.at(-1)!.noticeAction).toBeUndefined();
+
+        // Enabling the setting arms the very turn that bounced, daemon-side; this reflects it.
+        conversation.armOutageResume();
+        expect(conversation.outageResume.value?.scheduled).toBe(true);
+        expect(conversation.messages.value.at(-1)!.text).toContain(`Auto-resume enabled`);
+        conversation.abort();
+    });
+
+    // The turn is alive here — a status, never a transcript line, and it must not outlive the turn it describes.
+    it(`shows an in-turn provider retry as live status and drops it when the turn settles`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `provider_retry`, attempt: 3, maxAttempts: 300, nextAttemptAt: Date.now() + 45_000, status: 529 },
+                { kind: `delta`, text: `back` },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`hello`, settings);
+
+        expect(conversation.providerRetry.value).toBeUndefined();
+        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`retry`))).toBe(false);
+        expect(conversation.error.value).toBeNull();
+    });
+
     it(`resumeOnAccount fires the pending resume on the picked account and moves the chat onto it`, async () => {
         const conversation = new Conversation(`c1`);
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;

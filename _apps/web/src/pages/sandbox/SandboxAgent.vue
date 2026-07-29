@@ -33,7 +33,7 @@ const sandbox = useSandbox();
 // its flag. Toggles are disabled until settings load, so a defined value is guaranteed by the time one fires —
 // which is exactly why a failed read has to SAY so (settingsError below): the same disabled state otherwise
 // reads as a page of switches that simply don't respond to clicks.
-const { settings: sandboxSettings, error: settingsError, save: saveSandboxSettings } = useSandboxSettings();
+const { settings: sandboxSettings, error: settingsError, dropped: settingsDropped, save: saveSandboxSettings } = useSandboxSettings();
 // Only states that need explaining: a failed read, or a sandbox that isn't answering. The first-load moment is
 // deliberately silent — the controls are disabled for it either way, and a line that appears and then vanishes
 // would shove every row down and back on each visit.
@@ -66,16 +66,29 @@ const toggleTerseOutput = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, terseOutput: value });
 };
 
+/* Both holdout controls are a percentage [0,100] in the box over a fraction [0,1] in settings, so they commit
+ * the same way. Reading the ELEMENT rather than a plain number is the point: an emptied field is `Number("")`,
+ * which is 0 — "measure nothing", saved silently, from a user who was mid-edit — so it falls back to what is
+ * saved instead. The clamped value is written back into the input because the bound value may not have changed
+ * (typing 200 over 100), and then Vue has nothing to patch and the box keeps showing the number that was
+ * refused. */
+const commitPercent = (event: Event, saved: number, apply: (fraction: number) => void): void => {
+    const input = event.target as HTMLInputElement;
+    const typed = Number(input.value);
+    const percent = input.value === `` || !Number.isFinite(typed) ? saved : Math.min(100, Math.max(0, Math.round(typed)));
+    input.value = String(percent);
+    apply(percent / 100);
+};
+
 // The steer's measurement control, at turn level: the % of eligible turns that run WITHOUT it so the two arms
-// can be compared. Stored as a fraction [0,1], edited as a percentage — the same pair as the output holdout.
+// can be compared.
 const terseHoldoutPercent = computed<number>(() => Math.round((sandboxSettings.value?.terseHoldout ?? 0) * 100));
-const setTerseHoldoutPercent = (percent: number): void => {
+const setTerseHoldout = (fraction: number): void => {
     const current = sandboxSettings.value;
     if (current === undefined) {
         return;
     }
-    const clamped = Math.min(100, Math.max(0, Math.round(percent)));
-    saveSandboxSettings.mutate({ ...current, terseHoldout: clamped / 100 });
+    saveSandboxSettings.mutate({ ...current, terseHoldout: fraction });
 };
 
 /* --- System prompt -------------------------------------------------------------------------------------------
@@ -180,13 +193,23 @@ const toggleIqSearch = (value: boolean): void => {
     saveSandboxSettings.mutate({ ...current, iqSearch: value });
 };
 
-// Usage-limit auto-resume: re-run a limit-killed turn once the limit window reopens (see limit-resume.ts).
+// Usage-limit auto-resume: re-run a limit-killed turn once the limit window reopens (see turn-resume.ts).
 const toggleAutoResume = (value: boolean): void => {
     const current = sandboxSettings.value;
     if (current === undefined) {
         return;
     }
     saveSandboxSettings.mutate({ ...current, autoResumeOnLimit: value });
+};
+
+// Provider-outage auto-resume: re-run a turn the provider killed, on an escalating shared backoff. Defaults ON —
+// see the field comment in schemas.ts for why this one and not the limit resume beside it.
+const toggleResumeAfterOutage = (value: boolean): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    saveSandboxSettings.mutate({ ...current, resumeAfterOutage: value });
 };
 
 // Auto-land: whether a clean turn's work applies to the workspace the moment it finishes, or waits on the
@@ -324,13 +347,12 @@ const toggleCleaner = (id: string, on: boolean): void => {
 
 // Holdout control: a percentage [0,100] of commands whose output bypasses cleaning, stored as a fraction [0,1].
 const holdoutPercent = computed<number>(() => Math.round((sandboxSettings.value?.outputHoldout ?? 0) * 100));
-const setHoldoutPercent = (percent: number): void => {
+const setOutputHoldout = (fraction: number): void => {
     const current = sandboxSettings.value;
     if (current === undefined) {
         return;
     }
-    const clamped = Math.min(100, Math.max(0, Math.round(percent)));
-    saveSandboxSettings.mutate({ ...current, outputHoldout: clamped / 100 });
+    saveSandboxSettings.mutate({ ...current, outputHoldout: fraction });
 };
 
 // Cleaner backend: native (agent-output-filter) vs rtk (the image-baked rtk binary, rewritten at the hook).
@@ -398,6 +420,11 @@ const importMemory = async (): Promise<void> => {
              disables all of them, and an unexplained dead switch is indistinguishable from a broken page. -->
         <p v-if="settingsBlocked" :class="settingsError ? cmp.alertDanger() : 'px-0.5 text-xs text-muted'">{{ settingsBlocked }}</p>
 
+        <!-- A save the daemon accepted but stored WITHOUT one of its fields: the control below has already
+             snapped back to its old value, and without this line that reads as an input refusing to be typed
+             into rather than as a sandbox that predates the setting. -->
+        <p v-if="settingsDropped" :class="cmp.alertWarning()">{{ settingsDropped }}</p>
+
         <!-- Command output — the shell-output filter (master toggle + per-cleaner checklist + holdout), its A/B
              backend, and the realized-savings report. One grouped section instead of a card per toggle. -->
         <RowGroup label="Command output">
@@ -461,7 +488,7 @@ const importMemory = async (): Promise<void> => {
                                     max="100"
                                     :value="holdoutPercent"
                                     :class="cmp.input('w-16 text-right text-xs')"
-                                    @change="(event: Event) => setHoldoutPercent(Number((event.target as HTMLInputElement).value))"
+                                    @change="(event: Event) => commitPercent(event, holdoutPercent, setOutputHoldout)"
                                 />
                                 <span class="text-xs text-muted">%</span>
                             </span>
@@ -567,7 +594,7 @@ const importMemory = async (): Promise<void> => {
                                     max="100"
                                     :value="terseHoldoutPercent"
                                     :class="cmp.input('w-16 text-right text-xs')"
-                                    @change="(event: Event) => setTerseHoldoutPercent(Number((event.target as HTMLInputElement).value))"
+                                    @change="(event: Event) => commitPercent(event, terseHoldoutPercent, setTerseHoldout)"
                                 />
                                 <span class="text-xs text-muted">%</span>
                             </span>
@@ -705,8 +732,11 @@ const importMemory = async (): Promise<void> => {
                 </template>
             </Row>
 
-            <!-- Auto-resume — re-run a turn the Claude subscription's usage limit killed, a minute after the
-                 limit window resets. The chat also offers this at the moment a limit hit lands. -->
+            <!-- The two auto-resumes, adjacent because they answer the same question ("who restarts a turn that
+                 died through no fault of its own?") and default OPPOSITE ways on purpose. A usage limit spends
+                 the user's own allowance and waits hours, so it is opt-in; a provider outage spends nothing the
+                 dead turn hadn't already committed and clears in minutes, so it is opt-out. Both are also
+                 offered from the chat at the moment they would have helped. -->
             <Row
                 icon="clock"
                 title="Auto-resume after usage limits"
@@ -717,6 +747,20 @@ const importMemory = async (): Promise<void> => {
                         :model-value="sandboxSettings?.autoResumeOnLimit ?? false"
                         :disabled="sandboxSettings === undefined"
                         @update:model-value="toggleAutoResume"
+                    />
+                </template>
+            </Row>
+
+            <Row
+                icon="refresh"
+                title="Auto-resume after provider outages"
+                description="When the model provider fails a turn (500, 529 at capacity, a dropped connection), retry it automatically — waiting longer between each attempt, and only one attempt at a time across all your agents, so an outage isn't hammered."
+            >
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="sandboxSettings?.resumeAfterOutage ?? true"
+                        :disabled="sandboxSettings === undefined"
+                        @update:model-value="toggleResumeAfterOutage"
                     />
                 </template>
             </Row>

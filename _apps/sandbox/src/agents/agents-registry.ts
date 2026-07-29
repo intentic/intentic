@@ -521,6 +521,18 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     break;
                 }
                 case "error":
+                    /* A failure the daemon has already scheduled a resume for is not how this turn ENDED — the
+                     * turn is coming back (turn-resume.ts), and the card has to read as work in progress rather
+                     * than as a card the user needs to go look at. Without this a provider blip painted the whole
+                     * board red for the length of an outage, which is both wrong and the strongest possible
+                     * argument for switching the automation off.
+                     *
+                     * Keyed on the frame's own verdict rather than on the code, so it covers every condition that
+                     * resumes itself: a spent allowance waiting on its reset reads the same way. "available" is
+                     * NOT covered — nothing is armed, so the failure stands until the user arms it. */
+                    if (event.autoResume === "scheduled") {
+                        return;
+                    }
                     state.errored = true;
                     break;
                 default:

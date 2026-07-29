@@ -314,6 +314,48 @@ const apiErrorMessage = (message: SDKAssistantMessage): string => {
     return explained ?? `agent error: ${message.error}`;
 };
 
+/* WHICH CONDITION an API failure actually is — the frame the client branches on.
+ *
+ * Two of these read the CATEGORY the SDK filed, and two read the SENTENCE, and the split is not arbitrary. A
+ * spent allowance and a refused credential arrive as prose under whatever category the failing layer happened to
+ * pick (see usage-limit-text.ts, auth-failure-text.ts), so there the text is the only signal. A provider outage
+ * does not: the harness buckets every 5xx, every 529 at capacity, and every dropped socket as `server_error`, and
+ * a pre-retry capacity refusal as `overloaded`. Those two categories mean precisely "the provider failed us and
+ * the request is worth making again", which is the one claim an automatic resume has to be right about — so it is
+ * read from the category and never from the wording, which changes with every CLI release.
+ *
+ * Everything else stays uncoded and reads as the red line it is: 4xx all land in the SDK's `unknown` bucket, and
+ * a malformed request re-sent on a timer is a loop, not a recovery. */
+const errorFrame = (message: SDKAssistantMessage): Extract<AgentEvent, { kind: "error" }> => {
+    // rate_limit is Claude's subscription usage cap, not a workspace fault — tag it so the UI can render it as a
+    // "wait and retry" notice instead of a red crash line (see conversation.ts). A limit hit the SDK filed under
+    // another category keeps its own sentence (the CLI's "You've hit your session limit · resets …" names the
+    // reset; our canned line doesn't) but carries the same code, so every spent-allowance failure reaches the
+    // client as one condition.
+    if (message.error === "rate_limit") {
+        return {
+            kind: "error",
+            code: "rate_limit",
+            message:
+                "Claude usage limit reached — this is the Claude subscription's rate limit resetting, not a workspace problem. Your last message wasn't processed; try again shortly.",
+        };
+    }
+    if (message.error === "server_error" || message.error === "overloaded") {
+        return { kind: "error", code: "provider-outage", message: apiErrorMessage(message) };
+    }
+    const explained = apiErrorMessage(message);
+    if (isUsageLimitText(explained)) {
+        return { kind: "error", code: "rate_limit", message: explained };
+    }
+    // A credential the CLI has stopped trying to use (auth-failure-text.ts). Coded so the route can re-mint and
+    // resume the turn instead of leaving a dead tab for a human to restart by hand — the same "not a workspace
+    // fault" treatment a spent allowance gets.
+    if (isAuthFailureText(explained)) {
+        return { kind: "error", code: "claude-token-refused", message: explained };
+    }
+    return { kind: "error", message: explained };
+};
+
 // Normalize the SDK's SDKMessage stream onto AgentEvents. High-value block types get a dedicated frame;
 // any SDK message without a mapping is dropped. Does NOT emit the terminal `done` (runAgent does that once
 // the whole turn settles).
@@ -412,27 +454,7 @@ async function* streamSdk(
             // Text/thinking already streamed as deltas above; here we only surface tool calls (and the
             // TodoWrite checklist, which is a tool call we render as its own live list).
             if (message.error !== undefined) {
-                // rate_limit is Claude's subscription usage cap, not a workspace fault — tag it so the UI can
-                // render it as a "wait and retry" notice instead of a red crash line (see conversation.ts).
-                // A limit hit the SDK filed under another category keeps its own sentence (the CLI's "You've
-                // hit your session limit · resets …" names the reset; our canned line doesn't) but carries the
-                // same code, so every spent-allowance failure reaches the client as one condition.
-                const explained = apiErrorMessage(message);
-                yield message.error === "rate_limit"
-                    ? {
-                          kind: "error",
-                          code: "rate_limit",
-                          message:
-                              "Claude usage limit reached — this is the Claude subscription's rate limit resetting, not a workspace problem. Your last message wasn't processed; try again shortly.",
-                      }
-                    : isUsageLimitText(explained)
-                      ? { kind: "error", code: "rate_limit", message: explained }
-                      : // A credential the CLI has stopped trying to use (auth-failure-text.ts). Coded so the
-                        // route can re-mint and resume the turn instead of leaving a dead tab for a human to
-                        // restart by hand — the same "not a workspace fault" treatment a spent allowance gets.
-                        isAuthFailureText(explained)
-                        ? { kind: "error", code: "claude-token-refused", message: explained }
-                        : { kind: "error", message: explained };
+                yield errorFrame(message);
             } else {
                 const content = message.message.content as ReadonlyArray<{ type: string; id?: string; name?: string; input?: unknown }>;
                 for (const block of content) {
@@ -601,6 +623,20 @@ async function* streamSdk(
                 if (unknown === undefined) {
                     yield { kind: "text_end", ...withParent };
                 }
+            } else if (message.subtype === "api_retry") {
+                /* The harness is retrying a request it lost to the provider — INSIDE this turn, so nothing has
+                 * failed yet and there is nothing in the transcript to write. Forwarded because the retry budget
+                 * is deliberately long (CLAUDE_CODE_RETRY_WATCHDOG in harness-credentials.ts): a turn riding out
+                 * an outage can now go quiet for minutes, and an agent that has gone quiet is indistinguishable
+                 * from one that has hung. The user's move against an apparent hang is Stop — the one move that
+                 * actually throws the work away — so the wait has to say what it is and when it ends. */
+                yield {
+                    kind: "provider_retry",
+                    attempt: message.attempt,
+                    maxAttempts: message.max_retries,
+                    nextAttemptAt: Date.now() + message.retry_delay_ms,
+                    ...(message.error_status !== null ? { status: message.error_status } : {}),
+                };
             }
         } else if (message.type === "rate_limit_event") {
             // Claude subscription usage for the turn: which window is active, how much of it is spent, and when

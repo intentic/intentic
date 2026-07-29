@@ -53,13 +53,26 @@ const { mobile } = useDevice();
  * message, so pressing it once retires the offer from every landed notice at once, and a transcript replayed
  * into an already-holding agent never shows a stale one. */
 const { agentById, setAutoLand } = useAgents();
-const { settings: sandboxSettings } = useSandboxSettings();
+const { settings: sandboxSettings, save: saveSandboxSettings } = useSandboxSettings();
 const holdOffer = computed(
     () => props.message.noticeAction === `landHold` && effectiveAutoLand(agentById(active.value.conversationId), sandboxSettings.value?.autoLand),
 );
 // Best-effort like markSeen: a failed write leaves the offer standing to press again.
 const holdFutureLands = (): void => {
     void setAutoLand(active.value.conversationId, false).catch(() => undefined);
+};
+
+/* The outage notice's opt-out, on exactly the same reasoning one line up — with one difference: this one is the
+ * SANDBOX default rather than per-agent, because the setting it turns off is sandbox-wide and there is no
+ * per-agent override to point it at. Gated on the live setting, so pressing it retires the offer from every
+ * outage notice at once and a replayed transcript never shows a stale one. */
+const outageOptOutOffer = computed(() => props.message.noticeAction === `outageOptOut` && sandboxSettings.value?.resumeAfterOutage === true);
+const stopResumingOutages = (): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    void saveSandboxSettings.mutateAsync({ ...current, resumeAfterOutage: false }).catch(() => undefined);
 };
 
 // Whimsical status words cycled while a turn is streaming (Claude Code style).
@@ -141,6 +154,24 @@ const loaderSeconds = computed(() => {
     void loaderTick.value; // read the tick so this re-evaluates each second
     return Math.max(0, Math.floor((Date.now() - loaderStartedAt) / 1000));
 });
+
+/* THE PROVIDER IS FAILING AND THIS TURN IS RIDING IT OUT (the provider_retry frame). It takes the loader line
+ * over, because it answers the one question the cycling word cannot: the agent is not stuck, it is waiting, and
+ * here is when it tries again.
+ *
+ * This line is what makes the long in-turn retry budget safe to have. Without it a turn absorbing an outage looks
+ * identical to a hung one for minutes at a stretch, and the move a user makes against an apparent hang is Stop —
+ * the only move that actually throws away the work the turn has already done. Rides the same one-second tick as
+ * the elapsed counter, so the countdown moves and stale-looks impossible. */
+const providerRetry = computed(() => active.value.providerRetry.value);
+const retryIn = computed(() => {
+    void loaderTick.value;
+    const retry = providerRetry.value;
+    return retry === undefined ? 0 : Math.max(0, Math.round((retry.nextAttemptAt - Date.now()) / 1000));
+});
+// 529 is capacity, everything else in this frame is a fault. Worth distinguishing: "at capacity" tells a user
+// their request was fine and a smaller model would probably go through right now, which is actionable.
+const retryReason = computed(() => (providerRetry.value?.status === 529 ? `at capacity` : `not responding`));
 watch(
     () => props.streaming,
     (isStreamingNow, _prev, onCleanup) => {
@@ -245,9 +276,7 @@ const picksFor = (index: number): string[] =>
         return typed.length > 0 ? [typed] : [];
     });
 
-const canSubmit = computed(
-    () => props.message.question?.questions.every((_, index) => picksFor(index).length > 0 && !otherPending(index)) ?? false,
-);
+const canSubmit = computed(() => props.message.question?.questions.every((_, index) => picksFor(index).length > 0 && !otherPending(index)) ?? false);
 
 const submitAnswers = (): void => {
     const question = props.message.question;
@@ -652,10 +681,23 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                 v-if="holdOffer"
                 type="button"
                 class="shrink-0 font-medium text-link hover:underline"
-                v-tooltip.top="'Turns auto-land off for this agent: from now on its finished work waits on its branch as “Ready to land”, and you land it from the board or its review.'"
+                v-tooltip.top="
+                    'Turns auto-land off for this agent: from now on its finished work waits on its branch as “Ready to land”, and you land it from the board or its review.'
+                "
                 @click="holdFutureLands"
             >
                 Keep future work on the branch
+            </button>
+            <button
+                v-if="outageOptOutOffer"
+                type="button"
+                class="shrink-0 font-medium text-link hover:underline"
+                v-tooltip.top="
+                    'Turns off auto-resume after provider outages for this sandbox: a turn the provider kills will stop and wait for you instead of retrying itself.'
+                "
+                @click="stopResumingOutages"
+            >
+                Don't auto-resume
             </button>
         </div>
         <template v-else>
@@ -863,12 +905,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                         </button>
                         <!-- Dismissing ends the turn (see Conversation.cancelQuestion), which the label alone
                              does not say — so the tooltip does, before the click rather than after it. -->
-                        <button
-                            type="button"
-                            class="plan-reject plan-sm"
-                            v-tooltip.bottom="'Also stops the turn'"
-                            @click="cancelQuestion(message)"
-                        >
+                        <button type="button" class="plan-reject plan-sm" v-tooltip.bottom="'Also stops the turn'" @click="cancelQuestion(message)">
                             Dismiss
                         </button>
                     </div>
@@ -904,12 +941,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                     </button>
                     <!-- Same as the question card's Dismiss: a refusal with nothing to redirect the agent to
                          ends the turn rather than leaving it to work around the answer it was just given. -->
-                    <button
-                        type="button"
-                        class="plan-reject"
-                        v-tooltip.bottom="'Also stops the turn'"
-                        @click="decidePermission(message, 'deny')"
-                    >
+                    <button type="button" class="plan-reject" v-tooltip.bottom="'Also stops the turn'" @click="decidePermission(message, 'deny')">
                         <Icon name="times" class="text-xs" />
                         No
                     </button>
@@ -920,7 +952,11 @@ const onEditKeydown = (event: KeyboardEvent): void => {
                  trails, and takes the assistant bubble's padding so the stack keeps one left edge. -->
             <div v-if="showTyping" class="flex items-center gap-2 self-start rounded-lg bg-overlay px-3 py-2 text-2xs text-muted">
                 <Icon name="spinner" class="text-2xs text-link" spin />
-                <span
+                <span v-if="providerRetry"
+                    >The model provider is {{ retryReason }} — retrying in {{ retryIn }}s
+                    <span class="text-subtle">(attempt {{ providerRetry.attempt }}, nothing lost)</span></span
+                >
+                <span v-else
                     >{{ loaderWord }}… <span class="text-subtle">({{ loaderSeconds }}s)</span></span
                 >
             </div>

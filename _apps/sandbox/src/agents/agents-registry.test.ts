@@ -387,6 +387,30 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.status).toBe("error");
     });
 
+    /* A failure the daemon has already armed a resume for is not how the turn ENDED — it is coming back
+     * (turn-resume.ts). Painting the card red for it turned every provider blip into a board full of agents that
+     * look like they need attention while the daemon is quietly fixing them, which is the single most effective
+     * way to make a user switch the automation off. */
+    it("a failure with a scheduled resume leaves the card out of the error state", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "error", code: "provider-outage", message: "API Error: 529", autoResume: "scheduled" });
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.status).toBe("idle");
+    });
+
+    // "available" is the other half: nothing is armed, the turn is only REMEMBERED behind a setting the user has
+    // not turned on, so the failure genuinely stands until they do something about it.
+    it("a failure whose resume is merely on offer still ends the turn in error", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "error", code: "provider-outage", message: "API Error: 529", autoResume: "available" });
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.status).toBe("error");
+    });
+
     it("session and worktree composition persist across a turn's finish", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();

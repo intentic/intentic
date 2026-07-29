@@ -67,6 +67,22 @@ export const usageTone = (percent: number): string => (percent >= 90 ? `text-dan
 export const formatReset = (epochSeconds: number): string =>
     new Date(epochSeconds * 1000).toLocaleString([], { weekday: `short`, hour: `numeric`, minute: `2-digit` });
 
+/* The same instant as a RELATIVE wait, for the outage retry — where a wall-clock time would be the wrong answer
+ * to the right question. A limit reset is hours out, so naming the hour lets someone decide whether to wait; an
+ * outage retry is thirty seconds to twenty minutes out, and "Tue 9:41 PM" makes the reader do arithmetic to learn
+ * something they'd have understood instantly as "about 30s".
+ *
+ * Deliberately coarse ("about"), and not a ticking countdown: the schedule has jitter and the daemon polls on its
+ * own cadence, so a second-accurate clock here would be precision this cannot honour. The live countdown belongs
+ * on the in-turn retry status, where the harness really does name its own next attempt. */
+export const formatWait = (epochSeconds: number, now: number = Date.now()): string => {
+    const seconds = Math.max(0, Math.round((epochSeconds * 1000 - now) / 1000));
+    if (seconds < 90) {
+        return `about ${Math.max(5, Math.round(seconds / 5) * 5)}s`;
+    }
+    return `about ${Math.round(seconds / 60)} min`;
+};
+
 // How old a snapshot is, coarsely. A reading is taken at the end of a turn, so an idle sandbox's is as old as
 // its last turn — and utilization only ever climbs within a window, so the number is a floor, not a live figure.
 export const formatAge = (measuredAt: number, now: number = Date.now()): string => {

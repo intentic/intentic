@@ -426,8 +426,60 @@ test("a rate_limit assistant error is tagged with a code and a human message, no
 });
 
 test("a non-rate-limit assistant error with no explanation falls back to its bare category", async () => {
-    const events = await collect(request, fakeQuery({ type: "assistant", session_id: "s", error: "overloaded", message: { content: [] } }));
-    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", message: "agent error: overloaded" }, { kind: "done" }]);
+    const events = await collect(request, fakeQuery({ type: "assistant", session_id: "s", error: "unknown", message: { content: [] } }));
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", message: "agent error: unknown" }, { kind: "done" }]);
+});
+
+/* THE PROVIDER'S OWN FAILURES, read from the CATEGORY rather than the sentence. The harness files every 5xx, every
+ * 529 at capacity and every dropped socket as `server_error`, and a pre-retry capacity refusal as `overloaded`;
+ * both mean the request is worth making again, which is the one claim the auto-resume has to be right about. The
+ * wording changes with every CLI release, so classifying on it would break silently — these two tests are what
+ * pins that. */
+test("a server_error is coded as a provider outage, keeping the provider's own sentence", async () => {
+    const outage = "API Error: 500 Internal server error. This is a server-side issue, usually temporary — try again in a moment.";
+    const events = await collect(
+        request,
+        fakeQuery({ type: "assistant", session_id: "s", error: "server_error", message: { content: [{ type: "text", text: outage }] } }),
+    );
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "provider-outage", message: outage }, { kind: "done" }]);
+});
+
+test("a 529 at capacity is the same condition as a 500 — one code covers both", async () => {
+    const overloaded = "API Error: Repeated 529 Overloaded errors. The API is at capacity — this is usually temporary. Try again in a moment.";
+    const events = await collect(
+        request,
+        fakeQuery({ type: "assistant", session_id: "s", error: "overloaded", message: { content: [{ type: "text", text: overloaded }] } }),
+    );
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "provider-outage", message: overloaded }, { kind: "done" }]);
+});
+
+// The turn is still alive here — the harness lost a request and is retrying it in place. It surfaces because the
+// retry budget is long enough (CLAUDE_CODE_RETRY_WATCHDOG) that the silence would otherwise read as a hang, and
+// the user's answer to a hang is Stop, which is the only thing that loses the work.
+test("an in-turn retry surfaces as a waiting status with its own next-attempt clock, not an error", async () => {
+    const events = await collect(
+        request,
+        fakeQuery({ type: "system", subtype: "api_retry", session_id: "s", attempt: 3, max_retries: 300, retry_delay_ms: 45_000, error_status: 529 }),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "provider_retry", attempt: 3, maxAttempts: 300, nextAttemptAt: expect.any(Number), status: 529 },
+        { kind: "done" },
+    ]);
+});
+
+// A transport failure never got a response, so there is no status to name — the frame carries the wait alone
+// rather than inventing a code the client would render as if the provider had spoken.
+test("a retry with no HTTP status behind it omits the status instead of faking one", async () => {
+    const events = await collect(
+        request,
+        fakeQuery({ type: "system", subtype: "api_retry", session_id: "s", attempt: 1, max_retries: 300, retry_delay_ms: 1_000, error_status: null }),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "provider_retry", attempt: 1, maxAttempts: 300, nextAttemptAt: expect.any(Number) },
+        { kind: "done" },
+    ]);
 });
 
 // The CLI files a mid-session limit hit under a non-rate_limit category, with only the sentence saying what

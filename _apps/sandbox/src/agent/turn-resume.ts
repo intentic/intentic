@@ -3,11 +3,12 @@ import type { WakeFn } from "../automations/scheduler.js";
 import { replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
+import { outageRetryDue, outageRetryFired } from "./provider-health.js";
 import { startTurnRun } from "./turn-runs.js";
 
-/* RE-RUNNING A TURN WHOSE BLOCKER HAS CLEARED — two conditions, one mechanism.
+/* RE-RUNNING A TURN WHOSE BLOCKER HAS CLEARED — three conditions, one mechanism.
  *
- * Some turns do not fail because the work was wrong. They fail because the credential underneath them stopped
+ * Some turns do not fail because the work was wrong. They fail because something underneath them stopped
  * working for a while, and a moment later it works again. Re-running such a turn is not a retry policy, it is
  * the completion of a turn the user already asked for; leaving it dead means every open tab needs a human to
  * type "continue" into it, which is precisely the morning this module exists to prevent.
@@ -24,9 +25,17 @@ import { startTurnRun } from "./turn-runs.js";
  * — a spent allowance is the user's budget to spend, while a rotated token is the daemon's own bookkeeping
  * breaking a turn nobody chose to break.
  *
- * Daemon-side on purpose, both of them: the whole point of detached runs is that turns outlive browser tabs,
- * and a resume that died with the tab would miss exactly the failures worth automating (a 5-hour window
- * lapsing overnight; a token rotating while the operator is away).
+ * PROVIDER OUTAGE. The model provider itself failed — 500/502/503, a 529 at capacity, a dropped socket — and
+ * the harness's own long in-turn retry budget did not outlast it. This one has no instant to wait for AND no
+ * credential to repair: nobody can say when the provider comes back, only that asking again is worth something
+ * and asking constantly is worth nothing. So the WHEN is owned by a shared per-provider breaker
+ * (provider-health.ts) rather than by this map, and the rule here is only which stranded turn gets the one
+ * attempt that breaker permits.
+ *
+ * Daemon-side on purpose, all three: the whole point of detached runs is that turns outlive browser tabs, and a
+ * resume that died with the tab would miss exactly the failures worth automating (a 5-hour window lapsing
+ * overnight; a token rotating while the operator is away; a provider that is down for the twenty minutes
+ * somebody spent at lunch).
  *
  * Keyed by conversationId, like turn-runs: one pending resume per conversation, and any NEW turn on the
  * conversation supersedes it (the user retrying by hand must not be doubled by the scheduler). */
@@ -38,6 +47,13 @@ export const RESUME_DELAY_MS = 60_000;
 // A pending resume whose reset came and went without the toggle ever coming on is an offer nobody took —
 // dropped after a day so the map doesn't hold dead turns for the sandbox's whole life.
 const STALE_AFTER_MS = 24 * 60 * 60_000;
+
+/* The same idea for an outage, but an hour rather than a day, because the two waits are nothing alike. A limit
+ * reset is a scheduled event the user knows is coming and may well sleep through, so its offer is worth holding
+ * overnight. An outage has no known end, and its attempt budget is spent inside forty minutes: past the hour
+ * either the provider is still down or the user has read the red line and moved on, and a turn that springs back
+ * to life hours after they did is a worse outcome than one that stayed dead. */
+const OUTAGE_STALE_AFTER_MS = 60 * 60_000;
 
 export interface LimitHit {
     // The failed turn as the client sent it — re-resolved from scratch at fire time (fresh credentials,
@@ -56,13 +72,14 @@ export const recordLimitHit = (hit: LimitHit, now: number = Date.now()): void =>
     pending.set(hit.input.conversationId, { ...hit, recordedAt: now });
 };
 
-// Every turn start clears its conversation's pending resumes — both kinds. Whatever runs next (the user
+// Every turn start clears its conversation's pending resumes — all three kinds. Whatever runs next (the user
 // retrying by hand, the scheduler's own fire) supersedes them. A retry that hits the limit AGAIN records a
 // fresh entry with the new reset instant, which is what makes the resume self-pacing across consecutive spent
 // windows.
 export const clearPendingResume = (conversationId: string): void => {
     pending.delete(conversationId);
     pendingAuth.delete(conversationId);
+    pendingOutage.delete(conversationId);
 };
 
 export const pendingLimitHit = (conversationId: string): LimitHit | undefined => pending.get(conversationId);
@@ -94,6 +111,32 @@ export const recordAuthFailure = (failure: AuthFailure): void => {
     pendingAuth.set(failure.input.conversationId, failure);
 };
 
+export interface OutageFailure {
+    readonly input: AgentTurn & { conversationId: string };
+    // The session the failed turn last reported — it holds whatever partial work preceded the outage, which for
+    // a mid-turn 500 can be most of the work.
+    readonly sessionId?: string;
+    // Whose outage this was: the breaker's key, so a Claude outage never gates a Codex conversation's resume.
+    readonly provider: string;
+}
+
+const pendingOutage = new Map<string, OutageFailure & { readonly recordedAt: number }>();
+
+/* Remember a turn the provider killed. Recorded unconditionally — including for a turn that is ITSELF a resume,
+ * which is the opposite of the auth rule above and deliberately so: a re-minted token that gets refused again
+ * means the credential is dead and retrying is hopeless, whereas a provider that is still down means the outage
+ * is simply longer than one attempt, which is the normal case and the reason a backoff exists at all.
+ *
+ * Recorded whatever the resumeAfterOutage setting says, for the same reason the limit path does: the failure
+ * frame tells the client an "available" resume exists, and turning the toggle on right afterwards has to arm
+ * exactly the turn that just bounced. What bounds the retrying is the breaker's attempt budget and the staleness
+ * sweep below, never this call. */
+export const recordOutageFailure = (failure: OutageFailure, now: number = Date.now()): void => {
+    pendingOutage.set(failure.input.conversationId, { ...failure, recordedAt: now });
+};
+
+export const pendingOutageFailure = (conversationId: string): OutageFailure | undefined => pendingOutage.get(conversationId);
+
 /* The reset instant when the stream itself never named one: the account's persisted usage windows (recorded
  * at every turn end — see claude-usage.ts). The pool that refused the turn is the account's FULLEST one, so
  * its reset is when this wait ends — the same binding-window rule the browser's usage readouts apply. */
@@ -115,9 +158,10 @@ export const accountLimitReset = async (services: Services, account: string | un
 const RESUME_NOTE = "The Claude usage limit that interrupted this conversation has reset, and this turn resumed automatically.";
 const SWITCH_NOTE = "The Claude usage limit interrupted this conversation, and this turn now resumes on a different account.";
 const AUTH_NOTE = "The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically.";
+const OUTAGE_NOTE = "The model provider was briefly unavailable and interrupted this conversation; this turn resumed automatically.";
 
 const withResumeNote = (prompt: string, note: string): string =>
-    [RESUME_NOTE, SWITCH_NOTE, AUTH_NOTE].some((known) => prompt.startsWith(known))
+    [RESUME_NOTE, SWITCH_NOTE, AUTH_NOTE, OUTAGE_NOTE].some((known) => prompt.startsWith(known))
         ? prompt
         : `${note} The interrupted request is repeated below — where part of it was already completed in this session, continue from that point instead of starting over.\n\n${prompt}`;
 
@@ -131,15 +175,35 @@ const withResumeNote = (prompt: string, note: string): string =>
  * account of the same provider, whose allowance is not the spent one. The session STILL rides — Claude
  * sessions live in the sandbox's own store, not the account, so the partial work continues under whichever
  * credential serves the resume. */
-export const resumeTurnOf = (hit: LimitHit, account?: string): AgentTurn & { conversationId: string } => {
-    const sessionId = hit.sessionId ?? hit.input.sessionId;
-    const { history, ...rest } = hit.input;
+const resumedTurn = (
+    failure: { readonly input: AgentTurn & { conversationId: string }; readonly sessionId?: string },
+    note: string,
+    account?: string,
+): AgentTurn & { conversationId: string } => {
+    const sessionId = failure.sessionId ?? failure.input.sessionId;
+    const { history, ...rest } = failure.input;
     return {
         ...rest,
-        prompt: withResumeNote(hit.input.prompt, account === undefined ? RESUME_NOTE : SWITCH_NOTE),
+        prompt: withResumeNote(failure.input.prompt, note),
         ...(account !== undefined ? { account } : {}),
         ...(sessionId !== undefined ? { sessionId } : history !== undefined ? { history } : {}),
     };
+};
+
+export const resumeTurnOf = (hit: LimitHit, account?: string): AgentTurn & { conversationId: string } =>
+    resumedTurn(hit, account === undefined ? RESUME_NOTE : SWITCH_NOTE, account);
+
+/* Start a resumed turn as a detached run — the same shape POST /agent starts, push observers included, so every
+ * window can attach to it and a user away from the keyboard hears how it ended. Answers whether it actually
+ * started: undefined means turn-runs found a live turn already on the conversation, which SUPERSEDES the resume
+ * exactly like a hand retry does. */
+const fireResume = (services: Services, wake: WakeFn, turn: AgentTurn & { conversationId: string }): boolean => {
+    const conversationId = turn.conversationId;
+    const run = startTurnRun((input, signal) => wake(services, input, signal), turn, {
+        awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),
+        settled: (outcome) => void services.pushSender.notifyIfAway(turnFinished(conversationId, turn.prompt, outcome)),
+    });
+    return run !== undefined;
 };
 
 export interface TurnResumeScheduler {
@@ -166,27 +230,60 @@ const fireAuthResume = async (services: Services, wake: WakeFn, failure: AuthFai
     if (replacement === undefined || replacement === failure.refusedToken) {
         return;
     }
-    const sessionId = failure.sessionId ?? failure.input.sessionId;
-    const { history, ...rest } = failure.input;
-    const turn: AgentTurn & { conversationId: string } = {
-        ...rest,
-        prompt: withResumeNote(failure.input.prompt, AUTH_NOTE),
-        ...(sessionId !== undefined ? { sessionId } : history !== undefined ? { history } : {}),
-    };
-    const run = startTurnRun((input, signal) => wake(services, input, signal), turn, {
-        awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),
-        settled: (outcome) => void services.pushSender.notifyIfAway(turnFinished(conversationId, turn.prompt, outcome)),
-    });
-    if (run !== undefined) {
+    if (fireResume(services, wake, resumedTurn(failure, AUTH_NOTE))) {
         services.logger.info({ conversationId, account: failure.account }, "auth auto-resume fired");
     }
 };
 
-// Polls both pending maps. A limit resume waits for its window to reopen (reset + the delay above) and for the
-// toggle, read per pass rather than snapshotted at failure time: flipping it on while a reset is pending arms
+/* THE OUTAGE PASS. Every conversation stranded on a provider, in the order they were stranded, offered to the
+ * breaker one at a time.
+ *
+ * The breaker (provider-health.ts) answers when — and because firing MOVES its clock, the second stranded
+ * conversation on the same provider is refused within this very loop. That is the anti-spam property stated
+ * once: an outage costs one turn per window to keep measuring, whether one agent is waiting on it or twenty. The
+ * turn that goes is the oldest, which is both the fairest and the one whose user has been waiting longest; and
+ * whichever one it is, its SUCCESS clears the breaker for everybody, so the rest follow on the next few passes
+ * rather than waiting out a fresh backoff each.
+ *
+ * The toggle is read per pass, not snapshotted at failure time — flipping resumeAfterOutage on while a stranded
+ * turn sits here arms that turn, which is what the chat's offer promises. */
+const runOutagePass = async (services: Services, wake: WakeFn, now: number): Promise<void> => {
+    const stranded = [...pendingOutage.values()];
+    if (stranded.length === 0) {
+        return;
+    }
+    const { resumeAfterOutage } = await services.sandboxSettings.get();
+    for (const failure of stranded) {
+        const conversationId = failure.input.conversationId;
+        // A turn nobody resumed within the hour is not worth resuming at all: the attempts are spent, or the
+        // toggle is off and the offer went unanswered. Either way the user has read the failure and moved on, and
+        // a turn springing back to life long after they did is worse than one that stayed dead.
+        if (now - failure.recordedAt > OUTAGE_STALE_AFTER_MS) {
+            pendingOutage.delete(conversationId);
+            continue;
+        }
+        if (!resumeAfterOutage || !outageRetryDue(failure.provider, now)) {
+            continue;
+        }
+        // Counted at dispatch, before the turn starts: it is what closes the window against the next stranded
+        // conversation, and it must hold even if starting this one turns out to conflict.
+        outageRetryFired(failure.provider, now);
+        // Dropped before firing, like both paths above — a conflict means a live turn already owns this
+        // conversation and supersedes the resume, and a retained entry would re-fire on every pass. A resume that
+        // dies on the outage AGAIN is re-recorded by its own turn, with the breaker one step further along.
+        pendingOutage.delete(conversationId);
+        if (fireResume(services, wake, resumedTurn(failure, OUTAGE_NOTE))) {
+            services.logger.info({ conversationId, provider: failure.provider, waiting: stranded.length }, "provider-outage auto-resume fired");
+        }
+    }
+};
+
+// Polls all three pending maps. A limit resume waits for its window to reopen (reset + the delay above) and for
+// the toggle, read per pass rather than snapshotted at failure time: flipping it on while a reset is pending arms
 // that resume, and a reset that arrives with the toggle off simply waits for it (until staleness drops the
 // entry). An auth resume has neither gate — it is due the moment it is recorded, and it is not the user's
-// budget being spent but the daemon's own rotation being undone.
+// budget being spent but the daemon's own rotation being undone. An outage resume waits on the shared
+// per-provider breaker instead of on any instant of its own — see runOutagePass.
 export const createTurnResumeScheduler = (services: Services, wake: WakeFn, intervalMs = 5_000): TurnResumeScheduler => {
     let timer: NodeJS.Timeout | undefined;
 
@@ -200,6 +297,7 @@ export const createTurnResumeScheduler = (services: Services, wake: WakeFn, inte
             pendingAuth.delete(failure.input.conversationId);
             await fireAuthResume(services, wake, failure);
         }
+        await runOutagePass(services, wake, now);
         const due = [...pending.values()].filter((hit) => now >= hit.resetsAt * 1000 + RESUME_DELAY_MS);
         if (due.length === 0) {
             return;
@@ -217,14 +315,7 @@ export const createTurnResumeScheduler = (services: Services, wake: WakeFn, inte
             // conversation, and that turn — which cleared this entry at ITS start under normal ordering —
             // supersedes the resume exactly like a hand retry does.
             pending.delete(conversationId);
-            const turn = resumeTurnOf(hit);
-            // The same detached-run shape POST /agent starts, push observers included, so every window can
-            // attach to the resumed turn and a user away from the keyboard hears how it ended.
-            const run = startTurnRun((input, signal) => wake(services, input, signal), turn, {
-                awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),
-                settled: (outcome) => void services.pushSender.notifyIfAway(turnFinished(conversationId, turn.prompt, outcome)),
-            });
-            if (run !== undefined) {
+            if (fireResume(services, wake, resumeTurnOf(hit))) {
                 services.logger.info({ conversationId, resetsAt: hit.resetsAt }, "usage-limit auto-resume fired");
             }
         }

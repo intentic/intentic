@@ -28,6 +28,15 @@ test("a native Claude turn keeps the real alias table — sonnet and opus are di
     expect(env["CLAUDE_CODE_SUBAGENT_MODEL"]).toBeUndefined();
 });
 
+test("every harness process is told to ride out a provider outage rather than give up on it", () => {
+    // Whichever credential shape serves the turn: the retry budget is about the provider being down, which has
+    // nothing to do with whose token is in play. A turn that gives up here is one turn-resume.ts has to rebuild
+    // from scratch, at full context cost.
+    for (const credentials of [{ oauthToken: "sk-oauth" }, { baseUrl: "http://127.0.0.1:8788", authToken: "local" }, {}]) {
+        expect(harnessEnv(credentials)["CLAUDE_CODE_RETRY_WATCHDOG"]).toBe("1");
+    }
+});
+
 test("a custom endpoint with no resolved model pins nothing rather than an empty id", () => {
     const env = harnessEnv({ baseUrl: "https://api.moonshot.ai/anthropic", authToken: "key" });
     expect(env["ANTHROPIC_BASE_URL"]).toBe("https://api.moonshot.ai/anthropic");

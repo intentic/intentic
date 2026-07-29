@@ -39,7 +39,7 @@ import {
     type TurnEffect,
     type TurnState,
 } from "./turnReducer";
-import { bindingWindow, formatReset, usageStatusByAccount, usageStatusFor } from "./usageStatus";
+import { bindingWindow, formatReset, formatWait, usageStatusByAccount, usageStatusFor } from "./usageStatus";
 
 // The permission mode is the contract's PermissionMode — imported, not redeclared. The composer picks the
 // turn's STARTING mode; the agent can then move itself (EnterPlanMode when a request turns out to need
@@ -432,6 +432,10 @@ const LIMIT_REATTACH_DELAY_MS = 70_000;
 const LIMIT_REATTACH_INTERVAL_MS = 15_000;
 const LIMIT_REATTACH_TRIES = 20;
 
+// The same beat for an outage resume, which the daemon fires within a scheduler pass of its own retryAt rather
+// than a minute after it — so the probe only has to clear the poll cadence, not a fire delay.
+const OUTAGE_REATTACH_DELAY_MS = 10_000;
+
 /* One chat conversation: its transcript, the resumed sandbox session, and the streaming machinery for a
  * turn. Self-contained so the manager can run several at once — each instance owns its AbortController and
  * typewriter loop, so tabs stream independently. A turn EXECUTES as a detached run on the sandbox daemon
@@ -572,6 +576,19 @@ export class Conversation {
     // send, which supersedes the pending resume daemon-side the same way. Not persisted: after a reload the
     // standing toggle on the settings page is the offer.
     readonly limitResume = ref<{ resetsAt: number; scheduled: boolean; account?: string } | undefined>();
+
+    /* A provider outage the daemon is working through, as this window sees it: when the next attempt is due, how
+     * many are left, and whether it is armed or waiting on the setting. Drives the composer's outage banner — the
+     * one place that can honestly answer "is anything still happening?", which is the only question a user has
+     * during an outage. Cleared by the next turn starting, which is either the resume landing or the user's own
+     * send superseding it. */
+    readonly outageResume = ref<{ retryAt: number; attempt: number; maxAttempts: number; scheduled: boolean } | undefined>();
+
+    /* The harness retrying INSIDE the live turn (provider_retry). Distinct from outageResume in the way that
+     * matters most to a waiting user: nothing has failed and nothing has been lost — this turn is still running.
+     * Rendered as a status beside the streaming indicator and dropped the moment the turn produces anything or
+     * settles, so it can never outlive the wait it describes. */
+    readonly providerRetry = ref<{ attempt: number; maxAttempts: number; nextAttemptAt: number; status?: number } | undefined>();
 
     // Whether the running turn can absorb a message mid-flight: the Claude Code loop only (see runsClaudeCode,
     // the same predicate the daemon's streamAgent gates its SteeringQueue on). Used for WORDING alone (the
@@ -902,8 +919,10 @@ export class Conversation {
         this.error.value = null;
         // A live turn supersedes a pending usage-limit resume — the daemon cleared its side at this turn's
         // start — so the offer banner must not outlive the failure it described, whether the scheduler fired
-        // the resume, another window did, or the user simply sent something over there.
+        // the resume, another window did, or the user simply sent something over there. Same for an outage
+        // resume: THIS turn is the retry, or the send that replaced it.
         this.limitResume.value = undefined;
+        this.outageResume.value = undefined;
         this.turnStartedAt.value = startedAt;
     }
 
@@ -913,6 +932,8 @@ export class Conversation {
         this.flushType();
         this.inflight = null;
         this.streaming.value = false;
+        // An in-turn retry belongs to the turn that was retrying. Whatever it settled as, the wait is over.
+        this.providerRetry.value = undefined;
         // Nothing is streaming here, so nothing is replay — a stream that died mid-replay must not leave the
         // conversation permanently marked as re-telling history.
         this.replaying.value = false;
@@ -975,7 +996,21 @@ export class Conversation {
         }
         this.limitResume.value = { ...pending, scheduled: true };
         this.appendNotice(`Auto-resume enabled — this chat continues by itself around ${formatReset(pending.resetsAt + RESUME_DELAY_S)}.`);
-        this.scheduleLimitReattach(pending.resetsAt);
+        this.scheduleReattach(pending.resetsAt * 1000 + LIMIT_REATTACH_DELAY_MS);
+        this.persist();
+    }
+
+    // The same move for an outage the user has just enabled resuming for: the daemon remembered the stranded turn
+    // whatever the setting said, so the save alone arms it and this window only has to reflect that and be there
+    // when it lands.
+    armOutageResume(): void {
+        const pending = this.outageResume.value;
+        if (pending === undefined) {
+            return;
+        }
+        this.outageResume.value = { ...pending, scheduled: true };
+        this.appendNotice(`Auto-resume enabled — this chat retries by itself in ${formatWait(pending.retryAt)}.`);
+        this.scheduleReattach(pending.retryAt * 1000 + OUTAGE_REATTACH_DELAY_MS);
         this.persist();
     }
 
@@ -1018,9 +1053,11 @@ export class Conversation {
     // conversation, so a fresh failure's schedule replaces a stale one.
     private limitReattachTimer: ReturnType<typeof setTimeout> | undefined;
 
-    // See the RESUME_* constants above: wait out the reset plus the daemon's fire delay, then re-attach on
-    // its poll cadence until the resumed run answers (or the attempts run out).
-    private scheduleLimitReattach(resetsAt: number): void {
+    /* Start probing at `firstProbeAt` (epoch ms — a beat AFTER the daemon is expected to fire) and re-probe on
+     * its poll cadence until the resumed run answers or the attempts run out. Takes an instant rather than a
+     * reset second because both callers compute it differently: a limit resume aims at reset + the daemon's fire
+     * delay, an outage resume at the breaker's next attempt, which moves with the backoff. */
+    private scheduleReattach(firstProbeAt: number): void {
         clearTimeout(this.limitReattachTimer);
         let attempts = 0;
         const probe = (): void => {
@@ -1034,7 +1071,7 @@ export class Conversation {
                 }
             });
         };
-        this.limitReattachTimer = setTimeout(probe, Math.max(0, resetsAt * 1000 + LIMIT_REATTACH_DELAY_MS - Date.now()));
+        this.limitReattachTimer = setTimeout(probe, Math.max(0, firstProbeAt - Date.now()));
     }
 
     // Release a hold placed by a failure the user has now fixed (reconnecting a revoked account) and let
@@ -1471,6 +1508,13 @@ export class Conversation {
     // One frame in: the transcript transition is the reducer's, and whatever the frame ALSO does — set a
     // conversation ref, touch a cross-conversation store, open a file — comes back as effects this applies.
     private handleEvent(event: AgentEvent, turn: TurnContext): void {
+        // Any other frame means the wait this described is over — the request went through, or the turn moved on
+        // to a different problem. Retired here rather than on specific frames because "still waiting" is only
+        // true until literally anything else happens, and a replayed transcript must not restore a countdown that
+        // finished minutes ago.
+        if (event.kind !== `provider_retry`) {
+            this.providerRetry.value = undefined;
+        }
         const { state, effects } = applyTurnFrame(this.state.value, event, { userMessageId: turn.userMessageId });
         this.state.value = state;
         this.syncTypewriter();
@@ -1577,6 +1621,11 @@ export class Conversation {
                 void import("../terminal/useTerminalPanel").then((m) => m.useTerminalPanel().surface(session));
                 return;
             }
+            case `providerRetry`:
+                // A wait, not a failure: the turn is still running. Held only while it is (see clearTurnState),
+                // so a stale "retrying…" can never sit under a finished answer.
+                this.providerRetry.value = effect.retry;
+                return;
             case `error`:
                 this.applyTurnError(effect, turn);
                 return;
@@ -1653,6 +1702,9 @@ export class Conversation {
             case `rate_limit`:
                 this.applyLimitError(error);
                 return;
+            case `provider-outage`:
+                this.applyOutageError(error, turn);
+                return;
             case `grok-model-invalid`:
             case `codex-model-invalid`:
                 // The daemon rejected the pinned model. Grok self-heals mid-turn (re-prompting with a model xAI
@@ -1701,13 +1753,50 @@ export class Conversation {
             // another account of this provider can carry the turn NOW, and that offer belongs in the room while
             // the timer runs.
             this.limitResume.value = { resetsAt, scheduled: true, account: error.account };
-            this.scheduleLimitReattach(resetsAt);
+            this.scheduleReattach(resetsAt * 1000 + LIMIT_REATTACH_DELAY_MS);
             return;
         }
         if (error.autoResume === `available`) {
             this.limitResume.value = { resetsAt, scheduled: false, account: error.account };
         }
         this.appendNotice(`${message} Resets ${formatReset(resetsAt)}.`);
+    }
+
+    /* THE PROVIDER FAILED, AND SOMETHING IS ALREADY BEING DONE ABOUT IT.
+     *
+     * Muted rather than red, for the same reason a spent allowance is: the red line means "this needs you", and
+     * the whole point of the resume is that it doesn't. What the user needs to know instead is the three things a
+     * red line cannot say — that the provider was at fault and not their work, that the turn is coming back, and
+     * WHEN. The wait is escalating (30s to 20 minutes as an outage drags on), so naming the instant matters more
+     * here than it does for a limit: "retrying" alone, on a wait that silently grows, is indistinguishable from
+     * nothing happening.
+     *
+     * The one-press opt-out rides the notice because this is the moment of regret — the automation just fired, and
+     * anyone who did not want it wants it gone now, not after a trip to Sandbox ▸ Agent.
+     *
+     * With no resume armed (the daemon's attempts are spent, so `outage` is absent) this is a plain failure and
+     * gets the red line: promising a retry that will not come is worse than admitting the turn is dead. The user's
+     * words are handed back either way — the message never reached the model, and a 500 that eats what somebody
+     * typed is the one part of this failure that is genuinely our fault. */
+    private applyOutageError(error: Extract<TurnEffect, { kind: "error" }>, turn: TurnContext): void {
+        const { message, outage } = error;
+        if (outage === undefined) {
+            this.requeueUndelivered(turn.userMessageId);
+            this.interrupted = true;
+            this.error.value = message;
+            return;
+        }
+        const scheduled = error.autoResume === `scheduled`;
+        this.outageResume.value = { ...outage, scheduled };
+        this.appendNotice(
+            scheduled
+                ? `${message} Retrying by itself in ${formatWait(outage.retryAt)} — attempt ${outage.attempt} of ${outage.maxAttempts}.`
+                : `${message} Auto-resume is off, so this turn is waiting: turn it on and it continues from here.`,
+            scheduled ? `outageOptOut` : undefined,
+        );
+        if (scheduled) {
+            this.scheduleReattach(outage.retryAt * 1000 + OUTAGE_REATTACH_DELAY_MS);
+        }
     }
 
     // --- transcript writes the conversation itself makes (control actions, restores) --------------------------
@@ -1764,8 +1853,9 @@ export class Conversation {
     }
 
     // A small muted system line marking a control action (dismissed / kept planning / approved / stopped).
-    private appendNotice(text: string): void {
-        this.state.value = appendNotice(this.state.value, text);
+    // `action` is the one-press follow-up a notice can carry — see ChatMessage.noticeAction.
+    private appendNotice(text: string, action?: ChatMessage["noticeAction"]): void {
+        this.state.value = appendNotice(this.state.value, text, action);
     }
 
     // Hang an interactive card (plan / question / permission) on a bubble — and, with the answered card, freeze

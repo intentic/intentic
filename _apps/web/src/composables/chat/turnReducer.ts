@@ -76,7 +76,12 @@ export type TurnEffect =
           readonly resetsAt: number | undefined;
           readonly autoResume: Extract<AgentEvent, { kind: "error" }>["autoResume"];
           readonly account: string | undefined;
-      };
+          // provider-outage only: when the next attempt is due and how many are left — see events.ts.
+          readonly outage: Extract<AgentEvent, { kind: "error" }>["outage"];
+      }
+    // The turn is alive and waiting on the provider. Not a transcript write at all: the caller renders it where
+    // the streaming indicator goes, and the next frame of real content retires it.
+    | { readonly kind: "providerRetry"; readonly retry: Extract<AgentEvent, { kind: "provider_retry" }> };
 
 export interface TurnStep {
     readonly state: TurnState;
@@ -411,7 +416,12 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
         case `session`:
             return step(state, { kind: `session`, sessionId: event.sessionId });
         case `worktree`:
-            return step(state, { kind: `worktree`, branch: event.branch, base: event.base, ...(event.unenforced === true ? { unenforced: true } : {}) });
+            return step(state, {
+                kind: `worktree`,
+                branch: event.branch,
+                base: event.base,
+                ...(event.unenforced === true ? { unenforced: true } : {}),
+            });
         case `mode`:
             return step(state, { kind: `liveMode`, mode: event.mode });
         case `init`:
@@ -431,7 +441,10 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                 resetsAt: event.resetsAt,
                 autoResume: event.autoResume,
                 account: event.account,
+                outage: event.outage,
             });
+        case `provider_retry`:
+            return step(state, { kind: `providerRetry`, retry: event });
         case `rate_limit_info`:
         // The live gate, not a headroom reading: it names whichever single window the provider considered
         // binding for that request. `account_usage` carries every pool, and is what the readouts use.

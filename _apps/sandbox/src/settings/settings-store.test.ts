@@ -38,6 +38,8 @@ const DEFAULTS: SandboxSettings = {
     // would silently hold every existing sandbox's finished work on branches nobody is watching.
     autoLand: true,
     autoResumeOnLimit: false,
+    // And the third: a provider outage is the provider's failure, not a budget the user chose to spend.
+    resumeAfterOutage: true,
 };
 
 test("get returns the defaults when the file is absent", async () => {

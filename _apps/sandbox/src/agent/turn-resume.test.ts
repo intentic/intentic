@@ -6,14 +6,17 @@ import { expect, test, vi } from "vitest";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import { fileSandboxSettingsStore } from "../settings/settings-store.js";
+import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "./provider-health.js";
 import {
     accountLimitReset,
     clearPendingResume,
     createTurnResumeScheduler,
     type LimitHit,
     pendingLimitHit,
+    pendingOutageFailure,
     recordAuthFailure,
     recordLimitHit,
+    recordOutageFailure,
     RESUME_DELAY_MS,
     resumeTurnOf,
 } from "./turn-resume.js";
@@ -43,7 +46,12 @@ const hit = (conversationId: string, extra: Partial<LimitHit> = {}): LimitHit =>
 const DUE_AT = 1_000 * 1000 + RESUME_DELAY_MS;
 
 test("resumeTurnOf repeats the original request under the resume note and returns to the failed turn's session", () => {
-    const turn = resumeTurnOf(hit("lr-shape", { sessionId: "s-latest", input: { prompt: "finish the report", conversationId: "lr-shape", sessionId: "s-old", history: [{ role: "user", text: "hi" }] } }));
+    const turn = resumeTurnOf(
+        hit("lr-shape", {
+            sessionId: "s-latest",
+            input: { prompt: "finish the report", conversationId: "lr-shape", sessionId: "s-old", history: [{ role: "user", text: "hi" }] },
+        }),
+    );
     expect(turn.prompt).toContain("usage limit");
     expect(turn.prompt).toContain("finish the report");
     // The stream's latest session wins over the one the client sent, and a resumed session needs no history seed.
@@ -56,7 +64,10 @@ test("resumeTurnOf repeats the original request under the resume note and return
 });
 
 test("an account override points the resume at the other allowance, under its own note, session intact", () => {
-    const turn = resumeTurnOf(hit("lr-switch", { sessionId: "s-live", input: { prompt: "finish the report", conversationId: "lr-switch", account: "acct-spent" } }), "acct-b");
+    const turn = resumeTurnOf(
+        hit("lr-switch", { sessionId: "s-live", input: { prompt: "finish the report", conversationId: "lr-switch", account: "acct-spent" } }),
+        "acct-b",
+    );
     // The switch wording, not the reset wording — the model should know it is riding a fresh allowance.
     expect(turn.prompt).toContain("different account");
     expect(turn.prompt).toContain("finish the report");
@@ -205,4 +216,148 @@ test("the next turn on the conversation supersedes a pending auth resume", async
     clearPendingResume("auth-4");
     await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
     expect(prompts).toHaveLength(0);
+});
+
+/* THE OUTAGE RESUME — the one whose whole job is restraint. The provider is failing intermittently, so the
+ * question is never "can we retry" (always yes) but "how little can we spend finding out", and the answers live
+ * across two modules: the wait is the breaker's (provider-health.ts), the choice of which stranded turn spends it
+ * is this one's. Each test invents its own provider name, because the breaker is process-wide state. */
+
+const OUT_NOW = 5_000_000;
+
+const outage = (conversationId: string, provider: string, extra: Record<string, unknown> = {}) => ({
+    input: { prompt: "finish the report", conversationId, isolated: true },
+    provider,
+    ...extra,
+});
+
+const outageServices = async (root: string, resumeAfterOutage = true): Promise<Services> => {
+    const services = fakeServices(root);
+    const settings = await services.sandboxSettings.get();
+    await services.sandboxSettings.set({ ...settings, resumeAfterOutage });
+    return services;
+};
+
+test("a stranded turn resumes once the provider's wait elapses, under a note saying why", async () => {
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
+    const { retryAt } = recordProviderFailure("out-fire", OUT_NOW);
+    recordOutageFailure(outage("out-1", "out-fire"), OUT_NOW);
+    const prompts: string[] = [];
+    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+
+    // Nothing while the wait runs — this is the anti-spam contract, and it is the default state of an outage.
+    await scheduler.tick(retryAt - 1);
+    expect(prompts).toEqual([]);
+
+    await scheduler.tick(retryAt);
+    expect(prompts).toHaveLength(1);
+    // The original request rides again IN FULL behind the note: a bare "continue" would lose it, and the note is
+    // what stops the model from starting over on work its session already holds.
+    expect(prompts[0]).toContain("finish the report");
+    expect(prompts[0]).toContain("model provider was briefly unavailable");
+    expect(pendingOutageFailure("out-1")).toBeUndefined();
+});
+
+test("an outage costs ONE turn per window however many conversations are stranded on it", async () => {
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
+    const { retryAt } = recordProviderFailure("out-herd", OUT_NOW);
+    for (const id of ["herd-1", "herd-2", "herd-3", "herd-4"]) {
+        recordOutageFailure(outage(id, "out-herd"), OUT_NOW);
+    }
+    const prompts: string[] = [];
+    await createTurnResumeScheduler(services, fakeWake(prompts)).tick(retryAt);
+
+    // Firing moves the breaker's clock, so the other three are refused inside this same pass. Four stranded
+    // agents cost exactly what one costs — the whole reason the wait lives per provider and not per conversation.
+    expect(prompts).toHaveLength(1);
+    expect(pendingOutageFailure("herd-1")).toBeUndefined();
+    // And the ones that did not go are still remembered, in order, for the windows after this.
+    expect(pendingOutageFailure("herd-2")).toBeDefined();
+    expect(pendingOutageFailure("herd-4")).toBeDefined();
+    for (const id of ["herd-2", "herd-3", "herd-4"]) {
+        clearPendingResume(id);
+    }
+});
+
+test("evidence that the provider is back releases the stranded set without waiting out the backoff", async () => {
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
+    recordProviderFailure("out-back", OUT_NOW);
+    recordOutageFailure(outage("back-1", "out-back"), OUT_NOW);
+    const prompts: string[] = [];
+    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+    await scheduler.tick(OUT_NOW);
+    expect(prompts).toEqual([]);
+
+    // Any turn's first content clears the outage (agent.routes.ts calls this) — a user's own message going
+    // through, an automation waking, another agent entirely. The stranded turn goes on the very next pass rather
+    // than sitting out a wait the provider has already disproved.
+    recordProviderSuccess("out-back");
+    await scheduler.tick(OUT_NOW + 1);
+    expect(prompts).toHaveLength(1);
+});
+
+test("with the toggle off the turn is remembered, not resumed — turning it on arms that same turn", async () => {
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), false);
+    const { retryAt } = recordProviderFailure("out-toggle", OUT_NOW);
+    recordOutageFailure(outage("toggle-1", "out-toggle"), OUT_NOW);
+    const prompts: string[] = [];
+    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+    await scheduler.tick(retryAt);
+    expect(prompts).toEqual([]);
+    expect(pendingOutageFailure("toggle-1")).toBeDefined();
+
+    const settings = await services.sandboxSettings.get();
+    await services.sandboxSettings.set({ ...settings, resumeAfterOutage: true });
+    await scheduler.tick(retryAt);
+    expect(prompts).toHaveLength(1);
+});
+
+test("a stranded turn nobody resumed within the hour is dropped rather than sprung back to life", async () => {
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
+    recordOutageFailure(outage("stale-1", "out-stale"), OUT_NOW - 61 * 60_000);
+    const prompts: string[] = [];
+    await createTurnResumeScheduler(services, fakeWake(prompts)).tick(OUT_NOW);
+    expect(prompts).toEqual([]);
+    expect(pendingOutageFailure("stale-1")).toBeUndefined();
+});
+
+test("once the attempt budget is spent the failure stands — the retrying is finite by design", async () => {
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
+    const prompts: string[] = [];
+    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+    let now = OUT_NOW;
+    // Walk the whole outage: each window releases one attempt, that attempt dies on the provider too, and its
+    // turn is re-recorded by its own failure — which is what a resume that fails again really does.
+    for (let i = 0; i < OUTAGE_MAX_ATTEMPTS + 2; i += 1) {
+        const { retryAt } = recordProviderFailure("out-spent", now);
+        recordOutageFailure(outage("spent-1", "out-spent"), now);
+        now = retryAt;
+        await scheduler.tick(now);
+    }
+    expect(prompts).toHaveLength(OUTAGE_MAX_ATTEMPTS);
+    clearPendingResume("spent-1");
+});
+
+test("the next turn on the conversation supersedes a pending outage resume", async () => {
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
+    const { retryAt } = recordProviderFailure("out-super", OUT_NOW);
+    recordOutageFailure(outage("super-1", "out-super"), OUT_NOW);
+    clearPendingResume("super-1");
+    const prompts: string[] = [];
+    await createTurnResumeScheduler(services, fakeWake(prompts)).tick(retryAt);
+    expect(prompts).toEqual([]);
+});
+
+test("one provider's outage never gates a conversation on another", async () => {
+    const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
+    recordProviderFailure("out-claude", OUT_NOW);
+    recordOutageFailure(outage("iso-claude", "out-claude"), OUT_NOW);
+    recordOutageFailure(outage("iso-codex", "out-codex"), OUT_NOW);
+    const prompts: string[] = [];
+    await createTurnResumeScheduler(services, fakeWake(prompts)).tick(OUT_NOW);
+    // The Codex conversation has nothing to wait for: its provider never failed.
+    expect(prompts).toHaveLength(1);
+    expect(pendingOutageFailure("iso-codex")).toBeUndefined();
+    expect(pendingOutageFailure("iso-claude")).toBeDefined();
+    clearPendingResume("iso-claude");
 });

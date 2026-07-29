@@ -88,6 +88,24 @@ export const harnessEnv = (credentials: {
     readonly model?: string;
 }): Record<string, string> => ({
     IS_SANDBOX: "1",
+    /* RIDE OUT A PROVIDER BLIP INSIDE THE TURN, rather than dying and being resumed from outside it.
+     *
+     * The harness retries 5xx/529/dropped-socket failures by itself, but its default budget is tuned for a human
+     * sitting at a terminal who can just press up-enter: ten attempts, and it gives up outright the moment the
+     * provider asks for a wait longer than a minute — which is exactly what a provider in real trouble asks for.
+     * This flag is the harness's own switch for the other case, an unattended agent that should keep trying:
+     * three hundred attempts, no ceiling on the requested wait, and capacity refusals stop counting against the
+     * budget at all.
+     *
+     * Worth far more than the resume it prevents. A retry inside the live turn keeps the session, the prompt
+     * cache and whatever the agent had already done; a resume re-reads all of it and starts the turn again. So
+     * this is the layer that should absorb almost every outage, with turn-resume.ts as the net under it for the
+     * turns that die anyway — and the `provider_retry` frame (agent.ts) as the thing that makes the resulting
+     * long silence legible instead of looking like a hang.
+     *
+     * Cost: the harness stops falling back to a cheaper model on server errors. We never set a fallback model,
+     * so there is nothing to lose here. */
+    CLAUDE_CODE_RETRY_WATCHDOG: "1",
     ...(credentials.baseUrl !== undefined
         ? {
               ANTHROPIC_BASE_URL: credentials.baseUrl,
