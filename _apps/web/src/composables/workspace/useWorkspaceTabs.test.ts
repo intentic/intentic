@@ -32,7 +32,7 @@ sessionStorage.setItem(
 
 const { useWorkspaceTabs } = await import("./useWorkspaceTabs");
 
-const { tabs, activeId, openDiff, openFile, selectTab } = useWorkspaceTabs();
+const { tabs, activeId, openDiff, openFile, selectTab, closedTabs, closeTabIds, reopenClosedTab } = useWorkspaceTabs();
 const stored = (): { active: string | null; tabs: { id: string }[] } => JSON.parse(sessionStorage.getItem(KEY) ?? `{}`);
 
 it(`comes back with the tabs and focus the last visit left`, () => {
@@ -66,4 +66,47 @@ it(`keeps a focus that was genuinely nothing`, async () => {
     await nextTick();
 
     expect(stored().active).toBeNull();
+});
+
+// The close family's undo: a mis-closed tab comes back WHERE it was, which is what separates "reopen" from
+// "open it again" — a tab restored at the end of the strip would leave the user hunting for it.
+it(`reopens the last closed tab at the position it held, and focuses it`, () => {
+    closeTabIds(new Set(tabs.value.filter((tab) => tab.kind === `diff`).map((tab) => tab.id)));
+    selectTab(`src/main.ts`);
+    const before = tabs.value.map((tab) => tab.id);
+
+    closeTabIds(new Set([`graph:root`])); // the middle tab
+
+    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `README.md`]);
+    reopenClosedTab();
+
+    expect(tabs.value.map((tab) => tab.id)).toEqual(before);
+    expect(activeId.value).toBe(`graph:root`);
+    // The diff closed above is still on the stack, one entry below the graph tab just popped off it.
+    expect(closedTabs.value).toHaveLength(1);
+});
+
+// One entry per CLOSE, so undoing a bulk close brings the whole strip back in order and in one press — the
+// action the user took is the unit they undo.
+it(`restores a whole bulk close in one press, in order and focused as it was`, () => {
+    selectTab(`graph:root`);
+    closeTabIds(new Set(tabs.value.map((tab) => tab.id))); // Close All
+
+    expect(tabs.value).toEqual([]);
+    expect(activeId.value).toBeNull();
+
+    reopenClosedTab();
+
+    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `graph:root`, `README.md`]);
+    expect(activeId.value).toBe(`graph:root`);
+});
+
+it(`does nothing when nothing has been closed`, () => {
+    closedTabs.value = [];
+    selectTab(`README.md`);
+
+    reopenClosedTab();
+
+    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `graph:root`, `README.md`]);
+    expect(activeId.value).toBe(`README.md`);
 });

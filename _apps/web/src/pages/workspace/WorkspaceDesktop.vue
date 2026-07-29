@@ -41,7 +41,6 @@ import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 import WorkspaceTree from "./WorkspaceTree.vue";
 import { rendersAsBytes } from "./fileType";
-import { closeTabs } from "./workspaceTabs";
 
 /* The Workspace area: a VSCode-like, full-height explorer + viewer of the /work filesystem the agent sees
  * ("what the LLM sees"), read DIRECTLY from the sandbox daemon (no platform state, see CLAUDE.md). A resizable
@@ -94,7 +93,22 @@ const {
 } = useWorkspaceSearch(filter, contentMode);
 // The open tabs live in the useWorkspaceTabs singleton (the chat pushes plan previews in from the shell, and
 // tabs survive navigation); this component owns closing — the dirty-confirm dialog and edit-buffer forget.
-const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, openDirectory, openGraph, openHealth, selectTab } = useWorkspaceTabs();
+const {
+    tabs,
+    activeId,
+    activeTab,
+    openLine,
+    openFile,
+    openAtLine,
+    openDiff,
+    openDirectory,
+    openGraph,
+    openHealth,
+    selectTab,
+    closedTabs,
+    closeTabIds,
+    reopenClosedTab,
+} = useWorkspaceTabs();
 // Mirror the active file into the URL (`/workspace/<path>`) so a reload / shared link reopens it.
 useWorkspaceRoute();
 
@@ -156,11 +170,9 @@ const tabMenu = ref<{ show: (event: Event) => void }>();
 const menuTabId = ref<string>();
 const pendingClose = ref<ReadonlySet<string>>();
 
+// The store drops the tabs (and remembers them for Reopen Closed Tab); this layer forgets their edit buffers.
 const applyClose = (ids: ReadonlySet<string>): void => {
-    const { nextTabs, nextActiveId, forgetPaths } = closeTabs(tabs.value, activeId.value, ids);
-    tabs.value = nextTabs;
-    forgetPaths.forEach(forget); // drop unsaved edit buffers for the closed files
-    activeId.value = nextActiveId;
+    closeTabIds(ids).forEach(forget); // drop unsaved edit buffers for the closed files
 };
 // The single × (and the menu's "Close") stay silent — the dirty dot is right there on the tab. Bulk closes confirm
 // first when any of the tabs going away has unsaved edits (a background tab's dirt is easy to miss).
@@ -186,8 +198,10 @@ const pendingCloseDirty = computed(() =>
 );
 // The row that names no particular tab: it tails a tab's menu and it IS the menu a right-click on the strip's
 // empty space opens (the chat and terminal strips carry the same pair of entry points).
-const stripItems = computed<MenuItem[]>(() =>
-    tabs.value.length === 0
+// Reopen is here too, and it is the one row that survives an EMPTY strip: closing the last tab is exactly when
+// a mis-close leaves nothing to right-click but the empty space.
+const stripItems = computed<MenuItem[]>(() => [
+    ...(tabs.value.length === 0
         ? []
         : [
               {
@@ -195,8 +209,11 @@ const stripItems = computed<MenuItem[]>(() =>
                   shortcut: commandShortcut(`workspace.closeAllTabs`),
                   command: () => requestClose(new Set(tabs.value.map((tab) => tab.id))),
               },
-          ],
-);
+          ]),
+    ...(closedTabs.value.length === 0
+        ? []
+        : [{ label: `Reopen Closed Tab`, shortcut: commandShortcut(`workspace.reopenClosedTab`), command: () => reopenClosedTab() }]),
+]);
 
 const tabMenuItems = computed<MenuItem[]>(() => {
     const id = menuTabId.value;
@@ -385,6 +402,21 @@ const WORKSPACE_COMMANDS: readonly Omit<RegisteredCommand, `owner`>[] = [
         keybinding: `Ctrl+Shift+Backspace`,
         when: inTabSurface(`workspace`),
         handler: closeAllTabs,
+    },
+    // The close family's undo. VSCode puts it on Ctrl+Shift+T, which is the one chord a browser will never hand
+    // over — it reopens the BROWSER's closed tab and, like Ctrl+W, isn't cancellable — so this takes
+    // Ctrl+Shift+O ("reOpen") and stays inside the Ctrl+Shift family the rest of the tab verbs live in. An
+    // Alt+letter chord was the other candidate and is worse: Option+Shift+letter composes a glyph on Apple
+    // layouts ("ˇ" for T), which the letter half of matchesChord deliberately matches by produced character.
+    // Surface-gated like the rest of the family, so a press in a terminal or the chat is left to its owner
+    // rather than resurrecting an editor tab behind it.
+    {
+        command: `workspace.reopenClosedTab`,
+        title: `Reopen Closed Tab`,
+        icon: `undo`,
+        keybinding: `Ctrl+Shift+O`,
+        when: inTabSurface(`workspace`),
+        handler: reopenClosedTab,
     },
     { command: `workspace.refresh`, title: `Refresh Workspace Files`, icon: `refresh`, handler: () => refetch() },
 ];

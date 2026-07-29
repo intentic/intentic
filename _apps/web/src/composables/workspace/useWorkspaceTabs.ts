@@ -1,5 +1,5 @@
 import { computed, ref, watch } from "vue";
-import { type DiffTabPayload, diffTabId, type LineJump, type WorkspaceTab } from "../../pages/workspace/workspaceTabs";
+import { closeTabs, type DiffTabPayload, diffTabId, type LineJump, type WorkspaceTab } from "../../pages/workspace/workspaceTabs";
 import { useSandbox } from "../sandbox/useSandbox";
 import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspaceSnapshot";
 
@@ -150,6 +150,80 @@ const selectTab = (id: string): void => {
     activeId.value = id;
 };
 
+// --- Reopen closed tab -------------------------------------------------------------------------
+/* The strip's undo stack. One entry per CLOSE, not per tab: a single × pushes one tab, and a bulk close (Close
+ * Others / to the Right / All) pushes its whole set as one entry, so the keystroke undoes the action the user
+ * took rather than dribbling tabs back one press at a time. Each tab carries the index it held, and a group
+ * re-inserts left to right, so the strip comes back in its old ORDER — restoring at the end would leave the
+ * user hunting for the tab they just recovered. `focus` is the tab that had the focus when it went away, so an
+ * undone close also gives the editor back.
+ *
+ * In memory only, and bounded: a diff tab carries both sides of its file as content, so an unbounded stack
+ * would hold megabytes of text the user already dismissed, and persisting it would grow the very blob the
+ * strip's snapshot keeps small on purpose. A reload starts with the tabs that survived and no history. */
+const MAX_CLOSED = 20;
+
+interface TabClose {
+    // In strip order, each with the position it held at close time.
+    readonly entries: readonly { readonly tab: WorkspaceTab; readonly index: number }[];
+    readonly focus: string;
+}
+
+const closedTabs = ref<readonly TabClose[]>([]);
+
+// Close a set of tabs, remembering them for reopenClosedTab. Returns the paths whose edit buffers the caller
+// should forget — the one part of a close this store has no business doing (see useEditBuffers).
+const closeTabIds = (ids: ReadonlySet<string>): readonly string[] => {
+    const { nextTabs, nextActiveId, forgetPaths } = closeTabs(tabs.value, activeId.value, ids);
+    const entries = tabs.value.flatMap((tab, index) => (ids.has(tab.id) ? [{ tab, index }] : []));
+    const last = entries.at(-1);
+    if (last !== undefined) {
+        // The closed tab that held the focus, else the rightmost of the group (what the strip fell back to).
+        const focus = entries.find(({ tab }) => tab.id === activeId.value)?.tab.id ?? last.tab.id;
+        closedTabs.value = [...closedTabs.value, { entries, focus }].slice(-MAX_CLOSED);
+    }
+    tabs.value = nextTabs;
+    activeId.value = nextActiveId;
+    return forgetPaths;
+};
+
+// Undo the last close: every tab it removed comes back at its old position, focused as it was. A tab that is
+// open again by other means (the user re-clicked the file) is left where it is, and the entry still leaves the
+// stack either way — the keystroke landed.
+const reopenClosedTab = (): void => {
+    const last = closedTabs.value.at(-1);
+    if (last === undefined) {
+        return;
+    }
+    closedTabs.value = closedTabs.value.slice(0, -1);
+    openLine.value = undefined;
+    const next = [...tabs.value];
+    for (const { tab, index } of last.entries) {
+        if (!next.some((open) => open.id === tab.id)) {
+            // The strip may have shrunk since the close, so the remembered index can point past its end — clamp.
+            next.splice(Math.min(index, next.length), 0, tab);
+        }
+    }
+    tabs.value = next;
+    activeId.value = last.focus;
+};
+
 export function useWorkspaceTabs() {
-    return { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, openPlan, openDirectory, openGraph, openHealth, selectTab };
+    return {
+        tabs,
+        activeId,
+        activeTab,
+        openLine,
+        openFile,
+        openAtLine,
+        openDiff,
+        openPlan,
+        openDirectory,
+        openGraph,
+        openHealth,
+        selectTab,
+        closedTabs,
+        closeTabIds,
+        reopenClosedTab,
+    };
 }
