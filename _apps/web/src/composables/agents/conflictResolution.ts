@@ -1,3 +1,4 @@
+import type { IconName } from "@intentic-app/ui";
 import type { LandConflict, LandConflictReason } from "@intentic/sandbox-contract";
 
 /* WHO CAN ACTUALLY CLEAR A LAND CONFLICT — and what we say to them.
@@ -37,6 +38,45 @@ export const agentBlockers = (blockers: readonly Blocker[]): readonly Blocker[] 
 
 // The user's half — paths held by their own uncommitted edits, which nothing but a commit or a stash clears.
 export const userBlockers = (blockers: readonly Blocker[]): readonly Blocker[] => blockers.filter((blocker) => blocker.reason === `workspace`);
+
+/* WHAT EACH CAUSE MEANS TO THE USER — the one copy of it, because a conflict is now named on two surfaces at
+ * once and they must not drift: the report explains the causes as GROUPS above the review, and the file list
+ * marks the individual ROWS those groups are talking about. A report that says "3 files couldn't be applied"
+ * over a list of thirty identical-looking rows makes the reader hunt for the three; the shared glyph is what
+ * turns the group heading into a pointer at them.
+ *
+ *   `icon`  rides both the group heading and the row mark — the same glyph in both places IS the link.
+ *   `mark`  one word, because it sits on a row next to a truncating path and a diffstat.
+ *   `title` the group heading, plural, reading on from the count line above it.
+ *   `fix`   who can clear it, which is the ladder of buttons underneath.
+ *   `row`   the same thing said about ONE file, standing on its own — a row's tooltip has no count line and
+ *           no button ladder under it to lean on.
+ *
+ * Declaration order is the report's group order: the agent's own two causes first, the user's in the middle
+ * where the ladder puts it. Deliberately not REASON_BRIEF below, which says all of this to the AGENT. */
+export const REASON_COPY: Record<LandConflictReason, { icon: IconName; mark: string; title: string; fix: string; row: string }> = {
+    diverged: {
+        icon: `sync`,
+        mark: `moved`,
+        title: `your workspace moved on since the agent branched`,
+        fix: `The agent can rebase onto it and merge these itself.`,
+        row: `Your workspace moved on since the agent branched — the agent can rebase onto it and merge this itself.`,
+    },
+    workspace: {
+        icon: `user`,
+        mark: `yours`,
+        title: `you have uncommitted edits to these`,
+        fix: `Only you can clear this — git cannot merge through unstaged work, and the agent's checkout cannot see it.`,
+        row: `You have uncommitted edits to this file — only you can clear it, by committing or stashing them.`,
+    },
+    binary: {
+        icon: `image`,
+        mark: `binary`,
+        title: `binary files, which have no automatic merge`,
+        fix: `The agent can re-create them against the current file, or pick a side.`,
+        row: `A binary file has no automatic merge — the agent can re-create it against the current file, or pick a side.`,
+    },
+};
 
 // Why each path is blocked, addressed TO THE AGENT. Deliberately not the panel's REASON_COPY, which speaks to
 // the user about their own tree ("you have uncommitted edits to these") — read by the agent that would be an

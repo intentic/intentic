@@ -1,11 +1,12 @@
 import type { AgentChange, AgentChangesResponse, AgentRepoChanges, FileDiffResponse } from "@intentic-app/api-contract";
-import { isTestPath, type LandMode, type LandResult } from "@intentic/sandbox-contract";
+import { isTestPath, type LandConflictReason, type LandMode, type LandResult } from "@intentic/sandbox-contract";
 import { computed, ref, watch, type Ref } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { useAsyncAction } from "../useAsyncAction";
 import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent } from "./agentActions";
+import { blockersOf } from "./conflictResolution";
 import { useAgents } from "./useAgents";
 
 /* Per-agent isolated review — one conversation worktree's CUMULATIVE output (GET /agents/{id}/diff, the
@@ -30,6 +31,13 @@ export interface AgentReviewFile {
     readonly key: string;
     // Repo-qualified path — what a tooltip, a workspace tab, or the diff header names the file.
     readonly label: string;
+    /* Why the last land refused THIS file, if it did (see LandConflictReason). Carried on the row rather than
+     * looked up per surface, because the conflict report and the file list were otherwise two readings of the
+     * same refusal that could disagree: the report named a handful of paths in prose above a list of thirty
+     * rows that all looked alike, so the one question the user actually had — "which of these is the problem,
+     * and whose problem is it?" — was answered by neither. `undefined` for the overwhelming majority of rows,
+     * including every row of an agent that never conflicted. */
+    readonly blocked: LandConflictReason | undefined;
 }
 
 const reviewFileKey = (repo: string, path: string): string => JSON.stringify([repo, path]);
@@ -57,19 +65,44 @@ export function useAgentChanges(agentId: Ref<string>) {
     });
 
     const repos = computed<readonly AgentRepoChanges[]>(() => query.data.value?.repos ?? []);
+
+    /* Why the last land refused — read from the DAEMON, not from the land call this browser made. The land
+     * that conflicts is almost always the automatic one at turn completion, which no browser asked for: the
+     * user learns about it from the card and clicks "See what blocked it", which opens this panel cold. Held in
+     * a local ref, the report was empty on exactly that path — the panel rendered no explanation and no merge
+     * action, so the one affordance the board offers for a conflict led nowhere. Landing invalidates this
+     * query, so an attempt made here still refreshes it, one round trip later. */
+    const conflicts = computed<LandResult[`conflicts`]>(() => query.data.value?.conflicts);
+    // The refusal, keyed the way the review keys its rows, so the join below is a lookup rather than a scan per
+    // row — and so it is keyed on the pair, never on the repo-qualified label, which one unlucky filename in a
+    // multi-repo composition would make ambiguous (see reviewFileKey).
+    const blockedBy = computed(
+        () => new Map(blockersOf(conflicts.value).map((blocker) => [reviewFileKey(blocker.repo, blocker.path), blocker.reason])),
+    );
+
     const files = computed<readonly AgentReviewFile[]>(() =>
         repos.value.flatMap((group) =>
-            group.changes.map((change) => ({
-                repo: group.repo,
-                change,
-                key: reviewFileKey(group.repo, change.path),
-                label: group.repo === `root` ? change.path : `${group.repo}/${change.path}`,
-            })),
+            group.changes.map((change) => {
+                const key = reviewFileKey(group.repo, change.path);
+                return {
+                    repo: group.repo,
+                    change,
+                    key,
+                    label: group.repo === `root` ? change.path : `${group.repo}/${change.path}`,
+                    blocked: blockedBy.value.get(key),
+                };
+            }),
         ),
     );
     const count = computed(() => files.value.length);
     // What "Land now" would still apply — zero once everything has landed, which is the steady state.
     const pending = computed(() => files.value.filter((file) => !file.change.landed));
+    /* The rows the refusal is actually about — a strict subset of `pending` (a check land is atomic, so a
+     * refusal leaves everything unlanded, blocked or not) and usually a tiny one. It is the number that says
+     * how little is wrong, and the list the review has to be able to narrow itself to. Derived from the ROWS
+     * rather than counted off the report so it can never claim more files than the list can show: a blocker on
+     * a path the agent has since reverted has no row to mark and does not belong in a filter's count. */
+    const blocked = computed(() => files.value.filter((file) => file.blocked !== undefined));
     const additions = computed(() => files.value.reduce((total, file) => total + (file.change.additions ?? 0), 0));
     const deletions = computed(() => files.value.reduce((total, file) => total + (file.change.deletions ?? 0), 0));
     // The change vs the proof: one classifier (the contract's isTestPath) splits the review so the header can
@@ -111,13 +144,6 @@ export function useAgentChanges(agentId: Ref<string>) {
     };
 
     const { busy: actionBusy, error: actionError, run } = useAsyncAction();
-    /* Why the last land refused — read from the DAEMON, not from the land call this browser made. The land
-     * that conflicts is almost always the automatic one at turn completion, which no browser asked for: the
-     * user learns about it from the card and clicks "Resolve conflict", which opens this panel cold. Held in a
-     * local ref, the report was empty on exactly that path — the panel rendered no explanation and no merge
-     * action, so the one affordance the board offers for a conflict led nowhere. Landing invalidates this
-     * query, so an attempt made here still refreshes it, one round trip later. */
-    const conflicts = computed<LandResult[`conflicts`]>(() => query.data.value?.conflicts);
 
     // Paths a `merge` land wrote into the workspace with conflict markers on them, for the panel to hand back
     // to the user as work to finish. Local, because unlike `conflicts` it describes an attempt rather than a
@@ -189,6 +215,7 @@ export function useAgentChanges(agentId: Ref<string>) {
         files,
         count,
         pending,
+        blocked,
         additions,
         deletions,
         codeStat,

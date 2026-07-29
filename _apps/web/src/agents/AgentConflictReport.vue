@@ -2,7 +2,7 @@
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { cmp, useDevice } from "@intentic-app/ui";
 import { computed } from "vue";
-import { agentBlockers, blockerLabel, blockersOf, userBlockers } from "../composables/agents/conflictResolution";
+import { agentBlockers, type Blocker, blockerLabel, blockersOf, REASON_COPY, userBlockers } from "../composables/agents/conflictResolution";
 
 /* THE CONFLICT REPORT — what the review panel says when a land is refused.
  *
@@ -29,7 +29,12 @@ import { agentBlockers, blockerLabel, blockersOf, userBlockers } from "../compos
  *
  * A component of its own, rather than a fourth of the review panel's template, because it is the one part of
  * that panel with a decision tree in it — five states over three causes, and the pair (asked, streaming) —
- * which is exactly the part worth being able to mount on its own and look at. */
+ * which is exactly the part worth being able to mount on its own and look at.
+ *
+ * What it deliberately does NOT own is the copy: REASON_COPY lives in conflictResolution, because the file
+ * list below now marks the same causes on the same paths (AgentReviewPanel), and two surfaces naming one
+ * refusal in two vocabularies is the drift this report was written to end. The paths here are the bridge
+ * between them — each one selects its row, so a cause read up here can be looked at down there. */
 
 const props = defineProps<{
     conflicts: readonly LandConflict[];
@@ -41,35 +46,22 @@ const props = defineProps<{
     asked: boolean;
 }>();
 
-const emit = defineEmits<{ resolve: []; merge: []; commit: []; stop: []; chat: [] }>();
+const emit = defineEmits<{ resolve: []; merge: []; commit: []; stop: []; chat: []; select: [Blocker] }>();
 
 const { mobile } = useDevice();
-
-const REASON_COPY = {
-    diverged: {
-        title: `your workspace moved on since the agent branched`,
-        fix: `The agent can rebase onto it and merge these itself.`,
-    },
-    workspace: {
-        title: `you have uncommitted edits to these`,
-        fix: `Only you can clear this — git cannot merge through unstaged work, and the agent's checkout cannot see it.`,
-    },
-    binary: {
-        title: `binary files, which have no automatic merge`,
-        fix: `The agent can re-create them against the current file, or pick a side.`,
-    },
-} as const;
 
 const blockers = computed(() => blockersOf(props.conflicts));
 const blockedCount = computed(() => blockers.value.length);
 // What the atomic refusal is holding hostage — the number that tells the user how little is actually wrong.
 const cleanCount = computed(() => props.conflicts.reduce((total, conflict) => total + conflict.clean, 0));
-// Grouped by cause, because the three want different things from different people. Paths are repo-qualified:
-// in a multi-repo composition a bare `README.md` names as many files as the workspace has repos.
+// Grouped by cause, because the three want different things from different people. The blockers travel whole
+// rather than pre-labelled: each path is a control that has to name a ROW (repo + path), and a repo-qualified
+// string cannot be taken back apart — in a multi-repo composition a bare `README.md` names as many files as
+// the workspace has repos, which is the same reason the label exists for reading.
 const groups = computed(() =>
     (Object.keys(REASON_COPY) as (keyof typeof REASON_COPY)[]).flatMap((reason) => {
-        const paths = blockers.value.filter((blocker) => blocker.reason === reason).map(blockerLabel);
-        return paths.length === 0 ? [] : [{ reason, paths, ...REASON_COPY[reason] }];
+        const blocked = blockers.value.filter((blocker) => blocker.reason === reason);
+        return blocked.length === 0 ? [] : [{ reason, blocked, ...REASON_COPY[reason] }];
     }),
 );
 // The two halves of the ladder. `mine` is what asking the agent would actually fix; `theirs` is what stays
@@ -100,13 +92,31 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                 >
             </template>
         </span>
-        <!-- Grouped by cause: which of the three is in play decides who does something next. -->
+        <!-- Grouped by cause: which of the three is in play decides who does something next. The heading wears
+             the SAME glyph the file list puts on those rows, so the group reads as a pointer at them; each
+             path is a button that goes and selects one, because "which of these thirty is it" is the question
+             a list of names in prose leaves the user to answer by eye. -->
         <div v-for="group in groups" :key="group.reason" class="flex flex-col">
-            <span class="text-2xs text-content">{{ group.title }}</span>
-            <span class="break-all font-mono text-2xs text-muted">{{ group.paths.join(", ") }}</span>
+            <span class="inline-flex items-center gap-1 text-2xs text-content">
+                <Icon :name="group.icon" class="shrink-0 text-2xs text-warning" />{{ group.title }}
+            </span>
+            <div class="flex flex-wrap gap-x-2">
+                <button
+                    v-for="blocker in group.blocked"
+                    :key="`${blocker.repo}:${blocker.path}`"
+                    type="button"
+                    class="break-all text-left font-mono text-2xs text-muted underline decoration-dotted underline-offset-2 transition-colors hover:text-content"
+                    @click="emit('select', blocker)"
+                    v-tooltip.bottom="'Show this file in the review'"
+                >
+                    {{ blockerLabel(blocker) }}
+                </button>
+            </div>
             <span class="text-2xs text-subtle">{{ group.fix }}</span>
         </div>
-        <p v-if="blockedCount === 0" class="text-2xs text-muted">Nothing was applied and nothing was lost — the agent's work is still on its branch.</p>
+        <p v-if="blockedCount === 0" class="text-2xs text-muted">
+            Nothing was applied and nothing was lost — the agent's work is still on its branch.
+        </p>
 
         <!-- Handed back to the agent, and still with it. This REPLACES the ladder rather than sitting beside
              it: while the rebase runs, re-asking or landing on top of it is not a choice worth offering, and a

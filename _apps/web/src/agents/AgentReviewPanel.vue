@@ -3,11 +3,12 @@ import type { FileDiffResponse } from "@intentic-app/api-contract";
 import { cmp, explorerColorClass, iconForEntry, Segmented, useDevice, useExplorerStyle } from "@intentic-app/ui";
 import { isTestPath } from "@intentic/sandbox-contract";
 import Dialog from "primevue/dialog";
-import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import DiffStat from "../components/DiffStat.vue";
 import { stopAgent } from "../composables/agents/agentActions";
 import { effectiveAutoLand } from "../composables/agents/agentStatus";
+import { type Blocker, REASON_COPY } from "../composables/agents/conflictResolution";
 import { type AgentReviewFile, useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
@@ -37,6 +38,11 @@ import AgentConflictReport from "./AgentConflictReport.vue";
  *   - A REVIEW HAS PROGRESS. Files can be ticked off as you look at them (viewed, GitHub-style), the toolbar
  *     shows the count, and `v` ticks the current file and advances — so a 30-file scan has a place to stop and
  *     resume rather than being a wall of paths.
+ *   - A CONFLICT IS A PROPERTY OF FILES. When a land refuses, the report above says how many refused and why;
+ *     the LIST says which. Every blocked row carries its cause (REASON_COPY — the report's own vocabulary and
+ *     the report's own glyph), each repo heading carries its count so a collapsed group cannot hide one, and
+ *     the filter narrows to exactly them. Without this the two halves of a conflict lived apart: a paragraph
+ *     naming three paths, above thirty rows that all looked alike, and the user matching strings by eye.
  *
  * Keyboard, while focus isn't in a text field or inside Monaco: ↑/↓ or j/k move, v marks viewed and advances.
  * Land/discard stay gated on the turn: both are refused daemon-side while it streams (CONFLICT), so they are
@@ -81,13 +87,35 @@ const toggleAutoLand = (): void => {
 };
 
 // --- the list ------------------------------------------------------------------------------------------
-// "Not landed" narrows the list to the remainder Land now would apply. It only exists while that remainder is
-// a PROPER subset — with nothing landed it filters nothing, and with everything landed it would empty the
-// panel, which is the failure mode this whole view exists to undo.
-const filter = ref<`all` | `code` | `tests` | `pending`>(`all`);
-const splittable = computed(() => changes.pending.value.length > 0 && changes.pending.value.length < changes.count.value);
-watch(splittable, (canSplit) => {
-    if (!canSplit) {
+/* THE NARROWING CONTROL. Every option is offered exactly while it would tell the user something they cannot
+ * already see, and each is dropped for its own reason — which is why this is a list built per state rather
+ * than one `splittable` flag over the whole control. That flag was "is the unlanded set a proper subset", and
+ * it hid the Segmented ENTIRELY whenever it wasn't: a refused land is atomic, so it leaves every row unlanded,
+ * so the one state where narrowing matters most was the one state with no control to do it.
+ *
+ *   Blocked     — what refused. First, because when it exists it is the only reason the user is on this panel.
+ *   Code/Tests  — the product change vs the proof, offered only when the review holds both.
+ *   Not landed  — the remainder Land now would apply, offered only while it is a PROPER subset: with nothing
+ *                 landed it filters nothing, and with everything landed it would empty the panel. */
+type ReviewFilter = `all` | `blocked` | `code` | `tests` | `pending`;
+const filter = ref<ReviewFilter>(`all`);
+const filterOptions = computed<{ label: string; value: ReviewFilter }[]>(() => [
+    { label: `All ${changes.count.value}`, value: `all` },
+    ...(changes.blocked.value.length > 0 ? [{ label: `Blocked ${changes.blocked.value.length}`, value: `blocked` as const }] : []),
+    ...(changes.testStat.value.files > 0 && changes.codeStat.value.files > 0
+        ? [
+              { label: `Code ${changes.codeStat.value.files}`, value: `code` as const },
+              { label: `Tests ${changes.testStat.value.files}`, value: `tests` as const },
+          ]
+        : []),
+    ...(changes.pending.value.length > 0 && changes.pending.value.length < changes.count.value
+        ? [{ label: `Not landed ${changes.pending.value.length}`, value: `pending` as const }]
+        : []),
+]);
+// A filter whose option has gone (the agent landed the last blocker, say) would otherwise hold the list empty
+// with nothing on screen still claiming to be filtering it.
+watch(filterOptions, (options) => {
+    if (!options.some((option) => option.value === filter.value)) {
         filter.value = `all`;
     }
 });
@@ -102,6 +130,9 @@ const toggleGroup = (repo: string): void => {
 };
 
 const filtered = computed<readonly AgentReviewFile[]>(() => {
+    if (filter.value === `blocked`) {
+        return changes.blocked.value;
+    }
     if (filter.value === `pending`) {
         return changes.files.value.filter((file) => !file.change.landed);
     }
@@ -129,6 +160,9 @@ const groups = computed(() => {
         files,
         additions: files.reduce((total, file) => total + (file.change.additions ?? 0), 0),
         deletions: files.reduce((total, file) => total + (file.change.deletions ?? 0), 0),
+        // On the heading because a collapsed repo is otherwise a place a blocker can hide: the whole point of
+        // the row marks is that the list says where the trouble is without being scrolled or expanded.
+        blocked: files.filter((file) => file.blocked !== undefined).length,
     }));
 });
 
@@ -152,6 +186,30 @@ const setRowEl = (key: string, el: unknown): void => {
 
 const select = (file: AgentReviewFile): void => {
     selectedKey.value = file.key;
+    rowEls.get(file.key)?.scrollIntoView({ block: `nearest` });
+};
+
+/* The conflict report's paths, landed on the rows they name. The report explains the CAUSES; the list holds
+ * the files — clicking a path is the one gesture that joins them, and without it a user reading "3 files
+ * couldn't be applied" over thirty rows is left to find them by matching strings with their eyes.
+ *
+ * Both guards are the difference between a click that works and a click that visibly does nothing: the row may
+ * be hidden by the filter the user is standing in (widened to `blocked`, which by definition holds it — never
+ * to `all`, which would throw away a narrowing they chose), and its repo may be collapsed. The scroll waits a
+ * tick because after either of those the row's element does not exist yet. */
+const jumpTo = async (blocker: Blocker): Promise<void> => {
+    const file = changes.files.value.find((row) => row.repo === blocker.repo && row.change.path === blocker.path);
+    if (file === undefined) {
+        return;
+    }
+    if (!filtered.value.some((row) => row.key === file.key)) {
+        filter.value = `blocked`;
+    }
+    const expanded = new Set(collapsed.value);
+    expanded.delete(file.repo);
+    collapsed.value = expanded;
+    selectedKey.value = file.key;
+    await nextTick();
     rowEls.get(file.key)?.scrollIntoView({ block: `nearest` });
 };
 
@@ -300,16 +358,6 @@ const openInWorkspace = (file: AgentReviewFile): void => {
 const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
 
-const filterOptions = computed<{ label: string; value: `all` | `code` | `tests` | `pending` }[]>(() => [
-    { label: `All ${changes.count.value}`, value: `all` },
-    ...(changes.testStat.value.files > 0 && changes.codeStat.value.files > 0
-        ? [
-              { label: `Code ${changes.codeStat.value.files}`, value: `code` as const },
-              { label: `Tests ${changes.testStat.value.files}`, value: `tests` as const },
-          ]
-        : []),
-    { label: `Not landed ${changes.pending.value.length}`, value: `pending` },
-]);
 const layoutOptions: { label: string; value: `split` | `unified` }[] = [
     { label: `Split`, value: `split` },
     { label: `Unified`, value: `unified` },
@@ -404,7 +452,7 @@ const confirmDiscard = (): void => {
             >
                 <Icon name="check" class="text-2xs" />landed
             </span>
-            <Segmented v-if="splittable" v-model="filter" :options="filterOptions" size="xs" />
+            <Segmented v-if="filterOptions.length > 1" v-model="filter" :options="filterOptions" size="xs" />
             <Icon v-if="changes.actionBusy.value" name="spinner" class="text-xs text-muted" spin />
             <span class="flex-1"></span>
             <span
@@ -432,9 +480,7 @@ const confirmDiscard = (): void => {
                 class="inline-flex items-center whitespace-nowrap rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
                 :disabled="changes.actionBusy.value || archiveBusy || streaming"
                 @click="changes.archive()"
-                v-tooltip.bottom="
-                    streaming ? 'Wait for the agent turn to finish' : 'The branch, diff and conversation are kept'
-                "
+                v-tooltip.bottom="streaming ? 'Wait for the agent turn to finish' : 'The branch, diff and conversation are kept'"
             >
                 <Icon name="box" class="mr-1 text-2xs" />Archive
             </button>
@@ -529,6 +575,7 @@ const confirmDiscard = (): void => {
             @commit="openChanges"
             @stop="stopAgent(agentId)"
             @chat="emit('chat')"
+            @select="jumpTo"
         />
 
         <p v-if="changes.loading.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">Loading the agent's diff…</p>
@@ -560,6 +607,13 @@ const confirmDiscard = (): void => {
                         <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
                         <span class="min-w-0 truncate text-2xs font-semibold uppercase tracking-wide text-muted">{{ group.repo }}</span>
                         <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ group.files.length }}</span>
+                        <span
+                            v-if="group.blocked > 0"
+                            class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warning/20 px-1.5 py-px text-2xs font-medium text-warning"
+                            v-tooltip.right="`${group.blocked} file${group.blocked === 1 ? '' : 's'} here blocked the land`"
+                        >
+                            <Icon name="exclamation-triangle" class="text-2xs" />{{ group.blocked }}
+                        </span>
                         <span class="flex-1"></span>
                         <DiffStat :additions="group.additions" :deletions="group.deletions" />
                     </button>
@@ -573,7 +627,9 @@ const confirmDiscard = (): void => {
                             :class="
                                 file.key === selectedKey
                                     ? 'border-primary-500 bg-primary-600/10'
-                                    : 'border-transparent hover:border-line-strong hover:bg-overlay'
+                                    : file.blocked !== undefined
+                                      ? 'border-warning/70 bg-warning/5 hover:bg-overlay'
+                                      : 'border-transparent hover:border-line-strong hover:bg-overlay'
                             "
                         >
                             <button
@@ -597,8 +653,20 @@ const confirmDiscard = (): void => {
                                     <span class="font-medium text-content">{{ basename(file.change.path) }}</span>
                                     <span class="ml-1 text-subtle">{{ parentDir(file.change.path) }}</span>
                                 </span>
+                                <!-- WHY THIS ROW REFUSED, on the row. A blocked file is unlanded by
+                                     definition, so the plain dot would only be repeating what the mark
+                                     already says in a word — the mark REPLACES it rather than crowding in
+                                     beside it. One word and the cause's own glyph, because this sits between
+                                     a truncating path and a diffstat; the sentence is the tooltip. -->
                                 <span
-                                    v-if="!file.change.landed"
+                                    v-if="file.blocked !== undefined"
+                                    class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warning/20 px-1 py-px text-2xs font-medium text-warning"
+                                    v-tooltip.right="REASON_COPY[file.blocked].row"
+                                >
+                                    <Icon :name="REASON_COPY[file.blocked].icon" class="text-2xs" />{{ REASON_COPY[file.blocked].mark }}
+                                </span>
+                                <span
+                                    v-else-if="!file.change.landed"
                                     class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
                                     v-tooltip.right="'Not yet landed in your workspace'"
                                 ></span>
@@ -658,8 +726,18 @@ const confirmDiscard = (): void => {
                         >
                             ← {{ selected.change.from }}
                         </span>
+                        <!-- The row's mark, carried onto the file you opened: this header is where a reviewer
+                             actually is while deciding what to do about the conflict, and a diff that does not
+                             say it is the blocked one reads as an ordinary change. -->
                         <span
-                            v-if="!selected.change.landed"
+                            v-if="selected.blocked !== undefined"
+                            class="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-medium text-warning"
+                            v-tooltip.bottom="REASON_COPY[selected.blocked].row"
+                        >
+                            <Icon :name="REASON_COPY[selected.blocked].icon" class="text-2xs" />blocked · {{ REASON_COPY[selected.blocked].mark }}
+                        </span>
+                        <span
+                            v-else-if="!selected.change.landed"
                             class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-medium text-warning"
                             v-tooltip.bottom="'Still waiting for Land now'"
                         >
