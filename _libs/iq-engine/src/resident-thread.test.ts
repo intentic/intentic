@@ -16,6 +16,10 @@ import { makeFixtureWorkspace } from "./testing.js";
 
 const FILES = 900;
 const BLOCK_MS = 750;
+/* warm() waits out a whole index pass over FILES files — sweep, hash, parse, chunk, one transaction per file. That
+ * is seconds of real work by design, and on a loaded CI box it breached vitest's 5s default. The wait is not an
+ * assertion about speed (nothing here is timed), so the ceiling is set well clear of the work rather than near it. */
+const WARM_TIMEOUT_MS = 120_000;
 
 let root: string;
 let cleanup: () => Promise<void>;
@@ -69,4 +73,4 @@ test("warm() reports the finished index, and the sweep the host serves queries a
         echo: `files "module42"`,
     });
     expect(outcome.result.groups[0]?.path).toBe("bulk/module42.ts");
-});
+}, WARM_TIMEOUT_MS);
