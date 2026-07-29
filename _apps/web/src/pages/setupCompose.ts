@@ -10,6 +10,8 @@
  * and the workspace data all stay compatible: a sandbox can move between script-managed and compose-managed
  * without losing /work. Keep the two in lockstep. */
 
+import { SANDBOX_CAPABILITIES } from "@intentic/constants";
+
 export interface ComposeArgs {
     readonly mode: `intentic` | `own`;
     // The short-lived setup code the platform minted — the only secret-adjacent value in the instructions.
@@ -82,14 +84,14 @@ export const composeFile = (args: ComposeArgs): string => {
         `        pull_policy: ${imageHasRegistry(args.image) ? `always` : `never`}`,
         `        container_name: intentic-sandbox-${slug}`,
         `        init: true`,
-        // Unprivileged, matching connect.sh's default run — with the ONE capability that run also carries:
-        // SYS_ADMIN, which is what lets the daemon give each isolated agent turn its own mount namespace
-        // (the sandbox app's agents/isolation.ts). Without it agents' absolute workspace paths reach the
-        // shared checkout, so a compose-started sandbox would quietly be the weaker kind. The docker
-        // capability's `privileged: true` (its isolated nested engine; the host's Docker socket is never
-        // mounted) stays the user's own compose edit — the rebuild flow recreates containers with
-        // `docker run`, which would fight a compose-managed one.
-        `        cap_add: [SYS_ADMIN]`,
+        // Unprivileged, matching connect.sh's default run — with the same capability posture that run
+        // carries, spliced from the one shared definition (@intentic/constants SANDBOX_CAPABILITIES; see
+        // there for what each grant is for). Without it agents' absolute workspace paths reach the shared
+        // checkout, so a compose-started sandbox would quietly be the weaker kind. The docker capability's
+        // `privileged: true` (its isolated nested engine; the host's Docker socket is never mounted) stays
+        // the user's own compose edit — the rebuild flow recreates containers with `docker run`, which
+        // would fight a compose-managed one.
+        `        cap_add: [${SANDBOX_CAPABILITIES.join(", ")}]`,
         `        restart: unless-stopped`,
         // Fresh public resolvers, so just-minted ssh-<id> tunnel hostnames don't hit a stale NXDOMAIN cache.
         `        dns: [1.1.1.1, 1.0.0.1]`,
