@@ -6,6 +6,7 @@ import * as automations from "@intentic/ext-automations";
 import * as exploratoryTests from "@intentic/ext-exploratory-tests";
 import * as logs from "@intentic/ext-logs";
 import * as memory from "@intentic/ext-memory";
+import * as pipelines from "@intentic/ext-pipelines";
 import * as preview from "@intentic/ext-preview";
 import * as viewers from "@intentic/ext-viewers";
 import { createExtensionApi, type HostBindings } from "./apiImpl";
@@ -26,6 +27,7 @@ const builtins: readonly Builtin[] = [
     { manifest: logs.manifest, module: logs },
     { manifest: memory.manifest, module: memory },
     { manifest: activity.manifest, module: activity },
+    { manifest: pipelines.manifest, module: pipelines },
     { manifest: apps.manifest, module: apps },
     { manifest: exploratoryTests.manifest, module: exploratoryTests },
     { manifest: preview.manifest, module: preview },

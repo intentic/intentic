@@ -111,7 +111,7 @@ const sshRegistrationWarning = (host: GitHost, publicKey: string, err: unknown):
     ].join("\n");
 };
 
-const githubHeaders = (token: string): Record<string, string> => ({ Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" });
+export const githubHeaders = (token: string): Record<string, string> => ({ Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" });
 
 const uploadKeyReal = async (host: GitHost, publicKey: string, title: string): Promise<void> => {
     if (host.provider === "github") {

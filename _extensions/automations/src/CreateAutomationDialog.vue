@@ -129,11 +129,11 @@ const recipeFilterInput = ref<HTMLInputElement>();
 const savedId = ref<string | undefined>(undefined);
 const submitError = ref<string | undefined>(undefined);
 
-// "Start from" suggestions: provider-less recipes always show; provider-bound ones only when that capability
-// is enabled.
+// "Start from" suggestions: provider-less recipes always show; provider-bound ones only when one of their
+// capabilities is enabled.
 const recipes = computed(() => {
     const enabled = new Set(capabilities.value.map((capability) => capability.config[`provider`]).filter((provider) => typeof provider === `string`));
-    return AUTOMATION_RECIPES.filter((recipe) => recipe.provider === undefined || enabled.has(recipe.provider));
+    return AUTOMATION_RECIPES.filter((recipe) => recipe.providers === undefined || recipe.providers.some((provider) => enabled.has(provider)));
 });
 
 // The open picker's list, filtered and split in two: chores watch this workspace, everything else is fired
@@ -142,7 +142,9 @@ const recipes = computed(() => {
 const recipeGroups = computed(() => {
     const needle = recipeFilter.value.trim().toLowerCase();
     const matches = recipes.value.filter((recipe) =>
-        [recipe.title, recipe.note, recipe.description, recipe.id, recipe.provider].some((field) => field?.toLowerCase().includes(needle)),
+        [recipe.title, recipe.note, recipe.description, recipe.id, recipe.providers?.join(` `)].some((field) =>
+            field?.toLowerCase().includes(needle),
+        ),
     );
     return [
         { label: `Code chores`, items: matches.filter((recipe) => recipe.chore === true) },
@@ -150,12 +152,13 @@ const recipeGroups = computed(() => {
     ].filter((group) => group.items.length > 0);
 });
 
-// The live sources the user can actually listen to: those whose provider is connected as a capability. Drives
+// The live sources the user can actually listen to: those with a connected capability behind them (the source
+// key itself, or any of its declared `providers` — CI listens on whichever git host is connected). Drives
 // both whether the "Listen (live)" trigger shows and its Source picker.
 const liveSources = computed(() => {
     const connected = new Set(capabilities.value.map((capability) => capability.config[`provider`]));
     return (Object.keys(LISTENER_SOURCES) as (keyof typeof LISTENER_SOURCES)[])
-        .filter((provider) => connected.has(provider))
+        .filter((provider) => (LISTENER_SOURCES[provider].providers ?? [provider]).some((capability) => connected.has(capability)))
         .map((provider) => Object.assign({ provider }, LISTENER_SOURCES[provider]));
 });
 

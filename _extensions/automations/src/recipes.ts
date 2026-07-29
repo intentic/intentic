@@ -1,5 +1,6 @@
 import type { WorkspaceEventKind } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/extension-ui";
+import type { ListenerEventType } from "./listenerSources";
 
 /* "Start from" suggestions in the new-automation dialog, shown only when the matching capability provider is
  * enabled. Pure prefill — the daemon knows nothing about recipes. Discord and IMAP listen live over their
@@ -12,9 +13,10 @@ import type { IconName } from "@intentic/extension-ui";
  * the outside world, and they get a shelf of their own on the Automations page. See AutomationRecipe.chore. */
 
 export interface AutomationRecipe {
-    // Matches a capability's config.provider — the recipe shows only when that capability is enabled. Absent ⇒
-    // always shown (a recipe that needs no capability, e.g. publishing drafts through whatever skills exist).
-    readonly provider?: string;
+    // Capability config.providers (any of) — the recipe shows when one of them is enabled. Absent ⇒ always
+    // shown (a recipe that needs no capability, e.g. publishing drafts through whatever skills exist). A list
+    // because a recipe can ride alternative capabilities: fixing CI works over github OR gitlab.
+    readonly providers?: readonly string[];
     readonly title: string;
     // Simple-icons slug, same convention as a capability card's logo.
     readonly logo?: string;
@@ -25,7 +27,7 @@ export interface AutomationRecipe {
     readonly trigger:
         | { readonly kind: "event" }
         | { readonly kind: "schedule"; readonly cron: string }
-        | { readonly kind: "listener"; readonly provider: "discord" | "imap"; readonly eventType?: "message" }
+        | { readonly kind: "listener"; readonly provider: "discord" | "imap" | "ci"; readonly eventType?: ListenerEventType }
         | { readonly kind: "workspace"; readonly event: WorkspaceEventKind };
     // Prefills the guard command (a shell one-liner; non-zero exit skips the wake).
     readonly guard?: string;
@@ -149,7 +151,7 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
         note: "nightly · high + critical only",
     },
     {
-        provider: "github",
+        providers: ["github"],
         title: "Push to repo",
         logo: "github/f5f5f5",
         id: "github-push",
@@ -158,7 +160,7 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
         setup: "In the GitHub repo: Settings → Webhooks → Add webhook → paste this URL as the Payload URL, content type application/json.",
     },
     {
-        provider: "gitlab",
+        providers: ["gitlab"],
         title: "Push to repo",
         logo: "gitlab",
         id: "gitlab-push",
@@ -167,7 +169,19 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
         setup: "In the GitLab project: Settings → Webhooks → paste this URL and check Push events.",
     },
     {
-        provider: "sentry",
+        providers: ["github", "gitlab"],
+        title: "Fix failing CI",
+        icon: "bolt",
+        id: "fix-failing-ci",
+        trigger: { kind: "listener", provider: "ci", eventType: "pipeline_failed" },
+        prompt:
+            "A CI pipeline just failed — each payload line is one JSON event with the workspace repo, branch, sha, run url and the failed job names. " +
+            "Fetch the failing jobs' logs with your GitHub/GitLab capability, reproduce the failure locally in that repo, fix the cause, verify the " +
+            "failing checks pass, and push the fix to the branch that failed.",
+        note: "instant · via the CI webhook",
+    },
+    {
+        providers: ["sentry"],
         title: "New alert",
         logo: "sentry",
         id: "sentry-alert",
@@ -176,7 +190,7 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
         setup: "In Sentry: Alerts → your alert rule → add a webhook action pointing at this URL.",
     },
     {
-        provider: "stripe",
+        providers: ["stripe"],
         title: "Payment events",
         logo: "stripe",
         id: "stripe-events",
@@ -185,7 +199,7 @@ export const AUTOMATION_RECIPES: readonly AutomationRecipe[] = [
         setup: "In the Stripe Dashboard: Developers → Webhooks → Add endpoint → paste this URL and pick the events to send.",
     },
     {
-        provider: "imap",
+        providers: ["imap"],
         title: "New email",
         id: "new-email",
         trigger: { kind: "listener", provider: "imap", eventType: "message" },

@@ -1997,6 +1997,73 @@ export type AutomationSummary = z.infer<typeof AutomationSummarySchema>;
 export const AutomationsListSchema = z.object({ automations: z.array(AutomationSummarySchema) });
 export const AutomationIdParamSchema = z.object({ id: z.string() });
 
+// ---- ci: pipeline runs on the workspace repos' github/gitlab remotes ----
+// The daemon maps each workspace repo to the CI project behind its remote (a connected github/gitlab
+// capability supplies the token), registers a webhook so completed pipelines dispatch `ci` listener
+// automations instantly, and serves the Pipelines rail view from a webhook-freshened cache backfilled over the
+// same REST clients. `host` names WHICH provider API serves a repo; the listener provider is always `ci` — one
+// automation covers both hosts because the repo, not the vendor, is what a trigger narrows to.
+
+export const CiHostSchema = z.enum(["github", "gitlab"]);
+export type CiHost = z.infer<typeof CiHostSchema>;
+
+// Terminal-or-not over both vendors' vocabularies: github's status+conclusion pair and gitlab's single status
+// both collapse onto these five. `running` covers everything non-terminal (queued, manual, preparing …) — the
+// view only needs "still moving" vs the three ways it stopped.
+export const PipelineStatusSchema = z.enum(["running", "success", "failed", "canceled", "skipped"]);
+export type PipelineStatus = z.infer<typeof PipelineStatusSchema>;
+
+export const PipelineRunSchema = z.object({
+    // The workspace repo dir (the panels `repo` convention) — the join key back to the tree and to triggers.
+    repo: z.string(),
+    host: CiHostSchema,
+    // owner/name (github) or the full project path (gitlab).
+    project: z.string(),
+    // The vendor's numeric run/pipeline id — what rerun/cancel address.
+    runId: z.number(),
+    // github's display_title (the commit/PR line); gitlab's pipeline name when set. Absent ⇒ the view shows ref@sha.
+    title: z.string().optional(),
+    branch: z.string(),
+    sha: z.string(),
+    status: PipelineStatusSchema,
+    // The vendor's run page — the deep link out.
+    url: z.string(),
+    createdAt: z.number(),
+    durationSeconds: z.number().optional(),
+    // Names of the failed jobs — fetched only for failed runs (one extra call), so a wake or a view names what broke.
+    failedJobs: z.array(z.string()).optional(),
+});
+export type PipelineRun = z.infer<typeof PipelineRunSchema>;
+
+// One mapped repo's CI wiring state. `hookWarning` is the manual-setup story when webhook registration was
+// refused (token scope, role) or impossible (no public URL): what happened plus the target URL + secret to
+// paste into the repo's webhook settings — the git-access sshRegistrationWarning pattern.
+export const CiRepoSchema = z.object({
+    repo: z.string(),
+    host: CiHostSchema,
+    project: z.string(),
+    // The project's home page on its host.
+    url: z.string(),
+    hookWarning: z.string().optional(),
+});
+export type CiRepo = z.infer<typeof CiRepoSchema>;
+
+export const CiRunsResponseSchema = z.object({
+    repos: z.array(CiRepoSchema),
+    // Newest first, across all mapped repos.
+    runs: z.array(PipelineRunSchema),
+});
+export type CiRunsResponse = z.infer<typeof CiRunsResponseSchema>;
+
+// rerun/cancel/fix address a run by repo + vendor id; the daemon re-resolves repo → project + token per call,
+// so a stale card can't act on a project the workspace no longer maps to.
+export const CiRunParamSchema = z.object({ repo: z.string(), runId: z.number() });
+export type CiRunParam = z.infer<typeof CiRunParamSchema>;
+
+// The fix route opens an isolated conversation (fleet card + chat tab) seeded with the failure context.
+export const CiFixResponseSchema = z.object({ conversationId: z.string() });
+export type CiFixResponse = z.infer<typeof CiFixResponseSchema>;
+
 // ---- drafts: agent-proposed posts awaiting owner approval (.intentic/drafts/<id>.json) ----
 // One JSON file per draft. The AGENT creates drafts with its normal file tools — it can't call daemon routes,
 // the same split as the environment proposal — while the daemon edits/deletes them on the owner's behalf, so

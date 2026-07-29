@@ -3,6 +3,7 @@ import { automationsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
 import { streamAgent } from "../agent/agent.routes.js";
+import { CI_EVENT_TYPES, CI_PROVIDER } from "../ci/webhook.routes.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
@@ -44,11 +45,13 @@ export const createAutomationsRoutes = (services: Services) => {
                 }
             }
             // A listener trigger's provider/eventType are open strings in the schema — validate them here against
-            // what's actually installed: `webchat` (the core gateway-less source) plus every provider an
+            // what's actually installed: the core gateway-less sources (`webchat`, which narrows to no event
+            // types, and `ci`, whose events the daemon's own webhook receiver dispatches) plus every provider an
             // extension declares via contributes.listener, and that provider's declared event types.
             if (input.trigger.kind === "listener") {
                 const { provider, eventType } = input.trigger;
                 const declared = await listenerProvidersOf(services);
+                declared.set(CI_PROVIDER, CI_EVENT_TYPES);
                 const eventTypes = declared.get(provider);
                 if (provider !== "webchat" && eventTypes === undefined) {
                     throw new ORPCError("BAD_REQUEST", {

@@ -123,6 +123,21 @@ survive reconnects. Its subsystems:
   `localhost:<other-port>` works untouched.
 - **Automations** — cron schedules, webhooks (`/automations/:id/fire`), and event listeners
   ([automations/](_apps/sandbox/src/automations/)).
+- **CI pipelines** — the workspace repos' GitHub Actions / GitLab pipelines, as both an automation source and a
+  UI surface ([ci/](_apps/sandbox/src/ci/)). A repo participates when its remote's hostname matches a connected
+  github/gitlab capability (`projects.ts` — self-hosted GitLab included, via the capability's instance url). A
+  reconciler keeps a webhook on every mapped repo pointing at the public receiver `/ci/webhook/:host`,
+  authenticated by a per-sandbox secret in `.intentic/ci.json` (GitHub signs the body, GitLab echoes the
+  token); a refusal (token scope, role) degrades that repo to a warning carrying the manual hook recipe, the
+  ssh-key-registration posture. Completed pipelines dispatch the core listener provider **`ci`** — the webchat
+  precedent: no gateway extension, the daemon's own receiver is the source — with event types
+  `pipeline_failed` / `pipeline_succeeded` / `pipeline_fixed` (a success ending a recorded failure streak on
+  that repo+branch, remembered across restarts in `ci.json`), so a listener automation narrows by repo
+  (`channelId`) and result. The same deliveries freshen the runs cache behind `GET /ci/runs`, which the
+  **Pipelines** rail view ([\_extensions/pipelines](_extensions/pipelines)) polls — backfilled over the
+  vendors' REST APIs when stale, so the view has history even where webhooks never registered. Row actions
+  proxy rerun/cancel to the vendor, and **Fix with agent** (`POST /ci/fix`) opens an isolated conversation
+  seeded with the failed jobs' log tails — a fleet card like any other agent.
 - **Push notifications** — the daemon is the sender, because it is the only tier that knows what the agent is
   doing ([push/](_apps/sandbox/src/push/)). It owns a per-sandbox VAPID keypair and one subscription per
   subscribed browser, stored on the **history volume** rather than under `/work/.intentic`: the private key can

@@ -11,17 +11,17 @@
                 "catalog": {
                     "name": "GitHub",
                     "logo": "github/f5f5f5",
-                    "description": "Issues, PRs and code search as agent tools — plus git clone/pull/push in the terminal.",
+                    "description": "Issues, PRs and code search as agent tools — plus git clone/pull/push and CI pipelines on your workspace repos.",
                     "category": "code",
-                    "hint": "The agent uses the token with curl against the GitHub API. With Git access on you can git pull/push in the terminal — ssh-form URLs work too (rerouted over HTTPS when native SSH isn't available), so any repo-scoped token works. For native ssh://git we register an SSH key to your account, which needs write:public_key on a classic PAT (or the \"Git SSH keys: write\" permission on a fine-grained token); without it git still works over HTTPS and we show the key to add manually.",
+                    "hint": "The agent uses the token with curl against the GitHub API. With Git access on you can git pull/push in the terminal — ssh-form URLs work too (rerouted over HTTPS when native SSH isn't available), so any repo-scoped token works. For native ssh://git we register an SSH key to your account, which needs write:public_key on a classic PAT (or the \"Git SSH keys: write\" permission on a fine-grained token); without it git still works over HTTPS and we show the key to add manually. Workspace repos on GitHub also get a CI webhook (the Pipelines view + instant CI automations), which needs admin:repo_hook on a classic PAT (or \"Webhooks: write\"); without it the Pipelines view shows the hook to add manually.",
                     "guide": {
                         "url": "https://github.com/settings/tokens",
-                        "scopes": "repo (+ write:public_key / Git SSH keys: write for native ssh)",
+                        "scopes": "repo (+ write:public_key for native ssh, admin:repo_hook for CI webhooks)",
                         "steps": [
                             "Open Settings → Developer settings → Personal access tokens.",
-                            "Classic: generate a token with the repo scope (add write:public_key for native ssh://git).",
-                            "Fine-grained: grant repo Contents access (add the \"Git SSH keys: write\" account permission for native ssh://git).",
-                            "Copy the token and paste it here. Git works over HTTPS regardless; the extra permission only enables native ssh."
+                            "Classic: generate a token with the repo scope (add write:public_key for native ssh://git, admin:repo_hook for CI webhooks).",
+                            "Fine-grained: grant repo Contents access (add the \"Git SSH keys: write\" account permission for native ssh://git, and \"Webhooks: write\" for CI).",
+                            "Copy the token and paste it here. Git works over HTTPS regardless; the extra permissions only enable native ssh and automatic CI webhooks."
                         ]
                     }
                 },
@@ -46,9 +46,9 @@
                 "catalog": {
                     "name": "GitLab",
                     "logo": "gitlab",
-                    "description": "Issues, merge requests, and pipelines as agent tools — plus git clone/pull/push in the terminal.",
+                    "description": "Issues, merge requests, and pipelines as agent tools — plus git clone/pull/push and CI pipelines on your workspace repos.",
                     "category": "code",
-                    "hint": "The agent uses the token with curl against the GitLab API. With Git access on, we register an SSH key to your account (the api scope covers key upload) so you can git clone/pull/push over ssh://git in the terminal; if key upload is refused, ssh-form URLs are rerouted over HTTPS so git still works.",
+                    "hint": "The agent uses the token with curl against the GitLab API. With Git access on, we register an SSH key to your account (the api scope covers key upload) so you can git clone/pull/push over ssh://git in the terminal; if key upload is refused, ssh-form URLs are rerouted over HTTPS so git still works. Workspace repos on this GitLab also get a CI webhook (the Pipelines view + instant CI automations) — the api scope covers it, but the token's user needs at least the Maintainer role on the project; otherwise the Pipelines view shows the hook to add manually.",
                     "guide": {
                         "urlFromField": "url",
                         "path": "/-/user_settings/personal_access_tokens",

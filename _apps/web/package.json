@@ -26,6 +26,7 @@
         "@intentic/ext-exploratory-tests": "workspace:*",
         "@intentic/ext-logs": "workspace:*",
         "@intentic/ext-memory": "workspace:*",
+        "@intentic/ext-pipelines": "workspace:*",
         "@intentic/ext-preview": "workspace:*",
         "@intentic/ext-repo-apps": "workspace:*",
         "@intentic/ext-viewers": "workspace:*",

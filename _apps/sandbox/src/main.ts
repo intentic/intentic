@@ -269,6 +269,10 @@ const main = async (): Promise<void> => {
     const scheduler = createAutomationsScheduler(services, streamAgent);
     scheduler.start();
 
+    // CI webhooks: keep every mapped workspace repo's github/gitlab hook pointing at this sandbox (boot pass +
+    // interval), so completed pipelines wake `ci` automations and freshen the Pipelines view.
+    services.ciHooks.start();
+
     // Usage-limit auto-resume: re-run turns the Claude subscription's limit killed, once their window reopens
     // (gated by the autoResumeOnLimit setting; the failures are remembered regardless), and re-runs a turn whose
     // credential was refused mid-flight as soon as a replacement token exists — see turn-resume.ts.
@@ -333,6 +337,7 @@ const main = async (): Promise<void> => {
         clearInterval(logsSweep);
         clearInterval(sessionSweep);
         scheduler.stop();
+        services.ciHooks.stop();
         limitResume.stop();
         versionCheck.stop();
         announcer.stop();

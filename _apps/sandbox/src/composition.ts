@@ -37,6 +37,9 @@ import { type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createC
 import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities/capabilities-store.js";
+import { type CiStore, fileCiStore } from "./ci/ci-store.js";
+import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
+import { createRunsCache, type RunsCache } from "./ci/runs-cache.js";
 import { createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStore, type MembersStore, type VerifiedIdentity } from "./auth/auth.js";
 import { createSessions, type MintedSession } from "./auth/session.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude/claude-models.js";
@@ -163,6 +166,13 @@ export interface Services {
     readonly capabilities: CapabilitiesStore;
     // Scheduled agent wake-ups (.intentic/automations.json) — the scheduler polls it; /automations edits it.
     readonly automations: AutomationsStore;
+    // CI state (.intentic/ci.json): the webhook secret + the per repo+branch conclusion memory that makes a
+    // success after a failure read as `pipeline_fixed`.
+    readonly ciStore: CiStore;
+    // The Pipelines view's read model: webhook deliveries freshen it, /ci/runs backfills it when stale.
+    readonly ciRuns: RunsCache;
+    // Keeps every mapped repo's provider webhook pointing at this sandbox; its warnings ride /ci/runs.
+    readonly ciHooks: CiHookReconciler;
     // Wakes from `requireApproval` automations, held for the owner (.intentic/approvals/, one file per wake) —
     // the /automations pending routes approve (run the held wake) or reject them.
     readonly approvals: ApprovalsStore;
@@ -426,6 +436,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the Changes scan's per-file attribution reads the SAME registry the turns write to — a
     // second instance would answer from a stale agents.json.
     const agents = createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json")), createLandStandings(agentWorktrees));
+    // Hoisted: the CI hook reconciler reads the same manifest the routes edit.
+    const capabilities = fileCapabilitiesStore(join(workspace.root, ".intentic", "capabilities.json"), (id, reason) =>
+        logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
+    );
+    const ciStore = fileCiStore(join(workspace.root, ".intentic", "ci.json"));
 
     return {
         config,
@@ -439,9 +454,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         agentToken: randomBytes(32).toString("hex"),
         info,
         tools: internalTools(config.intenticAgentTools),
-        capabilities: fileCapabilitiesStore(join(workspace.root, ".intentic", "capabilities.json"), (id, reason) =>
-            logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}) — the rest of the manifest is unaffected`),
-        ),
+        capabilities,
+        ciStore,
+        ciRuns: createRunsCache(),
+        ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
         bridgeTokens: fileBridgeTokens(join(workspace.root, ".intentic", "bridge-tokens.json")),
         automations: fileAutomationsStore(join(workspace.root, ".intentic", "automations.json")),
         approvals: fileApprovalsStore(join(workspace.root, ".intentic", "approvals")),

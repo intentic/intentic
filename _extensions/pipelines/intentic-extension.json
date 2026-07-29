@@ -1,0 +1,12 @@
+{
+    "publisher": "intentic",
+    "name": "pipelines",
+    "version": "1.0.0",
+    "engines": { "intentic": "^0.4.0" },
+    "permissions": {
+        "sandbox": ["GET /ci/runs", "POST /ci/runs/rerun", "POST /ci/runs/cancel", "POST /ci/fix"]
+    },
+    "contributes": {
+        "views": [{ "id": "pipelines", "label": "Pipelines", "surface": "rail" }]
+    }
+}

@@ -31,6 +31,7 @@ import {
     verifySyncToken,
 } from "./platform/sync.js";
 import { approveEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
+import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserLoginRoute } from "./browser/browser-login.js";
 import { createTerminalRoute } from "./terminal/terminal.js";
@@ -63,6 +64,11 @@ const eventFirePath = /^\/automations\/[^/]+\/fire$/;
 // The web-chat widget ingest — its callers are anonymous website visitors (no Google token), so it's exempt
 // from the bearer middleware and gated by the automation's origin allowlist + rate limit instead (see the route).
 const webchatPath = /^\/webchat\/[^/]+\/message$/;
+
+// The CI pipeline webhook receiver — its callers are github/gitlab delivery agents (no Google token), so it's
+// exempt from the bearer middleware and gated by the per-sandbox webhook secret instead (github signs the
+// body, gitlab echoes the token — see ci/webhook.routes.ts).
+const ciWebhookPath = /^\/ci\/webhook\/[^/]+$/;
 
 // The only routes the in-container agent token opens: the live VPN surface the `vpn` CLI drives. Anchored and
 // path-segment aware so it admits /vpn and /vpn/<id>/connect but never a route that merely starts with those
@@ -133,7 +139,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 c.req.path === "/enroll" ||
                 c.req.path === "/system/authorized-key" ||
                 eventFirePath.test(c.req.path) ||
-                webchatPath.test(c.req.path)
+                webchatPath.test(c.req.path) ||
+                ciWebhookPath.test(c.req.path)
             ) {
                 return next();
             }
@@ -532,6 +539,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/listeners/:provider/dispatch", listenerRoutes.dispatch);
     app.post("/listeners/:provider/failure", listenerRoutes.failure);
     app.post("/listeners/:provider/status", listenerRoutes.status);
+
+    // The CI pipeline webhook receiver — public (ciWebhookPath above), secret-gated in the handler. Completed
+    // pipelines freshen the runs cache and wake `ci` listener automations (see ci/webhook.routes.ts).
+    app.post("/ci/webhook/:host", createCiWebhookRoute(services));
 
     // Desktop enrollment (Mutagen). The browser mints a short-lived pairing token; the desktop agent redeems it
     // once at /system/authorized-key to land its SSH key — so the agent needs no OAuth, and trust roots in the
