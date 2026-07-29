@@ -31,6 +31,26 @@ import type { AgentTool } from "./agent/agent-tools.js";
 import { workspacePaths } from "./workspace/workspace.js";
 import { MAX_RAW_BYTES, sha256Text, UploadTooLargeError } from "./workspace/workspace-files.js";
 
+/* A fire route answers 200 the moment it accepts the wake and lets the turn run DETACHED, so the run it records
+ * lands some time after the response. That tail is not the fake agent (which completes instantly) — it is the
+ * real turn path around it: the extension/cli env scan off disk, the worktree compose, the land pass. On a
+ * loaded runner (CI runs this package's 143 files alongside the rest of the monorepo) it outruns vi.waitFor's
+ * 1s default often enough to have made these the suite's flakiest tests. This budget bounds a hang; it does not
+ * measure latency — and it stays under the 5s default test timeout so an overrun still reports as the assertion
+ * that did not settle rather than as a dead test.
+ */
+const TURN_SETTLES = { timeout: 4_000 } as const;
+
+/* Where the agent worktrees' MAIN checkouts would be — a path under tmpdir that is never created, so on every
+ * host it is definitively absent. This suite drives the ROUTES; the worktree and land git mechanics have their
+ * own suites against real repos (worktrees.test.ts, land.test.ts). The land pass a turn runs at its end reads
+ * the main checkout with real git, so naming the product's own "/work" here made the outcome depend on whether
+ * the machine running the tests happens to have one: absent on CI, a LIVE repo on a developer's own intentic
+ * sandbox, where the land then shelled git at a worktree that was never created and failed the turn. Absent
+ * everywhere, the pass reports "main checkout vanished" and returns without spawning anything.
+ */
+const ABSENT_MAIN = join(tmpdir(), "intentic-absent-main");
+
 // An in-memory capabilities store so the capability routes + turn merge are testable without the fs.
 const memoryCapabilitiesStore = (initial: Capability[] = []): CapabilitiesStore => {
     let capabilities = [...initial];
@@ -273,7 +293,7 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     agentWorktrees: {
         conversationDir: (id) => `/history/worktrees/${id}`,
         worktreeDir: (id, repo) => (repo === "root" ? `/history/worktrees/${id}` : `/history/worktrees/${id}/${repo}`),
-        mainDir: (repo) => (repo === "root" ? "/work" : `/work/${repo}`),
+        mainDir: (repo) => (repo === "root" ? ABSENT_MAIN : join(ABSENT_MAIN, repo)),
         exists: async () => false,
         // A live checkout, so the routes read the worktree path — the steady state these fakes model.
         attached: async () => true,
@@ -289,8 +309,9 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     // No mount capability, like a container launched without CAP_SYS_ADMIN — the plan still describes where
     // the worktree is, and the harness enforces it by redirecting tool paths instead of by mounting.
     turnIsolation: { available: async () => false, planFor: async (worktree: string) => ({ worktree, root: "/work", modules: [] }) },
-    // No agent has landed anything into these fake repos, so every changed file is the user's.
-    agentOrigins: { forRepo: async () => ({}) },
+    // No agent has landed anything into these fake repos, so every changed file is the user's — and with no
+    // ids to attribute, `identify` has nobody to resolve.
+    agentOrigins: { forRepo: async () => ({}), identify: () => ({}) },
     files: fakeFiles(),
     workspaceTree: async () => ({ root: "/work", tree: [], hidden: 0 }),
     // Inert resident search — no index, no rg. The search route test overrides `run` with a canned outcome.
@@ -1222,7 +1243,7 @@ test("POST /automations/:id/fire skips bearer auth, enforces the automation toke
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ ok: true });
     // The turn runs detached (the fake agent completes instantly) and lands in the run history.
-    await vi.waitFor(async () => expect((await store.get("deploy"))?.runs).toHaveLength(1));
+    await vi.waitFor(async () => expect((await store.get("deploy"))?.runs).toHaveLength(1), TURN_SETTLES);
     expect((await store.get("deploy"))?.runs[0]?.outcome).toBe("completed");
 });
 
@@ -1259,7 +1280,7 @@ test("POST /webchat/:id/message skips bearer auth, gates on the origin allowlist
     expect(ok.headers.get("content-type")).toContain("text/event-stream");
     expect(ok.headers.get("access-control-allow-origin")).toBe("https://site.example");
     await ok.text();
-    await vi.waitFor(async () => expect((await store.get("support"))?.runs).toHaveLength(1));
+    await vi.waitFor(async () => expect((await store.get("support"))?.runs).toHaveLength(1), TURN_SETTLES);
     expect((await store.get("support"))?.runs[0]?.outcome).toBe("completed");
 
     // The preflight is answered with the reflected origin too, so the browser lets the cross-site POST through.
