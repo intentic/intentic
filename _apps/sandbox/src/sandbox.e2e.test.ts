@@ -15,7 +15,7 @@ import { hasValidBase } from "./environment/environment.js";
 // publishes) in loopback mode and drive its HTTP surface exactly as the browser does, asserting only what the
 // in-memory app.test.ts cannot — the real container: bytes on the real /work fs, the real sshd handshake for
 // desktop sync, the real entrypoint/boot, and a real `docker build` of the composed environment overlay (the
-// harness plays the outside-executor role of rebuild.sh). No Cloudflare, no Google, no Claude — the only
+// harness plays the outside-executor role of recreate.sh). No Cloudflare, no Google, no Claude — the only
 // requirement is a Docker daemon. Gated behind INTENTIC_E2E like cli.e2e.test.ts; `pnpm e2e` sets it.
 //
 // SANDBOX_E2E_IMAGE skips the from-source build and runs a prebuilt image instead (CI's nightly points it at
@@ -261,7 +261,7 @@ describe.skipIf(!enabled)("sandbox daemon end-to-end (real container, loopback)"
         const environment = (await (await fetch(`${base}/environment`)).json()) as { approved?: { content: string; hash: string } };
         expect(environment.approved).toBeDefined();
         const approved = environment.approved as { content: string; hash: string };
-        // The compose contract rebuild.sh trusts: pinned base, daemon-owned fragment, runtime directives, hash.
+        // The compose contract recreate.sh trusts: pinned base, daemon-owned fragment, runtime directives, hash.
         expect(hasValidBase(approved.content)).toBe(true);
         expect(approved.content).toContain("wireguard-tools");
         expect(approved.content).toContain("# intentic:runtime --device=/dev/net/tun");

@@ -6,7 +6,7 @@ set -e
 # enrolled at runtime by the daemon's POST /system/authorized-key (authorized by the owner's Google token).
 
 # The host key is the sandbox's SSH IDENTITY, so it must outlive the container. Every runner recreates this
-# container — dev-sandbox.sh, rebuild.sh, update.sh and a provider update all `docker rm -f` + `docker run`,
+# container — recreate.sh (any mode) and a provider update all `docker rm -f` + `docker run`,
 # keeping only the named volumes — and the image used to carry a build-time `ssh-keygen -A`, so each rebuild
 # shipped a NEW identity. The laptop pins the old one in its own known_hosts with `StrictHostKeyChecking
 # accept-new`, which auto-accepts an unknown host but hard-refuses a CHANGED one, so sync died in the SSH

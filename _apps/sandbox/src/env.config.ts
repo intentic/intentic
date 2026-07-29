@@ -107,14 +107,14 @@ const configSchema = z.object({
             name: z.string().default(""),
             image: z.string().default(""),
             // The UPSTREAM image the composed overlay must extend — set by whichever runner created this
-            // container (rebuild.sh, update.sh, dev-sandbox.sh) to the base it actually built FROM. Distinct
+            // container (recreate.sh) to the base it actually built FROM. Distinct
             // from `image` because after a rebuild `image` is the overlay's own tag
             // (intentic-sandbox-env-<slug>:<hash>), which would be a nonsense base to compose against.
             // Empty ⇒ derive it from `image` (a fresh connect.sh run IS running the base). Runner-set, so the
             // agent cannot influence which image a rebuild extends.
             baseImage: z.string().default(""),
             // sha256 of the approved overlay Dockerfile this container was built from, stamped by the rebuild
-            // executor (rebuild.sh / workspace provider). Empty ⇒ stock image.
+            // executor (recreate.sh / workspace provider). Empty ⇒ stock image.
             environmentHash: z.string().default(""),
         })
         .prefault({}),

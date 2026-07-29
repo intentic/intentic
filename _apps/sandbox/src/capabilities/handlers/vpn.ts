@@ -15,7 +15,7 @@ import type { CapabilityHandler } from "../capability.js";
 
 // ONE fragment for every provider rather than one per protocol. Two reasons, both load-bearing: adding a second
 // kind of VPN later must not cost a second container rebuild, and the runtime directives must appear exactly
-// once in the composed overlay — rebuild.sh appends each directive token it reads without deduplicating, and a
+// once in the composed overlay — recreate.sh appends each directive token it reads without deduplicating, and a
 // doubled --device would fail the run. Composition dedupes fragments by exact content, so N vpn capabilities
 // still contribute this one block.
 const VPN_FRAGMENT = `# vpn capability: clients for all three supported protocols, plus the container privileges they share.

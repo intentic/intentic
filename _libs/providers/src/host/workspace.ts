@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { SANDBOX_CAPABILITIES } from "@intentic/constants";
+import { runtimeDirectivesOf, sandboxNames, sandboxRunCommand } from "@intentic/sandbox-run";
 import type { Provider, ResolvedInputs } from "@intentic/engine";
 import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
@@ -31,12 +31,13 @@ const workspaceSchema = sshSchema.extend({
 type WorkspaceInputs = z.infer<typeof workspaceSchema>;
 const parse = (inputs: ResolvedInputs): WorkspaceInputs => parseInputs(workspaceSchema, inputs, "workspace");
 
-// One sandbox per host (like the platform's Forgejo/Komodo) — a fixed name + workspace volume, matching the
-// connect.sh local flow so the two bootstraps stay in lockstep. DOCKER_VOLUME backs the in-sandbox Docker
-// Engine's /var/lib/docker (images + dev-DB volumes survive recreates; layers land on a real filesystem).
-const CONTAINER = "intentic-sandbox-workspace";
-const WORKSPACE_VOLUME = "intentic-workspace-workspace";
-const DOCKER_VOLUME = "intentic-docker-workspace";
+// One sandbox per host (like the platform's Forgejo/Komodo) — the fixed "workspace" slug, derived through the
+// same contract every other creation path uses, so container/volume names stay in lockstep with connect.sh by
+// construction. The docker volume backs the in-sandbox Docker Engine's /var/lib/docker (images + dev-DB
+// volumes survive recreates; layers land on a real filesystem). The network is the graph's own input rather
+// than the slug-derived one — hosts wire several containers onto it.
+const NAMES = sandboxNames("workspace");
+const CONTAINER = NAMES.container;
 
 // A stable digest of the resolved tools, stamped as a container label so a tools change (not just an image
 // bump) triggers a recreate. Empty when no tools are wired.
@@ -52,33 +53,6 @@ const environmentDigest = (dockerfile: string): string => createHash("sha256").u
 // against the stock tag).
 const desiredImage = (parsed: WorkspaceInputs): string =>
     parsed.dockerfile === undefined ? parsed.image : `intentic-sandbox-env:${environmentDigest(parsed.dockerfile).slice(0, 12)}`;
-
-const RUNTIME_ALLOWLIST = new Set(["--device=/dev/net/tun", "--cap-add=NET_ADMIN", "--privileged"]);
-const RUNTIME_DIRECTIVE = "# intentic:runtime ";
-
-// Container privileges come ONLY from "# intentic:runtime" directive lines in the owner-approved overlay —
-// emitted by capability fragments (the vpn's WireGuard needs tun + NET_ADMIN; the docker capability's nested
-// engine needs --privileged) — allowlisted hard so an overlay can't smuggle arbitrary docker flags. The base
-// run is unprivileged. "" when no overlay or no directives; a trailing space otherwise, so it splices into the
-// run command cleanly.
-const runtimeFlags = (dockerfile: string | undefined): string => {
-    if (dockerfile === undefined) {
-        return "";
-    }
-    const flags = new Set<string>();
-    for (const line of dockerfile.split("\n")) {
-        if (!line.startsWith(RUNTIME_DIRECTIVE)) {
-            continue;
-        }
-        for (const token of line.slice(RUNTIME_DIRECTIVE.length).trim().split(/\s+/)) {
-            if (!RUNTIME_ALLOWLIST.has(token)) {
-                throw new Error(`unsupported runtime directive in the workspace overlay: ${token}`);
-            }
-            flags.add(token);
-        }
-    }
-    return flags.size === 0 ? "" : `${[...flags].join(" ")} `;
-};
 
 const internalUrl = (parsed: WorkspaceInputs): string => `http://${parsed.internalIp}:${parsed.daemonPort}`;
 const outputsFor = (parsed: WorkspaceInputs): Record<string, unknown> => ({
@@ -158,13 +132,13 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
     },
     apply: async (inputs, _observed, ctx) => {
         const parsed = parse(inputs);
-        // Validate the overlay's runtime directives up front — a bad overlay must not even build.
-        const runtime = runtimeFlags(parsed.dockerfile);
+        // Validate the overlay's runtime directives up front — a bad overlay must not even build. Extraction
+        // and the allowlist both live in the run contract, shared with every script flow.
+        const runtime = runtimeDirectivesOf(parsed.dockerfile ?? "");
         // Wait out a booting host's tunnel warm-up rather than hard-failing the recreate on the first dial error.
         const session = await connectWithRetry(executor, sshTarget(parsed), { log: ctx.log });
         try {
             const image = desiredImage(parsed);
-            let environmentEnv = ``;
             if (parsed.dockerfile !== undefined) {
                 // Build BEFORE the container is touched, so a failed build leaves the old sandbox running.
                 // The content rides base64-encoded through the SSH command (the INTENTIC_AGENT_TOOLS
@@ -175,55 +149,60 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 if (build.code !== 0) {
                     throw new Error(`failed to build the workspace overlay image on host: exited ${build.code}: ${build.stderr.trim()}`);
                 }
-                // Name the base the overlay was built FROM alongside its hash. Without it the daemon would have
-                // to infer a base from SANDBOX_IMAGE — which here is the overlay's own tag — and fall back to
-                // the release tag. That inference happens to match today only because the graph pins `:stable`;
-                // the moment it pins a version, the daemon would compose a DIFFERENT base than was built,
-                // and every server sandbox would sit permanently on "rebuild required".
-                environmentEnv = ` -e SANDBOX_ENVIRONMENT_HASH=${environmentDigest(parsed.dockerfile)} -e SANDBOX_BASE_IMAGE=${parsed.image}`;
             }
             await session.exec(`docker network inspect ${parsed.network} >/dev/null 2>&1 || docker network create ${parsed.network}`);
-            // Forwarded into the sandbox so the agent talks to a custom Anthropic endpoint.
-            const agentEnv = parsed.agentBaseUrl !== undefined ? ` -e ANTHROPIC_BASE_URL=${parsed.agentBaseUrl}` : ``;
-            // The agent's MCP tools, base64-encoded so the JSON (quotes/braces) rides the docker `-e` cleanly
-            // through the SSH command. The daemon decodes + connects them for each agent turn.
             const digest = toolsDigest(parsed.tools);
-            const toolsEnv =
-                parsed.tools !== undefined && parsed.tools.length > 0
-                    ? ` -e INTENTIC_AGENT_TOOLS=${Buffer.from(JSON.stringify(parsed.tools)).toString("base64")}`
-                    : ``;
+            /* The run command comes from the shared contract (@intentic/sandbox-run) — this provider adds only
+             * what is genuinely the hosted flavor's own: the graph's network, the internal-ip port binds
+             * (cloudflared with --network host reaches the preview proxy there; the engine health-probes the
+             * daemon — neither is exposed on the host's public interface), the engine's identity labels (the
+             * tools digest drives recreate-on-change), and the public resolvers (`intentic deploy apply` runs
+             * `cloudflared access tcp` in here, and an operator resolver's negatively-cached NXDOMAIN on a
+             * freshly-minted ssh-<id> tunnel name otherwise fails the dial with ECONNRESET). No --init, no
+             * network alias (the container NAME is the alias — one sandbox per host), and no /history volume,
+             * as this flavor always ran.
+             *
+             * `baseImage` names what the overlay was built FROM alongside its hash. Without it the daemon
+             * would infer a base from SANDBOX_IMAGE — here the overlay's own tag — and fall back to the
+             * release tag: the moment the graph pins a version, every server sandbox would sit permanently on
+             * "rebuild required". */
+            const runCommand = sandboxRunCommand({
+                names: { ...NAMES, network: parsed.network },
+                image,
+                baseImage: parsed.image,
+                ...(parsed.dockerfile !== undefined ? { environmentHash: environmentDigest(parsed.dockerfile) } : {}),
+                runtime,
+                init: false,
+                alias: false,
+                history: false,
+                ports: [
+                    `${parsed.internalIp}:${parsed.previewPort}:${parsed.previewPort}`,
+                    `${parsed.internalIp}:${parsed.daemonPort}:${parsed.daemonPort}`,
+                ],
+                labels: [`intentic.id=${ctx.id}`, `intentic.type=workspace`, `intentic.tools=${digest}`],
+                dns: ["1.1.1.1", "1.0.0.1"],
+                env: [
+                    ["WORKSPACE_ROOT", "/work"],
+                    ["SANDBOX_HOST", "0.0.0.0"],
+                    ["SANDBOX_PORT", String(parsed.daemonPort)],
+                    ["PREVIEW_PORT", String(parsed.previewPort)],
+                    // Forwarded into the sandbox so the agent talks to a custom Anthropic endpoint.
+                    ...(parsed.agentBaseUrl !== undefined ? [["ANTHROPIC_BASE_URL", parsed.agentBaseUrl] as const] : []),
+                    // The agent's MCP tools, base64-encoded so the JSON (quotes/braces) rides the docker `-e`
+                    // cleanly through the SSH command. The daemon decodes + connects them per agent turn.
+                    ...(parsed.tools !== undefined && parsed.tools.length > 0
+                        ? [["INTENTIC_AGENT_TOOLS", Buffer.from(JSON.stringify(parsed.tools)).toString("base64")] as const]
+                        : []),
+                ],
+            });
             const run = await session.exec(
                 // rm + run in ONE exec: when `intentic deploy apply` runs INSIDE the sandbox being recreated, the rm
                 // kills the CLI — two separate execs would never reach the run.
-                // Unprivileged by default — container privileges (the docker capability's --privileged for its
-                // ISOLATED nested engine, the vpn's tun + NET_ADMIN) ride in solely through the overlay's
-                // allowlisted runtime directives (runtimeFlags above), like rebuild.sh's local path. The host's
-                // docker socket is never mounted.
-                // Both ports bind the host's INTERNAL ip — cloudflared
-                // (--network host) reaches the preview proxy there for the wildcard preview route, and the engine
-                // health-probes the daemon, without exposing either on the host's public interface. The tools
-                // digest label drives recreate-on-change. SANDBOX_NAME/SANDBOX_IMAGE feed the daemon's /info.
                 // The rm destroys the old container's `docker logs` — keep its tail on the host first, so a
-                // failed recreate still has the predecessor's record (fetchable via `intentic deploy logs`). The
-                // json-file caps stop an unbounded log from filling the host disk.
-                // --dns: `intentic deploy apply` runs `cloudflared access tcp` in here to reach enrolled hosts by their
-                // freshly-minted ssh-<id>.<zone> tunnel name; a public resolver (Cloudflare, where the zone lives)
-                // avoids the operator resolver's negatively-cached NXDOMAIN that otherwise fails the dial (ECONNRESET).
+                // failed recreate still has the predecessor's record (fetchable via `intentic deploy logs`).
                 `(docker logs --tail 2000 ${CONTAINER} > /opt/intentic/workspace-previous.log 2>&1 || true) && ` +
                     `(docker rm -f ${CONTAINER} 2>/dev/null || true) && ` +
-                    `docker run -d --restart unless-stopped --name ${CONTAINER} --label intentic.id=${ctx.id} --label intentic.type=workspace --label intentic.tools=${digest} ` +
-                    `--network ${parsed.network} --add-host host.docker.internal:host-gateway --dns 1.1.1.1 --dns 1.0.0.1 ` +
-                    `--log-opt max-size=10m --log-opt max-file=3 ` +
-                    // The sandbox container's capability posture — defined once in @intentic/constants (see
-                    // SANDBOX_CAPABILITIES there for what each grant is for and the drift story that made it
-                    // a shared constant), spliced here exactly as the creation scripts splice it.
-                    `${SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`).join(" ")} ` +
-                    runtime +
-                    `-p ${parsed.internalIp}:${parsed.previewPort}:${parsed.previewPort} -p ${parsed.internalIp}:${parsed.daemonPort}:${parsed.daemonPort} ` +
-                    `-v ${WORKSPACE_VOLUME}:/work -v ${DOCKER_VOLUME}:/var/lib/docker ` +
-                    `-e WORKSPACE_ROOT=/work -e SANDBOX_HOST=0.0.0.0 -e SANDBOX_PORT=${parsed.daemonPort} ` +
-                    `-e PREVIEW_PORT=${parsed.previewPort} ` +
-                    `-e SANDBOX_NAME=${CONTAINER} -e SANDBOX_IMAGE=${image}${environmentEnv}${agentEnv}${toolsEnv} ${image}`,
+                    runCommand,
             );
             if (run.code !== 0) {
                 throw new Error(`failed to start workspace sandbox on host: exited ${run.code}: ${run.stderr.trim()}`);

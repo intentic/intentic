@@ -611,7 +611,7 @@ if [ "$FORCE" != 1 ]; then
 fi
 
 # Every connect leaves a log on this machine (docker run errors, launch health-check failures) — otherwise a
-# failed setup is only ever seen on this terminal. Kept to the newest 10 connects; same dir rebuild.sh and the
+# failed setup is only ever seen on this terminal. Kept to the newest 10 connects; same dir recreate.sh and the
 # intentic CLI log to (keep the two scripts' log handling in lockstep).
 LOG_DIR="${INTENTIC_LOG_DIR:-$HOME/.intentic/logs}"
 mkdir -p "$LOG_DIR"
@@ -809,66 +809,55 @@ self_host_addr_env=""
 PLATFORM_URL_CONTAINER="$(printf '%s' "$PLATFORM_URL" | sed -e 's#//localhost#//host.docker.internal#' -e 's#//127\.0\.0\.1#//host.docker.internal#')"
 
 # Runs UNPRIVILEGED: container privileges come only from "# intentic:runtime" directives in an owner-approved
-# overlay, applied by rebuild.sh/update.sh on a recreate (the docker capability's --privileged for its ISOLATED
-# nested engine, the vpn's /dev/net/tun + NET_ADMIN). The image bakes Docker + Compose but the engine stays
-# dormant until that grant; the host's Docker socket is never mounted, so the agent's containers can only ever
-# live inside the sandbox's own engine. The /var/lib/docker volume is mounted regardless (empty until then).
-# --add-host lets the sandbox reach the host it runs on at host.docker.internal (SSH
-# self-host deploys target it). The workspace volume persists the cloned repos across re-runs. The daemon binds
-# 0.0.0.0:8787 on the private network; only the Cloudflare tunnel exposes it (no host port is published).
+# overlay, applied by recreate.sh on a rebuild (the docker capability's --privileged for its ISOLATED nested
+# engine, the vpn's /dev/net/tun + NET_ADMIN). The image bakes Docker + Compose but the engine stays dormant
+# until that grant; the host's Docker socket is never mounted, so the agent's containers can only ever live
+# inside the sandbox's own engine.
+#
+# HOW THE CONTAINER IS RUN is not written in this script. The docker-run shape — volumes, network + alias,
+# capability posture, which env rides in — is the run contract (@intentic/sandbox-run), and the image itself
+# speaks it: the pairs below go in NUL-framed (HOST_SSH_KEY is a multi-line key; empties are dropped CLI-side,
+# where an empty secret would shadow the workspace .env the user writes later), `intentic sandbox run-command`
+# answers with the full command, and this script executes the answer. A stale copy of this script therefore
+# still runs a new image correctly — the hand-written run block this replaced needed three scripts kept in
+# lockstep by comment, and drifted.
 # GOOGLE_CLIENT_ID/CONNECT_TOKEN/WEB_ORIGIN activate the browser-facing auth; OWNER_EMAIL pins the owner the
-# daemon will TOFU-bind (the account that created this sandbox); SANDBOX_PUBLIC_URL tells the daemon its own
-# public address; PLATFORM_URL is where it announces that address + its liveness; CLOUDFLARE_API_TOKEN/HOST_SSH_KEY/
-# SELF_HOST_USER are the infra secrets the in-sandbox `intentic deploy apply` reads (they never touch the platform).
-# The volume mounts target the daemon's DEFAULT roots (/work, /history), and the bind host/port ride its
-# defaults too (0.0.0.0:8787) — only identity, reachability, and secrets are set explicitly here; keep the
-# compose rendering (setupCompose.ts) in lockstep.
-# NOTE: rebuild.sh replays this env set when recreating the sandbox from an approved overlay image — keep its
-# allowlist in lockstep with the -e list here.
-# The infra secrets ride in only when non-empty: a baked-in `CLOUDFLARE_API_TOKEN=""` would shadow the value
-# the user later writes to the workspace .env (a container's env can't change after creation). Accumulated as
-# argv via `set --` because HOST_SSH_KEY is a multi-line private key that must not word-split.
-set --
-for _dns in $SANDBOX_DNS; do set -- "$@" --dns "$_dns"; done
-[ -n "$CF_TOKEN" ] && set -- "$@" -e CLOUDFLARE_API_TOKEN="$CF_TOKEN"
-[ -n "$HOST_SSH_KEY" ] && set -- "$@" -e HOST_SSH_KEY="$HOST_SSH_KEY"
-[ -n "$SELF_HOST_USER" ] && set -- "$@" -e SELF_HOST_USER="$SELF_HOST_USER"
-[ -n "$INTENTIC_AGENT_AUTH_VOLUME" ] && set -- "$@" -v "${INTENTIC_AGENT_AUTH_VOLUME}:/agent-auth" -e AGENT_AUTH_DIR=/agent-auth
-# SANDBOX_BASE_IMAGE is set to the SAME value as SANDBOX_IMAGE below: on a fresh run the image being started
-# IS the base that any later environment overlay must extend. Naming it is what lets a sandbox started on a
-# non-release image (a pinned version, or a locally-built intentic-sandbox:dev) be rebuilt onto ITSELF rather
-# than silently onto :stable — which would swap its daemon for the last release behind the owner's back.
+# daemon will TOFU-bind; SANDBOX_PUBLIC_URL tells the daemon its own public address; PLATFORM_URL (the
+# container-rewritten value) is where it announces that address + liveness; CLOUDFLARE_API_TOKEN/HOST_SSH_KEY/
+# SELF_HOST_* are the infra secrets the in-sandbox `intentic deploy apply` reads (they never touch the platform).
+env_pairs="$(mktemp)"
+run_command="$(mktemp)"
+trap 'rm -f "$env_pairs" "$run_command"' EXIT
+{
+    printf '%s=%s\0' PREVIEW_PORT "$PREVIEW_PORT"
+    printf '%s=%s\0' GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID"
+    printf '%s=%s\0' CONNECT_TOKEN "$CONNECT_TOKEN"
+    printf '%s=%s\0' OWNER_EMAIL "$OWNER_EMAIL"
+    printf '%s=%s\0' WEB_ORIGIN "$WEB_ORIGIN"
+    printf '%s=%s\0' SANDBOX_PUBLIC_URL "$SANDBOX_PUBLIC_URL"
+    printf '%s=%s\0' PLATFORM_URL "$PLATFORM_URL_CONTAINER"
+    printf '%s=%s\0' SYNC_PAIR_TOKEN "$SYNC_PAIR_TOKEN"
+    printf '%s=%s\0' CLOUDFLARE_API_TOKEN "$CF_TOKEN"
+    printf '%s=%s\0' HOST_SSH_KEY "$HOST_SSH_KEY"
+    printf '%s=%s\0' SELF_HOST_USER "$SELF_HOST_USER"
+    printf '%s=%s\0' SELF_HOST_ADDRESS "$SELF_HOST_ADDRESS"
+    printf '%s=%s\0' SELF_HOST_VIA "$SELF_HOST_VIA"
+    # The /agent-auth mount+env pair (shared subscription credentials across dev sandboxes).
+    [ -n "$INTENTIC_AGENT_AUTH_VOLUME" ] && printf '%s=%s\0' AGENT_AUTH_DIR /agent-auth
+    :
+} >"$env_pairs"
+set -- --slug "$SLUG" --image "$SANDBOX_IMAGE" --base-image "$SANDBOX_IMAGE"
+[ -n "$SANDBOX_DNS" ] && set -- "$@" --dns "$SANDBOX_DNS"
+[ -n "$INTENTIC_AGENT_AUTH_VOLUME" ] && set -- "$@" --mounts "${INTENTIC_AGENT_AUTH_VOLUME}:/agent-auth"
+if ! docker run -i --rm --entrypoint intentic "$SANDBOX_IMAGE" sandbox run-command "$@" <"$env_pairs" >"$run_command" 2>>"$LOG" ||
+    ! [ -s "$run_command" ]; then
+    tail -n 5 "$LOG" >&2
+    echo "error: ${SANDBOX_IMAGE} could not produce its run command — the full error is saved to ${LOG}." >&2
+    exit 1
+fi
 echo "== docker run ${SANDBOX_IMAGE} ==" >>"$LOG"
-# SYS_ADMIN is what lets the daemon give each isolated agent turn its own mount namespace, with that
-# conversation's worktree standing in for the workspace root (the sandbox app's agents/isolation.ts). Without
-# it the daemon still runs every turn — it just cannot make the guarantee, and an agent's absolute workspace
-# paths reach the shared checkout again. The capability is scoped to THIS container's own mounts; it is not host access, and
-# the docker socket is still never mounted. Kept in lockstep with the platform provider's own run
-# (_libs/providers/src/host/workspace.ts), which is a SEPARATE path to the same container: it had this flag
-# while these scripts did not, so a sandbox created or rebuilt the ordinary way silently lost the isolation.
-if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
-    --network "$NETWORK" \
-    --network-alias "$ORIGIN_HOST" \
-    --add-host host.docker.internal:host-gateway \
-    --log-opt max-size=10m --log-opt max-file=3 \
-    --cap-add=SYS_ADMIN \
-    -v "${WORKSPACE_VOLUME}:/work" \
-    -v "${HISTORY_VOLUME}:/history" \
-    -v "${DOCKER_VOLUME}:/var/lib/docker" \
-    -e SANDBOX_NAME="$CONTAINER" \
-    -e SANDBOX_IMAGE="$SANDBOX_IMAGE" \
-    -e SANDBOX_BASE_IMAGE="$SANDBOX_IMAGE" \
-    -e PREVIEW_PORT="$PREVIEW_PORT" \
-    -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
-    -e CONNECT_TOKEN="$CONNECT_TOKEN" \
-    -e OWNER_EMAIL="$OWNER_EMAIL" \
-    -e WEB_ORIGIN="$WEB_ORIGIN" \
-    -e SANDBOX_PUBLIC_URL="$SANDBOX_PUBLIC_URL" \
-    -e PLATFORM_URL="$PLATFORM_URL_CONTAINER" \
-    -e SYNC_PAIR_TOKEN="$SYNC_PAIR_TOKEN" \
-    "$@" \
-    $self_host_addr_env \
-    "$SANDBOX_IMAGE" >/dev/null 2>>"$LOG"; then
+cat "$run_command" >>"$LOG"
+if ! sh "$run_command" >/dev/null 2>>"$LOG"; then
     tail -n 5 "$LOG" >&2
     echo "error: starting the sandbox failed — the full docker error is saved to ${LOG}." >&2
     exit 1
@@ -883,7 +872,7 @@ docker run -d --restart unless-stopped --name "$TUNNEL_CONTAINER" --network "$NE
     "$CLOUDFLARED_IMAGE" tunnel --no-autoupdate run --token "$TUNNEL_TOKEN" >/dev/null 2>>"$LOG"
 
 # A container that starts but crash-loops would otherwise time out silently in the setup wizard — gate on the
-# daemon's own /health before declaring success (lockstep with rebuild.sh's post-launch check).
+# daemon's own /health before declaring success (lockstep with recreate.sh's post-launch check).
 echo "intentic: waiting for the sandbox daemon to come up…"
 tries=0
 until docker exec "$CONTAINER" curl -sf http://localhost:8787/health >/dev/null 2>&1; do

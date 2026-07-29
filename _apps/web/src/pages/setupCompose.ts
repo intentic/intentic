@@ -10,7 +10,7 @@
  * and the workspace data all stay compatible: a sandbox can move between script-managed and compose-managed
  * without losing /work. Keep the two in lockstep. */
 
-import { SANDBOX_CAPABILITIES } from "@intentic/constants";
+import { ORIGIN_HOST, SANDBOX_CAPABILITIES, sandboxNames } from "@intentic/sandbox-run";
 
 export interface ComposeArgs {
     readonly mode: `intentic` | `own`;
@@ -29,9 +29,8 @@ export interface ComposeArgs {
 // The platform's API origin — where the claim (POST /setup/claim) and the daemon's announce land. NOT the
 // web-app origin (app.*), which serves only static files and 405s a POST. Mirrors connect.sh's PLATFORM_URL.
 const PLATFORM_DEFAULT = `https://api.intentic.dev`;
-// Mirrors connect.sh's CLOUDFLARED_IMAGE / PREVIEW_PORT / ORIGIN_HOST.
+// Mirrors connect.sh's CLOUDFLARED_IMAGE; the alias and per-sandbox names come from the run contract.
 const CLOUDFLARED_IMAGE = `cloudflare/cloudflared:2026.7.2`;
-const ORIGIN_HOST = `intentic-sandbox-workspace`;
 
 const slugOf = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
 const isLocal = (url: string): boolean => url.includes(`//localhost`) || url.includes(`//127.0.0.1`);
@@ -68,7 +67,7 @@ export const composeBootstrap = (args: ComposeArgs): string => {
 // The compose services/volumes/networks to add to the user's docker-compose.yml. Secrets stay in the .env
 // (compose interpolates them); non-secret identity (names, hostname, platform) is rendered concretely.
 export const composeFile = (args: ComposeArgs): string => {
-    const slug = slugOf(args.hostname);
+    const names = sandboxNames(slugOf(args.hostname));
     const dev = args.platformUrl !== undefined;
     // The platform as seen FROM the container (connect.sh's PLATFORM_URL_CONTAINER rewrite).
     const platform = (args.platformUrl ?? PLATFORM_DEFAULT)
@@ -82,10 +81,10 @@ export const composeFile = (args: ComposeArgs): string => {
         // be pulled — a `compose pull` would get "denied" from Docker Hub. The moving `:stable` release IS
         // pulled every time so the sandbox tracks the newest release (matching connect.sh's always-pull).
         `        pull_policy: ${imageHasRegistry(args.image) ? `always` : `never`}`,
-        `        container_name: intentic-sandbox-${slug}`,
+        `        container_name: ${names.container}`,
         `        init: true`,
         // Unprivileged, matching connect.sh's default run — with the same capability posture that run
-        // carries, spliced from the one shared definition (@intentic/constants SANDBOX_CAPABILITIES; see
+        // carries, spliced from the one shared definition (@intentic/sandbox-run SANDBOX_CAPABILITIES; see
         // there for what each grant is for). Without it agents' absolute workspace paths reach the shared
         // checkout, so a compose-started sandbox would quietly be the weaker kind. The docker capability's
         // `privileged: true` (its isolated nested engine; the host's Docker socket is never mounted) stays
@@ -122,7 +121,7 @@ export const composeFile = (args: ComposeArgs): string => {
         ...(dev ? [`            AGENT_AUTH_DIR: /agent-auth`] : []),
         `    intentic-sandbox-tunnel:`,
         `        image: ${CLOUDFLARED_IMAGE}`,
-        `        container_name: intentic-sandbox-tunnel-${slug}`,
+        `        container_name: ${names.tunnelContainer}`,
         `        restart: unless-stopped`,
         `        command: tunnel --no-autoupdate run --token \${TUNNEL_TOKEN:?run the .env bootstrap first}`,
         `        networks: [intentic]`,
@@ -131,14 +130,14 @@ export const composeFile = (args: ComposeArgs): string => {
         `            options: { max-size: 10m, max-file: "3" }`,
         `networks:`,
         `    intentic:`,
-        `        name: intentic-workspace-${slug}`,
+        `        name: ${names.network}`,
         `volumes:`,
         `    work:`,
-        `        name: intentic-workspace-${slug}`,
+        `        name: ${names.workspaceVolume}`,
         `    history:`,
-        `        name: intentic-history-${slug}`,
+        `        name: ${names.historyVolume}`,
         `    docker-engine:`,
-        `        name: intentic-docker-${slug}`,
+        `        name: ${names.dockerVolume}`,
         ...(dev ? [`    agent-auth:`, `        name: intentic-dev-agent-auth`] : []),
         ``,
     ].join(`\n`);

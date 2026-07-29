@@ -9,7 +9,7 @@ import { capabilityFragments } from "./fragment-sources.js";
 // the pinned FROM, the enabled capabilities' code-versioned fragments (see CapabilityHandler.fragment), and the
 // owner-approved custom section. The agent writes the proposal (custom-section content only — no FROM, no
 // runtime directives) with its normal file tools; the owner-gated approve route stores it as the custom file
-// and recomposes. The container can't rebuild itself (no docker socket) — an outside executor (rebuild.sh
+// and recomposes. The container can't rebuild itself (no docker socket) — an outside executor (recreate.sh
 // served at intentic.dev/rebuild, or the workspace provider) verifies the approved content against the hash pinned in the rebuild
 // command, builds, and recreates with SANDBOX_ENVIRONMENT_HASH stamped. Status is derived, never stored.
 
@@ -29,7 +29,7 @@ const OFFICIAL_IMAGE = /^registry\.gitlab\.com\/radarsu\/intentic\/sandbox:\S+$/
 // write — so neither is a path for smuggling a base image past the owner.
 //
 // `baseImage` wins because after a rebuild `runningImage` is the overlay's own tag
-// (`intentic-sandbox-env-<slug>:<hash>` — see rebuild.sh / update.sh / dev-sandbox.sh), which is not a base at
+// (`intentic-sandbox-env-<slug>:<hash>` — see recreate.sh), which is not a base at
 // all. Preferring the running image there would flip the composed FROM on every recompose, changing the
 // content, changing its hash, and asking the owner to rebuild AGAIN — the endless prompt, which each time also
 // downgraded them to whatever `:stable` happened to be.
@@ -49,7 +49,7 @@ export const baseImageOf = (baseImage: string | undefined, runningImage: string 
 };
 
 // The composed overlay must extend the official sandbox image — the first instruction is pinned so an approved
-// overlay can't swap the base for an arbitrary image. Held by construction in composeEnvironment; rebuild.sh
+// overlay can't swap the base for an arbitrary image. Held by construction in composeEnvironment; recreate.sh
 // re-checks it belt-and-braces.
 export const hasValidBase = (content: string): boolean => {
     const first = content

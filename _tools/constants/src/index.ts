@@ -12,22 +12,3 @@ export const LEGAL_CONTACT_EMAIL = "contact@intentic.dev";
 // state-resolver emits them into the workspace node — one source so container bind, ingress, and graph agree.
 export const DAEMON_PORT = 8787;
 export const PREVIEW_PORT = 5173;
-
-/* The Linux capabilities EVERY sandbox workspace container is granted at creation — the container's security
- * posture, defined once because it has to hold across six creation paths in four dialects: the platform
- * provider's docker run over SSH (providers/host/workspace.ts), the compose generator (web setupCompose.ts),
- * and four hand-served scripts (connect.sh / rebuild.sh / update.sh on the site, dev-sandbox.sh in the
- * sandbox app; connect.ps1 mirrors connect.sh). The flag drifted once: SYS_ADMIN was added to the provider
- * alone, so every sandbox created or rebuilt through the scripts silently lost turn isolation — and
- * "recreate the sandbox to restore isolation" recreated it through a door that could not grant it.
- *
- * TS consumers import this and splice it into what they emit. The scripts cannot import anything — they are
- * curl-served standalone files — so a discovery test (sandbox app, sandbox-run-contract.test.ts) scans the
- * repo for every docker-run/compose that mounts /work and asserts each grants exactly these. Add a
- * capability here and that test names every file still to update; add a creation path anywhere and the test
- * finds it by its /work mount, not by being told.
- *
- * SYS_ADMIN: lets the daemon give each isolated agent turn its own mount namespace, with the conversation's
- * worktree standing in for /work (sandbox app agents/isolation.ts). Scoped to the container's own mounts —
- * not host access, and the docker socket is never mounted. */
-export const SANDBOX_CAPABILITIES = ["SYS_ADMIN"] as const;

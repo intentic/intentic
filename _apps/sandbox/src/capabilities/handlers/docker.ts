@@ -6,7 +6,7 @@ import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 
 // The in-sandbox Docker Engine. The base image bakes Docker + Compose, but the engine stays dormant — and the
 // container unprivileged — until this capability is added: its fragment is a single `--privileged` runtime
-// directive the rebuild executors translate into the docker run flag (allowlisted there — see rebuild.sh / the
+// directive the rebuild executors translate into the docker run flag (allowlisted there — see recreate.sh / the
 // workspace provider), and dockerd runs as the visible panel-docker tmux session, started by `apply` once the
 // container is privileged and restored on boot (startDockerdIfEnabled). The HOST's Docker socket is never
 // mounted, so the agent's containers live inside this nested engine. No remove — deliberately: the engine's

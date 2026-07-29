@@ -14,8 +14,11 @@ const SCRIPTS: Record<string, string> = {
     "/sync.ps1": "sync.ps1",
     "/cleanup": "cleanup.sh",
     "/cleanup.ps1": "cleanup.ps1",
-    "/rebuild": "rebuild.sh",
-    "/update": "update.sh",
+    // Both vanity paths serve the ONE recreate script — the mode rides the argument shape the platform's
+    // cards already hand out (<slug> <sha256> = rebuild, <slug> = update), so every pasted one-liner keeps
+    // working across the merge.
+    "/rebuild": "recreate.sh",
+    "/update": "recreate.sh",
 };
 
 export default {

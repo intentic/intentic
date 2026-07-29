@@ -94,7 +94,7 @@ test("a rebuild is version-preserving: composing again after one is byte-identic
     expect(hasValidBase(approved)).toBe(true);
 
     // Recompose as the daemon does on boot AFTER a rebuild: the container now runs the overlay's own tag, with
-    // the base named by rebuild.sh and the applied hash stamped. Identical content and hash ⇒ the Environment
+    // the base named by recreate.sh and the applied hash stamped. Identical content and hash ⇒ the Environment
     // card stays quiet instead of asking for another rebuild.
     const rebuilt = stubServices(first!, [vpn("office")], "intentic-sandbox-env-demo:abc123def456", latest);
     expect(await composeEnvironment(rebuilt)).toBe(first);

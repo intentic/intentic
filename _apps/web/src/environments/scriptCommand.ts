@@ -27,8 +27,9 @@ export const SCRIPT_PATHS = {
     cleanupHost: `_apps/site/public/scripts/cleanup-host.sh`,
     desktopSh: `_apps/site/public/scripts/sync.sh`,
     desktopPs1: `_apps/site/public/scripts/sync.ps1`,
-    rebuild: `_apps/site/public/scripts/rebuild.sh`,
-    update: `_apps/site/public/scripts/update.sh`,
+    // One recreate script serves both flows — mode inferred from the argument shape (see recreate.sh).
+    rebuild: `_apps/site/public/scripts/recreate.sh`,
+    update: `_apps/site/public/scripts/recreate.sh`,
     cleanup: `_apps/site/public/scripts/cleanup.sh`,
 } as const;
 

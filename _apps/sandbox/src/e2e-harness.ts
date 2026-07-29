@@ -64,7 +64,7 @@ export const until = async <T>(read: () => Promise<T | undefined>, what: string,
     }
 };
 
-// `docker build` the composed overlay from stdin — the exact command rebuild.sh runs (`docker build - <overlay`).
+// `docker build` the composed overlay from stdin — the exact command recreate.sh runs (`docker build - <overlay`).
 export const dockerBuild = (dockerfile: string, tag: string): Promise<void> =>
     new Promise((resolve, reject) => {
         const build = spawn("docker", ["build", "-t", tag, "-"]);

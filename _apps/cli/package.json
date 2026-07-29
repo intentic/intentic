@@ -47,6 +47,7 @@
         "@intentic/need-resolver": "workspace:*",
         "@intentic/providers": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/sandbox-run": "workspace:*",
         "@intentic/scaffold": "workspace:*",
         "@intentic/state-resolver": "workspace:*",
         "@puristic/env": "catalog:",

@@ -1,13 +1,13 @@
 {
-    "name": "@intentic/providers",
+    "name": "@intentic/sandbox-run",
     "version": "0.0.0",
-    "description": "",
+    "description": "The sandbox container's run contract — names, capability posture, env allowlist, runtime directives, and the docker-run emitter every creation path composes from",
     "license": "MIT",
     "type": "module",
     "repository": {
         "type": "git",
         "url": "git+https://gitlab.com/radarsu/intentic.git",
-        "directory": "_libs/providers"
+        "directory": "_libs/sandbox-run"
     },
     "files": [
         "dist"
@@ -36,19 +36,12 @@
         "test:watch": "vitest"
     },
     "dependencies": {
-        "@intentic/engine": "workspace:*",
-        "@intentic/graph": "workspace:*",
-        "@intentic/sandbox-run": "workspace:*",
-        "bcryptjs": "catalog:",
-        "ssh2": "catalog:",
-        "tslib": "catalog:",
-        "zod": "catalog:"
+        "@intentic/constants": "workspace:*",
+        "tslib": "catalog:"
     },
     "devDependencies": {
-        "@intentic/sdk": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
-        "@types/ssh2": "catalog:",
         "@typescript/native-preview": "catalog:",
         "vitest": "catalog:"
     }

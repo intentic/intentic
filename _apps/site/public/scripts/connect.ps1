@@ -397,45 +397,42 @@ if ($SelfHost) {
 }
 
 # Runs UNPRIVILEGED: container privileges come only from "# intentic:runtime" directives in an owner-approved
-# overlay, applied by rebuild.sh on a recreate (the docker capability's --privileged for its ISOLATED nested
+# overlay, applied by recreate.sh on a rebuild (the docker capability's --privileged for its ISOLATED nested
 # engine, the vpn's tun + NET_ADMIN). The image bakes Docker + Compose but the engine stays dormant until that
-# grant; the host's Docker socket is never mounted. --add-host lets it reach the host it runs on at
-# host.docker.internal. The workspace volume persists the cloned repos across re-runs. The daemon binds
-# 0.0.0.0:8787 on the private network; only the Cloudflare tunnel exposes it (no host port is published).
-# SELF_HOST_* (when self-host is on) point the sandbox's `self` deploy target at the Docker-in-Docker host
-# above. Every -e value is quoted so spaces and the multi-line HOST_SSH_KEY pass as single arguments.
-$AgentAuthArgs = if ($AgentAuthVolume) { @('-v', "${AgentAuthVolume}:/agent-auth", '-e', 'AGENT_AUTH_DIR=/agent-auth') } else { @() }
-# SYS_ADMIN is what lets the daemon give each isolated agent turn its own mount namespace, with that
-# conversation's worktree standing in for the workspace root (the sandbox app's agents/isolation.ts). Without
-# it the daemon still runs every turn — it just cannot make the guarantee, and an agent's absolute workspace
-# paths reach the shared checkout again. Scoped to THIS container's own mounts; not host access, and the
-# docker socket is still never mounted. Kept in lockstep with connect.sh and the platform provider's run.
-docker run -d --restart unless-stopped --name $Container `
-    --network $Network `
-    --network-alias $OriginHost `
-    --add-host host.docker.internal:host-gateway `
-    --cap-add=SYS_ADMIN `
-    -v "${WorkspaceVolume}:/work" `
-    -v "${HistoryVolume}:/history" `
-    -v "${DockerVolume}:/var/lib/docker" `
-    @AgentAuthArgs `
-    -e WORKSPACE_ROOT=/work `
-    -e HISTORY_ROOT=/history `
-    -e SANDBOX_HOST=0.0.0.0 `
-    -e SANDBOX_PORT=8787 `
-    -e "SANDBOX_NAME=$Container" `
-    -e "SANDBOX_IMAGE=$SandboxImage" `
-    -e "PREVIEW_PORT=$PreviewPort" `
-    -e "GOOGLE_CLIENT_ID=$GoogleClientId" `
-    -e "CONNECT_TOKEN=$ConnectToken" `
-    -e "WEB_ORIGIN=$WebOrigin" `
-    -e "SANDBOX_PUBLIC_URL=$SandboxPublicUrl" `
-    -e "CLOUDFLARE_API_TOKEN=$CfToken" `
-    -e "SELF_HOST_ADDRESS=$SelfHostAddress" `
-    -e "SELF_HOST_USER=$SelfHostUser" `
-    -e "HOST_SSH_KEY=$HostSshKey" `
-    -e "SYNC_PAIR_TOKEN=$SyncPairToken" `
-    $SandboxImage | Out-Null
+# grant; the host's Docker socket is never mounted. SELF_HOST_* (when self-host is on) point the sandbox's
+# `self` deploy target at the Docker-in-Docker host above.
+#
+# HOW THE CONTAINER IS RUN is not written in this script. The docker-run shape — volumes, network + alias,
+# capability posture, which env rides in — is the run contract (@intentic/sandbox-run), and the image itself
+# speaks it: the pairs below go in NUL-framed on stdin (empties are dropped CLI-side, where an empty secret
+# would shadow the workspace .env the user writes later), `intentic sandbox run-command --format json`
+# answers with the docker argv, and PowerShell splats it. Values pass as whole array elements, so spaces and
+# the multi-line HOST_SSH_KEY survive without any quoting rules of this dialect's own.
+$EnvPairs = @(
+    'WORKSPACE_ROOT=/work',
+    'HISTORY_ROOT=/history',
+    'SANDBOX_HOST=0.0.0.0',
+    'SANDBOX_PORT=8787',
+    "PREVIEW_PORT=$PreviewPort",
+    "GOOGLE_CLIENT_ID=$GoogleClientId",
+    "CONNECT_TOKEN=$ConnectToken",
+    "WEB_ORIGIN=$WebOrigin",
+    "SANDBOX_PUBLIC_URL=$SandboxPublicUrl",
+    "CLOUDFLARE_API_TOKEN=$CfToken",
+    "SELF_HOST_ADDRESS=$SelfHostAddress",
+    "SELF_HOST_USER=$SelfHostUser",
+    "HOST_SSH_KEY=$HostSshKey",
+    "SYNC_PAIR_TOKEN=$SyncPairToken"
+)
+if ($AgentAuthVolume) { $EnvPairs += 'AGENT_AUTH_DIR=/agent-auth' }
+$VerbArgs = @('sandbox', 'run-command', '--slug', $Slug, '--image', $SandboxImage, '--base-image', $SandboxImage, '--format', 'json')
+if ($AgentAuthVolume) { $VerbArgs += @('--mounts', "${AgentAuthVolume}:/agent-auth") }
+$ArgvJson = ($EnvPairs -join "`0") + "`0" | docker run -i --rm --entrypoint intentic $SandboxImage @VerbArgs
+if ($LASTEXITCODE -ne 0 -or -not $ArgvJson) {
+    Write-Error "$SandboxImage could not produce its run command (see the docker output above)."
+    exit 1
+}
+docker @($ArgvJson | ConvertFrom-Json) | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Error 'failed to start the sandbox container (see the docker output above).'
     exit 1

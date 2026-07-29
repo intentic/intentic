@@ -35,7 +35,7 @@ const ensureInclude = async (): Promise<void> => {
 };
 
 // Boot: point the managed dir at the /history volume and re-ensure the Include. ~/.ssh is the CONTAINER's
-// filesystem, which every recreate throws away — dev-sandbox.sh, rebuild.sh, update.sh and a provider update all
+// filesystem, which every recreate throws away — recreate.sh (any mode) and a provider update all
 // `docker rm -f` + `docker run`, keeping only the /work and /history volumes. So the ssh identity git access
 // registered with github/gitlab, and every `ssh` capability's key, died on each rebuild while the manifest on
 // /work still said "connected": `git pull` answered `Permission denied (publickey)` under a card that read

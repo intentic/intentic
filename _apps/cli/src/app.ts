@@ -14,6 +14,7 @@ import { monorepoCommand } from "./monorepo/monorepo.command.js";
 import { planCommand } from "./plan/plan.command.js";
 import { resolveCommand } from "./resolve/resolve.command.js";
 import { restore } from "./restore/restore.command.js";
+import { sandboxRunCommandCli } from "./sandbox-run/sandbox-run.command.js";
 import { sandboxTunnel } from "./sandbox-tunnel/sandbox-tunnel.command.js";
 import { secretsCommand } from "./secrets/secrets.command.js";
 
@@ -62,6 +63,15 @@ const deploy = buildRouteMap({
     docs: { brief: "The bundled deployment engine — declare intent, reconcile your own infrastructure" },
 });
 
+// The image speaking its own run contract (see sandbox-run.command.ts): connect.sh/recreate.sh execute what
+// this prints instead of hand-copying the docker-run shape.
+const sandbox = buildRouteMap({
+    routes: {
+        runCommand: sandboxRunCommandCli,
+    },
+    docs: { brief: "The sandbox container's own run contract — print the canonical docker-run command" },
+});
+
 const scaffold = buildRouteMap({
     routes: {
         monorepo: monorepoCommand,
@@ -72,8 +82,8 @@ const scaffold = buildRouteMap({
 
 export const app = buildApplication(
     buildRouteMap({
-        routes: { tunnel, deploy, scaffold },
-        docs: { brief: "intentic — the sandbox toolbox: tunnel · deploy · scaffold" },
+        routes: { tunnel, sandbox, deploy, scaffold },
+        docs: { brief: "intentic — the sandbox toolbox: tunnel · sandbox · deploy · scaffold" },
     }),
     {
         name: "intentic",
