@@ -52,6 +52,12 @@ export const agentStatusMeta = (status: AgentStatus | "draft"): { icon: IconName
     if (status === `error`) {
         return { icon: `exclamation-triangle`, label: `Error`, class: `text-danger` };
     }
+    // Warning, not danger: nothing FAILED here — the turn was cut off by its daemon dying (a rebuild, a crash),
+    // which is a fact about the sandbox rather than about the work. The glyph is the one the Stop button wears,
+    // because that is what happened to it.
+    if (status === `interrupted`) {
+        return { icon: `stop`, label: `Interrupted`, class: `text-warning` };
+    }
     return { icon: `circle-fill`, label: `Idle`, class: `text-subtle` };
 };
 
@@ -59,7 +65,12 @@ export const agentStatusMeta = (status: AgentStatus | "draft"): { icon: IconName
 // thing as unread, which only says you haven't looked at it yet: a board that tells the user seven finished
 // agents "need you" teaches them to ignore the word.
 export const blocked = (agent: AgentStanding): boolean =>
-    agent.attention.plan || agent.attention.question || agent.attention.permission || agent.attention.conflict || agent.status === `error`;
+    agent.attention.plan ||
+    agent.attention.question ||
+    agent.attention.permission ||
+    agent.attention.conflict ||
+    agent.status === `error` ||
+    agent.status === `interrupted`;
 
 // The half of "blocked" that is literally WAITING TO BE TOLD SOMETHING — a plan to approve, a question, a
 // permission, a paused turn. Deliberately narrower than `blocked`, which also covers the DEAD ENDS (a failed
@@ -83,6 +94,11 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     }
     if (agent.status === `error`) {
         return `Error`;
+    }
+    // Says what the card cannot: the turn did not fail and did not finish — the daemon under it went away. The
+    // user's move is to send it a message, which starts a fresh turn on the same session.
+    if (agent.status === `interrupted`) {
+        return `Interrupted`;
     }
     return undefined;
 };
@@ -169,6 +185,11 @@ export const reviewAction = (agent: AgentStanding & { readonly diff?: { files: n
     }
     if (agent.status === `error`) {
         return `View error`;
+    }
+    // The destination is the transcript, where the cut-off tool call is the last thing in it — that IS the
+    // report for this state, so the label names the place rather than promising a fix the board cannot do.
+    if (agent.status === `interrupted`) {
+        return `See where it stopped`;
     }
     // Ready names both halves of what its destination offers: the review panel is where the held work is read
     // AND where "Land now" sits. The card's own primary button lands without the trip (AgentCard).

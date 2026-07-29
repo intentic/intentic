@@ -47,7 +47,9 @@ export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction
         return `resolve`;
     }
     // An ERRORED turn never reached its auto-land at all, so there is a first land to try here, not a repeat.
-    if (agent.status === `error`) {
+    // Nor did an INTERRUPTED one — its daemon died before the land ran — and whatever it had written by then
+    // is sitting in its worktree with nothing else offering to take it.
+    if (agent.status === `error` || agent.status === `interrupted`) {
         return `land`;
     }
     return undefined;

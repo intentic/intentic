@@ -8,10 +8,21 @@ import { z } from "zod";
 // conversation. Runtime-only state (running/awaiting, attention, activity, context fill) lives in the
 // registry's memory and is rebuilt from turn frames; only what must survive a restart is here.
 
-// Persisted status excludes the transient running/awaiting — a daemon restart mid-turn must rehydrate to a
-// state the user can act on (the turn itself is gone). `ready` IS persisted: a held delta waits on the branch
-// across restarts exactly as it waits across turns, and rehydrating it to `idle` would hide work from review.
-const PersistedAgentStatusSchema = z.enum(["idle", "ready", "landed", "conflict", "error"]);
+/* Persisted status excludes the transient running/awaiting — a daemon restart mid-turn must rehydrate to a
+ * state the user can act on (the turn itself is gone). `ready` IS persisted: a held delta waits on the branch
+ * across restarts exactly as it waits across turns, and rehydrating it to `idle` would hide work from review.
+ *
+ * `interrupted` is what a LIVE turn leaves here — written by registry.begin, overwritten by registry.finish.
+ * The value on disk while a turn runs is therefore the one that should stand if the daemon never comes back,
+ * which is the only way to get this right: the daemon does not get to write a parting state. Its container is
+ * recreated with `docker rm -f` on every rebuild (dev-sandbox.sh) and it is equally free to be OOM-killed, so
+ * anything that depended on a graceful shutdown — or on a boot pass repairing a "running" marker — would be
+ * skipped in exactly the cases it exists for.
+ *
+ * Writing `idle` here instead is what filed a killed agent under Finished: `idle` is the resting status of a
+ * turn that ended CLEANLY, so an agent whose turn was parked on a question, and whose park died with the
+ * process holding it, came back indistinguishable from one that had nothing left to do. */
+const PersistedAgentStatusSchema = z.enum(["idle", "interrupted", "ready", "landed", "conflict", "error"]);
 
 /* Where a title came from, which is the whole of what decides whether a better one may replace it.
  *

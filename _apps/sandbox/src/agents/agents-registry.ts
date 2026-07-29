@@ -334,7 +334,11 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 provider: turn.provider,
                 harness: turn.harness,
                 repos: existing?.repos ?? [],
-                status: "idle",
+                // The state this turn should be found in if it never reports back — see the store's note on
+                // PersistedAgentStatusSchema. finish() overwrites it moments later in the ordinary case (it
+                // runs in a `finally`, so an abort and a failure both reach it); what it cannot overwrite is
+                // the daemon being killed under the turn, and THAT is what this value is for.
+                status: "interrupted",
                 costUsd: existing?.costUsd ?? 0,
                 inputTokens: existing?.inputTokens ?? 0,
                 outputTokens: existing?.outputTokens ?? 0,

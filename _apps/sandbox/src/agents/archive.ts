@@ -26,8 +26,12 @@ import type { AgentWorktrees } from "./worktrees.js";
 //   · running — the worktree is the live turn's working state (the same guard land/discard take)
 //   · conflict/error — the card is in the Attention lane asking for something; archiving it would hide a
 //     question rather than answer it
-//   · attention flags aren't checked here because they are runtime-only state on a RUNNING turn, which the
-//     first guard already excludes
+//   · interrupted — the same, for a turn the daemon died under: nobody has seen that it stopped, and its
+//     worktree holds however far it got. This one is why the status exists rather than rehydrating to `idle`:
+//     the runtime flags a park raised die WITH the daemon, so a question-blocked agent used to come back
+//     `idle` and not running — passing both guards below, and eligible to be swept away unread.
+//   · attention flags aren't checked here because they are runtime-only state, and the two ways to hold one —
+//     a live turn, or a turn that died holding it — are exactly the first and third guards
 // `idle` with nothing landed is the most archivable case there is: a throwaway agent that produced nothing.
 export const archivable = (entry: PersistedAgent, running: boolean): boolean =>
     !running && entry.archivedAt === undefined && (entry.status === "landed" || entry.status === "idle");

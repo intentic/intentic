@@ -166,7 +166,14 @@ export type AttachTurn = z.infer<typeof AttachTurnSchema>;
 // landed / conflict are outcomes of the land flow — `ready` is a clean completion whose delta stayed on the
 // agent's branch because auto-land is off (the user lands it deliberately, from the review panel or the card);
 // error is a terminal turn failure surfaced on the card.
-export const AgentStatusSchema = z.enum(["idle", "running", "awaiting", "ready", "landed", "conflict", "error"]);
+//
+// `interrupted` is the turn that never got to report ANY of those: the daemon died under it (a container
+// rebuild, a crash, an OOM kill), taking the provider process and the whole runtime half of the fleet — status,
+// attention flags, the park a question raised — with it. It exists because the alternative is worse than
+// unlabelled: without it such a turn rehydrates as `idle`, which is the resting status of a turn that finished
+// CLEANLY, so the board files a killed agent under Finished and the question it was holding disappears with the
+// process that asked it. See agents-store.ts — this is the status a live turn leaves on disk.
+export const AgentStatusSchema = z.enum(["idle", "running", "awaiting", "ready", "landed", "conflict", "error", "interrupted"]);
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 // The card's live activity snippet: the last tool the agent used (with its target) and the in-progress todo.
 export const AgentActivitySchema = z.object({

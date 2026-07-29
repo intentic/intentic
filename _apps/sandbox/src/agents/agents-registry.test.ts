@@ -324,6 +324,39 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.attention.question).toBe(false);
     });
 
+    /* THE DAEMON DYING UNDER A PARKED TURN — a container rebuild (`docker rm -f`, so not even a SIGTERM), a
+     * crash, an OOM kill. The next boot is a fresh registry over the same store, and everything that said the
+     * agent was mid-task — running, the question's park, the attention flag it raised — was runtime state that
+     * died with the process. So the entry's own status is the ONLY thing left to say so, and `begin` having
+     * written the resting `idle` there is what filed a turn holding an unanswered question under Finished. */
+    it("a turn the daemon died under comes back interrupted, not idle", async () => {
+        const store = memoryStore();
+        const first = createAgentsRegistry(store);
+        await first.init();
+        await first.begin(turn(), 1_000);
+        first.observe("c1", { kind: "question", requestId: "q1", questions: [] });
+        expect(first.get("c1")?.status).toBe("awaiting");
+
+        // No finish() — the process is gone. Whatever is on disk at this instant is what the user comes back to.
+        const rebooted = createAgentsRegistry(store);
+        await rebooted.init();
+        expect(rebooted.get("c1")?.status).toBe("interrupted");
+        expect(rebooted.running("c1")).toBe(false);
+    });
+
+    // The same entry once the turn DOES report back: `interrupted` is a placeholder that every ordinary ending
+    // overwrites, so a restart after this one reads the outcome rather than the interruption.
+    it("finishing overwrites the interrupted placeholder, and it does not survive the next boot", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store);
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.finish("c1", 2_000, "landed");
+        const rebooted = createAgentsRegistry(store);
+        await rebooted.init();
+        expect(rebooted.get("c1")?.status).toBe("landed");
+    });
+
     it("error during the turn persists as error status at finish", async () => {
         const registry = createAgentsRegistry(memoryStore());
         await registry.init();
