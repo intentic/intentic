@@ -15,13 +15,19 @@ const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TSX = join(packageRoot, "node_modules", ".bin", "tsx");
 const CLI = join(packageRoot, "src", "cli.ts");
 
-const runVerb = async (args: string[], stdin: string): Promise<{ stdout: string; code: number }> => {
+/* A failed spawn must never look like a verb that legitimately refused: `code` distinguishes the two and
+ * `stderr` carries the reason, so an ENOENT or an unbuilt dependency reads as itself instead of as an empty
+ * stdout the assertions then misattribute. */
+const runVerb = async (args: string[], stdin: string): Promise<{ stdout: string; stderr: string; code: number }> => {
     const child = exec(TSX, [CLI, "sandbox", "run-command", ...args]);
     child.child.stdin?.end(stdin);
     try {
-        return { stdout: (await child).stdout, code: 0 };
+        const { stdout, stderr } = await child;
+        return { stdout, stderr, code: 0 };
     } catch (error) {
-        return { stdout: "", code: (error as { code?: number }).code ?? 1 };
+        const failure = error as { code?: number | string; stdout?: string; stderr?: string };
+        if (typeof failure.code !== "number") throw error;
+        return { stdout: failure.stdout ?? "", stderr: failure.stderr ?? "", code: failure.code };
     }
 };
 
@@ -50,10 +56,12 @@ test("--format json prints the argv for PowerShell to splat", async () => {
 }, 30_000);
 
 test("an unallowlisted runtime directive fails the whole verb — never a command minus a privilege", async () => {
-    const { code, stdout } = await runVerb(
+    const { code, stdout, stderr } = await runVerb(
         ["--slug", "s3", "--image", "i", "--base-image", "i", "--runtime", "# intentic:runtime --cap-add=SYS_PTRACE"],
         "",
     );
     expect(code).not.toBe(0);
     expect(stdout).toBe("");
+    // Named, so the refusal is the allowlist speaking — not any other crash that happens to exit non-zero.
+    expect(stderr).toContain("--cap-add=SYS_PTRACE");
 }, 30_000);

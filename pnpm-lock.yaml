@@ -644,6 +644,9 @@ importers:
       testcontainers:
         specifier: 'catalog:'
         version: 12.0.3
+      tsx:
+        specifier: 'catalog:'
+        version: 4.22.4
       vitest:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(happy-dom@20.11.1)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.1.2(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
