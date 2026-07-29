@@ -281,6 +281,9 @@ const availableCommands = computed<readonly AgentCommand[]>(() => {
 });
 const awaitingDecision = computed(() => active.value.awaitingDecision.value);
 const pendingPlanMessage = computed(() => active.value.pendingPlanMessage.value);
+// Whether the active conversation's attach stream is still re-telling frames from before it attached — see
+// Conversation.replaying, and the plan-preview watch below, which is what it exists for.
+const replaying = computed(() => active.value.replaying.value);
 // The active conversation's undelivered messages (submitted while its turn was running) and whether its
 // running turn can take one mid-flight — the composer renders the first and words its hints from the second.
 const queued = computed(() => active.value.queued.value);
@@ -297,21 +300,25 @@ const openPlanPreview = (plan: PlanRequest): void => {
     void router.push({ name: `workspace` });
 };
 
-// A newly proposed plan opens as a rendered markdown preview tab in the main view (Claude Code VSCode style);
-// the approve/keep-planning buttons stay on the chat card. Keyed by requestId so unrelated transcript updates
-// (which re-create message objects) don't re-fire, while a revised plan — or switching to a chat tab with its
-// own pending plan — opens/refreshes the preview. Watching the active-conversation facade means a background
-// tab's plan never hijacks the main view; it opens when that tab is focused.
-watch(
-    () => pendingPlanMessage.value?.plan?.requestId,
-    (requestId) => {
-        const plan = pendingPlanMessage.value?.plan;
-        if (requestId === undefined || plan === undefined) {
-            return;
-        }
-        openPlanPreview(plan);
-    },
-);
+/* A newly proposed plan opens as a rendered markdown preview tab in the main view (Claude Code VSCode style);
+ * the approve/keep-planning buttons stay on the chat card. Keyed by requestId so unrelated transcript updates
+ * (which re-create message objects) don't re-fire, while a revised plan — or switching to a chat tab with its
+ * own pending plan — opens/refreshes the preview. Watching the active-conversation facade means a background
+ * tab's plan never hijacks the main view; it opens when that tab is focused.
+ *
+ * Gated on `replaying`, because a plan card is not only born from a live frame: attaching to a run REPLAYS its
+ * whole log, so an approved plan passes back through `pending` on its way to the frozen approval. Acting on
+ * that instant threw the preview (and the router, which lands on the Workspace) in front of the user on every
+ * reload, redeploy, second window and resume probe — for a decision they had already made, over whatever they
+ * had moved on to. A plan STILL pending when the stream reaches the live boundary is one the agent is really
+ * parked on, and that is worth surfacing. */
+watch([() => pendingPlanMessage.value?.plan?.requestId, replaying], ([requestId, isReplaying]) => {
+    const plan = pendingPlanMessage.value?.plan;
+    if (requestId === undefined || plan === undefined || isReplaying) {
+        return;
+    }
+    openPlanPreview(plan);
+});
 
 const activeModel = computed(() => active.value.activeModel.value);
 const contextUsage = computed(() => active.value.contextUsage.value);
@@ -432,12 +439,8 @@ const managedProvider = ref<AgentProvider>(turnDefaults.provider.value);
 const accountUsage = ref<Record<string, UsageAccount>>({});
 const loadUsage = async (): Promise<void> => {
     try {
-        const response = await sandboxRequest(`/system/usage`);
-        if (!response.ok) {
-            return;
-        }
-        const usageAccounts = ((await response.json()) as { accounts?: UsageAccount[] }).accounts ?? [];
-        accountUsage.value = Object.fromEntries(usageAccounts.map((usage) => [usage.account, usage]));
+        const body = await sandboxJson<{ accounts?: UsageAccount[] }>(`/system/usage`);
+        accountUsage.value = Object.fromEntries((body.accounts ?? []).map((usage) => [usage.account, usage]));
     } catch {
         // Leave the last totals; usage is a non-critical display.
     }

@@ -23,6 +23,9 @@ export interface RepoFacts {
     readonly directoryUi: boolean;
     readonly monorepo: boolean;
     readonly vitest: boolean;
+    // Whether the repo describes its features as user stories (a docs/user-stories directory) — the one fact
+    // here that is language-agnostic, and the evidence an exploratory-test surface activates on.
+    readonly userStories: boolean;
 }
 
 // One connected capability's secret-free echo — `kind` is an open string: new kinds appear without an API bump,

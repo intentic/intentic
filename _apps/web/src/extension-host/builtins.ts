@@ -3,6 +3,7 @@ import { extensionIdOf } from "@intentic/extension-api";
 import * as activity from "@intentic/ext-activity";
 import * as apps from "@intentic/ext-repo-apps";
 import * as automations from "@intentic/ext-automations";
+import * as exploratoryTests from "@intentic/ext-exploratory-tests";
 import * as logs from "@intentic/ext-logs";
 import * as memory from "@intentic/ext-memory";
 import * as preview from "@intentic/ext-preview";
@@ -26,6 +27,7 @@ const builtins: readonly Builtin[] = [
     { manifest: memory.manifest, module: memory },
     { manifest: activity.manifest, module: activity },
     { manifest: apps.manifest, module: apps },
+    { manifest: exploratoryTests.manifest, module: exploratoryTests },
     { manifest: preview.manifest, module: preview },
     { manifest: viewers.manifest, module: viewers },
 ];

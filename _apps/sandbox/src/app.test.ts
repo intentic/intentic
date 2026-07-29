@@ -397,7 +397,7 @@ test("panels.list enumerates every repo with its operator panel + runtime status
             }),
         ),
     );
-    const facts = { deployConfig: false, desiredState: false, directoryUi: false, monorepo: false, vitest: false };
+    const facts = { deployConfig: false, desiredState: false, directoryUi: false, monorepo: false, vitest: false, userStories: false };
     expect(await client.panels.list()).toEqual({
         panels: [
             {
@@ -509,6 +509,7 @@ test("panels.list reports the content facts extensions detect on", async () => {
     writeFileSync(join(dir, "turbo.json"), "{}");
     mkdirSync(join(dir, ".intentic", "ui"), { recursive: true });
     writeFileSync(join(dir, ".intentic", "ui", "index.html"), "<html></html>");
+    mkdirSync(join(dir, "docs", "user-stories"), { recursive: true });
     const client = clientFor(createApp(services({ workspace })));
     expect(await client.panels.list()).toEqual({
         panels: [
@@ -522,6 +523,7 @@ test("panels.list reports the content facts extensions detect on", async () => {
                 directoryUi: true,
                 monorepo: true,
                 vitest: false,
+                userStories: true,
             },
         ],
     });
@@ -547,6 +549,7 @@ test("panels.list advertises no previewUrl without a connect token (loopback —
                 directoryUi: false,
                 monorepo: false,
                 vitest: false,
+                userStories: false,
             },
         ],
     });

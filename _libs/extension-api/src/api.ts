@@ -37,6 +37,12 @@ export interface ViewRegistration {
     readonly detect: (repos: readonly RepoFacts[], capabilities: readonly CapabilityFacts[]) => Activation[];
     // A fallback view's activations are dropped for repos already claimed by a non-fallback one.
     readonly fallback?: true | undefined;
+    // An AUXILIARY view adds a surface BESIDE whatever else serves the repo instead of replacing it — a test
+    // runner, a docs browser. Its activations render and mark the directory manageable exactly like any other,
+    // but they do not claim the repo, so the fallback view (the raw dev-server preview) survives alongside.
+    // Claiming is for a view that subsumes the fallback: `apps` renders the preview URLs itself, so dropping
+    // the preview tile beside it is right; a test runner renders no preview, so dropping it would be a loss.
+    readonly auxiliary?: true | undefined;
     // Lazily imported root component, rendered with `repo` (+ props) bound.
     readonly view: () => Promise<Component>;
 }

@@ -22,6 +22,7 @@
         "@intentic-app/ui": "workspace:*",
         "@intentic/ext-activity": "workspace:*",
         "@intentic/ext-automations": "workspace:*",
+        "@intentic/ext-exploratory-tests": "workspace:*",
         "@intentic/ext-logs": "workspace:*",
         "@intentic/ext-memory": "workspace:*",
         "@intentic/ext-preview": "workspace:*",

@@ -57,14 +57,16 @@ const safeDetect = (entry: RegisteredView, repos: readonly RepoFacts[], capabili
 };
 
 // Run every registered view's detect() and compose the sidebar: fallback activations are dropped for repos a
-// non-fallback view already claims — the single cross-extension rule, applied once here. Repo-less
+// claiming view already serves — the single cross-extension rule, applied once here. Neither a `fallback` view
+// nor an `auxiliary` one claims: the first because it IS the thing being replaced, the second because it sits
+// beside the repo's main surface rather than subsuming it (see ViewRegistration.auxiliary). Repo-less
 // (capability-driven) activations sit outside the claim rule. Reads the registry ref, so callers inside a
 // computed re-run when an extension registers or disposes.
 export const detectActivations = (repos: readonly RepoFacts[], capabilities: readonly CapabilityFacts[]): ActiveExtension[] => {
     const detected = views.value.map((entry) => ({ extension: entry.registration, activations: safeDetect(entry, repos, capabilities) }));
     const claimed = new Set(
         detected
-            .filter(({ extension }) => extension.fallback !== true)
+            .filter(({ extension }) => extension.fallback !== true && extension.auxiliary !== true)
             .flatMap(({ activations }) => activations.flatMap((a) => (a.repo === undefined ? [] : [a.repo]))),
     );
     return detected.flatMap(({ extension, activations }) =>

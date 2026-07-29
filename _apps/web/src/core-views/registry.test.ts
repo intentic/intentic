@@ -1,4 +1,5 @@
-import type { IntenticApi, ViewRegistration } from "@intentic/extension-api";
+import type { Disposable, IntenticApi, ViewRegistration } from "@intentic/extension-api";
+import * as exploratory from "@intentic/ext-exploratory-tests";
 import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic-app/api-contract";
@@ -12,6 +13,7 @@ import { detectActivations, registerView } from "./registry";
 const registerApi = { views: { register: (view: ViewRegistration) => registerView(`test`, view) } } as unknown as IntenticApi;
 apps.activate(registerApi, { extensionId: `intentic.repo-apps`, subscriptions: [] });
 preview.activate(registerApi, { extensionId: `intentic.preview`, subscriptions: [] });
+exploratory.activate(registerApi, { extensionId: `intentic.exploratory-tests`, subscriptions: [] });
 
 // A PanelSummary with everything false — override only the facts a case exercises.
 const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => ({
@@ -23,6 +25,7 @@ const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => 
     directoryUi: false,
     monorepo: false,
     vitest: false,
+    userStories: false,
     ...over,
 });
 
@@ -80,6 +83,64 @@ describe(`apps extension — merged tests view`, () => {
     it(`the old vitest extension id is gone`, () => {
         const acts = detectActivations([panel({ repo: `mono`, monorepo: true, vitest: true })], []);
         expect(acts.some(({ extension }) => extension.id === `vitest`)).toBe(false);
+    });
+});
+
+/* An AUXILIARY view is the third position in the claim rule: it sets `activation.repo` (so the directory panel
+ * renders it and the tree marks the dir manageable) yet leaves the preview fallback standing, because it adds a
+ * surface beside the repo's main one instead of subsuming it. Without this, any repo that both runs a dev
+ * server and activates such a view would silently lose its Preview tab. */
+describe(`auxiliary views`, () => {
+    const register = (id: string, extra: Partial<ViewRegistration>): Disposable =>
+        registerView(`test`, {
+            id,
+            label: id,
+            surface: `directory`,
+            detect: (repos) => repos.map((repo) => ({ key: repo.repo, title: repo.repo, repo: repo.repo })),
+            view: async () => await Promise.resolve({}),
+            ...extra,
+        });
+
+    it(`renders for its repo AND leaves the preview fallback in place`, () => {
+        const disposable = register(`aux`, { auxiliary: true });
+        const panels = [panel({ repo: `site`, hasPanel: true })];
+        expect(contributes(`aux`, `site`, panels)).toBe(true);
+        expect(contributes(`preview`, `site`, panels)).toBe(true);
+        disposable.dispose();
+    });
+
+    it(`the same view without the flag claims the repo and suppresses preview`, () => {
+        const disposable = register(`claimer`, {});
+        const panels = [panel({ repo: `site`, hasPanel: true })];
+        expect(contributes(`claimer`, `site`, panels)).toBe(true);
+        expect(contributes(`preview`, `site`, panels)).toBe(false);
+        disposable.dispose();
+    });
+});
+
+describe(`exploratory-tests extension`, () => {
+    it(`activates on a repo with user stories`, () => {
+        expect(contributes(`exploratory-tests`, `site`, [panel({ repo: `site`, userStories: true })])).toBe(true);
+    });
+
+    it(`stays away from a repo that has none`, () => {
+        expect(contributes(`exploratory-tests`, `site`, [panel({ repo: `site`, hasPanel: true })])).toBe(false);
+    });
+
+    // The composition this extension's `auxiliary` flag exists for — a web app with stories is exactly the repo
+    // that also runs a dev server, and it must not lose Preview by gaining a test runner.
+    it(`sits BESIDE the preview fallback on a repo that both runs a dev server and has stories`, () => {
+        const panels = [panel({ repo: `site`, hasPanel: true, userStories: true })];
+        expect(contributes(`exploratory-tests`, `site`, panels)).toBe(true);
+        expect(contributes(`preview`, `site`, panels)).toBe(true);
+    });
+
+    // …while a monorepo, which `apps` DOES claim, still gets the tests tab: auxiliary views are exempt from the
+    // claim rule as subjects, not merely as objects.
+    it(`still activates on a monorepo the apps extension claims`, () => {
+        const panels = [panel({ repo: `mono`, monorepo: true, userStories: true })];
+        expect(contributes(`exploratory-tests`, `mono`, panels)).toBe(true);
+        expect(contributes(`apps`, `mono`, panels)).toBe(true);
     });
 });
 

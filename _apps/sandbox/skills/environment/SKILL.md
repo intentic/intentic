@@ -13,11 +13,20 @@ propose custom Dockerfile steps — the owner reviews and approves them, then a 
 ## Check what's already here first
 
 The image is not bare, and reaching for an install before looking wastes a lot of a turn. Already baked:
-git, tmux, zsh, ripgrep, jq, curl, rsync, openssh, make/g++, docker (dormant until the capability is granted),
-python3 with **pip and venv**, node 24 (which runs `.ts` files directly — `tsx` is a shim over it), pnpm/npm,
-the `intentic`, `iq` and `lsp` CLIs, and **Chromium with browser tools** (`mcp__web__browser_navigate`,
-`mcp__web__browser_take_screenshot`, … — load them with ToolSearch; never install a browser). Check with
-`command -v <tool>` before assuming something is missing.
+
+- **Toolchain** — git (+ git-lfs), tmux, zsh, make/g++, python3 with **pip and venv**, node 24 (which runs
+  `.ts` files directly — `tsx` is a shim over it), pnpm/npm, docker (dormant until the capability is granted).
+- **First-party CLIs** — `intentic`, `iq`, `lsp`, and **Chromium with browser tools**
+  (`mcp__web__browser_navigate`, `mcp__web__browser_take_screenshot`, … — load them with ToolSearch; never
+  install a browser).
+- **Search & data** — ripgrep, `jq`, `yq` (YAML; note python3 has no PyYAML), sqlite3, xmllint, file, tree.
+- **Network** — curl, wget, rsync, openssh, ss/ip, netstat/ifconfig, lsof, fuser, ping, traceroute, dig/host,
+  nc, socat.
+- **Process & files** — ps/top, killall/pstree, strace, patch, less, nano/vi, diff, hexdump/xxd/column,
+  unzip/zip, tar with gzip/xz/zstd/bzip2, sponge, envsubst, uuidgen, bc, dos2unix.
+
+Check with `command -v <tool>` before assuming something is missing. If a staple that belongs in that list is
+genuinely absent, it is worth proposing below — the list above grew from exactly that.
 
 The final overlay (`.intentic/environment.approved.Dockerfile`) is COMPOSED BY THE DAEMON from three parts:
 the pinned `FROM`, the enabled capabilities' fragments (daemon-owned — never copy or touch these), and the

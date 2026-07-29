@@ -57,3 +57,49 @@ test("a command already wrapped by tmux-run still matches", async () => {
     const wrapped = "/usr/local/bin/tmux-run agent-abc 'apt-get install -y ffmpeg' install-ffmpeg";
     expect(context(await fire(installSteeringHooks(), wrapped))).toContain("environment.d");
 });
+
+const firePost = async (hooks: ReturnType<typeof installSteeringHooks>, command: string, response: unknown) => {
+    const [matcher] = hooks.PostToolUse!;
+    const input = {
+        hook_event_name: "PostToolUse",
+        tool_name: "Bash",
+        tool_input: { command },
+        tool_response: response,
+        tool_use_id: "t1",
+    } as unknown as HookInput;
+    return matcher!.hooks[0]!(input, "t1", { signal: new AbortController().signal });
+};
+
+// Every shell the sandbox can run a command through words this differently, and the harness hands the result
+// back in three shapes; the notice has to survive all of them.
+test.each([
+    ["lsof -i :3000", "bash: line 1: lsof: command not found"],
+    ["lsof -i :3000", "zsh: command not found: lsof"],
+    ["lsof -i :3000", { stdout: "", stderr: "sh: 1: lsof: not found" }],
+    ["lsof -i :3000", { content: [{ type: "text", text: "/tmp/x/cmd: line 1: lsof: command not found" }] }],
+])("a missing tool is named and pointed at both places it could live: %s", async (command, response) => {
+    const told = context(await firePost(installSteeringHooks(), command, response));
+    expect(told).toContain("`lsof`");
+    expect(told).toContain("pnpm exec");
+    expect(told).toContain("environment.d");
+});
+
+// The guard that keeps this from crying wolf: a tool result is full of other people's text.
+test.each([
+    ["grep -rn 'command not found' /var/log/app.log", "app.log:12: bash: line 1: ffmpeg: command not found"],
+    ["node -e \"assert(err.message === 'sh: 1: convert: not found')\"", "ok"],
+    ["ls -la", "total 4\ndrwxr-xr-x 2 root root 4096 Jan 1 00:00 ."],
+])("output that merely quotes a shell failure is left alone: %s", async (command, response) => {
+    expect(await firePost(installSteeringHooks(), command, response)).toEqual({});
+});
+
+// A name that only appears as part of a longer path or word is not the thing that failed.
+test("a substring match does not count as the command naming the tool", async () => {
+    expect(await firePost(installSteeringHooks(), "cat /var/log/file.log", "bash: file: command not found")).toEqual({});
+});
+
+test("the missing-tool notice is told once per turn", async () => {
+    const hooks = installSteeringHooks();
+    expect(context(await firePost(hooks, "lsof -i :3000", "bash: lsof: command not found"))).toBeDefined();
+    expect(await firePost(hooks, "tree -L 2", "bash: tree: command not found")).toEqual({});
+});

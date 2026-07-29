@@ -769,7 +769,8 @@ const baseOptions = (
     // Hooks fire even under bypassPermissions, and for subagents too. tmux: every Bash command runs inside an
     // `agent-*` tmux session (bin/tmux-run) so the terminal panel can watch the agent work live (the rtk
     // backend rewrites the command to `rtk <cmd>` inside the same wrapper). Installs: an image-scoped install
-    // is pointed at the owner-approved overlay. Diagnostics: every native Edit/Write is type-checked by the
+    // is pointed at the owner-approved overlay, and so is a command that came back `not found`, which is the
+    // same problem noticed one step earlier. Diagnostics: every native Edit/Write is type-checked by the
     // resident lsp service and compile errors ride back as additionalContext.
     hooks: mergeHooks(
         tmuxEnabled ? bashTmuxHooks(request.filterBackend, Object.keys(request.cliEnv ?? {}), request.isolation) : {},

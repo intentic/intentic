@@ -1979,13 +1979,15 @@ export const PanelSummarySchema = z.object({
     role: z.enum(["intent", "desired-state", "app"]).optional(),
     // Content facts: deploy.config.ts (the intent ledger's day-one marker), desired-state.json (present after
     // the first resolve), .intentic/ui/index.html (a sandboxed directory UI), pnpm-workspace.yaml +
-    // turbo.json (a pnpm+turbo monorepo), and vitest evidence (a root vitest.config.ts, or "vitest" in the
-    // root manifest / workspace catalog).
+    // turbo.json (a pnpm+turbo monorepo), vitest evidence (a root vitest.config.ts, or "vitest" in the
+    // root manifest / workspace catalog), and docs/user-stories (a directory of stories an agent can test
+    // against the running app — the one fact here that says nothing about the repo's language).
     deployConfig: z.boolean(),
     desiredState: z.boolean(),
     directoryUi: z.boolean(),
     monorepo: z.boolean(),
     vitest: z.boolean(),
+    userStories: z.boolean(),
 });
 export type PanelSummary = z.infer<typeof PanelSummarySchema>;
 export const PanelsListSchema = z.object({ panels: z.array(PanelSummarySchema) });

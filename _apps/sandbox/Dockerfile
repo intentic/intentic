@@ -150,6 +150,59 @@ RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \
     && /usr/local/bin/cloudflared --version
+# The ordinary-CLI floor. Every install above is here because a FEATURE needs it; this layer is here because
+# an AGENT reaches for it. Mining this workspace's session transcripts (both `command not found` and invoked
+# binaries that resolve to nothing) shows a model does not adapt gracefully when a staple is missing — it
+# improvises around it and the work gets worse: `file` was reached for in 8 sessions, `netstat` in 7, `tree`
+# in 3, `lsof`/`fuser` in 3 more, and not once did the agent install any of them. That same mining is what put
+# pip and the tsx shim in this image; below is the rest of the list, held to tools that are small, generic,
+# and useful to the owner in a web terminal too.
+#   diagnostics — lsof/fuser answer "what is holding this port or file", the question an agent asks every time
+#     a dev server won't bind and the one `ss` only half answers; net-tools is muscle memory (netstat,
+#     ifconfig) that no amount of iproute2 displaces; strace is the only way to see where something hangs;
+#     psmisc also brings killall/pstree; ping/traceroute/dnsutils/netcat/socat are the reachability ladder.
+#   files & data — file identifies a blob before the agent cats 2 MiB of binary into its own context; tree is
+#     how a model asks for a directory's shape; unzip/zip/xz/zstd/bzip2 open what curl brings back; sqlite3
+#     reads the .db a project keeps in-repo; patch applies a diff that isn't a git commit; bsdextrautils/xxd
+#     (hexdump, column) read the bytes; libxml2-utils and moreutils cover the two idioms with no shell
+#     equivalent — xmllint and `cmd file | sponge file`.
+#   shell floor — less (git's pager; without it a terminal `git log` is an unpaged wall), nano + vim-tiny
+#     (nano takes Debian's `editor` alternative, so an interactive `git commit` stops erroring out — the
+#     tradeoff is that a no -m commit now waits on an editor instead of failing fast, which is why the agent
+#     is told to always pass -m; vim-tiny registers `vi` but NOT `vim`, so the symlink below spares everyone
+#     who types the name they actually know — it is the reduced build, which beats a missing one), bc,
+#     envsubst, uuidgen, dos2unix, and wget — curl is baked, but half the install instructions on the
+#     internet, and in the model's weights, say wget.
+#   git-lfs is the one whose absence is SILENT: cloning an LFS repo without it yields pointer files that look
+#     like content, so the agent reads 130-byte stubs and reports on them. `install --system` registers the
+#     filters image-wide; the package alone does not.
+# Deliberately NOT here: shellcheck (18 MiB for a linter agents don't run on themselves), cron/at (nothing
+# runs a cron daemon — automations own scheduling, and an inert crontab that accepts jobs it will never fire
+# is worse than no crontab), man-db (a slim base ships no man pages for it to read), htop/ncdu (interactive-
+# only: an agent that starts one just waits out its timeout — `top` and `du` already answer the same question
+# in one shot), ffmpeg/imagemagick/pandoc and the database clients (heavy and task-specific — capability or
+# overlay), the language toolchains (overlay, as above), and fd (Debian installs it as `fdfind`, and a tool
+# present under the wrong name costs more turns than an absent one). Placed after the pinned installs above
+# so adding a staple here never re-runs the Docker/Chromium layers, and before the tree COPYs so it stays
+# cache-stable across source changes.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        lsof psmisc net-tools iputils-ping traceroute dnsutils netcat-openbsd socat strace \
+        file tree unzip zip xz-utils zstd bzip2 sqlite3 patch bsdextrautils xxd libxml2-utils moreutils \
+        less nano vim-tiny bc gettext-base uuid-runtime dos2unix wget git-lfs \
+    && ln -s /usr/bin/vim.tiny /usr/local/bin/vim \
+    && git lfs install --system \
+    && rm -rf /var/lib/apt/lists/*
+# yq on PATH — jq's counterpart for YAML, and until now there was NO way to read a YAML file programmatically
+# here: python3 is baked for node-gyp, but Debian's interpreter ships no PyYAML, so an agent editing a compose
+# file, a CI pipeline or a k8s manifest had to hand-patch it with sed. Debian's own `yq` package is a
+# DIFFERENT program (a Python wrapper around jq) whose write syntax is not the one every model has learned, so
+# this is upstream's Go binary — pinned and version-checked like cloudflared/rtk, same rationale.
+ARG YQ_VERSION=4.53.3
+RUN arch="$(dpkg --print-architecture)" \
+    && curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${arch}" -o /usr/local/bin/yq \
+    && chmod +x /usr/local/bin/yq \
+    && yq --version
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
 # connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
 # runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as

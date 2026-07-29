@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
+import { watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Conversation, turnDefaults, turnRequestBody } from "./conversation";
 import { acksOf, type ChatMessage, isAcknowledgment, transcriptOf, turnsOf } from "./transcript";
@@ -914,7 +915,14 @@ describe(`Conversation`, () => {
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
         sandboxRequestMock.mockImplementation(
             sseResponse([
-                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `scheduled`, account: `acct-spent` },
+                {
+                    kind: `error`,
+                    code: `rate_limit`,
+                    message: `Claude usage limit reached.`,
+                    resetsAt,
+                    autoResume: `scheduled`,
+                    account: `acct-spent`,
+                },
                 { kind: `done` },
             ]),
         );
@@ -961,7 +969,14 @@ describe(`Conversation`, () => {
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
         sandboxRequestMock.mockImplementation(
             sseResponse([
-                { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, autoResume: `available`, account: `acct-spent` },
+                {
+                    kind: `error`,
+                    code: `rate_limit`,
+                    message: `Claude usage limit reached.`,
+                    resetsAt,
+                    autoResume: `available`,
+                    account: `acct-spent`,
+                },
                 { kind: `done` },
             ]),
         );
@@ -1287,6 +1302,56 @@ describe(`Conversation`, () => {
         // The run's frames armed the session exactly as they would have for the initiating window.
         expect(conversation.session.value).toMatchObject({ id: `s-9` });
         expect(conversation.streaming.value).toBe(false);
+    });
+
+    /* The replay/live boundary the head's `seq` names (see Conversation.replaying): what the run had already
+     * logged when this window attached is history being re-told, and only what is still standing past it is
+     * news. The plan preview's auto-open reads it — a replayed proposal the user answered long ago must not
+     * throw the preview back in front of them (useChat.test.ts holds that end of it). */
+    it(`marks the head's already-logged frames as replay and drops the mark at the boundary`, async () => {
+        const conversation = new Conversation(`c1`);
+        const marks: boolean[] = [];
+        sandboxRequestMock.mockImplementation(() => {
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    // Two frames logged before this attach, then one that arrives live.
+                    controller.enqueue(sseFrame(head({ prompt: `Continue`, seq: 2 })));
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 1, event: { kind: `delta`, text: `one ` } }));
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 2, event: { kind: `delta`, text: `two ` } }));
+                    controller.enqueue(sseFrame({ kind: `frame`, seq: 3, event: { kind: `delta`, text: `three` } }));
+                    controller.enqueue(sseFrame({ kind: `end` }));
+                    controller.close();
+                },
+            });
+            return Promise.resolve({ ok: true, body } as Response);
+        });
+        const stop = watch(conversation.replaying, (replaying) => marks.push(replaying), { flush: `sync` });
+
+        await expect(conversation.reattach()).resolves.toBe(true);
+        stop();
+
+        // Raised at the head and dropped once, on the frame carrying the boundary — the third frame is live, and
+        // a run that goes on streaming never re-enters replay.
+        expect(marks).toEqual([true, false]);
+        expect(conversation.messages.value.at(-1)).toMatchObject({ text: `one two three` });
+    });
+
+    it(`drops the replay mark when the stream dies before reaching the boundary`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(() =>
+            // A head promising three logged frames, one delivered, then the connection breaks — and every
+            // re-attach after it fails, so the follow gives up mid-replay.
+            Promise.resolve({
+                ok: true,
+                body: chunkStream([head({ seq: 3 }), { kind: `frame`, seq: 1, event: { kind: `delta`, text: `one` } }], `error`),
+            } as Response),
+        );
+
+        await conversation.reattach();
+
+        // Left marked, the conversation would read as "still re-telling history" forever, and a plan it parks
+        // on later would never surface.
+        expect(conversation.replaying.value).toBe(false);
     });
 
     /* The transcript-loss bug: reattach appends the running turn's prompt bubble to whatever the transcript
@@ -1631,9 +1696,7 @@ describe(`turnRequestBody`, () => {
         expect(bare).not.toHaveProperty(`attachments`);
         expect(bare).not.toHaveProperty(`editorContext`);
 
-        const full = wire(
-            turnRequestBody({ ...base, title: `Do the thing`, attachmentPaths: [`a.png`], editorContext: { file: `src/app.ts` } }),
-        );
+        const full = wire(turnRequestBody({ ...base, title: `Do the thing`, attachmentPaths: [`a.png`], editorContext: { file: `src/app.ts` } }));
         expect(full).toMatchObject({ title: `Do the thing`, attachments: [`a.png`], editorContext: { file: `src/app.ts` } });
     });
 });

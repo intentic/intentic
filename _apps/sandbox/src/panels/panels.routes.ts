@@ -19,6 +19,10 @@ import { probePort } from "../processes/managed-processes.js";
 // ponytail: substring match, not a manifest parse — parse catalog/devDependencies if a stray mention ever bites.
 const mentionsVitest = (file: string): boolean => existsSync(file) && readFileSync(file, "utf8").includes("vitest");
 
+// The convention the exploratory-tests extension detects on: a repo describing its features as user stories,
+// one file each. A directory rather than a marker file because the stories ARE the evidence.
+const USER_STORIES_DIR = join("docs", "user-stories");
+
 export const createPanelsRoutes = (services: Services) => {
     const i = implement(panelsContract).$context<OrpcContext>();
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
@@ -48,6 +52,7 @@ export const createPanelsRoutes = (services: Services) => {
                             existsSync(join(dir, "vitest.config.ts")) ||
                             mentionsVitest(join(dir, "pnpm-workspace.yaml")) ||
                             mentionsVitest(join(dir, "package.json")),
+                        userStories: existsSync(join(dir, USER_STORIES_DIR)),
                     };
                     const withRole = (REPO_ROLES as readonly string[]).includes(repo) ? Object.assign(summary, { role: repo as RepoRole }) : summary;
                     const withPort = port !== undefined ? Object.assign(withRole, { port }) : withRole;

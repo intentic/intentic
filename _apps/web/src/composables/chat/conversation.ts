@@ -441,6 +441,15 @@ export class Conversation {
 
     readonly messages = computed<readonly ChatMessage[]>(() => this.state.value.messages);
     readonly streaming = ref(false);
+    /* True while the attached stream is still re-telling frames that PREDATE this attach — the head's `seq` is
+     * the daemon's replay/live boundary (see follow). The transcript is rebuilt from that frame log, so a card
+     * the user answered long ago passes back through `pending` on its way to the answer that froze it: a run
+     * this window is joining (a reload, a redeploy, a second window, a probe) re-tells the whole story.
+     *
+     * Rendering follows the frames as they land — that flicker is the transcript being drawn. Anything that
+     * ACTS on what a frame says (the plan preview's auto-open) waits for this to drop, because a replayed
+     * proposal is not a proposal: only what is still pending at the boundary is waiting on the user. */
+    readonly replaying = ref(false);
     readonly error = ref<string | null>(null);
     // This conversation's slash commands — replaced whole per `commands` frame, listed by the composer's `/`
     // popover. Both provider families publish them: an ACP agent mid-session, Claude at each turn's init (plus
@@ -894,6 +903,9 @@ export class Conversation {
         this.flushType();
         this.inflight = null;
         this.streaming.value = false;
+        // Nothing is streaming here, so nothing is replay — a stream that died mid-replay must not leave the
+        // conversation permanently marked as re-telling history.
+        this.replaying.value = false;
         this.turnStartedAt.value = undefined;
         this.persist();
         void this.drainQueue();
@@ -1346,6 +1358,10 @@ export class Conversation {
         let attached = false;
         let retryMs = 500;
         let turn: TurnContext | undefined;
+        // The seq the current attach head named: the run's log length at attach time, so every frame up to it
+        // is history this stream is re-telling and everything past it is live (see `replaying`). Re-read at
+        // each head, because a re-attach after a drop has its own boundary.
+        let replayUntil = 0;
         // Consecutive re-attaches that returned no new frames and no `end`. A run that keeps answering empty is
         // done with nothing left to stream (or never terminates its stream), so give up after a few rounds
         // rather than tight-looping the daemon at network speed. Reset the moment real progress arrives.
@@ -1401,10 +1417,21 @@ export class Conversation {
                             return false;
                         }
                         attached = true;
+                        // Frames the run had already logged when this attach landed are its story so far, not
+                        // news — whether this window is joining a turn another one started or re-joining its
+                        // own after a drop.
+                        replayUntil = parsed.seq;
+                        this.replaying.value = parsed.seq > cursor.after;
                     } else if (parsed.kind === `frame`) {
                         cursor.after = parsed.seq;
                         if (turn !== undefined) {
                             this.handleEvent(parsed.event, turn);
+                        }
+                        // The boundary frame is applied, so from the next one on the run is happening live. The
+                        // flag drops in the SAME tick the frame landed in, which is what lets a card that is
+                        // still pending here read as one genuinely awaiting the user.
+                        if (parsed.seq >= replayUntil) {
+                            this.replaying.value = false;
                         }
                     } else if (parsed.kind === `end`) {
                         return attached;
