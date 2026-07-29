@@ -22,6 +22,10 @@ export interface UsageStore {
     // Grouped by day × provider × account × model × harness × conversation, oldest day first. Inclusive UTC
     // day bounds.
     readonly rollup: (query: { from?: string | undefined; to?: string | undefined }) => Promise<UsageRollupRow[]>;
+    // The rows themselves, same bounds. The rollup is a projection built for the cost panels and cannot answer
+    // a question about the SPREAD of turns — the terse experiment needs a per-turn variance to put a margin on
+    // its delta, and summing that out of grouped rows is exactly the information the grouping destroyed.
+    readonly turns: (query: { from?: string | undefined; to?: string | undefined }) => Promise<UsageTurn[]>;
 }
 
 // The UTC calendar day an instant falls in. UTC, not the container's local zone: the sandbox's TZ is incidental
@@ -34,6 +38,10 @@ export const utcDay = (at: number): string => new Date(at).toISOString().slice(0
 // data, and a separator-based key would collide the moment one contained the separator.
 const groupKey = (row: Pick<UsageTurn, "day" | "provider" | "account" | "model" | "harness" | "conversationId">): string =>
     JSON.stringify([row.day, row.provider, row.account, row.model, row.harness, row.conversationId]);
+
+// Inclusive UTC day bounds; an absent bound is unbounded on that side.
+const inWindow = (turn: UsageTurn, query: { from?: string | undefined; to?: string | undefined }): boolean =>
+    (query.from === undefined || turn.day >= query.from) && (query.to === undefined || turn.day <= query.to);
 
 export const fileUsageStore = (path: string, now: () => number = Date.now): UsageStore => {
     let queue: Promise<unknown> = Promise.resolve();
@@ -71,10 +79,11 @@ export const fileUsageStore = (path: string, now: () => number = Date.now): Usag
             queue = step.catch(() => undefined);
             return step;
         },
+        turns: async (query) => (await read()).filter((turn) => inWindow(turn, query)),
         rollup: async (query) => {
             const rows = new Map<string, UsageRollupRow>();
             for (const turn of await read()) {
-                if ((query.from !== undefined && turn.day < query.from) || (query.to !== undefined && turn.day > query.to)) {
+                if (!inWindow(turn, query)) {
                     continue;
                 }
                 const key = groupKey(turn);

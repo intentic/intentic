@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import { useAgents } from "../../composables/agents/useAgents";
+import { relativeTime } from "../../composables/chat/catalog";
 import { providerAccounts } from "../../composables/chat/conversation";
 import {
     formatAge,
@@ -16,7 +17,11 @@ import {
     usageTone,
     usageWindowLabel,
 } from "../../composables/chat/usageStatus";
+import { useSavings } from "../../composables/sandbox/useSavings";
 import { useUsage } from "../../composables/sandbox/useUsage";
+import { compositionOf } from "./savingsChart";
+import SavingsArmsChart from "./SavingsArmsChart.vue";
+import SavingsStackBar from "./SavingsStackBar.vue";
 import UsageBarChart from "./UsageBarChart.vue";
 import UsageColumnChart from "./UsageColumnChart.vue";
 import UsageSparkline from "./UsageSparkline.vue";
@@ -57,6 +62,11 @@ import {
  * So the plan-limit meters are their own section with their own subject stated in the label — an earlier version
  * of this tab put a bare "1%" under the spend tiles and invited reading it as a budget, on an account that was
  * really 98% through its week.
+ *
+ * The Savings section answers a third: what the token-reduction settings were WORTH over the same window. It
+ * lives here rather than beside its switches on the Agent tab because a saving without a period is a lifetime
+ * number that only grows and can be compared to nothing — and the window, the refresh and the provenance rules
+ * this tab is built around are exactly what it needs. The switches keep their own one-line readouts.
  *
  * Cost and tokens stay two tiles for the same reason: unrelated scales, never one chart with two y-axes. */
 
@@ -136,6 +146,21 @@ const byModel = computed(() =>
 );
 const agentTitle = (id: string): string => fleet.value.find((agent) => agent.id === id)?.title ?? `${id.slice(0, 8)}…`;
 const byAgent = computed(() => rankByCost(current.value, (row) => row.conversationId, agentTitle, `Main tree`));
+
+// ---- savings ------------------------------------------------------------------------------------------------
+
+// Windowed daemon-side (unlike the spend rollup, which comes down whole) — the ledgers behind it hold a row per
+// Bash command and a row per turn, so the browser slicing them itself would mean shipping both raw.
+const { savings } = useSavings(window);
+const composition = computed(() => (savings.value === undefined ? undefined : compositionOf(savings.value.input)));
+// A section that would only say "nothing yet" is not shown at all — every other panel on this tab is about
+// turns that ran, and an empty savings card on a sandbox that never enabled a cleaner is just furniture.
+const hasSavings = computed(() => (savings.value?.input.commands ?? 0) > 0 || savings.value?.output !== undefined);
+// Under rtk the numbers cannot be windowed (its ledger reports no timestamps), so the section says which
+// calendar it is really on instead of sitting silently under a 7-day filter that does not reach it.
+const savingsPeriod = computed(() =>
+    savings.value?.input.windowed === false ? `all time — rtk's ledger reports no dates` : preset.value === `all` ? `all time` : `this range`,
+);
 
 // ---- plan limits --------------------------------------------------------------------------------------------
 
@@ -360,6 +385,65 @@ const hasSpend = computed(() => current.value.length > 0);
                         <h3 class="mb-3 text-sm font-semibold text-content">Cost by agent</h3>
                         <UsageBarChart v-if="byAgent.length > 0" :entries="byAgent" />
                         <p v-else :class="cmp.emptyState()">Nothing was billed in this range.</p>
+                    </Card>
+                </div>
+
+                <!-- SAVINGS — what the token-reduction settings were worth. Two cards, never one ranking of
+                     all the mechanisms together: the left one is measured (every command carries its own raw
+                     baseline, so the numbers are exact), the right one is an experiment (a turn cannot be
+                     re-run unsteered, so it needs a control group, an n and a margin). Bars side by side would
+                     lend the second the first's confidence. They are also different units of value — a saved
+                     tool-output token is saved again on every later request of the conversation, an output
+                     token is saved once but costs several times as much — which is why neither card totals
+                     into the other. -->
+                <div v-if="hasSavings" class="grid gap-3 lg:grid-cols-2">
+                    <Card class="flex flex-col">
+                        <div class="mb-1 flex items-baseline justify-between gap-3">
+                            <h3 class="text-sm font-semibold text-content">Tool output → assistant</h3>
+                            <span class="text-sm tabular-nums text-success">{{ savings?.input.savedPct ?? 0 }}% saved</span>
+                        </div>
+                        <!-- Provenance on its own line, not trailing the numbers: this card once sat on a
+                             ledger nothing was writing any more, and a frozen figure reads exactly like a live
+                             one unless its source and its age are stated. -->
+                        <p class="mb-3 text-2xs text-subtle">
+                            {{ formatCompact(savings?.input.commands ?? 0) }} commands · {{ savingsPeriod }} · via
+                            {{ savings?.input.source === `rtk` ? `rtk gain` : `the output filter` }}
+                            <template v-if="savings?.input.updatedAt !== undefined"
+                                >· last command {{ relativeTime(savings.input.updatedAt) }}</template
+                            >
+                        </p>
+
+                        <SavingsStackBar v-if="composition !== undefined && composition.rawTokens > 0" :composition="composition" />
+                        <p v-else :class="cmp.emptyState()">No shell output was cleaned in this range.</p>
+
+                        <!-- The whole-pipeline counterfactual, and the only one on this card that isn't
+                             sequential: the held-out commands were left raw at random, so this compares two
+                             populations rather than attributing within one. -->
+                        <p v-if="savings?.input.holdout.measuredSavedPct !== undefined" class="mt-3 border-t border-line pt-2.5 text-2xs text-muted">
+                            Holdout control: {{ savings.input.holdout.heldOut }} of
+                            {{ savings.input.holdout.heldOut + savings.input.holdout.cleaned }} commands left raw, putting the measured reduction at
+                            <span class="tabular-nums text-content">{{ savings.input.holdout.measuredSavedPct }}%</span>.
+                        </p>
+                    </Card>
+
+                    <Card class="flex flex-col">
+                        <div class="mb-1 flex items-baseline justify-between gap-3">
+                            <h3 class="text-sm font-semibold text-content">Assistant's own output</h3>
+                            <span class="text-2xs text-subtle">terse steer · A/B</span>
+                        </div>
+                        <p class="mb-3 text-2xs text-subtle">
+                            Mean output tokens per turn, steered against a random unsteered control — the only honest way to measure this, since a
+                            turn can't be re-run to see what it would have said.
+                        </p>
+
+                        <SavingsArmsChart v-if="savings?.output !== undefined" :output="savings.output" />
+                        <p v-else :class="cmp.emptyState()">
+                            Not being measured. Turn on
+                            <RouterLink :to="{ name: `sandbox`, params: { tab: `agent` } }" class="text-link hover:underline"
+                                >Terse responses</RouterLink
+                            >
+                            and give it a turn holdout — without a control group there is nothing to compare the steered turns against.
+                        </p>
                     </Card>
                 </div>
 

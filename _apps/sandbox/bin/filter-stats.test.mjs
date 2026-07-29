@@ -3,17 +3,20 @@ import { parseStatsFile, summarizeStats } from "./filter-stats.mjs";
 
 test("summarizeStats: saved-% and tokens come from the cleaned population only", () => {
     const rows = [
-        { command: "pnpm i", rawBytes: 4000, emittedBytes: 400, matched: ["pnpm"], heldOut: false },
-        { command: "vitest", rawBytes: 8000, emittedBytes: 800, matched: ["test"], heldOut: false },
+        { command: "pnpm i", rawBytes: 4000, emittedBytes: 400, matched: ["pnpm"], heldOut: false, stageBytes: { pnpm: 3600 } },
+        { command: "vitest", rawBytes: 8000, emittedBytes: 800, matched: ["test"], heldOut: false, stageBytes: { test: 6000, cap: 1200 } },
     ];
     const report = summarizeStats(rows);
     expect(report.commands).toBe(2);
     expect(report.rawTokens).toBe(3000); // (4000+8000)/4
     expect(report.emittedTokens).toBe(300); // (400+800)/4
     expect(report.savedPct).toBe(90);
+    // Ranked by what each mechanism SAVED, not by how often it fired — a handler can match constantly and be
+    // worth nothing, which is exactly what this list is read to find out.
     expect(report.perCleaner).toEqual([
-        { id: "pnpm", commands: 1 },
-        { id: "test", commands: 1 },
+        { id: "test", commands: 1, savedTokens: 1500 },
+        { id: "pnpm", commands: 1, savedTokens: 900 },
+        { id: "cap", commands: 1, savedTokens: 300 },
     ]);
 });
 

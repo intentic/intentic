@@ -40,7 +40,14 @@ exposes a master on/off in the Sandbox → Agent settings; finer specs are set v
 benchmarking. Unknown tokens are ignored (fail-open).
 
 **Provenance:** `agent-output-filter` appends one line per command to `historyRoot/logs/filter-stats.jsonl` with
-`rawBytes`/`emittedBytes` + the active `cleaners` + which `matched`. This is the live A/B ledger.
+`rawBytes`/`emittedBytes` + the active `cleaners` + which `matched` + `stageBytes`. This is the live A/B ledger.
+
+**Per-mechanism attribution:** `stageBytes` maps stage id → bytes that stage removed, weighed against what
+reached it (`cleanLines` returns `{ lines, stages }`). Sequential by construction, so the stages sum exactly to
+raw − emitted and stack into one bar; the flip side is that a cleaner running before the cap is credited with
+lines the cap would have taken anyway, so this is **not** "what turning it off would save" — the holdout is the
+only whole-pipeline counterfactual. Two stages have no toggle: `ansi` (escapes/`\r` frames) and `footer`, which
+is **negative** — the retrieval pointer adds bytes, and it rides the same ledger as what it bought.
 
 **Offline bench:** `pnpm --filter @intentic/sandbox bench:cleaners` replays a fixture corpus through named configs
 (off / all / no-cap / …) and reports Δtokens per config — deterministic, no agent (mirrors iq-bench). Add
@@ -61,6 +68,27 @@ Separate from tool-output cleaning: the **`terseOutput`** setting appends a shor
 **end** of the system prompt (a stable suffix, so it composes with `stableSystemPrompt` and doesn't bust the
 prompt cache), cutting the model's own output tokens. (Headroom-style effort routing is deferred — it maps poorly
 to intentic's per-turn tool loop; revisit if benchmarks show model output dominates.)
+
+**Measuring it needs an experiment.** A cleaned command yields its own baseline in the same event; a turn cannot
+be re-run to see what it would have said unsteered. So **`terseHoldout`** (fraction [0,1], default 0) is a
+turn-level holdout: `turn-plan.ts` flips the coin, and the arm it picked is stamped on the spend ledger
+(`UsageTurn.terse` — absent means the turn was never in the experiment, e.g. a custom system prompt, which drops
+the steer with everything else). `usage/terse-savings.ts` reads the two arms back: mean output tokens per turn,
+`n` per arm, and a Welch margin. Below `MIN_ARM_TURNS` (30) per arm it reports the arms and **no delta** — per-turn
+output is spread far too wide for a handful of turns to separate the steer from the work.
+
+## What the report says — `/settings/savings`
+
+`SavingsReport` is two families, deliberately never one ranking:
+
+- `input` — the cleaners, from the ledger of whichever backend is compressing (`filterBackend`). Exact, windowed
+  by UTC day. `windowed: false` under rtk, whose `gain` reports no timestamps, so the UI labels it all-time.
+- `output` — the terse A/B above. Absent entirely when the experiment isn't running.
+
+The web renders `input` as one stacked bar (mechanisms + what reached the assistant) on the Usage tab, where the
+range window lives, and puts each mechanism's saving next to its own switch on the Agent tab. Note the ledger
+lives under `logsRoot` and is therefore pruned by `pruneLogFiles` (5 MB → newest 1 MB, 30-day idle): it is a
+window of recent commands, not a lifetime record like `usage.jsonl`.
 
 ## Swapping the filter backend (external cleaners)
 

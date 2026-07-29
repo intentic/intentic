@@ -13,7 +13,6 @@ import {
     CapabilityStateSchema,
     CapabilityStatusSchema,
     CapabilitySummarySchema,
-    CleanerSavingsSchema,
     DraftSchema,
     DraftStatusSchema,
     DraftsListSchema,
@@ -97,7 +96,6 @@ export {
     CapabilityStateSchema,
     CapabilityStatusSchema,
     CapabilitySummarySchema,
-    CleanerSavingsSchema,
     DraftSchema,
     DraftStatusSchema,
     DraftsListSchema,
@@ -151,7 +149,6 @@ export type Draft = z.infer<typeof DraftSchema>;
 export type DraftSummary = z.infer<typeof DraftSummarySchema>;
 export type DraftsList = z.infer<typeof DraftsListSchema>;
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
-export type CleanerSavings = z.infer<typeof CleanerSavingsSchema>;
 export type BuiltinPromptText = z.infer<typeof BuiltinPromptTextSchema>;
 export type PanelSummary = z.infer<typeof PanelSummarySchema>;
 export type TemplateSummary = z.infer<typeof TemplateSummarySchema>;

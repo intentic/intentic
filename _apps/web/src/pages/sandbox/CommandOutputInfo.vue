@@ -139,21 +139,28 @@ const BACKENDS = [
         <InfoTable class="mt-4" :headers="[`Every command`, `Removes`]" :rows="GLOBAL_CLEANERS" />
         <p class="mt-1.5 text-2xs text-subtle">Dedupe and redaction run on failures too — neither can cost you a detail.</p>
 
-        <!-- ⑤ The holdout, as the ratio it is: a segmented same-ramp meter, one segment per ten commands. -->
-        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Holdout control</h3>
+        <!-- ⑤ What the numbers mean. The per-mechanism figure and the holdout answer DIFFERENT questions, and
+             a reader who thinks they are the same number will misread both: one is bookkeeping within a
+             command, the other is a comparison between two populations of commands. -->
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">What the savings numbers mean</h3>
         <p class="mt-1.5 text-2xs text-muted">
-            Proof rather than a promise: a slice of commands skips cleaning and is recorded raw, so the savings row can compare real cleaned output
-            against real raw output instead of estimating.
+            Every command is weighed before and after each rule runs, so the figure beside a switch is what that rule actually removed — counted, not
+            estimated. Read it in pipeline order, though:
+            <span class="font-medium text-content">the rules run one after another</span>, so a rule near the front is credited with lines the
+            head/tail cap behind it would have taken anyway. Turning it off usually costs less than its number suggests.
         </p>
         <div class="mt-2 flex items-center gap-3 rounded-lg border border-line bg-canvas px-2.5 py-2">
             <div class="flex shrink-0 gap-1" role="img" aria-label="One command in ten left raw">
                 <span v-for="slot in 10" :key="slot" class="h-4 w-2 rounded-sm" :class="slot === 1 ? `bg-content` : `bg-content/15`" />
             </div>
             <p class="text-2xs text-muted">
-                <span class="font-medium text-content">At 10%</span>, about 1 command in 10 is left raw. At 0, everything is cleaned and the reported
-                saving is an estimate.
+                <span class="font-medium text-content">Holdout, at 10%:</span> about 1 command in 10 skips cleaning and is recorded raw. That is the
+                only figure that covers the pipeline as a whole — a real cleaned-vs-raw comparison rather than an accounting of who removed what.
             </p>
         </div>
+        <p class="mt-1.5 text-2xs text-subtle">
+            The full breakdown — every mechanism, and what was left for the assistant — is on the Usage tab, where you can pick a date range.
+        </p>
 
         <!-- ⑥ A/B backends — two options a reader wants to scan row by row. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Native or rtk</h3>

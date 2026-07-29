@@ -3,8 +3,8 @@
 // bench's `discover` and (mirrored in TS) the daemon's /settings/savings route. Pure + dependency-free so it
 // rides the image next to the other bin cleaners and is unit-testable.
 //
-// Row shape (written by agent-output-filter): { rawBytes, emittedBytes, matched: string[], heldOut: boolean, command }.
-// ~4 chars/token, the same heuristic iq-engine's estimateTokens uses.
+// Row shape (written by agent-output-filter): { rawBytes, emittedBytes, matched: string[], heldOut: boolean,
+// command, stageBytes: { [id]: bytesRemoved } }. ~4 chars/token, the same heuristic iq-engine's estimateTokens uses.
 
 const sum = (rows, key) => rows.reduce((total, row) => total + (row[key] ?? 0), 0);
 const avg = (rows, key) => (rows.length === 0 ? 0 : sum(rows, key) / rows.length);
@@ -20,14 +20,20 @@ export const summarizeStats = (rows) => {
     const cleanedEmitted = sum(cleaned, "emittedBytes");
     const savedPct = cleanedRaw === 0 ? 0 : Math.round(((cleanedRaw - cleanedEmitted) / cleanedRaw) * 100);
 
-    // Which cleaner ids fired, across how many commands (the attribution the report's per-cleaner bars show).
-    const counts = new Map();
+    // What each mechanism was worth: bytes removed, summed over the commands it ran on. Sequential attribution
+    // (every stage was weighed against what reached it), so these sum to raw − emitted and stack cleanly. A
+    // stage that ran and removed nothing is still counted in `commands` — that is a different fact from a
+    // cleaner that never fired at all, and it is the one that says a handler has stopped matching.
+    const stages = new Map();
     for (const row of cleaned) {
-        for (const id of row.matched ?? []) {
-            counts.set(id, (counts.get(id) ?? 0) + 1);
+        for (const [id, bytes] of Object.entries(row.stageBytes ?? {})) {
+            const current = stages.get(id) ?? { commands: 0, bytes: 0 };
+            stages.set(id, { commands: current.commands + 1, bytes: current.bytes + bytes });
         }
     }
-    const perCleaner = [...counts.entries()].map(([id, commands]) => ({ id, commands })).toSorted((a, b) => b.commands - a.commands);
+    const perCleaner = [...stages.entries()]
+        .map(([id, entry]) => ({ id, commands: entry.commands, savedTokens: tokens(entry.bytes) }))
+        .toSorted((a, b) => b.savedTokens - a.savedTokens);
 
     // Measured saving: avg emitted tokens on cleaned commands vs avg raw tokens on the held-out control. Because
     // holdout is a random sample of the same command stream, this is a real reduction, not a per-command estimate.

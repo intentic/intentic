@@ -31,57 +31,57 @@ test("parseCleaners: unknown tokens are ignored (fail-open), never thrown", () =
 
 test("cleanLines: strips pnpm progress on success when enabled", () => {
     const lines = ["Progress: resolved 100", "added 5 packages", "done"];
-    expect(cleanLines(lines, { command: "pnpm install", exitCode: "0", enabled: new Set(CLEANERS) })).toEqual(["added 5 packages", "done"]);
+    expect(cleanLines(lines, { command: "pnpm install", exitCode: "0", enabled: new Set(CLEANERS) }).lines).toEqual(["added 5 packages", "done"]);
 });
 
 test("cleanLines: a disabled cleaner leaves its noise untouched", () => {
     const lines = ["Progress: resolved 100", "added 5 packages"];
-    expect(cleanLines(lines, { command: "pnpm install", exitCode: "0", enabled: parseCleaners("-pnpm") })).toEqual(lines);
+    expect(cleanLines(lines, { command: "pnpm install", exitCode: "0", enabled: parseCleaners("-pnpm") }).lines).toEqual(lines);
 });
 
 test("cleanLines: failure keeps everything (no command strip)", () => {
     const lines = ["Progress: resolved 100", "error: boom"];
-    expect(cleanLines(lines, { command: "pnpm install", exitCode: "1", enabled: new Set(CLEANERS) })).toEqual(lines);
+    expect(cleanLines(lines, { command: "pnpm install", exitCode: "1", enabled: new Set(CLEANERS) }).lines).toEqual(lines);
 });
 
 test("cleanLines: cap elides the middle past MAX when enabled", () => {
     const lines = Array.from({ length: 200 }, (_, i) => `line ${i}`);
-    const out = cleanLines(lines, { command: "echo", exitCode: "0", enabled: new Set(CLEANERS) });
+    const out = cleanLines(lines, { command: "echo", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
     expect(out.length).toBeLessThan(200);
     expect(out.some((line) => /lines elided/.test(line))).toBe(true);
 });
 
 test("cleanLines: cap disabled keeps all lines", () => {
     const lines = Array.from({ length: 200 }, (_, i) => `line ${i}`);
-    expect(cleanLines(lines, { command: "echo", exitCode: "0", enabled: parseCleaners("-cap") })).toHaveLength(200);
+    expect(cleanLines(lines, { command: "echo", exitCode: "0", enabled: parseCleaners("-cap") }).lines).toHaveLength(200);
 });
 
 test("filterOutput: strips ANSI and appends a footer when lines were dropped", () => {
     const raw = `${["Progress: a", "Progress: b", "\x1b[32mdone\x1b[0m"].join("\n")}\n`;
-    const out = filterOutput(raw, "pnpm install", "0", "1", "/logs/x.log");
+    const out = filterOutput(raw, "pnpm install", "0", "1", "/logs/x.log").out;
     expect(out).toContain("done");
     expect(out).not.toContain("\x1b[");
     expect(out).toContain("retrieve-output /logs/x.log");
 });
 
 test("filterOutput: no footer when nothing was dropped", () => {
-    expect(filterOutput("hello\nworld\n", "echo hi", "0", "0", "")).toBe("hello\nworld\n");
+    expect(filterOutput("hello\nworld\n", "echo hi", "0", "0", "").out).toBe("hello\nworld\n");
 });
 
 test("test cleaner: drops per-test pass lines on green, keeps the summary", () => {
     const lines = ["✓ src/a.test.ts (3)", "✓ src/b.test.ts (2)", "Test Files  2 passed (2)", "Tests  5 passed (5)"];
-    const out = cleanLines(lines, { command: "vitest run", exitCode: "0", enabled: new Set(CLEANERS) });
+    const out = cleanLines(lines, { command: "vitest run", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
     expect(out).toEqual(["Test Files  2 passed (2)", "Tests  5 passed (5)"]);
 });
 
 test("test cleaner: a failing run keeps everything (command cleaners skip on non-zero exit)", () => {
     const lines = ["✓ src/a.test.ts (3)", "FAIL src/b.test.ts", "AssertionError: expected 1 to be 2"];
-    expect(cleanLines(lines, { command: "vitest run", exitCode: "1", enabled: new Set(CLEANERS) })).toEqual(lines);
+    expect(cleanLines(lines, { command: "vitest run", exitCode: "1", enabled: new Set(CLEANERS) }).lines).toEqual(lines);
 });
 
 test("dedup: collapses a run of >=3 identical lines with a count", () => {
     const lines = ["warn: retry", "warn: retry", "warn: retry", "warn: retry", "done"];
-    expect(cleanLines(lines, { command: "echo", exitCode: "0", enabled: parseCleaners("dedup") })).toEqual([
+    expect(cleanLines(lines, { command: "echo", exitCode: "0", enabled: parseCleaners("dedup") }).lines).toEqual([
         "warn: retry",
         "  … (3 more identical lines)",
         "done",
@@ -90,29 +90,31 @@ test("dedup: collapses a run of >=3 identical lines with a count", () => {
 
 test("dedup: leaves distinct lines and short runs untouched", () => {
     const lines = ["a", "b", "b", "c"];
-    expect(cleanLines(lines, { command: "echo", exitCode: "0", enabled: parseCleaners("dedup") })).toEqual(lines);
+    expect(cleanLines(lines, { command: "echo", exitCode: "0", enabled: parseCleaners("dedup") }).lines).toEqual(lines);
 });
 
 test("redact: masks secret-named assignments, AWS keys, and bearer tokens on success and failure", () => {
     const lines = ["export GITHUB_TOKEN=ghp_abcd1234", "key AKIAIOSFODNN7EXAMPLE end", "Authorization: Bearer sk-xyz.123"];
-    expect(cleanLines(lines, { command: "env", exitCode: "0", enabled: parseCleaners("redact") })).toEqual([
+    expect(cleanLines(lines, { command: "env", exitCode: "0", enabled: parseCleaners("redact") }).lines).toEqual([
         "export GITHUB_TOKEN=***",
         "key *** end",
         "Authorization: Bearer ***",
     ]);
-    expect(cleanLines(["boom TOKEN=secretval"], { command: "env", exitCode: "1", enabled: parseCleaners("redact") })).toEqual(["boom TOKEN=***"]);
+    expect(cleanLines(["boom TOKEN=secretval"], { command: "env", exitCode: "1", enabled: parseCleaners("redact") }).lines).toEqual([
+        "boom TOKEN=***",
+    ]);
 });
 
 test("lint cleaner: drops tsc perf diagnostics and node warnings on green, keeps real diagnostics", () => {
     const lines = ["(node:42) ExperimentalWarning: Type Stripping", "Files:  412", "Check time:  3.10s", "src/a.ts(1,1): warning TS6133: unused"];
-    expect(cleanLines(lines, { command: "tsc --noEmit --diagnostics", exitCode: "0", enabled: parseCleaners("lint") })).toEqual([
+    expect(cleanLines(lines, { command: "tsc --noEmit --diagnostics", exitCode: "0", enabled: parseCleaners("lint") }).lines).toEqual([
         "src/a.ts(1,1): warning TS6133: unused",
     ]);
 });
 
 test("ls cleaner: strips the `total N` block header", () => {
     const lines = ["total 24", "-rw-r--r-- 1 u u 120 a.ts", "-rw-r--r-- 1 u u 240 b.ts"];
-    expect(cleanLines(lines, { command: "ls -l", exitCode: "0", enabled: parseCleaners("ls") })).toEqual([
+    expect(cleanLines(lines, { command: "ls -l", exitCode: "0", enabled: parseCleaners("ls") }).lines).toEqual([
         "-rw-r--r-- 1 u u 120 a.ts",
         "-rw-r--r-- 1 u u 240 b.ts",
     ]);
@@ -120,7 +122,7 @@ test("ls cleaner: strips the `total N` block header", () => {
 
 test("build cleaner: strips cargo per-crate Compiling/Updating noise, keeps Finished", () => {
     const lines = ["   Compiling serde v1.0", "   Updating crates.io index", "    Finished dev [unoptimized] in 12.4s"];
-    expect(cleanLines(lines, { command: "cargo build", exitCode: "0", enabled: parseCleaners("build") })).toEqual([
+    expect(cleanLines(lines, { command: "cargo build", exitCode: "0", enabled: parseCleaners("build") }).lines).toEqual([
         "    Finished dev [unoptimized] in 12.4s",
     ]);
 });
@@ -150,16 +152,16 @@ test("collapseCached: different output for the same command is not a hit", () =>
 test("filterOutput: cache collapses a byte-identical success repeat, and is a no-op without a store", () => {
     const store = memoryStore();
     const raw = "hello\nworld\n";
-    expect(filterOutput(raw, "echo hi", "0", "0", "", new Set(CLEANERS), store)).toBe("hello\nworld\n");
-    const repeat = filterOutput(raw, "echo hi", "0", "0", "/logs/y.log", new Set(CLEANERS), store);
+    expect(filterOutput(raw, "echo hi", "0", "0", "", new Set(CLEANERS), store).out).toBe("hello\nworld\n");
+    const repeat = filterOutput(raw, "echo hi", "0", "0", "/logs/y.log", new Set(CLEANERS), store).out;
     expect(repeat).toContain(CACHE_MARKER);
     // Without a store the same input passes through unchanged (deterministic for the offline bench).
-    expect(filterOutput(raw, "echo hi", "0", "0", "")).toBe("hello\nworld\n");
+    expect(filterOutput(raw, "echo hi", "0", "0", "").out).toBe("hello\nworld\n");
 });
 
 test("filterOutput: cache disabled leaves a repeat untouched", () => {
     const store = memoryStore();
     const raw = "same\noutput\n";
     filterOutput(raw, "echo x", "0", "0", "", parseCleaners("-cache"), store);
-    expect(filterOutput(raw, "echo x", "0", "0", "", parseCleaners("-cache"), store)).toBe("same\noutput\n");
+    expect(filterOutput(raw, "echo x", "0", "0", "", parseCleaners("-cache"), store).out).toBe("same\noutput\n");
 });

@@ -3,11 +3,13 @@ import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { CleanerSavings } from "@intentic/sandbox-contract";
+import type { DayWindowQuery, InputSavings } from "@intentic/sandbox-contract";
+import { utcDay } from "../usage/usage-store.js";
 import { logsRoot } from "./log-files.js";
 
-// The output-cleaner savings report, read from whichever backend is ACTUALLY compressing the agent's shell
-// output (`filterBackend`) — because only that backend's ledger is being written:
+// The input-side savings report — shell output the cleaners trimmed before the model saw it — read from
+// whichever backend is ACTUALLY compressing the agent's output (`filterBackend`), because only that backend's
+// ledger is being written:
 //
 //   native — historyRoot/logs/filter-stats.jsonl, one row per agent Bash command written by
 //            bin/agent-output-filter. Its aggregation mirrors bin/filter-stats.mjs `summarizeStats` — the
@@ -32,6 +34,8 @@ interface StatRow {
     readonly matched?: string[];
     readonly heldOut?: boolean;
     readonly command?: string;
+    // Bytes each mechanism removed on this command, keyed by stage id (negative ⇒ added, i.e. the footer).
+    readonly stageBytes?: Record<string, number>;
 }
 
 const tokens = (bytes: number): number => Math.round(bytes / 4);
@@ -50,8 +54,9 @@ const parseRows = (text: string): StatRow[] =>
             }
         });
 
-const zeroed = (source: "native" | "rtk"): CleanerSavings => ({
+const zeroed = (source: "native" | "rtk", windowed: boolean): InputSavings => ({
     source,
+    windowed,
     commands: 0,
     rawTokens: 0,
     emittedTokens: 0,
@@ -62,8 +67,9 @@ const zeroed = (source: "native" | "rtk"): CleanerSavings => ({
 });
 
 // `rtk gain --format json` — rtk's own ledger, the only record of what rtk saved (it runs the command, so the
-// uncompressed output never reaches us to measure). Totals only: rtk attributes no per-command cleaner ids and
-// keeps no held-out control, so perCleaner/holdout/gaps stay empty and the card simply omits those sections.
+// uncompressed output never reaches us to measure). Totals only: rtk attributes no per-command cleaner ids,
+// keeps no held-out control, and stamps no timestamp on what it reports — so perCleaner/holdout/gaps stay
+// empty, `windowed` is false, and the card says all-time instead of letting a 7-day filter mislabel it.
 // input/output are already token counts, not bytes.
 interface RtkGain {
     readonly summary?: {
@@ -83,7 +89,7 @@ const rtkLedgerMtime = async (): Promise<number | undefined> => {
     );
 };
 
-const readRtkSavings = async (): Promise<CleanerSavings> => {
+const readRtkSavings = async (): Promise<InputSavings> => {
     let gain: RtkGain;
     try {
         // Global scope (not --project): the agent's commands run all over the sandbox, not in one repo.
@@ -92,7 +98,7 @@ const readRtkSavings = async (): Promise<CleanerSavings> => {
     } catch {
         // rtk absent from the image, or a version whose `gain` speaks a different dialect — report nothing
         // rather than a stale number from the other backend's ledger.
-        return zeroed("rtk");
+        return zeroed("rtk", false);
     }
     const commands = gain.summary?.total_commands ?? 0;
     const rawTokens = gain.summary?.total_input ?? 0;
@@ -101,12 +107,24 @@ const readRtkSavings = async (): Promise<CleanerSavings> => {
     // avg_savings_pct is a mean over commands and disagrees with the totals line by a point or two).
     const savedPct = rawTokens === 0 ? 0 : Math.round(((rawTokens - emittedTokens) / rawTokens) * 100);
     const updatedAt = await rtkLedgerMtime();
-    return { ...zeroed("rtk"), commands, rawTokens, emittedTokens, savedPct, ...(updatedAt !== undefined ? { updatedAt } : {}) };
+    return { ...zeroed("rtk", false), commands, rawTokens, emittedTokens, savedPct, ...(updatedAt !== undefined ? { updatedAt } : {}) };
 };
 
-const readLedgerSavings = async (historyRoot: string): Promise<CleanerSavings> => {
+const readLedgerSavings = async (historyRoot: string, window: DayWindowQuery): Promise<InputSavings> => {
     const path = join(logsRoot(historyRoot), "filter-stats.jsonl");
-    const rows = await readFile(path, "utf8").then(parseRows, () => []);
+    const all = await readFile(path, "utf8").then(parseRows, () => []);
+    // The reader's window, on the ledger's own calendar (the UTC day the command ran). A row with no timestamp
+    // predates nothing this report can place in time, so a bounded window drops it rather than pool it in.
+    const rows = all.filter((row) => {
+        if (window.from === undefined && window.to === undefined) {
+            return true;
+        }
+        if (typeof row.ts !== "number") {
+            return false;
+        }
+        const day = utcDay(row.ts);
+        return (window.from === undefined || day >= window.from) && (window.to === undefined || day <= window.to);
+    });
 
     // Held-out commands bypassed cleaning (the measurement control) — excluded from saved-% and gaps.
     const cleaned = rows.filter((row) => row.heldOut !== true);
@@ -116,13 +134,20 @@ const readLedgerSavings = async (historyRoot: string): Promise<CleanerSavings> =
     const cleanedEmitted = sumBytes(cleaned, "emittedBytes");
     const savedPct = cleanedRaw === 0 ? 0 : Math.round(((cleanedRaw - cleanedEmitted) / cleanedRaw) * 100);
 
-    const counts = new Map<string, number>();
+    // Per-mechanism attribution: bytes removed, summed over the commands each stage ran on. Sequential — every
+    // stage was weighed against what reached it — so these sum to raw − emitted and can be stacked. Commands
+    // count the rows the stage RAN on, including the ones where it removed nothing: "fired and was worth
+    // nothing" and "never ran" are different facts about a cleaner.
+    const stages = new Map<string, { commands: number; bytes: number }>();
     for (const row of cleaned) {
-        for (const id of row.matched ?? []) {
-            counts.set(id, (counts.get(id) ?? 0) + 1);
+        for (const [id, bytes] of Object.entries(row.stageBytes ?? {})) {
+            const current = stages.get(id) ?? { commands: 0, bytes: 0 };
+            stages.set(id, { commands: current.commands + 1, bytes: current.bytes + bytes });
         }
     }
-    const perCleaner = [...counts.entries()].map(([id, commands]) => ({ id, commands })).toSorted((a, b) => b.commands - a.commands);
+    const perCleaner = [...stages.entries()]
+        .map(([id, entry]) => ({ id, commands: entry.commands, savedTokens: tokens(entry.bytes) }))
+        .toSorted((a, b) => b.savedTokens - a.savedTokens);
 
     // Measured saving: avg emitted tokens on cleaned commands vs avg raw tokens on the held-out control (a random
     // sample of the same command stream) — a real reduction, not a per-command estimate. Absent without a holdout.
@@ -145,6 +170,7 @@ const readLedgerSavings = async (historyRoot: string): Promise<CleanerSavings> =
 
     return {
         source: "native",
+        windowed: true,
         ...(updatedAt !== undefined ? { updatedAt } : {}),
         commands: rows.length,
         rawTokens: tokens(sumBytes(rows, "rawBytes")),
@@ -157,6 +183,7 @@ const readLedgerSavings = async (historyRoot: string): Promise<CleanerSavings> =
 };
 
 // The report for the backend that is actually compressing output. `backend` is the live `filterBackend` setting;
-// route it wrong and the card reports a ledger nobody is writing.
-export const readCleanerSavings = async (historyRoot: string, backend: "native" | "rtk"): Promise<CleanerSavings> =>
-    backend === "rtk" ? readRtkSavings() : readLedgerSavings(historyRoot);
+// route it wrong and the card reports a ledger nobody is writing. The window is ignored under rtk, which reports
+// no timestamps — hence `windowed: false` on what comes back, so the screen can say which calendar it is on.
+export const readInputSavings = async (historyRoot: string, backend: "native" | "rtk", window: DayWindowQuery): Promise<InputSavings> =>
+    backend === "rtk" ? readRtkSavings() : readLedgerSavings(historyRoot, window);

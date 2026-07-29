@@ -87,7 +87,7 @@ const CONFIGS = [
 ];
 
 const cleanedFor = (fixture, spec) =>
-    spec === "off" ? fixture.raw : filterOutput(fixture.raw, fixture.command, fixture.exitCode, "0", "", parseCleaners(spec));
+    spec === "off" ? fixture.raw : filterOutput(fixture.raw, fixture.command, fixture.exitCode, "0", "", parseCleaners(spec)).out;
 
 const bench = () => {
     const baseline = FIXTURES.reduce((sum, fixture) => sum + estimateTokens(fixture.raw), 0);
@@ -117,7 +117,11 @@ const discover = (file) => {
         `commands: ${report.commands} · raw ~${report.rawTokens} tok → emitted ~${report.emittedTokens} tok · saved ${report.savedPct}%${measured}\n`,
     );
     if (report.perCleaner.length > 0) {
-        process.stdout.write(`by cleaner: ${report.perCleaner.map((entry) => `${entry.id} ×${entry.commands}`).join(", ")}\n`);
+        // Tokens first: which handler is WORTH the most is the question this list is read for, and a count of
+        // how often one fired answers a different one (a cleaner can fire constantly and save nothing).
+        process.stdout.write(
+            `by mechanism: ${report.perCleaner.map((entry) => `${entry.id} ~${entry.savedTokens} tok ×${entry.commands}`).join(", ")}\n`,
+        );
     }
     process.stdout.write("\n");
     if (report.gaps.length === 0) {

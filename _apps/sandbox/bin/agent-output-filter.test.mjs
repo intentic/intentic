@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { filterOutput } from "./agent-output-filter.mjs";
 
-const run = (raw, { command = "some-cmd", exit = "0", duration = "1", log = "" } = {}) => filterOutput(raw, command, exit, duration, log);
+// filterOutput returns the result AND its per-mechanism attribution; these assertions are about the result.
+const run = (raw, { command = "some-cmd", exit = "0", duration = "1", log = "" } = {}) => filterOutput(raw, command, exit, duration, log).out;
+const stagesOf = (raw, { command = "some-cmd", exit = "0", duration = "1", log = "" } = {}) => filterOutput(raw, command, exit, duration, log).stages;
 
 describe("filterOutput", () => {
     it("strips ANSI codes and collapses \\r progress frames to the final frame", () => {
@@ -60,5 +62,23 @@ describe("filterOutput", () => {
         const out = run("npm warn old\nok\n", { command: "npm i" });
         expect(out).toContain("filtered to 1");
         expect(out).not.toContain("retrieve-output");
+    });
+
+    // The attribution the savings report is built on. Two properties matter and neither is about any single
+    // mechanism: every byte between raw and emitted is accounted for by SOME stage, and the footer is on the
+    // ledger as the cost it is rather than quietly netted out of the savings it bought.
+    it("attributes every byte between raw and emitted to a stage", () => {
+        const raw = "\x1b[32mnpm warn deprecated foo@1: gone\x1b[0m\nadded 100 packages in 2s\n";
+        const { out, stages } = filterOutput(raw, "npm ci", "0", "1", "/logs/x.log");
+        const attributed = stages.reduce((sum, stage) => sum + stage.saved, 0);
+        expect(attributed).toBe(raw.length - out.length);
+        expect(stages.map((stage) => stage.id)).toContain("ansi");
+        expect(stages.map((stage) => stage.id)).toContain("npm");
+    });
+
+    it("records the retrieval footer as a cost, not a saving", () => {
+        const raw = "npm warn deprecated foo@1: gone\nadded 100 packages in 2s\n";
+        const footer = stagesOf(raw, { command: "npm ci", log: "/logs/x.log" }).find((stage) => stage.id === "footer");
+        expect(footer.saved).toBeLessThan(0);
     });
 });

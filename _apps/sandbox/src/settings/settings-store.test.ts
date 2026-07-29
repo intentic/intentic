@@ -20,6 +20,9 @@ const DEFAULTS: SandboxSettings = {
     skills: [],
     hashlineEdits: false,
     terseOutput: false,
+    // The steer's measurement control is off by default: a holdout spends the very tokens it measures, so it
+    // is something the owner opts into once, not a cost every sandbox pays to produce a number nobody asked for.
+    terseHoldout: 0,
     iqSearch: false,
     outputCleaners: "off",
     outputHoldout: 0,

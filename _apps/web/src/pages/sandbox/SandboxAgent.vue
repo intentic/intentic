@@ -10,11 +10,12 @@ import { quickModelGroups, useQuickModel } from "../../composables/chat/quickMod
 import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../composables/extensions/memoryImport";
 import { errorMessage, useAsyncAction } from "../../composables/useAsyncAction";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
-import { useCleanerSavings } from "../../composables/sandbox/useCleanerSavings";
+import { useSavings } from "../../composables/sandbox/useSavings";
 import { useSandboxSettings } from "../../composables/sandbox/useSandboxSettings";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
+import { ALL_CLEANER_IDS, CLEANER_OPTIONS, savedByCleaner } from "./savingsChart";
 import AiAccountSection from "./AiAccountSection.vue";
 import AssistantInfo from "./AssistantInfo.vue";
 import CommandOutputInfo from "./CommandOutputInfo.vue";
@@ -63,6 +64,18 @@ const toggleTerseOutput = (value: boolean): void => {
         return;
     }
     saveSandboxSettings.mutate({ ...current, terseOutput: value });
+};
+
+// The steer's measurement control, at turn level: the % of eligible turns that run WITHOUT it so the two arms
+// can be compared. Stored as a fraction [0,1], edited as a percentage — the same pair as the output holdout.
+const terseHoldoutPercent = computed<number>(() => Math.round((sandboxSettings.value?.terseHoldout ?? 0) * 100));
+const setTerseHoldoutPercent = (percent: number): void => {
+    const current = sandboxSettings.value;
+    if (current === undefined) {
+        return;
+    }
+    const clamped = Math.min(100, Math.max(0, Math.round(percent)));
+    saveSandboxSettings.mutate({ ...current, terseHoldout: clamped / 100 });
 };
 
 /* --- System prompt -------------------------------------------------------------------------------------------
@@ -257,28 +270,10 @@ const retentionOptions = [
 ];
 
 // --- Per-cleaner toggles (the `outputCleaners` spec, edited as a checklist) ---------------------------------
-// Every cleaner id + a short label, in the order of bin/cleaners.mjs CLEANERS (keep in sync). Each renders one
-// switch; the checklist round-trips through the spec string the daemon already threads to the filter, so every
-// cleaner is individually A/B-benchmarkable without touching the settings JSON by hand.
-const CLEANER_OPTIONS = [
-    { id: `npm`, label: `npm / npx` },
-    { id: `pnpm`, label: `pnpm` },
-    { id: `yarn`, label: `yarn` },
-    { id: `docker`, label: `docker` },
-    { id: `git`, label: `git` },
-    { id: `pip`, label: `pip` },
-    { id: `apt`, label: `apt` },
-    { id: `test`, label: `test runners` },
-    { id: `lint`, label: `tsc / eslint` },
-    { id: `ls`, label: `ls listings` },
-    { id: `gh`, label: `gh CLI` },
-    { id: `build`, label: `cargo / go` },
-    { id: `dedup`, label: `dedupe repeats` },
-    { id: `cap`, label: `head/tail cap` },
-    { id: `redact`, label: `redact secrets` },
-    { id: `cache`, label: `collapse repeats` },
-];
-const ALL_CLEANER_IDS = CLEANER_OPTIONS.map((cleaner) => cleaner.id);
+// The id + label list lives in savingsChart.ts, next to the projections that draw the same mechanisms on the
+// Usage tab: a switch here and a segment there must never end up named two different things. Each entry renders
+// one switch; the checklist round-trips through the spec string the daemon already threads to the filter, so
+// every cleaner is individually A/B-benchmarkable without touching the settings JSON by hand.
 
 // Which cleaners the current spec enables (mirrors bin/cleaners.mjs parseCleaners, lenient): "" = all on, an
 // allow-list ("git,pnpm") = only those, default-minus ("-cap") = all except. "off" (master off) = none.
@@ -351,9 +346,19 @@ const backendOptions = [
     { label: `rtk`, value: `rtk` as const },
 ];
 
-// The savings report (rtk-`gain` surface) over the live filter-stats ledger.
-const { savings } = useCleanerSavings();
+/* What each mechanism has been worth, all-time — the readout that belongs NEXT TO ITS SWITCH. Unwindowed on
+ * purpose: this page is where a switch is flipped, not where a period is compared, and the Usage tab's Savings
+ * section owns the windowed chart. */
+const { savings } = useSavings({});
+const savedTokens = computed(() => savedByCleaner(savings.value?.input));
 const cleaningOn = computed(() => (sandboxSettings.value?.outputCleaners ?? ``) !== `off`);
+
+/* WHETHER THE CONTROLS BELOW DO ANYTHING. Under the rtk backend the daemon sets INTENTIC_RUN_FILTER=0 and the
+ * PreToolUse hook prefixes `rtk ` regardless of the spec (agent.ts cleanerEnv, agent-terminals.ts) — so the
+ * cleaner checklist, the holdout and even the master toggle are inert, and rtk is compressing the output
+ * whatever they say. Rendering them live was the screen's worst lie: sixteen switches, a measurement control,
+ * and a savings figure that came from none of them. */
+const nativeFilter = computed(() => (sandboxSettings.value?.filterBackend ?? `native`) === `native`);
 
 // --- Import memory (was ImportMemoryDialog) ----------------------------------------------------------------
 const { readFile, saveText } = useWorkspaceTree();
@@ -403,15 +408,38 @@ const importMemory = async (): Promise<void> => {
                 description="Trim noisy shell output before it reaches the assistant — fewer tokens, same signal (errors always kept)."
             >
                 <template #control>
-                    <ToggleSwitch :model-value="cleaningOn" :disabled="sandboxSettings === undefined" @update:model-value="toggleOutputCleaning" />
+                    <ToggleSwitch
+                        :model-value="cleaningOn"
+                        :disabled="sandboxSettings === undefined || !nativeFilter"
+                        @update:model-value="toggleOutputCleaning"
+                    />
                 </template>
-                <!-- Per-cleaner switches (the spec, as a checklist) — only meaningful while cleaning is on. -->
-                <template v-if="cleaningOn && sandboxSettings !== undefined" #below>
-                    <div class="flex flex-col gap-2">
-                        <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Cleaners</p>
+                <!-- Per-cleaner switches (the spec, as a checklist) — only meaningful while cleaning is on AND
+                     the native filter is the one running. Under rtk none of this is wired to anything, so the
+                     row says who is doing the work instead of offering controls that quietly do nothing. -->
+                <template v-if="sandboxSettings !== undefined" #below>
+                    <p v-if="!nativeFilter" class="text-2xs text-muted">
+                        rtk is compressing output on this sandbox, and it brings its own handlers — these cleaners, the holdout and the toggle above
+                        don't apply until the backend below is back on Native.
+                    </p>
+                    <div v-else-if="cleaningOn" class="flex flex-col gap-2">
+                        <div class="flex items-baseline justify-between gap-2">
+                            <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Cleaners</p>
+                            <!-- What each switch is WORTH, all-time, next to the switch itself. This is the
+                                 tuning job: sixteen identical toggles are a wall, sixteen toggles carrying
+                                 their own savings are a ranked list you can prune. -->
+                            <p class="text-2xs text-subtle">tokens saved, all time</p>
+                        </div>
                         <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
                             <label v-for="cleaner in CLEANER_OPTIONS" :key="cleaner.id" class="flex items-center justify-between gap-2">
-                                <span class="truncate text-xs text-content">{{ cleaner.label }}</span>
+                                <span class="flex min-w-0 items-baseline gap-1.5">
+                                    <span class="truncate text-xs text-content">{{ cleaner.label }}</span>
+                                    <!-- A cleaner with nothing recorded says nothing rather than "0": it has
+                                         not been measured, which is a different claim from "worth nothing". -->
+                                    <span v-if="savedTokens.get(cleaner.id) !== undefined" class="shrink-0 text-2xs tabular-nums text-success">
+                                        ~{{ formatTokens(savedTokens.get(cleaner.id) ?? 0) }}
+                                    </span>
+                                </span>
                                 <ToggleSwitch
                                     :model-value="enabledCleaners.has(cleaner.id)"
                                     @update:model-value="(value: boolean) => toggleCleaner(cleaner.id, value)"
@@ -456,30 +484,38 @@ const importMemory = async (): Promise<void> => {
                 </template>
             </Row>
 
-            <!-- Savings report (rtk-`gain`) — realized token savings from the ledger of whichever backend is doing
-                 the compressing, so the owner can see what each cleaner is worth and where to add the next handler.
-                 Source and last-recorded-command are shown next to the numbers on purpose: this card once sat on a
-                 ledger nothing was writing any more, and without its provenance a frozen number reads exactly like
-                 a live one. -->
-            <Row v-if="savings !== undefined && savings.commands > 0" icon="wave-pulse" title="Output savings">
+            <!-- Realized savings, from the ledger of whichever backend is doing the compressing. The hero is one
+                 number; everything that qualifies it — source, freshness, what it is a share of — sits under it
+                 rather than trailing it as a run-on, because those are the facts that tell a live figure from a
+                 frozen one, and this card once sat on a ledger nothing was writing any more.
+                 The breakdown BY mechanism lives on the Usage tab, where a window exists to compare it over. -->
+            <Row icon="wave-pulse" title="Output savings">
                 <template #description>
-                    {{ savings.commands }} commands · ~{{ formatTokens(savings.rawTokens) }} → ~{{ formatTokens(savings.emittedTokens) }} tokens ·
-                    <span class="font-medium text-success">{{ savings.savedPct }}% saved</span>
-                    <span v-if="savings.holdout.measuredSavedPct !== undefined"> · {{ savings.holdout.measuredSavedPct }}% measured (holdout)</span>
-                    <span class="text-muted">
-                        · via {{ savings.source === `rtk` ? `rtk gain` : `output filter` }}
-                        <template v-if="savings.updatedAt !== undefined">· last command {{ relativeTime(savings.updatedAt) }}</template>
+                    <template v-if="savings !== undefined && savings.input.commands > 0">
+                        <span class="font-medium text-success">{{ savings.input.savedPct }}% saved</span>
+                        · ~{{ formatTokens(savings.input.rawTokens) }} → ~{{ formatTokens(savings.input.emittedTokens) }} tokens over
+                        {{ savings.input.commands }} commands
+                        <span v-if="savings.input.holdout.measuredSavedPct !== undefined">
+                            · <span class="text-content">{{ savings.input.holdout.measuredSavedPct }}%</span> measured against the holdout
+                        </span>
+                        <br />
+                        <span class="text-muted">
+                            via {{ savings.input.source === `rtk` ? `rtk gain` : `the output filter` }}
+                            <template v-if="savings.input.updatedAt !== undefined"
+                                >· last command {{ relativeTime(savings.input.updatedAt) }}</template
+                            >
+                        </span>
+                    </template>
+                    <!-- Absence used to be the empty state: the row simply wasn't rendered, so a page of
+                         switches promising savings showed nothing at all about them. -->
+                    <span v-else class="text-muted">
+                        Nothing measured yet — the ledger fills as the agent runs shell commands, one row per command.
                     </span>
                 </template>
-                <template #below>
-                    <div v-if="savings.perCleaner.length > 0" class="flex flex-wrap gap-1.5">
-                        <span v-for="entry in savings.perCleaner" :key="entry.id" class="rounded-md bg-canvas px-1.5 py-0.5 text-2xs text-subtle">
-                            {{ entry.id }} ×{{ entry.commands }}
-                        </span>
-                    </div>
-                    <div v-if="savings.gaps.length > 0" class="mt-2 flex flex-col gap-1 border-t border-line pt-2">
+                <template v-if="savings !== undefined && savings.input.gaps.length > 0" #below>
+                    <div class="flex flex-col gap-1">
                         <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Un-cleaned (add a handler)</p>
-                        <p v-for="gap in savings.gaps.slice(0, 5)" :key="gap.command" class="truncate font-mono text-2xs text-muted">
+                        <p v-for="gap in savings.input.gaps.slice(0, 5)" :key="gap.command" class="truncate font-mono text-2xs text-muted">
                             ~{{ formatTokens(gap.tokens) }} · {{ gap.command }}
                         </p>
                     </div>
@@ -507,8 +543,51 @@ const importMemory = async (): Promise<void> => {
                 <!-- The steer is one line appended to the system prompt, so a custom prompt takes it with
                      everything else. Said here rather than left to be discovered: a switch that is on and doing
                      nothing is worse than one that is off. -->
-                <template v-if="promptMode === `custom`" #below>
-                    <p class="text-2xs text-warning">Not applied while your own system prompt is set — say it in the prompt below instead.</p>
+                <template #below>
+                    <p v-if="promptMode === `custom`" class="text-2xs text-warning">
+                        Not applied while your own system prompt is set — say it in the prompt below instead.
+                    </p>
+                    <!-- The steer's measurement control. Unlike a cleaned command, which carries its own raw
+                         baseline, a turn cannot be re-run to see what it would have said unsteered — so the
+                         only way to know what this switch is worth is to leave a slice of turns unsteered and
+                         compare. The control costs the very tokens it measures, which is why it is opt-in and
+                         says what it buys. -->
+                    <template v-else-if="sandboxSettings?.terseOutput === true">
+                        <label class="flex items-center justify-between gap-3">
+                            <span class="flex min-w-0 flex-col">
+                                <span class="text-xs text-content">Measure it</span>
+                                <span class="text-2xs text-muted">
+                                    Run this % of turns without the steer, as a control. Both arms need ~30 turns before a figure is reported.
+                                </span>
+                            </span>
+                            <span class="flex shrink-0 items-center gap-1">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    :value="terseHoldoutPercent"
+                                    :class="cmp.input('w-16 text-right text-xs')"
+                                    @change="(event: Event) => setTerseHoldoutPercent(Number((event.target as HTMLInputElement).value))"
+                                />
+                                <span class="text-xs text-muted">%</span>
+                            </span>
+                        </label>
+                        <p v-if="savings?.output !== undefined" class="mt-2 border-t border-line pt-2 text-2xs">
+                            <template v-if="savings.output.deltaPct !== undefined">
+                                <span class="tabular-nums" :class="savings.output.deltaPct < 0 ? `text-success` : `text-muted`">
+                                    {{ savings.output.deltaPct < 0 ? `↓` : `↑` }}{{ Math.abs(savings.output.deltaPct) }}%
+                                </span>
+                                <span class="text-muted">
+                                    output tokens per turn ± {{ savings.output.marginPct }}pp, over {{ savings.output.on.turns }} steered vs
+                                    {{ savings.output.off.turns }} unsteered turns.
+                                </span>
+                            </template>
+                            <span v-else class="text-muted">
+                                Measuring — {{ savings.output.on.turns }} steered and {{ savings.output.off.turns }} unsteered turns so far, of
+                                {{ savings.output.minTurns }} needed per arm.
+                            </span>
+                        </p>
+                    </template>
                 </template>
             </Row>
 

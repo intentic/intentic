@@ -47,6 +47,11 @@ export type TurnPlan =
           // frames and the activity log. Undefined when the credential came from the container env, or from a
           // translator subscription rather than an account this sandbox stores.
           readonly account?: string;
+          // Which arm of the terse experiment this turn was built on, when it was in the experiment at all —
+          // stamped onto the spend ledger at turn end (UsageTurn.terse) because that is the only record of it.
+          // It rides the plan rather than the request: the request is what the SDK is handed, and the steer has
+          // already been folded into the prompt by the time one exists.
+          readonly terseArm?: boolean;
           readonly request: AgentRequest;
       };
 
@@ -229,9 +234,17 @@ const planHarnessTurn = async (
         outputHoldout,
         filterBackend,
         terseOutput,
+        terseHoldout,
         systemPromptMode,
         systemPrompt: customPrompt,
     } = await services.sandboxSettings.get();
+    /* THE TERSE EXPERIMENT'S COIN FLIP. The steer is eligible only where the daemon still appends to the
+     * prompt — a custom prompt takes it away with everything else — and the holdout then runs its fraction of
+     * eligible turns WITHOUT it, so the savings report has two populations of the same command stream to
+     * compare instead of an assertion. A turn outside the experiment records no arm at all (see UsageTurn.terse):
+     * "the steer was off for everyone" is not a control group. */
+    const terseEligible = terseOutput && systemPromptMode !== "custom" && terseHoldout > 0;
+    const terseArm = terseEligible ? Math.random() >= terseHoldout : undefined;
     // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
     // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle (opt-in,
     // default off). Empty dir outside the container ⇒ skipped regardless. Extension checkouts with a
@@ -273,7 +286,8 @@ const planHarnessTurn = async (
         systemPrompt: customPrompt,
         ...(delegation.note !== undefined ? { note: delegation.note } : {}),
         stableSystemPrompt,
-        terseOutput,
+        // The arm decides when the experiment is running; the plain setting decides when it isn't.
+        terseOutput: terseArm ?? terseOutput,
     });
     // A prompt whose leading `/` names no command this session has, which the CLI would otherwise answer with
     // "Unknown command" and discard — the note keeps the user's words in front of the model (agent-commands.ts
@@ -293,6 +307,7 @@ const planHarnessTurn = async (
         ok: true,
         run: services.agent,
         ...(resolved.credentials.account !== undefined ? { account: resolved.credentials.account } : {}),
+        ...(terseArm !== undefined ? { terseArm } : {}),
         request: {
             ...context.base,
             prompt,

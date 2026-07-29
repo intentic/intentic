@@ -147,36 +147,61 @@ const TAIL = 50;
 const MAX = 100;
 const FAIL_TAIL = 500;
 
+// What a line array would weigh once joined with newlines — measured without building the string, because the
+// pipeline measures it after EVERY stage and materialising a 500k-line capture per stage would cost more than
+// the cleaning does.
+export const bodyBytes = (lines) => (lines.length === 0 ? 0 : lines.reduce((sum, line) => sum + line.length, 0) + lines.length - 1);
+
 // The gated cleaning pipeline over already-split, ANSI/\r-cleaned lines. Exit-code-asymmetric: on success run the
 // matching command cleaners then the cap; on failure keep everything but a generous tail. `enabled` gates each id.
+//
+// Returns the cleaned lines AND what each stage removed, in pipeline order — the per-mechanism attribution the
+// savings report is built on. It is sequential by construction (each stage is weighed against what reached it,
+// not against the raw capture), which is what makes the stages sum exactly to the total saving and lets them be
+// drawn as one stacked bar. The flip side, and the reason the UI must not label these "what turning this off
+// would save": a cleaner that runs before the cap is credited with lines the cap would have taken anyway.
 export const cleanLines = (lines, { command, exitCode, enabled }) => {
+    const stages = [];
     let out = lines;
+    let bytes = bodyBytes(lines);
+    // Weigh the result of one stage against what reached it, and record the difference under the stage's id.
+    // A stage that changed nothing still costs one pass; recording it (at 0) is what lets the report say a
+    // cleaner fired and was worth nothing, which is a different fact from it never having run.
+    const ran = (id, next) => {
+        out = next;
+        const after = bodyBytes(out);
+        stages.push({ id, saved: bytes - after });
+        bytes = after;
+    };
     if (exitCode === "0") {
         for (const cleaner of COMMAND_CLEANERS) {
             if (enabled.has(cleaner.id) && cleaner.match.test(command)) {
-                out = cleaner.apply(out);
+                ran(cleaner.id, cleaner.apply(out));
             }
         }
         if (enabled.has("dedup")) {
-            out = dedupeRuns(out);
+            ran("dedup", dedupeRuns(out));
         }
         if (enabled.has("cap") && out.length > MAX) {
-            out = [...out.slice(0, HEAD), `… ${out.length - HEAD - TAIL} lines elided …`, ...out.slice(-TAIL)];
+            ran("cap", [...out.slice(0, HEAD), `… ${out.length - HEAD - TAIL} lines elided …`, ...out.slice(-TAIL)]);
         }
     } else {
         // Failures keep detail verbatim — only collapse long identical runs (lossless) and cap at a generous tail.
         if (enabled.has("dedup")) {
-            out = dedupeRuns(out);
+            ran("dedup", dedupeRuns(out));
         }
         if (out.length > FAIL_TAIL) {
-            out = [`… ${out.length - FAIL_TAIL} earlier lines elided …`, ...out.slice(-FAIL_TAIL)];
+            // Its own id, never folded into `cap`: this one is unconditional (errors are kept whatever the
+            // spec says), so crediting the `cap` toggle with it would put a number under a switch that did not
+            // produce it.
+            ran("failtail", [`… ${out.length - FAIL_TAIL} earlier lines elided …`, ...out.slice(-FAIL_TAIL)]);
         }
     }
     // Redaction runs last on both paths so a leaked secret is masked even inside an error dump.
     if (enabled.has("redact")) {
-        out = out.map(redactLine);
+        ran("redact", out.map(redactLine));
     }
-    return out;
+    return { lines: out, stages };
 };
 
 // Which command cleaners actually fired for this command — recorded in filter-stats.jsonl to attribute savings.

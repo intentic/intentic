@@ -20,6 +20,7 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
     };
     expect(SandboxSettingsSchema.parse(older)).toEqual({
         ...older,
+        terseHoldout: 0,
         filterBackend: "native",
         systemPromptMode: "intentic",
         systemPrompt: "",
@@ -36,6 +37,8 @@ test("an empty object is the full default settings object", () => {
         skills: [],
         hashlineEdits: false,
         terseOutput: false,
+        // Off: the steer's turn-level control spends the tokens it measures, so measuring is opt-in.
+        terseHoldout: 0,
         iqSearch: false,
         outputCleaners: "off",
         outputHoldout: 0,

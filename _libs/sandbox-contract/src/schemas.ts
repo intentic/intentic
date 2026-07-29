@@ -648,6 +648,14 @@ export const SandboxSettingsSchema = z.object({
     skills: z.array(z.string()).default([]),
     hashlineEdits: z.boolean().default(false),
     terseOutput: z.boolean().default(false),
+    /* Measurement control for the terse steer, at TURN level — the same trick `outputHoldout` plays over
+     * commands, one layer up. A fraction [0,1] of otherwise-eligible turns run WITHOUT the steer and record
+     * which arm they ran on (UsageTurn.terse), so the savings report can compare two real populations.
+     *
+     * It has to be an experiment: unlike a cleaned command, which yields its own raw baseline in the same
+     * event, a turn cannot be re-run to see what it would have said unsteered. 0 ⇒ no measurement (every
+     * eligible turn is steered), which is the default because the control costs the very tokens it measures. */
+    terseHoldout: z.number().min(0).max(1).default(0),
     /* WHICH SYSTEM PROMPT THE AGENT RUNS ON — the base, before anything this turn composes.
      *
      *   intentic — Intentic's own prompt, tuned for this harness (intentic-prompt.ts). The default.
@@ -710,22 +718,43 @@ export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 export const BuiltinPromptTextSchema = z.object({ text: z.string(), version: z.string() });
 export type BuiltinPromptText = z.infer<typeof BuiltinPromptTextSchema>;
 
-// ---- output-cleaner savings report (rtk-`gain`-style) ----
-// Whichever cleaner is ACTUALLY compressing output owns the numbers, so the report is read from that backend's
+/* ---- savings report: what each token-reduction mechanism actually saved ----
+ *
+ * TWO FAMILIES, deliberately never one list of bars. They are measured differently, and a chart that ranks
+ * them side by side claims a confidence and a denominator that only one of them has:
+ *
+ *   input  — shell output the cleaners trimmed before the model ever saw it. Both sides of the comparison come
+ *            off the SAME command (raw in, emitted out), so the counterfactual is observed rather than
+ *            estimated: exact, per command, no sample size to argue about.
+ *   output — the model's own tokens under the terse steer. There is no second run of the same turn to compare
+ *            against, so the only honest number is an experiment: a turn-level holdout, an n per arm, and a
+ *            margin. It is absent entirely until both arms are large enough for the delta to mean anything.
+ *
+ * The two are also in different units of value — a saved tool-output token is saved again on every later
+ * request of that conversation, an output token is saved once but costs several times as much — which is the
+ * other reason they are separate sections with separate totals rather than one number.
+ */
+
+// One mechanism's realized saving, biggest first. `savedTokens` is what THIS stage removed from what reached
+// it in pipeline order — sequential attribution, which is why the stages sum exactly to raw − emitted and can
+// be drawn as one stacked bar. It is NOT "what turning this cleaner off would cost you": the cap downstream
+// would have eaten some of the same lines. `commands` is how many commands the stage ran on. Negative for the
+// `footer` stage, which adds the retrieval pointer back — a cost on the same ledger as what it bought.
+export const SavingsStageSchema = z.object({ id: z.string(), commands: z.number(), savedTokens: z.number() });
+
+// Whichever cleaner is ACTUALLY compressing output owns these numbers, so they are read from that backend's
 // own ledger: "native" aggregates historyRoot/logs/filter-stats.jsonl (one row per agent Bash command, written
 // by agent-output-filter), "rtk" reads rtk's own gain ledger. Reading one ledger regardless of backend is how
 // this card went stale: under rtk the native filter is switched off, nothing appends, and the last numbers
 // written — a test run's, as it happened — sat on the card looking live.
-//
-// `perCleaner` attributes which cleaner ids fired across commands; `holdout` is the measured control (commands
-// the holdout bypassed) vs the cleaned population — a real saved-% rather than an estimate; `gaps` are
-// high-volume commands that matched no cleaner (the next handler to write). All three are native-only: rtk
-// reports totals, not per-command attribution, so they arrive empty under that backend. Empty/zeroed when no
-// commands have run yet.
-export const CleanerSavingsSchema = z.object({
+export const InputSavingsSchema = z.object({
     // Which backend's ledger these numbers came from — shown on the card, because a number without its source
     // cannot be told apart from a stale one. Defaulted for the same daemon-older-than-browser seam as settings.
     source: z.enum(["native", "rtk"]).default("native"),
+    // False ⇒ these totals cover the ledger's whole life, not the range the reader selected: `rtk gain` reports
+    // no timestamps, so its numbers cannot be windowed and the screen has to say so rather than let a 7-day
+    // filter sit above an all-time figure.
+    windowed: z.boolean(),
     // When that ledger last recorded a command (epoch ms), so the card can show its age instead of implying
     // freshness it doesn't have. Absent when the ledger has never been written or its age can't be read.
     updatedAt: z.number().optional(),
@@ -733,11 +762,43 @@ export const CleanerSavingsSchema = z.object({
     rawTokens: z.number(),
     emittedTokens: z.number(),
     savedPct: z.number(),
-    perCleaner: z.array(z.object({ id: z.string(), commands: z.number() })),
+    // Per-stage attribution, biggest first. Native-only: rtk reports totals, not which of its handlers fired.
+    perCleaner: z.array(SavingsStageSchema),
+    // The measured control — commands the holdout left raw — against the cleaned population. A real saved-%
+    // for the pipeline as a whole rather than an estimate, and the only whole-pipeline counterfactual there is.
     holdout: z.object({ cleaned: z.number(), heldOut: z.number(), measuredSavedPct: z.number().optional() }),
+    // High-volume commands that matched no cleaner: where the next handler is worth writing. Native-only.
     gaps: z.array(z.object({ command: z.string(), tokens: z.number() })),
 });
-export type CleanerSavings = z.infer<typeof CleanerSavingsSchema>;
+export type InputSavings = z.infer<typeof InputSavingsSchema>;
+
+// One arm of the turn-level experiment: the turns that ran with the steer, and the turns the holdout ran
+// without it. Mean output tokens PER TURN, because the arms never hold the same number of turns.
+export const SavingsArmSchema = z.object({ turns: z.number(), meanOutputTokens: z.number() });
+
+// The terse steer, as measured. Only turns where the steer was ELIGIBLE are counted — a turn under a custom
+// system prompt drops the steer along with everything else the daemon appends, so it belongs to neither arm.
+export const OutputSavingsSchema = z.object({
+    on: SavingsArmSchema,
+    off: SavingsArmSchema,
+    // Turns per arm before a delta is reported at all. Carried on the wire so the screen's "measuring…" state
+    // counts toward the daemon's real threshold instead of a number the browser guessed.
+    minTurns: z.number(),
+    /* The three below are present TOGETHER, and only once both arms clear `minTurns` — a schema that can't
+     * express a half-measured experiment is how a 34%-that-becomes-8%-tomorrow never reaches the screen.
+     *   deltaPct   — change in mean output tokens per turn under the steer; negative is a saving.
+     *   marginPct  — ± percentage points, 95% (Welch, unequal variances and unequal arms).
+     *   savedTokens — what the delta is worth over the turns that actually ran with the steer, in this window. */
+    deltaPct: z.number().optional(),
+    marginPct: z.number().optional(),
+    savedTokens: z.number().optional(),
+});
+export type OutputSavings = z.infer<typeof OutputSavingsSchema>;
+
+// `output` is absent when the experiment isn't running at all (terse off, or no holdout set) — a section that
+// isn't there reads as "not measured", which is the truth, while zeros would read as "measured, worth nothing".
+export const SavingsReportSchema = z.object({ input: InputSavingsSchema, output: OutputSavingsSchema.optional() });
+export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 
 // ---- intentic CLI ----
 
@@ -2260,6 +2321,14 @@ export const UsageTurnSchema = z.object({
     cacheCreationTokens: z.number(),
     costUsd: z.number(),
     durationMs: z.number(),
+    /* Which arm of the terse experiment this turn ran on (settings.terseHoldout) — the only record of it, and
+     * the reason the savings report can say what the steer is worth instead of guessing.
+     *
+     * ABSENT means "not part of the experiment", not "off": a turn under a custom system prompt drops the
+     * steer along with everything else the daemon appends, and a turn run with the experiment switched off has
+     * no control to be compared against. Pooling those into the off-arm would compare steered turns against a
+     * population selected by something other than the coin flip, which is not a control at all. */
+    terse: z.boolean().optional(),
 });
 export type UsageTurn = z.infer<typeof UsageTurnSchema>;
 
@@ -2287,12 +2356,14 @@ export const UsageRollupRowSchema = z.object({
     durationMs: z.number(),
 });
 export type UsageRollupRow = z.infer<typeof UsageRollupRowSchema>;
-// Inclusive UTC day bounds (YYYY-MM-DD). Both absent ⇒ the whole ledger.
-export const UsageRollupQuerySchema = z.object({
+// Inclusive UTC day bounds (YYYY-MM-DD). Both absent ⇒ the whole ledger. Shared by every windowed read of a
+// daemon ledger (spend, savings): one window shape, so a screen that filters two ledgers at once filters them
+// with the same calendar.
+export const DayWindowQuerySchema = z.object({
     from: z.string().optional(),
     to: z.string().optional(),
 });
-export type UsageRollupQuery = z.infer<typeof UsageRollupQuerySchema>;
+export type DayWindowQuery = z.infer<typeof DayWindowQuerySchema>;
 export const UsageRollupSchema = z.object({ rows: z.array(UsageRollupRowSchema) });
 
 // ---- usage: per-account token/cost totals ----

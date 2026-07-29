@@ -89,6 +89,18 @@ const IQ_COMPARISON = [
             Same tools, same work, same thoroughness — less narration. It's appended at a fixed spot at the very end of the standing instructions, so
             it doesn't disturb the reuse that keeps a long conversation's later turns cheap.
         </p>
+        <!-- Why this one setting has a measurement control and the others don't: it is the only one whose effect
+             cannot be observed on the turn it applies to. Said plainly, because "Measure it" next to a switch
+             otherwise reads as telemetry rather than the experiment it is. -->
+        <div class="mt-2 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
+            <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+            <p class="text-2xs text-muted">
+                <span class="font-medium text-content">Measure it</span> runs a slice of turns without the instruction, as a control. There's no other
+                way to know what it's worth — the same turn can't be replayed to see what it would have said otherwise. Both groups need about 30
+                turns before a figure appears, because one turn is "yes" and the next is a forty-tool refactor. The result lands under
+                <span class="font-medium text-content">Usage → Assistant's own output</span>.
+            </p>
+        </div>
 
         <!-- ② System prompt — leads with the three options as a table, because "Intentic / Claude / Custom"
              on a segmented control tells you nothing about which to press. Then what Custom costs, which is the

@@ -17,6 +17,7 @@ import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import {
     ANSI,
+    bodyBytes,
     CACHE_MARKER,
     CLEANERS,
     cleanLines,
@@ -28,6 +29,16 @@ import {
     sessionKeyFromLog,
 } from "./cleaners.mjs";
 
+/* Returns what the model sees AND what each mechanism removed to get there (`stages`, in pipeline order), so
+ * the savings report can attribute tokens to mechanisms instead of counting how often each one fired.
+ *
+ * The accounting closes exactly: raw − Σ stage savings = the emitted result. Two of the stages are not
+ * cleaners in the registry and are named anyway, because leaving them out is how a "89% saved" figure ends up
+ * with an unexplained remainder:
+ *   ansi   — terminal escapes and \r redraw frames, stripped before any cleaner sees a line.
+ *   footer — the retrieval pointer, which ADDS bytes (a negative saving). It is the price of the trimming
+ *            being reversible, and it belongs on the same ledger as what it bought.
+ */
 export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled = new Set(CLEANERS), cacheStore = undefined) => {
     let lines = raw.replaceAll(ANSI, "").split("\n").map(collapseCr);
     // The trailing \n of the last output line is not an extra line.
@@ -35,28 +46,37 @@ export const filterOutput = (raw, command, exitCode, durationS, logPath, enabled
         lines.pop();
     }
     const rawCount = lines.length;
-    lines = cleanLines(lines, { command, exitCode, enabled });
+    const stages = [{ id: "ansi", saved: raw.length - bodyBytes(lines) }];
+    const cleaned = cleanLines(lines, { command, exitCode, enabled });
+    lines = cleaned.lines;
+    stages.push(...cleaned.stages);
     let body = lines.join("\n");
     if (exitCode === "0" && body.trim() === "" && raw.trim() !== "") {
         body = "(no notable output)";
     }
+    // Everything below rewrites the body as a whole, so each step is weighed against the body it was handed —
+    // the same rule the line stages follow.
+    const emitted = (text, id) => {
+        stages.push({ id, saved: bodyBytes(lines) - text.length });
+        return { out: text, stages };
+    };
     // `cache` (success only): if this command's cleaned body is byte-identical to an earlier run this session,
     // collapse it to the marker (which carries the retrieval handle) and skip the footer — nothing new to show.
     if (exitCode === "0" && enabled.has("cache") && cacheStore !== undefined && body !== "" && body !== "(no notable output)") {
         const collapsed = collapseCached(body, command, cacheStore, logPath);
         if (collapsed.cached) {
-            return `${collapsed.body}\n`;
+            return emitted(`${collapsed.body}\n`, "cache");
         }
     }
     if (lines.length >= rawCount) {
         // Nothing dropped (ANSI/\r cleanup alone needs no raw-log pointer).
-        return body === "" ? body : `${body}\n`;
+        return emitted(body === "" ? body : `${body}\n`, "footer");
     }
     const kept = body === "(no notable output)" ? 0 : lines.length;
     // Point at the reversible retrieval command (lossy display, lossless storage) — a ready-to-run handle like
     // iq's `--after <cursor>` continuation. `retrieve-output` greps the full pane log, budget-capped.
     const log = logPath !== undefined && logPath !== "" ? ` · full: retrieve-output ${logPath} [pattern]` : "";
-    return `${body}\n--- [exit ${exitCode}, ${durationS}s] ${rawCount} lines filtered to ${kept}${log}\n`;
+    return emitted(`${body}\n--- [exit ${exitCode}, ${durationS}s] ${rawCount} lines filtered to ${kept}${log}\n`, "footer");
 };
 
 const main = async () => {
@@ -67,6 +87,9 @@ const main = async () => {
     }
     const raw = Buffer.concat(chunks).toString("utf8");
     let out = raw;
+    // Per-mechanism attribution for the stat line; empty on the held-out and fail-open paths, where nothing
+    // was cleaned and there is nothing to attribute.
+    let stages = [];
     try {
         const enabled = parseCleaners(process.env["INTENTIC_OUTPUT_CLEANERS"]);
         const terminalsDir = process.env["INTENTIC_TERMINAL_LOGS_DIR"];
@@ -83,9 +106,14 @@ const main = async () => {
                 cacheStore = openCacheStore(terminalsDir, sessionKey);
             }
         }
-        out = heldOut ? raw : filterOutput(raw, command, exitCode, durationS, logPath, enabled, cacheStore);
+        if (!heldOut) {
+            const filtered = filterOutput(raw, command, exitCode, durationS, logPath, enabled, cacheStore);
+            out = filtered.out;
+            stages = filtered.stages;
+        }
         // Token-savings telemetry, one NDJSON line per command under historyRoot/logs (same prune policy as the
-        // terminal logs). `cleaners`/`matched`/`heldOut` attribute the saving to the active config for A/B.
+        // terminal logs). `cleaners`/`matched`/`heldOut` attribute the saving to the active config for A/B, and
+        // `stageBytes` says what each mechanism was worth on this command (bytes removed; negative = added).
         // Best-effort — stats must never break the tool result.
         if (terminalsDir !== undefined && terminalsDir !== "") {
             const matched = matchedCleaners(command, enabled);
@@ -99,6 +127,7 @@ const main = async () => {
                 cleaners: [...enabled],
                 matched: out.startsWith(CACHE_MARKER) ? [...matched, "cache"] : matched,
                 heldOut,
+                stageBytes: Object.fromEntries(stages.map((stage) => [stage.id, stage.saved])),
             };
             appendFileSync(join(terminalsDir, "..", "filter-stats.jsonl"), `${JSON.stringify(stat)}\n`);
         }
