@@ -35,32 +35,34 @@ let addPoll: ReturnType<typeof setInterval> | undefined;
 const stopped = computed(() => apps.value.filter((app) => !app.running));
 const running = computed(() => apps.value.filter((app) => app.running));
 
-// The type signal (issue: api/web read identical). An app's `template` is the manifest key it was scaffolded
-// from — a frontend (web/landing) and a backend (api) get a distinct icon + tint + kind pill so they're
-// told apart at a glance. Matched by the canonical keys with a loose contains() so a custom-named instance
-// template (e.g. "storefront-api") still classifies; anything unrecognized falls back to the neutral package
-// glyph and shows its raw template key.
+// The type signal (issue: api/web read identical). An app's `kind` is the manifest key it was scaffolded from,
+// or the framework the daemon detected for an app it found by convention — a frontend (web/landing/astro) and
+// a backend (api) get a distinct icon + tint + kind pill so they're told apart at a glance. Matched by the
+// canonical keys and framework names with a loose contains() so a custom-named instance (e.g. "storefront-api")
+// still classifies; an unrecognized kind falls back to the neutral package glyph and shows itself raw, and an
+// app with no kind at all (a bare `dev` script, no framework) shows the glyph alone.
 interface AppKind {
     readonly icon: IconName;
-    readonly label: string;
+    readonly label: string | undefined;
     readonly tint: string;
     readonly pill: string;
     readonly known: boolean;
 }
 const BACKEND: AppKind = { icon: `server`, label: `API`, tint: `text-primary-500`, pill: `bg-primary-600/10 text-primary-500`, known: true };
 const FRONTEND: AppKind = { icon: `globe`, label: `Web`, tint: `text-info`, pill: `bg-info/10 text-info`, known: true };
-const kindOf = (template: string): AppKind => {
-    const key = template.toLowerCase();
-    if (/api|server|backend|service|worker|daemon|gateway/.test(key)) {
+const kindOf = (kind: string | undefined): AppKind => {
+    const key = kind?.toLowerCase() ?? ``;
+    if (/api|server|backend|service|worker|daemon|gateway|hono|express|fastify|nest/.test(key)) {
         return BACKEND;
     }
-    if (/web|landing|site|front|client|dashboard|admin|spa/.test(key)) {
+    if (/web|landing|site|front|client|dashboard|admin|spa|astro|vite|next|nuxt|svelte|remix|docs/.test(key)) {
         return FRONTEND;
     }
-    return { icon: `box`, label: template, tint: `text-muted`, pill: `bg-subtle/10 text-subtle`, known: false };
+    // An unrecognized kind labels itself; no kind at all (a bare `dev` script) leaves the glyph to speak.
+    return { icon: `box`, label: kind, tint: `text-muted`, pill: `bg-subtle/10 text-subtle`, known: false };
 };
 // Decorate each app with its resolved kind so the template binds one value per row (no repeated kindOf calls).
-const appRows = computed(() => apps.value.map((app) => ({ ...app, kind: kindOf(app.template) })));
+const appRows = computed(() => apps.value.map((app) => ({ ...app, badge: kindOf(app.kind) })));
 
 const headerTitle = computed(() => (props.monorepo ? `Apps` : `Tests`));
 const headerDescription = computed(() =>
@@ -222,14 +224,17 @@ onUnmounted(() => {
                     <div v-else class="overflow-hidden rounded-lg border border-line bg-card">
                         <div class="flex flex-col divide-y divide-line">
                             <div v-for="app in appRows" :key="app.app" class="flex items-center gap-3 px-4 py-2.5">
-                                <Icon :name="app.kind.icon" class="shrink-0 text-lg" :class="app.kind.tint" />
+                                <Icon :name="app.badge.icon" class="shrink-0 text-lg" :class="app.badge.tint" />
                                 <div class="flex min-w-0 flex-1 items-center gap-2">
                                     <span class="truncate font-medium text-content">{{ app.app }}</span>
-                                    <span class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium" :class="app.kind.pill">{{
-                                        app.kind.label
-                                    }}</span>
-                                    <span v-if="app.template !== app.app && app.kind.known" class="shrink-0 truncate text-2xs text-subtle">{{
-                                        app.template
+                                    <span
+                                        v-if="app.badge.label"
+                                        class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium"
+                                        :class="app.badge.pill"
+                                        >{{ app.badge.label }}</span
+                                    >
+                                    <span v-if="app.kind && app.kind !== app.app && app.badge.known" class="shrink-0 truncate text-2xs text-subtle">{{
+                                        app.kind
                                     }}</span>
                                 </div>
                                 <StatusBadge

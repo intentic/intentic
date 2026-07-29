@@ -1290,12 +1290,13 @@ export const TemplatesListSchema = z.object({ templates: z.array(TemplateSummary
 export type TemplatesList = z.infer<typeof TemplatesListSchema>;
 
 // One app instance currently in a monorepo, with its own preview dev server + live status (started/stopped
-// from the apps extension). `app` is the user-chosen instance name (the _apps/ dir); `template` is the
-// manifest key it was created from (api/web/landing). previewUrl is
+// from the apps extension). `app` is the user-chosen instance name (the _apps/ dir); `kind` is what sort of
+// app it is — the manifest key it was scaffolded from (api/web/landing), else the framework detected from its
+// dependencies (astro/next/…), and absent when it was discovered purely by its `dev` script. previewUrl is
 // https://preview-<repo>--<app>-<sandboxId>.<zone> (absent on loopback — no zone or no connect token).
 export const RepoAppSchema = z.object({
     app: z.string(),
-    template: z.string(),
+    kind: z.string().optional(),
     previewUrl: z.string().optional(),
     running: z.boolean(),
     healthy: z.boolean(),

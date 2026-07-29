@@ -240,18 +240,20 @@ export const createWorkspaceRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         // The app instances present in this monorepo, each with its own preview URL + live status — drives
-        // the apps extension's list. Scans `_apps/` and resolves each to its template type.
+        // the apps extension's list. Scans `_apps/` for scaffolded instances and dev-server packages alike.
         appsList: i.appsList.handler(async ({ input }) => {
             const repo = monorepoOf(input.repo);
             const repoDir = join(services.workspace.root, repo);
             const manifest = await loadManifest(services);
             const apps = await Promise.all(
-                discoverApps(repoDir, manifest).map(async ({ app, template }) => {
+                discoverApps(repoDir, manifest).map(async ({ app, kind }) => {
                     const port = services.processes.portOf(appPanelKey(repo, app));
                     const healthy = port !== undefined && (await probePort(port));
                     const url = previewUrl(appPanelKey(repo, app), zone, sandboxId);
-                    const summary = { app, template, running: port !== undefined, healthy };
-                    return url !== undefined ? Object.assign(summary, { previewUrl: url }) : summary;
+                    // `kind` and `previewUrl` are both optional on the wire — an app whose type nothing
+                    // identified, and a loopback sandbox with no preview host, each just omit theirs.
+                    const summary = { app, running: port !== undefined, healthy };
+                    return Object.assign(summary, kind !== undefined ? { kind } : {}, url !== undefined ? { previewUrl: url } : {});
                 }),
             );
             return { apps };
