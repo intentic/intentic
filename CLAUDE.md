@@ -8,6 +8,10 @@
 - No migration logic – assume fresh state; remove compatibility layers.
 - Use early returns – handle edge cases first.
 - Treat rewriting as cheap - always go for best design, not the least disruptive change.
+- Fix the pattern, not the instance – trace a bug to its root cause; when the same knowledge lives in N
+  places, extract one source of truth and make every consumer import it (or execute what it emits).
+- Guard invariants by discovery, not enumeration – a test that recognizes violations by their SHAPE anywhere
+  in the repo; a hardcoded file list repeats the miss it exists to prevent.
 
 ---
 For the full architecture — the app plane (web/api/sandbox) that is the product, the extension
