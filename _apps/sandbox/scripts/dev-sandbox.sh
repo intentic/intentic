@@ -144,11 +144,17 @@ docker rm -f "$CONTAINER" >/dev/null
 # Same shape as connect.sh's run: unprivileged unless the overlay's directives grant privileges, per-sandbox
 # network + the stable tunnel-origin alias, the persistent /work + /history + /var/lib/docker volumes, bounded
 # json-file logs.
+# SYS_ADMIN matches connect.sh/rebuild.sh/update.sh: it is what lets the daemon give each isolated agent turn
+# its own mount namespace (agents/isolation.ts). This script was the LAST creation path to gain it — being the
+# dogfood rebuild, that meant two "recreate the sandbox to restore full isolation" rebuilds in a row recreated
+# it through the one door still missing the flag. If another `docker run` for the sandbox container is ever
+# added anywhere, it needs this flag too.
 if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
     --network "$NETWORK" \
     --network-alias "$ORIGIN_HOST" \
     --add-host host.docker.internal:host-gateway \
     --log-opt max-size=10m --log-opt max-file=3 \
+    --cap-add=SYS_ADMIN \
     -v "${WORKSPACE_VOLUME}:/work" \
     -v "${HISTORY_VOLUME}:/history" \
     -v "${DOCKER_VOLUME}:/var/lib/docker" \
