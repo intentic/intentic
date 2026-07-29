@@ -14,6 +14,8 @@ import { isRecentlyChanged } from "../../composables/workspace/useWorkspaceLive"
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import PresenceAvatars from "../../presence/PresenceAvatars.vue";
 import { explorerTreatment, iconForEntry } from "@intentic-app/ui";
+import { filesToEntries } from "./dropEntries";
+import { movableInto, pastePairs } from "./explorerPaste";
 import { nestSiblings, type NestedEntry } from "./fileNesting";
 import { selectRange, stepLead } from "./treeSelect";
 
@@ -38,7 +40,16 @@ interface MoreRow {
  * VSCode-style multi-selection (plain click = one, Ctrl/Cmd+click = toggle, Shift+click = range) drives mass
  * actions — delete, cut/copy/paste, and drag-move all act on the whole selection. Arrow keys move a focus "lead"
  * (roving tabindex); Shift/Ctrl+↑↓ extend/move it. All ops route through useWorkspaceTree's mutations. Paths are
- * root-relative; a dir is the drop/create target, a file's parent stands in for it. */
+ * root-relative; a dir is the drop/create target, a file's parent stands in for it.
+ *
+ * Cut/copy/paste ride the NATIVE clipboard events rather than a Ctrl+X/C/V keydown branch. Two reasons, both
+ * about the chord actually arriving: the browser fires copy/cut/paste at whatever non-editable element holds
+ * focus, so the gesture reaches us even where a keydown wouldn't (Safari and macOS Firefox don't focus a
+ * <button> on click at all — the old handler was simply dead there), and only the event carries `clipboardData`,
+ * which is what lets a copy publish its paths to the SYSTEM clipboard and a paste accept files copied out of the
+ * OS file manager. Owning the keyboard is the other half: a row focuses itself on click and the container takes
+ * focus when the click lands on empty space, so the explorer holds focus the way VSCode's does — and, equally,
+ * a chord pressed with the editor or chat focused still belongs to them. */
 
 const {
     tree,
@@ -75,12 +86,13 @@ const {
     loadChildren,
     expanded,
     collapseAll,
+    clipboard,
     lazyChildren,
     lazyHidden,
     lazyLoading,
 } = useWorkspaceTree();
 const layout = useLayout();
-const { enqueueFromDataTransfer } = useUploadQueue();
+const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { fileNesting } = useFileNesting();
 
 // Expanded directory paths live in useWorkspaceTree (shared with the explorer toolbar's Collapse All), consulted
@@ -90,7 +102,6 @@ const { fileNesting } = useFileNesting();
 const selection = ref<Set<string>>(new Set(selectedPath ? [selectedPath] : []));
 const anchor = ref<string | null>(selectedPath ?? null);
 const lead = ref<string | null>(selectedPath ?? null);
-const clipboard = ref<{ mode: "copy" | "cut"; paths: readonly string[] } | undefined>(undefined);
 const renamingPath = ref<string | undefined>(undefined);
 const renameDraft = ref(``);
 // Inline create (VSCode-style): a phantom input row rendered inside the target dir; `` = the root.
@@ -106,6 +117,9 @@ const menu = ref<{ show: (event: Event) => void } | undefined>(undefined);
 const menuEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
 // Row elements by path (roving-tabindex focus) — plain Map, kept in sync by the :ref callback on each button.
 const rowEls = new Map<string, HTMLElement>();
+// The tree container. Focusable (tabindex -1) so a click on the empty space below the rows still parks focus
+// inside the explorer, which is what makes the clipboard events below arrive.
+const treeEl = ref<HTMLElement>();
 
 // Opening a file (parent → selectedPath) collapses the selection to it; Ctrl/Shift-click never emit openFile, so
 // an in-progress multi-select is never clobbered by this.
@@ -267,6 +281,14 @@ const focusLead = async (): Promise<void> => {
     el?.focus();
     el?.scrollIntoView({ block: `nearest` });
 };
+// Clicking a row must leave the explorer holding the keyboard, and a <button> can't be relied on to focus
+// itself: Safari and macOS Firefox follow the platform convention of NOT focusing one on click. Focus it here
+// so the clipboard chords land on the tree in every browser, the way VSCode's explorer keeps focus on a
+// single click (opening the file in the editor doesn't take it).
+const focusRow = (path: string): void => rowEls.get(path)?.focus();
+// A click on the empty space below the rows: park focus on the container itself, so an explorer the user
+// obviously just clicked into still owns cut/copy/paste.
+const claimFocus = (): void => treeEl.value?.focus();
 
 // ---- selection primitives ----
 const selectSingle = (path: string): void => {
@@ -312,6 +334,7 @@ const onHealthClick = (entry: WorkspaceTreeEntry): void => {
 
 const onRowClick = (event: MouseEvent, row: Row): void => {
     const path = row.entry.path;
+    focusRow(path);
     if (event.shiftKey && anchor.value !== null) {
         extendTo(path); // range select, no activate
         return;
@@ -447,40 +470,111 @@ const confirmDelete = (): void => {
 const cancelDelete = (): void => {
     confirmPaths.value = undefined;
 };
-const doCut = (): void => {
+// Stage the selection on the clipboard. `system` publishes the same paths as text to the OS clipboard — the
+// menu path has no clipboard event to write through, so it asks the async API (best effort: it needs a secure
+// context, and CopyButton swallows the same failure).
+const stage = (mode: "copy" | "cut", system: "async" | "event"): readonly string[] => {
     const paths = clipPaths();
-    if (paths.length > 0) {
-        clipboard.value = { mode: `cut`, paths };
+    if (paths.length === 0) {
+        return paths;
     }
-};
-const doCopy = (): void => {
-    const paths = clipPaths();
-    if (paths.length > 0) {
-        clipboard.value = { mode: `copy`, paths };
+    clipboard.value = { mode, paths };
+    if (system === `async`) {
+        void navigator.clipboard.writeText(paths.join(`\n`)).catch(() => undefined);
     }
+    return paths;
 };
-const doPaste = (dir: string): void => {
+
+// The names already in the target dir — what a paste must not land on top of. A dir the walk never listed is
+// fetched first, so the check is made against what's really there rather than an empty "nothing here yet".
+const namesIn = async (dir: string): Promise<ReadonlySet<string>> => {
+    const target = dir === `` ? undefined : byPath.value.get(dir);
+    if (target !== undefined && isUnlisted(target)) {
+        await loadChildren(dir);
+    }
+    const siblings = target === undefined ? tree : childrenOf(target);
+    return new Set(siblings.map((child) => child.name));
+};
+
+// Show what a paste produced: expand the target dir and select the landed entries. Without this a paste into a
+// collapsed folder — or one scrolled out of view — is indistinguishable from nothing having happened.
+const revealPasted = (dir: string, paths: readonly string[]): void => {
+    if (dir !== `` && !expanded.value.has(dir)) {
+        toggleExpand(dir);
+    }
+    selection.value = new Set(paths);
+    anchor.value = paths[paths.length - 1] ?? null;
+    lead.value = anchor.value;
+};
+
+// Paste the clipboard into `dir`. A copy never overwrites — each source lands under a free name (VSCode's
+// "<name> copy"); a cut moves and consumes the clipboard.
+const doPaste = async (dir: string): Promise<void> => {
     const clip = clipboard.value;
     if (clip === undefined) {
         return;
     }
     if (clip.mode === `copy`) {
-        // Copying into the source's own dir would collide with itself — land those as "<name>-copy".
-        const pairs = clip.paths.map((path) => {
-            const collide = parentDir(path) === dir;
-            const dot = collide ? basename(path).lastIndexOf(`.`) : -1;
-            const name = !collide
-                ? basename(path)
-                : dot > 0
-                  ? `${basename(path).slice(0, dot)}-copy${basename(path).slice(dot)}`
-                  : `${basename(path)}-copy`;
-            return { from: path, to: joinPath(dir, name) };
-        });
-        void run(() => copyEntries(pairs));
+        const pairs = pastePairs(clip.paths, dir, await namesIn(dir));
+        if (pairs.length === 0) {
+            return;
+        }
+        await run(() => copyEntries(pairs));
+        revealPasted(
+            dir,
+            pairs.map((pair) => pair.to),
+        );
         return;
     }
+    const sources = movableInto(clip.paths, dir);
     clipboard.value = undefined;
-    void run(() => moveIntoMany(clip.paths, dir));
+    if (sources.length === 0) {
+        return;
+    }
+    await run(() => moveIntoMany(sources, dir));
+    revealPasted(
+        dir,
+        sources.map((source) => joinPath(dir, basename(source))),
+    );
+};
+
+// ---- clipboard events (the tree owns them only while it holds focus; an inline input owns its own) ----
+const editingInline = (): boolean => renamingPath.value !== undefined || creating.value !== undefined;
+const onCopyEvent = (event: ClipboardEvent, mode: "copy" | "cut"): void => {
+    if (editingInline()) {
+        return;
+    }
+    const paths = stage(mode, `event`);
+    if (paths.length === 0) {
+        return;
+    }
+    // Publishing the paths as text is what makes an explorer copy useful outside the tree (paste into the chat,
+    // a terminal, an editor) — and it replaces whatever the OS clipboard held, so the file branch of onPasteEvent
+    // can't then fire on a stale file copied before this one.
+    event.clipboardData?.setData(`text/plain`, paths.join(`\n`));
+    event.preventDefault();
+};
+const onPasteEvent = (event: ClipboardEvent): void => {
+    if (editingInline()) {
+        return;
+    }
+    const dir = targetDir(lead.value);
+    // Files copied out of the OS file manager (or an image copied from a page) beat the internal clipboard: a
+    // copy made HERE overwrites the system clipboard with text, so files present means they were copied later.
+    const files = event.clipboardData?.files;
+    if (files !== undefined && files.length > 0) {
+        event.preventDefault();
+        if (dir !== `` && !expanded.value.has(dir)) {
+            toggleExpand(dir);
+        }
+        void enqueue(dir, filesToEntries(files));
+        return;
+    }
+    if (clipboard.value === undefined) {
+        return;
+    }
+    event.preventDefault();
+    void doPaste(dir);
 };
 
 // ---- keyboard (target = the lead row; order = visible rows) ----
@@ -571,16 +665,9 @@ const onKeydown = (event: KeyboardEvent): void => {
     } else if (mod && (event.key === `a` || event.key === `A`)) {
         selection.value = new Set(order);
         event.preventDefault();
-    } else if (mod && (event.key === `c` || event.key === `C`)) {
-        doCopy();
-        event.preventDefault();
-    } else if (mod && (event.key === `x` || event.key === `X`)) {
-        doCut();
-        event.preventDefault();
-    } else if (mod && (event.key === `v` || event.key === `V`)) {
-        doPaste(targetDir(led));
-        event.preventDefault();
     }
+    // Ctrl/Cmd+X·C·V are deliberately absent: they arrive as the clipboard events above, which reach the tree
+    // in browsers a keydown wouldn't and carry the clipboardData a keydown can't.
 };
 
 // ---- drag: reorder within the tree (internal move, possibly of a multi-selection) OR upload OS files onto a
@@ -660,12 +747,24 @@ const menuItems = computed<MenuItem[]>(() => {
         items.push(
             { label: multi ? `Delete ${count} items` : `Delete`, icon: `trash`, command: () => doDeleteSelection() },
             { separator: true },
-            { label: multi ? `Cut ${count} items` : `Cut`, icon: `arrows-h`, command: () => doCut() },
-            { label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: () => doCopy() },
+            {
+                label: multi ? `Cut ${count} items` : `Cut`,
+                icon: `arrows-h`,
+                command: () => {
+                    stage(`cut`, `async`);
+                },
+            },
+            {
+                label: multi ? `Copy ${count} items` : `Copy`,
+                icon: `copy`,
+                command: () => {
+                    stage(`copy`, `async`);
+                },
+            },
         );
     }
     if (clipboard.value !== undefined) {
-        items.push({ label: `Paste`, icon: `clone`, command: () => doPaste(dir) });
+        items.push({ label: `Paste`, icon: `clone`, command: () => void doPaste(dir) });
     }
     if (expanded.value.size > 0) {
         items.push({ separator: true }, { label: `Collapse Folders`, icon: `collapse-all`, command: collapseAll });
@@ -685,7 +784,19 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
 </script>
 
 <template>
-    <div class="min-h-full" role="tree" aria-multiselectable="true" @keydown="onKeydown" @contextmenu.self.prevent="openMenu($event, undefined)">
+    <div
+        ref="treeEl"
+        class="min-h-full focus:outline-none"
+        role="tree"
+        aria-multiselectable="true"
+        tabindex="-1"
+        @keydown="onKeydown"
+        @mousedown.self="claimFocus"
+        @copy="onCopyEvent($event, 'copy')"
+        @cut="onCopyEvent($event, 'cut')"
+        @paste="onPasteEvent"
+        @contextmenu.self.prevent="openMenu($event, undefined)"
+    >
         <!-- Phantom create row at the root (also covers an empty workspace). -->
         <div v-if="creating !== undefined && creating.dir === ''" class="flex flex-col" style="padding-left: 0.5rem">
             <div class="flex items-center gap-1.5 py-1 pr-2">

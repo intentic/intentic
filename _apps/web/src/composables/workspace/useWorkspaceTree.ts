@@ -26,6 +26,11 @@ const lazyLoading = ref<Set<string>>(new Set());
 // the lazy subtrees above, so the explorer's toolbar (WorkspaceDesktop) and its context menu can Collapse All
 // against the same set the tree rows toggle. Only consulted when not filtering — a filter force-expands matches.
 const expanded = ref<ReadonlySet<string>>(new Set());
+// The explorer's cut/copy clipboard — paths staged by Ctrl+X/Ctrl+C, consumed by the next paste. Module-level for
+// the same reason `expanded` is: the tree component unmounts whenever the sidebar flips to Changes/Checkpoints or
+// the search scope flips to Content, and a clipboard that died with it would make "copy here, look there, paste
+// back" silently do nothing. Cleared on paste of a cut (the move consumed it) and on a sandbox switch below.
+const clipboard = ref<{ readonly mode: "copy" | "cut"; readonly paths: readonly string[] } | undefined>(undefined);
 // Collapse every open directory back to the roots (clears the whole set); nothing to reload since the tree data
 // is untouched. No-op when already empty.
 const collapseAll = (): void => {
@@ -42,6 +47,7 @@ export const resetWorkspaceTreeState = (): void => {
     lazyHidden.value = new Map();
     lazyLoading.value = new Set();
     expanded.value = new Set();
+    clipboard.value = undefined;
     resetUploadQueue();
 };
 
@@ -235,6 +241,7 @@ export function useWorkspaceTree() {
         loadChildren,
         expanded,
         collapseAll,
+        clipboard,
         lazyChildren,
         lazyHidden,
         lazyLoading,
