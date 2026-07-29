@@ -164,10 +164,13 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // UNCOMMITTED changes in the main tree (the Changes panel is the review); conflicts ⇒ it stayed safely in
     // the worktree, and each named path carries WHY it would not apply (see LandConflictSchema) so the report
     // can say whether the user's own copy is at risk or the main line simply moved on underneath the agent.
+    // held ⇒ auto-land is off for this agent: nothing was applied and nothing failed — the delta is waiting
+    // on the branch for a deliberate Land (landed is false, conflicts absent).
     z.object({
         kind: z.literal("landed"),
         landed: z.boolean(),
         conflicts: z.array(LandConflictSchema).optional(),
+        held: z.boolean().optional(),
     }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     z.object({ kind: z.literal("init"), model: z.string() }),
@@ -290,6 +293,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         // reset instant is unknown (nothing to schedule against).
         resetsAt: z.number().optional(),
         autoResume: z.enum(["scheduled", "available"]).optional(),
+        // rate_limit only: the account whose allowance is spent, as the DAEMON resolved it (the client's own
+        // selection can be empty, which means "the provider's first"). It is what lets the chat offer the
+        // provider's OTHER accounts as a resume-now instead of a wait — see /agent/resume-limit.
+        account: z.string().optional(),
     }),
     z.object({ kind: z.literal("done") }),
 ]);
