@@ -43,17 +43,58 @@ const escapeRegExp = (value: string): string => value.replaceAll(/[.*+?^${}()|[\
  *  - the trailing class stops at the characters that end a word in shell — whitespace, quotes, and the
  *    separators that follow a path in real command lines — so `cd /work/intentic && …` and `ls "/work/x";`
  *    both yield the path and nothing after it.
- *
- * A root that appears as prose inside a heredoc is rewritten too. That is accepted: the alternative is
- * parsing shell to find out, and a path named in prose is far more often a path the agent is about to use
- * than one it is quoting.
  */
 const commandPaths = (root: string): RegExp => new RegExp(String.raw`(?<![\w./-])${escapeRegExp(root)}(?:/[^\s'"\`;:,)\]}]*)?`, "g");
 
-// Rewrite every main-root path in a shell command. Shared by the Bash hook and exported for the terminal
-// wrapper, which composes the command line that a tmux pane actually runs.
-export const redirectCommand = (command: string, plan: IsolationPlan): string =>
-    command.replaceAll(commandPaths(plan.root), (match) => inWorktree(match, plan));
+/* HEREDOC BODIES ARE CONTENT, NOT PATHS — the one place this rewrite must keep its hands off.
+ *
+ * `cat > x.md <<'EOF' … EOF` and `python3 - <<'PY' … PY` are how an agent writes a FILE through the shell,
+ * and the body is data on its way to disk. A workspace path in there is almost never a path the command will
+ * act on; it is documentation, a comment, a test fixture, a commit message. Rewriting it corrupts the file
+ * that gets written, silently, with a path that is meaningless outside one conversation.
+ *
+ * This was first shipped as an accepted tradeoff ("a path named in prose is far more often one the agent is
+ * about to use"). That was wrong, and it took about an hour to prove: the very commit adding this feature had
+ * three shell scripts' comments rewritten mid-edit, each left naming a worktree that will not exist tomorrow.
+ * The redirect's whole promise is that the agent cannot tell the difference — a rewrite it can SEE in its own
+ * output breaks that promise more thoroughly than the missing mount ever did.
+ *
+ * Scanning for the delimiters is enough and needs no shell parser: `<<`, an optional `-`, an optional quote,
+ * the word, then everything up to a line that is that word alone (indented too, for `<<-`). Anything that
+ * confuses this scan simply leaves the region unrewritten, which is the safe direction.
+ */
+const HEREDOC_START = /<<-?\s*(["']?)([A-Za-z_][\w]*)\1/g;
+
+// The [start, end) spans of every heredoc BODY in the command, in order.
+const heredocSpans = (command: string): { start: number; end: number }[] => {
+    const spans: { start: number; end: number }[] = [];
+    for (const match of command.matchAll(HEREDOC_START)) {
+        const word = match[2];
+        if (word === undefined) {
+            continue;
+        }
+        // The body opens on the line after the one carrying the delimiter, and runs to a line holding the
+        // word alone. An unterminated heredoc (the agent's command was truncated) protects the rest.
+        const bodyStart = command.indexOf("\n", match.index + match[0].length);
+        if (bodyStart === -1) {
+            continue;
+        }
+        const terminator = new RegExp(String.raw`^[ \t]*${word}[ \t]*$`, "m");
+        const rest = terminator.exec(command.slice(bodyStart));
+        spans.push({ start: bodyStart, end: rest === null ? command.length : bodyStart + rest.index });
+    }
+    return spans;
+};
+
+// Rewrite every main-root path in a shell command, outside heredoc bodies. Shared by the Bash hook and
+// exported for the terminal wrapper, which composes the command line that a tmux pane actually runs.
+export const redirectCommand = (command: string, plan: IsolationPlan): string => {
+    const spans = heredocSpans(command);
+    return command.replaceAll(commandPaths(plan.root), (match, ...rest) => {
+        const at = rest.at(-2) as number;
+        return spans.some((span) => at >= span.start && at < span.end) ? match : inWorktree(match, plan);
+    });
+};
 
 /* The built-in tools that take a path as STRUCTURED input, and the field each one calls it. These are the
  * calls a rewrite can serve exactly — no parsing, no ambiguity about what is a path — which is why they are

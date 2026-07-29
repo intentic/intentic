@@ -405,10 +405,16 @@ if ($SelfHost) {
 # SELF_HOST_* (when self-host is on) point the sandbox's `self` deploy target at the Docker-in-Docker host
 # above. Every -e value is quoted so spaces and the multi-line HOST_SSH_KEY pass as single arguments.
 $AgentAuthArgs = if ($AgentAuthVolume) { @('-v', "${AgentAuthVolume}:/agent-auth", '-e', 'AGENT_AUTH_DIR=/agent-auth') } else { @() }
+# SYS_ADMIN is what lets the daemon give each isolated agent turn its own mount namespace, with that
+# conversation's worktree standing in for the workspace root (the sandbox app's agents/isolation.ts). Without
+# it the daemon still runs every turn — it just cannot make the guarantee, and an agent's absolute workspace
+# paths reach the shared checkout again. Scoped to THIS container's own mounts; not host access, and the
+# docker socket is still never mounted. Kept in lockstep with connect.sh and the platform provider's run.
 docker run -d --restart unless-stopped --name $Container `
     --network $Network `
     --network-alias $OriginHost `
     --add-host host.docker.internal:host-gateway `
+    --cap-add=SYS_ADMIN `
     -v "${WorkspaceVolume}:/work" `
     -v "${HistoryVolume}:/history" `
     -v "${DockerVolume}:/var/lib/docker" `

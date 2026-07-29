@@ -82,9 +82,14 @@ export const composeFile = (args: ComposeArgs): string => {
         `        pull_policy: ${imageHasRegistry(args.image) ? `always` : `never`}`,
         `        container_name: intentic-sandbox-${slug}`,
         `        init: true`,
-        // Unprivileged, matching connect.sh's default run. The docker capability's `privileged: true` (its
-        // isolated nested engine; the host's Docker socket is never mounted) is the user's own compose edit —
-        // the rebuild flow recreates containers with `docker run`, which would fight a compose-managed one.
+        // Unprivileged, matching connect.sh's default run — with the ONE capability that run also carries:
+        // SYS_ADMIN, which is what lets the daemon give each isolated agent turn its own mount namespace
+        // (the sandbox app's agents/isolation.ts). Without it agents' absolute workspace paths reach the
+        // shared checkout, so a compose-started sandbox would quietly be the weaker kind. The docker
+        // capability's `privileged: true` (its isolated nested engine; the host's Docker socket is never
+        // mounted) stays the user's own compose edit — the rebuild flow recreates containers with
+        // `docker run`, which would fight a compose-managed one.
+        `        cap_add: [SYS_ADMIN]`,
         `        restart: unless-stopped`,
         // Fresh public resolvers, so just-minted ssh-<id> tunnel hostnames don't hit a stale NXDOMAIN cache.
         `        dns: [1.1.1.1, 1.0.0.1]`,
