@@ -190,6 +190,26 @@ export const nsenterArgv = (anchorPid: number, cwd: string, command: string, arg
 // Bash tool's tmux rewrite, whose pane runs a shell line. Quoted so a path with a space can't split it.
 export const nsenterPrefix = (anchorPid: number, cwd: string): string => `nsenter --mount=/proc/${anchorPid}/ns/mnt --wd=${quote(cwd)} -- `;
 
+/* THE ONE PROCESS THAT MUST NOT BE BORN INSIDE A TURN'S NAMESPACE — the tmux server.
+ *
+ * The comment above bashTmuxHooks (agent/agent-terminals.ts) says a pane is forked by a server that "lives in
+ * the daemon's namespace". Nothing made that true. A tmux client that finds no server running FORKS one, and
+ * the server keeps ITS mounts for life; the client here is bin/tmux-run, which the Bash hook runs INSIDE the
+ * turn's namespace. So a single isolated Bash command arriving while no server happened to be running pinned
+ * one conversation's worktree as /work for every pane that server would ever fork — the owner's own web
+ * terminals included, long after the turn ended, with the main checkout nowhere on the filesystem and
+ * `git checkout main` refusing ("already checked out"). The private mounts stop a turn from seeing OUT; this
+ * was a turn leaking IN, through a process it forked but did not contain.
+ *
+ * So the daemon names its own namespace to the wrapper, which enters it before touching tmux at all. A path
+ * because that is what nsenter takes, and `process.pid` rather than `self` because the reader is the agent,
+ * on the far side of the boundary. It rides the environment because bin/tmux-run is a shell script the daemon
+ * executes rather than composes, and it is sent only for an ANCHORED turn: that is exactly when the wrapper
+ * runs somewhere other than here, and also the only time nsenter is known to work (same CAP_SYS_ADMIN probe).
+ */
+export const TMUX_NS_ENV = "INTENTIC_TMUX_NS";
+export const daemonMountNs = `/proc/${process.pid}/ns/mnt`;
+
 /* Can this container actually build the namespace? CAP_SYS_ADMIN is required for both `unshare --mount` and
  * `mount`, and the sandbox is launched unprivileged unless the host provider granted it
  * (_libs/providers/src/host/workspace.ts). A container that predates that flag — or a dev-host run, or CI —

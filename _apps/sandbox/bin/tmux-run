@@ -37,6 +37,27 @@ name="${3:-run}"
 # Fail open: any tmux failure below must degrade to running the command plainly, never break the caller.
 fallback() { exec bash -c "$cmd"; }
 
+# EVERY tmux call below is made from the mount namespace named by $INTENTIC_TMUX_NS (set per turn by
+# src/agent/agent.ts, and only for an isolated one).
+#
+# A tmux client that finds no server running FORKS one, and that server keeps the mounts of whoever forked it
+# — forever, for every pane it ever creates. This wrapper is such a client and the agent's Bash hook runs it
+# INSIDE the turn's namespace, where /work is that one conversation's worktree. So the first Bash command of
+# the first isolated turn to find no server hands its private /work to the server, and from then on the
+# OWNER's own web terminals open in a stranger's worktree, on its branch, with the main checkout nowhere on
+# the filesystem and `git checkout main` refusing ("already checked out"). A turn's isolation is supposed to
+# be invisible from outside it; this was it leaking out and outliving the turn.
+#
+# So the client hops OUT to the daemon's namespace first and the server is pinned there for good. The turn's
+# own namespace is re-entered one level in, by the nsenter inside the pane's command line
+# (src/agent/agent-terminals.ts) — the pane still runs the command in the worktree. Unset var (the daemon's
+# own runner, an unisolated turn) means this process is already where the server belongs, so there is no hop.
+# Resolved to a path once because the wrapper below calls the FUNCTION, which must not find itself by name.
+tmuxbin="$(command -v tmux)" || fallback
+hop=()
+[ -n "${INTENTIC_TMUX_NS:-}" ] && hop=(nsenter "--mount=$INTENTIC_TMUX_NS" --)
+tmux() { ${hop[@]+"${hop[@]}"} "$tmuxbin" "$@"; }
+
 d="$(mktemp -d)" || fallback
 printf '%s\n' "$cmd" > "$d/cmd"
 : > "$d/out"
@@ -116,8 +137,10 @@ fi
 # own prune, and the creation above would then have no session to add a window to.
 # Concurrent commands can both observe the same dead window; the first kill wins and the second target is gone.
 # That cleanup race is expected, so keep tmux's "can't find window" diagnostic out of an unrelated tool result.
+# A read loop rather than `xargs tmux`: xargs execs the BINARY it is given and would walk straight past the
+# namespace hop the function above exists to make.
 tmux list-panes -s -t "=$session" -F '#{pane_dead} #{window_id}' 2>/dev/null \
-    | awk '$1==1{print $2}' | xargs -rn1 tmux kill-window -t 2>/dev/null
+    | awk '$1==1{print $2}' | while read -r dead; do tmux kill-window -t "$dead" 2>/dev/null; done
 
 # A SIGTERM (the SDK's Bash timeout, or the daemon runner's abort/watchdog) takes the pane down with the
 # wrapper so timeout semantics match the plain Bash tool, and still returns whatever the command printed

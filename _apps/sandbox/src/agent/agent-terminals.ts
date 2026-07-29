@@ -75,8 +75,9 @@ export const bashTmuxHooks = (
     envKeys: readonly string[] = [],
     /* An isolated turn's Bash must land in the same tree as its Edit/Write, or the two tools disagree about
      * what /work is — the agent edits its worktree and `sed -i` on the same path rewrites the shared tree.
-     * Both roads to that agreement start here, because a pane is forked by the tmux SERVER, which lives in the
-     * daemon's namespace, and the pane's own command line is the only place that can diverge from it:
+     * Both roads to that agreement start here, because a pane is forked by the tmux SERVER, which is pinned to
+     * the daemon's namespace (isolation.ts names it to bin/tmux-run, which hops there before it can ever fork
+     * one), and the pane's own command line is the only place that can diverge from it:
      *
      *  - anchored: nsenter wraps the command INSIDE the window, leaving the server, its socket, and the
      *    terminals panel's list/attach exactly as they are;

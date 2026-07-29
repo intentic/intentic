@@ -22,7 +22,7 @@ import { spawn } from "node:child_process";
 import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, SystemPromptMode, UsageWindow } from "@intentic/sandbox-contract";
 import { relative, sep } from "node:path";
 import { z } from "zod";
-import { inWorktree, type IsolationAnchor, nsenterArgv, type TurnPlacement } from "../agents/isolation.js";
+import { daemonMountNs, inWorktree, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../agents/isolation.js";
 import { worktreeRedirectHooks } from "../agents/worktree-redirect.js";
 import { browserArtifactHooks } from "../browser/browser-artifacts.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
@@ -772,6 +772,10 @@ const baseOptions = (
         ...harnessEnv(request),
         // The output-cleaner spec/holdout (or the filter-off flag) that the agent's Bash → tmux-run → agent-output-filter reads.
         ...cleanerEnv(request),
+        // Where bin/tmux-run must stand to talk to tmux, so the server it may have to START is the daemon's
+        // and not this turn's (isolation.ts). Only for an anchored turn — the only one whose wrapper runs
+        // inside a namespace at all.
+        ...(request.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
     },
     // Hooks fire even under bypassPermissions, and for subagents too. tmux: every Bash command runs inside an
     // `agent-*` tmux session (bin/tmux-run) so the terminal panel can watch the agent work live (the rtk
