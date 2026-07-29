@@ -650,24 +650,35 @@ const pressKey = (data: string): void => tabs.sendInput(data);
 
 const container = ref<HTMLElement>();
 
-// The spawn-hook disposer (registered after attach, so a mid-attach "New Terminal" lands in the pending flag
-// instead of racing the initial relist).
+// The spawn-hook disposer. Registered synchronously at mount — ahead of the initial relist, not behind it:
+// attach() takes the container before it awaits anything, so the hook is usable the moment it is published,
+// and a relist that REJECTS (an unreachable daemon, or one whose session list predates the contract the app
+// parses it with) must not take "New Terminal" down with it. Behind the await, one bad list left the command a
+// no-op that opened the panel and never spawned anything, for as long as that panel lived.
 let disposeSpawn: (() => void) | undefined;
 // The panel is torn down and reopened by a plain v-if (Ctrl+`, the ×), so the initial relist can easily outlive
-// its own instance. Everything after that await has to check: publishing a dead instance's newTab as the global
-// spawn hook — or running it — opens a real tmux session that no live panel will ever show.
+// its own instance. Everything after that await has to check: running a dead instance's newTab opens a real
+// tmux session that no live panel will ever show.
 let live = true;
 
 onMounted(async () => {
     registerPanelCommands();
-    if (container.value !== undefined) {
-        const autoCreated = await tabs.attach(container.value);
-        if (live && newTab !== undefined) {
-            disposeSpawn = registerTerminalSpawn(newTab);
-            // A "New Terminal" issued while no panel was mounted; an empty panel's auto-created shell IS it.
-            if (consumeSpawnRequest() && !autoCreated) {
-                newTab();
-            }
+    if (container.value === undefined) {
+        return;
+    }
+    const attaching = tabs.attach(container.value);
+    if (newTab !== undefined) {
+        disposeSpawn = registerTerminalSpawn(newTab);
+    }
+    let autoCreated = false;
+    try {
+        autoCreated = await attaching;
+    } finally {
+        // A "New Terminal" issued while no panel was mounted; an empty panel's auto-created shell IS it. In the
+        // `finally` for the same reason the hook goes up first: a spawn the user asked for still opens its
+        // shell when the list is what broke, since the create needs nothing from it.
+        if (live && newTab !== undefined && consumeSpawnRequest() && !autoCreated) {
+            newTab();
         }
     }
     if (live && initial !== undefined) {
