@@ -3,6 +3,7 @@ import { isUsageLimitText } from "../agent/usage-limit-text.js";
 import { recordPrompt } from "../sessions/prompt-index.js";
 import type { AgentsStore, AgentTitleSource, PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
+import type { LandStandings } from "./standing.js";
 
 // The runtime half of the fleet registry: holds the authoritative in-memory entry list (loaded once from the
 // store, write-through on persisted mutations) plus per-conversation turn state rebuilt from AgentEvent frames
@@ -123,11 +124,16 @@ export interface AgentsRegistry {
     readonly recordLanded: (id: string, outcome: LandOutcome) => Promise<void>;
     // Fold one turn frame into runtime state; broadcasts only on card-visible changes.
     readonly observe: (id: string, event: AgentEvent) => void;
-    // End of turn (aborted included): flush pending usage/session into the entry, release the mutex.
-    // `outcome` carries the land verdict of a clean turn — landed/conflict from a real land, `ready` from a
-    // measure that held the delta on the branch — and wins over the default idle status (an observed error
-    // frame still wins over everything).
-    readonly finish: (id: string, now: number, outcome?: "landed" | "conflict" | "ready") => Promise<void>;
+    // End of turn (aborted included): flush pending usage/session into the entry, release the mutex, and write
+    // how the turn ENDED — error on an observed error frame, else idle. Deliberately says nothing about where
+    // the work now stands: that is standing.ts's question, re-derived here before the roster goes out.
+    readonly finish: (id: string, now: number) => Promise<void>;
+    /* Re-derive every live agent's land standing and publish the roster if any of them moved. Called wherever
+     * the answer can have changed without this daemon doing it — most of all the roster READ, which is what
+     * heals a card after work reached the main tree by a road the daemon never saw (a hand-merge in a
+     * terminal). Cheap and idempotent: a pass whose shas are unchanged spends one rev-parse per repo and
+     * broadcasts nothing. */
+    readonly refreshStandings: () => Promise<void>;
     // Stamp/clear the archive marker. Both take the ids that ALREADY had their checkout retired (or restored)
     // — the registry owns the marker, agents/archive.ts owns the git side and the order between them.
     readonly setArchived: (ids: readonly string[], now: number) => Promise<void>;
@@ -147,7 +153,7 @@ export interface AgentsRegistry {
     readonly revision: () => number;
 }
 
-export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
+export const createAgentsRegistry = (store: AgentsStore, standings: LandStandings): AgentsRegistry => {
     let entries: PersistedAgent[] = [];
     const runtime = new Map<string, RuntimeState>();
     const listeners = new Set<(agents: AgentSummary[], rev: number) => void>();
@@ -168,7 +174,13 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
         const state = runtime.get(entry.id);
         // A turn holding an unanswered card is AWAITING, however much else it has in flight beside it.
         const parked = state === undefined ? [] : [...state.pauses.values()];
-        const status = state?.running === true ? (parked.length > 0 ? "awaiting" : "running") : entry.status;
+        /* THE STATUS PROJECTION, in precedence order: the live turn, then how the last one ENDED, then where
+         * the work stands. The middle rung is why `idle` is the only persisted value that yields — it is the
+         * one that means "the turn ended cleanly", i.e. that the entry has nothing more to say and the
+         * question passes to git. `error` and `interrupted` outrank precisely because nothing else remembers
+         * them: a turn that died is not made fine by a branch that happens to be empty. */
+        const landing = standings.of(entry.id);
+        const status = state?.running === true ? (parked.length > 0 ? "awaiting" : "running") : entry.status === "idle" ? landing : entry.status;
         const base = (entry.repos.find((repo) => repo.repo === "root") ?? entry.repos[0])?.base.slice(0, 7);
         // Live totals: persisted totals plus the running turn's not-yet-flushed usage.
         const costUsd = entry.costUsd + (state?.pendingCostUsd ?? 0);
@@ -185,7 +197,9 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 plan: parked.includes("plan"),
                 question: parked.includes("question"),
                 permission: parked.includes("permission"),
-                conflict: entry.status === "conflict",
+                // Reads the DERIVED verdict, not the stored report. Deriving this from a cached status was the
+                // shape of the original bug in miniature: a faithful projection over a stale input is stale.
+                conflict: status === "conflict",
             },
             ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}),
             ...(entry.origin !== undefined ? { origin: entry.origin } : {}),
@@ -225,6 +239,9 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             listener(agents, revision);
         }
     };
+
+    // Only the live roster is probed — see LandStandings.refresh on why an archived agent keeps its last answer.
+    const reprobe = (): Promise<boolean> => standings.refresh(entries.filter((entry) => entry.archivedAt === undefined));
 
     // Chained, not fire-and-forget: `entries` is REPLACED (not mutated) by every write path, so two overlapping
     // persists would each serialize the array they captured — and the one that finishes last would write back a
@@ -285,6 +302,13 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
     return {
         init: async () => {
             entries = await store.load();
+            // Before the first roster goes out: a reboot's cache is empty, and an unprobed agent reads `idle`.
+            await reprobe();
+        },
+        refreshStandings: async () => {
+            if (await reprobe()) {
+                broadcast();
+            }
         },
         ids: () => entries.map((entry) => entry.id),
         list,
@@ -504,7 +528,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             }
             broadcast();
         },
-        finish: async (id, now, outcome) => {
+        finish: async (id, now) => {
             const entry = entryOf(id);
             const state = runtime.get(id);
             // Captured BEFORE the reset: only a finish that ends a LIVE turn counts toward `turns` — the
@@ -523,8 +547,9 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 const sessionId = state?.pendingSessionId ?? entry.sessionId;
                 replace({
                     ...entry,
-                    // An observed error frame outranks everything; else the land verdict; else idle.
-                    status: state?.errored === true ? "error" : (outcome ?? "idle"),
+                    // How the turn ENDED, which is all this field says now: an observed error frame, else the
+                    // clean ending that hands the question to standing.ts.
+                    status: state?.errored === true ? "error" : "idle",
                     costUsd: entry.costUsd + (state?.pendingCostUsd ?? 0),
                     inputTokens: entry.inputTokens + (state?.pendingInputTokens ?? 0),
                     outputTokens: entry.outputTokens + (state?.pendingOutputTokens ?? 0),
@@ -543,6 +568,10 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 }
                 await persist();
             }
+            // The turn just moved the branch (and, on an auto-land, the main tree) — re-derive BEFORE the
+            // roster goes out, so the card the user sees settle carries the new standing rather than the one
+            // from before the turn ran.
+            await reprobe();
             broadcast();
         },
         recordLanded: async (id, outcome) => {
@@ -560,6 +589,8 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
                 ...(outcome.conflicts !== undefined ? { conflicts: [...outcome.conflicts] } : {}),
             });
             await persist();
+            // The landedTips just moved, which is half the anchor every standing is measured from.
+            await reprobe();
             broadcast();
         },
         setArchived: async (ids, now) => {
@@ -588,6 +619,7 @@ export const createAgentsRegistry = (store: AgentsStore): AgentsRegistry => {
             for (const id of targets) {
                 runtime.delete(id);
             }
+            standings.forget(ids);
             await persist();
             broadcast();
         },

@@ -51,6 +51,7 @@ import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-regis
 import { fileAgentsStore } from "./agents/agents-store.js";
 import { createTurnIsolation, type TurnIsolation } from "./agents/isolation.js";
 import { createAgentOrigins, type AgentOrigins } from "./agents/origins.js";
+import { createLandStandings } from "./agents/standing.js";
 import { createAgentWorktrees, type AgentWorktrees } from "./agents/worktrees.js";
 import {
     type ActionResult,
@@ -414,12 +415,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the store and the sender that reads it must be the same instance, or a subscription added
     // through the routes would be invisible to the next send.
     const pushStore = filePushStore(join(config.historyRoot, "push.json"));
-    // Hoisted: the Changes scan's per-file attribution reads the SAME registry the turns write to — a
-    // second instance would answer from a stale agents.json.
-    const agents = createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json")));
     // Shared by the turn path (which builds a namespace per isolated turn) and worktree creation (which plants
     // mount points rather than symlinks when it knows the namespace is coming), so both read ONE probe.
     const turnIsolation = createTurnIsolation({ root: workspace.root, logger });
+    // Hoisted ABOVE the registry, which now derives each card's land standing through it (standing.ts) rather
+    // than reading a verdict off the entry.
+    const agentWorktrees = createAgentWorktrees({ workspace, worktreesRoot: join(config.historyRoot, "worktrees"), isolation: turnIsolation, logger });
+    // Hoisted: the Changes scan's per-file attribution reads the SAME registry the turns write to — a
+    // second instance would answer from a stale agents.json.
+    const agents = createAgentsRegistry(fileAgentsStore(join(config.historyRoot, "agents.json")), createLandStandings(agentWorktrees));
 
     return {
         config,
@@ -513,7 +517,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             dropCommit,
         },
         agents,
-        agentWorktrees: createAgentWorktrees({ workspace, worktreesRoot: join(config.historyRoot, "worktrees"), isolation: turnIsolation, logger }),
+        agentWorktrees,
         turnIsolation,
         agentOrigins: createAgentOrigins({ agents, logger }),
         files: {

@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { createAgentsRegistry, type AgentTurnIdentity } from "./agents-registry.js";
 import type { AgentsStore, PersistedAgent } from "./agents-store.js";
+import type { LandStanding, LandStandings } from "./standing.js";
+
+// The derived half of a card's status, dialled by hand. Deriving it for real needs a git repo per case and is
+// standing.test.ts's whole subject; what belongs HERE is the projection — which of the two halves wins, and
+// what each surface reads off the result.
+const standings = (): LandStandings & { set: (id: string, standing: LandStanding) => void } => {
+    const verdicts = new Map<string, LandStanding>();
+    return {
+        of: (id) => verdicts.get(id) ?? "idle",
+        refresh: async () => false,
+        forget: (ids) => {
+            for (const id of ids) {
+                verdicts.delete(id);
+            }
+        },
+        set: (id, standing) => verdicts.set(id, standing),
+    };
+};
 
 const memoryStore = (initial: PersistedAgent[] = []): AgentsStore & { saved: () => PersistedAgent[] } => {
     let data = initial;
@@ -23,7 +41,7 @@ const turn = (overrides: Partial<AgentTurnIdentity> = {}): AgentTurnIdentity => 
 
 describe("agents registry", () => {
     it("begin creates an entry with title, branch, and running status", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         expect(await registry.begin(turn(), 1_000)).toBe(true);
         const summary = registry.get("c1");
@@ -34,7 +52,7 @@ describe("agents registry", () => {
     });
 
     it("records where an outside message came from and keeps it across the user's own follow-up turns", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         const origin = { automationId: "support", provider: "discord", channelId: "c-general", author: "alice" };
         await registry.begin(turn({ origin, title: "alice: the build is red" }), 1_000);
@@ -50,7 +68,7 @@ describe("agents registry", () => {
     // tomorrow has nowhere else to learn it, and seeding its composer from the browser's own last pick instead
     // is what made an open agent claim a model its session never used.
     it("records the settings a turn ran under and keeps them for a turn that states none", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn({ model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false }), 1_000);
         expect(registry.get("c1")).toMatchObject({ model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false });
@@ -61,18 +79,17 @@ describe("agents registry", () => {
         expect(registry.get("c1")).toMatchObject({ model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false });
     });
 
-    it("holds the autoLand override across turns, clears it on null, and settles a held turn as ready", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+    it("holds the autoLand override across turns and clears it on null", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         // Set mid-turn on purpose — the value is read at turn COMPLETION, so this is "hold THIS turn's work".
         expect((await registry.setAutoLand("c1", false))?.autoLand).toBe(false);
-        await registry.finish("c1", 2_000, "ready");
-        expect(registry.get("c1")?.status).toBe("ready");
+        await registry.finish("c1", 2_000);
         // The override is a standing choice about the conversation: the next turn's entry rebuild keeps it.
         await registry.begin(turn({ prompt: "keep going" }), 3_000);
         expect(registry.get("c1")?.autoLand).toBe(false);
-        await registry.finish("c1", 4_000, "ready");
+        await registry.finish("c1", 4_000);
         // null strips the key back to "inherit the sandbox setting" — absent, not stored-false.
         expect((await registry.setAutoLand("c1", null))?.autoLand).toBeUndefined();
         expect(registry.entry("c1")?.autoLand).toBeUndefined();
@@ -80,7 +97,7 @@ describe("agents registry", () => {
     });
 
     it("begin is a mutex: a second concurrent turn is refused until finish", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         expect(await registry.begin(turn(), 2_000)).toBe(false);
@@ -90,7 +107,7 @@ describe("agents registry", () => {
 
     it("keeps the first title and accumulates usage across turns", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store);
+        const registry = createAgentsRegistry(store, standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "usage", costUsd: 0.5, inputTokens: 100, outputTokens: 50 });
@@ -107,7 +124,7 @@ describe("agents registry", () => {
     });
 
     it("begin prefers the turn's title over the prompt; a whitespace title falls back to the prompt", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn({ title: "My renamed draft" }), 1_000);
         expect(registry.get("c1")?.title).toBe("My renamed draft");
@@ -117,7 +134,7 @@ describe("agents registry", () => {
 
     it("setTitle persists, broadcasts, keeps updatedAt, and survives a running turn's finish", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store);
+        const registry = createAgentsRegistry(store, standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         const frames: (string | undefined)[] = [];
@@ -139,7 +156,7 @@ describe("agents registry", () => {
 
     it("markSeen persists the read marker, broadcasts it, and leaves updatedAt alone", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store);
+        const registry = createAgentsRegistry(store, standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         await registry.finish("c1", 2_000);
@@ -161,7 +178,7 @@ describe("agents registry", () => {
 
     it("markAllSeen stamps the whole fleet — the board's one escape hatch", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store);
+        const registry = createAgentsRegistry(store, standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         await registry.begin(turn({ conversationId: "c2" }), 2_000);
@@ -172,7 +189,7 @@ describe("agents registry", () => {
 
     it("promotes the title to a plan's heading, which names the job the opening prompt only hinted at", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store);
+        const registry = createAgentsRegistry(store, standings());
         await registry.init();
         await registry.begin(turn({ prompt: "the login page throws on submit" }), 1_000);
         const frames: (string | undefined)[] = [];
@@ -190,7 +207,7 @@ describe("agents registry", () => {
     });
 
     it("leaves the title alone for a plan with no heading to take it from", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn({ prompt: "the login page throws on submit" }), 1_000);
 
@@ -200,7 +217,7 @@ describe("agents registry", () => {
     });
 
     it("lets the first plan name the job and refuses to let a replan rename it", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
 
@@ -213,7 +230,7 @@ describe("agents registry", () => {
     });
 
     it("slots a summary above the derived guess and below a plan's own name", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn({ prompt: "we have recently added the fleet board" }), 1_000);
 
@@ -232,7 +249,7 @@ describe("agents registry", () => {
     });
 
     it("refuses a usage-limit refusal as any automatic title — it names the failure, not the work", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
 
@@ -261,13 +278,13 @@ describe("agents registry", () => {
             title: "You've hit your session limit · resets 11:50pm (UTC)",
             titleSource: "summary",
         };
-        const registry = createAgentsRegistry(memoryStore([poisoned]));
+        const registry = createAgentsRegistry(memoryStore([poisoned]), standings());
         await registry.init();
         expect((await registry.setTitle("c1", "Wire the fleet board broadcast", "summary"))?.title).toBe("Wire the fleet board broadcast");
     });
 
     it("never lets a plan rename what the user named, and still allows a second rename", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         await registry.setTitle("c1", "Login bug", "user");
@@ -280,7 +297,7 @@ describe("agents registry", () => {
     });
 
     it("a card parks the agent until its own release — the frames trailing it do not", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         // The `ask` tool's question beats its own tool_call out of the SDK (the card is pushed from the
@@ -298,7 +315,7 @@ describe("agents registry", () => {
     });
 
     it("cards are released one at a time; a release for one nobody raised changes nothing", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "plan", requestId: "p1", text: "the plan" });
@@ -315,7 +332,7 @@ describe("agents registry", () => {
     });
 
     it("stopping a parked turn takes its card off the board — the release may never arrive", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "question", requestId: "q1", questions: [] });
@@ -331,34 +348,38 @@ describe("agents registry", () => {
      * written the resting `idle` there is what filed a turn holding an unanswered question under Finished. */
     it("a turn the daemon died under comes back interrupted, not idle", async () => {
         const store = memoryStore();
-        const first = createAgentsRegistry(store);
+        const first = createAgentsRegistry(store, standings());
         await first.init();
         await first.begin(turn(), 1_000);
         first.observe("c1", { kind: "question", requestId: "q1", questions: [] });
         expect(first.get("c1")?.status).toBe("awaiting");
 
         // No finish() — the process is gone. Whatever is on disk at this instant is what the user comes back to.
-        const rebooted = createAgentsRegistry(store);
+        const rebooted = createAgentsRegistry(store, standings());
         await rebooted.init();
         expect(rebooted.get("c1")?.status).toBe("interrupted");
         expect(rebooted.running("c1")).toBe(false);
     });
 
     // The same entry once the turn DOES report back: `interrupted` is a placeholder that every ordinary ending
-    // overwrites, so a restart after this one reads the outcome rather than the interruption.
+    // overwrites, so a restart after this one reads the clean ending rather than the interruption — and from
+    // there the card's status is the branch's, re-derived on the fresh daemon's first probe.
     it("finishing overwrites the interrupted placeholder, and it does not survive the next boot", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store);
+        const registry = createAgentsRegistry(store, standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 2_000, "landed");
-        const rebooted = createAgentsRegistry(store);
+        await registry.finish("c1", 2_000);
+        const landed = standings();
+        landed.set("c1", "landed");
+        const rebooted = createAgentsRegistry(store, landed);
         await rebooted.init();
         expect(rebooted.get("c1")?.status).toBe("landed");
+        expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("idle");
     });
 
     it("error during the turn persists as error status at finish", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "error", message: "boom" });
@@ -366,27 +387,56 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.status).toBe("error");
     });
 
-    it("session and worktree composition persist; a finish outcome sets the land status", async () => {
-        const store = memoryStore();
-        const registry = createAgentsRegistry(store);
+    it("session and worktree composition persist across a turn's finish", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "session", sessionId: "s9" });
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
-        await registry.finish("c1", 2_000, "landed");
+        await registry.finish("c1", 2_000);
         expect(registry.get("c1")?.sessionId).toBe("s9");
         expect(registry.get("c1")?.base).toBe("aaaaaaa");
-        expect(registry.get("c1")?.status).toBe("landed");
-        // The manual-land path finishes with an outcome OUTSIDE any turn (no runtime state) — still persists.
-        await registry.finish("c1", 3_000, "conflict");
+    });
+
+    /* THE PROJECTION, which is the whole of what this module now decides about status: the live turn first,
+     * then how the last one ENDED, and only then where the work stands. `idle` is the one persisted value that
+     * yields, because it is the one that means the entry has nothing left to say.
+     *
+     * The precedence matters in both directions. A branch that happens to hold outstanding work must not
+     * relabel an errored turn as "ready to land" — the failure is the thing the user has to see. And a turn
+     * that ended cleanly must not keep ANY land verdict of its own: that is the cache that outlived its subject
+     * (see standing.ts), and the only cure is that there is nowhere left to write one. */
+    it("projects the land standing under a clean ending, and never over an error or an interruption", async () => {
+        const store = memoryStore();
+        const land = standings();
+        const registry = createAgentsRegistry(store, land);
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.status).toBe("idle");
+
+        land.set("c1", "conflict");
         expect(registry.get("c1")?.status).toBe("conflict");
+        // The Attention flag reads the DERIVED verdict too — deriving it from a stored status was the original
+        // bug in miniature, a faithful projection over a stale input.
         expect(registry.get("c1")?.attention.conflict).toBe(true);
-        expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("conflict");
+        // …and nothing about it reached the disk. The land verdict has no persisted home any more.
+        expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("idle");
+
+        land.set("c1", "ready");
+        expect(registry.get("c1")?.status).toBe("ready");
+        expect(registry.get("c1")?.attention.conflict).toBe(false);
+
+        // An error outranks whatever the branch holds: outstanding work does not make a failed turn fine.
+        await registry.begin(turn(), 3_000);
+        registry.observe("c1", { kind: "error", message: "boom" });
+        await registry.finish("c1", 4_000);
+        expect(registry.get("c1")?.status).toBe("error");
     });
 
     it("recordLanded persists advanced landedTips and the cumulative diffstat", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store);
+        const registry = createAgentsRegistry(store, standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
@@ -396,18 +446,19 @@ describe("agents registry", () => {
             repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }],
             diff: { files: 12, insertions: 412, deletions: 96 },
         });
-        await registry.finish("c1", 2_000, "landed");
+        await registry.finish("c1", 2_000);
         expect(store.saved().find((entry) => entry.id === "c1")?.repos).toEqual([{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }]);
         expect(registry.get("c1")?.diff).toEqual({ files: 12, insertions: 412, deletions: 96 });
     });
 
-    // The conflict report and the `conflict` status are one fact: a card that says "Resolve conflict" but
-    // cannot say WHAT blocked is the dead end this pairing exists to prevent. So the report has to outlive the
-    // land that produced it — and has to disappear the moment a later land succeeds, or the review keeps
-    // offering a resolution for something already resolved.
+    // A card that says "Resolve conflict" but cannot say WHAT blocked is the dead end this report exists to
+    // prevent, so it has to outlive the land that produced it — and has to disappear the moment a later land
+    // succeeds, or the review keeps offering a resolution for something already resolved. (It is EVIDENCE, not
+    // state: standing.ts reads it to explain an outstanding delta and never to invent one, so a report whose
+    // delta is gone stops being rendered whether or not anything got round to clearing it.)
     it("recordLanded stores the land's conflict report, and a later clean land clears it", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store);
+        const registry = createAgentsRegistry(store, standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
@@ -431,7 +482,7 @@ describe("agents registry", () => {
     });
 
     it("counts turns and tool uses — live during the turn, folded at finish, never inflated by manual lands", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "tool_call", id: "t1", name: "Edit", category: "edit", status: "in_progress" });
@@ -452,7 +503,7 @@ describe("agents registry", () => {
     });
 
     it("liveSessionIds reports the in-flight turns' sdk sessions — the terminals list's 'still working' signal", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         expect(registry.liveSessionIds()).toEqual([]);
         await registry.begin(turn(), 1_000);
@@ -474,7 +525,7 @@ describe("agents registry", () => {
     });
 
     it("activity tracks the last tool and current todo", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "tool_call", id: "t1", name: "Edit", category: "edit", status: "in_progress", target: "src/app.ts" });
@@ -489,7 +540,7 @@ describe("agents registry", () => {
     });
 
     it("subscribe delivers an immediate snapshot and change broadcasts", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         const frames: number[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents.length));
@@ -505,7 +556,7 @@ describe("agents registry", () => {
 
     it("archiving takes an agent off the roster without touching the entry", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store);
+        const registry = createAgentsRegistry(store, standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         await registry.finish("c1", 2_000);
@@ -525,7 +576,7 @@ describe("agents registry", () => {
     });
 
     it("a new turn un-archives the agent it runs on", async () => {
-        const registry = createAgentsRegistry(memoryStore());
+        const registry = createAgentsRegistry(memoryStore(), standings());
         await registry.init();
         await registry.begin(turn(), 1_000);
         await registry.finish("c1", 2_000);
@@ -555,7 +606,7 @@ describe("agents registry", () => {
             },
             saved: () => data,
         };
-        const registry = createAgentsRegistry(store);
+        const registry = createAgentsRegistry(store, standings());
         await registry.init();
         for (const id of ["c1", "c2", "c3"]) {
             await registry.begin(turn({ conversationId: id }), 1_000);
@@ -572,7 +623,7 @@ describe("agents registry", () => {
 
     it("the archived list survives a restart, newest first", async () => {
         const store = memoryStore();
-        const first = createAgentsRegistry(store);
+        const first = createAgentsRegistry(store, standings());
         await first.init();
         await first.begin(turn(), 1_000);
         await first.finish("c1", 1_500);
@@ -581,7 +632,7 @@ describe("agents registry", () => {
         await first.setArchived(["c1"], 5_000);
         await first.setArchived(["c2"], 6_000);
 
-        const second = createAgentsRegistry(store);
+        const second = createAgentsRegistry(store, standings());
         await second.init();
         expect(second.list()).toEqual([]);
         expect(second.listArchived().map((agent) => agent.id)).toEqual(["c2", "c1"]);
@@ -589,11 +640,11 @@ describe("agents registry", () => {
 
     it("remove drops the entry and rehydration restores persisted entries", async () => {
         const store = memoryStore();
-        const first = createAgentsRegistry(store);
+        const first = createAgentsRegistry(store, standings());
         await first.init();
         await first.begin(turn(), 1_000);
         await first.finish("c1", 2_000);
-        const second = createAgentsRegistry(store);
+        const second = createAgentsRegistry(store, standings());
         await second.init();
         expect(second.get("c1")?.status).toBe("idle");
         await second.remove(["c1"]);

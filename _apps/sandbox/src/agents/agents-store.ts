@@ -8,9 +8,12 @@ import { z } from "zod";
 // conversation. Runtime-only state (running/awaiting, attention, activity, context fill) lives in the
 // registry's memory and is rebuilt from turn frames; only what must survive a restart is here.
 
-/* Persisted status excludes the transient running/awaiting — a daemon restart mid-turn must rehydrate to a
- * state the user can act on (the turn itself is gone). `ready` IS persisted: a held delta waits on the branch
- * across restarts exactly as it waits across turns, and rehydrating it to `idle` would hide work from review.
+/* THE TURN LIFECYCLE, and nothing else. Every value here is an EVENT — how the last turn ended — which is
+ * exactly the class of fact nothing but this entry remembers. running/awaiting are excluded because they are
+ * rebuilt from the live turn's frames (a daemon restart mid-turn must rehydrate to a state the user can act
+ * on), and ready/landed/conflict because they are not facts about the turn at all: they answer "does this
+ * branch hold work the main line does not", which git answers live and correctly at any moment. Storing that
+ * answer made a cache with no invalidation, and a card that outlived what it described — see standing.ts.
  *
  * `interrupted` is what a LIVE turn leaves here — written by registry.begin, overwritten by registry.finish.
  * The value on disk while a turn runs is therefore the one that should stand if the daemon never comes back,
@@ -21,8 +24,14 @@ import { z } from "zod";
  *
  * Writing `idle` here instead is what filed a killed agent under Finished: `idle` is the resting status of a
  * turn that ended CLEANLY, so an agent whose turn was parked on a question, and whose park died with the
- * process holding it, came back indistinguishable from one that had nothing left to do. */
-const PersistedAgentStatusSchema = z.enum(["idle", "interrupted", "ready", "landed", "conflict", "error"]);
+ * process holding it, came back indistinguishable from one that had nothing left to do.
+ *
+ * `.catch` rather than a bare enum, and the only field here that carries one: agents.json is user data on a
+ * volume that outlives every image, so this field's vocabulary shrinking must cost the VALUE, not the row. The
+ * per-entry parse below already treats losing a row as a cost to be minimised; a status that no longer exists
+ * reads as the resting one, which is what every retired value meant — the turn ended and the land question is
+ * now asked of git. */
+const PersistedAgentStatusSchema = z.enum(["idle", "interrupted", "error"]).catch("idle");
 
 /* Where a title came from, which is the whole of what decides whether a better one may replace it.
  *
@@ -75,8 +84,9 @@ export const PersistedAgentSchema = z.object({
     // Per-agent override of the sandbox-wide autoLand setting, absent ⇒ inherit — see AgentSummarySchema.
     // Persisted because it must govern turns that finish with no browser attached (automations included).
     autoLand: z.boolean().optional(),
-    // Why the last land refused, kept alongside the `conflict` status it produced — the two are one fact, and
-    // a status the UI can render but not explain is what makes a conflicted card a dead end. Written and
+    // Why the last land refused — the EVIDENCE behind a conflicted card, which is a different thing from the
+    // card's state: standing.ts reads this only to explain an outstanding delta, never to create one, so a
+    // report whose delta has since gone stops being rendered without needing to be rewritten. Written and
     // cleared by the same recordLanded that advances the tips, so it is exactly as current as they are.
     conflicts: z.array(LandConflictSchema).optional(),
     costUsd: z.number(),

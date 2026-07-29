@@ -1,6 +1,6 @@
+import type { AgentSummary } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { AgentsRegistry } from "./agents-registry.js";
-import type { PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
 // ARCHIVING — the board's only exit that isn't a deletion.
@@ -22,24 +22,30 @@ import type { AgentWorktrees } from "./worktrees.js";
 // Contrast `discard`, which is the destructive one: it drops the branch too, and with it the only record of
 // work that never landed.
 
-// Is this entry safe to archive UNATTENDED? The guards are about not stranding the user, not about disk:
-//   · running — the worktree is the live turn's working state (the same guard land/discard take)
-//   · conflict/error — the card is in the Attention lane asking for something; archiving it would hide a
-//     question rather than answer it
-//   · interrupted — the same, for a turn the daemon died under: nobody has seen that it stopped, and its
-//     worktree holds however far it got. This one is why the status exists rather than rehydrating to `idle`:
-//     the runtime flags a park raised die WITH the daemon, so a question-blocked agent used to come back
-//     `idle` and not running — passing both guards below, and eligible to be swept away unread.
-//   · attention flags aren't checked here because they are runtime-only state, and the two ways to hold one —
-//     a live turn, or a turn that died holding it — are exactly the first and third guards
-// `idle` with nothing landed is the most archivable case there is: a throwaway agent that produced nothing.
-export const archivable = (entry: PersistedAgent, running: boolean): boolean =>
-    !running && entry.archivedAt === undefined && (entry.status === "landed" || entry.status === "idle");
+/* Is this agent safe to archive UNATTENDED? The guards are about not stranding the user, not about disk, and
+ * they are exactly two statuses wide because the SUMMARY status already folds in everything they used to test
+ * separately. Reading the summary rather than the persisted entry is what keeps this honest: `conflict` and
+ * `ready` are derived per roster now (agents/standing.ts), so an entry-level test could not see them at all,
+ * and the sweep would have started filing conflicted and held-work agents away unread.
+ *
+ * What each excluded status is protecting:
+ *   · running/awaiting — the worktree is the live turn's working state (the same guard land/discard take), and
+ *     an awaiting turn is holding a question
+ *   · conflict — the card is in the Attention lane asking for something; archiving it hides the ask
+ *   · ready — a held delta nobody has landed yet: finished, but the user's deliberate land is still owed
+ *   · error — a failure nobody has necessarily seen
+ *   · interrupted — the same, for a turn the daemon died under: its worktree holds however far it got. This one
+ *     is why the status is persisted rather than rehydrating to `idle`: the runtime flags a park raised die
+ *     WITH the daemon, so a question-blocked agent used to come back `idle` and not running — passing every
+ *     guard here, and eligible to be swept away unread.
+ * `idle` with nothing landed is the most archivable case there is: a throwaway agent that produced nothing. */
+export const archivable = (agent: AgentSummary): boolean =>
+    agent.archivedAt === undefined && (agent.status === "landed" || agent.status === "idle");
 
 // Aged out of the board, per the sandbox's retention setting. Kept separate from `archivable` so the manual
 // "Clear finished" button can archive on demand while the sweep waits — same safety guards, different clock.
-export const archivableByAge = (entry: PersistedAgent, running: boolean, now: number, retentionMs: number): boolean =>
-    retentionMs > 0 && archivable(entry, running) && now - entry.updatedAt >= retentionMs;
+export const archivableByAge = (agent: AgentSummary, now: number, retentionMs: number): boolean =>
+    retentionMs > 0 && archivable(agent) && now - agent.updatedAt >= retentionMs;
 
 export interface AgentArchiveDeps {
     readonly agents: AgentsRegistry;
@@ -142,11 +148,9 @@ export const purgeArchived = async (deps: AgentArchiveDeps): Promise<string[]> =
 // boot and on an interval — `updatedAt` is the clock, so an agent the user keeps talking to never ages out.
 export const sweepAgedAgents = async (deps: AgentArchiveDeps, now: number, retentionMs: number): Promise<string[]> => {
     const aged = deps.agents
-        .ids()
-        .map((id) => deps.agents.entry(id))
-        .filter((entry) => entry !== undefined)
-        .filter((entry) => archivableByAge(entry, deps.agents.running(entry.id), now, retentionMs))
-        .map((entry) => entry.id);
+        .list()
+        .filter((agent) => archivableByAge(agent, now, retentionMs))
+        .map((agent) => agent.id);
     if (aged.length === 0) {
         return [];
     }

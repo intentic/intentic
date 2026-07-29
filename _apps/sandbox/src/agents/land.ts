@@ -59,7 +59,7 @@ const isAncestor = async (dir: string, ancestor: string, descendant: string, git
 // The branch's tip as the MAIN repo sees it — a retired checkout's stand-in for `rev-parse HEAD` in the
 // worktree (the refs live in the shared .git either way). Undefined when the branch is gone too, which reads
 // as "nothing of this agent's exists in this repo any more".
-const branchSha = async (main: string, branch: string, git: GitRunner): Promise<string | undefined> => {
+export const branchSha = async (main: string, branch: string, git: GitRunner): Promise<string | undefined> => {
     try {
         return (await git(main, ["rev-parse", "-q", "--verify", `refs/heads/${branch}`])).stdout.trim();
     } catch {

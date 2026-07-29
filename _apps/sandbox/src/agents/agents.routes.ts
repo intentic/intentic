@@ -38,9 +38,18 @@ export const createAgentsRoutes = (services: Services) => {
     // build and no test. The router builder types the shape against agentsContract, so the next one is a
     // typecheck error instead of a 404 the browser swallows.
     return i.router({
-        // Every roster read carries the revision it was taken at, so the browser can tell this answer apart from
-        // the /events snapshots racing it — see AgentsListSchema.
-        list: i.list.handler(() => ({ agents: services.agents.list(), rev: services.agents.revision() })),
+        /* Every roster read carries the revision it was taken at, so the browser can tell this answer apart
+         * from the /events snapshots racing it — see AgentsListSchema.
+         *
+         * The refresh first is what makes a roster read SELF-HEALING. Every other trigger fires on something
+         * the daemon did; a hand-merge in a terminal, a rebuild, a sibling agent's land absorbing the same
+         * hunks all move the shas with nothing to hook. Loading the board is the moment the user is asking
+         * about, so it is the honest place to re-ask git, and it also broadcasts — every other open surface
+         * heals with it. */
+        list: i.list.handler(async () => {
+            await services.agents.refreshStandings();
+            return { agents: services.agents.list(), rev: services.agents.revision() };
+        }),
         // The archive's own roster — the other half of the fleet, off `list` by construction and pulled on
         // demand (the /events stream never carries it). Newest-archived first; see registry.listArchived.
         archived: i.archived.handler(() => ({ agents: services.agents.listArchived(), rev: services.agents.revision() })),
@@ -209,17 +218,12 @@ export const createAgentsRoutes = (services: Services) => {
                 dir: services.agentWorktrees.worktreeDir(entry.id, repo),
             }));
             const result = await landAgent(services.agentWorktrees, entry, input.mode);
+            // Both halves of what the card will show: recordLanded stores the tips and the conflict report,
+            // and re-derives the standing from them. `finish` no longer carries a verdict — it clears how the
+            // LAST TURN ended, which a deliberate land is the user moving past (an `error` card they chose to
+            // land must not keep wearing the error), and takes no turn off the counter because none ran.
             await services.agents.recordLanded(input.id, result);
-            // "Landed" only when there is landed WORK to stand behind it: a clean result with a cumulative
-            // diff means everything the agent produced is accounted for in the main tree, however it got
-            // there; a clean result with no output at all settles as idle (finish's no-outcome default) —
-            // stamping that "landed" is how an agent that landed nothing used to wear the badge. A `measure`
-            // land that held an outstanding delta settles as `ready` — the deliberate-land queue, not a refusal.
-            await services.agents.finish(
-                input.id,
-                Date.now(),
-                result.held === true ? "ready" : result.landed ? (result.diff.files > 0 ? "landed" : undefined) : "conflict",
-            );
+            await services.agents.finish(input.id, Date.now());
             if (result.landed && result.changed) {
                 // The main tree changed under the user — same attribution convention as git.discard.
                 services.history.notifyUserWrite();
@@ -263,14 +267,10 @@ export const createAgentsRoutes = (services: Services) => {
                     notRunning(id);
                 }
             }
-            const targets =
-                input.ids ??
-                services.agents
-                    .ids()
-                    .map((id) => services.agents.entry(id))
-                    .filter((entry) => entry !== undefined)
-                    .filter((entry) => archivable(entry, services.agents.running(entry.id)))
-                    .map((entry) => entry.id);
+            // Over the roster, so "archivable right now" is decided by the same status the card is wearing —
+            // including the derived half, which is invisible from the persisted entry (see archive.ts).
+            await services.agents.refreshStandings();
+            const targets = input.ids ?? services.agents.list().filter(archivable).map((agent) => agent.id);
             const archived = await archiveAgents(services, targets, Date.now());
             // Read AFTER the archive, so each summary carries the archivedAt the card dates itself by, and with
             // the revision that applied it — the browser holds these ids off the board until a roster at least

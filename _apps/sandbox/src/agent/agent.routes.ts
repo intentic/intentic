@@ -114,6 +114,9 @@ async function* runConversationTurn(
         yield { kind: "done" };
         return;
     }
+    // What THIS turn's land did, for the `turn.settled` chore event below — a historical record of one turn,
+    // which is the one thing a verdict is still good for. The CARD's state is no longer read from it: where the
+    // work stands is derived per roster from the branch and the main tree (agents/standing.ts).
     let outcome: "landed" | "conflict" | "ready" | undefined;
     // Hoisted out of the try because the chore emit in the finally reads them: the span this turn's workspace
     // event names, the branch it ran on, and whether it ended on an error frame.
@@ -214,7 +217,7 @@ async function* runConversationTurn(
             );
         }
     } finally {
-        await services.agents.finish(conversationId, Date.now(), outcome);
+        await services.agents.finish(conversationId, Date.now());
         // Once per turn, whatever the outcome — the errored and conflicted ones are the ones most worth a
         // second pair of eyes. An empty span means the worktree never came up, so there is nothing to review.
         if (span.length > 0) {

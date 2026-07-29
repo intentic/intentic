@@ -1,3 +1,4 @@
+import type { AgentSummary } from "@intentic/sandbox-contract";
 import { describe, expect, it, vi } from "vitest";
 import { createAgentsRegistry, type AgentTurnIdentity } from "./agents-registry.js";
 import type { AgentsStore, PersistedAgent } from "./agents-store.js";
@@ -21,20 +22,21 @@ const turn = (overrides: Partial<AgentTurnIdentity> = {}): AgentTurnIdentity => 
     ...overrides,
 });
 
-const entry = (overrides: Partial<PersistedAgent> = {}): PersistedAgent => ({
+// The guards read the ROSTER, not the persisted entry — half of what they test for is derived per pass and
+// never touches disk (see archive.ts). Only the fields the guards actually look at are filled.
+const card = (overrides: Partial<AgentSummary> = {}): AgentSummary => ({
     id: "c1",
-    branch: "agent/c1",
+    status: "landed",
     provider: "claude",
     harness: "native",
-    repos: [{ repo: "root", base: "abc" }],
-    status: "landed",
-    costUsd: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    createdAt: 0,
+    branch: "agent/c1",
     updatedAt: 0,
+    attention: { plan: false, question: false, permission: false, conflict: false },
     ...overrides,
 });
+
+// The registry stub the archive paths drive: they only ever ask it for the roster and write the markers back.
+const noStandings = { of: () => "idle" as const, refresh: async () => false, forget: () => {} };
 
 // Only `retire` (archive) and `remove` (purge) are exercised here; the rest of the interface is unreachable
 // from these paths.
@@ -49,36 +51,41 @@ const stubWorktrees = (
 
 describe("archivable", () => {
     it("takes finished agents and leaves everything that still owes the user an answer", () => {
-        expect(archivable(entry({ status: "landed" }), false)).toBe(true);
+        expect(archivable(card({ status: "landed" }))).toBe(true);
         // The throwaway probe — idle, nothing landed, nothing to lose. The case the Finished lane fills up with.
-        expect(archivable(entry({ status: "idle" }), false)).toBe(true);
-        // Its worktree is the running turn's live working state.
-        expect(archivable(entry({ status: "idle" }), true)).toBe(false);
+        expect(archivable(card({ status: "idle" }))).toBe(true);
+        // Its worktree is the running turn's live working state, and an awaiting turn is holding a question.
+        expect(archivable(card({ status: "running" }))).toBe(false);
+        expect(archivable(card({ status: "awaiting" }))).toBe(false);
         // Both sit in the Attention lane asking for something; archiving would hide the question, not answer it.
-        expect(archivable(entry({ status: "conflict" }), false)).toBe(false);
-        expect(archivable(entry({ status: "error" }), false)).toBe(false);
+        expect(archivable(card({ status: "conflict" }))).toBe(false);
+        expect(archivable(card({ status: "error" }))).toBe(false);
+        /* Held work nobody has landed. This is the one the guards could not see when they read the persisted
+         * entry: `ready` is derived per roster now, so an entry-level test would have called this agent idle
+         * and swept a delta the user was still deciding about off the board. */
+        expect(archivable(card({ status: "ready" }))).toBe(false);
         // A turn the daemon died under. Nobody has seen that it stopped — and it is NOT running, so the guard
         // above cannot be the one that saves it. Sweeping it away unread is the failure this status prevents.
-        expect(archivable(entry({ status: "interrupted" }), false)).toBe(false);
+        expect(archivable(card({ status: "interrupted" }))).toBe(false);
         // Already off the board.
-        expect(archivable(entry({ archivedAt: 1 }), false)).toBe(false);
+        expect(archivable(card({ archivedAt: 1 }))).toBe(false);
     });
 
     it("ages out on updatedAt, and never when retention is off", () => {
         const now = 10 * DAY;
-        expect(archivableByAge(entry({ updatedAt: now - 4 * DAY }), false, now, 3 * DAY)).toBe(true);
+        expect(archivableByAge(card({ updatedAt: now - 4 * DAY }), now, 3 * DAY)).toBe(true);
         // An agent the user is still talking to keeps resetting its own clock.
-        expect(archivableByAge(entry({ updatedAt: now - 2 * DAY }), false, now, 3 * DAY)).toBe(false);
+        expect(archivableByAge(card({ updatedAt: now - 2 * DAY }), now, 3 * DAY)).toBe(false);
         // "Never" — the sweep is off, and the manual Clear button is the only way the lane empties.
-        expect(archivableByAge(entry({ updatedAt: 0 }), false, now, 0)).toBe(false);
+        expect(archivableByAge(card({ updatedAt: 0 }), now, 0)).toBe(false);
         // The age check never overrides the safety guards.
-        expect(archivableByAge(entry({ status: "error", updatedAt: 0 }), false, now, 3 * DAY)).toBe(false);
+        expect(archivableByAge(card({ status: "error", updatedAt: 0 }), now, 3 * DAY)).toBe(false);
     });
 });
 
 describe("archiveAgents", () => {
     it("retires each checkout, then marks the entries", async () => {
-        const agents = createAgentsRegistry(memoryStore());
+        const agents = createAgentsRegistry(memoryStore(), noStandings);
         await agents.init();
         await agents.begin(turn(), 1_000);
         await agents.finish("c1", 2_000);
@@ -92,7 +99,7 @@ describe("archiveAgents", () => {
     });
 
     it("leaves an agent ON the board when its checkout could not be retired", async () => {
-        const agents = createAgentsRegistry(memoryStore());
+        const agents = createAgentsRegistry(memoryStore(), noStandings);
         await agents.init();
         await agents.begin(turn(), 1_000);
         await agents.finish("c1", 2_000);
@@ -114,7 +121,7 @@ describe("archiveAgents", () => {
     });
 
     it("ignores ids with no entry", async () => {
-        const agents = createAgentsRegistry(memoryStore());
+        const agents = createAgentsRegistry(memoryStore(), noStandings);
         await agents.init();
         const { worktrees, retire } = stubWorktrees();
         expect(await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["ghost"], 9_000)).toEqual([]);
@@ -124,7 +131,7 @@ describe("archiveAgents", () => {
 
 describe("purgeArchived", () => {
     it("deletes the archive and leaves the board alone", async () => {
-        const agents = createAgentsRegistry(memoryStore());
+        const agents = createAgentsRegistry(memoryStore(), noStandings);
         await agents.init();
         await agents.begin(turn({ conversationId: "filed" }), 1_000);
         await agents.finish("filed", 2_000);
@@ -146,7 +153,7 @@ describe("purgeArchived", () => {
     });
 
     it("keeps the agents whose teardown failed, and deletes the rest", async () => {
-        const agents = createAgentsRegistry(memoryStore());
+        const agents = createAgentsRegistry(memoryStore(), noStandings);
         await agents.init();
         for (const id of ["a", "b"]) {
             await agents.begin(turn({ conversationId: id }), 1_000);
@@ -168,7 +175,7 @@ describe("purgeArchived", () => {
     });
 
     it("leaves an agent that a new turn took back out of the archive", async () => {
-        const agents = createAgentsRegistry(memoryStore());
+        const agents = createAgentsRegistry(memoryStore(), noStandings);
         await agents.init();
         await agents.begin(turn({ conversationId: "filed" }), 1_000);
         await agents.finish("filed", 2_000);
@@ -186,7 +193,7 @@ describe("purgeArchived", () => {
 describe("sweepAgedAgents", () => {
     it("archives only what has aged out, and skips a running turn", async () => {
         const now = 10 * DAY;
-        const agents = createAgentsRegistry(memoryStore());
+        const agents = createAgentsRegistry(memoryStore(), noStandings);
         await agents.init();
         // Old and finished — the sweep's target.
         await agents.begin(turn({ conversationId: "old" }), 0);
@@ -210,7 +217,7 @@ describe("sweepAgedAgents", () => {
     });
 
     it("does nothing when retention is off", async () => {
-        const agents = createAgentsRegistry(memoryStore());
+        const agents = createAgentsRegistry(memoryStore(), noStandings);
         await agents.init();
         await agents.begin(turn(), 0);
         await agents.finish("c1", 0);
