@@ -41,3 +41,19 @@ export const rankRefCandidates = (tail: string, paths: readonly string[]): reado
         .filter((path) => path === tail || path.endsWith(`/${tail}`))
         .toSorted((a, b) => a.split(`/`).length - b.split(`/`).length || a.length - b.length || (a < b ? -1 : 1))
         .slice(0, MAX_REF_CANDIDATES);
+
+/* IS THIS FILE TEST CODE — the one classification rule for every surface that splits a diff into "the
+ * change" and "the proof". The agent review header answers "how much of this is tests?" with it; anything
+ * else that wants the split (fleet cards, commit summaries) must use this same predicate, because two
+ * classifiers that disagree turn the readout into a lie the user can't detect.
+ *
+ * Convention-based, matching what this monorepo (and the ecosystems it scaffolds) actually writes: a
+ * `.test.` / `.spec.` filename in any extension, a `__tests__` / `__fixtures__` directory anywhere on the
+ * path, an `e2e-harness`, or a test-runner config. Deliberately NOT "anything containing 'test'": a
+ * `testimonials/` page or a `latest.ts` is product code, and a false "tests" tag is worse than a missed one —
+ * it tells a reviewer not to look. */
+const TEST_DIRS = new Set([`__tests__`, `__fixtures__`, `__mocks__`, `__snapshots__`]);
+const TEST_FILE = /(?:^|\/)(?:[^/]+\.(?:test|spec)\.[^/.]+|[^/]*\.e2e\.[^/]+|e2e-harness\.[^/]+|(?:vitest|jest|playwright)(?:\.[\w-]+)*\.config\.[^/]+)$/;
+
+export const isTestPath = (path: string): boolean =>
+    TEST_FILE.test(path) || path.split(`/`).some((segment) => TEST_DIRS.has(segment));

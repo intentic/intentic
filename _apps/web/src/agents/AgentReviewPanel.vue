@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { FileDiffResponse } from "@intentic-app/api-contract";
 import { cmp, explorerColorClass, iconForEntry, Segmented, useDevice, useExplorerStyle } from "@intentic-app/ui";
+import { isTestPath } from "@intentic/sandbox-contract";
 import Dialog from "primevue/dialog";
 import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -83,7 +84,7 @@ const toggleAutoLand = (): void => {
 // "Not landed" narrows the list to the remainder Land now would apply. It only exists while that remainder is
 // a PROPER subset — with nothing landed it filters nothing, and with everything landed it would empty the
 // panel, which is the failure mode this whole view exists to undo.
-const filter = ref<`all` | `pending`>(`all`);
+const filter = ref<`all` | `code` | `tests` | `pending`>(`all`);
 const splittable = computed(() => changes.pending.value.length > 0 && changes.pending.value.length < changes.count.value);
 watch(splittable, (canSplit) => {
     if (!canSplit) {
@@ -100,9 +101,16 @@ const toggleGroup = (repo: string): void => {
     collapsed.value = next;
 };
 
-const filtered = computed<readonly AgentReviewFile[]>(() =>
-    filter.value === `pending` ? changes.files.value.filter((file) => !file.change.landed) : changes.files.value,
-);
+const filtered = computed<readonly AgentReviewFile[]>(() => {
+    if (filter.value === `pending`) {
+        return changes.files.value.filter((file) => !file.change.landed);
+    }
+    // The change vs the proof — the contract's isTestPath, the same classifier the header chips total.
+    if (filter.value === `code` || filter.value === `tests`) {
+        return changes.files.value.filter((file) => isTestPath(file.change.path) === (filter.value === `tests`));
+    }
+    return changes.files.value;
+});
 
 // Repo groups in the daemon's order, rebuilt from the filtered rows so an emptied group disappears with its
 // header rather than leaving a heading over nothing.
@@ -292,8 +300,14 @@ const openInWorkspace = (file: AgentReviewFile): void => {
 const basename = (path: string): string => path.slice(path.lastIndexOf(`/`) + 1);
 const parentDir = (path: string): string => (path.includes(`/`) ? path.slice(0, path.lastIndexOf(`/`)) : ``);
 
-const filterOptions = computed<{ label: string; value: `all` | `pending` }[]>(() => [
+const filterOptions = computed<{ label: string; value: `all` | `code` | `tests` | `pending` }[]>(() => [
     { label: `All ${changes.count.value}`, value: `all` },
+    ...(changes.testStat.value.files > 0 && changes.codeStat.value.files > 0
+        ? [
+              { label: `Code ${changes.codeStat.value.files}`, value: `code` as const },
+              { label: `Tests ${changes.testStat.value.files}`, value: `tests` as const },
+          ]
+        : []),
     { label: `Not landed ${changes.pending.value.length}`, value: `pending` },
 ]);
 const layoutOptions: { label: string; value: `split` | `unified` }[] = [
@@ -365,7 +379,17 @@ const confirmDiscard = (): void => {
             <span class="whitespace-nowrap text-2xs text-muted">
                 <span class="font-medium text-content">{{ changes.count.value }}</span> file{{ changes.count.value === 1 ? "" : "s" }}
             </span>
-            <DiffStat :additions="changes.additions.value" :deletions="changes.deletions.value" />
+            <template v-if="changes.testStat.value.files > 0 && changes.codeStat.value.files > 0">
+                <span class="inline-flex items-center gap-1 whitespace-nowrap" v-tooltip.bottom="'The product change, tests excluded'">
+                    <DiffStat :additions="changes.codeStat.value.additions" :deletions="changes.codeStat.value.deletions" />
+                    <span class="text-2xs text-muted">code</span>
+                </span>
+                <span class="inline-flex items-center gap-1 whitespace-nowrap" v-tooltip.bottom="'Test files (*.test.*, fixtures, runner configs)'">
+                    <DiffStat :additions="changes.testStat.value.additions" :deletions="changes.testStat.value.deletions" />
+                    <span class="text-2xs text-muted">tests</span>
+                </span>
+            </template>
+            <DiffStat v-else :additions="changes.additions.value" :deletions="changes.deletions.value" />
             <span
                 v-if="changes.pending.value.length > 0"
                 class="whitespace-nowrap rounded-full bg-warning/15 px-1.5 py-px text-2xs font-medium text-warning"

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { rankRefCandidates, referenceTails } from "./path-refs.js";
+import { isTestPath, rankRefCandidates, referenceTails } from "./path-refs.js";
 
 describe("referenceTails", () => {
     test("offers the reference itself first, then shorter tails of it", () => {
@@ -39,4 +39,30 @@ describe("rankRefCandidates", () => {
     test("matches the tail as a whole path too", () => {
         expect(rankRefCandidates("src/foo.ts", ["src/foo.ts", "vendor/src/foo.ts"])).toEqual(["src/foo.ts", "vendor/src/foo.ts"]);
     });
+});
+
+test("isTestPath: test files, fixture dirs and runner configs — never product code that merely says 'test'", () => {
+    for (const path of [
+        `src/agents/land.test.ts`,
+        `src/pages/Foo.spec.tsx`,
+        `_apps/cli/src/cli.e2e.test.ts`,
+        `src/e2e-harness.ts`,
+        `pkg/__tests__/helper.ts`,
+        `_libs/iq-recall/src/__fixtures__/transcripts/a.jsonl`,
+        `vitest.config.ts`,
+        `_apps/web/vitest.workspace.config.mts`,
+        `playwright.config.ts`,
+    ]) {
+        expect(isTestPath(path), path).toBe(true);
+    }
+    for (const path of [
+        `src/pages/testimonials.vue`,
+        `src/latest.ts`,
+        `src/test-utils.ts`,
+        `contest/results.ts`,
+        `src/attestation.spec.md.bak`,
+        `docs/testing.md`,
+    ]) {
+        expect(isTestPath(path), path).toBe(false);
+    }
 });

@@ -1,5 +1,5 @@
 import type { AgentChange, AgentChangesResponse, AgentRepoChanges, FileDiffResponse } from "@intentic-app/api-contract";
-import type { LandMode, LandResult } from "@intentic/sandbox-contract";
+import { isTestPath, type LandMode, type LandResult } from "@intentic/sandbox-contract";
 import { computed, ref, watch, type Ref } from "vue";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { sandboxKey } from "../sandbox/useSandbox";
@@ -34,6 +34,13 @@ export interface AgentReviewFile {
 
 const reviewFileKey = (repo: string, path: string): string => JSON.stringify([repo, path]);
 
+// Files/±lines of a review subset — the header's split chips total code and tests through this one shape.
+const statOf = (subset: readonly AgentReviewFile[]): { files: number; additions: number; deletions: number } => ({
+    files: subset.length,
+    additions: subset.reduce((total, file) => total + (file.change.additions ?? 0), 0),
+    deletions: subset.reduce((total, file) => total + (file.change.deletions ?? 0), 0),
+});
+
 // Which files the user has already eyeballed, per agent id — a GitHub-style "viewed" pass, and the one piece of
 // review state the daemon has no opinion about. Module-level, so stepping out to the workspace and back does
 // not lose the pass; in-memory only, because a reload means a fresh look anyway.
@@ -65,6 +72,11 @@ export function useAgentChanges(agentId: Ref<string>) {
     const pending = computed(() => files.value.filter((file) => !file.change.landed));
     const additions = computed(() => files.value.reduce((total, file) => total + (file.change.additions ?? 0), 0));
     const deletions = computed(() => files.value.reduce((total, file) => total + (file.change.deletions ?? 0), 0));
+    // The change vs the proof: one classifier (the contract's isTestPath) splits the review so the header can
+    // answer "how much of this is tests?" at a glance — a +2k diff that is half test coverage reads very
+    // differently from +2k of product surface, and the combined number hides exactly that.
+    const codeStat = computed(() => statOf(files.value.filter((file) => !isTestPath(file.change.path))));
+    const testStat = computed(() => statOf(files.value.filter((file) => isTestPath(file.change.path))));
 
     // Per-file diffs, cached for the length of one review pass: arrowing up and down the list re-selects files
     // constantly, and each miss is a daemon round-trip. vue-query's structural sharing keeps `repos` identical
@@ -179,6 +191,8 @@ export function useAgentChanges(agentId: Ref<string>) {
         pending,
         additions,
         deletions,
+        codeStat,
+        testStat,
         loading: query.isFetching,
         error,
         refresh: query.refetch,
