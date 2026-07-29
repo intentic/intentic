@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync, lstatSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -135,6 +135,57 @@ test("re-ensure keeps existing links and mirrors packages installed since the ch
     // The links that were already there are untouched, not rebuilt into something else.
     expect(await readlink(join(worktree, "node_modules"))).toBe(join(intent, "node_modules"));
     expect(await sh(worktree, "status", "--porcelain")).toBe("");
+});
+
+// The mirror's form is a property of the CONTAINER, and worktrees outlive containers on /history: a checkout
+// created without the namespace carries absolute symlinks that, inside one, resolve back into the worktree
+// occupying /work — the anchor's mkdir dies on the loop. Ensure must converge the mirror to the current mode.
+test("re-ensure converts pre-namespace symlinks into mount points once isolation is available", async () => {
+    const { work, historyRoot, worktrees } = await setup();
+    const intent = join(work, "intent");
+    await install(intent, "**/node_modules");
+    const created = await worktrees.ensure("c1", []);
+    const worktree = join(created.cwd, "intent");
+    expect(lstatSync(join(worktree, "node_modules")).isSymbolicLink()).toBe(true);
+
+    // The container came back with CAP_SYS_ADMIN: same worktree, other mode.
+    const isolated = createAgentWorktrees({
+        workspace: workspacePaths(work),
+        worktreesRoot: join(historyRoot, "worktrees"),
+        isolation: { available: async () => true, planFor: async () => undefined },
+        logger,
+    });
+    await isolated.ensure("c1", created.repos);
+
+    const entry = lstatSync(join(worktree, "node_modules"));
+    expect(entry.isSymbolicLink()).toBe(false);
+    expect(entry.isDirectory()).toBe(true);
+    // Empty — the namespace binds the real tree onto it.
+    expect(await readdir(join(worktree, "node_modules"))).toEqual([]);
+    expect(lstatSync(join(worktree, "pkg", "a", "node_modules")).isDirectory()).toBe(true);
+});
+
+test("re-ensure restores the symlink when isolation is lost, but never over a real install", async () => {
+    const { work, historyRoot, worktrees } = await setup();
+    const intent = join(work, "intent");
+    await install(intent, "**/node_modules");
+    const isolated = createAgentWorktrees({
+        workspace: workspacePaths(work),
+        worktreesRoot: join(historyRoot, "worktrees"),
+        isolation: { available: async () => true, planFor: async () => undefined },
+        logger,
+    });
+    const created = await isolated.ensure("c1", []);
+    const worktree = join(created.cwd, "intent");
+    // A real tree the agent put inside its worktree — content the flip must never delete.
+    await writeFile(join(worktree, "pkg", "a", "node_modules", "local.js"), "installed\n");
+
+    await worktrees.ensure("c1", created.repos);
+
+    expect(lstatSync(join(worktree, "node_modules")).isSymbolicLink()).toBe(true);
+    expect(await readlink(join(worktree, "node_modules"))).toBe(join(intent, "node_modules"));
+    expect(lstatSync(join(worktree, "pkg", "a", "node_modules")).isDirectory()).toBe(true);
+    expect(await readFile(join(worktree, "pkg", "a", "node_modules", "local.js"), "utf8")).toBe("installed\n");
 });
 
 // A package dir the agent's branch never had is not a package to mirror — planting a link would mean first

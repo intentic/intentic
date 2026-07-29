@@ -1,4 +1,4 @@
-import { access, mkdir, readdir, rm, symlink } from "node:fs/promises";
+import { access, lstat, mkdir, readdir, rm, rmdir, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultGit, gitCommitAll, type GitRunner } from "@intentic/scaffold";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
@@ -229,16 +229,31 @@ export const createAgentWorktrees = (
         await Promise.all(
             packages.map(async (pkg) => {
                 const rel = linkOf(pkg);
+                const target = join(worktree, rel);
                 if (!ignored.has(rel) || !(await exists(join(worktree, pkg)))) {
                     return;
                 }
+                // The mirror's FORM is a property of the container (namespace or not), and worktrees outlive
+                // containers on /history — so a checkout can carry the other mode's form, and ensure must
+                // converge it. A pre-namespace absolute symlink would, inside the namespace, resolve back into
+                // the worktree that now occupies /work — a loop the anchor's mkdir dies on. The other way, an
+                // empty mount point left by an isolated run would sit where the symlink belongs and resolve
+                // nothing for a namespace-less turn.
+                const entry = await lstat(target).catch(() => undefined);
                 if (isolated) {
-                    await mkdir(join(worktree, rel), { recursive: true }).catch((error: unknown) =>
+                    if (entry?.isSymbolicLink()) {
+                        await rm(target).catch(() => undefined);
+                    }
+                    await mkdir(target, { recursive: true }).catch((error: unknown) =>
                         logger.warn({ err: error, repo, package: pkg }, "agents: node_modules mount point failed"),
                     );
                     return;
                 }
-                await symlink(join(main, rel), join(worktree, rel), "dir").catch((error: unknown) => {
+                if (entry?.isDirectory()) {
+                    // rmdir refuses a non-empty dir — a real install the agent made stays put.
+                    await rmdir(target).catch(() => undefined);
+                }
+                await symlink(join(main, rel), target, "dir").catch((error: unknown) => {
                     // EEXIST is the steady state, not a failure: the link — or a real install — is already there.
                     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
                         logger.warn({ err: error, repo, package: pkg }, "agents: node_modules link failed");
