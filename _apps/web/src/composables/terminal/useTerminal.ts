@@ -95,8 +95,9 @@ export interface TerminalTabs {
     readonly processes: Ref<TerminalTab[]>;
     // The FOCUSED session — keystrokes land here; its group is the mounted pane.
     readonly activeName: Ref<string | undefined>;
-    // Resolves true when attaching auto-created the first shell (an empty managed panel opens with one).
-    readonly attach: (el: HTMLElement) => Promise<boolean>;
+    // Resolves true when attaching auto-created the first shell (an empty managed panel opens with one, unless
+    // `awaited` names the session the panel was opened for — see attach).
+    readonly attach: (el: HTMLElement, awaited?: string) => Promise<boolean>;
     readonly detach: () => void;
     readonly refresh: () => Promise<void>;
     // Focus a specific session, refreshing the list first when it isn't tabbed yet (a row's terminal button).
@@ -327,7 +328,11 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         });
     });
 
-    const attach = async (el: HTMLElement): Promise<boolean> => {
+    // `awaited` is the session the panel was OPENED FOR (Start, Run tests, a capability install — whatever set
+    // the focus request that brought the panel up). It suppresses the empty-panel shell: that session's tab is
+    // seconds away, and spawning a `web-*` shell to fill the gap puts a stray "1" beside the tab the user
+    // actually asked for — plus a real tmux session behind it — for every Start on an otherwise-empty panel.
+    const attach = async (el: HTMLElement, awaited?: string): Promise<boolean> => {
         container = el;
         await refresh();
         // Torn down (or re-attached) while the list was in flight — spawning the empty panel's opening shell
@@ -336,7 +341,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         if (container !== el) {
             return false;
         }
-        if (order.value.length === 0 && source.create !== undefined) {
+        if (order.value.length === 0 && awaited === undefined && source.create !== undefined) {
             newTab();
             return true;
         }

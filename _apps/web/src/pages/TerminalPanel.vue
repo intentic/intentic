@@ -666,7 +666,10 @@ onMounted(async () => {
     if (container.value === undefined) {
         return;
     }
-    const attaching = tabs.attach(container.value);
+    // `initial` at mount means the panel was opened FOR that session (Start, Run tests, a capability install) —
+    // attach skips the empty-panel shell for it, so the asked-for tab arrives alone instead of behind a stray
+    // `web-*` "1" that filled the second before the daemon's session existed.
+    const attaching = tabs.attach(container.value, initial?.name);
     if (newTab !== undefined) {
         disposeSpawn = registerTerminalSpawn(newTab);
     }

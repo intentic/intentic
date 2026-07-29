@@ -50,7 +50,7 @@ const panel = (initial: Listed[]) => {
         daemonLists: (next: Listed[]) => {
             listed = next;
         },
-        attach: () => tabs.attach(document.createElement(`div`)),
+        attach: (awaited?: string) => tabs.attach(document.createElement(`div`), awaited),
         names: () => tabs.order.value.map((tab) => tab.name),
     };
 };
@@ -114,6 +114,25 @@ test("the panel opens onto a live tab, never onto the dead pane it was last left
     await attach();
 
     expect(tabs.activeName.value).toBe(`web-1`);
+});
+
+// Start opens the panel for a dev-server session the daemon hasn't created yet. The empty-panel shell exists so
+// nobody stares at a blank pane, but here it would flash a stray `web-*` "1" beside the tab that was asked for.
+test("a panel opened FOR a session that doesn't exist yet waits for it instead of spawning a shell", async () => {
+    const { attach, names, tabs } = panel([]);
+
+    await attach(`panel-site--site`);
+
+    expect(names()).toEqual([]);
+    expect(tabs.activeName.value).toBeUndefined();
+});
+
+test("an empty panel opened with no session in mind still opens a shell", async () => {
+    const { attach, names } = panel([]);
+
+    await attach();
+
+    expect(names()).toEqual([`web-new`]);
 });
 
 test("with the preference on, work terminals tab and stay tabbed after they finish", async () => {

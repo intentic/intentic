@@ -148,18 +148,29 @@ const add = (entries: { template: string; name: string }[]): Promise<void> =>
     });
 
 // Any start opens the global terminal focused on the app — the terminals ARE the launch feedback (install +
-// boot stream live). The panel is shown UP FRONT so its chrome appears instantly; the session is focused the
-// moment the start POST returns (startApp no longer blocks on a refetch), so the terminal pops right away.
+// boot stream live). The panel is opened UP FRONT so its chrome appears instantly, and it is opened BY NAME:
+// the session doesn't exist until the POST lands, and a panel opened with no name on an empty strip fills the
+// gap with its own `web-*` shell — the stray "1" tab that used to greet every Start. Naming it makes the panel
+// wait for this session instead. Focused again once the POST returns (startApp no longer blocks on a refetch),
+// which is when the tab is really there.
 const startOne = (app: string): Promise<void> =>
     act(async () => {
-        host().terminal.setOpen(true);
+        openFocused(sessionOf(app));
         await startApp(app);
         openFocused(sessionOf(app));
     });
+// Start all opens on the FIRST app's terminal for the same reason — some session has to be named, and the one
+// at the top of the list is the one the panel would have landed on anyway.
 const startAll = (): Promise<void> =>
     act(async () => {
-        host().terminal.setOpen(true);
-        await Promise.all(stopped.value.map((app) => startApp(app.app)));
+        const names = stopped.value.map((app) => app.app);
+        const first = names[0];
+        if (first === undefined) {
+            return;
+        }
+        openFocused(sessionOf(first));
+        await Promise.all(names.map((app) => startApp(app)));
+        openFocused(sessionOf(first));
     });
 const stopAll = (): Promise<void> => act(async () => Promise.all(running.value.map((app) => stopApp(app.app))).then(() => undefined));
 
