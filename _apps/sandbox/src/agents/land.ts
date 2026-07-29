@@ -67,7 +67,10 @@ const branchSha = async (main: string, branch: string, git: GitRunner): Promise<
     }
 };
 
-/* WHERE this land's delta is measured from — which decides what "this agent's work" even means.
+/* WHERE an agent's delta is measured from — which decides what "this agent's work" even means. Shared by the
+ * land (with its landedTip rung, for the incremental remainder) and by the review's cumulative diff (without
+ * it — see agents.routes.ts), because two answers to "what did this agent do" that disagree are worse than
+ * either.
  *
  * An incremental land continues from `landedTip`, so a second land carries only what the agent has done
  * since the first. Everything else asks git: the agent's own work is what its tip has that the main line does
@@ -78,9 +81,11 @@ const branchSha = async (main: string, branch: string, git: GitRunner): Promise<
  * response to being told the main tree moved on — and the branch now CONTAINS main's commits. Diffing from
  * the frozen base then yields "what this agent did PLUS everything main did since": a patch of dozens of
  * files that can never apply, because the main tree already has its own half of it. What the user sees for
- * that is a conflict report naming files the agent never touched, and no way forward. The merge-base is
- * immune — it moves with the rebase, and the delta stays exactly the agent's own work. */
-const anchorOf = async (
+ * that is a conflict report naming files the agent never touched, and no way forward. (The review had the
+ * same bug for the same reason: an agent whose worktree fast-forwarded onto newer main commits showed a
+ * hundred files other agents wrote as its own output.) The merge-base is immune — it moves with the sync,
+ * and the delta stays exactly the agent's own work. */
+export const anchorOf = async (
     // Where the ref reads run — the worktree while the checkout is attached, the main repo once it is retired
     // (the object store is shared, so every sha the branch names answers in both).
     dir: string,
@@ -88,7 +93,7 @@ const anchorOf = async (
     tip: string,
     landedTip: string | undefined,
     base: string,
-    git: GitRunner,
+    git: GitRunner = defaultGit,
 ): Promise<string> => {
     // Only while the branch still descends from it: a rewrite that dropped the landed work has to re-land it.
     if (landedTip !== undefined && (await isAncestor(dir, landedTip, tip, git))) {

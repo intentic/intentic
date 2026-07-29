@@ -8,7 +8,7 @@ import { matchPrompts } from "../sessions/prompt-index.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import type { PersistedAgent } from "./agents-store.js";
 import { archivable, archiveAgents, purgeArchived } from "./archive.js";
-import { landAgent } from "./land.js";
+import { anchorOf, landAgent } from "./land.js";
 
 // The fleet routes: list/get the registry, review a conversation worktree's delta vs its recorded bases
 // (the same GitChanges shape the Changes panel renders), land it into the main tree, archive it off the board,
@@ -116,7 +116,7 @@ export const createAgentsRoutes = (services: Services) => {
             await services.agents.markAllSeen(Date.now());
             return { agents: services.agents.list(), rev: services.agents.revision() };
         }),
-        // The review shows the agent's CUMULATIVE output (`base` → worktree), so work stays inspectable after
+        // The review shows the agent's CUMULATIVE output (anchor → worktree), so work stays inspectable after
         // it lands — which is the normal case, clean turn completions auto-landing within ms of finishing.
         // What landing changes is per-file: a second pass from `landedTip` names the remainder still waiting
         // for "Land now" (everything, when nothing has landed yet), and every other file is flagged `landed`.
@@ -131,18 +131,24 @@ export const createAgentsRoutes = (services: Services) => {
                     // then reported a full branch as "no changes". The refs tell the same story either way
                     // (retiring committed the worktree's remainder onto the branch; the object store is shared).
                     const attached = await services.agentWorktrees.attached(entry.id, repo);
+                    const mainDir = services.agentWorktrees.mainDir(repo);
+                    const refDir = attached ? services.agentWorktrees.worktreeDir(entry.id, repo) : mainDir;
                     const against = (from: string): Promise<GitChange[]> =>
-                        attached
-                            ? services.git.changesAgainstBase(services.agentWorktrees.worktreeDir(entry.id, repo), from)
-                            : services.git.changesBetweenRefs(services.agentWorktrees.mainDir(repo), from, entry.branch);
-                    const changes = await against(base);
+                        attached ? services.git.changesAgainstBase(refDir, from) : services.git.changesBetweenRefs(mainDir, from, entry.branch);
+                    /* Measured from the anchor land itself uses (land.ts anchorOf), not the frozen
+                     * creation-time base — a worktree that synced onto newer main commits otherwise reviews
+                     * as having authored everything main gained in between: one agent's card showed a
+                     * hundred files of other agents' landed work as its own. The cumulative pass drops the
+                     * landedTip rung (landed work must stay inspectable); the pending pass keeps it, which
+                     * is exactly the land's own incremental span. */
+                    const changes = await against(await anchorOf(refDir, mainDir, entry.branch, undefined, base));
                     if (changes.length === 0) {
                         continue;
                     }
                     const pending =
                         landedTip === undefined
                             ? new Set(changes.map((change) => change.path))
-                            : new Set((await against(landedTip)).map((change) => change.path));
+                            : new Set((await against(await anchorOf(refDir, mainDir, entry.branch, landedTip, base))).map((change) => change.path));
                     // Object.assign, not a spread: `changes` is this call's own freshly-parsed array, so the
                     // flag goes onto the objects that are about to be serialized and nothing is copied.
                     const flagged = changes.map((change): AgentChange => Object.assign(change, { landed: !pending.has(change.path) }));
@@ -156,30 +162,32 @@ export const createAgentsRoutes = (services: Services) => {
             // conflicted card, so it has to arrive already knowing what blocked and why (see AgentChangesSchema).
             return { repos, ...(entry.conflicts !== undefined ? { conflicts: entry.conflicts } : {}) };
         }),
-        // Against `base`, matching the list: one row means one question — "what did this agent do to this
-        // file" — and its answer must not change the moment the work lands. (Diffing from `landedTip` would
-        // silently empty out every already-landed row.)
+        // Against the same cumulative anchor as the list above: one row means one question — "what did this
+        // agent do to this file" — and its answer must not change the moment the work lands. (Diffing from
+        // `landedTip` would silently empty out every already-landed row; diffing from the frozen base would
+        // show other agents' synced-in work, disagreeing with the list.)
         fileDiff: i.fileDiff.handler(async ({ input }) => {
             const entry = entryOf(input.id);
             const composed = entry.repos.find((repo) => repo.repo === input.repo);
             if (composed === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "repo not in this agent's composition" });
             }
+            const main = services.agentWorktrees.mainDir(input.repo);
             // Retired checkout: both sides are blobs, read from the main repo — the same per-repo seam as
             // `diff` above. The path guard still applies — it is validating the REQUEST, not the disk, and a
             // `..` here would escape into rev-spec territory just as readily.
             if (!(await services.agentWorktrees.attached(entry.id, input.repo))) {
-                const main = services.agentWorktrees.mainDir(input.repo);
                 if (resolveWithin(main, input.path) === undefined) {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
                 }
-                return services.git.refFileDiff(main, input.path, composed.base, entry.branch);
+                const anchor = await anchorOf(main, main, entry.branch, undefined, composed.base);
+                return services.git.refFileDiff(main, input.path, anchor, entry.branch);
             }
             const dir = services.agentWorktrees.worktreeDir(entry.id, input.repo);
             if (resolveWithin(dir, input.path) === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
             }
-            return services.git.fileDiff(dir, input.path, composed.base);
+            return services.git.fileDiff(dir, input.path, await anchorOf(dir, main, entry.branch, undefined, composed.base));
         }),
         // Manual land — the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input }) => {

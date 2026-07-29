@@ -6,11 +6,12 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { defaultGit } from "@intentic/scaffold";
 import { afterEach, expect, test } from "vitest";
+import { changesAgainstBase } from "../git/changes.js";
 import { ensureRootRepo } from "../git/root-repo.js";
 import { createLogger } from "../logger.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import type { PersistedAgent } from "./agents-store.js";
-import { landAgent } from "./land.js";
+import { anchorOf, landAgent } from "./land.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "./worktrees.js";
 
 const exec = promisify(execFile);
@@ -522,4 +523,25 @@ test("deletes and renames land; a conflicted land keeps landedTip so recovery ap
     const recovered = await landAgent(worktrees, entryFor(conflicted.repos));
     expect(recovered.landed).toBe(true);
     expect(await readFile(join(work, "renamed.ts"), "utf8")).toBe("line one AGENT\nline two\nline three\n");
+});
+
+/* The review's span, measured the way the diff route now measures it (agents.routes.ts → anchorOf without
+ * the landedTip rung). The bug this pins down: an agent whose worktree fast-forwarded onto newer main
+ * commits reviewed everything main gained in between as ITS OWN output — one real card showed a hundred
+ * files of other agents' landed work under "the isolated branch this agent works on". */
+test("a worktree synced onto newer main commits does not review main's work as its own", async () => {
+    const { work, conversation } = await setup();
+    const base = conversation.repos.find((repo) => repo.repo === "root")?.base ?? "";
+    // Someone else's work lands and is committed on the MAIN line after this agent's worktree was created.
+    await writeFile(join(work, "foreign.ts"), "someone else's work\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "foreign");
+    // The agent syncs its branch up to the moved main line (the turn-start fast-forward), then works.
+    await sh(conversation.cwd, "merge", "--ff-only", await sh(work, "rev-parse", "HEAD"));
+    await writeFile(join(conversation.cwd, "own.ts"), "this agent's work\n");
+
+    const anchor = await anchorOf(conversation.cwd, work, "agent/c1", undefined, base);
+    expect((await changesAgainstBase(conversation.cwd, anchor)).map((change) => change.path)).toEqual(["own.ts"]);
+    // The frozen creation-time base tells the broken story this replaced.
+    expect((await changesAgainstBase(conversation.cwd, base)).map((change) => change.path)).toContain("foreign.ts");
 });
