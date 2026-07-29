@@ -8,7 +8,7 @@ import { useAgents } from "../composables/agents/useAgents";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
 import { acksOf, type ChatAttachment, type ChatMessage, turnsOf } from "../composables/chat/transcript";
-import { bindingWindow, formatReset, formatUtilization, isStale, usageDetail, usageStatusFor } from "../composables/chat/usageStatus";
+import { bindingWindow, formatReset, formatUtilization, isStale, usageDetail, usageStatusFor, usageTone } from "../composables/chat/usageStatus";
 import { errorMessage } from "../composables/useAsyncAction";
 import { useChat } from "../composables/chat/useChat";
 import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
@@ -202,10 +202,13 @@ const usageRing = computed(() => {
         return undefined;
     }
     const rounded = Math.round(window.utilization);
+    // Past 90% the question flips from "how much is left" to "when can I go again", so the binding pool's
+    // reset joins the visible label instead of hiding in the tooltip — the chat view is where a limit bites.
+    const reset = rounded >= 90 && window.resetsAt !== undefined ? ` · ${formatReset(window.resetsAt)}` : ``;
     return {
         value: window.utilization,
-        label: formatUtilization(rounded, isStale(info)),
-        warn: rounded >= 75,
+        label: `${formatUtilization(rounded, isStale(info))}${reset}`,
+        tone: usageTone(rounded),
         tooltip: usageDetail(info),
     };
 });
@@ -1303,7 +1306,7 @@ watch(
                         v-tooltip.top="usageRing.tooltip"
                         @click="router.push('/sandbox/usage')"
                     >
-                        <ProgressRing :value="usageRing.value" :class="usageRing.warn ? 'text-warning' : 'text-primary-500'" />
+                        <ProgressRing :value="usageRing.value" :class="usageRing.tone" />
                         <span class="@max-xs:hidden">{{ usageRing.label }}</span>
                     </button>
                     <button

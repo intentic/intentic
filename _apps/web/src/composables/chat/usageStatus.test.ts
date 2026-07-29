@@ -1,6 +1,6 @@
 import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
-import { bindingWindow, formatAge, formatUtilization, isStale, orderedWindows, usageDetail, usagePercent, usageWindowLabel } from "./usageStatus";
+import { bindingWindow, formatAge, formatReset, formatUtilization, isStale, orderedWindows, usageDetail, usagePercent, usageWindowLabel } from "./usageStatus";
 
 const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: `seven_day`, utilization: 42.4, ...over });
 const usage = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: 0, ...over });
@@ -93,6 +93,18 @@ describe(`usageDetail`, () => {
             }),
         );
         expect(detail).toBe(`5-hour session 12% · Weekly · all models 98% · measured just now`);
+    });
+
+    it(`names each pool's reset beside its figure — "wait 20 minutes" and "wait until Thursday" are different answers`, () => {
+        const resetsAt = 1_700_000_000;
+        const detail = usageDetail(
+            usage({
+                windows: [window({ kind: `five_hour`, utilization: 91, resetsAt }), window({ kind: `seven_day`, utilization: 40 })],
+                measuredAt: Date.now(),
+            }),
+        );
+        // formatReset renders in the runner's locale/zone, so the expectation reuses it and asserts placement.
+        expect(detail).toBe(`5-hour session 91% (resets ${formatReset(resetsAt)}) · Weekly · all models 40% · measured just now`);
     });
 
     it(`marks every figure as a floor once the reading is old enough to have been overtaken elsewhere`, () => {

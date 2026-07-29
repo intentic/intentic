@@ -91,10 +91,15 @@ export const isStale = (usage: AccountUsage, now: number = Date.now()): boolean 
 // A percentage, marked as a floor when the reading is old enough to have been overtaken elsewhere.
 export const formatUtilization = (percent: number, stale: boolean): string => `${stale ? `≥` : ``}${percent}%`;
 
-// The compact tooltip: every pool, then how stale the whole reading is. All of them, because "which pool is
-// binding" is the question the single number can't answer.
+// The compact tooltip: every pool with its reset, then how stale the whole reading is. All of them, because
+// "which pool is binding" is the question the single number can't answer — and the reset rides in parentheses
+// because "wait 20 minutes" and "wait until Thursday" are different answers to the same percentage.
 export const usageDetail = (usage: AccountUsage): string =>
     [
-        ...orderedWindows(usage).map((window) => `${usageWindowLabel(window)} ${formatUtilization(Math.round(window.utilization), isStale(usage))}`),
+        ...orderedWindows(usage).map(
+            (window) =>
+                `${usageWindowLabel(window)} ${formatUtilization(Math.round(window.utilization), isStale(usage))}` +
+                (window.resetsAt === undefined ? `` : ` (resets ${formatReset(window.resetsAt)})`),
+        ),
         `measured ${formatAge(usage.measuredAt)}`,
     ].join(` · `);

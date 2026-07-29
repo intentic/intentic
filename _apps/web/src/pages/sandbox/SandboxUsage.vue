@@ -304,11 +304,14 @@ const hasSpend = computed(() => current.value.length > 0);
                             </span>
                         </div>
 
-                        <div v-for="pool in entry.pools" :key="pool.kind" class="flex items-center gap-3">
-                            <span class="w-40 shrink-0 truncate text-2xs text-muted">{{ pool.label }}</span>
+                        <!-- Narrow screens keep the reset instead of dropping it — "when does this reopen" is
+                             the number a phone is pulled out for — by wrapping the meter onto its own full-width
+                             line; from sm up everything sits on one line in fixed columns so rows align. -->
+                        <div v-for="pool in entry.pools" :key="pool.kind" class="flex flex-wrap items-center gap-x-3 gap-y-1 sm:flex-nowrap">
+                            <span class="min-w-0 flex-1 truncate text-2xs text-muted sm:w-40 sm:flex-none">{{ pool.label }}</span>
                             <!-- A pool at 0% still draws a sliver: an empty track is indistinguishable from a
                                  pool this screen has no reading for, and those mean opposite things. -->
-                            <div class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-content/10">
+                            <div class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 sm:order-none sm:basis-0">
                                 <div
                                     class="h-full rounded-full bg-current"
                                     :class="usageTone(pool.percent)"
@@ -318,7 +321,7 @@ const hasSpend = computed(() => current.value.length > 0);
                             <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
                                 {{ formatUtilization(pool.percent, entry.stale) }}
                             </span>
-                            <span class="hidden w-32 shrink-0 truncate text-right text-2xs text-subtle sm:block">
+                            <span class="shrink-0 truncate text-right text-2xs text-subtle sm:w-32">
                                 {{ pool.resetsAt === undefined ? `` : `resets ${formatReset(pool.resetsAt)}` }}
                             </span>
                         </div>
