@@ -10,6 +10,21 @@
 .chat-message {
     content-visibility: auto;
     contain-intrinsic-size: auto 3rem;
+    /* Nothing pasted into or printed by a turn may set the width of the panel. A token with no break
+       opportunity in it — a signed registry URL, a base64 blob, a 64-char digest — is one unbreakable word to
+       the layout, and `pre-wrap` alone does not break words: it ran out of the prompt bubble and dragged the
+       transcript's scrollWidth to ~3× its client width (measured), which is a shell scrolled sideways with the
+       sidebar clipped off screen.
+       `anywhere` rather than `break-word` because the fix has to hold in both shapes the chat renders text in.
+       They wrap identically, but only `anywhere` counts its break opportunities toward MIN-CONTENT width, and
+       min-content is what sizes an item in a flex row that isn't `min-w-0` — the tool card's `$ command` row is
+       exactly that, and stays 1.7× over its box under `break-word`. Where a percentage or `w-full` cap already
+       bounds the box (the prompt bubble at 85%) either value contains it; one rule covers both.
+       Inherited by the whole turn (bubbles, tool bodies, rendered markdown) rather than restated per surface:
+       all of it is text the user or the agent produced. It breaks a word only when the word cannot fit a line of
+       its own, so ordinary prose is untouched, and code blocks are exempt for free — `white-space: pre` disables
+       wrapping outright, so they keep scrolling horizontally in their own box. */
+    overflow-wrap: anywhere;
 }
 /* The warm-up pass (ChatPanel.warmTranscript): while the scroller holds this class nothing may be skipped, so
    one idle-time layout records every row's real height as its remembered size. The class then comes off and

@@ -153,7 +153,7 @@ const agentTerminal = computed(() => (view.value.body?.kind === `command` ? acti
             <div v-if="view.body?.kind === 'command'" class="ml-4 overflow-hidden rounded border border-line bg-canvas">
                 <div v-if="view.body.command" class="flex gap-1.5 border-b border-line px-2 py-1 font-mono text-2xs text-muted">
                     <span class="shrink-0 select-none text-subtle">$</span>
-                    <span class="whitespace-pre-wrap break-all">{{ view.body.command }}</span>
+                    <span class="whitespace-pre-wrap">{{ view.body.command }}</span>
                 </div>
                 <pre
                     v-if="view.body.output"
