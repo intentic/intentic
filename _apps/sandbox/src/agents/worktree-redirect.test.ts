@@ -84,3 +84,27 @@ test("a shell command has each of its main-root paths rewritten, and nothing els
     expect(redirectCommand("grep -r x /mnt/intentic-main/intentic", plan)).toBe("grep -r x /mnt/intentic-main/intentic");
     expect(redirectCommand("echo networking", plan)).toBe("echo networking");
 });
+
+/* A heredoc body is a FILE being written through the shell, not a path the command acts on. Rewriting it
+ * corrupts the file with a path meaningless outside one conversation — which is exactly what happened to
+ * three scripts' comments within an hour of this feature shipping. */
+test("a heredoc body is left alone — its workspace paths are content, not targets", () => {
+    const doc = ["cat > notes.md <<'EOF'", "The daemon serves /work to every agent.", "EOF", "cd /work/intentic"].join("\n");
+    const out = redirectCommand(doc, plan);
+    // The body keeps the path it names…
+    expect(out).toContain("The daemon serves /work to every agent.");
+    // …while the command AFTER the terminator is redirected as usual.
+    expect(out).toContain("cd /history/worktrees/abc/intentic");
+});
+
+test("heredoc detection covers the forms agents actually write", () => {
+    // Unquoted delimiter, indented terminator (`<<-`), a second heredoc later in the same command, and the
+    // command word before the body still being rewritten.
+    const unquoted = ["python3 /work/x.py <<EOF", "path = '/work/a'", "EOF"].join("\n");
+    expect(redirectCommand(unquoted, plan)).toBe(["python3 /history/worktrees/abc/x.py <<EOF", "path = '/work/a'", "EOF"].join("\n"));
+    const indented = ["cat <<-'END'", "\t/work/b", "\tEND", "ls /work/c"].join("\n");
+    expect(redirectCommand(indented, plan)).toContain("\t/work/b");
+    expect(redirectCommand(indented, plan)).toContain("ls /history/worktrees/abc/c");
+    // An unterminated heredoc protects everything after it rather than guessing where the body ended.
+    expect(redirectCommand(["cat <<'EOF'", "/work/d"].join("\n"), plan)).toContain("/work/d");
+});

@@ -149,11 +149,19 @@ docker rm -f "$CONTAINER" >/dev/null
 # network + the stable tunnel-origin alias, the persistent /work + /history + /var/lib/docker volumes, bounded
 # json-file logs. The tunnel sidecar keeps running and reconnects to the alias.
 echo "== docker run ${TAG} ==" >>"$LOG"
+# SYS_ADMIN is what lets the daemon give each isolated agent turn its own mount namespace, with that
+# conversation's worktree standing in for the workspace root (the sandbox app's agents/isolation.ts). Without
+# it the daemon still runs every turn — it just cannot make the guarantee, and an agent's absolute workspace
+# paths reach the shared checkout again. The capability is scoped to THIS container's own mounts; it is not host access, and
+# the docker socket is still never mounted. Kept in lockstep with the platform provider's own run
+# (_libs/providers/src/host/workspace.ts), which is a SEPARATE path to the same container: it had this flag
+# while these scripts did not, so a sandbox created or rebuilt the ordinary way silently lost the isolation.
 if ! docker run -d --init --restart unless-stopped --name "$CONTAINER" \
     --network "$NETWORK" \
     --network-alias "$ORIGIN_HOST" \
     --add-host host.docker.internal:host-gateway \
     --log-opt max-size=10m --log-opt max-file=3 \
+    --cap-add=SYS_ADMIN \
     -v "${WORKSPACE_VOLUME}:/work" \
     -v "${HISTORY_VOLUME}:/history" \
     -v "${DOCKER_VOLUME}:/var/lib/docker" \
