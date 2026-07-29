@@ -215,17 +215,3 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
     }
     return out;
 };
-
-// A fleet conversation is durable across provider/runtime switches; a runtime session id is not. Its dedicated
-// worktree directory is the stable SDK project key, so the newest session scoped EXACTLY to that directory is
-// the transcript the card means. `includeWorktrees: false` prevents a sibling agent's newer session winning.
-export const conversationSessionId = async (dir: string): Promise<string | undefined> =>
-    (await listSessions({ dir, includeWorktrees: false, limit: 1 }))[0]?.sessionId;
-
-export const readConversationSession = async (dir: string): Promise<{ sessionId: string; messages: RestoredMessage[] } | undefined> => {
-    const sessionId = await conversationSessionId(dir);
-    if (sessionId === undefined) {
-        return undefined;
-    }
-    return { sessionId, messages: await readWorkspaceSession(dir, sessionId) };
-};

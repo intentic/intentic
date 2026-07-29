@@ -28,10 +28,17 @@ export const createAgentsRoutes = (services: Services) => {
             throw new ORPCError("CONFLICT", { message: "the agent's turn is running — wait for it to finish" });
         }
     };
-    const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "provider" | "harness">): Promise<string | undefined> =>
-        runsClaudeCode(agent.provider, agent.harness)
-            ? services.sessions.sessionIdForConversation(services.agentWorktrees.conversationDir(agent.id))
-            : Promise.resolve(undefined);
+    /* Which SDK session holds this conversation's transcript — asked of the REGISTRY, which recorded it from
+     * the turn's own `session` frame, never re-derived from where the turn happened to run. An isolated turn
+     * runs in a mount namespace where its worktree IS the workspace root (agents/isolation.ts), so the SDK
+     * files the session under the root's project key and the worktree path is not a project key at all.
+     * Probing that directory answered "no session" for every isolated agent, and a card with no transcript
+     * reads as a conversation that never happened.
+     *
+     * `sessionIdOf` and not `entry.sessionId`: the entry is only flushed with the id at finish, so a running
+     * first turn — the one most likely to be opened — would otherwise have none. */
+    const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "provider" | "harness">): string | undefined =>
+        runsClaudeCode(agent.provider, agent.harness) ? services.agents.sessionIdOf(agent.id) : undefined;
     // i.router(), not a bare object literal: it is what makes the contract EXHAUSTIVE at compile time. A plain
     // literal is structurally fine while missing a route, so a handler deleted in passing (which is how
     // `archived` was lost — the router kept compiling and the archive door quietly stopped rendering) fails no
@@ -73,14 +80,11 @@ export const createAgentsRoutes = (services: Services) => {
                     if (agent.title?.toLowerCase().includes(needle) === true) {
                         return { id: agent.id };
                     }
-                    const sessionId = await sdkSessionIdOf(agent);
+                    const sessionId = sdkSessionIdOf(agent);
                     if (sessionId === undefined) {
                         return undefined;
                     }
-                    const snippet = matchPrompts(
-                        await services.sessions.prompts(services.agentWorktrees.conversationDir(agent.id), sessionId),
-                        needle,
-                    );
+                    const snippet = matchPrompts(await services.sessions.prompts(services.workspace.root, sessionId), needle);
                     return snippet === undefined ? undefined : { id: agent.id, snippet };
                 }),
             );
@@ -93,12 +97,15 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
+        // The transcript a card redraws, read root-scoped: the workspace root is the working dir every turn
+        // saw, so restored tool locations and attachment paths come back relative to the same tree they
+        // streamed against.
         transcript: i.transcript.handler(async ({ input }) => {
-            const agent = entryOf(input.id);
-            if (!runsClaudeCode(agent.provider, agent.harness)) {
+            const sessionId = sdkSessionIdOf(entryOf(input.id));
+            if (sessionId === undefined) {
                 return { messages: [] };
             }
-            return (await services.sessions.readConversation(services.agentWorktrees.conversationDir(input.id))) ?? { messages: [] };
+            return { sessionId, messages: await services.sessions.read(services.workspace.root, sessionId) };
         }),
         // Legal mid-turn (no notRunning): a title touches no worktree state, and the registry re-reads the
         // entry at begin/finish, so the rename survives a running turn.
@@ -270,7 +277,12 @@ export const createAgentsRoutes = (services: Services) => {
             // Over the roster, so "archivable right now" is decided by the same status the card is wearing —
             // including the derived half, which is invisible from the persisted entry (see archive.ts).
             await services.agents.refreshStandings();
-            const targets = input.ids ?? services.agents.list().filter(archivable).map((agent) => agent.id);
+            const targets =
+                input.ids ??
+                services.agents
+                    .list()
+                    .filter(archivable)
+                    .map((agent) => agent.id);
             const archived = await archiveAgents(services, targets, Date.now());
             // Read AFTER the archive, so each summary carries the archivedAt the card dates itself by, and with
             // the revision that applied it — the browser holds these ids off the board until a roster at least

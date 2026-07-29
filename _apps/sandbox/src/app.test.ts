@@ -334,8 +334,6 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     sessions: {
         list: async () => [],
         read: async () => [],
-        readConversation: async () => undefined,
-        sessionIdForConversation: async () => undefined,
         search: async () => [],
         prompts: async () => [],
         exists: async () => true,
@@ -835,8 +833,6 @@ test("a bridge token reaches the agent-conversation surface and NOTHING else", a
             sessions: {
                 list: async () => [],
                 read: async () => [],
-                readConversation: async () => undefined,
-                sessionIdForConversation: async () => undefined,
                 search: async () => [],
                 prompts: async () => [],
                 exists: async () => true,
@@ -894,8 +890,6 @@ test("sessions.list returns the full list, and routes to search when a query is 
                 sessions: {
                     list: async () => all,
                     read: async () => [],
-                    readConversation: async () => undefined,
-                    sessionIdForConversation: async () => undefined,
                     search: async (_root, query) => (query === "auth" ? matches : []),
                     prompts: async () => [],
                     exists: async () => true,
@@ -926,8 +920,6 @@ test("sessions.get restores a transcript, and a session the store cannot read is
                 sessions: {
                     list: async () => [],
                     read,
-                    readConversation: async () => undefined,
-                    sessionIdForConversation: async () => undefined,
                     search: async () => [],
                     prompts: async () => [],
                     exists: async () => true,
@@ -1738,8 +1730,6 @@ test("agent.run pre-flights a dead resume target with a coded error instead of s
                 sessions: {
                     list: async () => [],
                     read: async () => [],
-                    readConversation: async () => undefined,
-                    sessionIdForConversation: async () => undefined,
                     search: async () => [],
                     prompts: async () => [],
                     exists: async () => false,
@@ -2012,20 +2002,28 @@ test("agents.search matches titles and later prompts, across the archive, and ne
         "sess-1": ["fix the login bug", "actually make it use landAgent instead"],
         "sess-2": ["tidy the readme"],
     };
+    // Every store read the fleet makes, with the dir it scoped to — an isolated turn's session is filed under
+    // the workspace ROOT (its namespace makes the worktree /work), so a read scoped to the worktree path finds
+    // nothing and the card redraws as a conversation that never happened.
+    const scopedTo: string[] = [];
     const app = createApp(
         services({
-            agent: async function* () {
-                yield { kind: "session", sessionId: "pending" };
+            // One SDK session per conversation, told apart by the prompt each turn carries.
+            agent: async function* (request) {
+                yield { kind: "session", sessionId: request.prompt.includes("login") ? "sess-1" : "sess-2" };
                 yield { kind: "done" };
             },
             sessions: {
                 list: async () => [],
-                read: async () => [],
-                readConversation: async (dir) =>
-                    dir.endsWith("conv1") ? { sessionId: "replacement", messages: [{ role: "user" as const, text: "restored words" }] } : undefined,
-                sessionIdForConversation: async (dir) => (dir.endsWith("conv1") ? "sess-1" : "sess-2"),
+                read: async (dir, id) => {
+                    scopedTo.push(dir);
+                    return id === "sess-1" ? [{ role: "user" as const, text: "restored words" }] : [];
+                },
                 search: async () => [],
-                prompts: async (_root, id) => prompts[id] ?? [],
+                prompts: async (dir, id) => {
+                    scopedTo.push(dir);
+                    return prompts[id] ?? [];
+                },
                 exists: async () => true,
             },
         }),
@@ -2034,10 +2032,12 @@ test("agents.search matches titles and later prompts, across the archive, and ne
     await runAgentTurn(client, { prompt: "fix the login bug", conversationId: "conv1", isolated: true });
     await runAgentTurn(client, { prompt: "tidy the readme", conversationId: "conv2", isolated: true });
 
+    // The session the REGISTRY recorded from the turn's own frame, never re-derived from where the turn ran.
     expect(await client.agents.transcript({ id: "conv1" })).toEqual({
-        sessionId: "replacement",
+        sessionId: "sess-1",
         messages: [{ role: "user", text: "restored words" }],
     });
+    expect(scopedTo).toEqual(["/work"]);
     // An id the registry has never heard of is a 404 ON THE WIRE, not merely a rejected call: the browser reads
     // that exact status as "this conversation has no entry any more" and stops a tab claiming a fleet card
     // nothing on the board can render (see useChat's replayStoredSession). Anything else — a 500, an

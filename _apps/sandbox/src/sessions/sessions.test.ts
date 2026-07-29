@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { withRuntimeHistory } from "../agent/runtime-history.js";
-import { conversationSessionId, listWorkspaceSessions, readConversationSession, readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
+import { listWorkspaceSessions, readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
 
 // Fake the SDK store the sessions module reads through. `listSessions` is newest-first; `getSessionMessages`
 // returns Anthropic-shaped turns (content is a string here for brevity).
@@ -219,18 +219,6 @@ test("a replacement runtime session keeps the conversation's original user title
         },
     ]);
     expect((await listWorkspaceSessions("/work"))[0]?.title).toBe("Investigate the blank chat.");
-});
-
-test("resolves the newest SDK session scoped exactly to one conversation worktree", async () => {
-    listSessions.mockResolvedValue([{ sessionId: "replacement", lastModified: 2 }]);
-
-    expect(await conversationSessionId("/history/worktrees/conversation-1")).toBe("replacement");
-    expect(listSessions).toHaveBeenCalledWith({ dir: "/history/worktrees/conversation-1", includeWorktrees: false, limit: 1 });
-});
-
-test("returns no conversation transcript before that worktree has an SDK session", async () => {
-    listSessions.mockResolvedValue([]);
-    expect(await readConversationSession("/history/worktrees/new-agent")).toBeUndefined();
 });
 
 test("runtime-handoff search indexes prior user prompts but not assistant prose or protocol", async () => {
