@@ -1476,6 +1476,37 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBeNull();
     });
 
+    /* The harness read the leading `/` as a command it doesn't have and discarded the rest of the message, so
+     * the model never saw it and the daemon's transcript has no user turn to restore — the bubble in this
+     * window is the only copy left. Same hold as a revoked credential, for the same reason: nothing ran. */
+    it(`holds the message when the harness ate it as an unknown slash command`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                {
+                    kind: `error`,
+                    code: `unknown-command`,
+                    message: "`/workspace` isn't a command this agent has, so it read your message as one and dropped the rest.",
+                },
+            ]),
+        );
+
+        await conversation.send(`/workspace view does not remember the file tree`, {
+            agent: `claude`,
+            harness: `native`,
+            account: undefined,
+            model: `opus`,
+            effort: `medium`,
+            thinking: false,
+        });
+
+        expect(conversation.messages.value.map((message) => message.role)).toEqual([`notice`]);
+        // Held verbatim, leading slash and all — retyping it is exactly what the user should not have to do.
+        expect(conversation.queued.value.map((message) => message.text)).toEqual([`/workspace view does not remember the file tree`]);
+        // Muted: sending again is the fix, and the daemon now knows the command list well enough to let it past.
+        expect(conversation.error.value).toBeNull();
+    });
+
     it(`replays the held message once the account is reconnected`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

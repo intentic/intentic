@@ -7,12 +7,13 @@ import type { Services } from "../composition.js";
 import { extensionAgentDirsOf } from "../extensions/installed-extensions.js";
 import { createHashlineServer } from "../hashline/hashline-tools.js";
 import type { AgentRequest } from "./agent.js";
+import { isUnknownSlashCommand } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { delegationNote } from "./delegation.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { turnPromptPlacement } from "./system-prompt.js";
-import { withTurnPreamble } from "./turn-preamble.js";
+import { LITERAL_SLASH_NOTE, withTurnPreamble } from "./turn-preamble.js";
 import { setupNoticeFor, workspaceSetup } from "../workspace/workspace-setup.js";
 
 /* WHICH RUNTIME SERVES A TURN, AND WHAT IT IS HANDED — the one question every turn has to answer before it can
@@ -188,7 +189,12 @@ const planAcpTurn = async (
  * the translator/Moonshot endpoint a routed provider rides. Credentials are resolved by harness-credentials.ts,
  * which the quick-model one-shot behind the commit box's autofill reads too, so both authenticate identically;
  * its refusals are values, and this is where they become the refusal the composer's connect gate reads. */
-const planHarnessTurn = async (services: Services, input: AgentTurn, context: TurnContext, capabilities: readonly Capability[]): Promise<TurnPlan> => {
+const planHarnessTurn = async (
+    services: Services,
+    input: AgentTurn,
+    context: TurnContext,
+    capabilities: readonly Capability[],
+): Promise<TurnPlan> => {
     const resolved = await resolveHarnessCredentials(services, {
         agent: input.agent,
         ...(input.account !== undefined ? { account: input.account } : {}),
@@ -269,10 +275,18 @@ const planHarnessTurn = async (services: Services, input: AgentTurn, context: Tu
         stableSystemPrompt,
         terseOutput,
     });
+    // A prompt whose leading `/` names no command this session has, which the CLI would otherwise answer with
+    // "Unknown command" and discard — the note keeps the user's words in front of the model (agent-commands.ts
+    // decides, turn-preamble.ts explains). Last of the notes, so it sits against the message it describes.
+    const literalSlash = isUnknownSlashCommand(input.agent ?? "claude", promptWithAttachments);
     // withTurnPreamble so session restore can strip these notes back out of the stored message — they are
     // protocol, not something the user said (turn-preamble.ts).
     const prompt = withTurnPreamble(
-        [...(placement.userNote !== undefined ? [placement.userNote] : []), ...(setupNotice !== undefined ? [setupNotice] : [])],
+        [
+            ...(placement.userNote !== undefined ? [placement.userNote] : []),
+            ...(setupNotice !== undefined ? [setupNotice] : []),
+            ...(literalSlash ? [LITERAL_SLASH_NOTE] : []),
+        ],
         promptWithAttachments,
     );
     return {

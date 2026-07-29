@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { SETUP_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import { DELEGATION_NOTE_HEADER } from "./delegation.js";
-import { stripTurnPreamble, withTurnPreamble } from "./turn-preamble.js";
+import { LITERAL_SLASH_NOTE, stripTurnPreamble, withTurnPreamble } from "./turn-preamble.js";
 
 const notice = `${SETUP_NOTICE_HEADER}\n(a dropped project arrives without them on purpose):\n- intentic: run \`pnpm install\` there first.`;
 const note = `${DELEGATION_NOTE_HEADER}\n\nThe user's connected agent accounts are runnable from your shell.`;
@@ -10,6 +10,17 @@ test("strip is the builder's inverse, for one note and for both", () => {
     expect(stripTurnPreamble(withTurnPreamble([notice], "fix the bug"))).toBe("fix the bug");
     expect(stripTurnPreamble(withTurnPreamble([note], "fix the bug"))).toBe("fix the bug");
     expect(stripTurnPreamble(withTurnPreamble([note, notice], "fix the bug"))).toBe("fix the bug");
+});
+
+// The whole point of the literal-slash note is positional: with it in front, the user's `/` is no longer the
+// first thing the CLI's command parser sees. Restore then has to give the message back exactly as typed —
+// including that leading slash, which is what the user wrote and what search and titles index.
+test("the literal-slash note moves the user's `/` off the front, and strip puts it back", () => {
+    const prompt = "/workspace view does not remember the file tree";
+    const sent = withTurnPreamble([LITERAL_SLASH_NOTE], prompt);
+    expect(sent.startsWith("/")).toBe(false);
+    expect(stripTurnPreamble(sent)).toBe(prompt);
+    expect(stripTurnPreamble(withTurnPreamble([note, notice, LITERAL_SLASH_NOTE], prompt))).toBe(prompt);
 });
 
 test("no notes ⇒ the prompt rides untouched, and strip leaves ordinary messages alone", () => {

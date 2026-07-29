@@ -3,7 +3,7 @@ import { BottomSheet, useDevice } from "@intentic-app/ui";
 import Popover from "primevue/popover";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NATIVE_PROVIDERS, type NativeProvider, type OauthAccount, providerLabel } from "@intentic/sandbox-contract";
+import { type AgentCommand, NATIVE_PROVIDERS, type NativeProvider, type OauthAccount, providerLabel } from "@intentic/sandbox-contract";
 import { useAgents } from "../composables/agents/useAgents";
 import { effortsFor, MODES } from "../composables/chat/catalog";
 import { modelLabelFor, type PendingAttachment } from "../composables/chat/conversation";
@@ -101,7 +101,9 @@ const modelLabelText = computed(() => modelLabelFor(provider.value, model.value)
 // running turn reports a different model than the one selected — a fallback, or a provider alias. Those, and
 // nothing else, are what hovering it is worth.
 const modelHint = computed(() =>
-    activeModel.value === null || activeModel.value === model.value ? providerName.value : `${providerName.value} · this turn is running ${activeModel.value}`,
+    activeModel.value === null || activeModel.value === model.value
+        ? providerName.value
+        : `${providerName.value} · this turn is running ${activeModel.value}`,
 );
 // An ACP provider owns its own model AND reasoning settings — no effort scale to offer (the segments hide).
 const nativeProvider = computed(() => NATIVE_PROVIDERS.includes(provider.value as NativeProvider));
@@ -508,6 +510,23 @@ watch([active, history], (_current, [, previousHistory]) => {
     history.value?.reset();
 });
 
+/* Whether this draft SENDS as a command, which is a different question from what the popover lists: the
+ * picker matches the token being typed, this matches the whole first word against the published names. It is
+ * the same call the daemon makes on arrival (agent-commands.ts) — a leading `/` runs as a command only when
+ * the first token names one, and anything else is prose that goes to the model as written.
+ *
+ * Only the true case is worth saying. The composer used to speak up for the false one — "No command matches"
+ * while the caret sat in the first token — which put a warning over `/workspace` and then withdrew it the
+ * moment the user typed a space and the message became the sentence it was always going to be. */
+const commandRun = computed<AgentCommand | undefined>(() => {
+    const text = draft.value.trimStart();
+    if (!text.startsWith(`/`)) {
+        return undefined;
+    }
+    const name = text.slice(1).split(/\s/, 1)[0] ?? ``;
+    return availableCommands.value.find((command) => command.name === name);
+});
+
 // The one hint slot under the composer. An empty box can't take a newline but CAN take a recall, so it
 // advertises whichever of the two is live. Recomputed as the draft empties — which is exactly when a send has
 // just filled the ring.
@@ -516,6 +535,10 @@ const composerHint = computed(() => {
     // the user learns Escape does this at all.
     if (streaming.value && !awaitingDecision.value) {
         return `Esc to stop`;
+    }
+    // A draft that runs as a command sends nothing to the model, so say so before Enter rather than after.
+    if (commandRun.value !== undefined) {
+        return `Enter runs /${commandRun.value.name}`;
     }
     return draft.value === `` && history.value?.recallable === true ? `↑ for previous message` : `Shift+Enter for new line`;
 });
@@ -602,10 +625,16 @@ const slashQuery = computed<string | undefined>(() => {
 watch([() => activeMention.value?.query, slashQuery], () => {
     popoverDismissed.value = false;
 });
+// Commands the token being typed could still become. Nothing to show is a closed popover, not an empty one
+// saying so — see ChatCommandPopover's header for why that line was the wrong warning.
+const commandMatches = computed<readonly AgentCommand[]>(() => {
+    const needle = slashQuery.value?.toLowerCase();
+    return needle === undefined ? [] : availableCommands.value.filter((command) => command.name.toLowerCase().includes(needle));
+});
 const mentionPopover = ref<InstanceType<typeof ChatMentionPopover>>();
 const commandPopover = ref<InstanceType<typeof ChatCommandPopover>>();
 const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value);
-const commandOpen = computed(() => !mentionOpen.value && slashQuery.value !== undefined && !popoverDismissed.value);
+const commandOpen = computed(() => !mentionOpen.value && commandMatches.value.length > 0 && !popoverDismissed.value);
 
 // Put the picked text into the draft and land the caret after it, keeping the textarea focused.
 const applyDraftEdit = (text: string, nextCaret: number): void => {
@@ -1016,7 +1045,9 @@ watch(
                                 <Icon name="clock" class="mt-0.5 shrink-0" />
                                 <span class="min-w-0 flex-1"
                                     >Usage limit reached — resets {{ formatReset(limitResume.resetsAt) }}.
-                                    <template v-if="limitResume.scheduled">Auto-resume is on — this chat continues by itself about a minute after.</template>
+                                    <template v-if="limitResume.scheduled"
+                                        >Auto-resume is on — this chat continues by itself about a minute after.</template
+                                    >
                                     <template v-else>Auto-resume can continue this chat by itself about a minute after.</template></span
                                 >
                                 <button
@@ -1082,13 +1113,7 @@ watch(
                                         :query="activeMention?.query ?? ''"
                                         @pick="pickMention"
                                     />
-                                    <ChatCommandPopover
-                                        v-if="commandOpen"
-                                        ref="commandPopover"
-                                        :query="slashQuery ?? ''"
-                                        :commands="availableCommands"
-                                        @pick="pickCommand"
-                                    />
+                                    <ChatCommandPopover v-if="commandOpen" ref="commandPopover" :commands="commandMatches" @pick="pickCommand" />
                                     <div v-if="attachments.length > 0 || editorTarget !== undefined" class="flex flex-wrap gap-2 px-3 pt-3">
                                         <!-- Editor-context chip: off by default, one click attaches the open file /
                                      selection to the next message — the inverse of VSCode Claude Code. Sized

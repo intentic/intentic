@@ -291,6 +291,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // that resumed itself, not a request for the user to do anything. It only reaches the client
                 // when the resume could NOT start, which is when reconnecting really is the fix.
                 "claude-token-refused",
+                // The harness read the message as a slash command it doesn't have, and discarded everything
+                // after the name — the model never saw the message. Nothing was processed, so the client holds
+                // the text back instead of leaving the user to retype it (same treatment as claude-reauth).
+                "unknown-command",
                 "grok-model-invalid",
                 "codex-model-invalid",
                 "subscription-required",

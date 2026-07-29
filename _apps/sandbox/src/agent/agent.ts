@@ -25,6 +25,7 @@ import { z } from "zod";
 import { daemonMountNs, inWorktree, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../agents/isolation.js";
 import { worktreeRedirectHooks } from "../agents/worktree-redirect.js";
 import { browserArtifactHooks } from "../browser/browser-artifacts.js";
+import { localCommandText, unknownCommandName } from "./agent-commands.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
 import { type AgentTool, mcpServersOf } from "./agent-tools.js";
@@ -563,6 +564,28 @@ async function* streamSdk(
                     preTokens: meta.pre_tokens,
                     ...(meta.post_tokens !== undefined ? { postTokens: meta.post_tokens } : {}),
                 };
+            } else if (message.subtype === "local_command_output") {
+                /* What a slash command the CLI answers ITSELF produced — no model request ran, so none of the
+                 * frames above carry it. Dropping it (which this did) made every such command look broken: the
+                 * turn ends with the composer's own echo and nothing else, whatever the command actually said.
+                 *
+                 * The unknown-command case is the one that costs the user their words: the CLI claims a leading
+                 * `/`, finds no such command, and discards the REST of the message — the model never sees it.
+                 * turn-plan.ts stops that before it happens whenever the command list is known; this is the
+                 * backstop for when it isn't (a daemon that has run no turn yet), so it carries a code the
+                 * client can act on rather than a line of red text the user has to read and re-type around. */
+                const output = localCommandText(message.content);
+                const unknown = unknownCommandName(output);
+                yield unknown !== undefined
+                    ? {
+                          kind: "error",
+                          code: "unknown-command",
+                          message: `\`/${unknown}\` isn't a command this agent has, so it read your message as one and dropped the rest.`,
+                      }
+                    : { kind: "delta", text: output, ...withParent };
+                if (unknown === undefined) {
+                    yield { kind: "text_end", ...withParent };
+                }
             }
         } else if (message.type === "rate_limit_event") {
             // Claude subscription usage for the turn: which window is active, how much of it is spent, and when

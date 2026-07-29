@@ -732,6 +732,51 @@ test("a stream with no command list publishes no commands frame", async () => {
     expect(events.some((event) => event.kind === "commands")).toBe(false);
 });
 
+/* A command the CLI answers ITSELF bypasses the model, so nothing else on the stream carries what it said.
+ * Dropping this message (which the translation did) made every such command look broken — the turn ended with
+ * the user's own echo and silence, whatever the command had actually replied. */
+test("output from a locally-answered command reaches the transcript as assistant text", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "system", subtype: "init", session_id: "s", model: "sonnet" },
+            {
+                type: "system",
+                subtype: "local_command_output",
+                session_id: "s",
+                content: "<local-command-stdout>Session: 12k tokens</local-command-stdout>",
+            },
+            { type: "result", subtype: "success" },
+        ),
+    );
+    expect(events).toContainEqual({ kind: "delta", text: "Session: 12k tokens" });
+    expect(events).toContainEqual({ kind: "text_end" });
+});
+
+/* The one local-command answer that means the message was thrown away rather than acted on: the CLI claimed
+ * the leading `/`, found no such command, and discarded the rest. Coded, not narrated — the client holds the
+ * text back rather than leaving the user to notice the silence and retype (conversation.ts). */
+test("an unknown command is an error the client can act on, naming the token that ate the message", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "system", subtype: "init", session_id: "s", model: "sonnet" },
+            {
+                type: "system",
+                subtype: "local_command_output",
+                session_id: "s",
+                content: "<local-command-stdout>Unknown command: /workspace</local-command-stdout>",
+            },
+            { type: "result", subtype: "success" },
+        ),
+    );
+    const error = events.find((event) => event.kind === "error");
+    expect(error?.code).toBe("unknown-command");
+    expect(error?.message).toContain("/workspace");
+    // No assistant bubble for it: "Unknown command" is not something the agent said.
+    expect(events.some((event) => event.kind === "delta")).toBe(false);
+});
+
 test("a failing supportedCommands never breaks the turn", async () => {
     const rejecting: QueryFn = (args) =>
         Object.assign(

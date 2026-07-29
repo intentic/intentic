@@ -1613,6 +1613,21 @@ export class Conversation {
                  * to re-mint — surfaces separately as claude-reauth on the resumed turn's own refusal. */
                 this.appendNotice(`${message} The credential is being renewed and this turn continues automatically.`);
                 return;
+            case `unknown-command`:
+                /* The harness claimed the leading `/` as a command name it doesn't have and threw the rest of the
+                 * message away — nothing ran, and the words are not in the transcript the daemon stores either.
+                 * So this is the claude-reauth shape rather than a red line: pull the bubble back out and hold the
+                 * text, which is the only copy of it left.
+                 *
+                 * `interrupted` because the queue would otherwise flush the moment this turn settles, re-sending
+                 * a message the harness just ate without the user asking — and if the daemon still can't tell the
+                 * leading token from a command (an unlearned list is the only way this frame is reached), that is
+                 * a loop rather than a recovery. The turn did teach it the list, so the user's own next send is
+                 * the one that goes through. */
+                this.requeueUndelivered(turn.userMessageId);
+                this.interrupted = true;
+                this.appendNotice(`${message} Your message is held below — send it again and it goes as written.`);
+                return;
             case `session-not-found`:
                 // The sandbox no longer has this chat's transcript — drop the dead session so the next send starts
                 // a fresh one instead of replaying the failure forever. A muted notice, not the error ref: the
