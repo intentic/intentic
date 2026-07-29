@@ -4,26 +4,19 @@ import {
     type AgentTurn,
     agentContract,
     type EditorContext,
-    NATIVE_PROVIDERS,
     runsClaudeCode,
     type WorkspaceEvent,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { createOutboundSniffer } from "../activity/outbound.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
-import { browserOutputDir } from "../browser/browser-artifacts.js";
-import { browserServersOf } from "../browser/browser-tools.js";
 import { cliEnvOf } from "../capabilities/cli-env.js";
-import { mcpToolsOf } from "../capabilities/mcp-tools.js";
-import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
 import { extensionEnvOf } from "../extensions/extension-env.js";
-import { extensionAgentDirsOf, extensionBinDirsOf } from "../extensions/installed-extensions.js";
+import { extensionBinDirsOf } from "../extensions/installed-extensions.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { createHashlineServer } from "../hashline/hashline-tools.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
-import { setupNoticeFor, workspaceSetup } from "../workspace/workspace-setup.js";
 import { startAnchor } from "../agents/isolation.js";
 import { landAgent } from "../agents/land.js";
 import { recordPrompt } from "../sessions/prompt-index.js";
@@ -31,17 +24,14 @@ import type { AgentRequest } from "./agent.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
-import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
 import { accountLimitReset, clearLimitHit, pendingLimitHit, recordLimitHit, resumeTurnOf } from "./limit-resume.js";
 import { withRuntimeHistory } from "./runtime-history.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
 import { summarizeAgentTitle } from "./title-summary.js";
+import { planTurn } from "./turn-plan.js";
 import { sumUsage, type UsageFrame } from "./turn-usage.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
-import { delegationNote } from "./delegation.js";
-import { turnPromptPlacement } from "./system-prompt.js";
-import { withTurnPreamble } from "./turn-preamble.js";
 
 // Fold the opt-in editor context (the composer chip, off by default) into the prompt: the file the user is
 // looking at and, when they selected text, the lines themselves — so deictic prompts ("fix this") ground
@@ -256,7 +246,6 @@ async function* runTurn(
     }
     // cli-kind capabilities contribute env vars (their stored credentials) so either agent's shell can run
     // their CLI tools; extension `contributes.settings` with an `env` name inject theirs the same way.
-    const capabilities = await services.capabilities.list();
     const cliEnv = { ...(await cliEnvOf(services)), ...(await extensionEnvOf(services)) };
     // Extensions that ship an agent CLI (contributes.bin — e.g. ext-discord's `discord-voice`) get their bin dir
     // prepended to the turn's PATH, so the tool resolves by name in the agent's shell across every runtime.
@@ -331,274 +320,26 @@ async function* runTurn(
         ...(input.permissionMode !== undefined ? { permissionMode: input.permissionMode } : {}),
         ...(input.effort !== undefined ? { effort: input.effort } : {}),
     };
-    let run: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
-    let request: AgentRequest;
-    // The provider account that serves this turn (the selected one, else the provider's first) — the
-    // attribution key stamped onto the usage/rate-limit frames and the activity log below.
-    let resolvedAccount: string | undefined;
-    // Harness (agentic loop) is orthogonal to provider: "native" runs each provider on its own runtime;
-    // "claude-code" forces the Claude Code Agent SDK loop for ANY provider — codex/grok then fall through to the
-    // claude branch below, which serves them by pointing the harness at the sandbox's translator.
-    const harness = input.harness ?? "native";
-    if (input.agent === "codex" && harness === "native") {
-        // Codex has no sandbox-owned OAuth: it authenticates through the translator on the user's ChatGPT
-        // SUBSCRIPTION (the same connection the claude-code harness rides), or the container OPENAI_API_KEY on a
-        // bare dev run with no translator. There's a single sandbox-wide CODEX_HOME (the adapter's default), so a
-        // resume is a plain existence check against it; a missing thread self-heals like the Claude path below.
-        // Claude-only fields (plugins, MCP, thinking) don't apply here.
-        if (input.sessionId !== undefined && !(await services.codexThreadExists(input.sessionId))) {
-            yield {
-                kind: "error",
-                code: "session-not-found",
-                message:
-                    "This chat's Codex thread no longer exists on the sandbox — it was deleted or lost in a rebuild. The next message starts a fresh session.",
-            };
-            yield { kind: "done" };
-            return;
-        }
-        // The subscription (via the translator) is the credential; the container OPENAI_API_KEY is the only
-        // fallback (a bare dev run with no translator baked).
-        const translatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
-        if (!translatorReady && services.config.openaiApiKey === "") {
-            yield {
-                kind: "error",
-                code: "subscription-required",
-                message:
-                    services.config.translator.url === ""
-                        ? "This sandbox has no model translator, so Codex can't run here. Run a sandbox built from the published image."
-                        : "Connect your ChatGPT subscription in Sandbox ▸ Agent to run Codex.",
-            };
-            yield { kind: "done" };
-            return;
-        }
-        run = services.codexAgent;
-        // Attribution key: the shared subscription serving all Codex turns, else undefined for the api-key fallback.
-        resolvedAccount = translatorReady ? "codex-subscription" : undefined;
-        // Resolve a concrete model so the turn never falls back to @openai/codex-sdk's built-in default
-        // (gpt-5-codex), which the subscription can reject. An explicit selection rides through (a stale one
-        // self-heals via codex-model-invalid); an empty one resolves the catalog default (discovery → persisted →
-        // seed floor, never empty — see codex-catalog).
-        const model = input.model !== undefined && input.model !== "" ? input.model : (await services.codexModels.models()).default;
-        const withModel = { ...base, model };
-        // A subscription-served turn rides the translator's OpenAI-compatible endpoint on the fixed local bearer
-        // (the adapter builds the provider block); the dev api-key path uses Codex's own OPENAI_API_KEY default.
-        // The default CODEX_HOME (createCodexAgent) serves every turn — no per-turn home. Codex takes attachments
-        // structurally: images ride as native local_image inputs, the rest as a file list in the prompt.
-        const withAuth = translatorReady
-            ? { ...withModel, codexEndpoint: { baseUrl: services.config.translator.url, authToken: services.config.translator.token } }
-            : withModel;
-        request = attachmentPaths.length > 0 ? { ...withAuth, attachments: attachmentPaths } : withAuth;
-    } else if (input.agent === "grok" && harness === "native") {
-        // Grok rides OpenCode with xAI subscription OAuth (OpenCode owns the credential). Gate on OpenCode's own
-        // connection view. Claude-only fields (plugins, MCP tools, thinking) don't apply.
-        if (!(await services.openCode.connected("xai"))) {
-            yield {
-                kind: "error",
-                message: "No Grok account connected — sign in with your xAI (SuperGrok/X Premium) account in Setup before chatting.",
-            };
-            yield { kind: "done" };
-            return;
-        }
-        // Grok MUST ride an explicit, live-valid xAI model id: OpenCode's own default is a retired models.dev id
-        // (grok-code-fast-1) xAI rejects, and its catalog is empty for xai — so an omitted model makes the turn
-        // fall back to that same retired default. Resolve from the daemon's catalog (never empty — live discovery
-        // with a persisted/seed floor): keep the pinned model when it's offered, else the default. If the resolved
-        // id turns out stale, the runner self-heals it mid-turn from xAI's "Did you mean" rejection (grok-agent).
-        const catalog = await services.openCode.xaiModels();
-        const valid = new Set(catalog.models.map((entry) => entry.id));
-        const model = input.model !== undefined && valid.has(input.model) ? input.model : catalog.default;
-        run = services.grokAgent;
-        // OpenCode holds one xAI auth, so the single Grok account is "xai" (see grok.routes.ts).
-        resolvedAccount = "xai";
-        // Override base's input.model with the validated id; the adapter folds attachment paths into the prompt
-        // (OpenCode's tools read them from disk).
-        const withModel = { ...base, model };
-        request = attachmentPaths.length > 0 ? { ...withModel, attachments: attachmentPaths } : withModel;
-    } else if (input.agent !== undefined && !(NATIVE_PROVIDERS as readonly string[]).includes(input.agent)) {
-        // An ACP provider: the id of an installed `agent`-kind capability, spawned and driven over the Agent
-        // Client Protocol. Harness doesn't apply (the agent IS its own loop) and neither do the Claude-only
-        // request fields; the adapter passes http MCP tools through when the agent advertises support.
-        const provider = input.agent;
-        const capability = capabilities.find((entry) => entry.kind === "agent" && entry.id === provider);
-        if (capability === undefined || capability.kind !== "agent") {
-            yield { kind: "error", message: `Unknown agent provider "${provider}" — add it as an Agent capability first.` };
-            yield { kind: "done" };
-            return;
-        }
-        const acpConfig = capability.config;
-        run = (turnRequest) => services.acpAgent(provider, acpConfig, turnRequest);
-        const tools = [...services.tools, ...mcpToolsOf(capabilities)];
-        const withTools = tools.length > 0 ? { ...base, tools } : base;
-        request = attachmentPaths.length > 0 ? { ...withTools, attachments: attachmentPaths } : withTools;
-    } else {
-        // Endpoint + credentials for the Claude Code harness — a native Claude turn's subscription OAuth (with
-        // its mid-turn refresh callback), or the translator/Moonshot endpoint a routed provider rides. Resolved
-        // by harness-credentials.ts, which the quick-model one-shot behind the commit box's autofill reads too,
-        // so both authenticate identically. Its refusals are values (no translator in the image, an unconnected
-        // subscription, a revoked sign-in); this is where they become the error frame the composer's connect
-        // gate reads.
-        const resolved = await resolveHarnessCredentials(services, {
-            agent: input.agent,
-            ...(input.account !== undefined ? { account: input.account } : {}),
-            ...(input.model !== undefined ? { model: input.model } : {}),
-        });
-        if (!resolved.ok) {
-            yield { kind: "error", ...(resolved.code !== undefined ? { code: resolved.code } : {}), message: resolved.message };
-            yield { kind: "done" };
-            return;
-        }
-        const { oauthToken, refreshOauthToken, endpoint } = resolved.credentials;
-        resolvedAccount = resolved.credentials.account;
-        // Pre-flight the resume target: a session id that outlived its transcript (deleted, or minted before
-        // the store persisted across rebuilds) would otherwise spawn the CLI just to fail opaquely — on every
-        // retry. The coded error lets the UI drop the dead id so the next send starts fresh.
-        if (input.sessionId !== undefined && !(await services.sessions.exists(effectiveCwd, input.sessionId))) {
-            yield {
-                kind: "error",
-                code: "session-not-found",
-                message:
-                    "This chat's session no longer exists on the sandbox — it was deleted or lost in a rebuild. The next message starts a fresh session.",
-            };
-            yield { kind: "done" };
-            return;
-        }
-        // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities — a same-named
-        // external tool overrides, matching mcpServersOf's last-wins merge.
-        const tools = [...services.tools, ...mcpToolsOf(capabilities)];
-        // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the
-        // provider prompt cache survives the turn — the cross-provider delegation note then rides the user
-        // message instead of the system prompt.
-        const {
-            stableSystemPrompt,
-            hashlineEdits,
-            iqSearch,
-            outputCleaners,
-            outputHoldout,
-            filterBackend,
-            terseOutput,
-            systemPromptMode,
-            systemPrompt: customPrompt,
-        } = await services.sandboxSettings.get();
-        // The image-baked iq plugin (skill + SessionStart nudge) loads ahead of any user-added plugin-kind
-        // capabilities so the agent prefers iq for code search — gated by the per-sandbox iqSearch toggle
-        // (opt-in, default off). Empty dir outside the container ⇒ skipped regardless.
-        // Extension checkouts with a contributes.agent manifest entry ride the same SDK plugin loader.
-        const plugins = [
-            ...(services.config.iqPluginDir !== "" && iqSearch ? [services.config.iqPluginDir] : []),
-            ...pluginDirsOf(capabilities, services.workspace.root),
-            ...(await extensionAgentDirsOf(services)),
-        ];
-        // Each logged-in browser capability grants the @playwright/mcp browser tools, bound to that platform's
-        // persisted profile so the agent acts as the signed-in owner (read/reply/comment/post/join).
-        const browserServers = await browserServersOf(capabilities, services.workspace.root);
-        // Turn-scoped roots follow the effective cwd: hashline edits must anchor in the worktree an isolated
-        // turn edits. Browser profiles, plugin checkouts, and attachments stay on /work — absolute-path
-        // inputs, not edit targets.
-        const sdkServers = {
-            ...browserServers,
-            // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
-            ...(hashlineEdits ? { hashline: createHashlineServer(localCwd) } : {}),
-        };
-        // Cross-provider delegation via the shell: when Codex is reachable, the agent's Bash gets the shared
-        // CODEX_HOME (whose config.toml selects the translator subscription) plus the local bearer, and the
-        // system prompt a short how-to note. Codex is reachable when the translator holds the ChatGPT
-        // subscription, or a dev OPENAI_API_KEY is set; nothing ⇒ no env, no note — delegation isn't offered.
-        const codexTranslatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
-        const codexDelegable = codexTranslatorReady || services.config.openaiApiKey !== "";
-        const codexHome = codexDelegable ? services.codexHome : undefined;
-        // Resolve the xAI model the delegation note names from xAI's live catalog (default, else first), so the
-        // note never hardcodes a since-renamed id. Tolerate a transient xAI blip — a Claude turn must not fail on
-        // this lookup; the note then omits the model and tells the agent to list xAI's models itself.
-        const grokConnected = await services.openCode.connected("xai");
-        // Skip the live model lookup in stable mode — the note stays model-agnostic there (it points the agent at
-        // `opencode models`), so no volatile xAI id enters the turn at all.
-        const grokModel =
-            grokConnected && !stableSystemPrompt
-                ? await services.openCode
-                      .xaiModels()
-                      .then((catalog) => catalog.default ?? catalog.models[0]?.id)
-                      .catch(() => undefined)
-                : undefined;
-        const note = delegationNote({
-            ...(codexHome !== undefined ? { codexHome } : {}),
-            ...(grokConnected ? { openCodeXdg: services.authRoot } : {}),
-            ...(grokModel !== undefined ? { grokModel } : {}),
-        });
-        const shellEnv = {
-            ...cliEnv,
-            ...(codexHome !== undefined ? { CODEX_HOME: codexHome } : {}),
-            // The translator provider (config.toml) reads the bearer from CODEX_API_KEY; the dev api-key path
-            // uses the container's own OPENAI_API_KEY, already in the shell env.
-            ...(codexTranslatorReady ? { CODEX_API_KEY: services.config.translator.token } : {}),
-        };
-        // The turn's user message: attachment note folded in as before. With stableSystemPrompt on, the delegation
-        // note is prepended HERE (a user-message preamble) instead of appended to the preset system prompt, so the
-        // cached system+tools prefix stays byte-stable and the provider prompt cache is reused across the session.
-        const promptWithAttachments = attachmentPaths.length > 0 ? withAttachmentNote(base.prompt, attachmentPaths) : base.prompt;
-        // Dependency readiness for the tree this turn actually works in (an isolated turn's worktree, not /work).
-        // Told up front because the alternative is the model paying to rediscover it the expensive way — a package
-        // script exiting `vue-tsc: not found`, an `npx` reaching the registry for a binary that was never a package
-        // name, and a post-edit type-check whose every error is false. Rides the USER message, never systemAppend:
-        // it changes the moment an install finishes, and the system prefix is kept byte-stable for the prompt cache.
-        const setupNotice = setupNoticeFor(await workspaceSetup(localCwd, services.processes));
-        // Where this turn's instructions go — the owner's own system prompt (or the preset), what may be
-        // appended to it, and whether the delegation note has to travel in the user message instead
-        // (system-prompt.ts owns all three, because they are one decision).
-        const placement = turnPromptPlacement({
-            mode: systemPromptMode,
-            systemPrompt: customPrompt,
-            ...(note !== undefined ? { note } : {}),
-            stableSystemPrompt,
-            terseOutput,
-        });
-        // withTurnPreamble so session restore can strip these notes back out of the stored message — they are
-        // protocol, not something the user said (turn-preamble.ts).
-        const prompt = withTurnPreamble(
-            [...(placement.userNote !== undefined ? [placement.userNote] : []), ...(setupNotice !== undefined ? [setupNotice] : [])],
-            promptWithAttachments,
-        );
-        run = services.agent;
-        request = {
-            ...base,
-            prompt,
-            // A routed turn (codex/grok under the Claude Code harness) pins the translator endpoint + bearer +
-            // mapped model and withholds the Anthropic OAuth token (baseUrl in agent.ts drops CLAUDE_CODE_OAUTH_TOKEN).
-            // A native Claude turn keeps its OAuth token and falls back to the daemon-wide default model when the turn
-            // didn't pin one (a per-automation `model` already rode into `base` above and wins; empty ⇒ subscription default).
-            ...(endpoint !== undefined
-                ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken, model: endpoint.model }
-                : {
-                      ...(input.model === undefined && services.config.intenticAgentModel !== ""
-                          ? { model: services.config.intenticAgentModel }
-                          : {}),
-                      ...(oauthToken !== undefined ? { oauthToken } : {}),
-                      ...(refreshOauthToken !== undefined ? { refreshOauthToken } : {}),
-                  }),
-            ...(plugins.length > 0 ? { plugins } : {}),
-            ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
-            ...(tools.length > 0 ? { tools } : {}),
-            ...(Object.keys(sdkServers).length > 0 ? { sdkServers } : {}),
-            // The same directory the browser servers got as `--output-dir` — the hook that redirects
-            // model-named screenshots into it needs the value too, and one source keeps them from drifting.
-            browserOutputDir: browserOutputDir(services.workspace.root),
-            // hashlineEdits owns file mutation via the hashline MCP server above, so drop the native Edit/Write
-            // from the model's context (native Read stays for viewing images/PDFs).
-            ...(hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),
-            // Forward the Bash output-cleaner spec (default "off" ⇒ forwarded ⇒ filter disabled; "" ⇒ omit ⇒
-            // filter's all-on default), the holdout control fraction, and the cleaner backend (default "native" ⇒ omit).
-            ...(outputCleaners !== "" ? { outputCleaners } : {}),
-            ...(outputHoldout > 0 ? { outputHoldout } : {}),
-            ...(filterBackend !== "native" ? { filterBackend } : {}),
-            ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
-            // Which base the prompt is built on, plus either the owner's own text (under "custom") or what to
-            // append to a built-in base — never both, which is what turnPromptPlacement decided above.
-            systemPromptMode,
-            ...(placement.systemPrompt !== undefined ? { systemPrompt: placement.systemPrompt } : {}),
-            ...(placement.systemAppend !== undefined ? { systemAppend: placement.systemAppend } : {}),
-            // Mid-turn steering (the /agent/steer queue streamAgent registered) — Claude Code harness only.
-            ...(steering !== undefined ? { steering } : {}),
-        };
+    /* WHICH RUNTIME SERVES THIS TURN AND WHAT IT IS HANDED — resolved as a value (turn-plan.ts), so the four
+     * providers' gates and request assembly live together instead of interleaved with the lifecycle below.
+     * A refusal is one of them: an ordinary state of a sandbox (a session id that outlived its transcript, a
+     * subscription nobody connected, an uninstalled Agent capability), reported as the error frame the
+     * composer's connect gate reads. */
+    const plan = await planTurn(services, input, { base, attachmentPaths, localCwd, effectiveCwd, cliEnv, steering });
+    if (!plan.ok) {
+        // The namespace anchor was built before the gates ran, so a refusal has to take it down too — it is a
+        // detached `unshare` process that lives until something kills it, and every one of these refusals is a
+        // condition the user hits repeatedly (an unconnected subscription answers the same way on every press).
+        isolation?.dispose();
+        yield { kind: "error", ...(plan.code !== undefined ? { code: plan.code } : {}), message: plan.message };
+        yield { kind: "done" };
+        return;
     }
+    const { run } = plan;
+    // The provider account that serves this turn — the attribution key stamped onto the usage/rate-limit frames
+    // and the activity log below.
+    const resolvedAccount = plan.account;
+    let request = plan.request;
     // Bring every repo with a remote up to its latest commit before the agent reads the tree, so the turn works
     // on current code. Clean-only fast-forward — a dirty/diverged/detached repo is left as-is and its stale state
     // reported into the prompt so the agent knows. Throttled per repo; a network failure on one repo is isolated
@@ -748,7 +489,7 @@ async function* runTurn(
                     provider,
                     ...(resolvedAccount !== undefined ? { account: resolvedAccount } : {}),
                     ...(request.model !== undefined ? { model: request.model } : {}),
-                    harness,
+                    harness: input.harness ?? "native",
                     ...(conversation !== undefined ? { conversationId: conversation.id } : {}),
                     turns: usage.numTurns ?? 1,
                     inputTokens: usage.inputTokens ?? 0,
