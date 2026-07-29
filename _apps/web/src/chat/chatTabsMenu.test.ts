@@ -10,6 +10,16 @@
 // running agent — closing detaches from the turn (Conversation.abort is soft), it doesn't stop it.
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { createApp, h, nextTick } from "vue";
+// Statically imported, not awaited inside the hook: this graph is the whole app's — PrimeVue, the router, the
+// chat store — and compiling it cold takes longer than a hook is allowed to (vitest's hookTimeout), where the
+// same work at import time is simply the file's load. The globals below still land first; vi.hoisted runs
+// above every import in the transformed module, which is exactly what it is for.
+import ChatTabs from "./ChatTabs.vue";
+import { installUi } from "@intentic-app/ui";
+import { VueQueryPlugin } from "@tanstack/vue-query";
+import { resetChat, useChat } from "../composables/chat/useChat";
+import { queryClient } from "../composables/queryPersistence";
+import { router } from "../router";
 
 // The import-time globals a mounted chat component needs (see startAgent.test.ts): ui's useDevice reads
 // window.matchMedia at module scope, environment.ts reads window.env, and jsdom ships no ResizeObserver.
@@ -42,22 +52,13 @@ const { open } = vi.hoisted(() => {
 });
 
 let strip: HTMLElement;
-let useChat: typeof import("../composables/chat/useChat").useChat;
-let resetChat: typeof import("../composables/chat/useChat").resetChat;
 
 // Mounted ONCE for the file: ChatTabs registers the chat.* commands on mount and the registry throws on a
 // duplicate id, so each test resets the conversation list instead of remounting. installUi rather than
 // startAgent.test.ts's stub Icon — the menu IS a PrimeVue overlay, so it needs the real plugin. vue-query goes
 // on too: the strip carries the agents filter, whose daemon tier is a useQuery.
 // `onClose` stands in for ChatPanel, which hands the emitted set straight to the store's closeTabs.
-beforeAll(async () => {
-    const ChatTabs = (await import(`./ChatTabs.vue`)).default;
-    const { installUi } = await import(`@intentic-app/ui`);
-    const { VueQueryPlugin } = await import(`@tanstack/vue-query`);
-    const { queryClient } = await import(`../composables/queryPersistence`);
-    const { router } = await import(`../router`);
-    ({ useChat, resetChat } = await import(`../composables/chat/useChat`));
-
+beforeAll(() => {
     strip = document.createElement(`div`);
     document.body.appendChild(strip);
     const app = createApp({ render: () => h(ChatTabs, { onClose: (ids: ReadonlySet<string>) => useChat().closeTabs(ids) }) });
