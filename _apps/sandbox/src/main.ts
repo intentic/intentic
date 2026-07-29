@@ -1,7 +1,8 @@
-import { rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
 import { sweepAgedAgents } from "./agents/archive.js";
@@ -105,6 +106,14 @@ const main = async (): Promise<void> => {
         logger.warn({ err: error }, "root workspace repo not ensured — the Changes review will degrade");
         return false;
     });
+
+    // The reference shelf (REFERENCE_DIR, @intentic/workspace-ignore): furniture, like .intentic — its presence
+    // IS the affordance. Every scanner already excludes it; without the dir on disk the convention is invisible
+    // (nothing to drop onto, nothing in the tree to explain itself). Idempotent, so a shelf deleted mid-session
+    // stays gone until the next boot re-ensures an empty one.
+    await mkdir(join(config.workspaceRoot, REFERENCE_DIR), { recursive: true }).catch((error: unknown) =>
+        logger.warn({ err: error }, "reference shelf not ensured — refs/ drops have no target"),
+    );
 
     // No repo keeps its git dir under /work: a worktree's gitdir pointer has to resolve identically inside an
     // isolated turn's namespace, where /work IS that worktree (agents/isolation.ts). Every daemon-created repo

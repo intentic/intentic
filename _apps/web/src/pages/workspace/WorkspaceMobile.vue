@@ -18,6 +18,7 @@ import BinaryDiffView from "./viewers/BinaryDiffView.vue";
 import DiffView from "./viewers/DiffView.vue";
 import { rendersAsBytes } from "./fileType";
 import type { DiffTabPayload } from "./workspaceTabs";
+import { REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { filesToEntries } from "./dropEntries";
 import { iconForEntry } from "@intentic-app/ui";
 import FileViewer from "./viewers/FileViewer.vue";
@@ -339,6 +340,12 @@ const onPick = (event: Event): void => {
                                     :class="node.ignored ? 'text-subtle' : 'text-muted'"
                                 />
                                 <span class="min-w-0 flex-1 truncate text-sm" :class="{ 'text-subtle': node.ignored }">{{ node.name }}</span>
+                                <!-- The reference shelf must not read as junk — no hover on touch, so the badge alone names it. -->
+                                <span
+                                    v-if="node.path === REFERENCE_DIR"
+                                    class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
+                                    >reference</span
+                                >
                                 <Icon v-if="node.type === 'dir'" name="chevron-right" class="shrink-0 text-xs text-subtle" />
                             </button>
                             <p v-if="dirLoading && listing.length === 0" class="px-4 py-8 text-center text-xs text-subtle">Loading…</p>

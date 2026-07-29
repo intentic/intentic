@@ -626,8 +626,8 @@ const endResize = (event: PointerEvent): void => {
                             :aria-pressed="layout.includeIgnored.value"
                             v-tooltip.bottom="
                                 layout.includeIgnored.value
-                                    ? 'Including ignored files — node_modules, gitignored paths'
-                                    : 'Skipping ignored files — node_modules, gitignored paths'
+                                    ? 'Including ignored files — node_modules, gitignored paths, the refs/ reference shelf'
+                                    : 'Skipping ignored files — node_modules, gitignored paths, the refs/ reference shelf'
                             "
                             @click="layout.toggleIncludeIgnored()"
                         >

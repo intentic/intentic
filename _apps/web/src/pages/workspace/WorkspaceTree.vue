@@ -14,6 +14,7 @@ import { isRecentlyChanged } from "../../composables/workspace/useWorkspaceLive"
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import PresenceAvatars from "../../presence/PresenceAvatars.vue";
 import { explorerTreatment, iconForEntry } from "@intentic-app/ui";
+import { REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { filesToEntries } from "./dropEntries";
 import { movableInto, pastePairs } from "./explorerPaste";
 import { nestSiblings, type NestedEntry } from "./fileNesting";
@@ -921,6 +922,16 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                     <span v-else class="min-w-0 flex-1 truncate" :class="row.entry.ignored ? 'text-subtle' : 'text-content/90'">{{
                         row.entry.name
                     }}</span>
+                    <!-- The reference shelf: dimmed like every out-of-focus dir, but it must not read as junk —
+                         the badge names what it is, the tooltip says how to use it. -->
+                    <span
+                        v-if="row.entry.path === REFERENCE_DIR"
+                        class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
+                        v-tooltip.right="
+                            'Reference shelf — drop material the agent consults on request (docs, specs, repos to compare against). Out of search, sync, and the agent\'s focus until you point at it.'
+                        "
+                        >reference</span
+                    >
                     <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
                     <Icon
                         v-if="row.entry.type === 'dir' && lazyLoading.has(row.entry.path)"
