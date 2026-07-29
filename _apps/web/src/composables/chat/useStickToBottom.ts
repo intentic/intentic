@@ -3,8 +3,9 @@ import { onMounted, onUnmounted, type Ref, watch } from "vue";
 /* "Follow the newest content unless the user has scrolled up to read" — the transcript's half of the fact that
  * a chat is read from its bottom edge.
  *
- * The rule lives here, keyed on the only two things it actually depends on: what the user did with the
- * scrollbar, and how the geometry moved underneath them. It used to be a flag on the panel that every surface
+ * The rule lives here, keyed on what the user did with the scrollbar; everything else — the geometry moving
+ * underneath them, the panel saying the transcript changed — arrives through `follow` and re-pins whoever has
+ * not left. It used to be a flag on the panel that every surface
  * swapping the transcript had to remember to raise, which the surfaces that don't know the panel exists — the
  * agents board opening a session, a deep link into /agents/:id, the review panel handing a conflict back —
  * could not raise. Those opened a conversation into whatever scroll offset the previous one had left behind,
@@ -42,7 +43,7 @@ export const useStickToBottom = (
     // flag. Not the document itself: adoption rewrites `ownerDocument` in place, with nothing reactive about it
     // to watch, so the move is announced by whoever performs it.
     host: Ref<unknown>,
-): { pin: () => void } => {
+): { pin: () => void; follow: () => void } => {
     // Closure state rather than refs: nothing renders either of these, and every read happens inside a DOM
     // callback where a reactive read would only cost a dependency nobody collects.
     let pinned = true;
@@ -62,6 +63,19 @@ export const useStickToBottom = (
         // Read the write back: the browser clamps it to the real maximum, and that clamped value is what the
         // scroll event this fires next frame will be measured against.
         lastTop = element.scrollTop;
+    };
+
+    /* "Whatever just changed, stay where the transcript is being read from" — the pin, conditional on the
+     * reader not having left. The geometry observers below run through this, and so does the panel on the
+     * transcript changing (ChatPanel's follow watch): an observation is a MEASUREMENT of two boxes, and it is
+     * only ever as good as the frame it was taken in — a notification the browser coalesces away or defers past
+     * the growth that caused it (a resize-observer loop hitting its depth limit does exactly this) leaves the
+     * newest content below the fold with nothing to bring it up. Being told "the transcript changed" needs no
+     * frame to be true in, so the two together cover what neither does alone. */
+    const follow = (): void => {
+        if (pinned) {
+            pin();
+        }
     };
 
     const onScroll = (): void => {
@@ -101,11 +115,7 @@ export const useStickToBottom = (
             return;
         }
         const view = element.ownerDocument.defaultView ?? window;
-        observer = new view.ResizeObserver(() => {
-            if (pinned) {
-                pin();
-            }
-        });
+        observer = new view.ResizeObserver(follow);
         observer.observe(wrapper);
         observer.observe(element, { box: `content-box` });
     };
@@ -132,5 +142,5 @@ export const useStickToBottom = (
         listening = undefined;
     });
 
-    return { pin };
+    return { pin, follow };
 };

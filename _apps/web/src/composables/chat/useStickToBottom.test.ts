@@ -59,21 +59,22 @@ const geometry = (element: HTMLElement, scrollHeight: number, clientHeight: numb
 
 // The panel, reduced to what the composable touches: the scroller, the content wrapper it measures, and the
 // flag that says the two have been teleported to another document.
-const mountPanel = (): { scroller: HTMLElement; poppedOut: Ref<boolean>; pin: () => void } => {
+const mountPanel = (): { scroller: HTMLElement; poppedOut: Ref<boolean>; pin: () => void; follow: () => void } => {
     const scroller = ref<HTMLElement>();
     const content = ref<HTMLElement>();
     const poppedOut = ref(false);
     let pin: () => void = () => {};
+    let follow: () => void = () => {};
     const app = createApp({
         setup() {
-            ({ pin } = useStickToBottom(scroller, content, poppedOut));
+            ({ pin, follow } = useStickToBottom(scroller, content, poppedOut));
             return () => h(`div`, { ref: scroller }, [h(`div`, { ref: content })]);
         },
     });
     const host = document.createElement(`div`);
     document.body.append(host);
     app.mount(host);
-    return { scroller: scroller.value as HTMLElement, poppedOut, pin: () => pin() };
+    return { scroller: scroller.value as HTMLElement, poppedOut, pin: () => pin(), follow: () => follow() };
 };
 
 // A second window to be teleported into — an iframe is the one document jsdom gives with a defaultView of its
@@ -168,6 +169,28 @@ it(`sends the transcript to its newest message when the panel asks`, async () =>
     scroller.dispatchEvent(new Event(`scroll`));
     pin(); // submit(): the user wrote the newest thing in the transcript, so the bottom is where they want to be
     expect(scroller.scrollTop).toBe(600);
+});
+
+/* The panel's own report that the transcript changed, which exists because an observation can be lost: a
+ * ResizeObserver notification the browser coalesces or defers past the growth that caused it left a just-sent
+ * message and its "Perusing…" loader below the fold with nothing to bring them up. Growth with NO observation
+ * at all is what that failure looks like from here. */
+it(`follows a transcript that changed without the observer reporting it`, async () => {
+    installObserver(window);
+    const { scroller, follow } = mountPanel();
+    const box = geometry(scroller, 1000, 400);
+    await nextTick();
+
+    box.scrollHeight = 1400; // the sent message and the loader under it, unobserved
+    follow();
+    expect(scroller.scrollTop).toBe(1000);
+
+    // Still nobody else's turn to be moved: a reader who scrolled up stays where they are, observed or not.
+    scroller.scrollTop = 300;
+    scroller.dispatchEvent(new Event(`scroll`));
+    box.scrollHeight = 1800;
+    follow();
+    expect(scroller.scrollTop).toBe(300);
 });
 
 it(`stops observing when the panel unmounts`, async () => {

@@ -503,7 +503,7 @@ export class Conversation {
 
     // The tmux session this conversation's Bash commands are running in (`agent-<sdk session>`), from the
     // daemon's own `terminal` frame. Held so the transcript can offer to WATCH the shell — the agent's terminals
-    // no longer tab themselves into the panel (useAgentTerminals), so the Bash card is where that door lives.
+    // no longer tab themselves into the panel (useWorkTerminals), so the Bash card is where that door lives.
     // Undefined until the first Bash of a turn; a fresh conversation, a branch, and a restored transcript all
     // start without one, because whatever shell they inherited belongs to a session they no longer run in.
     readonly agentTerminal = ref<string | undefined>();
@@ -1561,13 +1561,13 @@ export class Conversation {
                 // The agent started running Bash in its live `agent-<id>` tmux terminal. Remember it, so this
                 // conversation's Bash cards can offer to watch it, and tell the terminal layer whose it is, so
                 // its popover names the conversation instead of eight hex characters. The panel is then asked to
-                // surface it, which tabs it only if the user opted into AI terminals — no auto-open, no focus
+                // surface it, which tabs it only if the user opted into work terminals — no auto-open, no focus
                 // steal either way. Both imports are lazy so the chat model doesn't statically pull in the
                 // xterm/terminal-panel chain.
                 const { session } = effect;
                 this.agentTerminal.value = session;
                 const title = this.title.value;
-                void import("../terminal/useAgentTerminals").then((m) => m.noteAgentTerminal(session, title));
+                void import("../terminal/useWorkTerminals").then((m) => m.noteAgentTerminal(session, title));
                 void import("../terminal/useTerminalPanel").then((m) => m.useTerminalPanel().surface(session));
                 return;
             }

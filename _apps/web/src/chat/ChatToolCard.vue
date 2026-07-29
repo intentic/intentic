@@ -3,7 +3,7 @@ import type { IconName } from "@intentic-app/ui";
 import { computed, ref } from "vue";
 import type { ChatTool } from "../composables/chat/transcript";
 import { useChat } from "../composables/chat/useChat";
-import { openAgentTerminal } from "../composables/terminal/useAgentTerminals";
+import { openWorkTerminal } from "../composables/terminal/useWorkTerminals";
 import { openWorkspaceRef } from "../composables/workspace/openFileRef";
 import ChatCodeBody from "./ChatCodeBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";
@@ -63,7 +63,7 @@ const toggleOpen = (): void => {
 const location = computed(() => props.tool.locations?.[0]);
 
 /* The shell behind a command card. An agent's Bash runs in a real tmux session that the terminal panel can
- * attach to, but those sessions no longer tab themselves into the strip (useAgentTerminals) — so this card is
+ * attach to, but those sessions no longer tab themselves into the strip (useWorkTerminals) — so this card is
  * where watching one is offered, which is also where the question ("what is it actually doing?") gets asked.
  * Only command-shaped cards get it, and only while the conversation on screen has a shell recorded: the panel
  * renders the ACTIVE conversation, so its terminal is this card's terminal. */
@@ -112,7 +112,7 @@ const agentTerminal = computed(() => (view.value.body?.kind === `command` ? acti
             }}</span>
             <!-- Attach to the shell this command runs in. Present while the call is genuinely in flight — that's
                  when "what is it doing right now?" is asked, and the answer is one click away — and hover-only
-                 afterwards, so a settled transcript stays as quiet as it was before AI terminals stopped tabbing
+                 afterwards, so a settled transcript stays as quiet as it was before work terminals stopped tabbing
                  themselves into the panel. -->
             <button
                 v-if="agentTerminal"
@@ -121,7 +121,7 @@ const agentTerminal = computed(() => (view.value.body?.kind === `command` ? acti
                 :class="[running && live ? '' : 'opacity-0 group-hover/tool:opacity-100', { 'ml-auto': !unfinished && !view.summary }]"
                 v-tooltip.top="'Watch in terminal'"
                 aria-label="Watch in terminal"
-                @click="openAgentTerminal(agentTerminal)"
+                @click="openWorkTerminal(agentTerminal)"
             >
                 <Icon name="desktop" class="text-2xs" />
             </button>

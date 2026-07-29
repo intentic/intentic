@@ -1,5 +1,5 @@
 import { computed, type ComputedRef } from "vue";
-import { showAgentTerminals } from "./useAgentTerminals";
+import { showWorkTerminals } from "./useWorkTerminals";
 import { useTerminalsQuery } from "./terminalsQuery";
 
 /* The terminal's presence on the rail: how many live sessions there are RIGHT NOW, from any view, whether or
@@ -12,10 +12,11 @@ import { useTerminalsQuery } from "./terminalsQuery";
  * `process` sessions are excluded: dockerd and the extensions' declared background processes are always up, so
  * counting them would pin a meaningless number to the rail forever. They are not tabs in the panel either —
  * they live in the background-process rows (useBackgroundProcesses), so the count matches what opening the
- * panel would show. Agent shells are excluded on the same terms while `showAgentTerminals` is off: they don't
- * tab then either, and a badge reading 3 over a strip showing 1 is exactly the disagreement this composable
- * exists to prevent. What the agent is doing has its own always-on surface — the chat rail's status — and the
- * shells themselves stay one click away in the panel's AI-terminals popover. */
+ * panel would show. The WORK terminals — agent shells and daemon jobs — are excluded on the same terms while
+ * `showWorkTerminals` is off: they don't tab then either, and a badge reading 3 over a strip showing 1 is
+ * exactly the disagreement this composable exists to prevent. Both already have their own always-on surfaces —
+ * the chat rail's status, the Capabilities page's progress — and stay one click away in the panel's
+ * Recent-terminals popover, which shows a live dot of its own while any of them is running. */
 
 // Sessions come and go through paths the browser never sees (the agent's Bash, an extension's Start, a tmux
 // exit), so the badge polls rather than waiting for an invalidation that no client action would fire.
@@ -34,7 +35,10 @@ export function useTerminalActivity(): TerminalActivity {
     const { sessions } = useTerminalsQuery(POLL_MS);
 
     const live = computed(() =>
-        sessions.value.filter((session) => session.running && session.kind !== `process` && (session.kind !== `agent` || showAgentTerminals.value)),
+        sessions.value.filter(
+            (session) =>
+                session.running && session.kind !== `process` && ((session.kind !== `agent` && session.kind !== `job`) || showWorkTerminals.value),
+        ),
     );
 
     const summary = computed<string | undefined>(() => {

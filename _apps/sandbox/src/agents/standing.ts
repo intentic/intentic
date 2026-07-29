@@ -45,10 +45,29 @@ export interface LandStandings {
     readonly forget: (ids: readonly string[]) => void;
 }
 
-// What a verdict was computed against. Both halves matter and each moves on its own: the branch tip changes
-// when the agent works, main's HEAD when anyone commits — including the hand-merge that strands a conflict.
-const keyOf = (repos: readonly { repo: string; head: string | undefined; tip: string | undefined }[]): string =>
-    repos.map(({ repo, head, tip }) => `${repo}@${head ?? "-"}:${tip ?? "-"}`).join("|");
+/* What a verdict was computed against — EVERY input to it, because a matching key skips the re-probe entirely.
+ *
+ * The two shas are the obvious half, and each moves on its own: the branch tip when the agent works, main's
+ * HEAD when anyone commits — including the hand-merge that strands a conflict. They are NOT the whole question,
+ * and a land is the case that proves it. Landing patches the main WORKING TREE: HEAD stays where it is, and the
+ * tip was already there (the provenance commit happened when the turn ended). The only thing that moves is
+ * `landedTip` — the rung anchorOf measures the outstanding delta from. Keyed on shas alone, the pass after a
+ * land re-served the standing from before it, so a card kept offering "Land now" for work already sitting in
+ * the user's workspace, until something unrelated happened to move a sha. `base` is the same kind of input, and
+ * moves when a worktree is re-created under an existing entry.
+ *
+ * `conflicts` belongs here for the same reason on the failure path: it is what separates `conflict` from
+ * `ready` over one identical delta, and a refused `check` land leaves the workspace byte-identical — its report
+ * is the ONLY thing that changed. Only its presence is keyed, never its contents: which paths refused doesn't
+ * enter the verdict (see the standing below), so a re-worded report of the same refusal is not a new answer. */
+const keyOf = (
+    conflicted: boolean,
+    repos: readonly { composed: PersistedAgent["repos"][number]; head: string | undefined; tip: string | undefined }[],
+): string =>
+    [
+        conflicted ? "refused" : "-",
+        ...repos.map(({ composed, head, tip }) => `${composed.repo}@${head ?? "-"}:${tip ?? "-"}:${composed.landedTip ?? "-"}:${composed.base}`),
+    ].join("|");
 
 export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = defaultGit): LandStandings => {
     const cache = new Map<string, { key: string; standing: LandStanding }>();
@@ -80,7 +99,8 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                         tip: await branchSha(worktrees.mainDir(composed.repo), entry.branch, git),
                     })),
                 );
-                const key = keyOf(shas.map(({ composed, head, tip }) => ({ repo: composed.repo, head, tip })));
+                const conflicted = entry.conflicts !== undefined && entry.conflicts.length > 0;
+                const key = keyOf(conflicted, shas);
                 const cached = cache.get(entry.id);
                 if (cached?.key === key) {
                     continue;
@@ -103,13 +123,7 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                 }
                 // The report explains a refusal; it does not create one. With nothing outstanding there is
                 // nothing it could still be about — see the header.
-                const standing: LandStanding = outstanding
-                    ? entry.conflicts !== undefined && entry.conflicts.length > 0
-                        ? "conflict"
-                        : "ready"
-                    : produced
-                      ? "landed"
-                      : "idle";
+                const standing: LandStanding = outstanding ? (conflicted ? "conflict" : "ready") : produced ? "landed" : "idle";
                 moved ||= cached?.standing !== standing;
                 cache.set(entry.id, { key, standing });
             }

@@ -17,6 +17,7 @@ import { writeAgentToken } from "./auth/agent-token.js";
 import { startClaudeRefresh } from "./claude/claude-credentials.js";
 import { reconnectVpns } from "./vpn/vpn-links.js";
 import { writeCodexConfig } from "./codex/codex-config.js";
+import { agentSessionName } from "./agent/agent-terminals.js";
 import { createServices } from "./composition.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
@@ -36,7 +37,7 @@ import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
 import { linkClaudeState } from "./sessions/session-store.js";
 import { createAnnouncer } from "./platform/announce.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
-import { reapIdleWebSessions } from "./terminal/terminal-session.js";
+import { reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
 import { startRepoWatch } from "./workspace/repo-watch.js";
 import { startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/workspace-watch.js";
@@ -229,10 +230,15 @@ const main = async (): Promise<void> => {
     void pruneLogFiles(logsRoot(config.historyRoot));
     const logsSweep = setInterval(() => void pruneLogFiles(logsRoot(config.historyRoot)), 3_600_000);
 
-    // Abandoned interactive shells: web-* sessions are exempt from the boot sweep (they're the user's own), so
-    // detached ones idle for days would pile up until the container restarts — reap them at boot + hourly.
-    void reapIdleWebSessions();
-    const webSessionSweep = setInterval(() => void reapIdleWebSessions(), 3_600_000);
+    // Session retention (terminal-session.ts): abandoned web-* shells, which are exempt from the boot sweep
+    // because they're the user's own, plus the agent-*/job-* sessions of work that finished hours ago and that
+    // the panel has long stopped tabbing. Both at boot + hourly. The `keep` predicate is what makes it safe to
+    // run unattended: an agent BETWEEN two commands has only dead panes, and so does a job whose runner still
+    // has something queued — the same two facts system.routes reports as `running`.
+    const stillWorking = (session: string): boolean =>
+        services.terminalRun.running(session) || services.agents.liveSessionIds().some((sessionId) => agentSessionName(sessionId) === session);
+    void reapFinishedSessions(stillWorking);
+    const sessionSweep = setInterval(() => void reapFinishedSessions(stillWorking), 3_600_000);
 
     const app = createApp(services);
     // The interactive-terminal WebSocket (/system/terminal) rides node-server's native WS support: `ws` in
@@ -316,7 +322,7 @@ const main = async (): Promise<void> => {
     const shutdown = (): void => {
         logger.info("shutting down intentic sandbox daemon…");
         clearInterval(logsSweep);
-        clearInterval(webSessionSweep);
+        clearInterval(sessionSweep);
         scheduler.stop();
         limitResume.stop();
         versionCheck.stop();

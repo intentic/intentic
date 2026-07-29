@@ -1,6 +1,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { type SystemEvent, type TerminalsList, type UsageAccount, HostTunnelSchema, SANDBOX_ROUTE_NAMES, systemContract } from "@intentic/sandbox-contract";
+import {
+    type SystemEvent,
+    type TerminalsList,
+    type UsageAccount,
+    HostTunnelSchema,
+    SANDBOX_ROUTE_NAMES,
+    systemContract,
+} from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { agentSessionName } from "../agent/agent-terminals.js";
 import type { VerifiedIdentity } from "../auth/auth.js";
@@ -18,20 +25,39 @@ import { workspaceIdentity } from "./workspace-identity.js";
 
 const execFileAsync = promisify(execFile);
 
-// Fold `tmux list-panes -a` output into one row per SESSION: the last pane's foreground command, plus whether
-// any pane in it is still alive. Liveness has to be per-session because agent-*/job-* sessions carry a window
-// per command and bin/tmux-run keeps finished ones (remain-on-exit) so their output stays readable — the last
-// command of a turn always leaves a dead window behind, and a session with only dead windows is a session
-// nothing is running in. Unparseable `pane_dead` reads as alive: the flag gates a destructive sweep, so the
-// safe direction is "keep".
-export const paneStates = (stdout: string): Map<string, { command: string; live: boolean }> => {
-    const states = new Map<string, { command: string; live: boolean }>();
+// Fold `tmux list-panes -a` output into one row per SESSION: the last pane's foreground command and exit
+// status, the session's last-activity stamp, plus whether any pane in it is still alive. Liveness has to be
+// per-session because agent-*/job-* sessions carry a window per command and bin/tmux-run keeps finished ones
+// (remain-on-exit) so their output stays readable — the last command of a turn always leaves a dead window
+// behind, and a session with only dead windows is a session nothing is running in. Unparseable `pane_dead`
+// reads as alive: the flag gates a destructive sweep, so the safe direction is "keep".
+//
+// `exitCode` follows `command` — the LAST pane wins, which for a window-per-command session is precisely the
+// last command's status (empty, hence undefined, while that pane still runs). `activityAt` is session-wide, so
+// every line of a session carries the same value; 0 stands for "tmux didn't say", and both consumers (the
+// Recent list's age, the retention sweep's clock) read that as unknown rather than as 1970.
+export interface PaneState {
+    readonly command: string;
+    readonly live: boolean;
+    readonly exitCode: number | undefined;
+    readonly activityAt: number;
+}
+
+export const paneStates = (stdout: string): Map<string, PaneState> => {
+    const states = new Map<string, PaneState>();
     for (const line of stdout.split("\n")) {
-        const [name, dead, command] = line.split("\t");
+        const [name, dead, status, activity, command] = line.split("\t");
         if (name === undefined || name === "" || command === undefined) {
             continue;
         }
-        states.set(name, { command, live: dead !== "1" || states.get(name)?.live === true });
+        const exitCode = Number.parseInt(status ?? "", 10);
+        const activitySeconds = Number(activity);
+        states.set(name, {
+            command,
+            live: dead !== "1" || states.get(name)?.live === true,
+            exitCode: Number.isFinite(exitCode) ? exitCode : undefined,
+            activityAt: Number.isFinite(activitySeconds) && activitySeconds > 0 ? activitySeconds * 1000 : 0,
+        });
     }
     return states;
 };
@@ -224,13 +250,19 @@ export const createSystemRoutes = (services: Services) => {
         // liveSessionIds — an agent between two commands is still working) or any pane in them is alive (see
         // paneStates — a turn nothing tracks, e.g. the CLI's own, still reads honestly). Once neither holds,
         // every window is a finished command's dead pane and nothing will ever write to that session again,
-        // which is what lets the panel's "clear finished terminals" sweep take it. job-* sessions are the terminal
+        // which is what retires it from the panel's strip and hands it to the retention sweep
+        // (terminal-session.ts reapFinishedSessions). job-* sessions are the terminal
         // runner's user-triggered flows (capability adds, infra check — `running` from its in-flight count).
         // Sessions matching no prefix stay hidden. No tmux server yet makes `list-panes` exit non-zero —
         // that's an empty list, not an error.
         terminals: i.terminals.handler(async () => {
             try {
-                const { stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", "#{session_name}\t#{pane_dead}\t#{pane_current_command}"]);
+                const { stdout } = await execFileAsync("tmux", [
+                    "list-panes",
+                    "-a",
+                    "-F",
+                    "#{session_name}\t#{pane_dead}\t#{pane_dead_status}\t#{session_activity}\t#{pane_current_command}",
+                ]);
                 const states = paneStates(stdout);
                 const extensionProcesses = await extensionProcessIndex(services);
                 const liveAgentSessions = new Set(
@@ -239,9 +271,12 @@ export const createSystemRoutes = (services: Services) => {
                         return session === undefined ? [] : [session];
                     }),
                 );
-                const sessions = [...states].flatMap(([name, { command, live }]): TerminalsList["sessions"] => {
+                const sessions = [...states].flatMap(([name, { command, live, exitCode, activityAt }]): TerminalsList["sessions"] => {
+                    // Every row carries the session's clock and its last window's status; what differs per kind is
+                    // only what `running` means.
+                    const seen = { activityAt, ...(exitCode !== undefined ? { exitCode } : {}) };
                     if (name.startsWith(WEB_SESSION_PREFIX)) {
-                        return [{ name, kind: "shell" as const, running: true }];
+                        return [{ name, kind: "shell" as const, running: true, ...seen }];
                     }
                     if (name.startsWith(PANEL_SESSION_PREFIX)) {
                         const key = name.slice(PANEL_SESSION_PREFIX.length);
@@ -255,11 +290,12 @@ export const createSystemRoutes = (services: Services) => {
                                     label: key,
                                     kind: "process" as const,
                                     running: services.processes.running(key) && command !== SHELL,
+                                    ...seen,
                                     ...(owner !== undefined ? owner : {}),
                                 },
                             ];
                         }
-                        return [{ name, label: key, kind: "panel" as const, running: services.processes.running(key) }];
+                        return [{ name, label: key, kind: "panel" as const, running: services.processes.running(key), ...seen }];
                     }
                     if (name.startsWith(AGENT_SESSION_PREFIX)) {
                         return [
@@ -268,12 +304,19 @@ export const createSystemRoutes = (services: Services) => {
                                 label: name.slice(AGENT_SESSION_PREFIX.length),
                                 kind: "agent" as const,
                                 running: live || liveAgentSessions.has(name),
+                                ...seen,
                             },
                         ];
                     }
                     if (name.startsWith(JOB_SESSION_PREFIX)) {
                         return [
-                            { name, label: name.slice(JOB_SESSION_PREFIX.length), kind: "job" as const, running: services.terminalRun.running(name) },
+                            {
+                                name,
+                                label: name.slice(JOB_SESSION_PREFIX.length),
+                                kind: "job" as const,
+                                running: services.terminalRun.running(name),
+                                ...seen,
+                            },
                         ];
                     }
                     return [];

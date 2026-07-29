@@ -3,7 +3,7 @@ import { Row, RowGroup, Segmented, useExplorerStyle, useIconSet, useTheme } from
 import { explorerTreatment } from "@intentic-app/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
-import { showAgentTerminals } from "../../composables/terminal/useAgentTerminals";
+import { showWorkTerminals } from "../../composables/terminal/useWorkTerminals";
 import { useFileNesting } from "../../composables/workspace/useFileNesting";
 import { useImportedTheme } from "../../composables/theme/useImportedTheme";
 import { useIconRailSize } from "../../composables/useIconRailSize";
@@ -105,18 +105,13 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- Terminal — what the panel's strip carries. The agent's shells are hidden by default (they're
-             evidence about a turn, not tabs you keep — useAgentTerminals); this is the sticky way back. The same
-             preference is a checked row in the panel's own right-click menu and the AI-terminals popover's
-             footer, which is where someone irritated by it will actually reach for it. -->
+        <!-- Terminal — what the panel's strip carries. The terminals work runs in are hidden by default (they're
+             evidence about something that ran, not tabs you keep — useWorkTerminals); this is the sticky way
+             back. The same preference is a checked row in the panel's own right-click menu and the
+             Recent-terminals popover's footer, which is where someone irritated by it will actually reach. -->
         <RowGroup label="Terminal">
-            <Row
-                as="label"
-                icon="sparkles"
-                title="AI terminals"
-                description="Give the shells an agent runs commands in their own tab in the terminal panel."
-            >
-                <template #control><ToggleSwitch v-model="showAgentTerminals" /></template>
+            <Row as="label" icon="sparkles" title="Work terminals" description="Give every agent and job terminal its own tab in the terminal panel.">
+                <template #control><ToggleSwitch v-model="showWorkTerminals" /></template>
             </Row>
         </RowGroup>
 

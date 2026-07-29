@@ -1,5 +1,5 @@
 import { ref, type Ref, watch } from "vue";
-import { showAgentTerminals } from "./useAgentTerminals";
+import { showWorkTerminals } from "./useWorkTerminals";
 import { addPendingTerminal, dropPendingTerminal } from "./terminalsQuery";
 import { pruneTerminalMeta } from "./terminalMeta";
 import {
@@ -18,9 +18,9 @@ import {
  * only — restarting a dev-server tab is Start's job) and the background-process split: "process" sessions
  * never tab by themselves — they live in `processes` (the popover's list) and tab only as read-only log
  * views via viewProcess, whose × merely hides them (killing a background process is the popover's explicit
- * Stop, never a tab close). "agent" sessions follow the same shape for a different reason: an agent's shell is
- * evidence about a turn rather than a tab the user keeps, so unless `showAgentTerminals` is on it tabs only
- * once explicitly opened (the chat's Bash card, the AI-terminals popover) — see useAgentTerminals.
+ * Stop, never a tab close). "agent" and "job" sessions follow the same shape for a different reason: they are
+ * evidence about work that ran rather than tabs the user keeps, so unless `showWorkTerminals` is on they tab
+ * only once explicitly opened, and only until they finish — see useWorkTerminals and `revealed` below.
  *
  * Tabs arrange into GROUPS (VSCode's split terminals): `groups` is the strip order, each entry an ordered
  * list of session names rendered side by side in one pane when active. Grouping is pure client view state
@@ -44,6 +44,11 @@ export interface TerminalTab {
     readonly extensionId?: string;
     readonly processName?: string;
 }
+
+// The terminals WORK runs in, as opposed to the PLACES the user keeps: an agent's Bash shell and the daemon's
+// job sessions are records of something that ran, and the strip treats them accordingly (hiddenFromStrip,
+// retireFinished).
+const isWork = (tab: TerminalTab): boolean => tab.kind === `agent` || tab.kind === `job`;
 
 export interface TerminalTabsSource {
     readonly list: () => Promise<TerminalTab[]>;
@@ -125,10 +130,14 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     const processes = ref<TerminalTab[]>([]);
     // Process sessions the user opened a log view for — the only "process" sessions that appear in `order`.
     const viewedProcesses = new Set<string>();
-    // Agent sessions revealed by an explicit open while the preference is off. Held for this surface's lifetime
-    // only, exactly like `viewedProcesses`: a reveal is "show me this now", so it must not outlive the panel or
-    // need pruning once the session is gone.
-    const revealedAgents = new Set<string>();
+    // Work sessions (agent + job) revealed by an explicit open while the preference is off. Held for this
+    // surface's lifetime only, exactly like `viewedProcesses`: a reveal is "show me THIS, now", so it must not
+    // outlive the panel or need pruning once the session is gone.
+    //
+    // That lifetime is the whole fix for the panel that used to reopen onto a row of corpses. A reveal is an
+    // answer to a question the user asked while watching; close the panel, walk away for a day of agent turns,
+    // and the set comes back empty — so there is nothing to tidy, rather than a broom to reach for.
+    const revealed = new Set<string>();
     const activeName = ref<string | undefined>(undefined);
     let container: HTMLElement | undefined;
     // The session names whose hosts are currently in the container — the active group's members.
@@ -156,14 +165,34 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
 
     const groupOf = (name: string): string[] => groups.value.find((group) => group.includes(name)) ?? [name];
 
-    // The two kinds that are listed by the daemon but do not tab on their own: a background process (its
-    // lifecycle belongs to the processes popover) and — unless the user asked for them — the agent's shells.
-    // Both become tabs the moment they are explicitly opened, and only then.
+    // The kinds that are listed by the daemon but do not tab on their own: a background process (its lifecycle
+    // belongs to the processes popover) and — unless the user asked for them — the terminals WORK runs in, the
+    // agent's shells and the daemon's jobs. All become tabs the moment they are explicitly opened, and only
+    // then. `retireFinished` below is the other half: a reveal lasts as long as there is something to watch.
     const hiddenFromStrip = (tab: TerminalTab): boolean => {
         if (tab.kind === `process`) {
             return !viewedProcesses.has(tab.name);
         }
-        return tab.kind === `agent` && !showAgentTerminals.value && !revealedAgents.has(tab.name);
+        return isWork(tab) && !showWorkTerminals.value && !revealed.has(tab.name);
+    };
+
+    // A revealed session that has FINISHED gives its reveal up: the question the reveal answered ("what is this
+    // doing?") no longer has an answer, and the pill would otherwise sit there dimmed until the panel closed —
+    // which is the litter this whole rule exists to prevent. Two sessions are spared, both for the same reason
+    // (nobody has had their look yet):
+    //   · the tab the user is on RIGHT NOW — yanking a terminal out from under someone mid-read would be its own
+    //     bug, so it stays until they switch away (see `switchTab`)
+    //   · one that is not on the strip yet — a reveal of an ALREADY-finished session (the Recent popover's rows
+    //     are mostly those) is decided in the same relist that first lists it, and retiring it there would make
+    //     the click do nothing at all
+    // Called on every relist, which is where a liveness change lands.
+    const retireFinished = (tabs: TerminalTab[]): void => {
+        const onStrip = new Set(order.value.map((tab) => tab.name));
+        for (const tab of tabs) {
+            if (isWork(tab) && !tab.running && onStrip.has(tab.name) && tab.name !== activeName.value) {
+                revealed.delete(tab.name);
+            }
+        }
     };
 
     const sessionOf = (name: string, readOnly = false): TerminalSession => {
@@ -246,6 +275,9 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
         pruneTerminalMeta(new Set(listed.map((tab) => tab.name)));
         processes.value = listed.filter((tab) => tab.kind === `process`);
+        // Before the filter, not after: a session that just finished has to lose its reveal in time for THIS
+        // list to drop it, or it would linger a whole relist longer than the work it was showing.
+        retireFinished(listed);
         const tabs = listed.filter((tab) => !hiddenFromStrip(tab));
         order.value = tabs;
         reconcileGroups(tabs);
@@ -254,8 +286,13 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
         const tabbed = new Set(tabs.map((tab) => tab.name));
         if (activeName.value === undefined || !tabbed.has(activeName.value)) {
+            // What the panel opens ONTO. A finished session is a dead pane whose whole content is an epitaph, so
+            // it is the last thing worth restoring someone to — prefer the remembered tab only while it is still
+            // alive, then the first live one, and settle for a corpse only when every tab is one.
             const remembered = window.localStorage.getItem(activeKey) ?? undefined;
-            mount(remembered !== undefined && tabbed.has(remembered) ? remembered : tabs[0]?.name);
+            const live = tabs.find((tab) => tab.running);
+            const restorable = tabs.find((tab) => tab.name === remembered && tab.running);
+            mount((restorable ?? live ?? tabs[0])?.name);
         } else if (mountedNames.some((name) => !tabbed.has(name))) {
             // The focused session survived but a groupmate vanished from the list (killed elsewhere) — remount
             // the shrunken group so its host doesn't linger.
@@ -276,10 +313,10 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     });
 
     // The preference toggled while the panel is open (the bar menu, the palette, the Settings row): relist, so
-    // the agent's shells arrive as tabs — or leave — under the hand that just asked for it. Turning it off drops
+    // the work terminals arrive as tabs — or leave — under the hand that just asked for it. Turning it off drops
     // them from `order` and `groups`; refresh() re-mounts around the survivors if the focused tab was one of
     // them, and their sockets stay parked in the cache in case the user flips back.
-    watch(showAgentTerminals, () => {
+    watch(showWorkTerminals, () => {
         void refresh().then(() => {
             // Hiding the last tab would leave the panel around a blank pane (only endSession retires it), which
             // is the one case where the strip can empty without a session ending — so it opens a shell instead,
@@ -324,7 +361,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // neighbour — its own group's survivor first — or hand off to onEmpty when it was the last.
     const endSession = (name: string): void => {
         viewedProcesses.delete(name);
-        revealedAgents.delete(name);
+        revealed.delete(name);
         // Whether or not the daemon ever listed it, this name is spent — a claim left standing would keep the
         // session in the shared list (and in the rail's count) until the page reloaded.
         dropPendingTerminal(name);
@@ -370,11 +407,11 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
 
     const focus = async (name: string): Promise<void> => {
         if (!order.value.some((tab) => tab.name === name)) {
-            // Focusing IS the explicit open that reveals a hidden agent shell (the chat's Bash card, the
-            // AI-terminals popover) — recorded before the relist, which is what decides whether it tabs.
-            // Unconditional: the set is only ever consulted for "agent" sessions, so a shell or panel name
-            // landing in it changes nothing.
-            revealedAgents.add(name);
+            // Focusing IS the explicit open that reveals a hidden work terminal (the chat's Bash card, the
+            // Recent-terminals popover, the Capabilities page's running install) — recorded before the relist,
+            // which is what decides whether it tabs. Unconditional: the set is only ever consulted for agent/job
+            // sessions, so a shell or panel name landing in it changes nothing.
+            revealed.add(name);
             await refresh();
         }
         // A background-process session never tabs directly — route it through its read-only log view
@@ -391,11 +428,11 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // cover tmux-run's session-create lag; a session that never materializes just stops after ~1s. The
     // common case (already listed) exits on the first check.
     const surface = async (name: string): Promise<void> => {
-        // Only the agent channel surfaces, and by default its shells don't tab (useAgentTerminals) — so the
+        // Only the agent channel surfaces, and by default its shells don't tab (useWorkTerminals) — so the
         // retry loop has nothing to wait for. One relist still earns its keep: it writes the shared session
-        // list, which is what makes the AI-terminals popover show the turn's shell the moment it starts rather
-        // than up to a poll later.
-        if (!showAgentTerminals.value) {
+        // list, which is what makes the Recent-terminals popover show the turn's shell the moment it starts
+        // rather than up to a poll later.
+        if (!showWorkTerminals.value) {
             await refresh();
             return;
         }
@@ -408,7 +445,17 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
     };
 
-    const switchTab = (name: string): void => mount(name);
+    // Switching away is the "looking up" that ends a finished work terminal's stay: its reveal was held only
+    // because it was the tab on screen (see retireFinished). Relist only when that actually let one go, so an
+    // ordinary switch between shells still costs nothing.
+    const switchTab = (name: string): void => {
+        mount(name);
+        const held = revealed.size;
+        retireFinished(order.value);
+        if (revealed.size !== held) {
+            void refresh();
+        }
+    };
 
     // Programmatic input into the active session, routed through xterm's input handler (fires the same onData
     // that a keystroke does), so the touch extra-keys row reuses the existing socket wiring.
@@ -484,8 +531,12 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // handshake the daemon does not list the session. The claim (addPendingTerminal) is what carries it across:
     // it counts on the rail the moment the tab appears, and it survives the relists that would otherwise drop
     // the tab out from under a live socket. Retired by endSession, or by the first list that names it.
+    // The claim carries a full SESSION, not merely the tab the strip needs: `activityAt` is the one field the
+    // daemon would have filled in had it listed this name yet, and it is simply now — the browser created it a
+    // moment ago. (Inferred rather than annotated: the query's `TerminalSession` and this module's xterm-side
+    // one are different types under the same name.)
     const claim = (name: string): TerminalTab => {
-        const tab: TerminalTab = { name, kind: `shell`, running: true };
+        const tab = { name, kind: `shell` as const, running: true, activityAt: Date.now() };
         addPendingTerminal(tab);
         sessionOf(name);
         return tab;

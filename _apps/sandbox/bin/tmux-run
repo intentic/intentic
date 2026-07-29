@@ -48,7 +48,20 @@ printf '%s\n' "$cmd" > "$d/cmd"
 # from the wrapper after creating the window loses to any fast command: tmux destroys the window the instant
 # the child exits, so `echo hi` was gone before the option landed — taking the whole session with it now that
 # no bootstrap shell holds it open. Here the window cannot have exited: its own shell is what runs this line.
-printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on 2>/dev/null\nbash %q/cmd 2>&1 | tee -a %q/out\necho "${PIPESTATUS[0]}" > %q/status\n' "$d" "$d" "$d" > "$d/runner"
+#
+# remain-on-exit-format is the epitaph tmux leaves in the dead pane, and it is READ BY THE USER: it's the last
+# line of every finished terminal in the web panel. tmux's default — "Pane is dead (status 0, Wed Jul 29
+# 13:07:37 2026)" — narrates a SUCCESS in the vocabulary of a crash, which is exactly the wrong first thing to
+# find when you open the panel after a turn. Say what happened instead, and let the colour carry the verdict.
+# (tmux >= 3.2; the image ships 3.3a. `2>/dev/null` keeps an older tmux failing open, as the line above does.)
+#
+# The runner then EXITS WITH THE COMMAND'S CODE rather than falling off the end at 0. That code is the only
+# thing that makes `pane_dead_status` mean anything: the epitaph above reads it, and so does the terminals list
+# (src/system/system.routes.ts paneStates → the panel's Recent list, "exit 1 · 1h ago"). It changes nothing
+# else — `remain-on-exit on` keeps the window whatever the status, and the wrapper's own exit code still comes
+# from the status file below, which is written first so a failure can't lose it.
+epitaph='#{?#{==:#{pane_dead_status},0},#[fg=green]✓ finished,#[fg=red]✗ #{?#{!=:#{pane_dead_signal},},signal #{pane_dead_signal},exit #{pane_dead_status}}}#[default] · #{t:pane_dead_time}'
+printf 'tmux set-option -w -t "$TMUX_PANE" remain-on-exit on 2>/dev/null\ntmux set-option -w -t "$TMUX_PANE" remain-on-exit-format %q 2>/dev/null\nbash %q/cmd 2>&1 | tee -a %q/out\ncode=${PIPESTATUS[0]}\necho "$code" > %q/status\nexit $code\n' "$epitaph" "$d" "$d" "$d" > "$d/runner"
 
 # The persistent pane log (written by the global pipe-pane hooks, src/logs/log-files.ts, VT-rendered to clean
 # text by pane-log-clean) — the filter's footer points the agent here for the full output. Path known only

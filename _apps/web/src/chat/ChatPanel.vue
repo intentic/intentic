@@ -122,7 +122,7 @@ const modeMenu = ref<InstanceType<typeof Popover> | null>(null);
 // transcript is on screen (the conversationId watch below), when the user has just sent something (submit),
 // and — because the composable watches these boxes with an observer owned by the window they are in — when
 // they move to another one, which for this panel is the pop-out and back.
-const { pin } = useStickToBottom(scroller, content, poppedOut);
+const { pin, follow } = useStickToBottom(scroller, content, poppedOut);
 
 const activeError = computed(() => active.value.error.value);
 
@@ -841,6 +841,21 @@ watch(
     },
     { flush: `post` },
 );
+
+/* The transcript changed — follow it, if the reader has not scrolled up.
+ *
+ * The composable's observers say "these boxes are a different size now", which is a measurement, taken in a
+ * frame, and delivered in one: a notification the browser coalesces or defers past the layout that produced it
+ * (a resize-observer loop that hits its depth limit does precisely this, and a transcript of
+ * content-visibility rows realizing under a scroll write is how you get there) leaves the newest content below
+ * the fold with nothing to bring it up. That was this bug: the message went out, "Perusing…" was appended
+ * under the composer, and the panel sat exactly where it was.
+ *
+ * So the panel states the fact it holds directly, in terms no frame can lose: a message arrived or left, and a
+ * turn started or ended — which is the loader, the one thing a send puts on screen before the answer exists.
+ * O(1) per flush and post-flush, so the row is in the DOM to be scrolled to; a streamed frame appends text to
+ * a bubble that is already counted, and stays the observers' job. */
+watch([() => messages.value.length, streaming], follow, { flush: `post` });
 
 // Drop focus into the composer as soon as the account connects; grow sizes the box to a restored draft (the
 // textarea mounts with the persisted text already in it). Not on mobile — autofocus there pops the keyboard

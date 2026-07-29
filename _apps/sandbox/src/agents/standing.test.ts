@@ -136,6 +136,53 @@ test("a standing is re-derived when either the branch or the main tree moves", a
     expect(await standings.refresh([entry])).toBe(false);
 });
 
+/* THE SHAS ARE NOT THE WHOLE QUESTION — and a land is the case that proves it.
+ *
+ * Landing applies a patch to the main WORKING TREE: main's HEAD does not move, and the branch tip does not
+ * either (the provenance commit already happened when the turn ended). The only thing that changes is the
+ * entry's `landedTip` — which is the very rung `anchorOf` measures the outstanding delta from. A cache keyed on
+ * the two shas alone therefore serves the pre-land answer back, and the board keeps offering "Land now" for
+ * work that is already sitting in the user's workspace, until something unrelated moves a sha.
+ */
+test("a land re-derives on the spot, even though neither sha moved", async () => {
+    const { worktrees, conversation } = await setup();
+    const standings = createLandStandings(worktrees);
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    const entry = entryFor(conversation.repos);
+    await standings.refresh([entry]);
+    expect(standings.of("c1")).toBe("ready");
+
+    const landed = await landAgent(worktrees, entry);
+    expect(landed.landed).toBe(true);
+
+    expect(await standings.refresh([entryFor(landed.repos)])).toBe(true);
+    expect(standings.of("c1")).toBe("landed");
+});
+
+// The same property on the failure path: a refused `check` land leaves the workspace byte-identical, so its
+// report is the ONLY thing that moved. Serving the cached `ready` there leaves the card promising a land that
+// has just been refused, with the report it would have to explain nowhere on screen.
+test("a refused land arms the conflict against the same shas", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const standings = createLandStandings(worktrees);
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    const entry = entryFor(conversation.repos);
+    await standings.refresh([entry]);
+    expect(standings.of("c1")).toBe("ready");
+
+    // The user edits the same lines, so the delta no longer applies.
+    await writeFile(join(work, "app.ts"), "line one MINE\nline two\nline three\n");
+    const refused = await landAgent(worktrees, entry);
+    expect(refused.landed).toBe(false);
+
+    expect(await standings.refresh([entryFor(refused.repos, { conflicts: refused.conflicts })])).toBe(true);
+    expect(standings.of("c1")).toBe("conflict");
+});
+
 test("forget drops an agent's standing, and an unprobed one reads idle", async () => {
     const { worktrees, conversation } = await setup();
     const standings = createLandStandings(worktrees);

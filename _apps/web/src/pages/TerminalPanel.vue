@@ -6,11 +6,11 @@ import ContextMenu from "primevue/contextmenu";
 import Dialog from "primevue/dialog";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
-import AiTerminals from "../components/AiTerminals.vue";
 import BackgroundProcesses from "../components/BackgroundProcesses.vue";
+import RecentTerminals from "../components/RecentTerminals.vue";
 import { inTabSurface } from "../composables/commands/tabSurface";
 import { commandShortcut, registerCommand, type RegisteredCommand } from "../composables/commands/useCommands";
-import { showAgentTerminals } from "../composables/terminal/useAgentTerminals";
+import { showWorkTerminals } from "../composables/terminal/useWorkTerminals";
 import { setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../composables/terminal/terminalMeta";
 import { useTerminalsQuery } from "../composables/terminal/terminalsQuery";
 import { createTerminalTabs, type TerminalTab, type TerminalTabsSource } from "../composables/terminal/useTerminal";
@@ -24,14 +24,19 @@ import { useTerminalPopout } from "../composables/terminal/useTerminalPopout";
  * active group's sessions render side by side in the pane. The strip is a VSCode-style list: Shift/Ctrl+click
  * multi-selects pills, right-click opens the action menu (split / join / unsplit / kill, and per-terminal
  * rename / color / icon overrides from terminalMeta). Right-click on the bar's empty space opens the same menu
- * on its strip-wide rows alone — kill all, sweep the finished, and pop the panel out into its own real
- * window (like the chat strip); the shell owns the teleport. In that window the bar stands up along the LEFT
- * edge — a floating terminal is a tall window, so pills belong on the axis that has room, the way VSCode
- * moves its own terminal list to the side once the panel is wide.
- * Every tab gets the hover-×; a finished tab (dimmed, running:false) also sweeps out in bulk via the toolbar's
- * eraser / the menu's "Clear N finished terminals". Restart is shell-only (a dev-server tab is re-run via
- * Start, or ↑ at its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves — they live in
- * the toolbar's processes popover, and their × only hides the read-only log view. `initial` is an object so
+ * on its strip-wide rows alone — kill all, and pop the panel out into its own real window (like the chat
+ * strip); the shell owns the teleport. In that window the bar stands up along the LEFT edge — a floating
+ * terminal is a tall window, so pills belong on the axis that has room, the way VSCode moves its own terminal
+ * list to the side once the panel is wide.
+ *
+ * The strip lists PLACES — the user's shells and their dev servers. The terminals WORK runs in (an agent's
+ * Bash, a capability install) are records of something that already happened, so they tab only while someone is
+ * watching and retire themselves when they finish (useWorkTerminals, useTerminal's `revealed`), and stay
+ * readable afterwards in the toolbar's Recent-terminals popover. That is why there is no broom here: nothing
+ * accumulates in the strip to sweep. Every tab still gets the hover-×, and a stopped dev server keeps its pill
+ * — it's a place you restart, not litter. Restart is shell-only (a dev-server tab is re-run via Start, or ↑ at
+ * its prompt). Managed background processes (extension gateways, dockerd) never tab by themselves — they live
+ * in the toolbar's processes popover, and their × only hides the read-only log view. `initial` is an object so
  * re-requesting the same session still refocuses. Height and collapse persist per storageKey;
  * `resizable: false` pins the panel to its container (the mobile route, and the pop-out window). */
 
@@ -160,27 +165,6 @@ const onSegmentClick = (event: MouseEvent, groupIndex: number, name: string): vo
     switchTab(name);
 };
 
-// --- Finished terminals: the one-click sweep ---------------------------------------------------
-// Finished sessions (running:false — a completed job's lingering shell, a stopped dev server) never leave on
-// their own: the daemon still lists their tmux session, so the strip silts up and the live tabs scroll out of
-// reach. `dead` is the sweep set — every dimmed tab EXCEPT a process log view, whose lifecycle belongs to the
-// processes popover (its × only hides the view, so sweeping one would be a no-op that lies about the count).
-// The action reaches the user the same three ways every other strip action does: a toolbar button that exists
-// only while there IS something to sweep (the toolbar stays quiet at rest), a right-click item (where the hand
-// already goes), and a palette command. No confirm dialog — nothing is running, and hovering the button
-// red-tints exactly the pills it would take, which answers "what will this remove?" without a modal.
-const dead = computed(() => new Set(order.value.filter((tab) => tab.running === false && tab.kind !== `process`).map((tab) => tab.name)));
-const sweepPreview = ref(false);
-const clearFinishedLabel = computed(() => `Clear ${dead.value.size} finished terminal${dead.value.size === 1 ? `` : `s`}`);
-const clearFinished = (): void => {
-    if (killTabs === undefined || dead.value.size === 0) {
-        return;
-    }
-    killTabs([...dead.value]);
-    selectedKeys.value = [];
-    sweepPreview.value = false;
-};
-
 // --- Killing in bulk ---------------------------------------------------------------------------
 // `killable` is what "all terminals" means: every session EXCEPT a background process's log view, whose
 // lifecycle belongs to the processes popover (the sweep above draws the same line, and for the same reason —
@@ -188,9 +172,8 @@ const clearFinished = (): void => {
 //
 // A bulk kill ENDS whatever those sessions are running, so it stops at a confirm listing the live ones. That is
 // the rule the other two strips already follow — the chat's "stop N running agents?", the workspace's
-// unsaved-edits dialog — and this panel's own sweep is the same rule seen from the other side: it never asks,
-// because nothing it takes is running. A single × (and the menu's "Kill terminal") stays silent too: that pill
-// is under the pointer, the one being killed.
+// unsaved-edits dialog. A single × (and the menu's "Kill terminal") stays silent: that pill is under the
+// pointer, the one being killed.
 const killable = computed(() => order.value.filter((tab) => tab.kind !== `process`).map((tab) => tab.name));
 const pendingKill = ref<string[]>();
 const runningIn = (names: string[]): TerminalTab[] => order.value.filter((tab) => names.includes(tab.name) && tab.running);
@@ -297,19 +280,16 @@ const stripItems = computed<MenuItem[]>(() => {
     if (killTabs !== undefined && killable.value.length > 0) {
         items.push({ label: `Kill all terminals`, shortcut: commandShortcut(`terminal.killAll`), command: () => requestKill(killable.value) });
     }
-    if (killTabs !== undefined && dead.value.size > 0) {
-        items.push({ label: clearFinishedLabel.value, shortcut: commandShortcut(`terminal.clearFinished`), command: clearFinished });
-    }
     items.push(
         ...(items.length > 0 ? [{ separator: true }] : []),
-        // The one CHECKED row in this menu (see the #item slot's checkmark gutter): whether the agent's shells
-        // tab here at all. It sits where the annoyance is felt — a right-click on the strip they were crowding —
-        // and writes the same preference as the AI-terminals popover's footer and Settings → Appearance.
+        // The one CHECKED row in this menu (see the #item slot's checkmark gutter): whether the terminals work
+        // runs in tab here at all. It sits where the annoyance is felt — a right-click on the strip they were
+        // crowding — and writes the same preference as the Recent popover's footer and Settings → Appearance.
         {
-            label: `Show AI terminals`,
-            checked: showAgentTerminals.value,
-            shortcut: commandShortcut(`terminal.toggleAiTerminals`),
-            command: () => (showAgentTerminals.value = !showAgentTerminals.value),
+            label: `Show work terminals`,
+            checked: showWorkTerminals.value,
+            shortcut: commandShortcut(`terminal.toggleWorkTerminals`),
+            command: () => (showWorkTerminals.value = !showWorkTerminals.value),
         },
         {
             label: popout.poppedOut.value ? `Dock panel back` : `Move panel into new window`,
@@ -537,13 +517,13 @@ const registerPanelCommands = (): void => {
             },
         },
         {
-            // Unbound by default, like the sweep and the cosmetic pickers: flipping a preference is a
-            // once-in-a-while act, and it already has two clickable homes (the bar menu, the popover footer).
-            command: `terminal.toggleAiTerminals`,
-            title: `Toggle AI Terminals in Panel`,
+            // Unbound by default, like the cosmetic pickers: flipping a preference is a once-in-a-while act, and
+            // it already has two clickable homes (the bar menu, the popover footer).
+            command: `terminal.toggleWorkTerminals`,
+            title: `Toggle Work Terminals in Panel`,
             icon: `sparkles`,
             handler: (): void => {
-                showAgentTerminals.value = !showAgentTerminals.value;
+                showWorkTerminals.value = !showWorkTerminals.value;
             },
         },
         {
@@ -602,14 +582,6 @@ const registerPanelCommands = (): void => {
             keybinding: `Ctrl+Shift+Backspace`,
             when: inTabSurface(`terminal`),
             handler: () => requestKill(killable.value),
-        });
-        // Unbound by default, like the cosmetic pickers: a strip-hygiene sweep is too rare to earn a global
-        // chord, and its toolbar button is one click away. Rebindable in Settings → Keybindings.
-        entries.push({
-            command: `terminal.clearFinished`,
-            title: `Clear Finished Terminals`,
-            icon: `eraser`,
-            handler: clearFinished,
         });
     }
     commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
@@ -768,10 +740,7 @@ const endResize = (event: PointerEvent): void => {
     <div
         ref="root"
         class="term relative flex min-h-0 shrink-0 border-t border-line"
-        :class="[
-            vertical ? 'flex-row' : 'flex-col',
-            { 'is-resizing': resizing, 'h-full': !resizable },
-        ]"
+        :class="[vertical ? 'flex-row' : 'flex-col', { 'is-resizing': resizing, 'h-full': !resizable }]"
         :style="!resizable || collapsed ? undefined : { height: `${height}px` }"
     >
         <div
@@ -819,10 +788,7 @@ const endResize = (event: PointerEvent): void => {
                         <span v-if="si > 0" class="h-3.5 w-px shrink-0 bg-line"></span>
                         <div
                             class="flex h-full items-center gap-1.5 pl-2 pr-1.5 text-2xs"
-                            :class="[
-                                vertical ? 'min-w-0 flex-1' : '',
-                                { 'opacity-60': tabByName.get(name)?.running === false, 'tterm-doomed': sweepPreview && dead.has(name) },
-                            ]"
+                            :class="[vertical ? 'min-w-0 flex-1' : '', { 'opacity-60': tabByName.get(name)?.running === false }]"
                             v-tooltip.top="renamingName === name ? undefined : segmentTooltip(name)"
                             @click="onSegmentClick($event, gi, name)"
                             @dblclick.prevent.stop="beginRename(name)"
@@ -889,21 +855,7 @@ const endResize = (event: PointerEvent): void => {
             <span v-else class="flex-1"></span>
             <!-- The toolbar: trailing the pills across the top, wrapped under them in the rail. -->
             <div class="flex shrink-0 items-center gap-1" :class="vertical ? 'flex-wrap justify-center border-t border-line pt-1.5' : undefined">
-                <!-- The sweep: only rendered while finished tabs exist, and hovering it previews the exact set it
-                     would kill (see .tterm-doomed) instead of asking for a confirmation. -->
-                <button
-                    v-if="dead.size > 0 && killTabs !== undefined"
-                    type="button"
-                    class="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-danger"
-                    @click="clearFinished()"
-                    @pointerenter="sweepPreview = true"
-                    @pointerleave="sweepPreview = false"
-                    v-tooltip.top="withShortcut(clearFinishedLabel, 'terminal.clearFinished')"
-                    :aria-label="clearFinishedLabel"
-                >
-                    <Icon name="eraser" class="text-xs" />
-                </button>
-                <AiTerminals />
+                <RecentTerminals />
                 <BackgroundProcesses />
                 <button
                     v-if="restart !== undefined && activeShell"
@@ -1126,15 +1078,6 @@ const endResize = (event: PointerEvent): void => {
     background: color-mix(in srgb, var(--color-primary-500) 14%, transparent);
     color: var(--color-content);
 }
-/* Sweep preview: while the toolbar's clear button is hovered, every segment it would kill lights up danger-red
-   at full strength (overriding the finished dimming) — the "are you sure?" answered on the strip itself. */
-.tterm-doomed {
-    opacity: 1;
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--color-danger) 22%, transparent);
-    color: var(--color-danger);
-}
-
 /* Split cells (built by useTerminal's mount — plain elements, hence :deep): equal flex columns with a hairline
    between, and a top accent on the focused pane so keystroke routing is visible in a split. */
 .term-body :deep(.term-cell) {

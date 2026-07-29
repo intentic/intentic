@@ -27,7 +27,9 @@ const { addPendingTerminal, clearPendingTerminals, dropPendingTerminal, listTerm
     await import("./terminalsQuery");
 const { useTerminalActivity } = await import("./useTerminalActivity");
 
-const shell = (name: string, running = true) => ({ name, kind: `shell` as const, running });
+// `activityAt` is part of every session the daemon lists (TerminalSessionSchema) — 0 stands for "tmux didn't
+// say", which is all these cases need: nothing here reads the clock.
+const shell = (name: string, running = true) => ({ name, kind: `shell` as const, running, activityAt: 0 });
 
 // What GET /system/terminals answers, plus a count of how many times it was actually asked.
 let reads = 0;

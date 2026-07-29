@@ -2063,11 +2063,19 @@ export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
 // declared process carries extensionId+processName, the address for its /extensions start/stop routes. The
 // `{name}` kill-route param is a bare string validated in the handler (a bad name is a BAD_REQUEST) since the
 // same charset gates a `tmux kill-session -t` shell-out.
+//
+// `activityAt` (epoch ms of the session's last output) and `exitCode` (the LAST window's exit status, absent
+// while that pane still lives) are what let a finished session be READ rather than merely listed: the panel's
+// Recent-terminals popover orders by the one and reports the other ("exit 1 · 1h ago"), and the daemon's
+// retention sweep ages sessions out by the same clock. 0 is "tmux didn't say" — treated as unknown by both,
+// never as 1970.
 export const TerminalSessionSchema = z.object({
     name: z.string(),
     label: z.string().optional(),
     kind: z.enum(["shell", "panel", "agent", "job", "process"]),
     running: z.boolean(),
+    activityAt: z.number(),
+    exitCode: z.number().optional(),
     extensionId: z.string().optional(),
     processName: z.string().optional(),
 });
