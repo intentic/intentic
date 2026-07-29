@@ -26,6 +26,12 @@ describe("laneOf", () => {
         expect(laneOf({ status: `landed`, attention: none })).toBe(`finished`);
         expect(laneOf({ status: `idle`, attention: none })).toBe(`finished`);
     });
+
+    it("routes ready (held for a deliberate land) to finished, not attention", () => {
+        // The user CHOSE to hold work for review — a card in this state is an offer, never a warning, and
+        // routing it to Attention would teach people to ignore that lane (see blocked()'s note).
+        expect(laneOf({ status: `ready`, attention: none })).toBe(`finished`);
+    });
 });
 
 /* The Changes legend's mark. The ONE property worth asserting is that it never disagrees with the board about
@@ -33,7 +39,7 @@ describe("laneOf", () => {
  * is the user watching two surfaces contradict each other, which is exactly what a second status list here
  * produced before this became a reading of laneOf. */
 describe("unfinishedMark", () => {
-    const STATUSES: readonly (AgentStatus | "draft")[] = [`idle`, `running`, `awaiting`, `landed`, `conflict`, `error`, `draft`];
+    const STATUSES: readonly (AgentStatus | "draft")[] = [`idle`, `running`, `awaiting`, `ready`, `landed`, `conflict`, `error`, `draft`];
     const FLAGS: readonly AgentStanding[`attention`][] = [
         none,
         { ...none, plan: true },

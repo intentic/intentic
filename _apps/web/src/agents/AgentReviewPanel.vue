@@ -6,9 +6,11 @@ import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import DiffStat from "../components/DiffStat.vue";
 import { stopAgent } from "../composables/agents/agentActions";
+import { effectiveAutoLand } from "../composables/agents/agentStatus";
 import { type AgentReviewFile, useAgentChanges } from "../composables/agents/useAgentChanges";
 import { useAgents } from "../composables/agents/useAgents";
 import { useChat } from "../composables/chat/useChat";
+import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import { useLayout } from "../composables/useLayout";
 import { diffRawUrls } from "../composables/workspace/diffRaw";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
@@ -62,6 +64,20 @@ const { agentById, restore, busyIds } = useAgents();
 const archived = computed(() => agentById(props.agentId)?.archivedAt !== undefined);
 // Both directions claim the same per-id counter in the fleet store, so one flag covers the round trip either way.
 const archiveBusy = computed(() => busyIds.value.includes(props.agentId));
+
+/* THE HOLD TOGGLE — this agent's land-at-completion posture, surfaced beside the Land button because this
+ * panel is where the user is when they think "I'd rather have reviewed that first". It reads the EFFECTIVE
+ * value (the agent's override, else the sandbox-wide setting — Sandbox ▸ Agent owns the default), and a click
+ * flips it FOR THIS AGENT only. Flipping back to what the sandbox already says clears the override entirely
+ * (null), so agents don't accumulate frozen overrides that quietly stop following the global toggle.
+ * Deliberately legal mid-turn: the daemon reads the value at turn COMPLETION, so pressing hold while the
+ * agent works is exactly "keep THIS turn's work on the branch" — the press that matters most. */
+const { settings: sandboxSettings } = useSandboxSettings();
+const autoLandOn = computed(() => effectiveAutoLand(agentById(props.agentId), sandboxSettings.value?.autoLand));
+const toggleAutoLand = (): void => {
+    const next = !autoLandOn.value;
+    void changes.setAutoLand(next === (sandboxSettings.value?.autoLand ?? true) ? null : next);
+};
 
 // --- the list ------------------------------------------------------------------------------------------
 // "Not landed" narrows the list to the remainder Land now would apply. It only exists while that remainder is
@@ -416,6 +432,23 @@ const confirmDiscard = (): void => {
                 v-tooltip.bottom="streaming ? 'Wait for the agent turn to finish' : 'Drop this agent\'s branch and worktree'"
             >
                 <Icon name="trash" class="mr-1 text-2xs" />Discard
+            </button>
+            <!-- The hold toggle rides beside the button it modifies: locked = finished work waits on the
+                 branch for the Land button, unlocked = it lands by itself at turn completion. Per-agent —
+                 the sandbox-wide default lives in Sandbox ▸ Agent (see toggleAutoLand). -->
+            <button
+                type="button"
+                :class="[ICON_BUTTON, autoLandOn ? '' : 'text-link']"
+                :disabled="changes.actionBusy.value || archived"
+                @click="toggleAutoLand"
+                v-tooltip.bottom="
+                    autoLandOn
+                        ? 'Finished turns land into your workspace by themselves. Click to keep this agent\'s future work on its branch until you press Land now.'
+                        : 'Holding: finished work waits on this agent\'s branch for Land now. Click to land automatically at turn completion again.'
+                "
+                :aria-label="autoLandOn ? 'Hold this agent\'s finished work on its branch' : 'Land this agent\'s finished work automatically'"
+            >
+                <Icon :name="autoLandOn ? 'unlock' : 'lock'" class="text-2xs" />
             </button>
             <button
                 type="button"
