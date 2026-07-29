@@ -57,15 +57,15 @@ describe(`resolvePrompt`, () => {
         expect(prompt).toContain(`refuses to start on a dirty tree`);
     });
 
-    it(`has the agent discover the user's checkout instead of baking in a path the daemon owns`, () => {
+    it(`has the agent discover the main-line branch instead of baking in a name the daemon owns`, () => {
         expect(prompt).toContain(`git worktree list`);
-        expect(prompt).toContain(`git rebase <that branch>`);
+        expect(prompt).toContain(`git rebase <branch>`);
         // The escape hatch, so a rebase that goes badly has somewhere to go other than improvisation.
         expect(prompt).toContain(`git rebase --abort`);
     });
 
     it(`refuses the cheap resolution — taking one side is how a change silently disappears`, () => {
-        expect(prompt).toContain(`keep the intent of BOTH sides`);
+        expect(prompt).toContain(`the intent of BOTH sides`);
         expect(prompt).toContain(`Do not take one side wholesale`);
     });
 
@@ -78,7 +78,7 @@ describe(`resolvePrompt`, () => {
 
     it(`fences off the user's own uncommitted paths rather than hiding them`, () => {
         expect(prompt).toContain(`Leave these alone`);
-        expect(prompt).toContain(`Rebasing will not unblock them`);
+        expect(prompt).toContain(`rebasing will not unblock them`);
         // Named under the fence, not in the work list.
         expect(prompt.indexOf(`src/config.ts`)).toBeGreaterThan(prompt.indexOf(`Leave these alone`));
     });
@@ -89,6 +89,6 @@ describe(`resolvePrompt`, () => {
 
     it(`keeps the agent out of the user's checkout and tells it the land is automatic`, () => {
         expect(prompt).toContain(`never edit, stage or commit in the user's checkout`);
-        expect(prompt).toContain(`the app lands the result automatically`);
+        expect(prompt).toContain(`re-lands automatically when your turn ends`);
     });
 });

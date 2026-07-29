@@ -114,34 +114,37 @@ const listing = (blockers: readonly Blocker[], reasons: boolean): string => {
  *   · COMMIT FIRST. The agent's worktree is dirty between lands — land's own gitCommitAll runs at land time,
  *     not before — and `git rebase` refuses to start on a dirty tree. Without this step the agent's first
  *     command errors and it improvises from there.
- *   · `git worktree list` rather than a path we bake in. The agent's checkout is a linked worktree of the
- *     user's repo, so the main checkout and the branch it holds are things git will simply tell it; a
- *     hardcoded /work would be a second copy of a fact the daemon owns, wrong the day the layout moves.
+ *   · `git worktree list` rather than a branch we bake in: the refs are shared, so git will simply tell the
+ *     agent what the main line is; a hardcoded name would be a second copy of a fact the daemon owns. But
+ *     ONLY the branch name — an isolated turn has its worktree mounted over /work (agents/isolation.ts), so
+ *     the first entry's PATH resolves to the agent's own checkout, and "go find the user's checkout" would
+ *     send it somewhere that is not what the words claim.
  *   · KEEP BOTH SIDES. Left to itself a model will happily make the markers go away by taking one side, which
  *     is how "resolved" ends up meaning "silently dropped the change that moved underneath me".
  *
  * The user's own blocked paths are named but fenced off: the agent cannot fix them from its worktree, and a
- * report that omitted them would have it wondering why the land it triggers still refuses. */
+ * report that omitted them would have it wondering why the land it triggers still refuses.
+ *
+ * Kept TERSE on purpose: the reader is a model mid-conversation, and every sentence past the load-bearing
+ * ones dilutes them. The rationale lives here, not in the prompt. */
 export const resolvePrompt = (conflicts: readonly LandConflict[] | undefined): string => {
     const blockers = blockersOf(conflicts);
     const mine = agentBlockers(blockers);
     const theirs = userBlockers(blockers);
     return [
-        `Landing your work hit a merge conflict, so none of it reached the user's workspace — it is all still on your branch. Bring the branch up to date with the user's main line and resolve the conflict yourself.`,
-        `For each repo below — \`root\` is your working directory, any other name is that subdirectory of it:`,
+        `Landing your work hit a merge conflict — none of it reached the user's workspace; it is all still on your branch. Rebase onto the main line and resolve the conflicts yourself. In each repo below (\`root\` is your working directory, any other name that subdirectory of it):`,
         [
-            `1. Commit whatever is still loose in the worktree (\`git add -A && git commit\`). A rebase refuses to start on a dirty tree.`,
-            `2. Find the user's checkout with \`git worktree list\`. The FIRST entry is theirs, and the branch in brackets is the one your work has to land on.`,
-            `3. \`git rebase <that branch>\`. If the rebase gets away from you, \`git rebase --abort\` and \`git merge <that branch>\` instead — either way your delta has to end up applying to the current main line.`,
-            `4. Resolve every conflict yourself: read the files, and keep the intent of BOTH sides — your change and whatever moved underneath it. Do not take one side wholesale to make the markers go away.`,
-            `5. Check the result still builds and its tests still pass, as far as this project makes that cheap.`,
+            `1. \`git add -A && git commit\` — a rebase refuses to start on a dirty tree.`,
+            `2. \`git rebase <branch>\`, where \`<branch>\` is the one in brackets on the FIRST line of \`git worktree list\` — the user's main line. If the rebase gets away from you: \`git rebase --abort\`, then \`git merge <branch>\` instead.`,
+            `3. Resolve each conflict keeping the intent of BOTH sides — your change and whatever moved underneath it. Do not take one side wholesale.`,
+            `4. Check the result still builds and tests, where this project makes that cheap.`,
         ].join(`\n`),
         `What blocked the land:\n${listing(mine, true)}`,
         ...(theirs.length === 0
             ? []
             : [
-                  `Leave these alone — the user has uncommitted edits of their own on them, and only they can clear that. Rebasing will not unblock them, and they are not yours to touch:\n${listing(theirs, false)}`,
+                  `Leave these alone — the user has uncommitted edits on them, which only they can clear; rebasing will not unblock them:\n${listing(theirs, false)}`,
               ]),
-        `Stay inside your own worktree: never edit, stage or commit in the user's checkout. When your turn ends the app lands the result automatically, so stop once the rebase is clean and the code holds together.`,
+        `Stay inside your own worktree: never edit, stage or commit in the user's checkout. The app re-lands automatically when your turn ends — stop once the rebase is clean.`,
     ].join(`\n\n`);
 };
