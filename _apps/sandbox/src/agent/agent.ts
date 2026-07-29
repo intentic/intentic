@@ -22,7 +22,8 @@ import { spawn } from "node:child_process";
 import type { AgentEvent, AgentReply, AskQuestion, PermissionMode, SystemPromptMode, UsageWindow } from "@intentic/sandbox-contract";
 import { relative, sep } from "node:path";
 import { z } from "zod";
-import { fromNamespace, type IsolationAnchor, nsenterArgv } from "../agents/isolation.js";
+import { inWorktree, type IsolationAnchor, nsenterArgv, type TurnPlacement } from "../agents/isolation.js";
+import { worktreeRedirectHooks } from "../agents/worktree-redirect.js";
 import { browserArtifactHooks } from "../browser/browser-artifacts.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
@@ -35,6 +36,7 @@ import { harnessEnv } from "./harness-credentials.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
 import { TaskChecklist } from "./task-checklist.js";
 import { editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
+import { isAuthFailureText } from "./auth-failure-text.js";
 import { isUsageLimitText } from "./usage-limit-text.js";
 
 export interface AgentRequest {
@@ -46,11 +48,11 @@ export interface AgentRequest {
     // The working dir the agent edits — the workspace root, so it can touch all three repos. Under `isolation`
     // this is the root as seen INSIDE the namespace, where it resolves to the conversation's worktree.
     readonly cwd: string;
-    // Run this turn in its own mount namespace, with the conversation's worktree bind-mounted over the
-    // workspace root — so an isolated agent's /work IS its worktree and every absolute path it inherits stays
-    // inside its own space (agents/isolation.ts). Absent ⇒ a main-tree turn, or a container that cannot build
-    // a namespace; either way the process runs unwrapped in `cwd` exactly as before.
-    readonly isolation?: IsolationAnchor;
+    // Where this turn works, and how strongly that is enforced (agents/isolation.ts). With an anchor the turn
+    // runs in its own mount namespace and its /work IS its worktree; without one the same mapping is applied
+    // to tool inputs instead (agents/worktree-redirect.ts). Absent entirely ⇒ a main-tree turn, which means
+    // the shared checkout and says so.
+    readonly isolation?: TurnPlacement;
     // Resume a prior turn's session for multi-message conversations.
     readonly sessionId?: string;
     readonly signal: AbortSignal;
@@ -409,7 +411,12 @@ async function* streamSdk(
                       }
                     : isUsageLimitText(explained)
                       ? { kind: "error", code: "rate_limit", message: explained }
-                      : { kind: "error", message: explained };
+                      : // A credential the CLI has stopped trying to use (auth-failure-text.ts). Coded so the
+                        // route can re-mint and resume the turn instead of leaving a dead tab for a human to
+                        // restart by hand — the same "not a workspace fault" treatment a spent allowance gets.
+                        isAuthFailureText(explained)
+                        ? { kind: "error", code: "claude-token-refused", message: explained }
+                        : { kind: "error", message: explained };
             } else {
                 const content = message.message.content as ReadonlyArray<{ type: string; id?: string; name?: string; input?: unknown }>;
                 for (const block of content) {
@@ -775,6 +782,10 @@ const baseOptions = (
     hooks: mergeHooks(
         tmuxEnabled ? bashTmuxHooks(request.filterBackend, Object.keys(request.cliEnv ?? {}), request.isolation) : {},
         installSteeringHooks(),
+        // The worktree the namespace could not build. Only when this turn is isolated AND unanchored: with an
+        // anchor the paths already mean the worktree, and rewriting them a second time would aim the tool at a
+        // worktree-inside-the-worktree that does not exist.
+        request.isolation !== undefined && request.isolation.anchor === undefined ? worktreeRedirectHooks(request.isolation.plan) : {},
         // Browser: a model-named screenshot resolves against the agent's cwd, not `--output-dir`, so the
         // filename is rewritten into the tool-owned directory before the tool ever sees it. Named here rather
         // than left to the prompt because a convention only holds for the agents that happen to read it.
@@ -782,11 +793,11 @@ const baseOptions = (
         // The hook body runs in the DAEMON, outside the turn's namespace, so the file the agent just edited
         // has to be named the way the daemon can reach it — otherwise an isolated turn type-checks the main
         // tree's copy of the path and reports diagnostics for code it did not write.
-        editDiagnosticsHooks(fromNamespace(request.cwd, request.isolation?.plan), request.isolation?.plan),
+        editDiagnosticsHooks(inWorktree(request.cwd, request.isolation?.plan), request.isolation?.plan),
     ),
     // Enter the namespace by wrapping the CLI's own spawn: the agent process (and everything it forks) is born
     // inside it, so there is no window in which the turn can see the shared tree.
-    ...(request.isolation !== undefined ? { spawnClaudeCodeProcess: namespacedSpawn(request.isolation) } : {}),
+    ...(request.isolation?.anchor !== undefined ? { spawnClaudeCodeProcess: namespacedSpawn(request.isolation.anchor) } : {}),
     ...(request.model !== undefined ? { model: request.model } : {}),
     ...(request.sessionId !== undefined ? { resume: request.sessionId } : {}),
     ...(request.plugins !== undefined ? { plugins: request.plugins.map((path) => ({ type: "local" as const, path })) } : {}),

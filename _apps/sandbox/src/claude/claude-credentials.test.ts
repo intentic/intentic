@@ -8,6 +8,7 @@ import {
     buildAuthorizeUrl,
     type ClaudeStore,
     ensureFreshToken,
+    holdAccount,
     fileClaudeStore,
     newAccount,
     renameAccount,
@@ -277,4 +278,40 @@ test("withRefreshLock steals a lock left behind by a dead holder", async () => {
     const { utimes } = await import("node:fs/promises");
     await utimes(join(dir, "acct-1.refresh.lock"), stale, stale);
     expect(await store.withRefreshLock("acct-1", async () => "ran")).toBe("ran");
+});
+
+/* ROTATION vs LIVE TURNS. Anthropic retires the previous access token the moment a refresh mints its
+ * successor, and a turn's token is a snapshot in a subprocess env that cannot be updated — so a rotation
+ * landing mid-turn kills every turn holding the old one. One real refresh did exactly that to three agents at
+ * once. While a turn holds the account, the rotation waits. */
+test("a rotation waits while turns are holding the token", async () => {
+    const store = memoryStore(stored({ accessToken: "held", refreshToken: "r", expiresAt: Date.now() + 10 * 60_000 }));
+    const release = holdAccount("a");
+    // Inside REFRESH_AHEAD_MS, so this WOULD rotate — but breaking the turns holding it costs more than
+    // carrying a token that is still ten minutes from expiry.
+    expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("held");
+    expect(store.current()?.accessToken).toBe("held");
+    // The moment the last turn lets go, the next pass rotates as it always did.
+    release();
+    expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("rotated");
+});
+
+test("the wait is bounded — a token about to genuinely expire rotates even under a live turn", async () => {
+    const store = memoryStore(stored({ accessToken: "dying", refreshToken: "r", expiresAt: Date.now() + 30_000 }));
+    const release = holdAccount("a");
+    // Past ROTATE_REGARDLESS_MS: waiting longer would let it lapse, which fails the NEXT turn too. The turns
+    // still running are covered by the auth resume instead.
+    expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("rotated");
+    release();
+});
+
+test("holds nest and release once — two turns on one account, and the second release is a no-op", async () => {
+    const store = memoryStore(stored({ accessToken: "held", refreshToken: "r", expiresAt: Date.now() + 10 * 60_000 }));
+    const first = holdAccount("a");
+    const second = holdAccount("a");
+    first();
+    first();
+    expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("held");
+    second();
+    expect(await ensureFreshToken(store, "a", async () => ({ accessToken: "rotated" }))).toBe("rotated");
 });

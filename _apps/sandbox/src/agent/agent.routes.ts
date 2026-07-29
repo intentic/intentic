@@ -17,7 +17,8 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
-import { startAnchor } from "../agents/isolation.js";
+import { startAnchor, type TurnPlacement } from "../agents/isolation.js";
+import { holdAccount } from "../claude/claude-credentials.js";
 import { landAgent } from "../agents/land.js";
 import { recordPrompt } from "../sessions/prompt-index.js";
 import type { AgentRequest } from "./agent.js";
@@ -25,7 +26,7 @@ import { withAttachmentNote } from "./attachment-note.js";
 import { resolveRequest } from "./agent-requests.js";
 import { commandsOf } from "./agent-commands.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
-import { accountLimitReset, clearLimitHit, pendingLimitHit, recordLimitHit, resumeTurnOf } from "./limit-resume.js";
+import { accountLimitReset, clearPendingResume, pendingLimitHit, recordAuthFailure, recordLimitHit, resumeTurnOf } from "./turn-resume.js";
 import { withRuntimeHistory } from "./runtime-history.js";
 import { startTurnRun, turnRunOf } from "./turn-runs.js";
 import { summarizeAgentTitle } from "./title-summary.js";
@@ -133,7 +134,10 @@ async function* runConversationTurn(
             dir: services.agentWorktrees.worktreeDir(conversationId, repo),
         }));
         const base = (worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0])?.base.slice(0, 7) ?? "";
-        yield { kind: "worktree", branch: worktree.branch, base };
+        // Reported per turn, not once at boot: the capability is a property of how the container was launched,
+        // and the only reason anyone noticed it was missing was work turning up in the main tree.
+        const enforced = await services.turnIsolation.available();
+        yield { kind: "worktree", branch: worktree.branch, base, ...(enforced ? {} : { unenforced: true }) };
         // Relay the turn while watching for error frames — a failed turn must not auto-land half-done work.
         // The agent's top-level text is accumulated on the way past: the CLOSING block is what the title-
         // summary pass below reads, and collecting it here costs nothing a transcript re-read would.
@@ -242,7 +246,7 @@ async function* runTurn(
     // Whatever turn runs on this conversation supersedes a pending usage-limit resume — the user retrying by
     // hand (or the scheduler's own fire, which comes through here) must not be doubled by the scheduler later.
     if (input.conversationId !== undefined) {
-        clearLimitHit(input.conversationId);
+        clearPendingResume(input.conversationId);
     }
     // cli-kind capabilities contribute env vars (their stored credentials) so either agent's shell can run
     // their CLI tools; extension `contributes.settings` with an `env` name inject theirs the same way.
@@ -281,19 +285,28 @@ async function* runTurn(
      * inherits already names, and nothing has to be remembered or forbidden. */
     const localCwd = conversation?.cwd ?? services.workspace.root;
     /* Built before anything else needs it, and torn down in this turn's finally. Undefined for a main-tree
-     * turn, and for a container with no mount capability — then the agent runs unwrapped in `localCwd`,
-     * exactly as it did before, and only loses the guarantee.
+     * turn, which means the shared checkout and says so.
      *
      * Gated on the harness that actually ENTERS the namespace. The Claude Code loop does, through the SDK's
      * spawn seam; a native Codex turn drives an in-process SDK with no such seam, and an ACP turn talks to a
      * pooled connection that outlives this turn. Building an anchor for those would be worse than skipping it:
      * `effectiveCwd` below would hand them /work — the SHARED tree — while they sit outside the namespace that
-     * makes /work mean the worktree. They keep pointing straight at their worktree instead, as they do today. */
-    const isolation =
+     * makes /work mean the worktree. They keep pointing straight at their worktree instead, as they do today.
+     *
+     * A container with no mount capability keeps the PLAN and loses only the anchor: the turn runs cwd'd in
+     * its worktree as before, and the harness applies the same mapping to tool inputs instead
+     * (agents/worktree-redirect.ts). That fallback used to be nothing at all, which is how three agents spent
+     * a morning writing into the shared tree while their worktrees stayed empty. */
+    const isolation: TurnPlacement | undefined =
         conversation === undefined || !runsClaudeCode(input.agent ?? "claude", input.harness ?? "native")
             ? undefined
-            : await services.turnIsolation.planFor(localCwd).then(async (plan) => (plan === undefined ? undefined : startAnchor(plan)));
-    const effectiveCwd = isolation?.cwd ?? localCwd;
+            : await services.turnIsolation.planFor(localCwd).then(async (plan) => {
+                  if (!(await services.turnIsolation.available())) {
+                      return { plan };
+                  }
+                  return { plan, anchor: await startAnchor(plan) };
+              });
+    const effectiveCwd = isolation?.anchor?.cwd ?? localCwd;
     // Kick the repo sync off now so its network git-fetch overlaps the token refresh, browser-server setup,
     // and config reads below instead of running strictly after them. Throttled to 60s, so it's a no-op on most
     // turns; awaited just before the snapshot, which must see the pulled files (the attribution fence below).
@@ -330,7 +343,7 @@ async function* runTurn(
         // The namespace anchor was built before the gates ran, so a refusal has to take it down too — it is a
         // detached `unshare` process that lives until something kills it, and every one of these refusals is a
         // condition the user hits repeatedly (an unconnected subscription answers the same way on every press).
-        isolation?.dispose();
+        isolation?.anchor?.dispose();
         yield { kind: "error", ...(plan.code !== undefined ? { code: plan.code } : {}), message: plan.message };
         yield { kind: "done" };
         return;
@@ -383,6 +396,9 @@ async function* runTurn(
     // error frame, so the resume snapshots the turn's LAST session id rather than a mid-turn one.
     let limitReset: number | undefined;
     let limitHitAt: number | undefined;
+    // Set when the API refused this turn's credential mid-flight. Like limitHitAt, it is acted on in the
+    // finally so the resume snapshots the turn's LAST session id — the one holding whatever it had done.
+    let authRefused = false;
     let usageExtra: Record<string, unknown> | undefined;
     // The turn's usage, kept typed (unlike usageExtra, which is the activity log's opaque `extra`) so the spend
     // ledger below appends numbers rather than re-narrowing unknowns. SUMMED, not last-wins: a turn emits one
@@ -400,6 +416,12 @@ async function* runTurn(
             .catch((error: unknown) => services.logger.warn({ err: error }, "activity: turn event append failed"));
     };
     record({ type: "turn.started", content: input.prompt.slice(0, 2_000) });
+    /* Claim that account for as long as this turn holds its token. The token rode into the agent subprocess env
+     * at spawn and cannot be replaced there, so a rotation landing now would kill this turn outright — the hold
+     * is what makes the proactive refresh wait for a gap instead (claude/claude-credentials.ts). Taken on the
+     * very edge of the try whose finally releases it: a hold leaked by a throw in between would block that
+     * account's rotation for the rest of the daemon's life. */
+    const releaseAccount = resolvedAccount !== undefined ? holdAccount(resolvedAccount) : undefined;
     try {
         for await (const event of run(request)) {
             sniffer.observe(event);
@@ -441,6 +463,7 @@ async function* runTurn(
                 // else the account's persisted binding window) and tell the client where the resume stands, so
                 // the chat can say "continues automatically at …" or offer the toggle at the moment it would
                 // have helped. No reset instant ⇒ nothing to schedule against ⇒ the plain frame, as before.
+                authRefused ||= event.code === "claude-token-refused";
                 if (event.code === "rate_limit" && input.conversationId !== undefined) {
                     limitHitAt = limitReset ?? (await accountLimitReset(services, resolvedAccount));
                     if (limitHitAt !== undefined) {
@@ -461,10 +484,13 @@ async function* runTurn(
             yield event;
         }
     } finally {
+        // The token this turn snapshotted is nobody's constraint any more — a rotation deferred while it ran
+        // can happen on the next tick.
+        releaseAccount?.();
         // Drop the namespace anchor. Not a kill of the namespace itself: a pane the agent left running (a dev
         // server it started) is still in there and keeps it alive until it exits, which is exactly the
         // behaviour a user watching that terminal expects.
-        isolation?.dispose();
+        isolation?.anchor?.dispose();
         // The limit killed this turn's work — remember it for the resume scheduler, with the last session the
         // stream reported (the one holding any partial progress). Recorded whatever the toggle says: enabling
         // autoResumeOnLimit right after the failure arms exactly this resume.
@@ -473,6 +499,18 @@ async function* runTurn(
                 input: { ...input, conversationId: input.conversationId },
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 resetsAt: limitHitAt,
+            });
+        }
+        /* The credential died under this turn — remember it so the next scheduler pass re-mints and re-runs it.
+         * Needs the exact token that was refused (so the rotation supersedes it rather than replaying it) and
+         * the account it belongs to, which is why only a turn on a STORED Claude account qualifies: the
+         * container-env fallback has no refresh token behind it and nothing to re-mint from. */
+        if (authRefused && input.conversationId !== undefined && resolvedAccount !== undefined && request.oauthToken !== undefined) {
+            recordAuthFailure({
+                input: { ...input, conversationId: input.conversationId },
+                ...(sessionId !== undefined ? { sessionId } : {}),
+                account: resolvedAccount,
+                refusedToken: request.oauthToken,
             });
         }
         record({ type: "turn.completed", ...(usageExtra !== undefined ? { extra: usageExtra } : {}) });
@@ -618,7 +656,7 @@ export const createAgentRoutes = (services: Services) => {
             const conversationId = input.conversationId;
             // Cleared before firing, like the scheduler's own fire — the turn this starts supersedes the
             // entry (and clears it again at its own start; a resume that re-hits the limit records afresh).
-            clearLimitHit(conversationId);
+            clearPendingResume(conversationId);
             const turn = resumeTurnOf(hit, input.account);
             const run = startTurnRun((resumed, signal) => streamAgent(services, resumed, signal), turn, {
                 awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),

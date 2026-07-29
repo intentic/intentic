@@ -157,9 +157,15 @@ export const AgentTranscriptSchema = SessionTranscriptSchema.extend({ sessionId:
 // `parentToolUseId` tags frames produced inside a subagent (Task tool).
 export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("session"), sessionId: z.string() }),
-    // First frame of an isolated turn: the conversation's worktree identity — its branch (agent/<id>) and the
-    // ROOT repo's short base sha (the checkout moment). Emitted before any provider frames.
-    z.object({ kind: z.literal("worktree"), branch: z.string(), base: z.string() }),
+    /* First frame of an isolated turn: the conversation's worktree identity — its branch (agent/<id>) and the
+     * ROOT repo's short base sha (the checkout moment). Emitted before any provider frames.
+     *
+     * `unenforced` marks the degraded container: no CAP_SYS_ADMIN, so the turn's worktree could not be
+     * bind-mounted over the workspace root and the harness is rewriting tool paths into it instead. That
+     * fallback covers what arrives as tool input and not what a subprocess computes for itself, so the
+     * operator needs to know — this state used to be one line in the daemon log at boot, and the way it got
+     * noticed was files appearing in the main tree from agents that were supposed to be on branches. */
+    z.object({ kind: z.literal("worktree"), branch: z.string(), base: z.string(), unenforced: z.boolean().optional() }),
     // Emitted after a clean isolated turn whose delta auto-landed (or failed to): landed ⇒ the work is now
     // UNCOMMITTED changes in the main tree (the Changes panel is the review); conflicts ⇒ it stayed safely in
     // the worktree, and each named path carries WHY it would not apply (see LandConflictSchema) so the report
@@ -279,6 +285,12 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // reconnect fixes it. Distinct from "no account connected": the account IS there, so the UI can
                 // offer reconnect where the user already is and replay the message that bounced.
                 "claude-reauth",
+                // The API refused this turn's token MID-FLIGHT — nearly always one superseded by a rotation,
+                // which Anthropic retires the moment its successor is minted. Distinct from claude-reauth: the
+                // account is fine and the daemon re-mints on the spot, so this frame is a notice about a turn
+                // that resumed itself, not a request for the user to do anything. It only reaches the client
+                // when the resume could NOT start, which is when reconnecting really is the fix.
+                "claude-token-refused",
                 "grok-model-invalid",
                 "codex-model-invalid",
                 "subscription-required",

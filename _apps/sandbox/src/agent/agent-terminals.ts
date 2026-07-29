@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { type IsolationAnchor, nsenterPrefix } from "../agents/isolation.js";
+import { nsenterPrefix, type TurnPlacement } from "../agents/isolation.js";
+import { redirectCommand } from "../agents/worktree-redirect.js";
 import { shellQuote, TMUX_RUN_BIN } from "../terminal/terminal-run.js";
 import { AGENT_SESSION_PREFIX } from "../terminal/terminal-session.js";
 
@@ -72,12 +73,17 @@ const rtkPrefixable = (command: string): boolean => {
 export const bashTmuxHooks = (
     filterBackend?: "native" | "rtk",
     envKeys: readonly string[] = [],
-    // An isolated turn's Bash must run in the SAME namespace as its Edit/Write, or the two tools disagree
-    // about what /work is — the agent edits its worktree and `sed -i` on the same path rewrites the shared
-    // tree. A pane is forked by the tmux SERVER, which lives in the daemon's namespace, so the pane's own
-    // command line is the only place that can join: nsenter wraps the command INSIDE the window, leaving the
-    // server, its socket, and the terminals panel's list/attach exactly as they are.
-    isolation?: IsolationAnchor,
+    /* An isolated turn's Bash must land in the same tree as its Edit/Write, or the two tools disagree about
+     * what /work is — the agent edits its worktree and `sed -i` on the same path rewrites the shared tree.
+     * Both roads to that agreement start here, because a pane is forked by the tmux SERVER, which lives in the
+     * daemon's namespace, and the pane's own command line is the only place that can diverge from it:
+     *
+     *  - anchored: nsenter wraps the command INSIDE the window, leaving the server, its socket, and the
+     *    terminals panel's list/attach exactly as they are;
+     *  - unanchored: the absolute paths in the command line are rewritten into the worktree instead
+     *    (worktree-redirect.ts), which is the same substitution the mounts would have made.
+     */
+    isolation?: TurnPlacement,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const envFlags = envKeyFlags(envKeys);
     return {
@@ -97,11 +103,19 @@ export const bashTmuxHooks = (
                         if (session === undefined) {
                             return {};
                         }
-                        const wrapped = filterBackend === "rtk" && rtkPrefixable(tool.command) ? `rtk ${tool.command}` : tool.command;
+                        // The path rewrite goes FIRST, on the agent's own words: everything added below is the
+                        // daemon's (the rtk prefix, tmux-run, the pane name) and names no workspace path of
+                        // its own, so rewriting after would scan text that can only produce false matches.
+                        const command =
+                            isolation !== undefined && isolation.anchor === undefined ? redirectCommand(tool.command, isolation.plan) : tool.command;
+                        const wrapped = filterBackend === "rtk" && rtkPrefixable(command) ? `rtk ${command}` : command;
                         // The namespace hop goes OUTSIDE the rtk prefix and inside the tmux wrapper: rtk is
                         // the agent's own command line and belongs in the namespace with it, while tmux-run
                         // itself must stay out here where the server and the pane logs are.
-                        const inner = isolation !== undefined ? `${nsenterPrefix(isolation.pid, isolation.cwd)}bash -c ${shellQuote(wrapped)}` : wrapped;
+                        const inner =
+                            isolation?.anchor !== undefined
+                                ? `${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}bash -c ${shellQuote(wrapped)}`
+                                : wrapped;
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",

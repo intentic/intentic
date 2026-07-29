@@ -6,7 +6,7 @@ import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
 import { sweepAgedAgents } from "./agents/archive.js";
 import { streamAgent } from "./agent/agent.routes.js";
-import { createLimitResumeScheduler } from "./agent/limit-resume.js";
+import { createTurnResumeScheduler } from "./agent/turn-resume.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { restoreConnectorGitAccess } from "./capabilities/cli/git-access.js";
@@ -255,8 +255,9 @@ const main = async (): Promise<void> => {
     scheduler.start();
 
     // Usage-limit auto-resume: re-run turns the Claude subscription's limit killed, once their window reopens
-    // (gated by the autoResumeOnLimit setting; the failures are remembered regardless — see limit-resume.ts).
-    const limitResume = createLimitResumeScheduler(services, streamAgent);
+    // (gated by the autoResumeOnLimit setting; the failures are remembered regardless), and re-runs a turn whose
+    // credential was refused mid-flight as soon as a replacement token exists — see turn-resume.ts.
+    const limitResume = createTurnResumeScheduler(services, streamAgent);
     limitResume.start();
 
     // Warm the "latest released sandbox version" cache in the background so /info can offer a non-blocking

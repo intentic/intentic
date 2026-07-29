@@ -2,7 +2,7 @@ import { access } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { diagnoseVia } from "@intentic/lsp/client";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { fromNamespace, type IsolationPlan } from "../agents/isolation.js";
+import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
 
 /* Post-edit diagnostics feedback — the VSCode Claude Code loop, reproduced daemon-side: after every native
  * Edit/Write the touched file is type-checked and any COMPILE ERRORS ride back to the model as additionalContext,
@@ -94,7 +94,7 @@ export const editDiagnosticsHooks = (
                         if (typeof file !== "string" || !CHECKED_EXTENSIONS.has(extname(file))) {
                             return {};
                         }
-                        const target = fromNamespace(file, isolation);
+                        const target = inWorktree(file, isolation);
                         if (!(await modules(target))) {
                             if (explained) {
                                 return {};

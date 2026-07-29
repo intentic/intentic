@@ -284,7 +284,9 @@ const services = (overrides: Partial<Services> = {}): Services => ({
     // Namespace isolation off, which is what a test runner (and any container without CAP_SYS_ADMIN) really
     // gets: turns then run straight in the worktree path, the behaviour every route assertion below expects.
     // The isolation.test.ts suite covers the plan these routes would build when it IS available.
-    turnIsolation: { available: async () => false, planFor: async () => undefined },
+    // No mount capability, like a container launched without CAP_SYS_ADMIN — the plan still describes where
+    // the worktree is, and the harness enforces it by redirecting tool paths instead of by mounting.
+    turnIsolation: { available: async () => false, planFor: async (worktree: string) => ({ worktree, root: "/work", modules: [] }) },
     // No agent has landed anything into these fake repos, so every changed file is the user's.
     agentOrigins: { forRepo: async () => ({}) },
     files: fakeFiles(),
@@ -1892,7 +1894,9 @@ test("an isolated turn runs in the conversation worktree, leads with the worktre
     );
     const events = await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
     // The worktree identity frame precedes every provider frame; the stub composition's root base is aaaa….
-    expect(events[0]).toEqual({ kind: "worktree", branch: "agent/conv1", base: "aaaaaaa" });
+    // `unenforced` because this sandbox cannot build the namespace: the turn still works in its worktree, but
+    // the guarantee comes from the path redirect rather than from mounts, and the operator is told so.
+    expect(events[0]).toEqual({ kind: "worktree", branch: "agent/conv1", base: "aaaaaaa", unenforced: true });
     // The single binding point: the turn's cwd is the worktree, not /work.
     expect(seen?.cwd).toBe("/history/worktrees/conv1");
     // Both main-tree history snapshots (attribution fence + turn end) are skipped.
